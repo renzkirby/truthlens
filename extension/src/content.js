@@ -186,13 +186,30 @@ function cropAndSave(fullScreenshot, coords) {
       // Store in chrome.storage or send to Django
       console.log("Cropped screenshot ready:", croppedScreenshot.substring(0, 50) + "...");
       console.log(croppedScreenshot);
-
       // TODO: Send to Django backend here
+      const payload = {
+         image_data: croppedScreenshot,
+      };
+      sendImageToServer(payload);
 
       cleanup();
    };
 
    img.src = fullScreenshot;
+}
+
+async function sendImageToServer(image) {
+   const response = await fetch("http://localhost:8000/api/analyze/", {
+      method: "POST",
+      headers: {
+         "content-type": "application/json",
+      },
+      body: JSON.stringify(image),
+   });
+
+   const data = await response.json();
+
+   console.log(data.message);
 }
 
 function cleanup() {
