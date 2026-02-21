@@ -210,6 +210,8 @@ async function sendImageToServer(image) {
    const data = await response.json();
 
    console.log(data.message);
+   console.log(data.extracted_text);
+   console.log(data.result);
 }
 
 function cleanup() {
