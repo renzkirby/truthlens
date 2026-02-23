@@ -31,20 +31,21 @@ def receive_snippet(request):
 
         image_file = "./api/img/snippet.jpg"
 
-        image_cv = cv2.imread(image_file)
+        # ACCURACY PROBLEM WITH OPENCV
+        # image_cv = cv2.imread(image_file)
 
-        # converts image's color to gray
-        gray_image = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
+        # # converts image's color to gray
+        # gray_image = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
 
-        # reduce image noise
-        thresh_img = cv2.adaptiveThreshold(
-            gray_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-        )
+        # # reduce image noise
+        # thresh_img = cv2.adaptiveThreshold(
+        #     gray_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+        # )
 
-        cv2.imwrite("./api/img/processed_snippet.jpg", thresh_img)
+        # cv2.imwrite("./api/img/processed_snippet.jpg", thresh_img)
 
         reader = easyocr.Reader(["en", "tl"])
-        result = reader.readtext(thresh_img)
+        result = reader.readtext(image_file)
 
         for item in result:
             extracted_text = " ".join([item[1] for item in result])
