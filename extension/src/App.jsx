@@ -44,6 +44,7 @@ function App() {
             style={{ padding: "10px 20px", cursor: "pointer", marginTop: "10px" }}>
             {isSnipping ? "Snipping..." : "Start Snipping ✂️"}
          </button>
+         <h1>NEW FEATURE</h1>
       </div>
    );
 }
