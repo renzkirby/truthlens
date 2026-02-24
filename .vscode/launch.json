@@ -6,7 +6,7 @@
                "type": "node",
                "request": "launch",
                "preLaunchTask": "Run Django Backend",
-               "internalConsoleOptions": "openOnSessionStart",
+               "internalConsoleOptions": "neverOpen",
           },
           {
                "name": "Trigger Frontend",
