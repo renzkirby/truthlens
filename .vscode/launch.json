@@ -1,0 +1,32 @@
+{
+     "version": "0.2.0.",
+     "configurations": [
+          {
+               "name": "Trigger Backend",
+               "type": "node",
+               "request": "launch",
+               "preLaunchTask": "Run Django Backend",
+               "internalConsoleOptions": "openOnSessionStart",
+          },
+          {
+               "name": "Trigger Frontend",
+               "type": "node",
+               "request": "launch",
+               "preLaunchTask": "Run React Frontend",
+               "internalConsoleOptions": "neverOpen"
+          },
+          {
+               "name": "Trigger Extension",
+               "type": "node",
+               "request": "launch",
+               "preLaunchTask": "Run React Extension",
+               "internalConsoleOptions": "neverOpen"
+          }
+     ],
+     "compounds": [
+          {
+               "name": "Launch TruthLens",
+               "configurations": ["Trigger Backend", "Trigger Frontend", "Trigger Extension"]
+          }
+     ]
+}

@@ -129,5 +129,6 @@ STATIC_URL = "static/"
 CORS_ALLOW_ALL_ORIGINS = True
 
 CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:5173",
+    "http://localhost:5173",  # extension port
+    "http://localhost:5174",  # frontend port
 ]
