@@ -8,6 +8,9 @@ import json
 import base64
 import easyocr
 import cv2
+import requests
+from dotenv import load_dotenv
+from tavily import TavilyClient
 
 
 # Create your views here.
@@ -50,10 +53,38 @@ def receive_snippet(request):
         for item in result:
             extracted_text = " ".join([item[1] for item in result])
 
+        api_url = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
+        payload = {
+            "query": extracted_text,
+            "key": os.environ.get("GOOGLE_API_KEY"),
+        }
+
+        response = requests.get(api_url, params=payload)
+        fact_check_data = response.json()
+
+        if fact_check_data.get("claims"):
+            context_data = fact_check_data.get("claims")
+            source_type = "Official Fact Check"
+        else:
+            tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
+            tavily_response = tavily_client.search(
+                query=extracted_text,
+                search_depth="advanced",
+                include_answer=True,
+            )
+
+            context_data = {
+                "summary": tavily_response.get("answer"),
+                "sources": tavily_response.get("results"),
+            }
+            source_type = "Live Web Search"
+
         return JsonResponse(
             {
                 "message": "Image saved successfully!",
                 "extracted_text": extracted_text,
+                "result": context_data,
+                "source_type": source_type,
             },
             status=200,
         )
