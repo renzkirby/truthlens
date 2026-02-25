@@ -11,6 +11,7 @@ import cv2
 import requests
 from dotenv import load_dotenv
 from tavily import TavilyClient
+from google import genai
 
 
 # Create your views here.
@@ -50,12 +51,16 @@ def receive_snippet(request):
         reader = easyocr.Reader(["en", "tl"])
         result = reader.readtext(image_file)
 
-        for item in result:
-            extracted_text = " ".join([item[1] for item in result])
+        if not result:
+            return JsonResponse({"error": "No text detected in the image"}, status=400)
+
+        extracted_text = " ".join([item[1] for item in result])
+
+        cleaned_text = clean_ocr_text(extracted_text)
 
         api_url = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
         payload = {
-            "query": extracted_text,
+            "query": cleaned_text,
             "key": os.environ.get("GOOGLE_API_KEY"),
         }
 
@@ -68,7 +73,7 @@ def receive_snippet(request):
         else:
             tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
             tavily_response = tavily_client.search(
-                query=extracted_text,
+                query=cleaned_text,
                 search_depth="advanced",
                 include_answer=True,
             )
@@ -88,3 +93,13 @@ def receive_snippet(request):
             },
             status=200,
         )
+
+
+def clean_ocr_text(raw_text):
+    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=f"You are a precise data extraction tool for a fact-checking pipeline. Your only job is to analyze messy OCR text, translate any local slang or Taglish to English, and extract the single most verifiable core claim. Extract a search query of exactly 6 words or less from this text. Output NOTHING else. No punctuation, no conversational filler. Text: {raw_text}",
+    )
+
+    return response.text
