@@ -84,6 +84,10 @@ def receive_snippet(request):
             }
             source_type = "Live Web Search"
 
+        client = TavilyClient(os.environ.get("TAVILY_API_KEY"))
+
+        response = client.search(query=extracted_text, search_depth="advanced")
+
         return JsonResponse(
             {
                 "message": "Image saved successfully!",

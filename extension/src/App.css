@@ -1,42 +1,92 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
-}
-
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+body {
+  display: flex;
+  justify-content: center;
+  padding: 0px;
 }
 
 .card {
-  padding: 2em;
+  background-color: white;
+  border-radius: 18px;
+  padding: 16px;
+  width: 250px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
-.read-the-docs {
-  color: #888;
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.card h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.window-dots {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.red {
+  background-color: #ff5f57;
+}
+.orange {
+  background-color: #ffbd2e;
+}
+.green {
+  background-color: #28c940;
+}
+
+.close-x {
+  margin-left: 8px;
+  font-size: 14px;
+  color: #333;
+  cursor: pointer;
+}
+
+.gray-placeholder {
+  background-color: #d9d9d9;
+  height: 55px;
+  border-radius: 10px;
+  margin-bottom: 15px;
+}
+
+.snip-btn {
+  background-color: #5d5fef !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 12px !important;
+  width: 100%;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  transition: opacity 0.2s;
+}
+
+.snip-btn:hover {
+  filter: brightness(1.1);
+}
+
+.snip-btn:disabled {
+  background-color: #a5a6f6 !important;
+  cursor: not-allowed;
+}
+
+.icon {
+  font-size: 14px;
+  transform: scaleX(-1);
 }
