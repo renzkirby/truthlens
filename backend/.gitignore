@@ -2,4 +2,3 @@
 .venv/
 img/
 __pycache__/
-migrations/
