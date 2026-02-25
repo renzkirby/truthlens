@@ -1,0 +1,260 @@
+:root {
+  --dark-bg: #0f172a;
+  --blue-primary: #5d5fef;
+  --text-light: #ffffff;
+  --text-gray: #94a3b8;
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", sans-serif;
+  background-color: #ffffff;
+  color: #333;
+}
+
+.container {
+  width: 100%;
+}
+
+/* Navbar */
+.navbar {
+  background-color: var(--dark-bg);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 5%;
+  color: white;
+}
+
+.logo {
+  font-size: 1.5rem;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-links a {
+  color: white;
+  text-decoration: none;
+  margin: 0 15px;
+  font-size: 0.9rem;
+}
+
+.btn-login {
+  background: transparent;
+  border: 1px solid white;
+  color: white;
+  padding: 5px 15px;
+  border-radius: 4px;
+  margin-right: 10px;
+  cursor: pointer;
+}
+
+.btn-get {
+  background: var(--blue-primary);
+  border: none;
+  color: white;
+  padding: 5px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* Hero Section */
+.hero {
+  background-color: var(--dark-bg);
+  padding: 60px 5% 100px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: white;
+}
+
+.hero-content h1 {
+  font-size: 3.5rem;
+  line-height: 1.1;
+  margin-bottom: 10px;
+}
+
+.hero-content p {
+  color: var(--text-gray);
+  margin-bottom: 30px;
+}
+
+.btn-download {
+  background: var(--blue-primary);
+  color: white;
+  border: none;
+  padding: 15px 30px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+/* Stats Bar */
+.stats-bar {
+  background-color: #d1d5db;
+  padding: 15px;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.separator {
+  margin: 0 20px;
+}
+
+/* Sections Common */
+.how-it-works,
+.investigations {
+  padding: 80px 5%;
+  text-align: center;
+}
+
+.steps-grid,
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 30px;
+  margin-top: 50px;
+}
+
+/* Step Icons */
+.step-icon {
+  font-size: 3rem;
+  margin-bottom: 20px;
+}
+
+/* Investigation Cards */
+.invest-card {
+  border-radius: 12px;
+  padding: 20px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.yellow-card {
+  background-color: #fefce8;
+  border: 1px solid #fef08a;
+}
+.red-card {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+}
+.green-card {
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.badge {
+  font-size: 0.7rem;
+  padding: 4px 8px;
+  border-radius: 99px;
+  font-weight: bold;
+}
+
+.unverified {
+  background: #fde047;
+}
+.fake {
+  background: #fca5a5;
+  color: white;
+}
+.fact {
+  background: #86efac;
+}
+
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20px;
+}
+
+.card-footer a {
+  font-size: 0.8rem;
+  text-decoration: none;
+  color: #666;
+}
+
+/* Laptop Mockup (Simplistic CSS Representation) */
+.hero-mockup {
+  width: 45%;
+}
+
+.laptop-frame {
+  background: #333;
+  padding: 15px;
+  border-radius: 10px 10px 0 0;
+  position: relative;
+  height: 300px;
+  border: 4px solid #444;
+}
+
+.mock-screen {
+  background: #fff;
+  height: 100%;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.mock-popup {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 140px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  padding: 8px;
+}
+
+.popup-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  font-weight: bold;
+}
+.dots {
+  display: flex;
+  gap: 2px;
+}
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+.red {
+  background: red;
+}
+.yellow {
+  background: orange;
+}
+.green {
+  background: green;
+}
+.popup-body {
+  height: 30px;
+  background: #e5e7eb;
+  margin: 8px 0;
+  border-radius: 4px;
+}
+.popup-btn {
+  width: 100%;
+  background: var(--blue-primary);
+  color: white;
+  border: none;
+  font-size: 10px;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.footer {
+  background-color: var(--dark-bg);
+  color: white;
+  text-align: center;
+  padding: 20px;
+  font-size: 0.8rem;
+}

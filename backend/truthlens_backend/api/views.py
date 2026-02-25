@@ -8,7 +8,8 @@ import json
 import base64
 import easyocr
 import cv2
-
+from dotenv import load_dotenv
+from tavily import TavilyClient
 
 # Create your views here.
 @csrf_exempt
@@ -47,13 +48,23 @@ def receive_snippet(request):
         reader = easyocr.Reader(["en", "tl"])
         result = reader.readtext(image_file)
 
+
         for item in result:
             extracted_text = " ".join([item[1] for item in result])
+
+
+        client = TavilyClient(os.environ.get("TAVILY_API_KEY"))
+
+        response = client.search(
+            query=extracted_text,
+            search_depth="advanced"
+        )
 
         return JsonResponse(
             {
                 "message": "Image saved successfully!",
                 "extracted_text": extracted_text,
+                "result": response,
             },
             status=200,
         )
