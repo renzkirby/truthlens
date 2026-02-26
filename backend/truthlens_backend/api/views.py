@@ -56,16 +56,18 @@ def receive_snippet(request):
 
         extracted_text = " ".join([item[1] for item in result])
 
-        cleaned_text = clean_ocr_text(extracted_text)
+        cleaned_text = clean_ocr_text(extracted_text).strip()
 
         api_url = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
         payload = {
             "query": cleaned_text,
-            "key": os.environ.get("GOOGLE_API_KEY"),
+            "key": os.environ.get("FACT_CHECK_API_KEY"),
         }
 
         response = requests.get(api_url, params=payload)
         fact_check_data = response.json()
+
+        print("GOOGLE'S RESPONSE:", fact_check_data)
 
         if fact_check_data.get("claims"):
             context_data = fact_check_data.get("claims")
@@ -84,14 +86,11 @@ def receive_snippet(request):
             }
             source_type = "Live Web Search"
 
-        client = TavilyClient(os.environ.get("TAVILY_API_KEY"))
-
-        response = client.search(query=extracted_text, search_depth="advanced")
-
         return JsonResponse(
             {
                 "message": "Image saved successfully!",
                 "extracted_text": extracted_text,
+                "cleaned_text": cleaned_text,
                 "result": context_data,
                 "source_type": source_type,
             },
@@ -99,6 +98,7 @@ def receive_snippet(request):
         )
 
 
+# non-views functions
 def clean_ocr_text(raw_text):
     client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
     response = client.models.generate_content(

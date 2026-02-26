@@ -190,6 +190,7 @@ async function sendImageToServer(image) {
 
    console.log(data.message);
    console.log(data.extracted_text);
+   console.log(data.cleaned_text);
    console.log(data.result);
    console.log(data.source_type);
 }
