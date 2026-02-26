@@ -27,6 +27,7 @@ def receive_snippet(request):
         if "," in base64_string:
             base64_string = base64_string.split(",")[1]
 
+        # Decode the base64 string and save it as an image
         bytes_decoded = base64.b64decode(base64_string)
         img = Image.open(BytesIO(bytes_decoded))
         out_jpg = img.convert("RGB")
@@ -35,19 +36,7 @@ def receive_snippet(request):
 
         image_file = "./api/img/snippet.jpg"
 
-        # ACCURACY PROBLEM WITH OPENCV
-        # image_cv = cv2.imread(image_file)
-
-        # # converts image's color to gray
-        # gray_image = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
-
-        # # reduce image noise
-        # thresh_img = cv2.adaptiveThreshold(
-        #     gray_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-        # )
-
-        # cv2.imwrite("./api/img/processed_snippet.jpg", thresh_img)
-
+        # Perform OCR using EasyOCR
         reader = easyocr.Reader(["en", "tl"])
         result = reader.readtext(image_file)
 
@@ -56,8 +45,10 @@ def receive_snippet(request):
 
         extracted_text = " ".join([item[1] for item in result])
 
+        # Clean the extracted text using Gemini-2.5-Flash to get a concise search query
         cleaned_text = clean_ocr_text(extracted_text).strip()
 
+        # Use the cleaned text to query Google's Fact Check Tools API
         api_url = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
         payload = {
             "query": cleaned_text,
@@ -69,6 +60,7 @@ def receive_snippet(request):
 
         print("GOOGLE'S RESPONSE:", fact_check_data)
 
+        # Check if the API returned any claims and prepare the context data accordingly
         if fact_check_data.get("claims"):
             context_data = fact_check_data.get("claims")
             source_type = "Official Fact Check"
@@ -77,7 +69,9 @@ def receive_snippet(request):
             tavily_response = tavily_client.search(
                 query=cleaned_text,
                 search_depth="advanced",
-                include_answer=True,
+                topic="news",
+                days=3,
+                include_answer=False,
             )
 
             context_data = {
@@ -103,7 +97,7 @@ def clean_ocr_text(raw_text):
     client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
     response = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=f"You are a precise data extraction tool for a fact-checking pipeline. Your only job is to analyze messy OCR text, translate any local slang or Taglish to English, and extract the single most verifiable core claim. Extract a search query of exactly 6 words or less from this text. Output NOTHING else. No punctuation, no conversational filler. Text: {raw_text}",
+        contents=f"You are a precise data extraction tool for a fact-checking pipeline. Your only job is to analyze messy OCR text, translate any local slang or Taglish to English, and extract the single most verifiable core claim. Extract a search query of exactly 10 words or less from this text. Output NOTHING else. No punctuation, no conversational filler. Text: {raw_text}",
     )
 
     return response.text

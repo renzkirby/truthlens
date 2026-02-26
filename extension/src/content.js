@@ -218,3 +218,38 @@ function cleanup() {
 
    console.log("Snipping mode deactivated");
 }
+
+function displayResultCard(data) {
+   const { result, source_type, cleaned_text } = data;
+
+   let verdict = "Analyzing...";
+   let summary = "No summary available.";
+   let sourceUrl = "#";
+   let badgeColor = "#6b7280";
+
+   if (source_type === "Official Fact Check" && result && result.length > 0) {
+      const firstClaim = result[0];
+      summary = "Where AI summarizes the fact check claim review, if available.";
+      if (firstClaim.claimReview && firstClaim.claimReview.length > 0) {
+         const review = firstClaim.claimReview[0];
+         verdict = review.textualRating || "No verdict available.";
+         sourceUrl = review.url || "No sources available.";
+
+         const lowerVerdict = verdict.toLowerCase();
+         if (
+            lowerVerdict.includes("false") ||
+            lowerVerdict.includes("fake") ||
+            lowerVerdict.includes("misleading") ||
+            lowerVerdict.includes("incorrect")
+         )
+            badgeColor = "#e02424";
+         else if (lowerVerdict.includes("true") || lowerVerdict.includes("correct"))
+            badgeColor = "#0e9f6e";
+         else badgeColor = "#d69e2e";
+      }
+   } else if (source_type === "Live Web Search") {
+      verdict = "Where AI gives the verdict based on the search results, if available.";
+      badgeColor = "#3f83f8";
+      summary = "Where AI summarizes the search results, if available.";
+   }
+}
