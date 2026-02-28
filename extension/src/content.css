@@ -1,0 +1,80 @@
+.truthlens-card {
+     position: fixed;
+     top: 20px;
+     right: 20px;
+     width: 320px;
+     background-color: white;
+     border-radius: 12px;
+     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+     padding: 20px;
+     z-index: 9999999;
+     font-family: Arial, sans-serif;
+     color: #333;
+}
+
+.truthlens-header {
+     display: flex;
+     justify-content: space-between;
+     align-items: center;
+     margin-bottom: 15px;
+}
+
+.truthlens-title {
+     font-size: 18px;
+     font-weight: bold;
+}
+
+.truthlens-close-btn {
+     border: none;
+     background: none;
+     font-size: 20px;
+     cursor: pointer;
+     color: #888;
+}
+
+.truthlens-verdict-text {
+     margin-bottom: 15px;
+     font-size: 15px;
+}
+
+.truthlens-badge {
+     color: white;
+     padding: 4px 8px;
+     border-radius: 6px;
+     font-weight: bold;
+     font-size: 12px;
+     text-transform: uppercase;
+}
+
+.truthlens-summary-box {
+     background-color: #f3f4f6;
+     padding: 12px;
+     border-radius: 8px;
+     margin-bottom: 15px;
+}
+
+.truthlens-summary-title {
+     font-size: 12px;
+     font-weight: bold;
+     color: #666;
+     margin-bottom: 5px;
+     text-transform: uppercase;
+}
+
+.truthlens-source-btn {
+     display: block;
+     text-align: center;
+     background-color: #4f46e5;
+     color: white;
+     text-decoration: none;
+     padding: 10px;
+     border-radius: 8px;
+     font-weight: bold;
+}
+
+.truthlens-footer {
+     text-align: center;
+     font-size: 11px;
+     color: #999;
+     margin-top: 10px;
+}

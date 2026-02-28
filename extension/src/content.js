@@ -1,3 +1,5 @@
+import "./content.css";
+
 console.log("TruthLens content script loaded");
 
 let isSnipping = false;
@@ -162,9 +164,6 @@ function cropAndSave(fullScreenshot, coords) {
       const croppedScreenshot = canvas.toDataURL("image/png");
       console.log("Screenshot cropped successfully");
 
-      console.log("Cropped screenshot ready:", croppedScreenshot.substring(0, 50) + "...");
-      console.log(croppedScreenshot);
-
       // TODO: Send to Django backend here
       const payload = {
          image_data: croppedScreenshot,
@@ -188,11 +187,10 @@ async function sendImageToServer(image) {
 
    const data = await response.json();
 
-   console.log(data.message);
-   console.log(data.extracted_text);
-   console.log(data.cleaned_text);
-   console.log(data.result);
-   console.log(data.source_type);
+   console.log("Image analysis complete, result received from server");
+   console.log("Server response:", data);
+
+   displayResultCard(data);
 }
 
 function cleanup() {
@@ -245,11 +243,59 @@ function displayResultCard(data) {
             badgeColor = "#e02424";
          else if (lowerVerdict.includes("true") || lowerVerdict.includes("correct"))
             badgeColor = "#0e9f6e";
-         else badgeColor = "#d69e2e";
+         else if (lowerVerdict === "satire") badgeColor = "#a83bf1";
+         else if (lowerVerdict.includes("scope")) badgeColor = "#6b7280";
+         else badgeColor = "#ebdc09";
       }
    } else if (source_type === "Live Web Search") {
-      verdict = "Where AI gives the verdict based on the search results, if available.";
-      badgeColor = "#3f83f8";
-      summary = "Where AI summarizes the search results, if available.";
+      verdict = result.verdict;
+      summary = result.summary;
+
+      const lowerVerdict = verdict.toLowerCase();
+      if (lowerVerdict === "fake" || lowerVerdict === "misleading" || lowerVerdict === "false")
+         badgeColor = "#e02424";
+      else if (lowerVerdict === "fact") badgeColor = "#0e9f6e";
+      else if (lowerVerdict === "satire") badgeColor = "#a83bf1";
+      else if (lowerVerdict.includes("scope")) badgeColor = "#6b7280";
+      else badgeColor = "#ebdc09";
+
+      if (result.sources && result.sources.length > 0) {
+         sourceUrl = result.sources[0].url;
+      }
    }
+
+   console.log("Verdict:", verdict);
+   console.log("Summary:", summary);
+   console.log("Source URL:", sourceUrl);
+
+   const card = document.createElement("div");
+   card.id = "truthlens-result-card";
+   card.className = "truthlens-card";
+
+   card.innerHTML = `
+      <div class="truthlens-header">
+         <strong class="truthlens-title">TruthLens</strong>
+         <button id="truthlens-close-btn" class="truthlens-close-btn">&times;</button>
+      </div>
+      <div class="truthlens-verdict-text">
+         This post is <span class="truthlens-verdict" style="background-color: ${badgeColor};">${verdict}</span>
+      </div>
+      <div class="truthlens-summary-box">
+         <div class="truthlens-summary-title">AI Summary</div>
+         <div style="font-size: 14px; line-height: 1.4;">${summary}</div>
+      </div>
+
+      ${
+         verdict !== "Unverified"
+            ? `<a href="${sourceUrl}" target="_blank" class="truthlens-source-link">View Source Link</a>`
+            : "<a href='#' target='_blank' class='truthlens-source-link'>Want to ask the community?</a>"
+      }
+
+      <div class="truthlens-footer">Source Type: ${source_type}</div>
+      `;
+
+   document.body.appendChild(card);
+   document.getElementById("truthlens-close-btn").addEventListener("click", () => {
+      card.remove();
+   });
 }

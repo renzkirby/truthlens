@@ -1,3 +1,5 @@
+from urllib import response
+
 from django.shortcuts import render
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -15,6 +17,7 @@ from google import genai
 
 
 # Create your views here.
+# Views Functions
 @csrf_exempt
 def receive_snippet(request):
     if request.method == "POST":
@@ -62,9 +65,15 @@ def receive_snippet(request):
 
         # Check if the API returned any claims and prepare the context data accordingly
         if fact_check_data.get("claims"):
-            context_data = fact_check_data.get("claims")
-            source_type = "Official Fact Check"
-        else:
+            first_claim_text = fact_check_data["claims"][0].get("text", "")
+
+            if is_google_data_relevant(extracted_text, first_claim_text):
+                context_data = fact_check_data.get("claims")
+                source_type = "Official Fact Check"
+            else:
+                fact_check_data = {}
+
+        if not fact_check_data.get("claims"):
             tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
             tavily_response = tavily_client.search(
                 query=cleaned_text,
@@ -74,9 +83,15 @@ def receive_snippet(request):
                 include_answer=False,
             )
 
+            tavily_results = tavily_response.get("results", [])
+            ai_verdict = evaluate_tavily_data(extracted_text, tavily_results)
+
+            print(ai_verdict)
+
             context_data = {
-                "summary": tavily_response.get("answer"),
-                "sources": tavily_response.get("results"),
+                "summary": ai_verdict.get("summary"),
+                "verdict": ai_verdict.get("verdict"),
+                "sources": tavily_results,
             }
             source_type = "Live Web Search"
 
@@ -92,7 +107,7 @@ def receive_snippet(request):
         )
 
 
-# non-views functions
+# Helper Functions
 def clean_ocr_text(raw_text):
     client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
     response = client.models.generate_content(
@@ -101,3 +116,86 @@ def clean_ocr_text(raw_text):
     )
 
     return response.text
+
+
+def evaluate_tavily_data(original_claim, tavily_data):
+    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+
+    evidence_text = ""
+    for i, result in enumerate(tavily_data[:3]):
+        evidence_text += (
+            f"Source {i+1} ({result.get('url')}): {result.get('content')}\n\n"
+        )
+
+    print("EVIDENCE TEXT:", evidence_text)
+
+    prompt = f"""
+    Role: Act as the core fact-checking algorithmic engine for a misinformation filtering platform.
+    Task: Analyze the provided social media claim against the retrieved live news evidence and classify it strictly into one of five predefined tiers.
+
+    Inputs:
+    Claim: "{original_claim}"
+    Evidence from Live News: "{evidence_text}"
+
+    Evaluation Criteria (Follow this strict hierarchy):
+
+    SATIRE: The claim explicitly contains markers like "satire" or "joke", OR the evidence confirms the source is a known satirical entity (e.g., The Onion). Summary requirement: State that the post originates from or is self-declared as satire.
+
+    OUT_OF_SCOPE: The claim is a purely subjective opinion, a personal question, or lacks any falsifiable facts. Summary requirement: State that the content is an opinion or non-factual statement that cannot be fact-checked.
+
+    UNVERIFIED: The evidence is completely unrelated to the entities/events in the claim, OR the evidence discusses the topic but lacks sufficient concrete data to definitively prove or debunk the claim. Summary requirement: State that current news sources do not contain enough verified information regarding this specific claim.
+
+    FACT: The evidence directly, explicitly, and substantially confirms the core factual elements of the claim.
+
+    FAKE: The evidence directly contradicts, debunks, or proves the core elements of the claim to be demonstrably false or altered.
+
+    Output Constraints:
+    Output ONLY a raw, valid JSON object. Absolutely NO markdown formatting (do not use ```json), NO conversational filler, and NO preambles.
+
+    JSON Schema:
+    {{
+    "reasoning": "Draft a 1-sentence internal logical deduction comparing the claim to the evidence. Do this BEFORE deciding the verdict.",
+    "verdict": "MUST be exactly one of: [FACT, FAKE, UNVERIFIED, SATIRE, OUT_OF_SCOPE]",
+    "summary": "A strict 1-2 sentence user-facing explanation following the rules above."
+    }}
+    """
+
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
+    )
+
+    try:
+        clean_json_string = (
+            response.text.strip().replace("```json", "").replace("```", "").strip()
+        )
+
+        print(clean_json_string)
+
+        return json.loads(clean_json_string)
+    except json.JSONDecodeError:
+        return {
+            "verdict": "Unverified",
+            "summary": "Could not definitively verify the claim from the live news.",
+        }
+
+
+def is_google_data_relevant(original_text, google_fact_check_text):
+    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+    prompt = f"""
+    You are an expert fact-checking journalist. Analyze this social media claim against the provided official fact check data.
+    Text 1 (From Claim): "{original_text}"
+    Text 2 (From Fact Check Database): "{google_fact_check_text}"
+    Determine if Text 2 is relevant evidence for verifying the claim in Text 1. Output ONLY "Relevant" or "Not Relevant".
+    """
+
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
+    )
+
+    print("RELEVANCE CHECK RESPONSE:", response.text)
+
+    if "NOT RELEVANT" in response.text.strip().upper():
+        return False
+    return True
