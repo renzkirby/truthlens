@@ -286,7 +286,7 @@ function displayResultCard(data) {
       </div>
 
       ${
-         verdict !== "Unverified"
+         verdict !== "UNVERIFIED"
             ? `<a href="${sourceUrl}" target="_blank" class="truthlens-source-link">View Source Link</a>`
             : "<a href='#' target='_blank' class='truthlens-source-link'>Want to ask the community?</a>"
       }
