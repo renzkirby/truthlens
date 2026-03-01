@@ -41,9 +41,11 @@ body {
 .red {
   background-color: #ff5f57;
 }
+
 .orange {
   background-color: #ffbd2e;
 }
+
 .green {
   background-color: #28c940;
 }
@@ -53,40 +55,4 @@ body {
   font-size: 14px;
   color: #333;
   cursor: pointer;
-}
-
-.gray-placeholder {
-  background-color: #d9d9d9;
-  height: 55px;
-  border-radius: 10px;
-  margin-bottom: 15px;
-}
-
-.snip-btn {
-  background-color: #5d5fef !important;
-  color: white !important;
-  border: none !important;
-  border-radius: 12px !important;
-  width: 100%;
-  font-size: 16px !important;
-  font-weight: 600 !important;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 10px;
-  transition: opacity 0.2s;
-}
-
-.snip-btn:hover {
-  filter: brightness(1.1);
-}
-
-.snip-btn:disabled {
-  background-color: #a5a6f6 !important;
-  cursor: not-allowed;
-}
-
-.icon {
-  font-size: 14px;
-  transform: scaleX(-1);
 }
