@@ -222,6 +222,7 @@ function displayResultCard(data) {
 
    let verdict = "Analyzing...";
    let summary = "No summary available.";
+   let confidence_score = "N/A";
    let sourceUrl = "#";
    let badgeColor = "#6b7280";
 
@@ -262,10 +263,15 @@ function displayResultCard(data) {
       if (result.sources && result.sources.length > 0) {
          sourceUrl = result.sources[0].url;
       }
+   } else if (source_type === "N/A") {
+      verdict = result.verdict;
+      summary = result.summary;
+      confidence_score = result.confidence_score;
    }
 
    console.log("Verdict:", verdict);
    console.log("Summary:", summary);
+   console.log("Confidence Score:", confidence_score);
    console.log("Source URL:", sourceUrl);
 
    const card = document.createElement("div");
@@ -284,11 +290,14 @@ function displayResultCard(data) {
          <div class="truthlens-summary-title">AI Summary</div>
          <div style="font-size: 14px; line-height: 1.4;">${summary}</div>
       </div>
+      <div class="truthlens-confidence-score">Confidence Score: ${confidence_score}</div>
 
       ${
-         verdict !== "UNVERIFIED"
-            ? `<a href="${sourceUrl}" target="_blank" class="truthlens-source-link">View Source Link</a>`
-            : "<a href='#' target='_blank' class='truthlens-source-link'>Want to ask the community?</a>"
+         verdict === "UNVERIFIED"
+            ? "<a href='#' target='_blank' class='truthlens-source-link'>Want to ask the community?</a>"
+            : verdict === "OUT_OF_SCOPE"
+              ? ""
+              : `<a href="${sourceUrl}" target="_blank" class="truthlens-source-link">View Source</a>`
       }
 
       <div class="truthlens-footer">Source Type: ${source_type}</div>

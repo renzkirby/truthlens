@@ -50,6 +50,22 @@ def receive_snippet(request):
         # Clean the extracted text using Gemini-2.5-Flash to get a concise search query
         cleaned_text = clean_ocr_text(extracted_text).strip()
 
+        if cleaned_text == "OUT_OF_SCOPE":
+            return JsonResponse(
+                {
+                    "message": "Image processed successfully!",
+                    "extracted_text": extracted_text,
+                    "cleaned_text": cleaned_text,
+                    "result": {
+                        "verdict": "OUT_OF_SCOPE",
+                        "summary": "The content of the image is not a claim that can be fact-checked.",
+                        "confidence_score": 100,
+                    },
+                    "source_type": "N/A",
+                },
+                status=200,
+            )
+
         # Use the cleaned text to query Google's Fact Check Tools API
         api_url = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
         payload = {

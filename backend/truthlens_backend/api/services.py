@@ -11,7 +11,12 @@ def clean_ocr_text(raw_text):
         messages=[
             {
                 "role": "system",
-                "content": "You are a precise data extraction tool for a fact-checking pipeline. Your only job is to analyze messy OCR text, translate any local slang or Taglish to English, and extract the single most verifiable core claim. Extract a search query of exactly 10 words or less from this text. Output NOTHING else. No punctuation, no conversational filler.",
+                "content": """
+                Role: You are a precise data extraction tool for a fact-checking pipeline. 
+                Task: Your only job is to analyze messy OCR text, if the text contains factual, verifiable claim, translate any local slang or Taglish to English, and extract the single most verifiable core claim. Extract a search query of exactly 10 words or less from this text. If the text is purely subjective, an opinion, a question, or does not contain any factual claim that can be verified, respond with the exact phrase "OUT_OF_SCOPE". 
+                
+                Output Constraints:
+                Do not output anything other than the clean claim or "OUT_OF_SCOPE". Do not provide any explanation or additional text. Output NOTHING else. No punctuation, no conversational filler.""",
             },
             {
                 "role": "user",
@@ -41,9 +46,7 @@ def evaluate_tavily_data(original_claim, tavily_data):
     Evaluation Criteria (Follow this strict hierarchy):
 
     SATIRE: The claim explicitly contains markers like "satire" or "joke", OR the evidence confirms the source is a known satirical entity (e.g., The Onion). Summary requirement: State that the post originates from or is self-declared as satire.
-
-    OUT_OF_SCOPE: The claim is a purely subjective opinion, a personal question, or lacks any falsifiable facts. Summary requirement: State that the content is an opinion or non-factual statement that cannot be fact-checked.
-
+    
     UNVERIFIED: The evidence is completely unrelated to the entities/events in the claim, OR the evidence discusses the topic but lacks sufficient concrete data to definitively prove or debunk the claim. Summary requirement: State that current news sources do not contain enough verified information regarding this specific claim.
 
     FACT: The evidence directly, explicitly, and substantially confirms the core factual elements of the claim.
@@ -52,12 +55,14 @@ def evaluate_tavily_data(original_claim, tavily_data):
 
     Output Constraints:
     Output ONLY a raw, valid JSON object. Absolutely NO markdown formatting (do not use ```json), NO conversational filler, and NO preambles.
+    You must calculate a confidence score. Do not output a score of 100 unless the evidence is indisputable.
 
     JSON Schema:
     {
     "reasoning": "Draft a 1-sentence internal logical deduction comparing the claim to the evidence. Do this BEFORE deciding the verdict.",
-    "verdict": "MUST be exactly one of: [FACT, FAKE, UNVERIFIED, SATIRE, OUT_OF_SCOPE]",
-    "summary": "A strict 1-2 sentence user-facing explanation following the rules above."
+    "verdict": "MUST be exactly one of: [FACT, FAKE, UNVERIFIED, SATIRE]",
+    "summary": "A strict 1-2 sentence user-facing explanation following the rules above.",
+    "confidence_score": "An integer from 1 to 100 representing your certainty in the chosen verdict based on the quality of the evidence."
     }
     """
 
@@ -99,6 +104,7 @@ def evaluate_tavily_data(original_claim, tavily_data):
         return {
             "verdict": "Unverified",
             "summary": "Could not definitively verify the claim from the live news.",
+            "confidence_score": 0,
         }
 
 
