@@ -50,3 +50,58 @@ class Thread(models.Model):
 
     def __str__(self):
         return f"Thread {self.id} - Claim ID: {self.claim.id} - Author: {self.author.username}"
+
+
+class EvidenceSubmission(models.Model):
+    class EvidenceType(models.TextChoices):
+        IMAGE = "IMAGE", "Image"
+        URL_LINK = "URL_LINK", "URL Link"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    thread = models.ForeignKey(
+        Thread, on_delete=models.CASCADE, related_name="evidence_submissions"
+    )
+    contributor = models.ForeignKey(
+        "auth.User", on_delete=models.CASCADE, related_name="evidence_submissions"
+    )
+    evidence_caption = models.TextField(blank=True, null=True)
+    evidence_url = models.URLField(max_length=500, blank=True, null=True)
+    evidence_type = models.CharField(
+        max_length=20, choices=EvidenceType.choices, blank=True, null=True
+    )
+    contributor_trust_snapshot = models.FloatField(blank=True, null=True)
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"EvidenceSubmission {self.id} - Thread ID: {self.thread.id} - Contributor: {self.contributor.username}"
+
+
+class Vote(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    evidence = models.ForeignKey(
+        EvidenceSubmission, on_delete=models.CASCADE, related_name="votes"
+    )
+    voter = models.ForeignKey(
+        "auth.User", on_delete=models.CASCADE, related_name="votes"
+    )
+    vote_value = models.BooleanField()  # True for upvote, False for downvote
+    vote_trust_snapshot = models.FloatField(blank=True, null=True)
+    voted_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Vote {self.id} - Evidence ID: {self.evidence.id} - Voter: {self.voter.username} - Vote: {'Upvote' if self.vote_value else 'Downvote'}"
+
+
+class ThreadComment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    thread = models.ForeignKey(
+        Thread, on_delete=models.CASCADE, related_name="comments"
+    )
+    commenter = models.ForeignKey(
+        "auth.User", on_delete=models.CASCADE, related_name="comments"
+    )
+    comment_text = models.TextField()
+    commented_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"ThreadComment {self.id} - Thread ID: {self.thread.id} - Commenter: {self.commenter.username}"
