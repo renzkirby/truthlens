@@ -3,7 +3,9 @@ import reactLogo from "./assets/react.svg";
 import viteLogo from "/vite.svg";
 import "./App.css";
 import NavigationBar from "./components/NavigationBar";
+import FileUpload from "./pages/FileUpload";
 import SnippingTool from "./pages/SnippingTool";
+import UrlUpload from "./pages/UrlUpload";
 import verifyIcon from "./assets/truthlens-icon.png";
 
 function App() {
@@ -55,13 +57,13 @@ function App() {
          case "file-upload":
             return (
                <div className="file-upload-page">
-                  <p>File Upload coming soon!</p>
+                  <FileUpload />
                </div>
             );
          case "url-upload":
             return (
                <div className="url-upload-page">
-                  <p>URL Upload coming soon!</p>
+                  <UrlUpload />
                </div>
             );
          default:

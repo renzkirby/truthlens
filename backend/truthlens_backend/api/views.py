@@ -7,13 +7,19 @@ from PIL import Image
 from dotenv import load_dotenv
 from tavily import TavilyClient
 from google import genai
+import imagehash
 import os
 import json
 import base64
 import easyocr
 import cv2
 import requests
-from .services import clean_ocr_text, evaluate_tavily_data, is_google_data_relevant
+from .services import (
+    clean_ocr_text,
+    evaluate_google_data,
+    evaluate_tavily_data,
+    is_google_data_relevant,
+)
 
 
 # Create your views here.
@@ -37,6 +43,11 @@ def receive_snippet(request):
         out_jpg.save("./api/img/snippet.jpg")
 
         image_file = "./api/img/snippet.jpg"
+
+        image = Image.open(image_file)
+        image_hash = str(imagehash.phash(image))
+
+        print("IMAGE HASH:", image_hash)
 
         # Perform OCR using EasyOCR
         reader = easyocr.Reader(["en", "tl"])
@@ -83,7 +94,12 @@ def receive_snippet(request):
             first_claim_text = fact_check_data["claims"][0].get("text", "")
 
             if is_google_data_relevant(extracted_text, first_claim_text):
-                context_data = fact_check_data.get("claims")
+                ai_verdict = evaluate_google_data(extracted_text, fact_check_data)
+                context_data = {
+                    "summary": ai_verdict.get("summary"),
+                    "verdict": ai_verdict.get("verdict"),
+                    "confidence_score": ai_verdict.get("confidence_score"),
+                }
                 source_type = "Official Fact Check"
             else:
                 fact_check_data = {}
@@ -106,6 +122,7 @@ def receive_snippet(request):
             context_data = {
                 "summary": ai_verdict.get("summary"),
                 "verdict": ai_verdict.get("verdict"),
+                "confidence_score": ai_verdict.get("confidence_score"),
                 "sources": tavily_results,
             }
             source_type = "Live Web Search"

@@ -102,7 +102,7 @@ def evaluate_tavily_data(original_claim, tavily_data):
         return json.loads(clean_json_string)
     except json.JSONDecodeError:
         return {
-            "verdict": "Unverified",
+            "verdict": "UNVERIFIED",
             "summary": "Could not definitively verify the claim from the live news.",
             "confidence_score": 0,
         }
@@ -131,3 +131,74 @@ def is_google_data_relevant(original_text, google_fact_check_text):
     if "NOT RELEVANT" in clean_response:
         return False
     return True
+
+
+def evaluate_google_data(original_claim, google_fact_check_data):
+    client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+
+    fact_check_text = google_fact_check_data.get("claims", [{}])[0].get("text", "")
+
+    system_instructions = """
+    Role: Act as the core fact-checking algorithmic engine for a misinformation filtering platform.
+    Task: Analyze the provided social media claim against the retrieved official fact check data and classify it strictly into one of three predefined tiers.
+
+    Evaluation Criteria (Follow this strict hierarchy):
+
+    FACT: The official fact check directly, explicitly, and substantially confirms the core factual elements of the claim.
+
+    FAKE: The official fact check directly contradicts, debunks, or proves the core elements of the claim to be demonstrably false or altered.
+
+    UNVERIFIED: The official fact check discusses the topic but lacks sufficient concrete data to definitively prove or debunk the claim.
+
+    Output Constraints:
+    Output ONLY a raw, valid JSON object. Absolutely NO markdown formatting (do not use ```json), NO conversational filler, and NO preambles.
+    You must calculate a confidence score. Do not output a score of 100 unless the evidence is indisputable.
+
+    JSON Schema:
+    {
+    "reasoning": "Draft a 1-sentence internal logical deduction comparing the claim to the official fact check data. Do this BEFORE deciding the verdict.",
+    "verdict": "MUST be exactly one of: [FACT, FAKE, UNVERIFIED]",
+    "summary": "A strict 1-2 sentence user-facing explanation following the rules above.",
+    "confidence_score": "An integer from 1 to 100 representing your certainty in the chosen verdict based on the quality of the evidence."
+    }
+    """
+
+    user_data = f"""
+    Inputs to Analyze:
+    
+    Claim: "{original_claim}"
+    
+    Official Fact Check Data: 
+    "{fact_check_text}"
+    """
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        response_format={"type": "json_object"},
+        messages=[
+            {
+                "role": "system",
+                "content": system_instructions,
+            },
+            {
+                "role": "user",
+                "content": user_data,
+            },
+        ],
+    )
+
+    try:
+        raw_content = response.choices[0].message.content
+
+        clean_json_string = (
+            raw_content.strip().replace("```json", "").replace("```", "").strip()
+        )
+
+        print("GOOGLE EVALUATION JSON OUTPUT:", clean_json_string)
+        return json.loads(clean_json_string)
+    except json.JSONDecodeError:
+        return {
+            "verdict": "UNVERIFIED",
+            "summary": "Could not definitively verify the claim from the official fact check data.",
+            "confidence_score": 0,
+        }
