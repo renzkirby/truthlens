@@ -1,0 +1,81 @@
+from rest_framework import serializers
+from django.contrib.auth.models import User
+from .models import Claim, Thread, UserProfile, EvidenceSubmission, Vote
+
+
+class UserSerializer(serializers.ModelSerializer):
+    trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
+
+    class Meta:
+        model = User
+        fields = ["id", "username", "email"]
+
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserProfile
+        fields = ["id", "user", "trust_score", "bio"]
+
+
+class ClaimSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Claim
+        fields = [
+            "id",
+            "claim_type",
+            "context_text",
+            "verdict",
+            "consensus_score",
+            "verified_via",
+            "last_updated",
+        ]
+
+
+class EvidenceSubmissionSerializer(serializers.ModelSerializer):
+    contributor = UserSerializer(read_only=True)
+
+    class Meta:
+        model = EvidenceSubmission
+        fields = [
+            "id",
+            "thread",
+            "contributor",
+            "evidence_caption",
+            "evidence_url",
+            "evidence_type",
+            "contributor_trust_snapshot",
+            "submitted_at",
+        ]
+
+
+class ThreadSerializer(serializers.ModelSerializer):
+    author = UserSerializer(read_only=True)
+    claim = ClaimSerializer(read_only=True)
+    evidence_submissions = EvidenceSubmissionSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Thread
+        fields = [
+            "id",
+            "claim",
+            "author",
+            "caption",
+            "status",
+            "created_at",
+            "evidence_submissions",
+        ]
+
+
+class VoteSerializer(serializers.ModelSerializer):
+    voter = UserSerializer(read_only=True)
+
+    class Meta:
+        model = Vote
+        fields = [
+            "id",
+            "evidence",
+            "voter",
+            "vote_value",
+            "vote_trust_snapshot",
+            "voted_at",
+        ]
