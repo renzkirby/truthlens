@@ -53,7 +53,7 @@ class Thread(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     claim = models.ForeignKey(Claim, on_delete=models.CASCADE, related_name="threads")
     author = models.ForeignKey(
-        "auth.User", on_delete=models.CASCADE, related_name="threads"
+        "auth.User", on_delete=models.CASCADE, related_name="authored_threads"
     )
     caption = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=20, blank=True, null=True)
@@ -73,7 +73,7 @@ class EvidenceSubmission(models.Model):
         Thread, on_delete=models.CASCADE, related_name="evidence_submissions"
     )
     contributor = models.ForeignKey(
-        "auth.User", on_delete=models.CASCADE, related_name="evidence_submissions"
+        "auth.User", on_delete=models.CASCADE, related_name="contributed_evidence"
     )
     evidence_caption = models.TextField(blank=True, null=True)
     evidence_url = models.URLField(max_length=500, blank=True, null=True)
@@ -100,7 +100,7 @@ class Vote(models.Model):
         EvidenceSubmission, on_delete=models.CASCADE, related_name="votes"
     )
     voter = models.ForeignKey(
-        "auth.User", on_delete=models.CASCADE, related_name="votes"
+        "auth.User", on_delete=models.CASCADE, related_name="user_votes"
     )
     vote_value = models.BooleanField()  # True for upvote, False for downvote
     vote_trust_snapshot = models.FloatField(blank=True, null=True)
@@ -116,7 +116,7 @@ class ThreadComment(models.Model):
         Thread, on_delete=models.CASCADE, related_name="comments"
     )
     commenter = models.ForeignKey(
-        "auth.User", on_delete=models.CASCADE, related_name="comments"
+        "auth.User", on_delete=models.CASCADE, related_name="user_comments"
     )
     comment_text = models.TextField()
     commented_at = models.DateTimeField(auto_now_add=True)
