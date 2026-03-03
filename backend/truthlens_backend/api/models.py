@@ -1,8 +1,19 @@
 from django.db import models
+from django.contrib.auth.models import User
 import uuid
 
 
 # Create your models here.
+class UserProfile(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
+    trust_score = models.FloatField(default=0.0)
+    bio = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"UserProfile {self.id} - User: {self.user.username} - Trust Score: {self.trust_score}"
+
+
 class Claim(models.Model):
     class VerificationSource(models.TextChoices):
         AI_EXTENSION = "AI_EXTENSION", "AI Extension"
@@ -77,6 +88,13 @@ class EvidenceSubmission(models.Model):
 
 
 class Vote(models.Model):
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["evidence", "voter"], name="unique_vote_per_evidence_per_user"
+            )
+        ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     evidence = models.ForeignKey(
         EvidenceSubmission, on_delete=models.CASCADE, related_name="votes"
