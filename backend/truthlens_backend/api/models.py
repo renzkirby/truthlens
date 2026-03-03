@@ -43,6 +43,8 @@ class Claim(models.Model):
         default=VerificationSource.PENDING,
     )
 
+    source_link = models.URLField(max_length=500, blank=True, null=True)
+
     last_updated = models.DateTimeField(auto_now=True)
 
     def __str__(self):

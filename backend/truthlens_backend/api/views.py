@@ -99,6 +99,7 @@ def receive_snippet(request):
                     "summary": ai_verdict.get("summary"),
                     "verdict": ai_verdict.get("verdict"),
                     "confidence_score": ai_verdict.get("confidence_score"),
+                    "sources": fact_check_data.get("claims", []),
                 }
                 source_type = "Official Fact Check"
             else:
