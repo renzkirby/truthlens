@@ -227,30 +227,25 @@ function displayResultCard(data) {
    let badgeColor = "#6b7280";
 
    if (source_type === "Official Fact Check" && result && result.length > 0) {
-      const firstClaim = result[0];
-      summary = "Where AI summarizes the fact check claim review, if available.";
-      if (firstClaim.claimReview && firstClaim.claimReview.length > 0) {
-         const review = firstClaim.claimReview[0];
-         verdict = review.textualRating || "No verdict available.";
-         sourceUrl = review.url || "No sources available.";
+      verdict = result.verdict;
+      summary = result.summary;
+      confidence_score = result.confidence_score;
 
-         const lowerVerdict = verdict.toLowerCase();
-         if (
-            lowerVerdict.includes("false") ||
-            lowerVerdict.includes("fake") ||
-            lowerVerdict.includes("misleading") ||
-            lowerVerdict.includes("incorrect")
-         )
-            badgeColor = "#e02424";
-         else if (lowerVerdict.includes("true") || lowerVerdict.includes("correct"))
-            badgeColor = "#0e9f6e";
-         else if (lowerVerdict === "satire") badgeColor = "#a83bf1";
-         else if (lowerVerdict.includes("scope")) badgeColor = "#6b7280";
-         else badgeColor = "#ebdc09";
+      const lowerVerdict = verdict.toLowerCase();
+      if (lowerVerdict === "fake" || lowerVerdict === "misleading" || lowerVerdict === "false")
+         badgeColor = "#e02424";
+      else if (lowerVerdict === "fact") badgeColor = "#0e9f6e";
+      else if (lowerVerdict === "satire") badgeColor = "#a83bf1";
+      else if (lowerVerdict.includes("scope")) badgeColor = "#6b7280";
+      else badgeColor = "#ebdc09";
+
+      if (result.sources && result.sources.length > 0) {
+         sourceUrl = result.sources[0].url;
       }
    } else if (source_type === "Live Web Search") {
       verdict = result.verdict;
       summary = result.summary;
+      confidence_score = result.confidence_score;
 
       const lowerVerdict = verdict.toLowerCase();
       if (lowerVerdict === "fake" || lowerVerdict === "misleading" || lowerVerdict === "false")
@@ -278,6 +273,12 @@ function displayResultCard(data) {
    card.id = "truthlens-result-card";
    card.className = "truthlens-card";
 
+   let confidence_bar_color = "#6b7280"; // Default gray
+
+   if (confidence_score < 40) confidence_bar_color = "#e02424";
+   else if (confidence_score >= 40 && confidence_score < 70) confidence_bar_color = "#ebdc09";
+   else if (confidence_score >= 70) confidence_bar_color = "#0e9f6e";
+
    card.innerHTML = `
       <div class="truthlens-header">
          <strong class="truthlens-title">TruthLens</strong>
@@ -291,6 +292,9 @@ function displayResultCard(data) {
          <div style="font-size: 14px; line-height: 1.4;">${summary}</div>
       </div>
       <div class="truthlens-confidence-score">Confidence Score: ${confidence_score}</div>
+      <div class="truthlens-confidence-bar">
+         <div class="truthlens-confidence-fill" style="width: ${confidence_score}%; background-color: ${confidence_bar_color};"></div>
+      </div>
 
       ${
          verdict === "UNVERIFIED"

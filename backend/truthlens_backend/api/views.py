@@ -36,29 +36,21 @@ def receive_snippet(request):
             base64_string = base64_string.split(",")[1]
 
         # Decode the base64 string and save it as an image
-        bytes_decoded = base64.b64decode(base64_string)
-        img = Image.open(BytesIO(bytes_decoded))
-        out_jpg = img.convert("RGB")
-        os.makedirs("./api/img/", exist_ok=True)
-        out_jpg.save("./api/img/snippet.jpg")
-
-        image_file = "./api/img/snippet.jpg"
-
-        image = Image.open(image_file)
-        image_hash = str(imagehash.phash(image))
-
+        image_bytes = base64.b64decode(base64_string)
+        pil_img = Image.open(BytesIO(image_bytes))
+        image_hash = str(imagehash.phash(pil_img))
         print("IMAGE HASH:", image_hash)
 
         # Perform OCR using EasyOCR
-        reader = easyocr.Reader(["en", "tl"])
-        result = reader.readtext(image_file)
+        ocr_reader = easyocr.Reader(["en", "tl"])
+        ocr_result = ocr_reader.readtext(image_bytes, detail=0)
 
-        if not result:
+        if not ocr_result:
             return JsonResponse({"error": "No text detected in the image"}, status=400)
 
-        extracted_text = " ".join([item[1] for item in result])
+        extracted_text = " ".join(ocr_result)
 
-        # Clean the extracted text using Gemini-2.5-Flash to get a concise search query
+        # Clean the extracted text using Groq to get a concise search query
         cleaned_text = clean_ocr_text(extracted_text).strip()
 
         if cleaned_text == "OUT_OF_SCOPE":

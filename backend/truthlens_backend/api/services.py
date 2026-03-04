@@ -55,7 +55,7 @@ def evaluate_tavily_data(original_claim, tavily_data):
 
     Output Constraints:
     Output ONLY a raw, valid JSON object. Absolutely NO markdown formatting (do not use ```json), NO conversational filler, and NO preambles.
-    You must calculate a confidence score. Do not output a score of 100 unless the evidence is indisputable.
+    You must calculate a confidence score. Do not output a score of 100 unless the evidence is indisputable. The summary must strictly follow the requirements outlined in the criteria above for each tier. DO NOT mention the presence or absence of evidence in the summary unless it is required by the criteria. For example, if the claim is classified as FACT or FAKE, do not mention the sufficiency of evidence in the summary. If the claim is classified as UNVERIFIED, do not mention any confirming or contradicting evidence in the summary. The summary should be concise and directly address the claim's classification based on the evidence.
 
     JSON Schema:
     {
