@@ -2,6 +2,10 @@ from groq import Groq
 from dotenv import load_dotenv
 import os
 import json
+import imagehash
+import base64
+from io import BytesIO
+from PIL import Image
 
 
 # Clean the OCR text to extract a concise search query or determine if it's out of scope
@@ -206,3 +210,11 @@ def evaluate_google_data(original_claim, google_fact_check_data):
             "summary": "Could not definitively verify the claim from the official fact check data.",
             "confidence_score": 0,
         }
+
+
+def process_image(raw_base64):
+    image_bytes = base64.b64decode(raw_base64)
+    pil_img = Image.open(BytesIO(image_bytes))
+    image_hash = str(imagehash.phash(pil_img))
+
+    return image_hash, image_bytes

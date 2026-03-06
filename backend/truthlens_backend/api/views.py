@@ -1,20 +1,10 @@
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from io import BytesIO
-from PIL import Image
 from tavily import TavilyClient
-import imagehash
 import os
 import json
-import base64
-import easyocr
 import requests
-from .services import (
-    clean_ocr_text,
-    evaluate_google_data,
-    evaluate_tavily_data,
-    is_google_data_relevant,
-)
+from .services import *
 from .ocr_service import extract_text_from_image
 
 
@@ -32,9 +22,7 @@ def receive_snippet(request):
             base64_string = base64_string.split(",")[1]
 
         # Decode the base64 string and save it as an image
-        image_bytes = base64.b64decode(base64_string)
-        pil_img = Image.open(BytesIO(image_bytes))
-        image_hash = str(imagehash.phash(pil_img))
+        image_hash, image_bytes = process_image(base64_string)
         print("IMAGE HASH:", image_hash)
 
         # Perform OCR using EasyOCR

@@ -7,6 +7,7 @@ let isDrawing = false;
 let startX, startY;
 let selectionBox = null;
 let overlay = null;
+let isAnalyzing = false;
 
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
    if (request.type === "ACTIVATE_SNIPPING") {
@@ -169,6 +170,8 @@ function cropAndSave(fullScreenshot, coords) {
          image_data: croppedScreenshot,
       };
       sendImageToServer(payload);
+      isAnalyzing = true;
+      displayLoadingCard();
 
       cleanup();
    };
@@ -186,6 +189,13 @@ async function sendImageToServer(image) {
    });
 
    const data = await response.json();
+
+   isAnalyzing = false;
+   const loadingCard = document.getElementById("truthlens-loading-card");
+   loadingCard.classList.remove("show");
+   setTimeout(() => {
+      loadingCard.remove();
+   }, 1000);
 
    console.log("Image analysis complete, result received from server");
    console.log("Server response:", data);
@@ -308,7 +318,34 @@ function displayResultCard(data) {
       `;
 
    document.body.appendChild(card);
+   void card.offsetWidth;
+   setTimeout(() => {
+      card.classList.add("show");
+   }, 100);
    document.getElementById("truthlens-close-btn").addEventListener("click", () => {
-      card.remove();
+      card.classList.remove("show");
+      setTimeout(() => {
+         card.remove();
+      }, 300);
    });
+}
+
+function displayLoadingCard() {
+   const card = document.createElement("div");
+   card.id = "truthlens-loading-card";
+   card.className = "truthlens-card";
+   card.innerHTML = `
+      <div class="truthlens-header">
+         <strong class="truthlens-title">TruthLens</strong>
+      </div>
+      <div class="truthlens-loading">
+         <div class="truthlens-spinner"></div>
+         <div class='truthlens-loading-text'>${isAnalyzing ? "Analyzing the image, please wait..." : "Analyzing Done"}</div>
+      </div>
+   `;
+   document.body.appendChild(card);
+
+   setTimeout(() => {
+      card.classList.add("show");
+   }, 100);
 }

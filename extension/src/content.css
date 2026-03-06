@@ -10,6 +10,14 @@
      z-index: 9999999;
      font-family: Arial, sans-serif;
      color: #333;
+     opacity: hidden;
+     transform: translateX(110%);
+     transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.truthlens-card.show {
+     opacity: 1;
+     transform: translateX(0);
 }
 
 .truthlens-header {
@@ -101,4 +109,8 @@
 .truthlens-confidence-fill {
      height: 100%;
      border-radius: 5px;
+}
+
+#truthlens-loading-card {
+     top: 80%;
 }
