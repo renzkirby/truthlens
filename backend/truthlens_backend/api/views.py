@@ -1,18 +1,13 @@
-from urllib import response
-from django.shortcuts import render
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from io import BytesIO
 from PIL import Image
-from dotenv import load_dotenv
 from tavily import TavilyClient
-from google import genai
 import imagehash
 import os
 import json
 import base64
 import easyocr
-import cv2
 import requests
 from .services import (
     clean_ocr_text,
@@ -20,6 +15,7 @@ from .services import (
     evaluate_tavily_data,
     is_google_data_relevant,
 )
+from .ocr_service import extract_text_from_image
 
 
 # Create your views here.
@@ -42,8 +38,7 @@ def receive_snippet(request):
         print("IMAGE HASH:", image_hash)
 
         # Perform OCR using EasyOCR
-        ocr_reader = easyocr.Reader(["en", "tl"])
-        ocr_result = ocr_reader.readtext(image_bytes, detail=0)
+        ocr_result = extract_text_from_image(image_bytes)
 
         if not ocr_result:
             return JsonResponse({"error": "No text detected in the image"}, status=400)
@@ -70,16 +65,20 @@ def receive_snippet(request):
             )
 
         # Use the cleaned text to query Google's Fact Check Tools API
-        api_url = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
-        payload = {
-            "query": cleaned_text,
-            "key": os.environ.get("FACT_CHECK_API_KEY"),
-        }
+        try:
+            api_url = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
+            payload = {
+                "query": cleaned_text,
+                "key": os.environ.get("FACT_CHECK_API_KEY"),
+            }
 
-        response = requests.get(api_url, params=payload)
-        fact_check_data = response.json()
+            response = requests.get(api_url, params=payload)
+            fact_check_data = response.json()
 
-        print("GOOGLE'S RESPONSE:", fact_check_data)
+            print("GOOGLE'S RESPONSE:", fact_check_data)
+        except Exception as e:
+            print("Error calling Google's Fact Check Tools API:", str(e))
+            fact_check_data = {}
 
         # Check if the API returned any claims and prepare the context data accordingly
         if fact_check_data.get("claims"):
@@ -98,27 +97,36 @@ def receive_snippet(request):
                 fact_check_data = {}
 
         if not fact_check_data.get("claims"):
-            tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
-            tavily_response = tavily_client.search(
-                query=cleaned_text,
-                search_depth="advanced",
-                topic="news",
-                days=3,
-                include_answer=False,
-            )
+            try:
+                tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
+                tavily_response = tavily_client.search(
+                    query=cleaned_text,
+                    search_depth="advanced",
+                    topic="news",
+                    days=3,
+                    include_answer=False,
+                )
 
-            tavily_results = tavily_response.get("results", [])
-            ai_verdict = evaluate_tavily_data(extracted_text, tavily_results)
+                tavily_results = tavily_response.get("results", [])
+                ai_verdict = evaluate_tavily_data(extracted_text, tavily_results)
 
-            print(ai_verdict)
+                print(ai_verdict)
 
-            context_data = {
-                "summary": ai_verdict.get("summary"),
-                "verdict": ai_verdict.get("verdict"),
-                "confidence_score": ai_verdict.get("confidence_score"),
-                "sources": tavily_results,
-            }
-            source_type = "Live Web Search"
+                context_data = {
+                    "summary": ai_verdict.get("summary"),
+                    "verdict": ai_verdict.get("verdict"),
+                    "confidence_score": ai_verdict.get("confidence_score"),
+                    "sources": tavily_results,
+                }
+                source_type = "Live Web Search"
+            except Exception as e:
+                print("Error calling Tavily API:", str(e))
+                context_data = {
+                    "summary": "Could not retrieve relevant information from the web to verify the claim.",
+                    "verdict": "UNVERIFIED",
+                    "confidence_score": 0,
+                }
+                source_type = "Live Web Search"
 
         return JsonResponse(
             {
