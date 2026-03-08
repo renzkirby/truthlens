@@ -51,6 +51,35 @@ import {
    Sparkles,
    Layers,
    PanelLeft,
+   Bell,
+   BellOff,
+   Lock,
+   Mail,
+   Smartphone,
+   Download,
+   Zap,
+   Activity,
+   ChevronRight,
+   Info,
+   ToggleLeft,
+   ToggleRight,
+   PieChart,
+   Minimize2,
+   AlertOctagon,
+   ListChecks,
+   Rocket,
+   Play,
+   MonitorSmartphone,
+   Check,
+   Trash2,
+   RefreshCw,
+   Volume2,
+   VolumeX,
+   Send,
+   ArrowLeft,
+   UserCheck,
+   Clock,
+   Circle,
 } from "lucide-react";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
@@ -300,6 +329,233 @@ const AV = {
    politics: { Icon: Landmark, bg: "#dbeafe", color: "#1e40af" },
    satire: { Icon: Wand2, bg: "#ede9fe", color: T.violet },
    default: { Icon: User, bg: "#f3f4f6", color: T.gray },
+};
+
+// ─── Browser Chrome wrapper (reused by Feed, Thread, Auth) ───────────────────
+const BrowserChrome = ({ url, children }) => (
+   <div
+      style={{
+         overflow: "hidden",
+         borderTop: "1px solid #d1d5db",
+         borderBottom: "1px solid #d1d5db",
+         boxShadow: "0 8px 40px rgba(0,0,0,0.18)",
+      }}>
+      {/* Title bar */}
+      <div
+         style={{
+            background: "#e8e8e8",
+            padding: "10px 16px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            borderBottom: "1px solid #d0d0d0",
+         }}>
+         {/* Traffic lights */}
+         <div style={{ display: "flex", gap: 6 }}>
+            {["#ff5f57", "#febc2e", "#28c840"].map((c) => (
+               <div
+                  key={c}
+                  style={{ width: 12, height: 12, borderRadius: "50%", background: c }}
+               />
+            ))}
+         </div>
+         {/* Nav arrows */}
+         <div style={{ display: "flex", gap: 4 }}>
+            <div
+               style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 5,
+                  background: "#d0d0d0",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+               }}>
+               <ArrowRight
+                  size={11}
+                  color="#888"
+                  style={{ transform: "rotate(180deg)" }}
+               />
+            </div>
+            <div
+               style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 5,
+                  background: "#d0d0d0",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  opacity: 0.4,
+               }}>
+               <ArrowRight
+                  size={11}
+                  color="#888"
+               />
+            </div>
+         </div>
+         {/* Address bar */}
+         <div
+            style={{
+               flex: 1,
+               background: "#fff",
+               borderRadius: 6,
+               padding: "5px 14px",
+               fontSize: 12,
+               color: "#555",
+               display: "flex",
+               alignItems: "center",
+               gap: 8,
+               border: "1px solid #c8c8c8",
+            }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+               <div
+                  style={{
+                     width: 12,
+                     height: 12,
+                     borderRadius: "50%",
+                     background: T.green,
+                     display: "flex",
+                     alignItems: "center",
+                     justifyContent: "center",
+                  }}>
+                  <Shield
+                     size={7}
+                     color="#fff"
+                     strokeWidth={3}
+                  />
+               </div>
+               <span style={{ fontSize: 11, color: "#999" }}>https://</span>
+            </div>
+            <span style={{ fontWeight: 600, color: "#333" }}>truthlens.app</span>
+            <span style={{ color: "#999" }}>/{url}</span>
+         </div>
+         {/* Browser icons */}
+         <div style={{ display: "flex", gap: 4 }}>
+            {[Search, Star, MoreHorizontal].map((BI, i) => (
+               <div
+                  key={i}
+                  style={{
+                     width: 26,
+                     height: 26,
+                     borderRadius: 5,
+                     display: "flex",
+                     alignItems: "center",
+                     justifyContent: "center",
+                  }}>
+                  <BI
+                     size={14}
+                     color="#666"
+                     strokeWidth={1.8}
+                  />
+               </div>
+            ))}
+         </div>
+      </div>
+      {/* Viewport */}
+      <div style={{ background: "#f1f5f9", minHeight: "calc(100vh - 160px)", overflowY: "auto" }}>
+         {children}
+      </div>
+   </div>
+);
+
+// Simulated in-page TruthLens app nav (shown inside the browser viewport)
+const AppNav = ({ activePage = "feed" }) => {
+   const pages = [
+      { id: "feed", Icon: Globe, label: "Community Feed" },
+      { id: "dashboard", Icon: LayoutDashboard, label: "Dashboard" },
+      { id: "notifications", Icon: Bell, label: "Notifications" },
+      { id: "settings", Icon: Settings, label: "Settings" },
+   ];
+   return (
+      <div
+         style={{
+            background: T.dark,
+            padding: "0 32px",
+            display: "flex",
+            alignItems: "center",
+            gap: 0,
+            boxShadow: "0 2px 12px rgba(0,0,0,0.25)",
+            position: "sticky",
+            top: 0,
+            zIndex: 50,
+         }}>
+         <div
+            style={{
+               display: "flex",
+               alignItems: "center",
+               gap: 10,
+               padding: "12px 0",
+               marginRight: 28,
+               borderRight: "1px solid rgba(255,255,255,0.08)",
+               paddingRight: 28,
+            }}>
+            <Logo size={14} />
+            <span
+               style={{ color: "#fff", fontWeight: 900, fontSize: 15, letterSpacing: "-0.01em" }}>
+               TruthLens
+            </span>
+         </div>
+         <div style={{ display: "flex", gap: 2, flex: 1 }}>
+            {pages.map(({ id, Icon: NI, label }) => (
+               <div
+                  key={id}
+                  style={{
+                     padding: "12px 14px",
+                     fontSize: 12,
+                     fontWeight: 600,
+                     display: "flex",
+                     alignItems: "center",
+                     gap: 7,
+                     color: activePage === id ? "#fff" : "rgba(255,255,255,0.45)",
+                     borderBottom:
+                        activePage === id ? `2px solid ${T.indigo}` : "2px solid transparent",
+                     cursor: "pointer",
+                  }}>
+                  <NI
+                     size={13}
+                     strokeWidth={activePage === id ? 2.5 : 2}
+                  />
+                  {label}
+               </div>
+            ))}
+         </div>
+         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div
+               style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 7,
+                  background: "rgba(255,255,255,0.07)",
+                  borderRadius: 8,
+                  padding: "6px 12px",
+                  cursor: "pointer",
+               }}>
+               <Avatar
+                  Icon={UserCircle}
+                  bg="rgba(255,255,255,0.12)"
+                  color="rgba(255,255,255,0.7)"
+                  size={26}
+               />
+               <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.8)" }}>
+                  @verifyme
+               </span>
+               <span
+                  style={{
+                     fontSize: 11,
+                     fontWeight: 800,
+                     color: T.green,
+                     background: "rgba(14,159,110,0.15)",
+                     borderRadius: 6,
+                     padding: "2px 7px",
+                     border: `1px solid rgba(14,159,110,0.3)`,
+                  }}>
+                  82
+               </span>
+            </div>
+         </div>
+      </div>
+   );
 };
 
 // ─── View 1: Extension Popup ──────────────────────────────────────────────────
@@ -903,291 +1159,756 @@ const ContentCards = () => (
 // ─── View 3: Auth Pages ───────────────────────────────────────────────────────
 const AuthPages = () => {
    const [mode, setMode] = useState("login");
-   return (
+
+   const orbs = [
+      { w: 280, h: 280, top: "-80px", left: "-80px", opacity: 0.1 },
+      { w: 200, h: 200, top: "55%", left: "62%", opacity: 0.08 },
+      { w: 120, h: 120, top: "78%", left: "8%", opacity: 0.06 },
+      { w: 320, h: 320, top: "-10%", left: "58%", opacity: 0.07 },
+   ];
+   const stats = [
+      { Icon: ScanLine, value: "128K+", label: "Claims Analyzed" },
+      { Icon: CheckCircle2, value: "94K+", label: "Facts Verified" },
+      { Icon: Users, value: "32K+", label: "Community Members" },
+   ];
+   const features = [
+      { Icon: Shield, text: "AI-powered claim detection in real time" },
+      { Icon: Users, text: "Community-driven evidence and voting" },
+      { Icon: Trophy, text: "Earn Trust Score by contributing verified facts" },
+      { Icon: BadgeCheck, text: "Browser extension for on-the-fly fact-checking" },
+   ];
+
+   // ── Shared left + right panels ──────────────────────────────────────────────
+   const LeftPanel = () => (
       <div
          style={{
-            display: "grid",
-            gridTemplateColumns: "420px 1fr",
-            gap: 32,
-            alignItems: "start",
+            background: `linear-gradient(160deg, ${T.dark} 0%, #2d2a6e 60%, ${T.indigo} 100%)`,
+            padding: "52px 48px",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            position: "relative",
+            overflow: "hidden",
+            flex: 1,
          }}>
-         <div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-               {["login", "register"].map((m) => (
-                  <button
-                     key={m}
-                     onClick={() => setMode(m)}
+         {orbs.map((o, i) => (
+            <div
+               key={i}
+               style={{
+                  position: "absolute",
+                  width: o.w,
+                  height: o.h,
+                  top: o.top,
+                  left: o.left,
+                  borderRadius: "50%",
+                  background: "rgba(255,255,255,0.9)",
+                  opacity: o.opacity,
+                  pointerEvents: "none",
+               }}
+            />
+         ))}
+         <svg
+            style={{
+               position: "absolute",
+               inset: 0,
+               width: "100%",
+               height: "100%",
+               opacity: 0.055,
+            }}
+            xmlns="http://www.w3.org/2000/svg">
+            <defs>
+               <pattern
+                  id="dots2"
+                  x="0"
+                  y="0"
+                  width="28"
+                  height="28"
+                  patternUnits="userSpaceOnUse">
+                  <circle
+                     cx="2"
+                     cy="2"
+                     r="1.8"
+                     fill="white"
+                  />
+               </pattern>
+            </defs>
+            <rect
+               width="100%"
+               height="100%"
+               fill="url(#dots2)"
+            />
+         </svg>
+
+         <div style={{ position: "relative", zIndex: 1 }}>
+            {/* Logo */}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 56 }}>
+               <Logo
+                  size={20}
+                  bg="rgba(255,255,255,0.15)"
+               />
+               <span
+                  style={{
+                     color: "#fff",
+                     fontWeight: 900,
+                     fontSize: 20,
+                     letterSpacing: "-0.02em",
+                  }}>
+                  TruthLens
+               </span>
+            </div>
+            {/* Headline */}
+            <div style={{ marginBottom: 40 }}>
+               <div
+                  style={{
+                     fontSize: 32,
+                     fontWeight: 900,
+                     color: "#fff",
+                     lineHeight: 1.2,
+                     letterSpacing: "-0.03em",
+                     marginBottom: 14,
+                  }}>
+                  {mode === "login" ? (
+                     <>
+                        The Internet
+                        <br />
+                        Deserves
+                        <br />
+                        the Truth.
+                     </>
+                  ) : (
+                     <>
+                        Join the Fight
+                        <br />
+                        Against
+                        <br />
+                        Misinformation.
+                     </>
+                  )}
+               </div>
+               <p
+                  style={{
+                     fontSize: 13,
+                     color: "rgba(255,255,255,0.55)",
+                     lineHeight: 1.8,
+                     margin: 0,
+                     maxWidth: 280,
+                  }}>
+                  {mode === "login"
+                     ? "Welcome back. Your community is counting on you to keep the information ecosystem honest."
+                     : "Create your account and start earning Trust Score by verifying claims alongside a global community."}
+               </p>
+            </div>
+            {/* Dynamic content */}
+            {mode === "register" ? (
+               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  {features.map(({ Icon: FI, text }) => (
+                     <div
+                        key={text}
+                        style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                        <div
+                           style={{
+                              width: 34,
+                              height: 34,
+                              borderRadius: 10,
+                              background: "rgba(255,255,255,0.1)",
+                              border: "1px solid rgba(255,255,255,0.12)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              flexShrink: 0,
+                           }}>
+                           <FI
+                              size={16}
+                              color="rgba(255,255,255,0.85)"
+                              strokeWidth={2}
+                           />
+                        </div>
+                        <span
+                           style={{
+                              fontSize: 13,
+                              color: "rgba(255,255,255,0.7)",
+                              lineHeight: 1.5,
+                           }}>
+                           {text}
+                        </span>
+                     </div>
+                  ))}
+               </div>
+            ) : (
+               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {stats.map(({ Icon: SI, value, label }) => (
+                     <div
+                        key={label}
+                        style={{
+                           display: "flex",
+                           alignItems: "center",
+                           gap: 16,
+                           background: "rgba(255,255,255,0.07)",
+                           borderRadius: 12,
+                           padding: "14px 18px",
+                           border: "1px solid rgba(255,255,255,0.1)",
+                        }}>
+                        <div
+                           style={{
+                              width: 38,
+                              height: 38,
+                              borderRadius: 10,
+                              background: "rgba(255,255,255,0.12)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              flexShrink: 0,
+                           }}>
+                           <SI
+                              size={18}
+                              color="#fff"
+                              strokeWidth={2}
+                           />
+                        </div>
+                        <div>
+                           <div
+                              style={{
+                                 fontSize: 20,
+                                 fontWeight: 900,
+                                 color: "#fff",
+                                 letterSpacing: "-0.02em",
+                                 lineHeight: 1,
+                              }}>
+                              {value}
+                           </div>
+                           <div
+                              style={{
+                                 fontSize: 11,
+                                 color: "rgba(255,255,255,0.45)",
+                                 fontWeight: 500,
+                                 marginTop: 2,
+                              }}>
+                              {label}
+                           </div>
+                        </div>
+                     </div>
+                  ))}
+               </div>
+            )}
+         </div>
+
+         <div style={{ position: "relative", zIndex: 1, marginTop: 40 }}>
+            <div
+               style={{ height: "1px", background: "rgba(255,255,255,0.08)", marginBottom: 16 }}
+            />
+            <div
+               style={{
+                  fontSize: 10,
+                  color: "rgba(255,255,255,0.3)",
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase",
+               }}>
+               www.truthlens.app
+            </div>
+         </div>
+      </div>
+   );
+
+   const RightPanel = () => (
+      <div
+         style={{
+            background: "#fff",
+            padding: "52px 56px",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            flex: 1,
+         }}>
+         <div style={{ maxWidth: 380, width: "100%", margin: "0 auto" }}>
+            {/* Greeting */}
+            <div style={{ marginBottom: 36 }}>
+               <div style={{ fontSize: 14, color: T.gray, fontWeight: 500, marginBottom: 6 }}>
+                  {mode === "login" ? "Hello! Welcome back." : "Hello! Let's get started."}
+               </div>
+               <div
+                  style={{
+                     fontSize: 28,
+                     fontWeight: 900,
+                     color: T.dark,
+                     letterSpacing: "-0.03em",
+                     lineHeight: 1.15,
+                  }}>
+                  {mode === "login" ? (
+                     <>
+                        <span style={{ color: T.indigo }}>Sign in</span> to your account
+                     </>
+                  ) : (
+                     <>
+                        <span style={{ color: T.indigo }}>Create</span> your account
+                     </>
+                  )}
+               </div>
+            </div>
+
+            {/* Fields */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+               {mode === "register" && (
+                  <div>
+                     <label
+                        style={{
+                           fontSize: 12,
+                           fontWeight: 700,
+                           color: "#374151",
+                           display: "block",
+                           marginBottom: 6,
+                        }}>
+                        Username
+                     </label>
+                     <div
+                        style={{
+                           background: "#f9fafb",
+                           borderBottom: `2px solid ${T.indigo}`,
+                           borderTop: "1.5px solid #e5e7eb",
+                           borderLeft: "1.5px solid #e5e7eb",
+                           borderRight: "1.5px solid #e5e7eb",
+                           borderRadius: "8px 8px 0 0",
+                           padding: "12px 14px",
+                           fontSize: 13,
+                           color: "#9ca3af",
+                           display: "flex",
+                           alignItems: "center",
+                           gap: 8,
+                        }}>
+                        <User
+                           size={14}
+                           color="#9ca3af"
+                        />
+                        Choose a unique username…
+                     </div>
+                  </div>
+               )}
+               <div>
+                  <label
                      style={{
-                        padding: "5px 16px",
-                        borderRadius: 999,
-                        fontSize: 11,
+                        fontSize: 12,
                         fontWeight: 700,
-                        cursor: "pointer",
-                        background: mode === m ? T.indigo : "#f3f4f6",
-                        color: mode === m ? "#fff" : T.gray,
-                        border: "none",
+                        color: "#374151",
+                        display: "block",
+                        marginBottom: 6,
                      }}>
-                     {m === "login" ? "Login" : "Register"}
+                     Email Address
+                  </label>
+                  <div
+                     style={{
+                        background: "#f9fafb",
+                        borderBottom: `2px solid ${T.indigo}`,
+                        borderTop: "1.5px solid #e5e7eb",
+                        borderLeft: "1.5px solid #e5e7eb",
+                        borderRight: "1.5px solid #e5e7eb",
+                        borderRadius: "8px 8px 0 0",
+                        padding: "12px 14px",
+                        fontSize: 13,
+                        color: "#9ca3af",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                     }}>
+                     <Layers
+                        size={14}
+                        color="#9ca3af"
+                     />
+                     you@example.com
+                  </div>
+               </div>
+               <div>
+                  <label
+                     style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: "#374151",
+                        display: "block",
+                        marginBottom: 6,
+                     }}>
+                     Password
+                  </label>
+                  <div
+                     style={{
+                        background: "#f9fafb",
+                        borderBottom: `2px solid ${T.indigo}`,
+                        borderTop: "1.5px solid #e5e7eb",
+                        borderLeft: "1.5px solid #e5e7eb",
+                        borderRight: "1.5px solid #e5e7eb",
+                        borderRadius: "8px 8px 0 0",
+                        padding: "12px 14px",
+                        fontSize: 13,
+                        color: "#9ca3af",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                     }}>
+                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <Shield
+                           size={14}
+                           color="#9ca3af"
+                        />
+                        ••••••••••
+                     </div>
+                     <div
+                        style={{
+                           display: "flex",
+                           alignItems: "center",
+                           gap: 4,
+                           fontSize: 11,
+                           color: T.indigo,
+                           cursor: "pointer",
+                           fontWeight: 600,
+                        }}>
+                        <Eye
+                           size={12}
+                           color={T.indigo}
+                        />
+                        Show
+                     </div>
+                  </div>
+               </div>
+
+               {mode === "login" && (
+                  <div
+                     style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                     }}>
+                     <label
+                        style={{
+                           display: "flex",
+                           alignItems: "center",
+                           gap: 7,
+                           fontSize: 12,
+                           color: T.gray,
+                           cursor: "pointer",
+                        }}>
+                        <div
+                           style={{
+                              width: 16,
+                              height: 16,
+                              border: `1.5px solid #d1d5db`,
+                              borderRadius: 4,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                           }}>
+                           <div
+                              style={{ width: 8, height: 8, background: T.indigo, borderRadius: 2 }}
+                           />
+                        </div>
+                        Remember me
+                     </label>
+                     <a
+                        style={{
+                           fontSize: 12,
+                           color: T.indigo,
+                           cursor: "pointer",
+                           fontWeight: 600,
+                        }}>
+                        Forgot Password?
+                     </a>
+                  </div>
+               )}
+
+               <button
+                  style={{
+                     background: T.indigo,
+                     color: "#fff",
+                     border: "none",
+                     borderRadius: 10,
+                     padding: "14px",
+                     fontSize: 14,
+                     fontWeight: 800,
+                     cursor: "pointer",
+                     letterSpacing: "0.05em",
+                     display: "flex",
+                     alignItems: "center",
+                     justifyContent: "center",
+                     gap: 9,
+                     marginTop: 4,
+                  }}>
+                  {mode === "login" ? "SIGN IN" : "CREATE ACCOUNT"}
+                  <ArrowRight
+                     size={16}
+                     strokeWidth={2.5}
+                  />
+               </button>
+            </div>
+
+            <div style={{ textAlign: "center", marginTop: 22, fontSize: 12, color: T.gray }}>
+               {mode === "login" ? (
+                  <span>
+                     Don't have an account?{" "}
+                     <a
+                        style={{ color: T.indigo, fontWeight: 700, cursor: "pointer" }}
+                        onClick={() => setMode("register")}>
+                        Create Account
+                     </a>
+                  </span>
+               ) : (
+                  <span>
+                     Already registered?{" "}
+                     <a
+                        style={{ color: T.indigo, fontWeight: 700, cursor: "pointer" }}
+                        onClick={() => setMode("login")}>
+                        Sign In
+                     </a>
+                  </span>
+               )}
+            </div>
+
+            {/* OAuth divider */}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "24px 0 0" }}>
+               <div style={{ flex: 1, height: 1, background: "#f0f0f0" }} />
+               <span
+                  style={{
+                     fontSize: 10,
+                     color: "#9ca3af",
+                     fontWeight: 700,
+                     letterSpacing: "0.06em",
+                  }}>
+                  OR CONTINUE WITH
+               </span>
+               <div style={{ flex: 1, height: 1, background: "#f0f0f0" }} />
+            </div>
+            <div style={{ display: "flex", gap: 12, marginTop: 14 }}>
+               {["Google", "GitHub"].map((p) => (
+                  <button
+                     key={p}
+                     style={{
+                        flex: 1,
+                        padding: "11px",
+                        background: "#f9fafb",
+                        border: "1.5px solid #e5e7eb",
+                        borderRadius: 10,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: "#374151",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 7,
+                     }}>
+                     <Globe
+                        size={14}
+                        color={T.gray}
+                        strokeWidth={2}
+                     />
+                     {p}
                   </button>
                ))}
             </div>
-            <SLabel>{mode === "login" ? "Login Page" : "Register Page"}</SLabel>
+         </div>
+      </div>
+   );
+
+   return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+         {/* Mode toggle */}
+         <div
+            style={{
+               display: "flex",
+               gap: 8,
+               marginBottom: 16,
+               alignItems: "center",
+               padding: "0 32px",
+            }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: T.gray }}>Preview mode:</span>
+            {["login", "register"].map((m) => (
+               <button
+                  key={m}
+                  onClick={() => setMode(m)}
+                  style={{
+                     padding: "5px 18px",
+                     borderRadius: 999,
+                     fontSize: 11,
+                     fontWeight: 700,
+                     cursor: "pointer",
+                     background: mode === m ? T.indigo : "#f3f4f6",
+                     color: mode === m ? "#fff" : T.gray,
+                     border: "none",
+                  }}>
+                  {m === "login" ? "Login" : "Register"}
+               </button>
+            ))}
+            <span style={{ fontSize: 10, color: "#9ca3af", marginLeft: 8 }}>
+               — Click to toggle between pages
+            </span>
+         </div>
+
+         {/* ── Browser Chrome Frame — full bleed ── */}
+         <div
+            style={{
+               overflow: "hidden",
+               boxShadow: "0 8px 40px rgba(0,0,0,0.2)",
+               borderTop: "1px solid #d1d5db",
+               borderBottom: "1px solid #d1d5db",
+            }}>
+            {/* Browser top bar */}
             <div
                style={{
-                  background: T.bg,
-                  minHeight: 540,
-                  borderRadius: 12,
-                  border: "1.5px solid #e5e7eb",
+                  background: "#e8e8e8",
+                  padding: "10px 16px",
                   display: "flex",
                   alignItems: "center",
-                  justifyContent: "center",
-                  padding: 24,
+                  gap: 12,
+                  borderBottom: "1px solid #d0d0d0",
                }}>
-               <div style={{ width: "100%", maxWidth: 360 }}>
-                  <div style={{ textAlign: "center", marginBottom: 28 }}>
+               {/* Window buttons */}
+               <div style={{ display: "flex", gap: 6 }}>
+                  {["#ff5f57", "#febc2e", "#28c840"].map((c) => (
                      <div
-                        style={{
-                           display: "inline-flex",
-                           alignItems: "center",
-                           justifyContent: "center",
-                           width: 52,
-                           height: 52,
-                           background: T.indigo,
-                           borderRadius: 14,
-                           marginBottom: 12,
-                        }}>
-                        <Search
-                           size={24}
-                           color="#fff"
-                           strokeWidth={2.5}
-                        />
-                     </div>
-                     <div
-                        style={{
-                           fontSize: 22,
-                           fontWeight: 900,
-                           color: "#111827",
-                           letterSpacing: "-0.02em",
-                        }}>
-                        TruthLens
-                     </div>
-                     <div style={{ fontSize: 12, color: T.gray, marginTop: 2 }}>
-                        {mode === "login" ? "Welcome back" : "Join the fact-checking community"}
-                     </div>
+                        key={c}
+                        style={{ width: 12, height: 12, borderRadius: "50%", background: c }}
+                     />
+                  ))}
+               </div>
+               {/* Nav arrows */}
+               <div style={{ display: "flex", gap: 4 }}>
+                  <div
+                     style={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: 5,
+                        background: "#d0d0d0",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                     }}>
+                     <ArrowRight
+                        size={11}
+                        color="#888"
+                        style={{ transform: "rotate(180deg)" }}
+                     />
                   </div>
-                  {mode === "register" && (
+                  <div
+                     style={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: 5,
+                        background: "#d0d0d0",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        opacity: 0.4,
+                     }}>
+                     <ArrowRight
+                        size={11}
+                        color="#888"
+                     />
+                  </div>
+               </div>
+               {/* Address bar */}
+               <div
+                  style={{
+                     flex: 1,
+                     background: "#fff",
+                     borderRadius: 6,
+                     padding: "5px 14px",
+                     fontSize: 12,
+                     color: "#555",
+                     display: "flex",
+                     alignItems: "center",
+                     gap: 8,
+                     border: "1px solid #c8c8c8",
+                  }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                      <div
                         style={{
-                           background: "#eff6ff",
-                           border: "1.5px solid #bfdbfe",
-                           borderRadius: 10,
-                           padding: "12px 14px",
-                           marginBottom: 20,
-                        }}>
-                        <div
-                           style={{
-                              fontSize: 11,
-                              fontWeight: 800,
-                              color: "#1d4ed8",
-                              marginBottom: 6,
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 6,
-                           }}>
-                           <Trophy
-                              size={13}
-                              color="#1d4ed8"
-                              strokeWidth={2.5}
-                           />
-                           Earn Your Trust Score
-                        </div>
-                        <p style={{ fontSize: 11, color: "#1e40af", lineHeight: 1.6, margin: 0 }}>
-                           Vote on evidence, submit sources, and resolve debates. Your{" "}
-                           <strong>Trust Score</strong> grows with every verified contribution —
-                           unlocking higher voting weight.
-                        </p>
-                     </div>
-                  )}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                     {mode === "register" && (
-                        <div>
-                           <label
-                              style={{
-                                 fontSize: 11,
-                                 fontWeight: 700,
-                                 color: "#374151",
-                                 display: "block",
-                                 marginBottom: 4,
-                              }}>
-                              Username
-                           </label>
-                           <div
-                              style={{
-                                 background: "#fff",
-                                 border: "1.5px solid #d1d5db",
-                                 borderRadius: 7,
-                                 padding: "9px 12px",
-                                 fontSize: 12,
-                                 color: "#9ca3af",
-                                 display: "flex",
-                                 gap: 7,
-                                 alignItems: "center",
-                              }}>
-                              <User
-                                 size={13}
-                                 color="#9ca3af"
-                              />
-                              Choose a unique username…
-                           </div>
-                        </div>
-                     )}
-                     <div>
-                        <label
-                           style={{
-                              fontSize: 11,
-                              fontWeight: 700,
-                              color: "#374151",
-                              display: "block",
-                              marginBottom: 4,
-                           }}>
-                           Email
-                        </label>
-                        <div
-                           style={{
-                              background: "#fff",
-                              border: "1.5px solid #d1d5db",
-                              borderRadius: 7,
-                              padding: "9px 12px",
-                              fontSize: 12,
-                              color: "#9ca3af",
-                              display: "flex",
-                              gap: 7,
-                              alignItems: "center",
-                           }}>
-                           <Layers
-                              size={13}
-                              color="#9ca3af"
-                           />
-                           you@example.com
-                        </div>
-                     </div>
-                     <div>
-                        <label
-                           style={{
-                              fontSize: 11,
-                              fontWeight: 700,
-                              color: "#374151",
-                              display: "block",
-                              marginBottom: 4,
-                           }}>
-                           Password
-                        </label>
-                        <div
-                           style={{
-                              background: "#fff",
-                              border: "1.5px solid #d1d5db",
-                              borderRadius: 7,
-                              padding: "9px 12px",
-                              fontSize: 12,
-                              color: "#9ca3af",
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                           }}>
-                           <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
-                              <Shield
-                                 size={13}
-                                 color="#9ca3af"
-                              />
-                              ••••••••••
-                           </div>
-                           <div
-                              style={{
-                                 display: "flex",
-                                 alignItems: "center",
-                                 gap: 4,
-                                 fontSize: 10,
-                                 color: T.indigo,
-                                 cursor: "pointer",
-                              }}>
-                              <Eye
-                                 size={11}
-                                 color={T.indigo}
-                              />
-                              Show
-                           </div>
-                        </div>
-                     </div>
-                     {mode === "login" && (
-                        <div style={{ textAlign: "right" }}>
-                           <a
-                              style={{
-                                 fontSize: 10,
-                                 color: T.indigo,
-                                 cursor: "pointer",
-                                 fontWeight: 600,
-                              }}>
-                              Forgot password?
-                           </a>
-                        </div>
-                     )}
-                     <button
-                        style={{
-                           background: T.indigo,
-                           color: "#fff",
-                           border: "none",
-                           borderRadius: 8,
-                           padding: "11px",
-                           fontSize: 13,
-                           fontWeight: 700,
-                           cursor: "pointer",
-                           marginTop: 4,
+                           width: 12,
+                           height: 12,
+                           borderRadius: "50%",
+                           background: T.green,
                            display: "flex",
                            alignItems: "center",
                            justifyContent: "center",
-                           gap: 8,
                         }}>
-                        {mode === "login" ? "Sign In" : "Create Account"}
-                        <ArrowRight
-                           size={15}
-                           strokeWidth={2.5}
+                        <Shield
+                           size={7}
+                           color="#fff"
+                           strokeWidth={3}
                         />
-                     </button>
+                     </div>
+                     <span style={{ fontSize: 11, color: "#999" }}>https://</span>
                   </div>
-                  <div style={{ textAlign: "center", marginTop: 16, fontSize: 11, color: T.gray }}>
-                     {mode === "login" ? (
-                        <span>
-                           No account?{" "}
-                           <a
-                              style={{ color: T.indigo, fontWeight: 700, cursor: "pointer" }}
-                              onClick={() => setMode("register")}>
-                              Register
-                           </a>
-                        </span>
-                     ) : (
-                        <span>
-                           Already registered?{" "}
-                           <a
-                              style={{ color: T.indigo, fontWeight: 700, cursor: "pointer" }}
-                              onClick={() => setMode("login")}>
-                              Sign In
-                           </a>
-                        </span>
-                     )}
-                  </div>
+                  <span style={{ fontWeight: 600, color: "#333" }}>truthlens.app</span>
+                  <span style={{ color: "#999" }}>/{mode === "login" ? "login" : "register"}</span>
+               </div>
+               {/* Browser action icons */}
+               <div style={{ display: "flex", gap: 6 }}>
+                  {[Search, Star, MoreHorizontal].map((BI, i) => (
+                     <div
+                        key={i}
+                        style={{
+                           width: 26,
+                           height: 26,
+                           borderRadius: 5,
+                           display: "flex",
+                           alignItems: "center",
+                           justifyContent: "center",
+                           background: "transparent",
+                           cursor: "pointer",
+                        }}>
+                        <BI
+                           size={14}
+                           color="#666"
+                           strokeWidth={1.8}
+                        />
+                     </div>
+                  ))}
+               </div>
+            </div>
+
+            {/* Page background — full-width desktop viewport */}
+            <div
+               style={{
+                  background: "#e8eaf0",
+                  padding: "60px 0",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minHeight: "calc(100vh - 120px)",
+               }}>
+               {/* Booklet — wide card filling most of the viewport */}
+               <div
+                  style={{
+                     display: "flex",
+                     width: "90%",
+                     maxWidth: 1300,
+                     borderRadius: 16,
+                     overflow: "hidden",
+                     boxShadow: "0 24px 64px rgba(0,0,0,0.22)",
+                     minHeight: 580,
+                  }}>
+                  <LeftPanel />
+                  <RightPanel />
                </div>
             </div>
          </div>
-         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+         {/* end browser frame */}
+
+         {/* ── Annotations below the frame ── */}
+         <div
+            style={{
+               display: "grid",
+               gridTemplateColumns: "1fr 1fr",
+               gap: 16,
+               marginTop: 28,
+               padding: "0 32px",
+            }}>
             <Ann
                title="Visual Structure"
                BoxIcon={Ruler}
                color={T.indigo}
                items={[
-                  "Full-viewport: min-h-screen bg-gray-50 flex items-center justify-center",
-                  "Card: max-w-sm w-full bg-white rounded-2xl shadow-lg p-8",
-                  "Logo → (ValueProp?) → Form fields → Submit → Toggle link",
-                  "Value prop box: bg-blue-50 border border-blue-200 rounded-xl",
+                  "Page bg: bg-slate-200 (or bg-gray-100) — offsets the white form panel",
+                  "Booklet: flex flex-row · w-[82%] max-w-5xl · rounded-2xl shadow-2xl",
+                  "Left & right panels: flex-1 — equal 50/50 split at all desktop widths",
+                  "Left panel: bg-gradient from-[#1e1b4b] via-[#2d2a6e] to-indigo-600",
+                  "Right panel: bg-white · px-14 py-[52px] · flex flex-col justify-center",
+                  "Form centered inside right: max-w-sm mx-auto (prevents stretching on wide)",
                ]}
             />
             <Ann
@@ -1195,12 +1916,14 @@ const AuthPages = () => {
                BoxIcon={Braces}
                color="#7c3aed"
                items={[
-                  "<AuthLayout> — centers card, sets bg-gray-50",
-                  "<BrandLogo> — reusable icon + wordmark",
-                  "<ValueProposition> — Register-only info card",
-                  "<FormField> — reusable label + input + error state",
-                  "<PasswordField> — extends FormField, show/hide toggle",
-                  "<AuthForm> — form logic, validation, submit handler",
+                  "<AuthPage> — owns mode state ('login' | 'register')",
+                  "<BrandPanel> — entire left side, receives mode prop",
+                  "<StatPill> — frosted stat card (login view)",
+                  "<FeatureItem> — icon + text row (register view)",
+                  "<AuthForm> — entire right side, mode + onSwitch props",
+                  "<FormField> — label + underline-bottom input + error msg",
+                  "<RememberForgotRow> — login-only row between fields",
+                  "<OAuthRow> — divider + Google / GitHub buttons",
                ]}
             />
             <Ann
@@ -1208,11 +1931,26 @@ const AuthPages = () => {
                BoxIcon={Palette}
                color={T.green}
                items={[
-                  "Input focus: focus:ring-2 focus:ring-indigo-500",
-                  "Error state: border-red-500 + text-red-600 helper text",
-                  "Submit btn: w-full py-2.5 hover:bg-indigo-700 transition-colors",
-                  "Value prop: text-blue-700 text-sm — acts as social proof",
-                  "No decorative imagery — trust is conveyed through restraint",
+                  "Inputs: border-b-2 border-indigo-600 only — underline style = editorial",
+                  "Submit: uppercase tracking-wider font-black — signals authority",
+                  "Left panel text hierarchy: 900 headline → 500 subtext → 45% opacity meta",
+                  "Orb blobs: rounded-full blur-3xl absolute pointer-events-none",
+                  "Dot grid: SVG pattern at opacity-5, does not compete with copy",
+                  "Focus ring on inputs: focus:outline-none focus:border-indigo-500",
+                  "Tab order: Username → Email → Password → Remember → Submit",
+               ]}
+            />
+            <Ann
+               title="Left Panel Content Strategy"
+               BoxIcon={Sparkles}
+               color={T.violet}
+               items={[
+                  "Login view: 3 stat pills — social proof before the user logs in",
+                  "Register view: 4 feature bullets — justifies the sign-up decision",
+                  "Both views: large headline + subtext paragraph + logo + URL footer",
+                  "Content swaps via mode prop — single <BrandPanel> component, no duplication",
+                  "On tablet (md): left panel shrinks but stays visible",
+                  "On mobile (sm): left panel hidden, form fills the full screen",
                ]}
             />
          </div>
@@ -1238,94 +1976,11 @@ const PersonalDashboard = () => {
       },
       { Icon: Image, text: '"Photo from 2018 shared as 2024"', verdict: "fake", date: "Jun 9" },
    ];
-   const nav = [
-      { Icon: LayoutDashboard, label: "Dashboard", active: true },
-      { Icon: Globe, label: "Community Feed", active: false },
-      { Icon: Settings, label: "Settings", active: false },
-   ];
    return (
-      <div
-         style={{
-            display: "grid",
-            gridTemplateColumns: "200px 1fr",
-            gap: 0,
-            background: T.bg,
-            borderRadius: 12,
-            border: "1.5px solid #e5e7eb",
-            overflow: "hidden",
-            minHeight: 600,
-         }}>
-         {/* Sidebar */}
-         <div
-            style={{
-               background: T.dark,
-               padding: "24px 0",
-               display: "flex",
-               flexDirection: "column",
-            }}>
-            <div
-               style={{ padding: "0 16px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <Logo size={14} />
-                  <span style={{ color: "#fff", fontWeight: 800, fontSize: 14 }}>TruthLens</span>
-               </div>
-            </div>
-            <nav style={{ padding: "16px 8px", flex: 1 }}>
-               {nav.map(({ Icon: NI, label, active }) => (
-                  <div
-                     key={label}
-                     style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        padding: "9px 12px",
-                        borderRadius: 8,
-                        marginBottom: 2,
-                        background: active ? "rgba(79,70,229,0.3)" : "transparent",
-                        cursor: "pointer",
-                     }}>
-                     <NI
-                        size={15}
-                        color={active ? "#fff" : "rgba(255,255,255,0.45)"}
-                        strokeWidth={active ? 2.5 : 2}
-                     />
-                     <span
-                        style={{
-                           fontSize: 12,
-                           fontWeight: active ? 700 : 500,
-                           color: active ? "#fff" : "rgba(255,255,255,0.55)",
-                        }}>
-                        {label}
-                     </span>
-                     {active && (
-                        <div
-                           style={{
-                              width: 5,
-                              height: 5,
-                              background: T.indigo,
-                              borderRadius: "50%",
-                              marginLeft: "auto",
-                           }}
-                        />
-                     )}
-                  </div>
-               ))}
-            </nav>
-            <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-               <Avatar
-                  Icon={UserCircle}
-                  bg="rgba(255,255,255,0.1)"
-                  color="rgba(255,255,255,0.7)"
-                  size={34}
-               />
-               <div style={{ fontSize: 11, fontWeight: 700, color: "#fff", marginTop: 6 }}>
-                  @verifyme
-               </div>
-               <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)" }}>Member since 2024</div>
-            </div>
-         </div>
-         {/* Main */}
-         <div style={{ padding: 24 }}>
+      <div style={{ background: "#f1f5f9", minHeight: "100%" }}>
+         <AppNav activePage="dashboard" />
+         {/* Page body */}
+         <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px 64px" }}>
             {/* Profile */}
             <div
                style={{
@@ -1892,15 +2547,10 @@ const CommunityFeed = () => {
       { id: "needs", Icon: Search, label: "Needs Evidence" },
    ];
    return (
-      <div
-         style={{
-            display: "grid",
-            gridTemplateColumns: "520px 1fr",
-            gap: 32,
-            alignItems: "start",
-         }}>
-         <div>
-            <SLabel>Community Feed — Facebook-style Layout</SLabel>
+      <div style={{ background: "#f1f5f9", minHeight: "100%" }}>
+         <AppNav activePage="feed" />
+         {/* Page body — centred feed column */}
+         <div style={{ maxWidth: 680, margin: "0 auto", padding: "32px 24px 64px" }}>
             {/* Filter bar */}
             <div
                style={{
@@ -1969,7 +2619,7 @@ const CommunityFeed = () => {
                   border: "1.5px solid #e5e7eb",
                   borderRadius: 12,
                   padding: "12px 16px",
-                  marginBottom: 16,
+                  marginBottom: 20,
                   display: "flex",
                   alignItems: "center",
                   gap: 12,
@@ -1978,7 +2628,7 @@ const CommunityFeed = () => {
                   Icon={UserCircle}
                   bg="#ede9fe"
                   color={T.violet}
-                  size={36}
+                  size={38}
                />
                <div
                   style={{
@@ -1986,8 +2636,8 @@ const CommunityFeed = () => {
                      background: "#f9fafb",
                      border: "1.5px solid #e5e7eb",
                      borderRadius: 999,
-                     padding: "9px 16px",
-                     fontSize: 12,
+                     padding: "10px 18px",
+                     fontSize: 13,
                      color: "#9ca3af",
                      cursor: "pointer",
                   }}>
@@ -1999,8 +2649,8 @@ const CommunityFeed = () => {
                      color: "#fff",
                      border: "none",
                      borderRadius: 8,
-                     padding: "8px 14px",
-                     fontSize: 11,
+                     padding: "9px 16px",
+                     fontSize: 12,
                      fontWeight: 700,
                      cursor: "pointer",
                      flexShrink: 0,
@@ -2015,7 +2665,7 @@ const CommunityFeed = () => {
                   Snip
                </button>
             </div>
-            {/* Posts */}
+            {/* Post list */}
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                {posts.map((p) => (
                   <PostCard
@@ -2025,58 +2675,6 @@ const CommunityFeed = () => {
                   />
                ))}
             </div>
-         </div>
-         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <Ann
-               title="Visual Structure"
-               BoxIcon={Ruler}
-               color={T.indigo}
-               items={[
-                  "Centered single column, max-w-xl · FilterBar → CreatePrompt → PostCards",
-                  "PostCard: Header → Caption → SnippedImage → VerdictOverlay → Reactions → Actions",
-                  "Verdict overlay strip: absolute bottom of image, border-t-4 semantic color",
-                  "ActionRow: React · Comment · Add Evidence (3 equal-width flex buttons)",
-               ]}
-            />
-            <Ann
-               title="React Components"
-               BoxIcon={Braces}
-               color="#7c3aed"
-               items={[
-                  "<CommunityFeed> — filter state, paginated post list",
-                  "<FilterBar> — activeFilter pill state, onFilterChange prop",
-                  "<CreatePostPrompt> — opens snip flow or upload modal",
-                  "<PostCard> — full post unit, receives post object",
-                  "<PostHeader> — Avatar, author, date, VerdictBadge, MoreHorizontal menu",
-                  "<SnippedImageBlock> — ImgPlaceholder + VerdictOverlay",
-                  "<ReactionBar> — icon stack + counts",
-                  "<PostActionRow> — 3 action buttons",
-               ]}
-            />
-            <Ann
-               title="Tailwind / UX Advice"
-               BoxIcon={Palette}
-               color={T.green}
-               items={[
-                  "PostCard: rounded-2xl shadow-sm hover:shadow-md transition-shadow",
-                  "Image: aspect-video or min-h-[200px] bg-gray-100",
-                  "VerdictOverlay: absolute bottom-0 inset-x-0 bg-[verdict]/10 border-t-4",
-                  "'Add Evidence': text-indigo-600 font-bold — distinct from other action btns",
-                  "Infinite scroll: IntersectionObserver on last card sentinel",
-               ]}
-            />
-            <Ann
-               title="UX Patterns"
-               BoxIcon={Puzzle}
-               color={T.amber}
-               items={[
-                  "Click image → opens Thread Detail page",
-                  "Click 'Comment' → expands inline input below ActionRow",
-                  "Click 'Add Evidence' → Thread Detail, auto-opens Evidence form",
-                  "MoreHorizontal menu → Report / Share / Copy Link",
-                  "Verdict overlay: informational only, non-interactive in feed",
-               ]}
-            />
          </div>
       </div>
    );
@@ -2154,601 +2752,633 @@ const ThreadDetail = () => {
    ];
    const tier = (s) => (s >= 75 ? T.green : s >= 45 ? T.amber : T.red);
    return (
-      <div style={{ maxWidth: 600 }}>
-         <SLabel>Thread Detail — Full Post + Tabbed Engagement</SLabel>
-         <PostCard post={post} />
-         {/* Evidence Toggle */}
-         <div style={{ marginTop: 12 }}>
-            <button
-               onClick={() => setShowForm((v) => !v)}
-               style={{
-                  width: "100%",
-                  background: showForm ? "#eff6ff" : T.indigo,
-                  color: showForm ? T.indigo : "#fff",
-                  border: `1.5px solid ${showForm ? T.indigo : "transparent"}`,
-                  borderRadius: showForm ? "10px 10px 0 0" : "10px",
-                  padding: "11px",
-                  fontSize: 13,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                  transition: "all 0.2s",
-               }}>
-               {showForm ? (
-                  <>
-                     <X
-                        size={15}
-                        strokeWidth={2.5}
-                     />
-                     Cancel Evidence Submission
-                  </>
-               ) : (
-                  <>
-                     <Paperclip
-                        size={15}
-                        strokeWidth={2.5}
-                     />
-                     Submit Evidence for This Claim
-                  </>
-               )}
-            </button>
-            {showForm && (
-               <div
-                  style={{
-                     background: "#fff",
-                     border: `1.5px solid ${T.indigo}`,
-                     borderTop: "none",
-                     borderRadius: "0 0 12px 12px",
-                     padding: "20px 20px 16px",
-                     boxShadow: "0 4px 16px rgba(79,70,229,0.08)",
-                  }}>
-                  <div
-                     style={{
-                        fontSize: 12,
-                        fontWeight: 800,
-                        color: T.indigo,
-                        marginBottom: 14,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
-                     }}>
-                     <Paperclip
-                        size={13}
-                        color={T.indigo}
-                        strokeWidth={2.5}
-                     />
-                     New Evidence Submission
-                  </div>
-                  <div
-                     style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gap: 12,
-                        marginBottom: 12,
-                     }}>
-                     <div>
-                        <label
-                           style={{
-                              fontSize: 11,
-                              fontWeight: 700,
-                              color: "#374151",
-                              display: "block",
-                              marginBottom: 4,
-                           }}>
-                           Source URL *
-                        </label>
-                        <div
-                           style={{
-                              background: "#f9fafb",
-                              border: "1.5px solid #d1d5db",
-                              borderRadius: 7,
-                              padding: "9px 12px",
-                              fontSize: 11,
-                              color: "#9ca3af",
-                              display: "flex",
-                              gap: 6,
-                              alignItems: "center",
-                           }}>
-                           <Link
-                              size={11}
-                              color="#9ca3af"
-                           />
-                           https://reliable-source.com/…
-                        </div>
-                     </div>
-                     <div>
-                        <label
-                           style={{
-                              fontSize: 11,
-                              fontWeight: 700,
-                              color: "#374151",
-                              display: "block",
-                              marginBottom: 4,
-                           }}>
-                           Evidence Type
-                        </label>
-                        <div
-                           style={{
-                              background: "#f9fafb",
-                              border: "1.5px solid #d1d5db",
-                              borderRadius: 7,
-                              padding: "9px 12px",
-                              fontSize: 11,
-                              color: "#374151",
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                           }}>
-                           <span>Contradicts Claim</span>
-                           <ChevronDown
-                              size={13}
-                              color={T.gray}
-                           />
-                        </div>
-                     </div>
-                  </div>
-                  <div style={{ marginBottom: 14 }}>
-                     <label
-                        style={{
-                           fontSize: 11,
-                           fontWeight: 700,
-                           color: "#374151",
-                           display: "block",
-                           marginBottom: 4,
-                        }}>
-                        Explanation *
-                     </label>
-                     <div
-                        style={{
-                           background: "#f9fafb",
-                           border: "1.5px solid #d1d5db",
-                           borderRadius: 7,
-                           padding: "10px 12px",
-                           fontSize: 11,
-                           color: "#9ca3af",
-                           minHeight: 72,
-                        }}>
-                        Explain why this source supports or refutes the claim…
-                     </div>
-                  </div>
-                  <div
-                     style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                     }}>
-                     <span
-                        style={{
-                           fontSize: 10,
-                           color: T.gray,
-                           display: "flex",
-                           alignItems: "center",
-                           gap: 4,
-                        }}>
-                        <BarChart2
-                           size={11}
-                           color={T.gray}
-                        />
-                        Your weight: <strong style={{ color: T.green }}>×1.8</strong> (Trust Score
-                        82)
-                     </span>
-                     <div style={{ display: "flex", gap: 8 }}>
-                        <button
-                           onClick={() => setShowForm(false)}
-                           style={{
-                              background: "#f3f4f6",
-                              color: T.gray,
-                              border: "none",
-                              borderRadius: 8,
-                              padding: "8px 16px",
-                              fontSize: 12,
-                              fontWeight: 600,
-                              cursor: "pointer",
-                           }}>
-                           Cancel
-                        </button>
-                        <button
-                           style={{
-                              background: T.indigo,
-                              color: "#fff",
-                              border: "none",
-                              borderRadius: 8,
-                              padding: "8px 20px",
-                              fontSize: 12,
-                              fontWeight: 700,
-                              cursor: "pointer",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 6,
-                           }}>
-                           Submit
-                           <ArrowRight
-                              size={13}
-                              strokeWidth={2.5}
-                           />
-                        </button>
-                     </div>
-                  </div>
-               </div>
-            )}
-         </div>
-         {/* Tabbed section */}
+      <div style={{ background: "#f1f5f9", minHeight: "100%" }}>
+         <AppNav activePage="feed" />
+         {/* Breadcrumb */}
          <div
             style={{
                background: "#fff",
-               border: "1.5px solid #e5e7eb",
-               borderRadius: 14,
-               overflow: "hidden",
-               marginTop: 12,
+               borderBottom: "1px solid #e5e7eb",
+               padding: "10px 32px",
+               display: "flex",
+               alignItems: "center",
+               gap: 8,
+               fontSize: 12,
+               color: T.gray,
             }}>
-            <div style={{ display: "flex", borderBottom: "1.5px solid #e5e7eb" }}>
-               {[
-                  { id: "comments", Icon: MessageCircle, label: `Comments (${post.comments})` },
-                  { id: "evidence", Icon: Paperclip, label: `Evidence Board (${post.evidence})` },
-               ].map(({ id, Icon: TI, label }) => (
-                  <button
-                     key={id}
-                     onClick={() => setActiveTab(id)}
+            <Globe
+               size={12}
+               color={T.gray}
+            />
+            <a style={{ color: T.indigo, fontWeight: 600, cursor: "pointer" }}>Community Feed</a>
+            <ArrowRight
+               size={11}
+               color="#d1d5db"
+            />
+            <span style={{ color: "#374151", fontWeight: 600 }}>Thread #1042</span>
+            <span style={{ marginLeft: "auto" }}>
+               <VerdictBadge verdict="misleading" />
+            </span>
+         </div>
+         {/* Page body */}
+         <div style={{ maxWidth: 680, margin: "0 auto", padding: "32px 24px 64px" }}>
+            <PostCard post={post} />
+            {/* Evidence Toggle */}
+            <div style={{ marginTop: 12 }}>
+               <button
+                  onClick={() => setShowForm((v) => !v)}
+                  style={{
+                     width: "100%",
+                     background: showForm ? "#eff6ff" : T.indigo,
+                     color: showForm ? T.indigo : "#fff",
+                     border: `1.5px solid ${showForm ? T.indigo : "transparent"}`,
+                     borderRadius: showForm ? "10px 10px 0 0" : "10px",
+                     padding: "12px",
+                     fontSize: 13,
+                     fontWeight: 700,
+                     cursor: "pointer",
+                     display: "flex",
+                     alignItems: "center",
+                     justifyContent: "center",
+                     gap: 8,
+                     transition: "all 0.2s",
+                  }}>
+                  {showForm ? (
+                     <>
+                        <X
+                           size={15}
+                           strokeWidth={2.5}
+                        />
+                        Cancel Evidence Submission
+                     </>
+                  ) : (
+                     <>
+                        <Paperclip
+                           size={15}
+                           strokeWidth={2.5}
+                        />
+                        Submit Evidence for This Claim
+                     </>
+                  )}
+               </button>
+               {showForm && (
+                  <div
                      style={{
-                        flex: 1,
-                        padding: "13px 8px",
-                        fontSize: 12,
-                        fontWeight: 700,
-                        background: activeTab === id ? "#fff" : "#f9fafb",
-                        color: activeTab === id ? T.indigo : T.gray,
-                        border: "none",
-                        borderBottom:
-                           activeTab === id ? `2px solid ${T.indigo}` : "2px solid transparent",
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: 7,
-                        transition: "all 0.15s",
+                        background: "#fff",
+                        border: `1.5px solid ${T.indigo}`,
+                        borderTop: "none",
+                        borderRadius: "0 0 12px 12px",
+                        padding: "20px 20px 16px",
+                        boxShadow: "0 4px 16px rgba(79,70,229,0.08)",
                      }}>
-                     <TI
-                        size={13}
-                        strokeWidth={2.5}
-                     />
-                     {label}
-                  </button>
-               ))}
-            </div>
-            {/* Comments */}
-            {activeTab === "comments" && (
-               <div style={{ padding: 16 }}>
-                  <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
-                     <Avatar
-                        Icon={UserCircle}
-                        bg="#ede9fe"
-                        color={T.violet}
-                        size={32}
-                     />
                      <div
                         style={{
-                           flex: 1,
-                           background: "#f9fafb",
-                           border: "1.5px solid #e5e7eb",
-                           borderRadius: 20,
-                           padding: "9px 16px",
                            fontSize: 12,
-                           color: "#9ca3af",
-                           cursor: "text",
+                           fontWeight: 800,
+                           color: T.indigo,
+                           marginBottom: 14,
                            display: "flex",
                            alignItems: "center",
                            gap: 6,
                         }}>
-                        <MessageSquare
+                        <Paperclip
                            size={13}
-                           color="#9ca3af"
+                           color={T.indigo}
+                           strokeWidth={2.5}
                         />
-                        Write a comment…
+                        New Evidence Submission
+                     </div>
+                     <div
+                        style={{
+                           display: "grid",
+                           gridTemplateColumns: "1fr 1fr",
+                           gap: 12,
+                           marginBottom: 12,
+                        }}>
+                        <div>
+                           <label
+                              style={{
+                                 fontSize: 11,
+                                 fontWeight: 700,
+                                 color: "#374151",
+                                 display: "block",
+                                 marginBottom: 4,
+                              }}>
+                              Source URL *
+                           </label>
+                           <div
+                              style={{
+                                 background: "#f9fafb",
+                                 border: "1.5px solid #d1d5db",
+                                 borderRadius: 7,
+                                 padding: "9px 12px",
+                                 fontSize: 11,
+                                 color: "#9ca3af",
+                                 display: "flex",
+                                 gap: 6,
+                                 alignItems: "center",
+                              }}>
+                              <Link
+                                 size={11}
+                                 color="#9ca3af"
+                              />
+                              https://reliable-source.com/…
+                           </div>
+                        </div>
+                        <div>
+                           <label
+                              style={{
+                                 fontSize: 11,
+                                 fontWeight: 700,
+                                 color: "#374151",
+                                 display: "block",
+                                 marginBottom: 4,
+                              }}>
+                              Evidence Type
+                           </label>
+                           <div
+                              style={{
+                                 background: "#f9fafb",
+                                 border: "1.5px solid #d1d5db",
+                                 borderRadius: 7,
+                                 padding: "9px 12px",
+                                 fontSize: 11,
+                                 color: "#374151",
+                                 display: "flex",
+                                 justifyContent: "space-between",
+                                 alignItems: "center",
+                              }}>
+                              <span>Contradicts Claim</span>
+                              <ChevronDown
+                                 size={13}
+                                 color={T.gray}
+                              />
+                           </div>
+                        </div>
+                     </div>
+                     <div style={{ marginBottom: 14 }}>
+                        <label
+                           style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              color: "#374151",
+                              display: "block",
+                              marginBottom: 4,
+                           }}>
+                           Explanation *
+                        </label>
+                        <div
+                           style={{
+                              background: "#f9fafb",
+                              border: "1.5px solid #d1d5db",
+                              borderRadius: 7,
+                              padding: "10px 12px",
+                              fontSize: 11,
+                              color: "#9ca3af",
+                              minHeight: 72,
+                           }}>
+                           Explain why this source supports or refutes the claim…
+                        </div>
+                     </div>
+                     <div
+                        style={{
+                           display: "flex",
+                           justifyContent: "space-between",
+                           alignItems: "center",
+                        }}>
+                        <span
+                           style={{
+                              fontSize: 10,
+                              color: T.gray,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 4,
+                           }}>
+                           <BarChart2
+                              size={11}
+                              color={T.gray}
+                           />
+                           Your weight: <strong style={{ color: T.green }}>×1.8</strong> (Trust
+                           Score 82)
+                        </span>
+                        <div style={{ display: "flex", gap: 8 }}>
+                           <button
+                              onClick={() => setShowForm(false)}
+                              style={{
+                                 background: "#f3f4f6",
+                                 color: T.gray,
+                                 border: "none",
+                                 borderRadius: 8,
+                                 padding: "8px 16px",
+                                 fontSize: 12,
+                                 fontWeight: 600,
+                                 cursor: "pointer",
+                              }}>
+                              Cancel
+                           </button>
+                           <button
+                              style={{
+                                 background: T.indigo,
+                                 color: "#fff",
+                                 border: "none",
+                                 borderRadius: 8,
+                                 padding: "8px 20px",
+                                 fontSize: 12,
+                                 fontWeight: 700,
+                                 cursor: "pointer",
+                                 display: "flex",
+                                 alignItems: "center",
+                                 gap: 6,
+                              }}>
+                              Submit
+                              <ArrowRight
+                                 size={13}
+                                 strokeWidth={2.5}
+                              />
+                           </button>
+                        </div>
                      </div>
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                     {comments.map((c, i) => {
-                        const av = AV[c.ak] || AV.default;
-                        return (
-                           <div
-                              key={i}
-                              style={{ display: "flex", gap: 10 }}>
-                              <Avatar
-                                 Icon={av.Icon}
-                                 bg={c.isMod ? "#d1fae5" : av.bg}
-                                 color={c.isMod ? T.green : av.color}
-                                 size={32}
-                              />
-                              <div style={{ flex: 1 }}>
-                                 <div
-                                    style={{
-                                       background: "#f9fafb",
-                                       borderRadius: "0 12px 12px 12px",
-                                       padding: "10px 14px",
-                                    }}>
+               )}
+            </div>
+            {/* Tabbed section */}
+            <div
+               style={{
+                  background: "#fff",
+                  border: "1.5px solid #e5e7eb",
+                  borderRadius: 14,
+                  overflow: "hidden",
+                  marginTop: 12,
+               }}>
+               <div style={{ display: "flex", borderBottom: "1.5px solid #e5e7eb" }}>
+                  {[
+                     { id: "comments", Icon: MessageCircle, label: `Comments (${post.comments})` },
+                     {
+                        id: "evidence",
+                        Icon: Paperclip,
+                        label: `Evidence Board (${post.evidence})`,
+                     },
+                  ].map(({ id, Icon: TI, label }) => (
+                     <button
+                        key={id}
+                        onClick={() => setActiveTab(id)}
+                        style={{
+                           flex: 1,
+                           padding: "13px 8px",
+                           fontSize: 12,
+                           fontWeight: 700,
+                           background: activeTab === id ? "#fff" : "#f9fafb",
+                           color: activeTab === id ? T.indigo : T.gray,
+                           border: "none",
+                           borderBottom:
+                              activeTab === id ? `2px solid ${T.indigo}` : "2px solid transparent",
+                           cursor: "pointer",
+                           display: "flex",
+                           alignItems: "center",
+                           justifyContent: "center",
+                           gap: 7,
+                           transition: "all 0.15s",
+                        }}>
+                        <TI
+                           size={13}
+                           strokeWidth={2.5}
+                        />
+                        {label}
+                     </button>
+                  ))}
+               </div>
+               {activeTab === "comments" && (
+                  <div style={{ padding: 16 }}>
+                     <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
+                        <Avatar
+                           Icon={UserCircle}
+                           bg="#ede9fe"
+                           color={T.violet}
+                           size={32}
+                        />
+                        <div
+                           style={{
+                              flex: 1,
+                              background: "#f9fafb",
+                              border: "1.5px solid #e5e7eb",
+                              borderRadius: 20,
+                              padding: "9px 16px",
+                              fontSize: 12,
+                              color: "#9ca3af",
+                              cursor: "text",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                           }}>
+                           <MessageSquare
+                              size={13}
+                              color="#9ca3af"
+                           />
+                           Write a comment…
+                        </div>
+                     </div>
+                     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                        {comments.map((c, i) => {
+                           const av = AV[c.ak] || AV.default;
+                           return (
+                              <div
+                                 key={i}
+                                 style={{ display: "flex", gap: 10 }}>
+                                 <Avatar
+                                    Icon={av.Icon}
+                                    bg={c.isMod ? "#d1fae5" : av.bg}
+                                    color={c.isMod ? T.green : av.color}
+                                    size={32}
+                                 />
+                                 <div style={{ flex: 1 }}>
+                                    <div
+                                       style={{
+                                          background: "#f9fafb",
+                                          borderRadius: "0 12px 12px 12px",
+                                          padding: "10px 14px",
+                                       }}>
+                                       <div
+                                          style={{
+                                             display: "flex",
+                                             alignItems: "center",
+                                             gap: 6,
+                                             marginBottom: 4,
+                                          }}>
+                                          <span
+                                             style={{
+                                                fontSize: 12,
+                                                fontWeight: 700,
+                                                color: T.indigo,
+                                             }}>
+                                             {c.u}
+                                          </span>
+                                          {c.isMod && (
+                                             <span
+                                                style={{
+                                                   fontSize: 9,
+                                                   background: "#d1fae5",
+                                                   color: "#065f46",
+                                                   borderRadius: 4,
+                                                   padding: "1px 5px",
+                                                   fontWeight: 700,
+                                                   display: "flex",
+                                                   alignItems: "center",
+                                                   gap: 3,
+                                                }}>
+                                                <Shield
+                                                   size={8}
+                                                   strokeWidth={2.5}
+                                                />
+                                                MOD
+                                             </span>
+                                          )}
+                                          <span
+                                             style={{
+                                                fontSize: 10,
+                                                color: T.gray,
+                                                marginLeft: "auto",
+                                             }}>
+                                             {c.ts}
+                                          </span>
+                                       </div>
+                                       <p
+                                          style={{
+                                             fontSize: 12,
+                                             color: "#374151",
+                                             margin: 0,
+                                             lineHeight: 1.6,
+                                          }}>
+                                          {c.t}
+                                       </p>
+                                    </div>
                                     <div
                                        style={{
                                           display: "flex",
-                                          alignItems: "center",
-                                          gap: 6,
-                                          marginBottom: 4,
+                                          gap: 12,
+                                          marginTop: 5,
+                                          paddingLeft: 14,
                                        }}>
-                                       <span
-                                          style={{
-                                             fontSize: 12,
-                                             fontWeight: 700,
-                                             color: T.indigo,
-                                          }}>
-                                          {c.u}
-                                       </span>
-                                       {c.isMod && (
-                                          <span
-                                             style={{
-                                                fontSize: 9,
-                                                background: "#d1fae5",
-                                                color: "#065f46",
-                                                borderRadius: 4,
-                                                padding: "1px 5px",
-                                                fontWeight: 700,
-                                                display: "flex",
-                                                alignItems: "center",
-                                                gap: 3,
-                                             }}>
-                                             <Shield
-                                                size={8}
-                                                strokeWidth={2.5}
-                                             />
-                                             MOD
-                                          </span>
-                                       )}
-                                       <span
+                                       <button
                                           style={{
                                              fontSize: 10,
                                              color: T.gray,
-                                             marginLeft: "auto",
+                                             background: "none",
+                                             border: "none",
+                                             cursor: "pointer",
+                                             fontWeight: 600,
+                                             display: "flex",
+                                             alignItems: "center",
+                                             gap: 4,
                                           }}>
-                                          {c.ts}
-                                       </span>
+                                          <ThumbsUp
+                                             size={11}
+                                             color={T.gray}
+                                             strokeWidth={2}
+                                          />
+                                          {c.likes}
+                                       </button>
+                                       <button
+                                          style={{
+                                             fontSize: 10,
+                                             color: T.gray,
+                                             background: "none",
+                                             border: "none",
+                                             cursor: "pointer",
+                                             fontWeight: 600,
+                                          }}>
+                                          Reply
+                                       </button>
                                     </div>
-                                    <p
-                                       style={{
-                                          fontSize: 12,
-                                          color: "#374151",
-                                          margin: 0,
-                                          lineHeight: 1.6,
-                                       }}>
-                                       {c.t}
-                                    </p>
                                  </div>
-                                 <div
-                                    style={{
-                                       display: "flex",
-                                       gap: 12,
-                                       marginTop: 5,
-                                       paddingLeft: 14,
-                                    }}>
-                                    <button
+                              </div>
+                           );
+                        })}
+                     </div>
+                  </div>
+               )}
+               {activeTab === "evidence" && (
+                  <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+                     <div
+                        style={{
+                           fontSize: 11,
+                           color: T.gray,
+                           display: "flex",
+                           justifyContent: "space-between",
+                           alignItems: "center",
+                        }}>
+                        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                           <BarChart2
+                              size={12}
+                              color={T.gray}
+                           />
+                           Sorted by weighted trust score
+                        </span>
+                        <span
+                           style={{
+                              fontSize: 10,
+                              background: "#f3f4f6",
+                              borderRadius: 4,
+                              padding: "2px 8px",
+                           }}>
+                           weighted = (up × trust/100) − (down × 0.5)
+                        </span>
+                     </div>
+                     {evidence.map((e, i) => (
+                        <div
+                           key={i}
+                           style={{
+                              background: "#fff",
+                              border: "1.5px solid #e5e7eb",
+                              borderLeft: `4px solid ${tier(e.score)}`,
+                              borderRadius: 10,
+                              padding: "14px 16px",
+                           }}>
+                           <div
+                              style={{
+                                 display: "flex",
+                                 justifyContent: "space-between",
+                                 alignItems: "center",
+                                 marginBottom: 8,
+                              }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                 <Avatar
+                                    Icon={UserCircle}
+                                    bg="#ede9fe"
+                                    color={T.violet}
+                                    size={28}
+                                 />
+                                 <div>
+                                    <div
+                                       style={{ fontSize: 12, fontWeight: 700, color: "#111827" }}>
+                                       {e.user}
+                                    </div>
+                                    <div
                                        style={{
-                                          fontSize: 10,
+                                          fontSize: 9,
                                           color: T.gray,
-                                          background: "none",
-                                          border: "none",
-                                          cursor: "pointer",
-                                          fontWeight: 600,
                                           display: "flex",
                                           alignItems: "center",
-                                          gap: 4,
+                                          gap: 3,
                                        }}>
-                                       <ThumbsUp
-                                          size={11}
-                                          color={T.gray}
-                                          strokeWidth={2}
+                                       <BadgeCheck
+                                          size={9}
+                                          color={tier(e.score)}
                                        />
-                                       {c.likes}
-                                    </button>
-                                    <button
+                                       Trust:{" "}
+                                       <strong style={{ color: tier(e.score) }}>{e.score}</strong>
+                                    </div>
+                                 </div>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                 {i === 0 && (
+                                    <span
                                        style={{
-                                          fontSize: 10,
-                                          color: T.gray,
-                                          background: "none",
-                                          border: "none",
-                                          cursor: "pointer",
-                                          fontWeight: 600,
+                                          fontSize: 9,
+                                          background: "#d1fae5",
+                                          color: "#065f46",
+                                          borderRadius: 4,
+                                          padding: "2px 6px",
+                                          fontWeight: 700,
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: 3,
                                        }}>
-                                       Reply
-                                    </button>
-                                 </div>
+                                       <Star
+                                          size={8}
+                                          strokeWidth={2.5}
+                                       />
+                                       Top
+                                    </span>
+                                 )}
+                                 <a
+                                    style={{
+                                       fontSize: 10,
+                                       color: T.indigo,
+                                       fontWeight: 600,
+                                       cursor: "pointer",
+                                       display: "flex",
+                                       alignItems: "center",
+                                       gap: 3,
+                                    }}>
+                                    <ExternalLink
+                                       size={10}
+                                       color={T.indigo}
+                                    />
+                                    {e.source}
+                                 </a>
                               </div>
                            </div>
-                        );
-                     })}
-                  </div>
-               </div>
-            )}
-            {/* Evidence board */}
-            {activeTab === "evidence" && (
-               <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-                  <div
-                     style={{
-                        fontSize: 11,
-                        color: T.gray,
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                     }}>
-                     <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <BarChart2
-                           size={12}
-                           color={T.gray}
-                        />
-                        Sorted by weighted trust score
-                     </span>
-                     <span
-                        style={{
-                           fontSize: 10,
-                           background: "#f3f4f6",
-                           borderRadius: 4,
-                           padding: "2px 8px",
-                        }}>
-                        weighted = (up × trust/100) − (down × 0.5)
-                     </span>
-                  </div>
-                  {evidence.map((e, i) => (
-                     <div
-                        key={i}
-                        style={{
-                           background: "#fff",
-                           border: "1.5px solid #e5e7eb",
-                           borderLeft: `4px solid ${tier(e.score)}`,
-                           borderRadius: 10,
-                           padding: "14px 16px",
-                        }}>
-                        <div
-                           style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                              marginBottom: 8,
-                           }}>
+                           <p
+                              style={{
+                                 fontSize: 12,
+                                 color: "#374151",
+                                 lineHeight: 1.6,
+                                 margin: "0 0 10px",
+                              }}>
+                              {e.expl}
+                           </p>
                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <Avatar
-                                 Icon={UserCircle}
-                                 bg="#ede9fe"
-                                 color={T.violet}
-                                 size={28}
-                              />
-                              <div>
-                                 <div style={{ fontSize: 12, fontWeight: 700, color: "#111827" }}>
-                                    {e.user}
-                                 </div>
-                                 <div
-                                    style={{
-                                       fontSize: 9,
-                                       color: T.gray,
-                                       display: "flex",
-                                       alignItems: "center",
-                                       gap: 3,
-                                    }}>
-                                    <BadgeCheck
-                                       size={9}
-                                       color={tier(e.score)}
-                                    />
-                                    Trust:{" "}
-                                    <strong style={{ color: tier(e.score) }}>{e.score}</strong>
-                                 </div>
-                              </div>
-                           </div>
-                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              {i === 0 && (
-                                 <span
-                                    style={{
-                                       fontSize: 9,
-                                       background: "#d1fae5",
-                                       color: "#065f46",
-                                       borderRadius: 4,
-                                       padding: "2px 6px",
-                                       fontWeight: 700,
-                                       display: "flex",
-                                       alignItems: "center",
-                                       gap: 3,
-                                    }}>
-                                    <Star
-                                       size={8}
-                                       strokeWidth={2.5}
-                                    />
-                                    Top
-                                 </span>
-                              )}
-                              <a
+                              <button
                                  style={{
-                                    fontSize: 10,
-                                    color: T.indigo,
-                                    fontWeight: 600,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 5,
+                                    background: "#f0fdf4",
+                                    border: "1.5px solid #bbf7d0",
+                                    borderRadius: 6,
+                                    padding: "4px 10px",
                                     cursor: "pointer",
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    color: "#166534",
+                                 }}>
+                                 <ChevronUp
+                                    size={13}
+                                    strokeWidth={2.5}
+                                 />
+                                 {e.up}
+                              </button>
+                              <button
+                                 style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 5,
+                                    background: "#fef2f2",
+                                    border: "1.5px solid #fecaca",
+                                    borderRadius: 6,
+                                    padding: "4px 10px",
+                                    cursor: "pointer",
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    color: "#991b1b",
+                                 }}>
+                                 <ChevronDown
+                                    size={13}
+                                    strokeWidth={2.5}
+                                 />
+                                 {e.down}
+                              </button>
+                              <span
+                                 style={{
+                                    fontSize: 9,
+                                    color: T.gray,
+                                    marginLeft: 4,
                                     display: "flex",
                                     alignItems: "center",
                                     gap: 3,
                                  }}>
-                                 <ExternalLink
-                                    size={10}
-                                    color={T.indigo}
+                                 <Hash
+                                    size={9}
+                                    color={T.gray}
                                  />
-                                 {e.source}
-                              </a>
+                                 Weighted: {(e.up * (e.score / 100) - e.down * 0.5).toFixed(1)}
+                              </span>
                            </div>
                         </div>
-                        <p
-                           style={{
-                              fontSize: 12,
-                              color: "#374151",
-                              lineHeight: 1.6,
-                              margin: "0 0 10px",
-                           }}>
-                           {e.expl}
-                        </p>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                           <button
-                              style={{
-                                 display: "flex",
-                                 alignItems: "center",
-                                 gap: 5,
-                                 background: "#f0fdf4",
-                                 border: "1.5px solid #bbf7d0",
-                                 borderRadius: 6,
-                                 padding: "4px 10px",
-                                 cursor: "pointer",
-                                 fontSize: 11,
-                                 fontWeight: 700,
-                                 color: "#166534",
-                              }}>
-                              <ChevronUp
-                                 size={13}
-                                 strokeWidth={2.5}
-                              />
-                              {e.up}
-                           </button>
-                           <button
-                              style={{
-                                 display: "flex",
-                                 alignItems: "center",
-                                 gap: 5,
-                                 background: "#fef2f2",
-                                 border: "1.5px solid #fecaca",
-                                 borderRadius: 6,
-                                 padding: "4px 10px",
-                                 cursor: "pointer",
-                                 fontSize: 11,
-                                 fontWeight: 700,
-                                 color: "#991b1b",
-                              }}>
-                              <ChevronDown
-                                 size={13}
-                                 strokeWidth={2.5}
-                              />
-                              {e.down}
-                           </button>
-                           <span
-                              style={{
-                                 fontSize: 9,
-                                 color: T.gray,
-                                 marginLeft: 4,
-                                 display: "flex",
-                                 alignItems: "center",
-                                 gap: 3,
-                              }}>
-                              <Hash
-                                 size={9}
-                                 color={T.gray}
-                              />
-                              Weighted: {(e.up * (e.score / 100) - e.down * 0.5).toFixed(1)}
-                           </span>
-                        </div>
-                     </div>
-                  ))}
-               </div>
-            )}
+                     ))}
+                  </div>
+               )}
+            </div>
          </div>
       </div>
    );
@@ -3007,15 +3637,3616 @@ const DesignSystem = () => (
    </div>
 );
 
+// ─── View: Settings Page ──────────────────────────────────────────────────────
+const SettingsPage = () => {
+   const [emailNotifs, setEmailNotifs] = useState(true);
+   const [pushNotifs, setPushNotifs] = useState(true);
+   const [evidenceAlerts, setEvidenceAlerts] = useState(true);
+   const [autoScan, setAutoScan] = useState(false);
+   const Toggle = ({ on, onToggle }) => (
+      <div
+         onClick={onToggle}
+         style={{ cursor: "pointer" }}>
+         {on ? (
+            <ToggleRight
+               size={28}
+               color={T.indigo}
+               strokeWidth={2}
+            />
+         ) : (
+            <ToggleLeft
+               size={28}
+               color={T.gray}
+               strokeWidth={2}
+            />
+         )}
+      </div>
+   );
+   const Row = ({ label, sub, on, onToggle }) => (
+      <div
+         style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "14px 0",
+            borderBottom: "1px solid #f3f4f6",
+         }}>
+         <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{label}</div>
+            {sub && <div style={{ fontSize: 11, color: T.gray, marginTop: 2 }}>{sub}</div>}
+         </div>
+         <Toggle
+            on={on}
+            onToggle={onToggle}
+         />
+      </div>
+   );
+   const Section = ({ title, Icon: SI, children }) => (
+      <div
+         style={{
+            background: "#fff",
+            borderRadius: 12,
+            border: "1.5px solid #e5e7eb",
+            marginBottom: 20,
+            overflow: "hidden",
+         }}>
+         <div
+            style={{
+               padding: "14px 20px",
+               borderBottom: "1px solid #f3f4f6",
+               display: "flex",
+               alignItems: "center",
+               gap: 8,
+               background: "#fafafa",
+            }}>
+            <div
+               style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 7,
+                  background: T.indigo,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+               }}>
+               <SI
+                  size={14}
+                  color="#fff"
+                  strokeWidth={2}
+               />
+            </div>
+            <span style={{ fontSize: 13, fontWeight: 800, color: "#111827" }}>{title}</span>
+         </div>
+         <div style={{ padding: "0 20px" }}>{children}</div>
+      </div>
+   );
+   return (
+      <div style={{ background: "#f1f5f9", minHeight: "100%" }}>
+         <AppNav activePage="settings" />
+         <div style={{ maxWidth: 720, margin: "0 auto", padding: "32px 24px 64px" }}>
+            <div style={{ marginBottom: 24 }}>
+               <div
+                  style={{
+                     fontSize: 22,
+                     fontWeight: 900,
+                     color: "#111827",
+                     letterSpacing: "-0.02em",
+                  }}>
+                  Settings
+               </div>
+               <div style={{ fontSize: 13, color: T.gray, marginTop: 4 }}>
+                  Manage your account preferences and extension behaviour.
+               </div>
+            </div>
+            <Section
+               title="Profile"
+               Icon={UserCircle}>
+               <div style={{ padding: "16px 0" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
+                     <Avatar
+                        Icon={UserCircle}
+                        bg="#ddd6fe"
+                        color={T.violet}
+                        size={56}
+                     />
+                     <div>
+                        <button
+                           style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              color: T.indigo,
+                              background: "#eff6ff",
+                              border: "1.5px solid #c7d2fe",
+                              borderRadius: 6,
+                              padding: "5px 12px",
+                              cursor: "pointer",
+                           }}>
+                           Change Avatar
+                        </button>
+                        <div style={{ fontSize: 10, color: T.gray, marginTop: 4 }}>
+                           JPG, PNG or GIF · max 2MB
+                        </div>
+                     </div>
+                  </div>
+                  {[
+                     { label: "Display Name", val: "@verifyme" },
+                     { label: "Email Address", val: "user@email.com" },
+                     { label: "Bio", val: "Passionate about media literacy..." },
+                  ].map(({ label, val }) => (
+                     <div
+                        key={label}
+                        style={{ marginBottom: 14 }}>
+                        <div
+                           style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              color: T.gray,
+                              letterSpacing: "0.06em",
+                              textTransform: "uppercase",
+                              marginBottom: 4,
+                           }}>
+                           {label}
+                        </div>
+                        <div
+                           style={{
+                              border: "1.5px solid #e5e7eb",
+                              borderRadius: 7,
+                              padding: "8px 12px",
+                              fontSize: 12,
+                              color: "#374151",
+                              background: "#fafafa",
+                           }}>
+                           {val}
+                        </div>
+                     </div>
+                  ))}
+                  <button
+                     style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        background: T.indigo,
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: 7,
+                        padding: "8px 18px",
+                        cursor: "pointer",
+                        marginTop: 4,
+                     }}>
+                     Save Changes
+                  </button>
+               </div>
+            </Section>
+            <Section
+               title="Notifications"
+               Icon={Bell}>
+               <Row
+                  label="Email notifications"
+                  sub="Receive digest emails for your scans and threads"
+                  on={emailNotifs}
+                  onToggle={() => setEmailNotifs((p) => !p)}
+               />
+               <Row
+                  label="Push notifications"
+                  sub="Browser push alerts for votes and replies"
+                  on={pushNotifs}
+                  onToggle={() => setPushNotifs((p) => !p)}
+               />
+               <Row
+                  label="Evidence alerts"
+                  sub="Notify me when new evidence is added to my threads"
+                  on={evidenceAlerts}
+                  onToggle={() => setEvidenceAlerts((p) => !p)}
+               />
+            </Section>
+            <Section
+               title="Extension"
+               Icon={ScanLine}>
+               <Row
+                  label="Auto-scan on page load"
+                  sub="Automatically scan claims when you open a new page"
+                  on={autoScan}
+                  onToggle={() => setAutoScan((p) => !p)}
+               />
+               <div
+                  style={{
+                     padding: "14px 0",
+                     display: "flex",
+                     alignItems: "center",
+                     justifyContent: "space-between",
+                  }}>
+                  <div>
+                     <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>
+                        Confidence threshold
+                     </div>
+                     <div style={{ fontSize: 11, color: T.gray, marginTop: 2 }}>
+                        Only show results above this confidence %
+                     </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                     {[60, 70, 80, 90].map((v) => (
+                        <button
+                           key={v}
+                           style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              padding: "4px 10px",
+                              borderRadius: 6,
+                              border: `1.5px solid ${v === 70 ? T.indigo : "#e5e7eb"}`,
+                              background: v === 70 ? T.indigo : "#fff",
+                              color: v === 70 ? "#fff" : T.gray,
+                              cursor: "pointer",
+                           }}>
+                           {v}%
+                        </button>
+                     ))}
+                  </div>
+               </div>
+            </Section>
+            <Section
+               title="Privacy & Security"
+               Icon={Lock}>
+               <Row
+                  label="Public profile"
+                  sub="Allow others to view your contributions and Trust Score"
+                  on={true}
+                  onToggle={() => {}}
+               />
+               <Row
+                  label="Anonymous voting"
+                  sub="Hide your username on evidence votes"
+                  on={false}
+                  onToggle={() => {}}
+               />
+               <div style={{ padding: "16px 0" }}>
+                  <button
+                     style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: T.red,
+                        background: "#fff5f5",
+                        border: "1.5px solid #fecaca",
+                        borderRadius: 7,
+                        padding: "8px 16px",
+                        cursor: "pointer",
+                     }}>
+                     Change Password
+                  </button>
+               </div>
+            </Section>
+            <Section
+               title="Danger Zone"
+               Icon={AlertOctagon}>
+               <div style={{ padding: "16px 0", display: "flex", gap: 12 }}>
+                  <button
+                     style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: T.red,
+                        background: "#fff5f5",
+                        border: "1.5px solid #fecaca",
+                        borderRadius: 7,
+                        padding: "8px 16px",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                     }}>
+                     <Trash2
+                        size={13}
+                        color={T.red}
+                     />{" "}
+                     Delete Account
+                  </button>
+                  <button
+                     style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: T.gray,
+                        background: "#f3f4f6",
+                        border: "1.5px solid #e5e7eb",
+                        borderRadius: 7,
+                        padding: "8px 16px",
+                        cursor: "pointer",
+                     }}>
+                     Export My Data
+                  </button>
+               </div>
+            </Section>
+         </div>
+      </div>
+   );
+};
+
+// ─── View: Notifications Panel ─────────────────────────────────────────────────
+const NotificationsPage = () => {
+   const [activeTab, setActiveTab] = useState("all");
+   const tabs = [
+      { id: "all", label: "All" },
+      { id: "votes", label: "Votes" },
+      { id: "evidence", label: "Evidence" },
+      { id: "system", label: "System" },
+   ];
+   const notifs = [
+      {
+         id: 1,
+         read: false,
+         Icon: ThumbsUp,
+         iconBg: "#d1fae5",
+         iconColor: T.green,
+         title: "Your evidence on 'Valencia flooding photo' received 12 upvotes",
+         time: "2m ago",
+         type: "votes",
+      },
+      {
+         id: 2,
+         read: false,
+         Icon: Paperclip,
+         iconBg: "#e0e7ff",
+         iconColor: T.indigo,
+         title: "New evidence submitted on your thread 'Vaccine efficacy chart'",
+         time: "1h ago",
+         type: "evidence",
+      },
+      {
+         id: 3,
+         read: false,
+         Icon: CheckCircle2,
+         iconBg: "#d1fae5",
+         iconColor: T.green,
+         title: "Thread you contributed to has been marked Verified",
+         time: "3h ago",
+         type: "system",
+      },
+      {
+         id: 4,
+         read: true,
+         Icon: AlertTriangle,
+         iconBg: "#fef3c7",
+         iconColor: T.amber,
+         title: "Claim you submitted was updated to Misleading by community vote",
+         time: "5h ago",
+         type: "system",
+      },
+      {
+         id: 5,
+         read: true,
+         Icon: ThumbsUp,
+         iconBg: "#d1fae5",
+         iconColor: T.green,
+         title: "Your comment on 'Senator healthcare vote' received 5 likes",
+         time: "1d ago",
+         type: "votes",
+      },
+      {
+         id: 6,
+         read: true,
+         Icon: Paperclip,
+         iconBg: "#e0e7ff",
+         iconColor: T.indigo,
+         title: "@factchecker added evidence to a thread you're following",
+         time: "2d ago",
+         type: "evidence",
+      },
+      {
+         id: 7,
+         read: true,
+         Icon: BadgeCheck,
+         iconBg: "#ede9fe",
+         iconColor: T.violet,
+         title: "Your Trust Score increased to 82 — you've unlocked Trusted Contributor status",
+         time: "3d ago",
+         type: "system",
+      },
+   ];
+   const filtered = activeTab === "all" ? notifs : notifs.filter((n) => n.type === activeTab);
+   return (
+      <div style={{ background: "#f1f5f9", minHeight: "100%" }}>
+         <AppNav activePage="notifications" />
+         <div style={{ maxWidth: 680, margin: "0 auto", padding: "32px 24px 64px" }}>
+            <div
+               style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 20,
+               }}>
+               <div>
+                  <div
+                     style={{
+                        fontSize: 22,
+                        fontWeight: 900,
+                        color: "#111827",
+                        letterSpacing: "-0.02em",
+                     }}>
+                     Notifications
+                  </div>
+                  <div style={{ fontSize: 13, color: T.gray, marginTop: 2 }}>3 unread</div>
+               </div>
+               <button
+                  style={{
+                     fontSize: 11,
+                     fontWeight: 700,
+                     color: T.indigo,
+                     background: "transparent",
+                     border: "none",
+                     cursor: "pointer",
+                     display: "flex",
+                     alignItems: "center",
+                     gap: 5,
+                  }}>
+                  <Check
+                     size={13}
+                     color={T.indigo}
+                  />{" "}
+                  Mark all read
+               </button>
+            </div>
+            {/* Tabs */}
+            <div
+               style={{
+                  display: "flex",
+                  gap: 4,
+                  background: "#fff",
+                  borderRadius: 10,
+                  padding: 4,
+                  border: "1.5px solid #e5e7eb",
+                  marginBottom: 20,
+               }}>
+               {tabs.map((t) => (
+                  <button
+                     key={t.id}
+                     onClick={() => setActiveTab(t.id)}
+                     style={{
+                        flex: 1,
+                        padding: "7px 0",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        borderRadius: 7,
+                        border: "none",
+                        background: activeTab === t.id ? T.indigo : "transparent",
+                        color: activeTab === t.id ? "#fff" : T.gray,
+                        cursor: "pointer",
+                        transition: "all 0.15s",
+                     }}>
+                     {t.label}
+                  </button>
+               ))}
+            </div>
+            {/* List */}
+            <div
+               style={{
+                  background: "#fff",
+                  borderRadius: 12,
+                  border: "1.5px solid #e5e7eb",
+                  overflow: "hidden",
+               }}>
+               {filtered.map((n, i) => (
+                  <div
+                     key={n.id}
+                     style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: 14,
+                        padding: "14px 18px",
+                        borderBottom: i < filtered.length - 1 ? "1px solid #f3f4f6" : "none",
+                        background: n.read ? "#fff" : "#f5f3ff",
+                        cursor: "pointer",
+                     }}>
+                     <div
+                        style={{
+                           width: 38,
+                           height: 38,
+                           borderRadius: "50%",
+                           background: n.iconBg,
+                           display: "flex",
+                           alignItems: "center",
+                           justifyContent: "center",
+                           flexShrink: 0,
+                        }}>
+                        <n.Icon
+                           size={17}
+                           color={n.iconColor}
+                           strokeWidth={2}
+                        />
+                     </div>
+                     <div style={{ flex: 1 }}>
+                        <div
+                           style={{
+                              fontSize: 12,
+                              color: "#1f2937",
+                              lineHeight: 1.5,
+                              fontWeight: n.read ? 400 : 600,
+                           }}>
+                           {n.title}
+                        </div>
+                        <div
+                           style={{
+                              fontSize: 10,
+                              color: T.gray,
+                              marginTop: 4,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 4,
+                           }}>
+                           <Clock
+                              size={9}
+                              color={T.gray}
+                           />{" "}
+                           {n.time}
+                        </div>
+                     </div>
+                     {!n.read && (
+                        <div
+                           style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: "50%",
+                              background: T.indigo,
+                              flexShrink: 0,
+                              marginTop: 4,
+                           }}
+                        />
+                     )}
+                  </div>
+               ))}
+            </div>
+         </div>
+      </div>
+   );
+};
+
+// ─── View: User Profile Page (Public) ─────────────────────────────────────────
+const UserProfilePage = () => {
+   const [activeTab, setActiveTab] = useState("evidence");
+   const tabs = [
+      { id: "evidence", label: "Evidence Submitted" },
+      { id: "threads", label: "Threads Started" },
+      { id: "comments", label: "Comments" },
+   ];
+   const evidence = [
+      {
+         title: "CDC report confirms no link between 5G and health issues",
+         thread: "5G towers cause cancer",
+         verdict: "fake",
+         votes: 34,
+         date: "Jun 12",
+      },
+      {
+         title: "Reuters fact-check: unemployment figures are accurate per BLS data",
+         thread: "Unemployment at 50-year low",
+         verdict: "verified",
+         votes: 28,
+         date: "Jun 10",
+      },
+      {
+         title: "PubMed study contradicts mask efficacy claim — methodology flawed",
+         thread: "Masks ineffective against COVID",
+         verdict: "misleading",
+         votes: 19,
+         date: "Jun 8",
+      },
+   ];
+   return (
+      <div style={{ background: "#f1f5f9", minHeight: "100%" }}>
+         <AppNav activePage="feed" />
+         {/* Breadcrumb */}
+         <div
+            style={{
+               background: "#fff",
+               borderBottom: "1px solid #e5e7eb",
+               padding: "10px 32px",
+               display: "flex",
+               alignItems: "center",
+               gap: 6,
+            }}>
+            <Globe
+               size={12}
+               color={T.gray}
+            />
+            <span style={{ fontSize: 11, color: T.gray, cursor: "pointer" }}>Community Feed</span>
+            <ChevronRight
+               size={11}
+               color="#d1d5db"
+            />
+            <span style={{ fontSize: 11, color: "#374151", fontWeight: 600 }}>@factchecker_ph</span>
+         </div>
+         <div style={{ maxWidth: 820, margin: "0 auto", padding: "28px 24px 64px" }}>
+            {/* Profile Header */}
+            <div
+               style={{
+                  background: "#fff",
+                  borderRadius: 14,
+                  border: "1.5px solid #e5e7eb",
+                  padding: "28px 28px 20px",
+                  marginBottom: 20,
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 20,
+               }}>
+               <Avatar
+                  Icon={Eye}
+                  bg="#fce7f3"
+                  color="#be185d"
+                  size={72}
+               />
+               <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                     <div style={{ fontSize: 20, fontWeight: 900, color: "#111827" }}>
+                        @factchecker_ph
+                     </div>
+                     <BadgeCheck
+                        size={18}
+                        color={T.green}
+                     />
+                  </div>
+                  <div
+                     style={{
+                        fontSize: 12,
+                        color: T.gray,
+                        marginBottom: 8,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                     }}>
+                     <Landmark
+                        size={11}
+                        color={T.gray}
+                     />{" "}
+                     Senior Fact-Checker · Joined March 2023
+                  </div>
+                  <div style={{ fontSize: 12, color: "#374151", lineHeight: 1.6, maxWidth: 480 }}>
+                     Independent media researcher focused on Philippine political misinformation. 3+
+                     years verifying viral claims across social platforms.
+                  </div>
+                  {/* Stats row */}
+                  <div style={{ display: "flex", gap: 24, marginTop: 16 }}>
+                     {[
+                        { label: "Trust Score", val: "91", color: T.green },
+                        { label: "Evidence", val: "147" },
+                        { label: "Accuracy", val: "94%", color: T.green },
+                        { label: "Votes Received", val: "1.2k" },
+                     ].map(({ label, val, color }) => (
+                        <div key={label}>
+                           <div
+                              style={{ fontSize: 18, fontWeight: 900, color: color || "#111827" }}>
+                              {val}
+                           </div>
+                           <div
+                              style={{
+                                 fontSize: 9,
+                                 color: T.gray,
+                                 fontWeight: 700,
+                                 letterSpacing: "0.06em",
+                                 textTransform: "uppercase",
+                              }}>
+                              {label}
+                           </div>
+                        </div>
+                     ))}
+                  </div>
+               </div>
+               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <button
+                     style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        background: T.indigo,
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: 8,
+                        padding: "9px 20px",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                     }}>
+                     <UserCheck
+                        size={13}
+                        color="#fff"
+                     />{" "}
+                     Follow
+                  </button>
+                  <button
+                     style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        background: "#fff",
+                        color: T.gray,
+                        border: "1.5px solid #e5e7eb",
+                        borderRadius: 8,
+                        padding: "9px 20px",
+                        cursor: "pointer",
+                     }}>
+                     Message
+                  </button>
+               </div>
+            </div>
+            {/* Trust Score visual */}
+            <div
+               style={{
+                  background: "#fff",
+                  borderRadius: 14,
+                  border: "1.5px solid #e5e7eb",
+                  padding: "20px 24px",
+                  marginBottom: 20,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 24,
+               }}>
+               <TrustGauge score={91} />
+               <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: "#111827", marginBottom: 8 }}>
+                     Trust Score Breakdown
+                  </div>
+                  {[
+                     { label: "Evidence Accuracy", val: 94 },
+                     { label: "Community Upvotes", val: 88 },
+                     { label: "Submission Volume", val: 92 },
+                  ].map(({ label, val }) => (
+                     <div
+                        key={label}
+                        style={{ marginBottom: 8 }}>
+                        <div
+                           style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              marginBottom: 3,
+                           }}>
+                           <span style={{ fontSize: 11, color: "#374151", fontWeight: 600 }}>
+                              {label}
+                           </span>
+                           <span style={{ fontSize: 11, color: T.green, fontWeight: 800 }}>
+                              {val}%
+                           </span>
+                        </div>
+                        <div style={{ height: 5, background: "#e5e7eb", borderRadius: 99 }}>
+                           <div
+                              style={{
+                                 height: "100%",
+                                 width: `${val}%`,
+                                 background: T.green,
+                                 borderRadius: 99,
+                              }}
+                           />
+                        </div>
+                     </div>
+                  ))}
+               </div>
+            </div>
+            {/* Tabs */}
+            <div style={{ display: "flex", borderBottom: "2px solid #e5e7eb", marginBottom: 16 }}>
+               {tabs.map((t) => (
+                  <button
+                     key={t.id}
+                     onClick={() => setActiveTab(t.id)}
+                     style={{
+                        padding: "10px 18px",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        background: "transparent",
+                        border: "none",
+                        borderBottom: `2px solid ${activeTab === t.id ? T.indigo : "transparent"}`,
+                        marginBottom: -2,
+                        color: activeTab === t.id ? T.indigo : T.gray,
+                        cursor: "pointer",
+                     }}>
+                     {t.label}
+                  </button>
+               ))}
+            </div>
+            {/* Evidence list */}
+            {activeTab === "evidence" && (
+               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {evidence.map((e, i) => (
+                     <div
+                        key={i}
+                        style={{
+                           background: "#fff",
+                           borderRadius: 10,
+                           border: "1.5px solid #e5e7eb",
+                           padding: "14px 18px",
+                           borderLeft: `4px solid ${e.verdict === "verified" ? T.green : e.verdict === "fake" ? T.red : T.amber}`,
+                        }}>
+                        <div
+                           style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "flex-start",
+                           }}>
+                           <div style={{ flex: 1 }}>
+                              <div
+                                 style={{
+                                    fontSize: 13,
+                                    fontWeight: 700,
+                                    color: "#111827",
+                                    marginBottom: 4,
+                                 }}>
+                                 {e.title}
+                              </div>
+                              <div
+                                 style={{
+                                    fontSize: 11,
+                                    color: T.gray,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 4,
+                                 }}>
+                                 <Paperclip
+                                    size={10}
+                                    color={T.gray}
+                                 />{" "}
+                                 On thread:{" "}
+                                 <span style={{ color: T.indigo, fontWeight: 600 }}>
+                                    "{e.thread}"
+                                 </span>
+                              </div>
+                           </div>
+                           <div
+                              style={{
+                                 display: "flex",
+                                 alignItems: "center",
+                                 gap: 10,
+                                 flexShrink: 0,
+                              }}>
+                              <VerdictBadge verdict={e.verdict} />
+                              <span
+                                 style={{
+                                    fontSize: 11,
+                                    color: T.gray,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 3,
+                                 }}>
+                                 <ThumbsUp
+                                    size={11}
+                                    color={T.gray}
+                                 />{" "}
+                                 {e.votes}
+                              </span>
+                           </div>
+                        </div>
+                     </div>
+                  ))}
+               </div>
+            )}
+            {(activeTab === "threads" || activeTab === "comments") && (
+               <div
+                  style={{
+                     background: "#fff",
+                     borderRadius: 10,
+                     border: "1.5px solid #e5e7eb",
+                     padding: "40px 24px",
+                     textAlign: "center",
+                  }}>
+                  <div style={{ fontSize: 13, color: T.gray }}>No {activeTab} yet.</div>
+               </div>
+            )}
+         </div>
+      </div>
+   );
+};
+
+// ─── View: Extension Minimized / Dismissed States ─────────────────────────────
+const ExtMinimizedStates = () => {
+   const MockPage = ({ children, label }) => (
+      <div style={{ flex: 1 }}>
+         <SLabel>{label}</SLabel>
+         <div
+            style={{
+               background: "#f8fafc",
+               border: "1.5px solid #e5e7eb",
+               borderRadius: 10,
+               overflow: "hidden",
+               minHeight: 360,
+               position: "relative",
+            }}>
+            {/* Fake webpage content */}
+            <div style={{ padding: 20 }}>
+               <div
+                  style={{
+                     height: 14,
+                     background: "#e5e7eb",
+                     borderRadius: 4,
+                     width: "70%",
+                     marginBottom: 10,
+                  }}
+               />
+               <div
+                  style={{
+                     height: 10,
+                     background: "#e5e7eb",
+                     borderRadius: 4,
+                     width: "90%",
+                     marginBottom: 7,
+                  }}
+               />
+               <div
+                  style={{
+                     height: 10,
+                     background: "#e5e7eb",
+                     borderRadius: 4,
+                     width: "80%",
+                     marginBottom: 7,
+                  }}
+               />
+               <div
+                  style={{
+                     height: 10,
+                     background: "#e5e7eb",
+                     borderRadius: 4,
+                     width: "60%",
+                     marginBottom: 16,
+                  }}
+               />
+               <div
+                  style={{ height: 80, background: "#e5e7eb", borderRadius: 6, marginBottom: 12 }}
+               />
+               <div
+                  style={{
+                     height: 10,
+                     background: "#e5e7eb",
+                     borderRadius: 4,
+                     width: "85%",
+                     marginBottom: 7,
+                  }}
+               />
+               <div
+                  style={{
+                     height: 10,
+                     background: "#e5e7eb",
+                     borderRadius: 4,
+                     width: "70%",
+                     marginBottom: 7,
+                  }}
+               />
+            </div>
+            {children}
+         </div>
+      </div>
+   );
+   return (
+      <div>
+         <SLabel>Extension States on Host Webpages</SLabel>
+         <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
+            {/* Minimized pill */}
+            <MockPage label="Minimized Pill State">
+               <div
+                  style={{
+                     position: "absolute",
+                     bottom: 16,
+                     right: 16,
+                     display: "flex",
+                     alignItems: "center",
+                     gap: 8,
+                     background: T.dark,
+                     borderRadius: 99,
+                     padding: "7px 14px 7px 10px",
+                     boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+                     cursor: "pointer",
+                  }}>
+                  <Logo
+                     size={11}
+                     bg={T.indigo}
+                  />
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#fff" }}>TruthLens</span>
+                  <div style={{ width: 1, height: 14, background: "rgba(255,255,255,0.2)" }} />
+                  <VerdictBadge verdict="fake" />
+                  <ChevronUp
+                     size={13}
+                     color="rgba(255,255,255,0.6)"
+                  />
+               </div>
+               <div
+                  style={{
+                     position: "absolute",
+                     bottom: 56,
+                     right: 16,
+                     fontSize: 10,
+                     color: T.gray,
+                     background: "#fff",
+                     padding: "4px 8px",
+                     borderRadius: 5,
+                     border: "1px solid #e5e7eb",
+                  }}>
+                  Click pill to re-expand result
+               </div>
+            </MockPage>
+            {/* Dismissed toast */}
+            <MockPage label="Dismissed / Toast State">
+               <div
+                  style={{
+                     position: "absolute",
+                     top: 16,
+                     right: 16,
+                     display: "flex",
+                     alignItems: "center",
+                     gap: 10,
+                     background: "#fff",
+                     borderRadius: 10,
+                     padding: "10px 14px",
+                     boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+                     border: "1px solid #e5e7eb",
+                     maxWidth: 240,
+                  }}>
+                  <div
+                     style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 7,
+                        background: "#fee2e2",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                     }}>
+                     <XCircle
+                        size={14}
+                        color={T.red}
+                        strokeWidth={2}
+                     />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                     <div style={{ fontSize: 11, fontWeight: 700, color: "#111827" }}>
+                        Claim flagged as Fake
+                     </div>
+                     <div
+                        style={{
+                           fontSize: 10,
+                           color: T.indigo,
+                           fontWeight: 600,
+                           cursor: "pointer",
+                           marginTop: 1,
+                        }}>
+                        View full analysis →
+                     </div>
+                  </div>
+                  <X
+                     size={13}
+                     color={T.gray}
+                     style={{ cursor: "pointer", flexShrink: 0 }}
+                  />
+               </div>
+            </MockPage>
+            {/* Scanning indicator */}
+            <MockPage label="Passive Scan Indicator">
+               <div
+                  style={{
+                     position: "absolute",
+                     bottom: 16,
+                     right: 16,
+                     display: "flex",
+                     alignItems: "center",
+                     gap: 7,
+                     background: "rgba(79,70,229,0.12)",
+                     border: `1.5px solid rgba(79,70,229,0.3)`,
+                     borderRadius: 99,
+                     padding: "6px 12px",
+                  }}>
+                  <div
+                     style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        background: T.indigo,
+                        animation: "pulse 1.5s infinite",
+                     }}
+                  />
+                  <span style={{ fontSize: 10, fontWeight: 700, color: T.indigo }}>
+                     Scanning page…
+                  </span>
+               </div>
+            </MockPage>
+         </div>
+         {/* Annotations */}
+         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 24 }}>
+            <Ann
+               title="Component States"
+               BoxIcon={Layers}
+               color={T.indigo}
+               items={[
+                  "Minimized Pill — verdict badge visible, click to re-expand <ResultCard>",
+                  "Dismissed Toast — top-right, auto-hides after 5s, 'View' deep-links to dashboard",
+                  "Passive Scan Indicator — shown while background analysis is running",
+                  "Each state is a separate React portal mounted on document.body",
+               ]}
+            />
+            <Ann
+               title="UX / Dev Notes"
+               BoxIcon={Braces}
+               color={T.violet}
+               items={[
+                  "Pill uses position:fixed bottom-right, z-index:2147483647 (max)",
+                  "Toast auto-dismiss: setTimeout 5000ms, clearTimeout on hover",
+                  "Minimized state persists in chrome.storage.local until page reload",
+                  "Pill verdict color matches the full result card border — visual consistency",
+               ]}
+            />
+         </div>
+      </div>
+   );
+};
+
+// ─── View: Trust Score Breakdown Modal ────────────────────────────────────────
+const TrustBreakdown = () => {
+   const factors = [
+      {
+         label: "Evidence Accuracy Rate",
+         desc: "% of your evidence that matched community consensus",
+         val: 87,
+         weight: 40,
+         color: T.green,
+      },
+      {
+         label: "Community Upvotes",
+         desc: "Net upvotes received on evidence submissions",
+         val: 74,
+         weight: 30,
+         color: T.indigo,
+      },
+      {
+         label: "Submission Volume",
+         desc: "Consistency of contributions over time",
+         val: 82,
+         weight: 20,
+         color: T.amber,
+      },
+      {
+         label: "Account Age & Consistency",
+         desc: "Tenure and submission regularity",
+         val: 90,
+         weight: 10,
+         color: T.violet,
+      },
+   ];
+   const weighted = Math.round(factors.reduce((acc, f) => acc + (f.val * f.weight) / 100, 0));
+   return (
+      <div
+         style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 380px",
+            gap: 28,
+            alignItems: "start",
+         }}>
+         {/* Dashboard bg preview */}
+         <div>
+            <SLabel>Dashboard — Trust Score section (modal trigger)</SLabel>
+            <div
+               style={{
+                  background: "#fff",
+                  borderRadius: 12,
+                  border: "1.5px solid #e5e7eb",
+                  padding: "20px 24px",
+                  opacity: 0.4,
+                  filter: "blur(1px)",
+                  marginBottom: 0,
+               }}>
+               <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                  <TrustGauge score={82} />
+                  <div>
+                     <div style={{ fontSize: 16, fontWeight: 900, color: "#111827" }}>
+                        Your Trust Score
+                     </div>
+                     <div style={{ fontSize: 11, color: T.gray, marginTop: 2 }}>
+                        Based on your community contributions
+                     </div>
+                     <button
+                        style={{
+                           marginTop: 8,
+                           fontSize: 10,
+                           fontWeight: 700,
+                           color: T.indigo,
+                           background: "#eff6ff",
+                           border: "1.5px solid #c7d2fe",
+                           borderRadius: 6,
+                           padding: "4px 10px",
+                           cursor: "pointer",
+                           display: "flex",
+                           alignItems: "center",
+                           gap: 4,
+                        }}>
+                        <Info
+                           size={10}
+                           color={T.indigo}
+                        />{" "}
+                        How is this calculated?
+                     </button>
+                  </div>
+               </div>
+            </div>
+         </div>
+         {/* Modal */}
+         <div>
+            <SLabel>Trust Score Breakdown Modal</SLabel>
+            <div
+               style={{
+                  background: "#fff",
+                  borderRadius: 14,
+                  border: "1.5px solid #e5e7eb",
+                  boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
+                  overflow: "hidden",
+               }}>
+               {/* Modal header */}
+               <div
+                  style={{
+                     background: `linear-gradient(135deg,${T.dark},#2d2a6e)`,
+                     padding: "20px 20px 16px",
+                  }}>
+                  <div
+                     style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                     }}>
+                     <div>
+                        <div
+                           style={{
+                              fontSize: 13,
+                              fontWeight: 800,
+                              color: "rgba(255,255,255,0.6)",
+                              letterSpacing: "0.08em",
+                              textTransform: "uppercase",
+                           }}>
+                           Trust Score
+                        </div>
+                        <div
+                           style={{
+                              fontSize: 32,
+                              fontWeight: 900,
+                              color: "#fff",
+                              letterSpacing: "-0.02em",
+                           }}>
+                           {weighted}
+                        </div>
+                     </div>
+                     <TrustGauge score={weighted} />
+                  </div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginTop: 4 }}>
+                     Weighted composite of 4 contribution factors
+                  </div>
+               </div>
+               {/* Factors */}
+               <div style={{ padding: "16px 20px" }}>
+                  {factors.map((f, i) => (
+                     <div
+                        key={i}
+                        style={{ marginBottom: 16 }}>
+                        <div
+                           style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: 4,
+                           }}>
+                           <div>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: "#111827" }}>
+                                 {f.label}
+                              </div>
+                              <div style={{ fontSize: 10, color: T.gray }}>{f.desc}</div>
+                           </div>
+                           <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
+                              <div style={{ fontSize: 16, fontWeight: 900, color: f.color }}>
+                                 {f.val}
+                              </div>
+                              <div style={{ fontSize: 9, color: T.gray, fontWeight: 700 }}>
+                                 ×{f.weight}% weight
+                              </div>
+                           </div>
+                        </div>
+                        <div style={{ height: 6, background: "#f3f4f6", borderRadius: 99 }}>
+                           <div
+                              style={{
+                                 height: "100%",
+                                 width: `${f.val}%`,
+                                 background: f.color,
+                                 borderRadius: 99,
+                              }}
+                           />
+                        </div>
+                     </div>
+                  ))}
+               </div>
+               {/* Footer */}
+               <div
+                  style={{
+                     padding: "12px 20px",
+                     background: "#f9fafb",
+                     borderTop: "1px solid #f3f4f6",
+                     display: "flex",
+                     justifyContent: "space-between",
+                     alignItems: "center",
+                  }}>
+                  <div style={{ fontSize: 10, color: T.gray }}>
+                     Updated daily · Score affects voting weight
+                  </div>
+                  <button
+                     style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: "#fff",
+                        background: T.indigo,
+                        border: "none",
+                        borderRadius: 7,
+                        padding: "6px 14px",
+                        cursor: "pointer",
+                     }}>
+                     See History
+                  </button>
+               </div>
+            </div>
+         </div>
+         {/* Annotations */}
+         <div
+            style={{
+               gridColumn: "1 / -1",
+               display: "grid",
+               gridTemplateColumns: "1fr 1fr",
+               gap: 16,
+               marginTop: 8,
+            }}>
+            <Ann
+               title="Component Structure"
+               BoxIcon={Braces}
+               color={T.indigo}
+               items={[
+                  "<TrustScoreModal> — portal overlay, triggered by 'How is this calculated?' button",
+                  "Modal header: dark gradient matches sidebar/AppNav brand colour",
+                  "4 <FactorBar> rows: label + description + score + weight label + progress bar",
+                  "Footer: update cadence note + 'See History' deep-link to score history page",
+               ]}
+            />
+            <Ann
+               title="UX Notes"
+               BoxIcon={Palette}
+               color={T.violet}
+               items={[
+                  "Blurred/dimmed dashboard behind modal signals context without leaving page",
+                  "Each factor colour maps to design tokens: green=accuracy, indigo=votes, amber=volume",
+                  "Weight labels (×40%) make the formula transparent — builds user trust in the system",
+                  "'See History' links to a future chart view showing score trend over time",
+               ]}
+            />
+         </div>
+      </div>
+   );
+};
+
+// ─── View: Empty & Loading States ─────────────────────────────────────────────
+const EmptyStates = () => {
+   const EmptyCard = ({ Icon: EI, iconBg, iconColor, title, sub, cta, ctaColor = T.indigo }) => (
+      <div
+         style={{
+            background: "#fff",
+            border: "1.5px solid #e5e7eb",
+            borderRadius: 12,
+            padding: "32px 24px",
+            textAlign: "center",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 12,
+         }}>
+         <div
+            style={{
+               width: 56,
+               height: 56,
+               borderRadius: 14,
+               background: iconBg,
+               display: "flex",
+               alignItems: "center",
+               justifyContent: "center",
+            }}>
+            <EI
+               size={26}
+               color={iconColor}
+               strokeWidth={1.5}
+            />
+         </div>
+         <div style={{ fontSize: 14, fontWeight: 800, color: "#111827" }}>{title}</div>
+         <div style={{ fontSize: 11, color: T.gray, lineHeight: 1.6, maxWidth: 200 }}>{sub}</div>
+         <button
+            style={{
+               fontSize: 11,
+               fontWeight: 700,
+               color: "#fff",
+               background: ctaColor,
+               border: "none",
+               borderRadius: 7,
+               padding: "7px 16px",
+               cursor: "pointer",
+               marginTop: 4,
+            }}>
+            {cta}
+         </button>
+      </div>
+   );
+   const SkeletonLine = ({ w = "100%", h = 10 }) => (
+      <div
+         style={{
+            height: h,
+            background: "linear-gradient(90deg,#f3f4f6 25%,#e5e7eb 50%,#f3f4f6 75%)",
+            backgroundSize: "200% 100%",
+            borderRadius: 4,
+            width: w,
+         }}
+      />
+   );
+   return (
+      <div>
+         <SLabel>Empty States</SLabel>
+         <div
+            style={{
+               display: "grid",
+               gridTemplateColumns: "repeat(4,1fr)",
+               gap: 16,
+               marginBottom: 32,
+            }}>
+            <EmptyCard
+               Icon={Globe}
+               iconBg="#e0e7ff"
+               iconColor={T.indigo}
+               title="No posts yet"
+               sub="Be the first to flag a claim and start a community thread."
+               cta="Flag a Claim"
+            />
+            <EmptyCard
+               Icon={ScanLine}
+               iconBg="#d1fae5"
+               iconColor={T.green}
+               title="No scans yet"
+               sub="Install the extension and snip your first suspicious claim."
+               cta="Get the Extension"
+               ctaColor={T.green}
+            />
+            <EmptyCard
+               Icon={Paperclip}
+               iconBg="#fef3c7"
+               iconColor={T.amber}
+               title="No evidence yet"
+               sub="Be the first to submit a source and earn Trust Score points."
+               cta="Add Evidence"
+               ctaColor={T.amber}
+            />
+            <EmptyCard
+               Icon={Bell}
+               iconBg="#f3f4f6"
+               iconColor={T.gray}
+               title="All caught up"
+               sub="You have no new notifications. Check back after contributing."
+               cta="Browse Feed"
+               ctaColor={T.gray}
+            />
+         </div>
+         <SLabel>Loading / Skeleton States</SLabel>
+         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            {/* PostCard skeleton */}
+            <div>
+               <div
+                  style={{
+                     fontSize: 10,
+                     fontWeight: 700,
+                     color: T.gray,
+                     marginBottom: 8,
+                     letterSpacing: "0.06em",
+                     textTransform: "uppercase",
+                  }}>
+                  PostCard Skeleton
+               </div>
+               <div
+                  style={{
+                     background: "#fff",
+                     borderRadius: 14,
+                     border: "1.5px solid #e5e7eb",
+                     overflow: "hidden",
+                     padding: 0,
+                  }}>
+                  <div
+                     style={{
+                        padding: "14px 16px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                     }}>
+                     <div
+                        style={{
+                           width: 38,
+                           height: 38,
+                           borderRadius: "50%",
+                           background: "#f3f4f6",
+                        }}
+                     />
+                     <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+                        <SkeletonLine
+                           w="40%"
+                           h={11}
+                        />
+                        <SkeletonLine
+                           w="25%"
+                           h={8}
+                        />
+                     </div>
+                  </div>
+                  <div
+                     style={{
+                        padding: "0 16px 12px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                     }}>
+                     <SkeletonLine w="90%" />
+                     <SkeletonLine w="75%" />
+                  </div>
+                  <div style={{ height: 160, background: "#f3f4f6" }} />
+                  <div style={{ padding: "12px 16px", display: "flex", gap: 8 }}>
+                     <SkeletonLine
+                        w="30%"
+                        h={28}
+                     />
+                     <SkeletonLine
+                        w="30%"
+                        h={28}
+                     />
+                     <SkeletonLine
+                        w="30%"
+                        h={28}
+                     />
+                  </div>
+               </div>
+            </div>
+            {/* Thread evidence skeleton */}
+            <div>
+               <div
+                  style={{
+                     fontSize: 10,
+                     fontWeight: 700,
+                     color: T.gray,
+                     marginBottom: 8,
+                     letterSpacing: "0.06em",
+                     textTransform: "uppercase",
+                  }}>
+                  Evidence Card Skeleton
+               </div>
+               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {[1, 2, 3].map((i) => (
+                     <div
+                        key={i}
+                        style={{
+                           background: "#fff",
+                           border: "1.5px solid #e5e7eb",
+                           borderLeft: `4px solid #f3f4f6`,
+                           borderRadius: 8,
+                           padding: "12px 16px",
+                           display: "flex",
+                           flexDirection: "column",
+                           gap: 7,
+                        }}>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                           <div
+                              style={{
+                                 width: 28,
+                                 height: 28,
+                                 borderRadius: "50%",
+                                 background: "#f3f4f6",
+                              }}
+                           />
+                           <SkeletonLine
+                              w="35%"
+                              h={9}
+                           />
+                           <SkeletonLine
+                              w="15%"
+                              h={16}
+                           />
+                        </div>
+                        <SkeletonLine w="95%" />
+                        <SkeletonLine w="80%" />
+                     </div>
+                  ))}
+               </div>
+            </div>
+         </div>
+         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 24 }}>
+            <Ann
+               title="Empty State Pattern"
+               BoxIcon={Puzzle}
+               color={T.indigo}
+               items={[
+                  "Icon → Title → Description → Single CTA (never two buttons)",
+                  "Icon background uses diluted semantic colour matching the context",
+                  "CTA copies the action language: 'Flag a Claim' not 'Get Started'",
+                  "Place empty states in the same position the content would appear — no layout shift",
+               ]}
+            />
+            <Ann
+               title="Skeleton Loading"
+               BoxIcon={RefreshCw}
+               color={T.amber}
+               items={[
+                  "Use CSS shimmer animation: background-position shift via keyframes",
+                  "Avatar: circle placeholder same size as real avatar — prevents layout jump",
+                  "Image block: fixed height (same as real card) — no collapsing",
+                  "Show 3 skeleton cards immediately on mount, replace with real data as it loads",
+               ]}
+            />
+         </div>
+      </div>
+   );
+};
+
+// ─── View: Onboarding Flow ─────────────────────────────────────────────────────
+const OnboardingFlow = () => {
+   const [step, setStep] = useState(0);
+   const steps = [
+      { id: 0, label: "Welcome", Icon: Sparkles },
+      { id: 1, label: "Install", Icon: Download },
+      { id: 2, label: "First Scan", Icon: ScanLine },
+      { id: 3, label: "Community", Icon: Users },
+   ];
+   const content = [
+      {
+         heading: "Welcome to TruthLens",
+         sub: "You're joining a community of 10,000+ fact-checkers. Here's how to get the most out of your account.",
+         body: (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+               {[
+                  {
+                     Icon: ScanLine,
+                     label: "Snip & Scan",
+                     desc: "Capture suspicious claims directly from any webpage",
+                  },
+                  {
+                     Icon: Users,
+                     label: "Community Votes",
+                     desc: "Earn Trust Score by submitting verified evidence",
+                  },
+                  {
+                     Icon: Shield,
+                     label: "AI + Human",
+                     desc: "AI gives a first verdict — the community settles it",
+                  },
+               ].map(({ Icon: SI, label, desc }) => (
+                  <div
+                     key={label}
+                     style={{
+                        display: "flex",
+                        gap: 12,
+                        alignItems: "center",
+                        background: "rgba(255,255,255,0.08)",
+                        borderRadius: 10,
+                        padding: "12px 16px",
+                     }}>
+                     <div
+                        style={{
+                           width: 36,
+                           height: 36,
+                           borderRadius: 9,
+                           background: "rgba(79,70,229,0.4)",
+                           display: "flex",
+                           alignItems: "center",
+                           justifyContent: "center",
+                           flexShrink: 0,
+                        }}>
+                        <SI
+                           size={16}
+                           color="#fff"
+                           strokeWidth={2}
+                        />
+                     </div>
+                     <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{label}</div>
+                        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>{desc}</div>
+                     </div>
+                  </div>
+               ))}
+            </div>
+         ),
+         cta: "Let's Get Started",
+      },
+      {
+         heading: "Install the Chrome Extension",
+         sub: "The extension lets you snip claims directly from any webpage — no copy-pasting needed.",
+         body: (
+            <div
+               style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+               <div
+                  style={{
+                     width: 80,
+                     height: 80,
+                     borderRadius: 20,
+                     background: "rgba(255,255,255,0.12)",
+                     display: "flex",
+                     alignItems: "center",
+                     justifyContent: "center",
+                  }}>
+                  <Download
+                     size={36}
+                     color="#fff"
+                     strokeWidth={1.5}
+                  />
+               </div>
+               <button
+                  style={{
+                     fontSize: 14,
+                     fontWeight: 800,
+                     color: T.indigo,
+                     background: "#fff",
+                     border: "none",
+                     borderRadius: 10,
+                     padding: "12px 28px",
+                     cursor: "pointer",
+                     display: "flex",
+                     alignItems: "center",
+                     gap: 8,
+                  }}>
+                  <Download
+                     size={16}
+                     color={T.indigo}
+                  />{" "}
+                  Add to Chrome — Free
+               </button>
+               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>
+                  Supports Chrome 88+. No account data shared with browser.
+               </div>
+            </div>
+         ),
+         cta: "I've Installed It",
+      },
+      {
+         heading: "Make Your First Scan",
+         sub: "Open any news article or social media post and click the TruthLens extension icon to snip a claim.",
+         body: (
+            <div
+               style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+               {[
+                  { n: 1, t: "Click the TruthLens icon in your toolbar" },
+                  { n: 2, t: "Select 'Snip' and drag over the claim" },
+                  { n: 3, t: "Wait for AI analysis — usually under 3 seconds" },
+                  { n: 4, t: "See your verdict and share to community if uncertain" },
+               ].map(({ n, t }) => (
+                  <div
+                     key={n}
+                     style={{
+                        display: "flex",
+                        gap: 12,
+                        alignItems: "center",
+                        width: "100%",
+                        maxWidth: 360,
+                        background: "rgba(255,255,255,0.08)",
+                        borderRadius: 9,
+                        padding: "10px 14px",
+                     }}>
+                     <div
+                        style={{
+                           width: 24,
+                           height: 24,
+                           borderRadius: "50%",
+                           background: T.indigo,
+                           display: "flex",
+                           alignItems: "center",
+                           justifyContent: "center",
+                           flexShrink: 0,
+                        }}>
+                        <span style={{ fontSize: 11, fontWeight: 900, color: "#fff" }}>{n}</span>
+                     </div>
+                     <span
+                        style={{ fontSize: 12, color: "rgba(255,255,255,0.85)", fontWeight: 500 }}>
+                        {t}
+                     </span>
+                  </div>
+               ))}
+            </div>
+         ),
+         cta: "Got It",
+      },
+      {
+         heading: "You're Ready!",
+         sub: "Start exploring the community feed, vote on evidence, and build your Trust Score.",
+         body: (
+            <div
+               style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+               <div
+                  style={{
+                     width: 72,
+                     height: 72,
+                     borderRadius: "50%",
+                     background: "rgba(14,159,110,0.2)",
+                     border: `2px solid ${T.green}`,
+                     display: "flex",
+                     alignItems: "center",
+                     justifyContent: "center",
+                  }}>
+                  <CheckCircle2
+                     size={32}
+                     color={T.green}
+                     strokeWidth={2}
+                  />
+               </div>
+               <div style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>
+                  Account setup complete
+               </div>
+               <div style={{ display: "flex", gap: 12 }}>
+                  <div
+                     style={{
+                        background: "rgba(255,255,255,0.1)",
+                        borderRadius: 10,
+                        padding: "10px 14px",
+                        textAlign: "center",
+                     }}>
+                     <div style={{ fontSize: 16, fontWeight: 900, color: "#fff" }}>0</div>
+                     <div
+                        style={{
+                           fontSize: 9,
+                           color: "rgba(255,255,255,0.5)",
+                           fontWeight: 700,
+                           textTransform: "uppercase",
+                           letterSpacing: "0.06em",
+                        }}>
+                        Scans
+                     </div>
+                  </div>
+                  <div
+                     style={{
+                        background: "rgba(255,255,255,0.1)",
+                        borderRadius: 10,
+                        padding: "10px 14px",
+                        textAlign: "center",
+                     }}>
+                     <div style={{ fontSize: 16, fontWeight: 900, color: "#fff" }}>50</div>
+                     <div
+                        style={{
+                           fontSize: 9,
+                           color: "rgba(255,255,255,0.5)",
+                           fontWeight: 700,
+                           textTransform: "uppercase",
+                           letterSpacing: "0.06em",
+                        }}>
+                        Starting Score
+                     </div>
+                  </div>
+               </div>
+            </div>
+         ),
+         cta: "Explore the Feed",
+      },
+   ];
+   const cur = content[step];
+   const prog = ((step + 1) / steps.length) * 100;
+   return (
+      <div style={{ padding: "0 0 48px" }}>
+         {/* Browser-style wrapper using same gradient as auth */}
+         <div
+            style={{
+               overflow: "hidden",
+               borderTop: "1px solid #d1d5db",
+               borderBottom: "1px solid #d1d5db",
+               boxShadow: "0 8px 40px rgba(0,0,0,0.18)",
+            }}>
+            <div
+               style={{
+                  background: "#e8e8e8",
+                  padding: "10px 16px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  borderBottom: "1px solid #d0d0d0",
+               }}>
+               <div style={{ display: "flex", gap: 6 }}>
+                  {["#ff5f57", "#febc2e", "#28c840"].map((c) => (
+                     <div
+                        key={c}
+                        style={{ width: 12, height: 12, borderRadius: "50%", background: c }}
+                     />
+                  ))}
+               </div>
+               <div
+                  style={{
+                     flex: 1,
+                     background: "#fff",
+                     borderRadius: 6,
+                     padding: "5px 14px",
+                     fontSize: 12,
+                     color: "#555",
+                     border: "1px solid #c8c8c8",
+                     display: "flex",
+                     alignItems: "center",
+                     gap: 6,
+                  }}>
+                  <span style={{ fontSize: 11, color: "#999" }}>https://</span>
+                  <span style={{ fontWeight: 600, color: "#333" }}>truthlens.app</span>
+                  <span style={{ color: "#999" }}>/onboarding</span>
+               </div>
+            </div>
+            <div
+               style={{
+                  background: `linear-gradient(160deg,${T.dark} 0%,#2d2a6e 60%,${T.indigo} 100%)`,
+                  minHeight: "calc(100vh - 160px)",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "40px 24px",
+                  position: "relative",
+               }}>
+               {/* SVG dot grid */}
+               <svg
+                  style={{
+                     position: "absolute",
+                     inset: 0,
+                     opacity: 0.06,
+                     width: "100%",
+                     height: "100%",
+                  }}>
+                  <defs>
+                     <pattern
+                        id="odots"
+                        width="28"
+                        height="28"
+                        patternUnits="userSpaceOnUse">
+                        <circle
+                           cx="2"
+                           cy="2"
+                           r="1.8"
+                           fill="white"
+                        />
+                     </pattern>
+                  </defs>
+                  <rect
+                     width="100%"
+                     height="100%"
+                     fill="url(#odots)"
+                  />
+               </svg>
+               {/* Logo */}
+               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 32 }}>
+                  <Logo size={16} />
+                  <span style={{ color: "#fff", fontWeight: 900, fontSize: 16 }}>TruthLens</span>
+               </div>
+               {/* Step indicators */}
+               <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+                  {steps.map((s, i) => (
+                     <div
+                        key={s.id}
+                        onClick={() => setStep(i)}
+                        style={{
+                           display: "flex",
+                           alignItems: "center",
+                           gap: 6,
+                           cursor: "pointer",
+                           opacity: i === step ? 1 : 0.5,
+                        }}>
+                        <div
+                           style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: "50%",
+                              background:
+                                 i <= step ? "rgba(79,70,229,0.8)" : "rgba(255,255,255,0.1)",
+                              border: `2px solid ${i <= step ? T.indigo : "rgba(255,255,255,0.2)"}`,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                           }}>
+                           {i < step ? (
+                              <Check
+                                 size={12}
+                                 color="#fff"
+                                 strokeWidth={3}
+                              />
+                           ) : (
+                              <span style={{ fontSize: 10, fontWeight: 800, color: "#fff" }}>
+                                 {i + 1}
+                              </span>
+                           )}
+                        </div>
+                        {i < steps.length - 1 && (
+                           <div
+                              style={{
+                                 width: 24,
+                                 height: 1,
+                                 background:
+                                    i < step ? "rgba(79,70,229,0.6)" : "rgba(255,255,255,0.15)",
+                              }}
+                           />
+                        )}
+                     </div>
+                  ))}
+               </div>
+               {/* Progress bar */}
+               <div
+                  style={{
+                     width: "100%",
+                     maxWidth: 460,
+                     height: 3,
+                     background: "rgba(255,255,255,0.1)",
+                     borderRadius: 99,
+                     marginBottom: 36,
+                  }}>
+                  <div
+                     style={{
+                        height: "100%",
+                        width: `${prog}%`,
+                        background: T.indigo,
+                        borderRadius: 99,
+                        transition: "width 0.3s",
+                     }}
+                  />
+               </div>
+               {/* Content card */}
+               <div
+                  style={{
+                     width: "100%",
+                     maxWidth: 460,
+                     background: "rgba(255,255,255,0.07)",
+                     backdropFilter: "blur(12px)",
+                     borderRadius: 18,
+                     border: "1px solid rgba(255,255,255,0.12)",
+                     padding: "28px 28px 24px",
+                     marginBottom: 24,
+                  }}>
+                  <div
+                     style={{
+                        fontSize: 22,
+                        fontWeight: 900,
+                        color: "#fff",
+                        letterSpacing: "-0.02em",
+                        marginBottom: 6,
+                     }}>
+                     {cur.heading}
+                  </div>
+                  <div
+                     style={{
+                        fontSize: 12,
+                        color: "rgba(255,255,255,0.65)",
+                        lineHeight: 1.6,
+                        marginBottom: 20,
+                     }}>
+                     {cur.sub}
+                  </div>
+                  {cur.body}
+               </div>
+               {/* Nav */}
+               <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                  {step > 0 && (
+                     <button
+                        onClick={() => setStep((s) => s - 1)}
+                        style={{
+                           fontSize: 12,
+                           fontWeight: 700,
+                           color: "rgba(255,255,255,0.6)",
+                           background: "rgba(255,255,255,0.08)",
+                           border: "1.5px solid rgba(255,255,255,0.15)",
+                           borderRadius: 9,
+                           padding: "10px 20px",
+                           cursor: "pointer",
+                        }}>
+                        ← Back
+                     </button>
+                  )}
+                  <button
+                     onClick={() => setStep((s) => Math.min(s + 1, steps.length - 1))}
+                     style={{
+                        fontSize: 13,
+                        fontWeight: 800,
+                        color: "#fff",
+                        background: step === steps.length - 1 ? T.green : T.indigo,
+                        border: "none",
+                        borderRadius: 9,
+                        padding: "10px 28px",
+                        cursor: "pointer",
+                        letterSpacing: "0.02em",
+                     }}>
+                     {cur.cta} →
+                  </button>
+               </div>
+               <div
+                  style={{
+                     marginTop: 16,
+                     fontSize: 10,
+                     color: "rgba(255,255,255,0.3)",
+                     cursor: "pointer",
+                  }}>
+                  Skip setup →
+               </div>
+            </div>
+         </div>
+         {/* Annotations */}
+         <div
+            style={{
+               display: "grid",
+               gridTemplateColumns: "1fr 1fr",
+               gap: 16,
+               marginTop: 28,
+               padding: "0 32px",
+            }}>
+            <Ann
+               title="Flow Structure"
+               BoxIcon={Ruler}
+               color={T.indigo}
+               items={[
+                  "4 steps: Welcome → Install Extension → First Scan → Complete",
+                  "Progress bar + numbered step indicators — user always knows where they are",
+                  "Step indicators are clickable (dev mode) — use router or state machine in production",
+                  "Skip link at bottom — never force onboarding, let curious users explore",
+               ]}
+            />
+            <Ann
+               title="UX / Conversion Notes"
+               BoxIcon={Puzzle}
+               color={T.violet}
+               items={[
+                  "Step 2 'Install' CTA opens Chrome Web Store in new tab — don't navigate away",
+                  "Step 3 transitions after extension sends a 'first_scan_complete' event via postMessage",
+                  "Step 4 shows the user's starting Trust Score (50) — immediate sense of progress",
+                  "After onboarding, set onboarded=true in user profile — never show again",
+               ]}
+            />
+         </div>
+      </div>
+   );
+};
+
+// ─── View: Moderation / Admin Panel ───────────────────────────────────────────
+const ModerationPanel = () => {
+   const [activeTab, setActiveTab] = useState("queue");
+   const queue = [
+      {
+         id: "F-001",
+         type: "Evidence",
+         claim: "Valencia flooding photo",
+         reporter: "@newscheck",
+         reason: "Misleading source link — URL redirects to known disinfo site",
+         status: "pending",
+         severity: "high",
+      },
+      {
+         id: "F-002",
+         type: "Comment",
+         claim: "Mask effectiveness thread",
+         reporter: "@verifyme",
+         reason: "Personal attack / harassment toward evidence submitter",
+         status: "pending",
+         severity: "medium",
+      },
+      {
+         id: "F-003",
+         type: "Thread",
+         claim: "Senator healthcare vote",
+         reporter: "@factchecker_ph",
+         reason: "Suspected coordinated voting — 40 upvotes in 2 minutes",
+         status: "reviewing",
+         severity: "high",
+      },
+      {
+         id: "F-004",
+         type: "Evidence",
+         claim: "5G cancer claim",
+         reporter: "@scicheck",
+         reason: "Evidence source is behind paywall — community cannot verify",
+         status: "pending",
+         severity: "low",
+      },
+   ];
+   const severityColor = { high: T.red, medium: T.amber, low: T.gray };
+   const statusColor = { pending: T.amber, reviewing: T.indigo, resolved: T.green };
+   return (
+      <div style={{ background: "#f1f5f9", minHeight: "100%" }}>
+         {/* Mod nav — extends AppNav with mod indicator */}
+         <div
+            style={{
+               background: T.dark,
+               padding: "0 32px",
+               display: "flex",
+               alignItems: "center",
+               gap: 0,
+               boxShadow: "0 2px 12px rgba(0,0,0,0.25)",
+               position: "sticky",
+               top: 0,
+               zIndex: 50,
+            }}>
+            <div
+               style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "12px 0",
+                  marginRight: 28,
+                  borderRight: "1px solid rgba(255,255,255,0.08)",
+                  paddingRight: 28,
+               }}>
+               <Logo size={14} />
+               <span style={{ color: "#fff", fontWeight: 900, fontSize: 15 }}>TruthLens</span>
+               <span
+                  style={{
+                     fontSize: 9,
+                     fontWeight: 800,
+                     color: T.red,
+                     background: "rgba(224,36,36,0.2)",
+                     border: `1px solid rgba(224,36,36,0.4)`,
+                     borderRadius: 5,
+                     padding: "2px 7px",
+                     letterSpacing: "0.06em",
+                  }}>
+                  MOD
+               </span>
+            </div>
+            <div style={{ display: "flex", gap: 2, flex: 1 }}>
+               {["Flag Queue", "Override Verdicts", "User Management", "Audit Log"].map(
+                  (label, i) => (
+                     <div
+                        key={label}
+                        style={{
+                           padding: "12px 14px",
+                           fontSize: 12,
+                           fontWeight: 600,
+                           display: "flex",
+                           alignItems: "center",
+                           gap: 7,
+                           color: i === 0 ? "#fff" : "rgba(255,255,255,0.45)",
+                           borderBottom: i === 0 ? `2px solid ${T.red}` : "2px solid transparent",
+                           cursor: "pointer",
+                        }}>
+                        {label}
+                        {i === 0 && (
+                           <span
+                              style={{
+                                 fontSize: 9,
+                                 fontWeight: 800,
+                                 color: "#fff",
+                                 background: T.red,
+                                 borderRadius: "50%",
+                                 width: 16,
+                                 height: 16,
+                                 display: "flex",
+                                 alignItems: "center",
+                                 justifyContent: "center",
+                              }}>
+                              4
+                           </span>
+                        )}
+                     </div>
+                  ),
+               )}
+            </div>
+            <div
+               style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 7,
+                  background: "rgba(255,255,255,0.07)",
+                  borderRadius: 8,
+                  padding: "6px 12px",
+               }}>
+               <Avatar
+                  Icon={Shield}
+                  bg="rgba(224,36,36,0.2)"
+                  color={T.red}
+                  size={26}
+               />
+               <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.8)" }}>
+                  @admin
+               </span>
+            </div>
+         </div>
+         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 24px 64px" }}>
+            {/* Stats header */}
+            <div
+               style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(4,1fr)",
+                  gap: 14,
+                  marginBottom: 24,
+               }}>
+               {[
+                  { label: "Flags Pending", val: "4", color: T.amber, Icon: Flag },
+                  { label: "Resolved Today", val: "12", color: T.green, Icon: CheckCircle2 },
+                  { label: "Avg. Resolution", val: "1.4h", color: T.indigo, Icon: Clock },
+                  { label: "Active Reviewers", val: "3", color: T.violet, Icon: Users },
+               ].map(({ label, val, color, Icon: SI }) => (
+                  <div
+                     key={label}
+                     style={{
+                        background: "#fff",
+                        border: "1.5px solid #e5e7eb",
+                        borderRadius: 10,
+                        padding: "16px 18px",
+                        borderTop: `3px solid ${color}`,
+                     }}>
+                     <div
+                        style={{
+                           display: "flex",
+                           justifyContent: "space-between",
+                           alignItems: "flex-start",
+                        }}>
+                        <div>
+                           <div style={{ fontSize: 24, fontWeight: 900, color: "#111827" }}>
+                              {val}
+                           </div>
+                           <div
+                              style={{
+                                 fontSize: 10,
+                                 color: T.gray,
+                                 fontWeight: 700,
+                                 textTransform: "uppercase",
+                                 letterSpacing: "0.06em",
+                              }}>
+                              {label}
+                           </div>
+                        </div>
+                        <SI
+                           size={18}
+                           color={color}
+                           strokeWidth={1.8}
+                        />
+                     </div>
+                  </div>
+               ))}
+            </div>
+            {/* Flag queue */}
+            <SLabel>Flag Queue</SLabel>
+            <div
+               style={{
+                  background: "#fff",
+                  border: "1.5px solid #e5e7eb",
+                  borderRadius: 12,
+                  overflow: "hidden",
+               }}>
+               <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                     <tr style={{ background: "#f9fafb", borderBottom: "1.5px solid #e5e7eb" }}>
+                        {[
+                           "ID",
+                           "Type",
+                           "Thread / Claim",
+                           "Reporter",
+                           "Reason",
+                           "Severity",
+                           "Status",
+                           "Actions",
+                        ].map((h) => (
+                           <th
+                              key={h}
+                              style={{
+                                 textAlign: "left",
+                                 padding: "10px 14px",
+                                 fontSize: 10,
+                                 fontWeight: 800,
+                                 color: T.gray,
+                                 letterSpacing: "0.06em",
+                                 whiteSpace: "nowrap",
+                              }}>
+                              {h}
+                           </th>
+                        ))}
+                     </tr>
+                  </thead>
+                  <tbody>
+                     {queue.map((item, i) => (
+                        <tr
+                           key={item.id}
+                           style={{
+                              borderBottom: i < queue.length - 1 ? "1px solid #f3f4f6" : "none",
+                           }}>
+                           <td
+                              style={{
+                                 padding: "12px 14px",
+                                 fontSize: 11,
+                                 color: T.gray,
+                                 fontFamily: "monospace",
+                              }}>
+                              {item.id}
+                           </td>
+                           <td style={{ padding: "12px 14px" }}>
+                              <span
+                                 style={{
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    color: T.indigo,
+                                    background: "#eff6ff",
+                                    borderRadius: 4,
+                                    padding: "2px 7px",
+                                 }}>
+                                 {item.type}
+                              </span>
+                           </td>
+                           <td
+                              style={{
+                                 padding: "12px 14px",
+                                 fontSize: 12,
+                                 color: "#374151",
+                                 maxWidth: 160,
+                              }}>
+                              {item.claim}
+                           </td>
+                           <td
+                              style={{
+                                 padding: "12px 14px",
+                                 fontSize: 11,
+                                 color: T.indigo,
+                                 fontWeight: 600,
+                              }}>
+                              {item.reporter}
+                           </td>
+                           <td
+                              style={{
+                                 padding: "12px 14px",
+                                 fontSize: 11,
+                                 color: "#374151",
+                                 maxWidth: 200,
+                              }}>
+                              {item.reason}
+                           </td>
+                           <td style={{ padding: "12px 14px" }}>
+                              <span
+                                 style={{
+                                    fontSize: 10,
+                                    fontWeight: 800,
+                                    color: severityColor[item.severity],
+                                    background:
+                                       item.severity === "high"
+                                          ? "#fee2e2"
+                                          : item.severity === "medium"
+                                            ? "#fef3c7"
+                                            : "#f3f4f6",
+                                    borderRadius: 4,
+                                    padding: "2px 8px",
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.05em",
+                                 }}>
+                                 {item.severity}
+                              </span>
+                           </td>
+                           <td style={{ padding: "12px 14px" }}>
+                              <span
+                                 style={{
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    color: statusColor[item.status],
+                                    background: "transparent",
+                                    borderRadius: 4,
+                                    padding: "2px 0",
+                                 }}>
+                                 {item.status}
+                              </span>
+                           </td>
+                           <td style={{ padding: "12px 14px" }}>
+                              <div style={{ display: "flex", gap: 5 }}>
+                                 <button
+                                    style={{
+                                       fontSize: 10,
+                                       fontWeight: 700,
+                                       color: "#fff",
+                                       background: T.green,
+                                       border: "none",
+                                       borderRadius: 4,
+                                       padding: "4px 8px",
+                                       cursor: "pointer",
+                                    }}>
+                                    Approve
+                                 </button>
+                                 <button
+                                    style={{
+                                       fontSize: 10,
+                                       fontWeight: 700,
+                                       color: "#fff",
+                                       background: T.red,
+                                       border: "none",
+                                       borderRadius: 4,
+                                       padding: "4px 8px",
+                                       cursor: "pointer",
+                                    }}>
+                                    Remove
+                                 </button>
+                                 <button
+                                    style={{
+                                       fontSize: 10,
+                                       fontWeight: 700,
+                                       color: T.gray,
+                                       background: "#f3f4f6",
+                                       border: "none",
+                                       borderRadius: 4,
+                                       padding: "4px 8px",
+                                       cursor: "pointer",
+                                    }}>
+                                    Warn
+                                 </button>
+                              </div>
+                           </td>
+                        </tr>
+                     ))}
+                  </tbody>
+               </table>
+            </div>
+            {/* Override Verdicts section */}
+            <SLabel style={{ marginTop: 24 }}>Verdict Override Panel</SLabel>
+            <div
+               style={{
+                  background: "#fff",
+                  border: "1.5px solid #e5e7eb",
+                  borderRadius: 12,
+                  padding: "18px 20px",
+                  marginTop: 12,
+               }}>
+               <div style={{ fontSize: 12, color: "#374151", marginBottom: 14, lineHeight: 1.6 }}>
+                  Moderators can override AI verdicts when community consensus is clear but the AI
+                  classification is wrong. All overrides are logged in the Audit Log.
+               </div>
+               <div style={{ display: "flex", gap: 12, alignItems: "flex-end" }}>
+                  <div style={{ flex: 1 }}>
+                     <div
+                        style={{
+                           fontSize: 10,
+                           fontWeight: 700,
+                           color: T.gray,
+                           letterSpacing: "0.06em",
+                           textTransform: "uppercase",
+                           marginBottom: 4,
+                        }}>
+                        Thread / Claim ID
+                     </div>
+                     <div
+                        style={{
+                           border: "1.5px solid #e5e7eb",
+                           borderRadius: 7,
+                           padding: "8px 12px",
+                           fontSize: 12,
+                           color: "#9ca3af",
+                           background: "#fafafa",
+                        }}>
+                        Enter Thread ID or claim URL…
+                     </div>
+                  </div>
+                  <div>
+                     <div
+                        style={{
+                           fontSize: 10,
+                           fontWeight: 700,
+                           color: T.gray,
+                           letterSpacing: "0.06em",
+                           textTransform: "uppercase",
+                           marginBottom: 4,
+                        }}>
+                        Override Verdict
+                     </div>
+                     <div style={{ display: "flex", gap: 6 }}>
+                        {["verified", "fake", "misleading", "unverified"].map((v) => (
+                           <span
+                              key={v}
+                              style={{ cursor: "pointer" }}>
+                              <VerdictBadge verdict={v} />
+                           </span>
+                        ))}
+                     </div>
+                  </div>
+                  <button
+                     style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: "#fff",
+                        background: T.indigo,
+                        border: "none",
+                        borderRadius: 7,
+                        padding: "9px 18px",
+                        cursor: "pointer",
+                     }}>
+                     Apply Override
+                  </button>
+               </div>
+            </div>
+         </div>
+      </div>
+   );
+};
+
+// ─── View: Mobile Feed ────────────────────────────────────────────────────────
+const MobileFeed = () => {
+   const posts = [
+      {
+         verdict: "fake",
+         author: "@photocheck",
+         time: "2h",
+         caption:
+            '"Shocking aerial photo shows the aftermath of the 2024 flooding in Valencia, Spain."',
+         confidence: 94,
+         reactions: 142,
+         comments: 89,
+         evidence: 15,
+      },
+      {
+         verdict: "misleading",
+         author: "@skepticwatch",
+         time: "5h",
+         caption: '"New study proves masks are completely ineffective against airborne COVID."',
+         confidence: 62,
+         reactions: 78,
+         comments: 34,
+         evidence: 7,
+      },
+      {
+         verdict: "satire",
+         author: "@theonion_watch",
+         time: "3h",
+         caption: '"Scientists Discover New Planet Composed Entirely Of Student Loan Debt"',
+         confidence: 99,
+         reactions: 312,
+         comments: 57,
+         evidence: 4,
+      },
+   ];
+   const borderColor = (v) =>
+      ({
+         verified: T.green,
+         fake: T.red,
+         misleading: T.amber,
+         unverified: T.gray,
+         satire: T.violet,
+      })[v] || T.gray;
+   const avatarEl = (av) => {
+      const m = {
+         detective: { Icon: Eye, bg: "#fce7f3", color: "#be185d" },
+         news: { Icon: Newspaper, bg: "#fef3c7", color: "#92400e" },
+         satire: { Icon: Wand2, bg: "#ede9fe", color: T.violet },
+      };
+      const a = m[av] || { Icon: User, bg: "#f3f4f6", color: T.gray };
+      return (
+         <Avatar
+            Icon={a.Icon}
+            bg={a.bg}
+            color={a.color}
+            size={32}
+         />
+      );
+   };
+   return (
+      <div style={{ display: "flex", gap: 32, alignItems: "flex-start", flexWrap: "wrap" }}>
+         {/* Device frame */}
+         <div>
+            <SLabel>Mobile Feed — 390px viewport (iPhone 15 Pro)</SLabel>
+            <div
+               style={{
+                  width: 390,
+                  borderRadius: 40,
+                  background: T.dark,
+                  padding: "12px 8px 8px",
+                  boxShadow: "0 24px 64px rgba(0,0,0,0.4)",
+                  border: "8px solid #1a1a2e",
+               }}>
+               {/* Status bar */}
+               <div
+                  style={{
+                     display: "flex",
+                     justifyContent: "space-between",
+                     alignItems: "center",
+                     padding: "0 20px 10px",
+                  }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>9:41</span>
+                  <div
+                     style={{
+                        width: 120,
+                        height: 30,
+                        background: "#000",
+                        borderRadius: 99,
+                        margin: "-8px auto 0",
+                     }}
+                  />
+                  <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                     <Activity
+                        size={12}
+                        color="#fff"
+                     />
+                     <Zap
+                        size={12}
+                        color="#fff"
+                     />
+                  </div>
+               </div>
+               {/* Screen */}
+               <div
+                  style={{
+                     background: "#f1f5f9",
+                     borderRadius: 32,
+                     overflow: "hidden",
+                     height: 720,
+                     position: "relative",
+                  }}>
+                  {/* Mobile top bar — compact */}
+                  <div
+                     style={{
+                        background: T.dark,
+                        padding: "10px 16px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                     }}>
+                     <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                        <Logo size={12} />
+                        <span style={{ color: "#fff", fontWeight: 800, fontSize: 13 }}>
+                           TruthLens
+                        </span>
+                     </div>
+                     <div style={{ display: "flex", gap: 10 }}>
+                        <Search
+                           size={16}
+                           color="rgba(255,255,255,0.7)"
+                        />
+                        <Bell
+                           size={16}
+                           color="rgba(255,255,255,0.7)"
+                        />
+                     </div>
+                  </div>
+                  {/* Feed */}
+                  <div
+                     style={{
+                        overflowY: "auto",
+                        height: "calc(720px - 50px - 56px)",
+                        padding: "10px 8px 0",
+                     }}>
+                     {posts.map((post, i) => (
+                        <div
+                           key={i}
+                           style={{
+                              background: "#fff",
+                              borderRadius: 12,
+                              border: "1.5px solid #e5e7eb",
+                              marginBottom: 10,
+                              overflow: "hidden",
+                           }}>
+                           <div
+                              style={{
+                                 padding: "10px 12px 8px",
+                                 display: "flex",
+                                 alignItems: "center",
+                                 justifyContent: "space-between",
+                              }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                 {avatarEl(["detective", "news", "satire"][i])}
+                                 <div>
+                                    <div
+                                       style={{ fontSize: 12, fontWeight: 700, color: "#111827" }}>
+                                       {post.author}
+                                    </div>
+                                    <div style={{ fontSize: 10, color: T.gray }}>
+                                       {post.time} · via TruthLens
+                                    </div>
+                                 </div>
+                              </div>
+                              <VerdictBadge verdict={post.verdict} />
+                           </div>
+                           <div
+                              style={{
+                                 padding: "0 12px 8px",
+                                 fontSize: 12,
+                                 color: "#1f2937",
+                                 lineHeight: 1.5,
+                              }}>
+                              {post.caption}
+                           </div>
+                           <div
+                              style={{
+                                 position: "relative",
+                                 height: 100,
+                                 background: "linear-gradient(135deg,#e0e7ff,#f3f4f6)",
+                                 display: "flex",
+                                 alignItems: "center",
+                                 justifyContent: "center",
+                              }}>
+                              <Image
+                                 size={22}
+                                 color={T.gray}
+                                 strokeWidth={1.5}
+                              />
+                              <div
+                                 style={{
+                                    position: "absolute",
+                                    bottom: 0,
+                                    inset: "auto 0 0",
+                                    background: `${borderColor(post.verdict)}18`,
+                                    borderTop: `3px solid ${borderColor(post.verdict)}`,
+                                    padding: "4px 10px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 6,
+                                 }}>
+                                 <span style={{ fontSize: 9, color: "#374151", fontWeight: 600 }}>
+                                    AI: <strong>{post.confidence}%</strong>
+                                 </span>
+                              </div>
+                           </div>
+                           {/* Compact action row */}
+                           <div style={{ padding: "6px 8px", display: "flex" }}>
+                              {[
+                                 { Icon: ThumbsUp, label: `${post.reactions}` },
+                                 { Icon: MessageCircle, label: `${post.comments}` },
+                                 { Icon: Paperclip, label: "Evidence", color: T.indigo },
+                              ].map(({ Icon: AI, label, color }, j) => (
+                                 <button
+                                    key={j}
+                                    style={{
+                                       flex: 1,
+                                       padding: "6px 2px",
+                                       background: "transparent",
+                                       border: "none",
+                                       fontSize: 11,
+                                       fontWeight: 600,
+                                       color: color || "#374151",
+                                       cursor: "pointer",
+                                       display: "flex",
+                                       alignItems: "center",
+                                       justifyContent: "center",
+                                       gap: 4,
+                                    }}>
+                                    <AI
+                                       size={12}
+                                       strokeWidth={2}
+                                    />{" "}
+                                    {label}
+                                 </button>
+                              ))}
+                           </div>
+                        </div>
+                     ))}
+                  </div>
+                  {/* Bottom tab bar */}
+                  <div
+                     style={{
+                        position: "absolute",
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        background: "#fff",
+                        borderRadius: "0 0 32px 32px",
+                        padding: "8px 0 12px",
+                        boxShadow: "0 -2px 20px rgba(0,0,0,0.12)",
+                        display: "flex",
+                        border: "none",
+                        borderTop: "1px solid #e5e7eb",
+                     }}>
+                     {[
+                        { Icon: Home, label: "Feed", active: true },
+                        { Icon: Search, label: "Search" },
+                        { Icon: ScanLine, label: "Scan" },
+                        { Icon: Bell, label: "Alerts" },
+                        { Icon: UserCircle, label: "Me" },
+                     ].map(({ Icon: TI, label, active }) => (
+                        <div
+                           key={label}
+                           style={{
+                              flex: 1,
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "center",
+                              gap: 2,
+                              cursor: "pointer",
+                           }}>
+                           <TI
+                              size={18}
+                              color={active ? T.indigo : T.gray}
+                              strokeWidth={active ? 2.5 : 1.8}
+                           />
+                           <span
+                              style={{
+                                 fontSize: 9,
+                                 fontWeight: active ? 700 : 500,
+                                 color: active ? T.indigo : T.gray,
+                              }}>
+                              {label}
+                           </span>
+                        </div>
+                     ))}
+                  </div>
+               </div>
+            </div>
+         </div>
+         {/* Annotations panel */}
+         <div style={{ flex: 1, minWidth: 280 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+               <Ann
+                  title="Mobile Layout Changes"
+                  BoxIcon={Smartphone}
+                  color={T.indigo}
+                  items={[
+                     "Top nav: compact — logo + name only, Search + Bell icons right-aligned",
+                     "Sidebar / top page nav removed — replaced by bottom tab bar (5 items)",
+                     "PostCard: tighter padding, image height reduced to 100px, avatar 32px",
+                     "Verdict badge moves to top-right of card header (not image overlay)",
+                     "Bottom tab bar: Home · Search · Scan (prominent) · Alerts · Me",
+                  ]}
+               />
+               <Ann
+                  title="Bottom Tab Bar Design"
+                  BoxIcon={Layers}
+                  color={T.violet}
+                  items={[
+                     "'Scan' is the centre tab — bigger or accented to highlight primary action",
+                     "Tab bar uses position:fixed bottom-0, safe-area-inset-bottom for notch devices",
+                     "Active tab: icon strokeWidth 2.5 + indigo colour + bold label",
+                     "Use react-navigation (React Native) or CSS position:fixed (web PWA)",
+                  ]}
+               />
+               <Ann
+                  title="Responsive Strategy"
+                  BoxIcon={MonitorSmartphone}
+                  color={T.green}
+                  items={[
+                     "Breakpoint: < 768px switches to mobile layout",
+                     "Bottom tab replaces AppNav via CSS media query or conditional render",
+                     "Feed column: full-width with 8px side padding (no maxWidth constraint)",
+                     "Touch targets minimum 44×44px — all buttons meet this threshold",
+                  ]}
+               />
+            </div>
+         </div>
+      </div>
+   );
+};
+
+// ─── View: Landing Page (Redesigned) ──────────────────────────────────────────
+const LandingPage = () => {
+   const stats = [
+      { val: "12,040+", label: "Images Verified" },
+      { val: "500+", label: "Active Contributors" },
+      { val: "98%", label: "Accuracy Rate" },
+      { val: "10k+", label: "Community Members" },
+   ];
+   const steps = [
+      {
+         n: 1,
+         Icon: Scissors,
+         label: "Snip",
+         desc: "Select any suspicious claim or image directly from your feed using our Chrome extension.",
+      },
+      {
+         n: 2,
+         Icon: Zap,
+         label: "Analyze",
+         desc: "AI cross-references the claim against thousands of verified sources in under 3 seconds.",
+      },
+      {
+         n: 3,
+         Icon: Users,
+         label: "Resolve",
+         desc: "The community votes on uncertain claims. Your Trust Score grows with every accurate contribution.",
+      },
+   ];
+   const recentPosts = [
+      {
+         verdict: "fake",
+         title: "Valencia flooding photo",
+         sub: "Aerial photo is from 2021 Hurricane Ida, not 2024 Spain floods.",
+         confidence: 94,
+      },
+      {
+         verdict: "misleading",
+         title: "Mask effectiveness study",
+         sub: "Study cited has not been peer-reviewed and contradicts CDC guidelines.",
+         confidence: 62,
+      },
+      {
+         verdict: "verified",
+         title: "Unemployment figures",
+         sub: "BLS data confirms headline claim is accurate within margin of error.",
+         confidence: 97,
+      },
+   ];
+   const bc = (v) => ({ verified: T.green, fake: T.red, misleading: T.amber })[v] || T.gray;
+   return (
+      <div style={{ background: "#fff", minHeight: "100%" }}>
+         {/* Navbar */}
+         <div
+            style={{
+               background: "rgba(255,255,255,0.95)",
+               backdropFilter: "blur(8px)",
+               borderBottom: "1px solid #e5e7eb",
+               padding: "0 48px",
+               display: "flex",
+               alignItems: "center",
+               position: "sticky",
+               top: 0,
+               zIndex: 50,
+               height: 60,
+            }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginRight: "auto" }}>
+               <Logo size={16} />
+               <span
+                  style={{
+                     fontWeight: 900,
+                     fontSize: 16,
+                     color: T.dark,
+                     letterSpacing: "-0.01em",
+                  }}>
+                  TruthLens
+               </span>
+            </div>
+            <div style={{ display: "flex", gap: 28, alignItems: "center" }}>
+               {["Features", "Community", "About"].map((l) => (
+                  <span
+                     key={l}
+                     style={{ fontSize: 13, fontWeight: 600, color: "#374151", cursor: "pointer" }}>
+                     {l}
+                  </span>
+               ))}
+               <div style={{ width: 1, height: 20, background: "#e5e7eb" }} />
+               <span style={{ fontSize: 13, fontWeight: 600, color: T.indigo, cursor: "pointer" }}>
+                  Login
+               </span>
+               <button
+                  style={{
+                     fontSize: 13,
+                     fontWeight: 800,
+                     color: "#fff",
+                     background: T.indigo,
+                     border: "none",
+                     borderRadius: 8,
+                     padding: "8px 18px",
+                     cursor: "pointer",
+                  }}>
+                  Get Started
+               </button>
+            </div>
+         </div>
+         {/* Hero */}
+         <div
+            style={{
+               background: `linear-gradient(160deg,${T.dark} 0%,#2d2a6e 55%,#4338ca 100%)`,
+               padding: "72px 48px 80px",
+               position: "relative",
+               overflow: "hidden",
+            }}>
+            <svg
+               style={{
+                  position: "absolute",
+                  inset: 0,
+                  opacity: 0.05,
+                  width: "100%",
+                  height: "100%",
+               }}>
+               <defs>
+                  <pattern
+                     id="ldots"
+                     width="28"
+                     height="28"
+                     patternUnits="userSpaceOnUse">
+                     <circle
+                        cx="2"
+                        cy="2"
+                        r="1.8"
+                        fill="white"
+                     />
+                  </pattern>
+               </defs>
+               <rect
+                  width="100%"
+                  height="100%"
+                  fill="url(#ldots)"
+               />
+            </svg>
+            <div
+               style={{
+                  maxWidth: 1100,
+                  margin: "0 auto",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 480px",
+                  gap: 48,
+                  alignItems: "center",
+                  position: "relative",
+               }}>
+               <div>
+                  <div
+                     style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 8,
+                        background: "rgba(79,70,229,0.3)",
+                        border: "1px solid rgba(79,70,229,0.5)",
+                        borderRadius: 99,
+                        padding: "5px 14px",
+                        marginBottom: 20,
+                     }}>
+                     <Shield
+                        size={12}
+                        color="#a5b4fc"
+                     />
+                     <span
+                        style={{
+                           fontSize: 11,
+                           fontWeight: 700,
+                           color: "#a5b4fc",
+                           letterSpacing: "0.05em",
+                        }}>
+                        AI-POWERED MEDIA LITERACY
+                     </span>
+                  </div>
+                  <div
+                     style={{
+                        fontSize: 48,
+                        fontWeight: 900,
+                        color: "#fff",
+                        letterSpacing: "-0.03em",
+                        lineHeight: 1.1,
+                        marginBottom: 16,
+                     }}>
+                     See the Truth
+                     <br />
+                     <span style={{ color: "#818cf8" }}>Behind the Feed.</span>
+                  </div>
+                  <div
+                     style={{
+                        fontSize: 16,
+                        color: "rgba(255,255,255,0.65)",
+                        lineHeight: 1.7,
+                        marginBottom: 32,
+                        maxWidth: 440,
+                     }}>
+                     AI-powered shield against misinformation. Snip any claim, get an instant
+                     verdict, and let 10,000+ fact-checkers settle the debate.
+                  </div>
+                  {/* Stats row — in hero */}
+                  <div style={{ display: "flex", gap: 28, marginBottom: 32 }}>
+                     {stats.map(({ val, label }) => (
+                        <div key={label}>
+                           <div style={{ fontSize: 20, fontWeight: 900, color: "#fff" }}>{val}</div>
+                           <div
+                              style={{
+                                 fontSize: 10,
+                                 color: "rgba(255,255,255,0.5)",
+                                 fontWeight: 600,
+                                 textTransform: "uppercase",
+                                 letterSpacing: "0.06em",
+                              }}>
+                              {label}
+                           </div>
+                        </div>
+                     ))}
+                  </div>
+                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                     <button
+                        style={{
+                           fontSize: 14,
+                           fontWeight: 800,
+                           color: "#fff",
+                           background: T.indigo,
+                           border: "none",
+                           borderRadius: 10,
+                           padding: "14px 28px",
+                           cursor: "pointer",
+                           display: "flex",
+                           alignItems: "center",
+                           gap: 8,
+                           letterSpacing: "0.02em",
+                        }}>
+                        <Download
+                           size={16}
+                           color="#fff"
+                        />{" "}
+                        DOWNLOAD FOR CHROME
+                     </button>
+                     <button
+                        style={{
+                           fontSize: 13,
+                           fontWeight: 700,
+                           color: "rgba(255,255,255,0.8)",
+                           background: "rgba(255,255,255,0.08)",
+                           border: "1.5px solid rgba(255,255,255,0.2)",
+                           borderRadius: 10,
+                           padding: "14px 22px",
+                           cursor: "pointer",
+                           display: "flex",
+                           alignItems: "center",
+                           gap: 6,
+                        }}>
+                        <Play
+                           size={13}
+                           color="rgba(255,255,255,0.8)"
+                        />{" "}
+                        Watch Demo
+                     </button>
+                  </div>
+               </div>
+               {/* Hero mockup — extension result card floating over feed */}
+               <div style={{ position: "relative" }}>
+                  {/* Fake feed bg */}
+                  <div
+                     style={{
+                        background: "rgba(255,255,255,0.06)",
+                        borderRadius: 14,
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        padding: 16,
+                     }}>
+                     {[1, 2].map((i) => (
+                        <div
+                           key={i}
+                           style={{
+                              background: "rgba(255,255,255,0.05)",
+                              borderRadius: 8,
+                              padding: 12,
+                              marginBottom: i < 2 ? 10 : 0,
+                           }}>
+                           <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                              <div
+                                 style={{
+                                    width: 28,
+                                    height: 28,
+                                    borderRadius: "50%",
+                                    background: "rgba(255,255,255,0.1)",
+                                 }}
+                              />
+                              <div style={{ flex: 1 }}>
+                                 <div
+                                    style={{
+                                       height: 9,
+                                       background: "rgba(255,255,255,0.15)",
+                                       borderRadius: 3,
+                                       width: "40%",
+                                       marginBottom: 5,
+                                    }}
+                                 />
+                                 <div
+                                    style={{
+                                       height: 7,
+                                       background: "rgba(255,255,255,0.08)",
+                                       borderRadius: 3,
+                                       width: "25%",
+                                    }}
+                                 />
+                              </div>
+                           </div>
+                           <div
+                              style={{
+                                 height: 60,
+                                 background: "rgba(255,255,255,0.07)",
+                                 borderRadius: 6,
+                              }}
+                           />
+                        </div>
+                     ))}
+                  </div>
+                  {/* Floating result card */}
+                  <div
+                     style={{
+                        position: "absolute",
+                        top: 16,
+                        right: -20,
+                        background: "#fff",
+                        borderRadius: 12,
+                        border: "1.5px solid #e5e7eb",
+                        boxShadow: "0 16px 48px rgba(0,0,0,0.3)",
+                        padding: "14px 16px",
+                        width: 220,
+                        borderLeft: `4px solid ${T.red}`,
+                     }}>
+                     <div
+                        style={{
+                           display: "flex",
+                           justifyContent: "space-between",
+                           alignItems: "center",
+                           marginBottom: 8,
+                        }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                           <Logo size={10} />
+                           <span style={{ fontSize: 10, fontWeight: 800, color: T.dark }}>
+                              TruthLens
+                           </span>
+                        </div>
+                        <VerdictBadge verdict="fake" />
+                     </div>
+                     <div
+                        style={{
+                           fontSize: 10,
+                           color: "#374151",
+                           lineHeight: 1.5,
+                           marginBottom: 8,
+                        }}>
+                        AI detected this photo is from a 2021 flood event, not 2024.
+                     </div>
+                     <div
+                        style={{
+                           height: 4,
+                           background: "#fee2e2",
+                           borderRadius: 99,
+                           marginBottom: 6,
+                        }}>
+                        <div
+                           style={{
+                              height: "100%",
+                              width: "94%",
+                              background: T.red,
+                              borderRadius: 99,
+                           }}
+                        />
+                     </div>
+                     <div style={{ fontSize: 9, color: T.gray, fontWeight: 600 }}>
+                        94% confidence · 15 community sources
+                     </div>
+                  </div>
+               </div>
+            </div>
+         </div>
+         {/* How It Works */}
+         <div style={{ padding: "72px 48px", background: "#f9fafb" }}>
+            <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+               <div style={{ textAlign: "center", marginBottom: 48 }}>
+                  <div
+                     style={{
+                        fontSize: 11,
+                        fontWeight: 800,
+                        color: T.indigo,
+                        letterSpacing: "0.12em",
+                        textTransform: "uppercase",
+                        marginBottom: 8,
+                     }}>
+                     HOW IT WORKS
+                  </div>
+                  <div
+                     style={{
+                        fontSize: 32,
+                        fontWeight: 900,
+                        color: T.dark,
+                        letterSpacing: "-0.02em",
+                     }}>
+                     Three steps to the truth
+                  </div>
+               </div>
+               <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 32 }}>
+                  {steps.map(({ n, Icon: SI, label, desc }) => (
+                     <div
+                        key={n}
+                        style={{ textAlign: "center" }}>
+                        <div
+                           style={{
+                              width: 64,
+                              height: 64,
+                              borderRadius: 16,
+                              background: `linear-gradient(135deg,${T.indigo},#6366f1)`,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              margin: "0 auto 16px",
+                           }}>
+                           <SI
+                              size={28}
+                              color="#fff"
+                              strokeWidth={1.8}
+                           />
+                        </div>
+                        <div
+                           style={{
+                              fontSize: 11,
+                              fontWeight: 800,
+                              color: T.indigo,
+                              letterSpacing: "0.1em",
+                              marginBottom: 6,
+                           }}>
+                           0{n} — {label.toUpperCase()}
+                        </div>
+                        <div
+                           style={{
+                              fontSize: 20,
+                              fontWeight: 900,
+                              color: T.dark,
+                              marginBottom: 8,
+                           }}>
+                           {label}
+                        </div>
+                        <div style={{ fontSize: 13, color: T.gray, lineHeight: 1.7 }}>{desc}</div>
+                     </div>
+                  ))}
+               </div>
+            </div>
+         </div>
+         {/* Recent Investigations */}
+         <div style={{ padding: "72px 48px" }}>
+            <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+               <div
+                  style={{
+                     display: "flex",
+                     justifyContent: "space-between",
+                     alignItems: "flex-end",
+                     marginBottom: 32,
+                  }}>
+                  <div>
+                     <div
+                        style={{
+                           fontSize: 11,
+                           fontWeight: 800,
+                           color: T.indigo,
+                           letterSpacing: "0.12em",
+                           textTransform: "uppercase",
+                           marginBottom: 8,
+                        }}>
+                        LIVE FROM THE COMMUNITY
+                     </div>
+                     <div
+                        style={{
+                           fontSize: 28,
+                           fontWeight: 900,
+                           color: T.dark,
+                           letterSpacing: "-0.02em",
+                        }}>
+                        Recent Investigations
+                     </div>
+                  </div>
+                  <button
+                     style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: T.indigo,
+                        background: "#eff6ff",
+                        border: "1.5px solid #c7d2fe",
+                        borderRadius: 8,
+                        padding: "8px 16px",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                     }}>
+                     View All{" "}
+                     <ArrowRight
+                        size={13}
+                        color={T.indigo}
+                     />
+                  </button>
+               </div>
+               <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
+                  {recentPosts.map((p, i) => (
+                     <div
+                        key={i}
+                        style={{
+                           border: "1.5px solid #e5e7eb",
+                           borderRadius: 12,
+                           overflow: "hidden",
+                           cursor: "pointer",
+                        }}>
+                        <div
+                           style={{
+                              height: 120,
+                              background: "linear-gradient(135deg,#e0e7ff,#f3f4f6)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              position: "relative",
+                              borderBottom: `3px solid ${bc(p.verdict)}`,
+                           }}>
+                           <Image
+                              size={28}
+                              color={T.gray}
+                              strokeWidth={1.5}
+                           />
+                           <div style={{ position: "absolute", top: 10, right: 10 }}>
+                              <VerdictBadge verdict={p.verdict} />
+                           </div>
+                        </div>
+                        <div style={{ padding: "14px 16px" }}>
+                           <div
+                              style={{
+                                 fontSize: 14,
+                                 fontWeight: 800,
+                                 color: "#111827",
+                                 marginBottom: 6,
+                              }}>
+                              {p.title}
+                           </div>
+                           <div style={{ fontSize: 11, color: T.gray, lineHeight: 1.6 }}>
+                              {p.sub}
+                           </div>
+                           <div
+                              style={{
+                                 marginTop: 10,
+                                 fontSize: 10,
+                                 color: T.gray,
+                                 display: "flex",
+                                 alignItems: "center",
+                                 gap: 4,
+                              }}>
+                              <Activity
+                                 size={10}
+                                 color={T.gray}
+                              />{" "}
+                              AI Confidence: <strong>{p.confidence}%</strong>
+                           </div>
+                        </div>
+                     </div>
+                  ))}
+               </div>
+            </div>
+         </div>
+         {/* Trust Score CTA */}
+         <div
+            style={{
+               background: `linear-gradient(135deg,${T.dark},#2d2a6e)`,
+               padding: "72px 48px",
+            }}>
+            <div style={{ maxWidth: 700, margin: "0 auto", textAlign: "center" }}>
+               <TrustGauge score={82} />
+               <div
+                  style={{
+                     fontSize: 32,
+                     fontWeight: 900,
+                     color: "#fff",
+                     letterSpacing: "-0.02em",
+                     marginTop: 16,
+                     marginBottom: 12,
+                  }}>
+                  Build Your Trust Score
+               </div>
+               <div
+                  style={{
+                     fontSize: 14,
+                     color: "rgba(255,255,255,0.65)",
+                     lineHeight: 1.7,
+                     marginBottom: 28,
+                     maxWidth: 480,
+                     margin: "0 auto 28px",
+                  }}>
+                  Every piece of evidence you submit, every vote you cast — it all builds your
+                  credibility score. Trusted contributors have more weight in community decisions.
+               </div>
+               <button
+                  style={{
+                     fontSize: 14,
+                     fontWeight: 800,
+                     color: T.indigo,
+                     background: "#fff",
+                     border: "none",
+                     borderRadius: 10,
+                     padding: "14px 32px",
+                     cursor: "pointer",
+                  }}>
+                  Join the Community →
+               </button>
+            </div>
+         </div>
+         {/* Footer */}
+         <div
+            style={{
+               background: T.dark,
+               padding: "32px 48px",
+               display: "flex",
+               justifyContent: "space-between",
+               alignItems: "center",
+            }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+               <Logo size={14} />
+               <span style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>
+                  © 2025 TruthLens. Fighting misinformation together.
+               </span>
+            </div>
+            <div style={{ display: "flex", gap: 20 }}>
+               {["Privacy", "Terms", "Contact", "API"].map((l) => (
+                  <span
+                     key={l}
+                     style={{
+                        fontSize: 11,
+                        color: "rgba(255,255,255,0.4)",
+                        cursor: "pointer",
+                        fontWeight: 600,
+                     }}>
+                     {l}
+                  </span>
+               ))}
+            </div>
+         </div>
+      </div>
+   );
+};
+
 // ─── Root App ─────────────────────────────────────────────────────────────────
 const VIEWS = [
    { id: "design", Icon: Palette, label: "Design System" },
    { id: "ext-popup", Icon: ScanLine, label: "Ext. Popup" },
    { id: "ext-cards", Icon: Layers, label: "Injection Cards" },
+   { id: "ext-minimized", Icon: Minimize2, label: "Ext. States" },
    { id: "auth", Icon: Shield, label: "Auth Pages" },
+   { id: "onboarding", Icon: Rocket, label: "Onboarding" },
    { id: "dashboard", Icon: LayoutDashboard, label: "Dashboard" },
    { id: "feed", Icon: Globe, label: "Community Feed" },
    { id: "thread", Icon: MessageCircle, label: "Thread Detail" },
+   { id: "user-profile", Icon: UserCircle, label: "User Profile" },
+   { id: "notifications", Icon: Bell, label: "Notifications" },
+   { id: "settings", Icon: Settings, label: "Settings" },
+   { id: "trust-breakdown", Icon: PieChart, label: "Trust Score" },
+   { id: "empty-states", Icon: HelpCircle, label: "Empty States" },
+   { id: "moderation", Icon: AlertOctagon, label: "Moderation" },
+   { id: "mobile-feed", Icon: Smartphone, label: "Mobile Feed" },
+   { id: "landing", Icon: Rocket, label: "Landing Page" },
 ];
 const DESC = {
    design:
@@ -3023,21 +7254,51 @@ const DESC = {
    "ext-popup": "380×520px popup with 3 tabbed input modes: Snip, Upload, and Scan URL.",
    "ext-cards":
       "React portals injected into host pages — Loading state and Analysis Result states.",
-   auth: "Minimalist entry point with optional value proposition for new users.",
+   "ext-minimized":
+      "Minimized pill, dismissed toast, and passive scanning indicator states on host webpages.",
+   auth: "Split-screen booklet layout — branded left panel with stats or features, clean form on the right.",
+   onboarding:
+      "4-step post-registration wizard: Welcome → Install Extension → First Scan → Complete.",
    dashboard:
       "User's personal space: Profile + Trust Score gauge, scan history, and contributions.",
    feed: "Facebook-style post feed with snipped images, verdict overlays, and reaction/action rows.",
    thread:
       "Full post view with collapsible evidence form and tabbed Comments / Evidence Board section.",
+   "user-profile":
+      "Public profile page for other users — Trust Score, contribution history, follow action.",
+   notifications:
+      "Tabbed notification feed (All / Votes / Evidence / System) with read/unread states.",
+   settings:
+      "Account, notification preferences, extension settings, privacy controls, and danger zone.",
+   "trust-breakdown":
+      "Modal showing weighted Trust Score formula — accuracy, votes, volume, tenure.",
+   "empty-states":
+      "Empty state cards for all data-empty views, plus PostCard and Evidence skeleton loaders.",
+   moderation:
+      "Admin panel with flag queue, verdict override controls, and moderation stat headers.",
+   "mobile-feed":
+      "390px iPhone frame showing the mobile-adapted feed layout with bottom tab navigation.",
+   landing:
+      "Redesigned public landing page — hero, stats, how it works, recent investigations, Trust Score CTA.",
 };
 const TITLE = {
    design: "Design System Reference",
    "ext-popup": "The Browser Extension Popup",
    "ext-cards": "Content Script Injection Cards",
+   "ext-minimized": "Extension Minimized & Dismissed States",
    auth: "Authentication Pages",
+   onboarding: "Post-Registration Onboarding Flow",
    dashboard: "Personal Dashboard",
    feed: "Community Feed",
    thread: "Thread Detail Page",
+   "user-profile": "Public User Profile",
+   notifications: "Notifications Page",
+   settings: "Settings Page",
+   "trust-breakdown": "Trust Score Breakdown Modal",
+   "empty-states": "Empty States & Skeleton Loaders",
+   moderation: "Moderation / Admin Panel",
+   "mobile-feed": "Mobile Feed (390px)",
+   landing: "Landing Page (Redesigned)",
 };
 
 export default function TruthLensWireframes() {
@@ -3142,68 +7403,202 @@ export default function TruthLensWireframes() {
                </span>
             </div>
          </div>
-         {/* Content */}
-         <div style={{ padding: "32px 32px 48px", maxWidth: 1200, margin: "0 auto" }}>
-            <div style={{ marginBottom: 28 }}>
-               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+         {/* Page header — only for constrained views */}
+         {active !== "auth" &&
+            active !== "feed" &&
+            active !== "thread" &&
+            active !== "dashboard" &&
+            active !== "user-profile" &&
+            active !== "notifications" &&
+            active !== "settings" &&
+            active !== "moderation" &&
+            active !== "onboarding" &&
+            active !== "landing" && (
+               <div style={{ padding: "32px 32px 0", maxWidth: 1200, margin: "0 auto" }}>
+                  <div style={{ marginBottom: 28 }}>
+                     <div
+                        style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                        <div
+                           style={{
+                              width: 32,
+                              height: 32,
+                              background: T.indigo,
+                              borderRadius: 8,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                           }}>
+                           <v.Icon
+                              size={16}
+                              color="#fff"
+                              strokeWidth={2}
+                           />
+                        </div>
+                        <span
+                           style={{
+                              fontSize: 11,
+                              color: T.indigo,
+                              fontWeight: 800,
+                              letterSpacing: "0.1em",
+                              textTransform: "uppercase",
+                           }}>
+                           {v.label}
+                        </span>
+                     </div>
+                     <div
+                        style={{
+                           fontSize: 24,
+                           fontWeight: 900,
+                           color: T.dark,
+                           letterSpacing: "-0.02em",
+                        }}>
+                        {TITLE[active]}
+                     </div>
+                     <div style={{ fontSize: 13, color: T.gray, marginTop: 4 }}>{DESC[active]}</div>
+                  </div>
+               </div>
+            )}
+
+         {/* Auth — full bleed, no maxWidth, no side padding */}
+         {active === "auth" && (
+            <div style={{ padding: "0 0 48px" }}>
+               <AuthPages />
+            </div>
+         )}
+
+         {/* Design, Ext-Popup, Ext-Cards, Ext-Minimized, Trust Breakdown, Empty States, Mobile Feed — constrained to 1200px */}
+         {(active === "design" ||
+            active === "ext-popup" ||
+            active === "ext-cards" ||
+            active === "ext-minimized" ||
+            active === "trust-breakdown" ||
+            active === "empty-states" ||
+            active === "mobile-feed") && (
+            <div style={{ padding: "0 32px 48px", maxWidth: 1200, margin: "0 auto" }}>
+               {active === "design" && <DesignSystem />}
+               {active === "ext-popup" && <ExtensionPopup />}
+               {active === "ext-cards" && <ContentCards />}
+               {active === "ext-minimized" && <ExtMinimizedStates />}
+               {active === "trust-breakdown" && <TrustBreakdown />}
+               {active === "empty-states" && <EmptyStates />}
+               {active === "mobile-feed" && <MobileFeed />}
+            </div>
+         )}
+
+         {/* Feed, Thread, Dashboard, User Profile, Notifications, Settings, Moderation — full bleed in BrowserChrome */}
+         {(active === "feed" ||
+            active === "thread" ||
+            active === "dashboard" ||
+            active === "user-profile" ||
+            active === "notifications" ||
+            active === "settings" ||
+            active === "moderation") && (
+            <div style={{ padding: "0 0 48px" }}>
+               <BrowserChrome
+                  url={
+                     active === "feed"
+                        ? "community"
+                        : active === "thread"
+                          ? "thread/1042"
+                          : active === "dashboard"
+                            ? "dashboard"
+                            : active === "user-profile"
+                              ? "u/factchecker_ph"
+                              : active === "notifications"
+                                ? "notifications"
+                                : active === "settings"
+                                  ? "settings"
+                                  : "moderation/queue"
+                  }>
+                  {active === "feed" && <CommunityFeed />}
+                  {active === "thread" && <ThreadDetail />}
+                  {active === "dashboard" && <PersonalDashboard />}
+                  {active === "user-profile" && <UserProfilePage />}
+                  {active === "notifications" && <NotificationsPage />}
+                  {active === "settings" && <SettingsPage />}
+                  {active === "moderation" && <ModerationPanel />}
+               </BrowserChrome>
+               {/* Annotations below the frame */}
+               {active === "feed" && (
                   <div
                      style={{
-                        width: 32,
-                        height: 32,
-                        background: T.indigo,
-                        borderRadius: 8,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: 16,
+                        marginTop: 28,
+                        padding: "0 32px",
                      }}>
-                     <v.Icon
-                        size={16}
-                        color="#fff"
-                        strokeWidth={2}
-                     />
-                  </div>
-                  <span
-                     style={{
-                        fontSize: 11,
-                        color: T.indigo,
-                        fontWeight: 800,
-                        letterSpacing: "0.1em",
-                        textTransform: "uppercase",
-                     }}>
-                     {v.label}
-                  </span>
-               </div>
-               <div
-                  style={{
-                     fontSize: 24,
-                     fontWeight: 900,
-                     color: T.dark,
-                     letterSpacing: "-0.02em",
-                  }}>
-                  {TITLE[active]}
-               </div>
-               <div style={{ fontSize: 13, color: T.gray, marginTop: 4 }}>{DESC[active]}</div>
-            </div>
-            {active === "design" && <DesignSystem />}
-            {active === "ext-popup" && <ExtensionPopup />}
-            {active === "ext-cards" && <ContentCards />}
-            {active === "auth" && <AuthPages />}
-            {active === "dashboard" && <PersonalDashboard />}
-            {active === "feed" && <CommunityFeed />}
-            {active === "thread" && (
-               <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 32 }}>
-                  <ThreadDetail />
-                  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                      <Ann
                         title="Visual Structure"
                         BoxIcon={Ruler}
                         color={T.indigo}
                         items={[
-                           "PostCard (identical to feed) → EvidenceToggleBtn → CollapsibleForm → TabbedSection",
-                           "TabbedSection: [Comments | Evidence Board] — Comments default active",
-                           "Evidence form hidden by default, toggled by Submit Evidence button",
-                           "Form merges below button via shared border — borderTop: none",
-                           "Max-width ~600px — mobile-first single column layout",
+                           "Full page: bg-gray-100 · AppNav (sticky) → FilterBar → CreatePrompt → PostCards",
+                           "PostCard: Header → Caption → SnippedImage → VerdictOverlay → Reactions → Actions",
+                           "Feed column: max-w-[680px] mx-auto — centered, same as Facebook/Twitter feed",
+                           "Verdict overlay: absolute bottom of image, border-t-4 semantic verdict color",
+                        ]}
+                     />
+                     <Ann
+                        title="React Components"
+                        BoxIcon={Braces}
+                        color="#7c3aed"
+                        items={[
+                           "<CommunityFeed> — filter state, paginated post list",
+                           "<AppNav> — sticky top nav with active page highlight",
+                           "<FilterBar> — activeFilter pill state, onFilterChange prop",
+                           "<CreatePostPrompt> — opens snip flow or upload modal",
+                           "<PostCard> — full post unit, receives post object",
+                           "<SnippedImageBlock> — ImgPlaceholder + VerdictOverlay strip",
+                           "<ReactionBar> — icon stack + counts",
+                           "<PostActionRow> — React / Comment / Add Evidence",
+                        ]}
+                     />
+                     <Ann
+                        title="Tailwind / UX Advice"
+                        BoxIcon={Palette}
+                        color={T.green}
+                        items={[
+                           "PostCard: rounded-2xl shadow-sm hover:shadow-md transition-shadow",
+                           "Image block: aspect-video or min-h-[200px] bg-gray-100",
+                           "VerdictOverlay: absolute bottom-0 inset-x-0 bg-[verdict]/10 border-t-4",
+                           "'Add Evidence': text-indigo-600 font-bold — distinct from other action btns",
+                           "Infinite scroll: IntersectionObserver on last card sentinel",
+                           "Filter pills: active = bg-indigo-600 text-white, inactive = bg-gray-100 text-gray-500",
+                        ]}
+                     />
+                     <Ann
+                        title="UX Patterns"
+                        BoxIcon={Puzzle}
+                        color={T.amber}
+                        items={[
+                           "Click image → navigates to Thread Detail page",
+                           "Click 'Comment' → expands inline input below ActionRow",
+                           "Click 'Add Evidence' → Thread Detail, auto-opens Evidence form",
+                           "MoreHorizontal menu → Report / Share / Copy Link",
+                           "Verdict overlay: informational only, non-interactive in feed view",
+                        ]}
+                     />
+                  </div>
+               )}
+               {active === "thread" && (
+                  <div
+                     style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: 16,
+                        marginTop: 28,
+                        padding: "0 32px",
+                     }}>
+                     <Ann
+                        title="Visual Structure"
+                        BoxIcon={Ruler}
+                        color={T.indigo}
+                        items={[
+                           "Full page: AppNav (sticky) → Breadcrumb bar → PostCard → EvidenceToggleBtn → TabbedSection",
+                           "Breadcrumb: Community Feed → Thread #1042 · VerdictBadge right-aligned",
+                           "Content column: max-w-[680px] mx-auto — matches feed column width",
+                           "EvidenceToggleBtn merges with form below via shared border (borderTop: none)",
                         ]}
                      />
                      <Ann
@@ -3212,14 +7607,13 @@ export default function TruthLensWireframes() {
                         color="#7c3aed"
                         items={[
                            "<ThreadDetail> — fetches thread by :id, owns showForm + activeTab state",
-                           "<PostCard> — reused from Community Feed (no changes needed)",
+                           "<AppNav> — same component as Community Feed, activePage='feed'",
+                           "<BreadcrumbBar> — static back-link + current thread title + VerdictBadge",
+                           "<PostCard> — reused from Community Feed, no changes needed",
                            "<EvidenceToggleButton> — toggles showEvidenceForm boolean",
                            "<EvidenceFormPanel> — conditionally rendered, controlled inputs",
-                           "<TabbedSection> — renders tab bar + active panel",
-                           "<CommentsPanel> — CommentInput + CommentList + CommentItem",
-                           "<EvidenceBoardPanel> — sorted EvidenceCard list",
-                           "<EvidenceCard> — trust tier border, source link, VoteButtons",
-                           "<VoteButtons> — optimistic up/down state",
+                           "<TabbedSection> — Comments | Evidence Board tab bar + active panel",
+                           "<EvidenceCard> — trust tier border-l-4, source link, VoteButtons",
                         ]}
                      />
                      <Ann
@@ -3227,11 +7621,11 @@ export default function TruthLensWireframes() {
                         BoxIcon={Palette}
                         color={T.green}
                         items={[
-                           "Toggle btn: bg/border/text flips when open (visual state feedback)",
-                           "Collapsible form: border-t-none merges with button above",
-                           "Tab bar: border-b-2 border-indigo-600 pattern = same as Extension",
-                           "Comment bubble: bg-gray-50 rounded-tr-xl rounded-b-xl (FB-style)",
-                           "Evidence border-l-4 tier: green ≥75 · amber 45–74 · red <45",
+                           "Toggle btn: bg/border/text flips when open — clear visual state signal",
+                           "Collapsible form: border-t-none merges with toggle button above it",
+                           "Tab bar: border-b-2 border-indigo-600 on active — same pattern as Extension Popup",
+                           "Comment bubble: bg-gray-50 rounded-tr-xl rounded-b-xl (Facebook-style)",
+                           "Evidence border-l-4 tier: green ≥75 · amber 45–74 · red <45 (submitter Trust Score)",
                         ]}
                      />
                      <Ann
@@ -3241,15 +7635,138 @@ export default function TruthLensWireframes() {
                         items={[
                            "Feed 'Add Evidence' → Thread Detail, auto-sets showForm=true",
                            "Feed 'Comment' → Thread Detail, activeTab='comments'",
-                           "Submitting form → optimistic add to Evidence Board, switch tab",
-                           "Tab switch is instant — data already in component state",
+                           "Submitting evidence form → optimistic insert to Evidence Board, switch to evidence tab",
+                           "Tab switch is instant — data already in component state, no loading",
                            "Evidence sorted: weighted_score DESC on initial load",
                         ]}
                      />
                   </div>
+               )}
+               {active === "dashboard" && (
+                  <div
+                     style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: 16,
+                        marginTop: 28,
+                        padding: "0 32px",
+                     }}>
+                     <Ann
+                        title="Visual Structure"
+                        BoxIcon={Ruler}
+                        color={T.indigo}
+                        items={[
+                           "Full page: AppNav (sticky, activePage='dashboard') → content column max-w-[900px] mx-auto",
+                           "ProfileHeader: Avatar · username · bio · TrustGauge · Scans/Votes stats",
+                           "My Scans: white card with table — thumbnail icon, claim text, VerdictBadge, date, actions",
+                           "My Contributions: 2-col grid of contribution cards with type badge + VerdictBadge",
+                        ]}
+                     />
+                     <Ann
+                        title="React Components"
+                        BoxIcon={Braces}
+                        color="#7c3aed"
+                        items={[
+                           "<PersonalDashboard> — top-level page, owns no interactive state",
+                           "<AppNav activePage='dashboard'> — 'Dashboard' tab underlined in indigo",
+                           "<ProfileHeader> — Avatar, username, bio, TrustGauge, stat pills",
+                           "<TrustGauge> — SVG ring gauge, color = green ≥80 / amber ≥50 / red <50",
+                           "<ScansTable> — table with VerdictBadge per row, View + Share actions",
+                           "<ContributionCard> — type label (Thread/Evidence), title, verdict, upvote count",
+                        ]}
+                     />
+                     <Ann
+                        title="Tailwind / UX Advice"
+                        BoxIcon={Palette}
+                        color={T.green}
+                        items={[
+                           "AppNav 'Dashboard' tab: border-b-2 border-indigo-600 text-white (active state)",
+                           "ProfileHeader: bg-white rounded-xl shadow-sm p-6 flex items-center gap-6",
+                           "TrustGauge: right-aligned in profile header — draws eye to credibility signal",
+                           "Table rows: hover:bg-gray-50 cursor-pointer transition-colors",
+                           "Contribution cards: border-l-4 using verdict semantic color for instant scanning",
+                        ]}
+                     />
+                     <Ann
+                        title="Architecture Note"
+                        BoxIcon={Hash}
+                        color={T.amber}
+                        items={[
+                           "Sidebar removed — AppNav replaces it for consistency with Feed and Thread Detail",
+                           "Page width is 900px (vs 680px for feed) — dashboard is data-dense, not a reading feed",
+                           "Navigation state: AppNav activePage prop is the only change between pages",
+                           "TrustGauge and VerdictBadge are shared components — define once in components/ui/",
+                        ]}
+                     />
+                  </div>
+               )}
+            </div>
+         )}
+
+         {/* Onboarding — full bleed (own browser frame built-in) */}
+         {active === "onboarding" && <OnboardingFlow />}
+
+         {/* Landing Page — full bleed */}
+         {active === "landing" && (
+            <div style={{ padding: "0 0 48px" }}>
+               <LandingPage />
+               <div
+                  style={{
+                     display: "grid",
+                     gridTemplateColumns: "1fr 1fr",
+                     gap: 16,
+                     marginTop: 28,
+                     padding: "0 32px",
+                  }}>
+                  <Ann
+                     title="Visual Structure"
+                     BoxIcon={Ruler}
+                     color={T.indigo}
+                     items={[
+                        "Sticky Navbar (white + blur) → Hero (dark gradient) → How It Works → Recent Investigations → Trust Score CTA → Footer",
+                        "Hero: 2-col grid — copy/CTAs left, floating extension mockup right",
+                        "Stats row lives inside the hero — not buried below the fold",
+                        "Floating Result Card overlaid on fake feed mockup = product-in-context storytelling",
+                     ]}
+                  />
+                  <Ann
+                     title="Brand Fixes vs Current Page"
+                     BoxIcon={Palette}
+                     color={T.red}
+                     items={[
+                        "Teal/cyan → Trust Indigo (#4f46e5) — matches the app exactly",
+                        "Hero gradient: dark navy → indigo (same as auth page and sidebar)",
+                        "CTA button: solid indigo with UPPERCASE tracking (not teal)",
+                        "Second CTA added: 'Watch Demo' for users not ready to install",
+                     ]}
+                  />
+                  <Ann
+                     title="Conversion Mechanics"
+                     BoxIcon={Rocket}
+                     color={T.green}
+                     items={[
+                        "Stats (12,040+ verified, 98% accuracy) moved into hero — visible before any scroll",
+                        "'Recent Investigations' section = social proof feed preview — shows product value live",
+                        "Trust Score CTA section converts community-curious users who won't install the extension",
+                        "Footer links: Privacy, Terms, Contact, API — signals legitimacy to skeptical users",
+                     ]}
+                  />
+                  <Ann
+                     title="Components"
+                     BoxIcon={Braces}
+                     color={T.violet}
+                     items={[
+                        "<LandingNavbar> — sticky, backdrop-blur, Login + Get Started CTAs",
+                        "<HeroSection> — grid layout, stats row, dual CTAs, floating ResultCard mockup",
+                        "<HowItWorks> — 3-step grid with icon tiles",
+                        "<RecentInvestigations> — static 3-card grid, links to community feed",
+                        "<TrustScoreCTA> — dark panel matching brand, single join CTA",
+                        "<LandingFooter> — logo, tagline, legal links",
+                     ]}
+                  />
                </div>
-            )}
-         </div>
+            </div>
+         )}
       </div>
    );
 }
