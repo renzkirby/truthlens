@@ -2684,6 +2684,7 @@ const CommunityFeed = () => {
 const ThreadDetail = () => {
    const [activeTab, setActiveTab] = useState("comments");
    const [showForm, setShowForm] = useState(false);
+
    const post = {
       id: 1,
       verdict: "misleading",
@@ -2695,11 +2696,11 @@ const ThreadDetail = () => {
       caption:
          '"Shocking aerial photo shows the aftermath of the 2024 flooding in Valencia, Spain."',
       confidence: 62,
-      reactions: 142,
       comments: 89,
       evidence: 15,
       status: "Needs Evidence",
    };
+
    const evidence = [
       {
          user: "@factchecker_pro",
@@ -2726,6 +2727,7 @@ const ThreadDetail = () => {
          down: 8,
       },
    ];
+
    const comments = [
       {
          u: "@curious_cat",
@@ -2750,203 +2752,313 @@ const ThreadDetail = () => {
          likes: 8,
       },
    ];
+
+   const verdictMeta = {
+      verified: {
+         color: T.green,
+         bg: "#ecfdf5",
+         label: "Verified",
+         desc: "This claim has been confirmed by multiple trusted sources.",
+      },
+      fake: {
+         color: T.red,
+         bg: "#fef2f2",
+         label: "False",
+         desc: "This claim has been debunked by reliable fact-checkers.",
+      },
+      misleading: {
+         color: T.amber,
+         bg: "#fffbeb",
+         label: "Misleading",
+         desc: "This claim contains partial truths but omits key context.",
+      },
+      unverified: {
+         color: T.gray,
+         bg: "#f9fafb",
+         label: "Unverified",
+         desc: "Insufficient evidence to confirm or deny this claim.",
+      },
+      satire: {
+         color: T.violet,
+         bg: "#f5f3ff",
+         label: "Satire",
+         desc: "This content is intentional satire or parody.",
+      },
+   };
+   const vm = verdictMeta[post.verdict] || verdictMeta.unverified;
    const tier = (s) => (s >= 75 ? T.green : s >= 45 ? T.amber : T.red);
+
+   // Confidence bar gradient
+   const confColor = post.confidence >= 75 ? T.green : post.confidence >= 45 ? T.amber : T.red;
+
    return (
-      <div style={{ background: "#f1f5f9", minHeight: "100%" }}>
+      <div style={{ background: "#ffffff", minHeight: "100%" }}>
          <AppNav activePage="feed" />
-         {/* Breadcrumb */}
+
+         {/* ── Sub-header / Back bar ─────────────────────────────────────── */}
          <div
             style={{
                background: "#fff",
-               borderBottom: "1px solid #e5e7eb",
-               padding: "10px 32px",
+               borderBottom: `3px solid ${vm.color}`,
+               padding: "0 40px",
                display: "flex",
                alignItems: "center",
-               gap: 8,
-               fontSize: 12,
-               color: T.gray,
+               gap: 16,
+               height: 52,
+               boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
             }}>
-            <Globe
-               size={12}
-               color={T.gray}
-            />
-            <a style={{ color: T.indigo, fontWeight: 600, cursor: "pointer" }}>Community Feed</a>
-            <ArrowRight
-               size={11}
-               color="#d1d5db"
-            />
-            <span style={{ color: "#374151", fontWeight: 600 }}>Thread #1042</span>
-            <span style={{ marginLeft: "auto" }}>
-               <VerdictBadge verdict="misleading" />
-            </span>
-         </div>
-         {/* Page body */}
-         <div style={{ maxWidth: 680, margin: "0 auto", padding: "32px 24px 64px" }}>
-            <PostCard post={post} />
-            {/* Evidence Toggle */}
-            <div style={{ marginTop: 12 }}>
-               <button
-                  onClick={() => setShowForm((v) => !v)}
+            {/* Back button */}
+            <button
+               style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: T.indigo,
+                  padding: "6px 0",
+               }}>
+               <ArrowRight
+                  size={14}
+                  color={T.indigo}
+                  style={{ transform: "rotate(180deg)" }}
+               />
+               Community Feed
+            </button>
+            <span style={{ color: "#e5e7eb", fontSize: 18 }}>›</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>Thread #1042</span>
+            <span style={{ fontSize: 11, color: T.gray }}>·</span>
+            <span style={{ fontSize: 11, color: T.gray }}>Flagged 2h ago by @photocheck</span>
+            {/* Verdict badge right-aligned */}
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+               <VerdictBadge verdict={post.verdict} />
+               <span
                   style={{
-                     width: "100%",
-                     background: showForm ? "#eff6ff" : T.indigo,
-                     color: showForm ? T.indigo : "#fff",
-                     border: `1.5px solid ${showForm ? T.indigo : "transparent"}`,
-                     borderRadius: showForm ? "10px 10px 0 0" : "10px",
-                     padding: "12px",
-                     fontSize: 13,
-                     fontWeight: 700,
-                     cursor: "pointer",
-                     display: "flex",
-                     alignItems: "center",
-                     justifyContent: "center",
-                     gap: 8,
-                     transition: "all 0.2s",
+                     fontSize: 12,
+                     color: T.gray,
+                     background: "#f3f4f6",
+                     borderRadius: 6,
+                     padding: "3px 10px",
+                     fontWeight: 600,
                   }}>
-                  {showForm ? (
-                     <>
-                        <X
-                           size={15}
-                           strokeWidth={2.5}
-                        />
-                        Cancel Evidence Submission
-                     </>
-                  ) : (
-                     <>
-                        <Paperclip
-                           size={15}
-                           strokeWidth={2.5}
-                        />
-                        Submit Evidence for This Claim
-                     </>
-                  )}
-               </button>
-               {showForm && (
+                  {post.status}
+               </span>
+            </div>
+         </div>
+
+         {/* ── Claim Hero ────────────────────────────────────────────────── */}
+         <div
+            style={{
+               background: vm.bg,
+               borderBottom: `1px solid ${vm.color}30`,
+               padding: "36px 40px",
+            }}>
+            <div
+               style={{
+                  maxWidth: 1200,
+                  margin: "0 auto",
+                  display: "flex",
+                  gap: 40,
+                  alignItems: "center",
+               }}>
+               {/* Left: claim text */}
+               <div style={{ flex: 1 }}>
                   <div
                      style={{
-                        background: "#fff",
-                        border: `1.5px solid ${T.indigo}`,
-                        borderTop: "none",
-                        borderRadius: "0 0 12px 12px",
-                        padding: "20px 20px 16px",
-                        boxShadow: "0 4px 16px rgba(79,70,229,0.08)",
+                        fontSize: 11,
+                        fontWeight: 800,
+                        color: vm.color,
+                        letterSpacing: "0.1em",
+                        textTransform: "uppercase",
+                        marginBottom: 10,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
                      }}>
+                     <Flag
+                        size={11}
+                        color={vm.color}
+                        strokeWidth={2.5}
+                     />
+                     Claim Under Investigation
+                  </div>
+                  <p
+                     style={{
+                        fontSize: 22,
+                        fontWeight: 800,
+                        color: "#111827",
+                        lineHeight: 1.4,
+                        letterSpacing: "-0.02em",
+                        margin: "0 0 16px",
+                        maxWidth: 680,
+                     }}>
+                     {post.caption}
+                  </p>
+                  <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
                      <div
                         style={{
-                           fontSize: 12,
-                           fontWeight: 800,
-                           color: T.indigo,
-                           marginBottom: 14,
                            display: "flex",
                            alignItems: "center",
                            gap: 6,
+                           fontSize: 12,
+                           color: T.gray,
                         }}>
-                        <Paperclip
-                           size={13}
-                           color={T.indigo}
-                           strokeWidth={2.5}
+                        <Globe
+                           size={12}
+                           color={T.gray}
                         />
-                        New Evidence Submission
+                        Sourced from <strong style={{ color: "#374151" }}>{post.source}</strong>
                      </div>
                      <div
                         style={{
-                           display: "grid",
-                           gridTemplateColumns: "1fr 1fr",
-                           gap: 12,
-                           marginBottom: 12,
+                           display: "flex",
+                           alignItems: "center",
+                           gap: 6,
+                           fontSize: 12,
+                           color: T.gray,
                         }}>
-                        <div>
-                           <label
-                              style={{
-                                 fontSize: 11,
-                                 fontWeight: 700,
-                                 color: "#374151",
-                                 display: "block",
-                                 marginBottom: 4,
-                              }}>
-                              Source URL *
-                           </label>
-                           <div
-                              style={{
-                                 background: "#f9fafb",
-                                 border: "1.5px solid #d1d5db",
-                                 borderRadius: 7,
-                                 padding: "9px 12px",
-                                 fontSize: 11,
-                                 color: "#9ca3af",
-                                 display: "flex",
-                                 gap: 6,
-                                 alignItems: "center",
-                              }}>
-                              <Link
-                                 size={11}
-                                 color="#9ca3af"
-                              />
-                              https://reliable-source.com/…
-                           </div>
-                        </div>
-                        <div>
-                           <label
-                              style={{
-                                 fontSize: 11,
-                                 fontWeight: 700,
-                                 color: "#374151",
-                                 display: "block",
-                                 marginBottom: 4,
-                              }}>
-                              Evidence Type
-                           </label>
-                           <div
-                              style={{
-                                 background: "#f9fafb",
-                                 border: "1.5px solid #d1d5db",
-                                 borderRadius: 7,
-                                 padding: "9px 12px",
-                                 fontSize: 11,
-                                 color: "#374151",
-                                 display: "flex",
-                                 justifyContent: "space-between",
-                                 alignItems: "center",
-                              }}>
-                              <span>Contradicts Claim</span>
-                              <ChevronDown
-                                 size={13}
-                                 color={T.gray}
-                              />
-                           </div>
-                        </div>
+                        <MessageCircle
+                           size={12}
+                           color={T.gray}
+                        />
+                        <strong style={{ color: "#374151" }}>{post.comments}</strong> comments
                      </div>
-                     <div style={{ marginBottom: 14 }}>
-                        <label
-                           style={{
-                              fontSize: 11,
-                              fontWeight: 700,
-                              color: "#374151",
-                              display: "block",
-                              marginBottom: 4,
-                           }}>
-                           Explanation *
-                        </label>
-                        <div
-                           style={{
-                              background: "#f9fafb",
-                              border: "1.5px solid #d1d5db",
-                              borderRadius: 7,
-                              padding: "10px 12px",
-                              fontSize: 11,
-                              color: "#9ca3af",
-                              minHeight: 72,
-                           }}>
-                           Explain why this source supports or refutes the claim…
-                        </div>
+                     <div
+                        style={{
+                           display: "flex",
+                           alignItems: "center",
+                           gap: 6,
+                           fontSize: 12,
+                           color: T.gray,
+                        }}>
+                        <Paperclip
+                           size={12}
+                           color={T.gray}
+                        />
+                        <strong style={{ color: "#374151" }}>{post.evidence}</strong> evidence
+                        submissions
                      </div>
+                  </div>
+               </div>
+
+               {/* Right: verdict + confidence panel */}
+               <div
+                  style={{
+                     background: "#fff",
+                     border: `1.5px solid ${vm.color}40`,
+                     borderRadius: 16,
+                     padding: "24px 28px",
+                     minWidth: 240,
+                     boxShadow: `0 4px 20px ${vm.color}15`,
+                  }}>
+                  {/* Verdict */}
+                  <div style={{ textAlign: "center", marginBottom: 20 }}>
+                     <VerdictBadge verdict={post.verdict} />
+                     <p style={{ fontSize: 11, color: T.gray, margin: "8px 0 0", lineHeight: 1.5 }}>
+                        {vm.desc}
+                     </p>
+                  </div>
+                  {/* Divider */}
+                  <div style={{ height: 1, background: "#f0f0f0", margin: "0 0 16px" }} />
+                  {/* Confidence */}
+                  <div style={{ marginBottom: 14 }}>
                      <div
                         style={{
                            display: "flex",
                            justifyContent: "space-between",
-                           alignItems: "center",
+                           alignItems: "baseline",
+                           marginBottom: 6,
                         }}>
-                        <span
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "#374151" }}>
+                           AI Confidence
+                        </span>
+                        <span style={{ fontSize: 18, fontWeight: 900, color: confColor }}>
+                           {post.confidence}%
+                        </span>
+                     </div>
+                     <div
+                        style={{
+                           height: 6,
+                           background: "#f3f4f6",
+                           borderRadius: 99,
+                           overflow: "hidden",
+                        }}>
+                        <div
+                           style={{
+                              width: `${post.confidence}%`,
+                              height: "100%",
+                              background: confColor,
+                              borderRadius: 99,
+                           }}
+                        />
+                     </div>
+                  </div>
+                  {/* Evidence count pill */}
+                  <div
+                     style={{
+                        background: vm.bg,
+                        borderRadius: 8,
+                        padding: "10px 14px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                     }}>
+                     <span style={{ fontSize: 11, color: T.gray, fontWeight: 600 }}>
+                        Evidence submissions
+                     </span>
+                     <span style={{ fontSize: 16, fontWeight: 900, color: vm.color }}>
+                        {post.evidence}
+                     </span>
+                  </div>
+               </div>
+            </div>
+         </div>
+
+         {/* ── Two-column body ───────────────────────────────────────────── */}
+         <div
+            style={{
+               maxWidth: 1200,
+               margin: "0 auto",
+               padding: "32px 40px 64px",
+               display: "grid",
+               gridTemplateColumns: "1fr 360px",
+               gap: 32,
+               alignItems: "start",
+            }}>
+            {/* ── LEFT COLUMN — Investigation ──────────────────────────── */}
+            <div>
+               {/* Snipped image card (replaces full PostCard) */}
+               <div
+                  style={{
+                     background: "#fff",
+                     border: "1.5px solid #e5e7eb",
+                     borderRadius: 14,
+                     overflow: "hidden",
+                     marginBottom: 16,
+                     boxShadow: "0 1px 6px rgba(0,0,0,0.05)",
+                  }}>
+                  <div
+                     style={{
+                        padding: "14px 16px 10px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        borderBottom: "1px solid #f3f4f6",
+                     }}>
+                     <Avatar
+                        Icon={AV[post.avatarKey]?.Icon || UserCircle}
+                        bg={AV[post.avatarKey]?.bg || "#ede9fe"}
+                        color={AV[post.avatarKey]?.color || T.violet}
+                        size={36}
+                     />
+                     <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
+                           {post.author}
+                        </div>
+                        <div
                            style={{
                               fontSize: 10,
                               color: T.gray,
@@ -2954,432 +3066,929 @@ const ThreadDetail = () => {
                               alignItems: "center",
                               gap: 4,
                            }}>
-                           <BarChart2
-                              size={11}
-                              color={T.gray}
+                           {post.date} <span style={{ color: "#d1d5db" }}>·</span>
+                           <Search
+                              size={9}
+                              color={T.indigo}
                            />
-                           Your weight: <strong style={{ color: T.green }}>×1.8</strong> (Trust
-                           Score 82)
-                        </span>
-                        <div style={{ display: "flex", gap: 8 }}>
-                           <button
-                              onClick={() => setShowForm(false)}
-                              style={{
-                                 background: "#f3f4f6",
-                                 color: T.gray,
-                                 border: "none",
-                                 borderRadius: 8,
-                                 padding: "8px 16px",
-                                 fontSize: 12,
-                                 fontWeight: 600,
-                                 cursor: "pointer",
-                              }}>
-                              Cancel
-                           </button>
-                           <button
-                              style={{
-                                 background: T.indigo,
-                                 color: "#fff",
-                                 border: "none",
-                                 borderRadius: 8,
-                                 padding: "8px 20px",
-                                 fontSize: 12,
-                                 fontWeight: 700,
-                                 cursor: "pointer",
-                                 display: "flex",
-                                 alignItems: "center",
-                                 gap: 6,
-                              }}>
-                              Submit
-                              <ArrowRight
-                                 size={13}
-                                 strokeWidth={2.5}
-                              />
-                           </button>
+                           <span style={{ color: T.indigo, fontWeight: 600 }}>via TruthLens</span>
                         </div>
                      </div>
-                  </div>
-               )}
-            </div>
-            {/* Tabbed section */}
-            <div
-               style={{
-                  background: "#fff",
-                  border: "1.5px solid #e5e7eb",
-                  borderRadius: 14,
-                  overflow: "hidden",
-                  marginTop: 12,
-               }}>
-               <div style={{ display: "flex", borderBottom: "1.5px solid #e5e7eb" }}>
-                  {[
-                     { id: "comments", Icon: MessageCircle, label: `Comments (${post.comments})` },
-                     {
-                        id: "evidence",
-                        Icon: Paperclip,
-                        label: `Evidence Board (${post.evidence})`,
-                     },
-                  ].map(({ id, Icon: TI, label }) => (
-                     <button
-                        key={id}
-                        onClick={() => setActiveTab(id)}
+                     <div
                         style={{
-                           flex: 1,
-                           padding: "13px 8px",
-                           fontSize: 12,
-                           fontWeight: 700,
-                           background: activeTab === id ? "#fff" : "#f9fafb",
-                           color: activeTab === id ? T.indigo : T.gray,
-                           border: "none",
-                           borderBottom:
-                              activeTab === id ? `2px solid ${T.indigo}` : "2px solid transparent",
-                           cursor: "pointer",
+                           marginLeft: "auto",
                            display: "flex",
+                           gap: 8,
                            alignItems: "center",
-                           justifyContent: "center",
-                           gap: 7,
-                           transition: "all 0.15s",
                         }}>
-                        <TI
-                           size={13}
-                           strokeWidth={2.5}
+                        <span
+                           style={{
+                              fontSize: 11,
+                              color: T.gray,
+                              background: "#f3f4f6",
+                              borderRadius: 6,
+                              padding: "3px 8px",
+                           }}>
+                           Original post
+                        </span>
+                        <ExternalLink
+                           size={14}
+                           color={T.gray}
+                           style={{ cursor: "pointer" }}
                         />
-                        {label}
-                     </button>
-                  ))}
+                     </div>
+                  </div>
+                  <ImgPlaceholder
+                     label={`Snipped from ${post.source}`}
+                     Icon={post.imageIcon || Image}
+                  />
                </div>
-               {activeTab === "comments" && (
-                  <div style={{ padding: 16 }}>
-                     <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
-                        <Avatar
-                           Icon={UserCircle}
-                           bg="#ede9fe"
-                           color={T.violet}
-                           size={32}
-                        />
+
+               {/* Evidence Submit toggle */}
+               <div style={{ marginBottom: 16 }}>
+                  <button
+                     onClick={() => setShowForm((v) => !v)}
+                     style={{
+                        width: "100%",
+                        background: showForm ? "#eff6ff" : T.indigo,
+                        color: showForm ? T.indigo : "#fff",
+                        border: `1.5px solid ${showForm ? T.indigo : "transparent"}`,
+                        borderRadius: showForm ? "10px 10px 0 0" : "10px",
+                        padding: "13px",
+                        fontSize: 13,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                        transition: "all 0.2s",
+                     }}>
+                     {showForm ? (
+                        <>
+                           <X
+                              size={15}
+                              strokeWidth={2.5}
+                           />
+                           Cancel Evidence Submission
+                        </>
+                     ) : (
+                        <>
+                           <Paperclip
+                              size={15}
+                              strokeWidth={2.5}
+                           />
+                           Submit Evidence for This Claim
+                        </>
+                     )}
+                  </button>
+                  {showForm && (
+                     <div
+                        style={{
+                           background: "#fff",
+                           border: `1.5px solid ${T.indigo}`,
+                           borderTop: "none",
+                           borderRadius: "0 0 12px 12px",
+                           padding: "20px",
+                           boxShadow: "0 4px 16px rgba(79,70,229,0.08)",
+                        }}>
                         <div
                            style={{
-                              flex: 1,
-                              background: "#f9fafb",
-                              border: "1.5px solid #e5e7eb",
-                              borderRadius: 20,
-                              padding: "9px 16px",
                               fontSize: 12,
-                              color: "#9ca3af",
-                              cursor: "text",
+                              fontWeight: 800,
+                              color: T.indigo,
+                              marginBottom: 14,
                               display: "flex",
                               alignItems: "center",
                               gap: 6,
                            }}>
-                           <MessageSquare
+                           <Paperclip
                               size={13}
-                              color="#9ca3af"
+                              color={T.indigo}
+                              strokeWidth={2.5}
                            />
-                           Write a comment…
+                           New Evidence Submission
+                        </div>
+                        <div
+                           style={{
+                              display: "grid",
+                              gridTemplateColumns: "1fr 1fr",
+                              gap: 12,
+                              marginBottom: 12,
+                           }}>
+                           <div>
+                              <label
+                                 style={{
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    color: "#374151",
+                                    display: "block",
+                                    marginBottom: 4,
+                                 }}>
+                                 Source URL *
+                              </label>
+                              <div
+                                 style={{
+                                    background: "#f9fafb",
+                                    border: "1.5px solid #d1d5db",
+                                    borderRadius: 7,
+                                    padding: "9px 12px",
+                                    fontSize: 11,
+                                    color: "#9ca3af",
+                                    display: "flex",
+                                    gap: 6,
+                                    alignItems: "center",
+                                 }}>
+                                 <Link
+                                    size={11}
+                                    color="#9ca3af"
+                                 />
+                                 https://reliable-source.com/…
+                              </div>
+                           </div>
+                           <div>
+                              <label
+                                 style={{
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    color: "#374151",
+                                    display: "block",
+                                    marginBottom: 4,
+                                 }}>
+                                 Evidence Type
+                              </label>
+                              <div
+                                 style={{
+                                    background: "#f9fafb",
+                                    border: "1.5px solid #d1d5db",
+                                    borderRadius: 7,
+                                    padding: "9px 12px",
+                                    fontSize: 11,
+                                    color: "#374151",
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                 }}>
+                                 <span>Contradicts Claim</span>
+                                 <ChevronDown
+                                    size={13}
+                                    color={T.gray}
+                                 />
+                              </div>
+                           </div>
+                        </div>
+                        <div style={{ marginBottom: 14 }}>
+                           <label
+                              style={{
+                                 fontSize: 11,
+                                 fontWeight: 700,
+                                 color: "#374151",
+                                 display: "block",
+                                 marginBottom: 4,
+                              }}>
+                              Explanation *
+                           </label>
+                           <div
+                              style={{
+                                 background: "#f9fafb",
+                                 border: "1.5px solid #d1d5db",
+                                 borderRadius: 7,
+                                 padding: "10px 12px",
+                                 fontSize: 11,
+                                 color: "#9ca3af",
+                                 minHeight: 72,
+                              }}>
+                              Explain why this source supports or refutes the claim…
+                           </div>
+                        </div>
+                        <div
+                           style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                           }}>
+                           <span
+                              style={{
+                                 fontSize: 10,
+                                 color: T.gray,
+                                 display: "flex",
+                                 alignItems: "center",
+                                 gap: 4,
+                              }}>
+                              <BarChart2
+                                 size={11}
+                                 color={T.gray}
+                              />
+                              Your weight: <strong style={{ color: T.green }}>×1.8</strong> (Trust
+                              Score 82)
+                           </span>
+                           <div style={{ display: "flex", gap: 8 }}>
+                              <button
+                                 onClick={() => setShowForm(false)}
+                                 style={{
+                                    background: "#f3f4f6",
+                                    color: T.gray,
+                                    border: "none",
+                                    borderRadius: 8,
+                                    padding: "8px 16px",
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    cursor: "pointer",
+                                 }}>
+                                 Cancel
+                              </button>
+                              <button
+                                 style={{
+                                    background: T.indigo,
+                                    color: "#fff",
+                                    border: "none",
+                                    borderRadius: 8,
+                                    padding: "8px 20px",
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 6,
+                                 }}>
+                                 Submit
+                                 <ArrowRight
+                                    size={13}
+                                    strokeWidth={2.5}
+                                 />
+                              </button>
+                           </div>
                         </div>
                      </div>
-                     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                        {comments.map((c, i) => {
-                           const av = AV[c.ak] || AV.default;
-                           return (
-                              <div
-                                 key={i}
-                                 style={{ display: "flex", gap: 10 }}>
-                                 <Avatar
-                                    Icon={av.Icon}
-                                    bg={c.isMod ? "#d1fae5" : av.bg}
-                                    color={c.isMod ? T.green : av.color}
-                                    size={32}
-                                 />
-                                 <div style={{ flex: 1 }}>
-                                    <div
-                                       style={{
-                                          background: "#f9fafb",
-                                          borderRadius: "0 12px 12px 12px",
-                                          padding: "10px 14px",
-                                       }}>
+                  )}
+               </div>
+
+               {/* Tabs: Comments | Evidence Board */}
+               <div
+                  style={{
+                     background: "#fff",
+                     border: "1.5px solid #e5e7eb",
+                     borderRadius: 14,
+                     overflow: "hidden",
+                  }}>
+                  <div style={{ display: "flex", borderBottom: "1.5px solid #e5e7eb" }}>
+                     {[
+                        {
+                           id: "comments",
+                           Icon: MessageCircle,
+                           label: `Comments (${post.comments})`,
+                        },
+                        {
+                           id: "evidence",
+                           Icon: Paperclip,
+                           label: `Evidence Board (${post.evidence})`,
+                        },
+                     ].map(({ id, Icon: TI, label }) => (
+                        <button
+                           key={id}
+                           onClick={() => setActiveTab(id)}
+                           style={{
+                              flex: 1,
+                              padding: "14px 8px",
+                              fontSize: 12,
+                              fontWeight: 700,
+                              background: activeTab === id ? "#fff" : "#f9fafb",
+                              color: activeTab === id ? T.indigo : T.gray,
+                              border: "none",
+                              borderBottom:
+                                 activeTab === id
+                                    ? `2px solid ${T.indigo}`
+                                    : "2px solid transparent",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: 7,
+                           }}>
+                           <TI
+                              size={13}
+                              strokeWidth={2.5}
+                           />
+                           {label}
+                        </button>
+                     ))}
+                  </div>
+
+                  {/* Comments */}
+                  {activeTab === "comments" && (
+                     <div style={{ padding: 20 }}>
+                        <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+                           <Avatar
+                              Icon={UserCircle}
+                              bg="#ede9fe"
+                              color={T.violet}
+                              size={34}
+                           />
+                           <div
+                              style={{
+                                 flex: 1,
+                                 background: "#f9fafb",
+                                 border: "1.5px solid #e5e7eb",
+                                 borderRadius: 20,
+                                 padding: "10px 18px",
+                                 fontSize: 12,
+                                 color: "#9ca3af",
+                                 cursor: "text",
+                                 display: "flex",
+                                 alignItems: "center",
+                                 gap: 6,
+                              }}>
+                              <MessageSquare
+                                 size={13}
+                                 color="#9ca3af"
+                              />
+                              Write a comment…
+                           </div>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                           {comments.map((c, i) => {
+                              const av = AV[c.ak] || AV.default;
+                              return (
+                                 <div
+                                    key={i}
+                                    style={{ display: "flex", gap: 10 }}>
+                                    <Avatar
+                                       Icon={av.Icon}
+                                       bg={c.isMod ? "#d1fae5" : av.bg}
+                                       color={c.isMod ? T.green : av.color}
+                                       size={34}
+                                    />
+                                    <div style={{ flex: 1 }}>
+                                       <div
+                                          style={{
+                                             background: "#f9fafb",
+                                             borderRadius: "0 14px 14px 14px",
+                                             padding: "12px 16px",
+                                          }}>
+                                          <div
+                                             style={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 6,
+                                                marginBottom: 5,
+                                             }}>
+                                             <span
+                                                style={{
+                                                   fontSize: 12,
+                                                   fontWeight: 700,
+                                                   color: T.indigo,
+                                                }}>
+                                                {c.u}
+                                             </span>
+                                             {c.isMod && (
+                                                <span
+                                                   style={{
+                                                      fontSize: 9,
+                                                      background: "#d1fae5",
+                                                      color: "#065f46",
+                                                      borderRadius: 4,
+                                                      padding: "1px 6px",
+                                                      fontWeight: 700,
+                                                      display: "flex",
+                                                      alignItems: "center",
+                                                      gap: 3,
+                                                   }}>
+                                                   <Shield
+                                                      size={8}
+                                                      strokeWidth={2.5}
+                                                   />
+                                                   MOD
+                                                </span>
+                                             )}
+                                             <span
+                                                style={{
+                                                   fontSize: 10,
+                                                   color: T.gray,
+                                                   marginLeft: "auto",
+                                                }}>
+                                                {c.ts}
+                                             </span>
+                                          </div>
+                                          <p
+                                             style={{
+                                                fontSize: 12,
+                                                color: "#374151",
+                                                margin: 0,
+                                                lineHeight: 1.65,
+                                             }}>
+                                             {c.t}
+                                          </p>
+                                       </div>
                                        <div
                                           style={{
                                              display: "flex",
-                                             alignItems: "center",
-                                             gap: 6,
-                                             marginBottom: 4,
+                                             gap: 12,
+                                             marginTop: 6,
+                                             paddingLeft: 16,
                                           }}>
-                                          <span
-                                             style={{
-                                                fontSize: 12,
-                                                fontWeight: 700,
-                                                color: T.indigo,
-                                             }}>
-                                             {c.u}
-                                          </span>
-                                          {c.isMod && (
-                                             <span
-                                                style={{
-                                                   fontSize: 9,
-                                                   background: "#d1fae5",
-                                                   color: "#065f46",
-                                                   borderRadius: 4,
-                                                   padding: "1px 5px",
-                                                   fontWeight: 700,
-                                                   display: "flex",
-                                                   alignItems: "center",
-                                                   gap: 3,
-                                                }}>
-                                                <Shield
-                                                   size={8}
-                                                   strokeWidth={2.5}
-                                                />
-                                                MOD
-                                             </span>
-                                          )}
-                                          <span
+                                          <button
                                              style={{
                                                 fontSize: 10,
                                                 color: T.gray,
-                                                marginLeft: "auto",
+                                                background: "none",
+                                                border: "none",
+                                                cursor: "pointer",
+                                                fontWeight: 600,
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 4,
                                              }}>
-                                             {c.ts}
-                                          </span>
+                                             <ThumbsUp
+                                                size={11}
+                                                color={T.gray}
+                                                strokeWidth={2}
+                                             />
+                                             {c.likes}
+                                          </button>
+                                          <button
+                                             style={{
+                                                fontSize: 10,
+                                                color: T.gray,
+                                                background: "none",
+                                                border: "none",
+                                                cursor: "pointer",
+                                                fontWeight: 600,
+                                             }}>
+                                             Reply
+                                          </button>
                                        </div>
-                                       <p
+                                    </div>
+                                 </div>
+                              );
+                           })}
+                        </div>
+                     </div>
+                  )}
+
+                  {/* Evidence Board */}
+                  {activeTab === "evidence" && (
+                     <div
+                        style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+                        <div
+                           style={{
+                              fontSize: 11,
+                              color: T.gray,
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                           }}>
+                           <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                              <BarChart2
+                                 size={12}
+                                 color={T.gray}
+                              />
+                              Sorted by weighted trust score
+                           </span>
+                           <span
+                              style={{
+                                 fontSize: 10,
+                                 background: "#f3f4f6",
+                                 borderRadius: 4,
+                                 padding: "2px 8px",
+                              }}>
+                              weighted = (up × trust/100) − (down × 0.5)
+                           </span>
+                        </div>
+                        {evidence.map((e, i) => (
+                           <div
+                              key={i}
+                              style={{
+                                 background: "#fff",
+                                 border: "1.5px solid #e5e7eb",
+                                 borderLeft: `4px solid ${tier(e.score)}`,
+                                 borderRadius: 10,
+                                 padding: "16px 18px",
+                              }}>
+                              <div
+                                 style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    marginBottom: 10,
+                                 }}>
+                                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <Avatar
+                                       Icon={UserCircle}
+                                       bg="#ede9fe"
+                                       color={T.violet}
+                                       size={30}
+                                    />
+                                    <div>
+                                       <div
                                           style={{
                                              fontSize: 12,
-                                             color: "#374151",
-                                             margin: 0,
-                                             lineHeight: 1.6,
+                                             fontWeight: 700,
+                                             color: "#111827",
                                           }}>
-                                          {c.t}
-                                       </p>
-                                    </div>
-                                    <div
-                                       style={{
-                                          display: "flex",
-                                          gap: 12,
-                                          marginTop: 5,
-                                          paddingLeft: 14,
-                                       }}>
-                                       <button
+                                          {e.user}
+                                       </div>
+                                       <div
                                           style={{
-                                             fontSize: 10,
+                                             fontSize: 9,
                                              color: T.gray,
-                                             background: "none",
-                                             border: "none",
-                                             cursor: "pointer",
-                                             fontWeight: 600,
                                              display: "flex",
                                              alignItems: "center",
-                                             gap: 4,
+                                             gap: 3,
                                           }}>
-                                          <ThumbsUp
-                                             size={11}
-                                             color={T.gray}
-                                             strokeWidth={2}
+                                          <BadgeCheck
+                                             size={9}
+                                             color={tier(e.score)}
                                           />
-                                          {c.likes}
-                                       </button>
-                                       <button
+                                          Trust:{" "}
+                                          <strong style={{ color: tier(e.score) }}>
+                                             {e.score}
+                                          </strong>
+                                       </div>
+                                    </div>
+                                 </div>
+                                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                    {i === 0 && (
+                                       <span
                                           style={{
-                                             fontSize: 10,
-                                             color: T.gray,
-                                             background: "none",
-                                             border: "none",
-                                             cursor: "pointer",
-                                             fontWeight: 600,
+                                             fontSize: 9,
+                                             background: "#d1fae5",
+                                             color: "#065f46",
+                                             borderRadius: 4,
+                                             padding: "2px 6px",
+                                             fontWeight: 700,
+                                             display: "flex",
+                                             alignItems: "center",
+                                             gap: 3,
                                           }}>
-                                          Reply
-                                       </button>
-                                    </div>
+                                          <Star
+                                             size={8}
+                                             strokeWidth={2.5}
+                                          />
+                                          Top
+                                       </span>
+                                    )}
+                                    <a
+                                       style={{
+                                          fontSize: 10,
+                                          color: T.indigo,
+                                          fontWeight: 600,
+                                          cursor: "pointer",
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: 3,
+                                       }}>
+                                       <ExternalLink
+                                          size={10}
+                                          color={T.indigo}
+                                       />
+                                       {e.source}
+                                    </a>
                                  </div>
                               </div>
-                           );
-                        })}
-                     </div>
-                  </div>
-               )}
-               {activeTab === "evidence" && (
-                  <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-                     <div
-                        style={{
-                           fontSize: 11,
-                           color: T.gray,
-                           display: "flex",
-                           justifyContent: "space-between",
-                           alignItems: "center",
-                        }}>
-                        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                           <BarChart2
-                              size={12}
-                              color={T.gray}
-                           />
-                           Sorted by weighted trust score
-                        </span>
-                        <span
-                           style={{
-                              fontSize: 10,
-                              background: "#f3f4f6",
-                              borderRadius: 4,
-                              padding: "2px 8px",
-                           }}>
-                           weighted = (up × trust/100) − (down × 0.5)
-                        </span>
-                     </div>
-                     {evidence.map((e, i) => (
-                        <div
-                           key={i}
-                           style={{
-                              background: "#fff",
-                              border: "1.5px solid #e5e7eb",
-                              borderLeft: `4px solid ${tier(e.score)}`,
-                              borderRadius: 10,
-                              padding: "14px 16px",
-                           }}>
-                           <div
-                              style={{
-                                 display: "flex",
-                                 justifyContent: "space-between",
-                                 alignItems: "center",
-                                 marginBottom: 8,
-                              }}>
+                              <p
+                                 style={{
+                                    fontSize: 12,
+                                    color: "#374151",
+                                    lineHeight: 1.65,
+                                    margin: "0 0 12px",
+                                 }}>
+                                 {e.expl}
+                              </p>
                               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                 <Avatar
-                                    Icon={UserCircle}
-                                    bg="#ede9fe"
-                                    color={T.violet}
-                                    size={28}
-                                 />
-                                 <div>
-                                    <div
-                                       style={{ fontSize: 12, fontWeight: 700, color: "#111827" }}>
-                                       {e.user}
-                                    </div>
-                                    <div
-                                       style={{
-                                          fontSize: 9,
-                                          color: T.gray,
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: 3,
-                                       }}>
-                                       <BadgeCheck
-                                          size={9}
-                                          color={tier(e.score)}
-                                       />
-                                       Trust:{" "}
-                                       <strong style={{ color: tier(e.score) }}>{e.score}</strong>
-                                    </div>
-                                 </div>
-                              </div>
-                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                 {i === 0 && (
-                                    <span
-                                       style={{
-                                          fontSize: 9,
-                                          background: "#d1fae5",
-                                          color: "#065f46",
-                                          borderRadius: 4,
-                                          padding: "2px 6px",
-                                          fontWeight: 700,
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: 3,
-                                       }}>
-                                       <Star
-                                          size={8}
-                                          strokeWidth={2.5}
-                                       />
-                                       Top
-                                    </span>
-                                 )}
-                                 <a
+                                 <button
                                     style={{
-                                       fontSize: 10,
-                                       color: T.indigo,
-                                       fontWeight: 600,
+                                       display: "flex",
+                                       alignItems: "center",
+                                       gap: 5,
+                                       background: "#f0fdf4",
+                                       border: "1.5px solid #bbf7d0",
+                                       borderRadius: 6,
+                                       padding: "4px 10px",
                                        cursor: "pointer",
+                                       fontSize: 11,
+                                       fontWeight: 700,
+                                       color: "#166534",
+                                    }}>
+                                    <ChevronUp
+                                       size={13}
+                                       strokeWidth={2.5}
+                                    />
+                                    {e.up}
+                                 </button>
+                                 <button
+                                    style={{
+                                       display: "flex",
+                                       alignItems: "center",
+                                       gap: 5,
+                                       background: "#fef2f2",
+                                       border: "1.5px solid #fecaca",
+                                       borderRadius: 6,
+                                       padding: "4px 10px",
+                                       cursor: "pointer",
+                                       fontSize: 11,
+                                       fontWeight: 700,
+                                       color: "#991b1b",
+                                    }}>
+                                    <ChevronDown
+                                       size={13}
+                                       strokeWidth={2.5}
+                                    />
+                                    {e.down}
+                                 </button>
+                                 <span
+                                    style={{
+                                       fontSize: 9,
+                                       color: T.gray,
+                                       marginLeft: 4,
                                        display: "flex",
                                        alignItems: "center",
                                        gap: 3,
                                     }}>
-                                    <ExternalLink
-                                       size={10}
-                                       color={T.indigo}
+                                    <Hash
+                                       size={9}
+                                       color={T.gray}
                                     />
-                                    {e.source}
-                                 </a>
+                                    Weighted: {(e.up * (e.score / 100) - e.down * 0.5).toFixed(1)}
+                                 </span>
                               </div>
                            </div>
-                           <p
-                              style={{
-                                 fontSize: 12,
-                                 color: "#374151",
-                                 lineHeight: 1.6,
-                                 margin: "0 0 10px",
-                              }}>
-                              {e.expl}
-                           </p>
-                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <button
-                                 style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 5,
-                                    background: "#f0fdf4",
-                                    border: "1.5px solid #bbf7d0",
-                                    borderRadius: 6,
-                                    padding: "4px 10px",
-                                    cursor: "pointer",
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    color: "#166534",
-                                 }}>
-                                 <ChevronUp
-                                    size={13}
-                                    strokeWidth={2.5}
-                                 />
-                                 {e.up}
-                              </button>
-                              <button
-                                 style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 5,
-                                    background: "#fef2f2",
-                                    border: "1.5px solid #fecaca",
-                                    borderRadius: 6,
-                                    padding: "4px 10px",
-                                    cursor: "pointer",
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    color: "#991b1b",
-                                 }}>
-                                 <ChevronDown
-                                    size={13}
-                                    strokeWidth={2.5}
-                                 />
-                                 {e.down}
-                              </button>
-                              <span
-                                 style={{
-                                    fontSize: 9,
-                                    color: T.gray,
-                                    marginLeft: 4,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 3,
-                                 }}>
-                                 <Hash
-                                    size={9}
-                                    color={T.gray}
-                                 />
-                                 Weighted: {(e.up * (e.score / 100) - e.down * 0.5).toFixed(1)}
-                              </span>
+                        ))}
+                     </div>
+                  )}
+               </div>
+            </div>
+
+            {/* ── RIGHT SIDEBAR ─────────────────────────────────────────── */}
+            <div
+               style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 16,
+                  position: "sticky",
+                  top: 64,
+               }}>
+               {/* Submitter card */}
+               <div
+                  style={{
+                     background: "#fff",
+                     border: "1.5px solid #e5e7eb",
+                     borderRadius: 14,
+                     padding: "20px",
+                     boxShadow: "0 1px 6px rgba(0,0,0,0.05)",
+                  }}>
+                  <div
+                     style={{
+                        fontSize: 11,
+                        fontWeight: 800,
+                        color: T.gray,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        marginBottom: 14,
+                     }}>
+                     Submitted by
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+                     <Avatar
+                        Icon={AV.detective.Icon}
+                        bg={AV.detective.bg}
+                        color={AV.detective.color}
+                        size={44}
+                     />
+                     <div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: "#111827" }}>
+                           @photocheck
+                        </div>
+                        <div
+                           style={{
+                              fontSize: 11,
+                              color: T.gray,
+                              marginTop: 2,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 4,
+                           }}>
+                           <BadgeCheck
+                              size={11}
+                              color={T.green}
+                           />
+                           Trusted Contributor
+                        </div>
+                     </div>
+                     <TrustGauge score={78} />
+                  </div>
+                  <div
+                     style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr 1fr",
+                        gap: 8,
+                        textAlign: "center",
+                     }}>
+                     {[
+                        ["142", "Scans"],
+                        ["38", "Evidence"],
+                        ["91%", "Accuracy"],
+                     ].map(([val, lbl]) => (
+                        <div
+                           key={lbl}
+                           style={{ background: "#f9fafb", borderRadius: 8, padding: "8px 4px" }}>
+                           <div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>
+                              {val}
                            </div>
+                           <div style={{ fontSize: 9, color: T.gray, fontWeight: 600 }}>{lbl}</div>
                         </div>
                      ))}
                   </div>
-               )}
+               </div>
+
+               {/* Trust Score mini-breakdown */}
+               <div
+                  style={{
+                     background: "#fff",
+                     border: "1.5px solid #e5e7eb",
+                     borderRadius: 14,
+                     padding: "20px",
+                     boxShadow: "0 1px 6px rgba(0,0,0,0.05)",
+                  }}>
+                  <div
+                     style={{
+                        fontSize: 11,
+                        fontWeight: 800,
+                        color: T.gray,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        marginBottom: 14,
+                     }}>
+                     Community Trust Score
+                  </div>
+                  {[
+                     { label: "Accuracy Rate", score: 91, color: T.green },
+                     { label: "Evidence Quality", score: 74, color: T.amber },
+                     { label: "Vote Balance", score: 67, color: T.amber },
+                     { label: "Tenure Bonus", score: 82, color: T.indigo },
+                  ].map(({ label, score, color }) => (
+                     <div
+                        key={label}
+                        style={{ marginBottom: 12 }}>
+                        <div
+                           style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              fontSize: 11,
+                              color: "#374151",
+                              fontWeight: 600,
+                              marginBottom: 5,
+                           }}>
+                           <span>{label}</span>
+                           <span style={{ color, fontWeight: 800 }}>{score}</span>
+                        </div>
+                        <div style={{ height: 5, background: "#f3f4f6", borderRadius: 99 }}>
+                           <div
+                              style={{
+                                 width: `${score}%`,
+                                 height: "100%",
+                                 background: color,
+                                 borderRadius: 99,
+                              }}
+                           />
+                        </div>
+                     </div>
+                  ))}
+                  <a
+                     style={{
+                        fontSize: 11,
+                        color: T.indigo,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                        marginTop: 4,
+                     }}>
+                     Full breakdown{" "}
+                     <ArrowRight
+                        size={11}
+                        color={T.indigo}
+                     />
+                  </a>
+               </div>
+
+               {/* Related claims */}
+               <div
+                  style={{
+                     background: "#fff",
+                     border: "1.5px solid #e5e7eb",
+                     borderRadius: 14,
+                     padding: "20px",
+                     boxShadow: "0 1px 6px rgba(0,0,0,0.05)",
+                  }}>
+                  <div
+                     style={{
+                        fontSize: 11,
+                        fontWeight: 800,
+                        color: T.gray,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        marginBottom: 14,
+                     }}>
+                     Related Claims
+                  </div>
+                  {[
+                     {
+                        text: '"Flooding photo from Thailand misused as 2023 Libya disaster"',
+                        verdict: "fake",
+                     },
+                     {
+                        text: '"Climate report data cherry-picked by viral post"',
+                        verdict: "misleading",
+                     },
+                     {
+                        text: '"Hurricane Ian aerial photo misidentified as recent event"',
+                        verdict: "fake",
+                     },
+                  ].map((r, i) => (
+                     <div
+                        key={i}
+                        style={{
+                           display: "flex",
+                           alignItems: "flex-start",
+                           gap: 10,
+                           padding: "10px 0",
+                           borderBottom: i < 2 ? "1px solid #f3f4f6" : "none",
+                           cursor: "pointer",
+                        }}>
+                        <VerdictBadge verdict={r.verdict} />
+                        <p
+                           style={{
+                              fontSize: 11,
+                              color: "#374151",
+                              lineHeight: 1.5,
+                              margin: 0,
+                              fontWeight: 500,
+                           }}>
+                           {r.text}
+                        </p>
+                     </div>
+                  ))}
+               </div>
+
+               {/* Report / flag actions */}
+               <div
+                  style={{
+                     background: "#fff",
+                     border: "1.5px solid #e5e7eb",
+                     borderRadius: 14,
+                     padding: "16px 20px",
+                     display: "flex",
+                     gap: 10,
+                  }}>
+                  <button
+                     style={{
+                        flex: 1,
+                        padding: "9px",
+                        background: "#fef2f2",
+                        border: "1.5px solid #fecaca",
+                        borderRadius: 8,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: "#991b1b",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 6,
+                     }}>
+                     <Flag
+                        size={12}
+                        strokeWidth={2.5}
+                     />
+                     Report
+                  </button>
+                  <button
+                     style={{
+                        flex: 1,
+                        padding: "9px",
+                        background: "#f9fafb",
+                        border: "1.5px solid #e5e7eb",
+                        borderRadius: 8,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: T.gray,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 6,
+                     }}>
+                     <ExternalLink
+                        size={12}
+                        strokeWidth={2}
+                     />
+                     Share
+                  </button>
+               </div>
             </div>
          </div>
+         {/* end two-column body */}
       </div>
    );
 };

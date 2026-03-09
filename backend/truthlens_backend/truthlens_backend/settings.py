@@ -138,3 +138,6 @@ CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",  # extension port
     "http://localhost:5174",  # frontend port
 ]
+
+CELERY_BROKER_URL = "redis://localhost:6379/0"
+CELERY_RESULT_BACKEND = "redis://localhost:6379/0"

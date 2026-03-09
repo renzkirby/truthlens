@@ -31,16 +31,14 @@ def receive_snippet(request):
         if not ocr_result:
             return JsonResponse({"error": "No text detected in the image"}, status=400)
 
-        extracted_text = " ".join(ocr_result)
-
         # Clean the extracted text using Groq to get a concise search query
-        cleaned_text = clean_ocr_text(extracted_text).strip()
+        cleaned_text = clean_ocr_text(ocr_result).strip()
 
         if cleaned_text == "OUT_OF_SCOPE":
             return JsonResponse(
                 {
                     "message": "Image processed successfully!",
-                    "extracted_text": extracted_text,
+                    "extracted_text": ocr_result,
                     "cleaned_text": cleaned_text,
                     "result": {
                         "verdict": "OUT_OF_SCOPE",
@@ -72,8 +70,8 @@ def receive_snippet(request):
         if fact_check_data.get("claims"):
             first_claim_text = fact_check_data["claims"][0].get("text", "")
 
-            if is_google_data_relevant(extracted_text, first_claim_text):
-                ai_verdict = evaluate_google_data(extracted_text, fact_check_data)
+            if is_google_data_relevant(ocr_result, first_claim_text):
+                ai_verdict = evaluate_google_data(ocr_result, fact_check_data)
                 context_data = {
                     "summary": ai_verdict.get("summary"),
                     "verdict": ai_verdict.get("verdict"),
@@ -96,7 +94,7 @@ def receive_snippet(request):
                 )
 
                 tavily_results = tavily_response.get("results", [])
-                ai_verdict = evaluate_tavily_data(extracted_text, tavily_results)
+                ai_verdict = evaluate_tavily_data(ocr_result, tavily_results)
 
                 print(ai_verdict)
 
@@ -119,7 +117,7 @@ def receive_snippet(request):
         return JsonResponse(
             {
                 "message": "Image saved successfully!",
-                "extracted_text": extracted_text,
+                "extracted_text": ocr_result,
                 "cleaned_text": cleaned_text,
                 "result": context_data,
                 "source_type": source_type,
