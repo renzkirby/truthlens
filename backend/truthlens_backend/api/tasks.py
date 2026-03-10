@@ -26,15 +26,9 @@ def snippet_fact_check_process(image_hash, base64_string, claim_id):
 
     if cleaned_text.get("cleaned_claim") == "OUT_OF_SCOPE":
         context_data = {
-            "message": "Image processed successfully!",
-            "extracted_text": ocr_result,
-            "cleaned_text": cleaned_text.get("cleaned_claim"),
-            "search_query": cleaned_text.get("search_query"),
-            "result": {
-                "verdict": "OUT_OF_SCOPE",
-                "summary": "The content of the image is not a claim that can be fact-checked.",
-                "confidence_score": 100,
-            },
+            "verdict": "OUT_OF_SCOPE",
+            "summary": "The content of the image is not a claim that can be fact-checked.",
+            "confidence_score": 100,
             "source_type": "N/A",
         }
 
@@ -69,12 +63,15 @@ def snippet_fact_check_process(image_hash, base64_string, claim_id):
                     "summary": ai_verdict.get("summary"),
                     "verdict": ai_verdict.get("verdict"),
                     "confidence_score": ai_verdict.get("confidence_score"),
-                    "sources": fact_check_data.get("claims", []),
+                    "sources": fact_check_data.get("claims", [])
+                    .get("claimReview", [{}])[0]
+                    .get("url", "No source URL"),
                 }
                 source_type = "Official Fact Check"
             else:
                 fact_check_data = {}
 
+        # If Google's Fact Check Tools API doesn't return relevant results, try Tavily
         if not fact_check_data.get("claims"):
             try:
                 tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
@@ -97,7 +94,11 @@ def snippet_fact_check_process(image_hash, base64_string, claim_id):
                     "summary": ai_verdict.get("summary"),
                     "verdict": ai_verdict.get("verdict"),
                     "confidence_score": ai_verdict.get("confidence_score"),
-                    "sources": tavily_results,
+                    "sources": (
+                        tavily_results[0].get("url")
+                        if tavily_results
+                        else "No sources found"
+                    ),
                 }
                 source_type = "Live Web Search"
             except Exception as e:
@@ -116,4 +117,6 @@ def snippet_fact_check_process(image_hash, base64_string, claim_id):
     claim.verified_via = Claim.VerificationSource.AI_EXTENSION
     claim.source_type = source_type
     claim.context_text = cleaned_text.get("cleaned_claim")
+    claim.source_link = context_data.get("sources")
+
     claim.save()

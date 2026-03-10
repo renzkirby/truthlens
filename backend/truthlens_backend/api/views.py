@@ -19,37 +19,64 @@ from .models import Claim
 
 # Create your views here.
 @csrf_exempt
+@api_view(["POST"])
 def receive_snippet(request):
-    if request.method == "POST":
-        parsed_data = json.loads(request.body)
-        base64_string = parsed_data.get("image_data")
+    parsed_data = json.loads(request.body)
+    base64_string = parsed_data.get("image_data")
 
-        if not base64_string:
-            return JsonResponse({"error": "No image data provided"}, status=400)
+    if not base64_string:
+        return JsonResponse({"error": "No image data provided"}, status=400)
 
-        if "," in base64_string:
-            base64_string = base64_string.split(",")[1]
+    if "," in base64_string:
+        base64_string = base64_string.split(",")[1]
 
-        # Decode the base64 string and save it as an image
-        image_hash, _ = process_image(base64_string)
-        print("IMAGE HASH:", image_hash)
+    # Decode the base64 string and save it as an image
+    image_hash, _ = process_image(base64_string)
+    print("IMAGE HASH:", image_hash)
 
-        claim = Claim.objects.create(
-            claim_type=Claim.ClaimType.IMAGE,
-            media_hash=image_hash,
-            verdict=None,
-            verified_via=Claim.VerificationSource.PENDING,
-        )
-        claim_id = claim.id  # Get the ID of the saved claim
+    claim = Claim.objects.create(
+        claim_type=Claim.ClaimType.IMAGE,
+        media_hash=image_hash,
+        verdict=None,
+        verified_via=Claim.VerificationSource.PENDING,
+    )
+    claim_id = claim.id  # Get the ID of the saved claim
 
-        snippet_fact_check_process.delay(image_hash, base64_string, str(claim_id))
+    snippet_fact_check_process.delay(image_hash, base64_string, str(claim_id))
 
+    return JsonResponse(
+        {"claim_id": str(claim_id)},
+        status=200,
+    )
+
+
+@csrf_exempt
+@api_view(["GET"])
+def claim_polling_endpoint(request, claim_id):
+    if not claim_id:
+        return JsonResponse({"error": "Claim ID is required"}, status=400)
+
+    try:
+        claim = Claim.objects.get(id=claim_id)
+    except Claim.DoesNotExist:
+        return JsonResponse({"error": "Claim not found"}, status=404)
+
+    if claim.verdict is None:
+        return JsonResponse({"verdict": "PENDING"}, status=200)
+    else:
         return JsonResponse(
-            {"claim_id": str(claim_id)},
+            {
+                "verdict": claim.verdict,
+                "summary": claim.ai_summary,
+                "confidence_score": claim.consensus_score,
+                "source_type": claim.source_type,
+                "source_url": claim.source_link,
+            },
             status=200,
         )
 
 
+@csrf_exempt
 @api_view(["POST"])
 def verify_url(request):
     # gets the data from fronted ('yung URL)

@@ -2,6 +2,8 @@ import "./content.css";
 
 console.log("TruthLens content script loaded");
 
+const API_BASE_URL = "http://localhost:8000/api";
+
 let isSnipping = false;
 let isDrawing = false;
 let startX, startY;
@@ -180,27 +182,71 @@ function cropAndSave(fullScreenshot, coords) {
 }
 
 async function sendImageToServer(image) {
-   const response = await fetch("http://localhost:8000/api/analyze/", {
+   const response = await fetch(`${API_BASE_URL}/analyze/`, {
       method: "POST",
       headers: {
          "content-type": "application/json",
       },
       body: JSON.stringify(image),
    });
+   if (!response.ok) {
+      console.error("Failed to send image to server:", response.statusText);
+      removeLoadingCard();
+      return;
+   }
 
    const data = await response.json();
 
-   isAnalyzing = false;
-   const loadingCard = document.getElementById("truthlens-loading-card");
-   loadingCard.classList.remove("show");
-   setTimeout(() => {
-      loadingCard.remove();
-   }, 1000);
+   const claim_id = data.claim_id;
+   console.log("Claim ID received from server:", claim_id);
+
+   // Start polling for claim result
+   let pollCount = 0;
+   let maxPolls = 20;
+
+   const pollInterval = setInterval(async () => {
+      pollCount++;
+      if (pollCount > maxPolls) {
+         clearInterval(pollInterval);
+         console.error("Polling timed out");
+         removeLoadingCard();
+         return;
+      }
+      const claim = await fetchClaimResult(claim_id);
+      if (claim && claim.verdict != "PENDING") {
+         clearInterval(pollInterval);
+         displayResultCard(claim);
+
+         setTimeout(() => {
+            removeLoadingCard();
+         }, 2000);
+      }
+   }, 3000);
 
    console.log("Image analysis complete, result received from server");
-   console.log("Server response:", data);
+}
 
-   displayResultCard(data);
+function removeLoadingCard() {
+   isAnalyzing = false;
+   const loadingCard = document.getElementById("truthlens-loading-card");
+   if (loadingCard) {
+      loadingCard.classList.remove("show");
+      setTimeout(() => {
+         loadingCard.remove();
+      }, 300);
+   }
+}
+
+// Polling function to check claim status
+async function fetchClaimResult(claim_id) {
+   try {
+      const response = await fetch(`${API_BASE_URL}/claims/${claim_id}/status`);
+      const data = await response.json();
+      console.log("Polled claim status:", data);
+      return data;
+   } catch (error) {
+      console.error("Error polling claim status:", error);
+   }
 }
 
 function cleanup() {
@@ -227,57 +273,36 @@ function cleanup() {
    console.log("Snipping mode deactivated");
 }
 
-function displayResultCard(data) {
-   const { result, source_type, cleaned_text } = data;
-
-   let verdict = "Analyzing...";
-   let summary = "No summary available.";
-   let confidence_score = "N/A";
-   let sourceUrl = "#";
+function displayResultCard(claim) {
+   const { verdict, summary, confidence_score, source_type, source_url } = claim;
    let badgeColor = "#6b7280";
 
-   if (source_type === "Official Fact Check" && result && result.length > 0) {
-      verdict = result.verdict;
-      summary = result.summary;
-      confidence_score = result.confidence_score;
-
-      const lowerVerdict = verdict.toLowerCase();
-      if (lowerVerdict === "fake" || lowerVerdict === "misleading" || lowerVerdict === "false")
+   switch (verdict) {
+      case "FACT":
+         badgeColor = "#0e9f6e";
+         break;
+      case "FAKE":
          badgeColor = "#e02424";
-      else if (lowerVerdict === "fact") badgeColor = "#0e9f6e";
-      else if (lowerVerdict === "satire") badgeColor = "#a83bf1";
-      else if (lowerVerdict.includes("scope")) badgeColor = "#6b7280";
-      else badgeColor = "#ebdc09";
-
-      if (result.sources && result.sources.length > 0) {
-         sourceUrl = result.sources[0].url;
-      }
-   } else if (source_type === "Live Web Search") {
-      verdict = result.verdict;
-      summary = result.summary;
-      confidence_score = result.confidence_score;
-
-      const lowerVerdict = verdict.toLowerCase();
-      if (lowerVerdict === "fake" || lowerVerdict === "misleading" || lowerVerdict === "false")
-         badgeColor = "#e02424";
-      else if (lowerVerdict === "fact") badgeColor = "#0e9f6e";
-      else if (lowerVerdict === "satire") badgeColor = "#a83bf1";
-      else if (lowerVerdict.includes("scope")) badgeColor = "#6b7280";
-      else badgeColor = "#ebdc09";
-
-      if (result.sources && result.sources.length > 0) {
-         sourceUrl = result.sources[0].url;
-      }
-   } else if (source_type === "N/A") {
-      verdict = result.verdict;
-      summary = result.summary;
-      confidence_score = result.confidence_score;
+         break;
+      case "MISLEADING":
+         badgeColor = "#f97316";
+         break;
+      case "SATIRE":
+         badgeColor = "#8b5cf6";
+         break;
+      case "UNVERIFIED":
+         badgeColor = "#ebdc09";
+         break;
+      case "OUT_OF_SCOPE":
+         badgeColor = "#6b7280";
+         break;
    }
 
    console.log("Verdict:", verdict);
    console.log("Summary:", summary);
    console.log("Confidence Score:", confidence_score);
-   console.log("Source URL:", sourceUrl);
+   console.log("Source Type:", source_type);
+   console.log("Source URL:", source_url);
 
    const card = document.createElement("div");
    card.id = "truthlens-result-card";
@@ -307,11 +332,11 @@ function displayResultCard(data) {
       </div>
 
       ${
-         verdict === "UNVERIFIED"
+         verdict === "UNVERIFIED" || confidence_score < 50
             ? "<a href='#' target='_blank' class='truthlens-source-link'>Want to ask the community?</a>"
             : verdict === "OUT_OF_SCOPE"
               ? ""
-              : `<a href="${sourceUrl}" target="_blank" class="truthlens-source-link">View Source</a>`
+              : `<a href="${source_url}" target="_blank" class="truthlens-source-link">View Source</a>`
       }
 
       <div class="truthlens-footer">Source Type: ${source_type}</div>
