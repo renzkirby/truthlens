@@ -3,8 +3,13 @@ from dotenv import load_dotenv
 import os
 import json
 import re
+import imagehash
+import base64
+from io import BytesIO
+from PIL import Image
 
 
+# Clean the OCR text to extract a concise search query or determine if it's out of scope
 def clean_ocr_text(raw_text):
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
     response = client.chat.completions.create(
@@ -29,6 +34,7 @@ def clean_ocr_text(raw_text):
     return response.choices[0].message.content
 
 
+# Evaluate Tavily data against the original claim using Groq
 def evaluate_tavily_data(original_claim, tavily_data):
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
@@ -109,6 +115,7 @@ def evaluate_tavily_data(original_claim, tavily_data):
         }
 
 
+# Evaluate the relevance of Google's Fact Check Tools data against the original claim using Groq
 def is_google_data_relevant(original_text, google_fact_check_text):
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
@@ -134,6 +141,7 @@ def is_google_data_relevant(original_text, google_fact_check_text):
     return True
 
 
+# Evaluate Google's Fact Check Tools data against the original claim using Groq
 def evaluate_google_data(original_claim, google_fact_check_data):
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
@@ -358,3 +366,11 @@ def evaluate_with_tavily(extracted_text, context):
             "summary": "Could not analyze the evidence from the web search.",
             "confidence_score": 0,
         }
+
+
+def process_image(raw_base64):
+    image_bytes = base64.b64decode(raw_base64)
+    pil_img = Image.open(BytesIO(image_bytes))
+    image_hash = str(imagehash.phash(pil_img))
+
+    return image_hash, image_bytes
