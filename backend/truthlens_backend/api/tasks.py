@@ -63,7 +63,7 @@ def snippet_fact_check_process(image_hash, base64_string, claim_id):
                     "summary": ai_verdict.get("summary"),
                     "verdict": ai_verdict.get("verdict"),
                     "confidence_score": ai_verdict.get("confidence_score"),
-                    "sources": fact_check_data.get("claims", [])
+                    "source": fact_check_data.get("claims", [])
                     .get("claimReview", [{}])[0]
                     .get("url", "No source URL"),
                 }
@@ -94,10 +94,10 @@ def snippet_fact_check_process(image_hash, base64_string, claim_id):
                     "summary": ai_verdict.get("summary"),
                     "verdict": ai_verdict.get("verdict"),
                     "confidence_score": ai_verdict.get("confidence_score"),
-                    "sources": (
+                    "source": (
                         tavily_results[0].get("url")
                         if tavily_results
-                        else "No sources found"
+                        else "No source found"
                     ),
                 }
                 source_type = "Live Web Search"
@@ -107,6 +107,7 @@ def snippet_fact_check_process(image_hash, base64_string, claim_id):
                     "summary": "Could not retrieve relevant information from the web to verify the claim.",
                     "verdict": "UNVERIFIED",
                     "confidence_score": 0,
+                    "source": "N/A"
                 }
                 source_type = "Live Web Search"
 
@@ -117,6 +118,6 @@ def snippet_fact_check_process(image_hash, base64_string, claim_id):
     claim.verified_via = Claim.VerificationSource.AI_EXTENSION
     claim.source_type = source_type
     claim.context_text = cleaned_text.get("cleaned_claim")
-    claim.source_link = context_data.get("sources")
+    claim.source_link = context_data.get("source")
 
     claim.save()
