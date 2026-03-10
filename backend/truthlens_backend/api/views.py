@@ -2,30 +2,19 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from io import BytesIO
-from PIL import Image
-from dotenv import load_dotenv
 from tavily import TavilyClient
-from google import genai
-import imagehash
 import os
 import json
-import base64
-import easyocr
-import cv2
 import requests
 from .services import (
-    clean_ocr_text,
-    evaluate_google_data,
-    evaluate_tavily_data,
-    is_google_data_relevant,
     clean_extracted_text,
     is_gfc_relevant,
     evaluate_with_gfc,
     evaluate_with_tavily,
-    process_image
+    process_image,
 )
 from .tasks import snippet_fact_check_process
+from .models import Claim
 
 
 # Create your views here.
@@ -45,48 +34,53 @@ def receive_snippet(request):
         image_hash, _ = process_image(base64_string)
         print("IMAGE HASH:", image_hash)
 
-        # Save Claim to db
-        # -- Code to save the claim and get claim_id goes here (not implemented) ---
-        claim_id = None  # Placeholder for claim ID after saving to DB
+        claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.IMAGE,
+            media_hash=image_hash,
+            verdict=None,
+            verified_via=Claim.VerificationSource.PENDING,
+        )
+        claim_id = claim.id  # Get the ID of the saved claim
 
-        snippet_fact_check_process.delay(image_hash, base64_string, claim_id=None)
-
-        # TO DO: Return the actual claim_id after saving the claim to the database, so that the frontend can use it to fetch results later when users view the claim details.
+        snippet_fact_check_process.delay(image_hash, base64_string, str(claim_id))
 
         return JsonResponse(
-            {"claim_id": claim_id},
+            {"claim_id": str(claim_id)},
             status=200,
         )
 
 
-@api_view(['POST'])
-def verify_url(request):    
+@api_view(["POST"])
+def verify_url(request):
     # gets the data from fronted ('yung URL)
     url = request.data.get("url")
-    print(f"Received URL: {url}")  
+    print(f"Received URL: {url}")
     if not url:
         return Response({"error": "URL is required"}, status=400)
-    
+
     # extract
     try:
         print("Starting Tavily extract...")  # tets
         response = requests.post(
             "https://api.tavily.com/extract",
             headers={"Authorization": f"Bearer {os.environ.get("TAVILY_API_KEY")}"},
-            json={"urls": [url]}
-        )   
+            json={"urls": [url]},
+        )
 
         print(f"Tavily response: {response.status_code}")  # test
         print(f"Tavily data: {response.json()}")  # test
         tavily_data = response.json()
 
         if not tavily_data.get("results"):
-            return Response({
-                "error": "Could not extract content from this URL. Try a news article instead."
-            }, status=400)
+            return Response(
+                {
+                    "error": "Could not extract content from this URL. Try a news article instead."
+                },
+                status=400,
+            )
 
         raw_text = tavily_data["results"][0]["raw_content"]
-        print(f'Raw Text Length: {len(raw_text)} characters')
+        print(f"Raw Text Length: {len(raw_text)} characters")
 
         extracted_text = clean_extracted_text(raw_text)  # from services.py
 
@@ -96,13 +90,15 @@ def verify_url(request):
     except Exception as e:
         print(f"Tavily extract error: {str(e)}")  # test
         return Response({"error": f"Text extraction failed: {str(e)}"}, status=500)
-    
 
     # GFC
     try:
         fact_check_response = requests.get(
-            "https://factchecktools.googleapis.com/v1alpha1/claims:search", 
-            params={"query": extracted_text[:200], "key": os.environ.get("FACT_CHECK_API_KEY")}
+            "https://factchecktools.googleapis.com/v1alpha1/claims:search",
+            params={
+                "query": extracted_text[:200],
+                "key": os.environ.get("FACT_CHECK_API_KEY"),
+            },
         )
 
         gfc_data = fact_check_response.json()
@@ -117,13 +113,15 @@ def verify_url(request):
 
                 verdict = evaluate_with_gfc(extracted_text, gfc_data)
 
-                return Response({
-                    "status": verdict.get("verdict"),
-                    "explanation": verdict.get("summary"),
-                    "confidence": verdict.get("confidence_score"),
-                    "source_type": "Official Fact Check",
-                    "original_url": url,
-                })
+                return Response(
+                    {
+                        "status": verdict.get("verdict"),
+                        "explanation": verdict.get("summary"),
+                        "confidence": verdict.get("confidence_score"),
+                        "source_type": "Official Fact Check",
+                        "original_url": url,
+                    }
+                )
             else:
                 print("GFC result not relevant, falling through to web search...")
         else:
@@ -145,7 +143,6 @@ def verify_url(request):
             include_answer=True,
         )
 
-        
         context = search_response.get("answer", "No additional context found")
         print(f"Tavily search context: {context[:200]}")
 
@@ -160,15 +157,16 @@ def verify_url(request):
         verdict = evaluate_with_tavily(extracted_text, context)
         print(f"AI verdict: {verdict}")
 
-        return Response({
-            "status": verdict.get("verdict"),
-            "explanation": verdict.get("summary"),
-            "confidence": verdict.get("confidence_score"),
-            "source_type": "Live Web Search",
-            "original_url": url,
-        })
+        return Response(
+            {
+                "status": verdict.get("verdict"),
+                "explanation": verdict.get("summary"),
+                "confidence": verdict.get("confidence_score"),
+                "source_type": "Live Web Search",
+                "original_url": url,
+            }
+        )
 
     except Exception as e:
         print(f"Groq error: {str(e)}")
         return Response({"error": f"AI analysis failed: {str(e)}"}, status=500)
-

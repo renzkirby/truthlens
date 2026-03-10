@@ -6,6 +6,7 @@ print("EasyOCR model loaded successfully!")
 
 
 def extract_text_from_image(image_bytes):
+    global ocr_reader
     if not ocr_reader:
         ocr_reader = easyocr.Reader(["en", "tl"])
 

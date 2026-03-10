@@ -14,15 +14,29 @@ def clean_ocr_text(raw_text):
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
+        response_format={"type": "json_object"},
         messages=[
             {
                 "role": "system",
                 "content": """
                 Role: You are a precise data extraction tool for a fact-checking pipeline. 
-                Task: Your only job is to analyze messy OCR text, if the text contains factual, verifiable claim, translate any local slang or Taglish to English, and extract the single most verifiable core claim. Extract a search query of exactly 10 words or less from this text. If the text is purely subjective, an opinion, a question, or does not contain any factual claim that can be verified, respond with the exact phrase "OUT_OF_SCOPE". 
+                Task: Your only job is to analyze messy OCR text, if the text contains factual, verifiable claim, translate any local slang or Taglish to English, and extract the single most verifiable core claim. Extract a search query of exactly 10 words or less from this text. Aside from this, clean the ocr text to something much readable to the human reader. The output of the cleaned ocr text should be the original extracted text but cleaned. If the text is purely subjective, an opinion, a question, or does not contain any factual claim that can be verified, respond with the exact phrase "OUT_OF_SCOPE". 
                 
                 Output Constraints:
-                Do not output anything other than the clean claim or "OUT_OF_SCOPE". Do not provide any explanation or additional text. Output NOTHING else. No punctuation, no conversational filler.""",
+                Do not output anything other than the clean claim or "OUT_OF_SCOPE". Do not provide any explanation or additional text. Output NOTHING else. No punctuation, no conversational filler. The output format should be in a json object with two fields: "cleaned_claim" and "search_query". If the text is out of scope, both fields should be "OUT_OF_SCOPE".
+                
+                JSON Schema:
+                If the text contains a verifiable claim:
+                {
+                "cleaned_claim": "A concise, cleaned version of the core claim extracted from the OCR text, translated to English if necessary.",
+                "search_query": "A concise search query derived from the cleaned claim."
+                }
+                If the text is out of scope:
+                {
+                "cleaned_claim": "OUT_OF_SCOPE",
+                "search_query": "OUT_OF_SCOPE"
+                }
+                """,
             },
             {
                 "role": "user",
@@ -31,7 +45,15 @@ def clean_ocr_text(raw_text):
         ],
     )
 
-    return response.choices[0].message.content
+    raw_response = response.choices[0].message.content
+
+    cleaned_ocr_text = (
+        raw_response.strip().replace("```json", "").replace("```", "").strip()
+    )
+
+    print("JSON OUTPUT:", cleaned_ocr_text)
+
+    return json.loads(cleaned_ocr_text)
 
 
 # Evaluate Tavily data against the original claim using Groq
@@ -211,25 +233,27 @@ def evaluate_google_data(original_claim, google_fact_check_data):
             "summary": "Could not definitively verify the claim from the official fact check data.",
             "confidence_score": 0,
         }
-    
+
+
 # URL VERIFIER******************************************************************************************************************
 
 
 def clean_extracted_text(text):
-    text = re.sub(r'!\[.*?\]\(.*?\)', '', text)
-    text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
-    text = re.sub(r'http\S+', '', text)
-    lines = text.split('\n')
+    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
+    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
+    text = re.sub(r"http\S+", "", text)
+    lines = text.split("\n")
     lines = [line.strip() for line in lines if len(line.strip()) > 40]
-    text = '\n'.join(lines)
+    text = "\n".join(lines)
     return text[:3000]
+
 
 def is_gfc_relevant(extracted_text, gfc_claim_text):
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
     response = client.chat.completions.create(
-        model = "llama-3.3-70b-versatile", 
-        messages = [
+        model="llama-3.3-70b-versatile",
+        messages=[
             {
                 "role": "system",
                 "content": (
@@ -237,7 +261,7 @@ def is_gfc_relevant(extracted_text, gfc_claim_text):
                     "Compare the two texts below and determine if the fact check "
                     "result is directly relevant to verifying the article claim. "
                     "Output ONLY 'Relevant' or 'Not Relevant'. No explanation."
-                )
+                ),
             },
             {
                 "role": "user",
@@ -249,24 +273,30 @@ def is_gfc_relevant(extracted_text, gfc_claim_text):
         ],
     )
 
-    
     result = response.choices[0].message.content.strip().upper()
 
     if "NOT RELEVANT" in result:
         return False
-    return True 
+    return True
+
 
 def evaluate_with_gfc(extracted_text, gfc_data):
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
     gfc_claim_text = gfc_data.get("claims", [{}])[0].get("text", "")
-    gfc_rating = gfc_data.get("claims",[{}])[0].get("claimReview", [{}])[0].get("textualRating", "")
-    gfc_source = gfc_data.get("claims", [{}])[0].get("claimReview", [{}])[0].get("url", "")
+    gfc_rating = (
+        gfc_data.get("claims", [{}])[0]
+        .get("claimReview", [{}])[0]
+        .get("textualRating", "")
+    )
+    gfc_source = (
+        gfc_data.get("claims", [{}])[0].get("claimReview", [{}])[0].get("url", "")
+    )
 
     response = client.chat.completions.create(
-        model = "llama-3.3-70b-versatile",
-        response_format = {"type": "json_object"},
-        messages = [
+        model="llama-3.3-70b-versatile",
+        response_format={"type": "json_object"},
+        messages=[
             {
                 "role": "system",
                 "content": """
@@ -310,7 +340,7 @@ def evaluate_with_gfc(extracted_text, gfc_data):
             "summary": "Could not analyze the official fact check data.",
             "confidence_score": 0,
         }
-    
+
 
 def evaluate_with_tavily(extracted_text, context):
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))

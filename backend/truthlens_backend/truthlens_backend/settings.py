@@ -141,3 +141,4 @@ CSRF_TRUSTED_ORIGINS = [
 
 CELERY_BROKER_URL = "redis://localhost:6379/0"
 CELERY_RESULT_BACKEND = "redis://localhost:6379/0"
+CELERY_WORKER_POOL = "solo"
