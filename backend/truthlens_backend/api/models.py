@@ -36,7 +36,7 @@ class Claim(models.Model):
     ai_summary = models.TextField(blank=True, null=True)
     verdict = models.CharField(max_length=20, blank=True, null=True)
     consensus_score = models.FloatField(blank=True, null=True)
-
+    source_type = models.CharField(max_length=50, blank=True, null=True)
     verified_via = models.CharField(
         max_length=20,
         choices=VerificationSource.choices,
