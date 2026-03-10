@@ -2,6 +2,8 @@ from urllib import response
 from django.shortcuts import render
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
 from io import BytesIO
 from PIL import Image
 from dotenv import load_dotenv
@@ -19,6 +21,10 @@ from .services import (
     evaluate_google_data,
     evaluate_tavily_data,
     is_google_data_relevant,
+    clean_extracted_text,
+    is_gfc_relevant,
+    evaluate_with_gfc,
+    evaluate_with_tavily,
 )
 
 
@@ -130,3 +136,118 @@ def receive_snippet(request):
             },
             status=200,
         )
+
+
+@api_view(['POST'])
+def verify_url(request):    
+    # gets the data from fronted ('yung URL)
+    url = request.data.get("url")
+    print(f"Received URL: {url}")  
+    if not url:
+        return Response({"error": "URL is required"}, status=400)
+    
+    # extract
+    try:
+        print("Starting Tavily extract...")  # tets
+        response = requests.post(
+            "https://api.tavily.com/extract",
+            headers={"Authorization": f"Bearer {os.environ.get("TAVILY_API_KEY")}"},
+            json={"urls": [url]}
+        )   
+
+        print(f"Tavily response: {response.status_code}")  # test
+        print(f"Tavily data: {response.json()}")  # test
+        tavily_data = response.json()
+
+        if not tavily_data.get("results"):
+            return Response({
+                "error": "Could not extract content from this URL. Try a news article instead."
+            }, status=400)
+
+        raw_text = tavily_data["results"][0]["raw_content"]
+        print(f'Raw Text Length: {len(raw_text)} characters')
+
+        extracted_text = clean_extracted_text(raw_text)  # from services.py
+
+        print(f"Cleaned extracted text: {extracted_text}")
+        print(f"Cleaned text length: {len(extracted_text)}")
+
+    except Exception as e:
+        print(f"Tavily extract error: {str(e)}")  # test
+        return Response({"error": f"Text extraction failed: {str(e)}"}, status=500)
+    
+
+    # GFC
+    try:
+        fact_check_response = requests.get(
+            "https://factchecktools.googleapis.com/v1alpha1/claims:search", 
+            params={"query": extracted_text[:200], "key": os.environ.get("FACT_CHECK_API_KEY")}
+        )
+
+        gfc_data = fact_check_response.json()
+        claims = gfc_data.get("claims", [])
+
+        if claims:
+            first_claim_text = claims[0].get("text", "")
+            print(f"GFC Found a claim: {first_claim_text[:100]}...")
+
+            if is_gfc_relevant(extracted_text, first_claim_text):
+                print("GFC result is relevant, evaluating")
+
+                verdict = evaluate_with_gfc(extracted_text, gfc_data)
+
+                return Response({
+                    "status": verdict.get("verdict"),
+                    "explanation": verdict.get("summary"),
+                    "confidence": verdict.get("confidence_score"),
+                    "source_type": "Official Fact Check",
+                    "original_url": url,
+                })
+            else:
+                print("GFC result not relevant, falling through to web search...")
+        else:
+            print("No claims found in GFC")
+
+    except Exception as e:
+        print(f"GFC error: {str(e)}")
+
+    # tavily search
+    try:
+        print("Searching trough tavily....")
+
+        tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
+
+        search_response = tavily_client.search(
+            query=extracted_text[:300],
+            search_depth="advanced",
+            topic="news",
+            include_answer=True,
+        )
+
+        
+        context = search_response.get("answer", "No additional context found")
+        print(f"Tavily search context: {context[:200]}")
+
+    except Exception as e:
+        print(f"Search error: {str(e)}")
+        context = "Could not retrieve additional context"
+
+    # AI analysis
+    try:
+        print("Running Groq Analysis...")
+
+        verdict = evaluate_with_tavily(extracted_text, context)
+        print(f"AI verdict: {verdict}")
+
+        return Response({
+            "status": verdict.get("verdict"),
+            "explanation": verdict.get("summary"),
+            "confidence": verdict.get("confidence_score"),
+            "source_type": "Live Web Search",
+            "original_url": url,
+        })
+
+    except Exception as e:
+        print(f"Groq error: {str(e)}")
+        return Response({"error": f"AI analysis failed: {str(e)}"}, status=500)
+

@@ -2,6 +2,7 @@ from groq import Groq
 from dotenv import load_dotenv
 import os
 import json
+import re
 
 
 def clean_ocr_text(raw_text):
@@ -200,5 +201,160 @@ def evaluate_google_data(original_claim, google_fact_check_data):
         return {
             "verdict": "UNVERIFIED",
             "summary": "Could not definitively verify the claim from the official fact check data.",
+            "confidence_score": 0,
+        }
+    
+# URL VERIFIER******************************************************************************************************************
+
+
+def clean_extracted_text(text):
+    text = re.sub(r'!\[.*?\]\(.*?\)', '', text)
+    text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+    text = re.sub(r'http\S+', '', text)
+    lines = text.split('\n')
+    lines = [line.strip() for line in lines if len(line.strip()) > 40]
+    text = '\n'.join(lines)
+    return text[:3000]
+
+def is_gfc_relevant(extracted_text, gfc_claim_text):
+    client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+
+    response = client.chat.completions.create(
+        model = "llama-3.3-70b-versatile", 
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a relevance checker for a fact-checking pipeline. "
+                    "Compare the two texts below and determine if the fact check "
+                    "result is directly relevant to verifying the article claim. "
+                    "Output ONLY 'Relevant' or 'Not Relevant'. No explanation."
+                )
+            },
+            {
+                "role": "user",
+                "content": (
+                    f'Article text: "{extracted_text[:300]}"\n\n'
+                    f'Fact check claim: "{gfc_claim_text}"'
+                ),
+            },
+        ],
+    )
+
+    
+    result = response.choices[0].message.content.strip().upper()
+
+    if "NOT RELEVANT" in result:
+        return False
+    return True 
+
+def evaluate_with_gfc(extracted_text, gfc_data):
+    client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+
+    gfc_claim_text = gfc_data.get("claims", [{}])[0].get("text", "")
+    gfc_rating = gfc_data.get("claims",[{}])[0].get("claimReview", [{}])[0].get("textualRating", "")
+    gfc_source = gfc_data.get("claims", [{}])[0].get("claimReview", [{}])[0].get("url", "")
+
+    response = client.chat.completions.create(
+        model = "llama-3.3-70b-versatile",
+        response_format = {"type": "json_object"},
+        messages = [
+            {
+                "role": "system",
+                "content": """
+                    Role: Act as the core fact-checking algorithmic engine for a misinformation filtering platform.
+                    Task: Analyze the provided article against the official fact check data and classify it.
+
+                    Evaluation Criteria:
+                    SATIRE: The claim explicitly contains markers like "satire" or "joke", OR the evidence confirms the source is a known satirical entity (e.g., The Onion). Summary requirement: State that the post originates from or is self-declared as satire.
+                    FACT: The official fact check directly confirms the core factual elements of the claim, OR the evidence is from a known reliable website (e.g., Rappler, Vera Files, GMA news, etc.).
+                    FAKE: The official fact check directly contradicts or debunks the claim.
+                    UNVERIFIED: The fact check discusses the topic but lacks sufficient data to decide.
+
+                    Output Constraints:
+                    Output ONLY a raw valid JSON object. No markdown. No backticks. No extra text.
+
+                    JSON Schema:
+                    {
+                        "reasoning": "1-sentence internal deduction comparing the article to the fact check.",
+                        "verdict": "MUST be exactly one of: [FACT, FAKE, UNVERIFIED]",
+                        "summary": "TWO PARTS - Part 1: what the article is about. Part 2: why this verdict. 2 sentences max.",
+                        "confidence_score": "Integer from 1 to 100."
+                    }
+            """,
+            },
+            {
+                "role": "user",
+                "content": (
+                    f'Article: "{extracted_text[:500]}"\n\n'
+                    f'Official Fact Check Claim: "{gfc_claim_text}"\n'
+                    f'Official Rating: "{gfc_rating}"'
+                ),
+            },
+        ],
+    )
+
+    try:
+        return json.loads(response.choices[0].message.content)
+    except json.JSONDecodeError:
+        return {
+            "verdict": "UNVERIFIED",
+            "summary": "Could not analyze the official fact check data.",
+            "confidence_score": 0,
+        }
+    
+
+def evaluate_with_tavily(extracted_text, context):
+    client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        response_format={"type": "json_object"},
+        messages=[
+            {
+                "role": "system",
+                "content": """
+                    Role: Act as the core fact-checking algorithmic engine for a misinformation filtering platform.
+                    Task: Analyze the provided article claim against the retrieved live news evidence and classify it strictly into one of four predefined tiers.
+
+                    Evaluation Criteria (Follow this strict hierarchy):
+
+                    SATIRE: The claim explicitly contains markers like "satire" or "joke", OR the evidence confirms the source is a known satirical entity (e.g., The Onion).
+
+                    UNVERIFIED: The evidence is completely unrelated to the entities/events in the claim, OR lacks sufficient concrete data to definitively prove or debunk the claim.
+
+                    FACT: The evidence directly, explicitly, and substantially confirms the core factual elements of the claim,  OR the evidence is from a known reliable website (e.g., Rappler, Vera Files, GMA news, etc.)
+
+                    FAKE: The evidence directly contradicts, debunks, or proves the core elements of the claim to be demonstrably false or altered.
+
+                    Output Constraints:
+                    Output ONLY a raw valid JSON object. No markdown. No backticks. No extra text.
+                    Do not output a confidence score of 100 unless the evidence is indisputable.
+
+                    JSON Schema:
+                    {
+                        "reasoning": "1-sentence internal deduction comparing the claim to the evidence. Do this BEFORE deciding the verdict.",
+                        "verdict": "MUST be exactly one of: [FACT, FAKE, UNVERIFIED, SATIRE]",
+                        "summary": "TWO PARTS - Part 1: what the article/news is about. Part 2: the reason for the verdict. 2 sentences max.",
+                        "confidence_score": "Integer from 1 to 100."
+                    }
+                """,
+            },
+            {
+                "role": "user",
+                "content": (
+                    f'Article Claim: "{extracted_text[:500]}"\n\n'
+                    f'Evidence from Live News Search: "{context}"'
+                ),
+            },
+        ],
+    )
+
+    try:
+        return json.loads(response.choices[0].message.content)
+    except json.JSONDecodeError:
+        return {
+            "verdict": "UNVERIFIED",
+            "summary": "Could not analyze the evidence from the web search.",
             "confidence_score": 0,
         }
