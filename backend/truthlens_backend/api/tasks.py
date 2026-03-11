@@ -1,12 +1,6 @@
 from celery import shared_task
 from .ocr_service import extract_text_from_image
-from .services import (
-    clean_ocr_text,
-    evaluate_google_data,
-    evaluate_tavily_data,
-    is_google_data_relevant,
-    process_image,
-)
+from .services import *
 from tavily import TavilyClient
 from .models import Claim
 import os
@@ -53,10 +47,10 @@ def snippet_fact_check_process(image_hash, base64_string, claim_id):
         if fact_check_data.get("claims"):
             first_claim_text = fact_check_data["claims"][0].get("text", "")
 
-            if is_google_data_relevant(
+            if is_fact_check_relevant(
                 cleaned_text.get("cleaned_claim"), first_claim_text
             ):
-                ai_verdict = evaluate_google_data(
+                ai_verdict = evaluate_image_claim_with_gfc(
                     cleaned_text.get("cleaned_claim"), fact_check_data
                 )
                 context_data = {
@@ -84,7 +78,7 @@ def snippet_fact_check_process(image_hash, base64_string, claim_id):
                 )
 
                 tavily_results = tavily_response.get("results", [])
-                ai_verdict = evaluate_tavily_data(
+                ai_verdict = evaluate_image_claim_with_tavily(
                     cleaned_text.get("cleaned_claim"), tavily_results
                 )
 
