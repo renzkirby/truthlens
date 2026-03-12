@@ -236,6 +236,47 @@ def clean_extracted_text(text):
     lines = [line.strip() for line in text.split("\n") if len(line.strip()) > 40]
     return "\n".join(lines)[:3000]
 
+def extract_search_query(text):
+    client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        response_format={"type": "json_object"},
+        messages=[
+            {
+                "role": "system",
+                "content": """
+                Role: You are a precise data extraction tool for a fact-checking pipeline. 
+                Task: Your only job is to analyze the extracted text from a website, if the text contains factual, verifiable claim, translate any local slang or Taglish to English, and extract the single most verifiable core claim. Extract a search query of exactly 10 words or less from this text. The output of the cleaned ocr text should be the original extracted text but cleaned. If the text is purely subjective, an opinion, a question, or does not contain any factual claim that can be verified, respond with the exact phrase "OUT_OF_SCOPE". 
+                
+                Output Constraints:
+                Do not output anything other than the clean claim or "OUT_OF_SCOPE". Do not provide any explanation or additional text. Output NOTHING else. No punctuation, no conversational filler. The output format should be in a json object with two fields: "cleaned_claim" and "search_query". If the text is out of scope, both fields should be "OUT_OF_SCOPE".
+                
+                JSON Schema:
+                If the text contains a verifiable claim:
+                {
+                "cleaned_claim": "A concise, cleaned version of the core claim extracted from the OCR text, translated to English if necessary.",
+                "search_query": "A concise search query derived from the cleaned claim."
+                }
+                If the text is out of scope:
+                {
+                "cleaned_claim": "OUT_OF_SCOPE",
+                "search_query": "OUT_OF_SCOPE"
+                }
+                """,
+            },
+            {
+                "role": "user",
+                "content": f"Text: {text}",
+            },
+        ],
+    )
+
+    extracted_search_query = response.choices[0].message.content
+
+    print("JSON OUTPUT:", extracted_search_query)
+
+    return json.loads(extracted_search_query)
+
 
 def evaluate_url_claim_with_gfc(extracted_text, gfc_data):
     """Evaluate a URL article claim against Google Fact Check data."""

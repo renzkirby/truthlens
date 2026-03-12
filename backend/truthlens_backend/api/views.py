@@ -132,10 +132,10 @@ def verify_url(request):
             first_claim_text = claims[0].get("text", "")
             print(f"GFC Found a claim: {first_claim_text[:100]}...")
 
-            if is_fact_check_relevant(extracted_text, first_claim_text):
+            if is_fact_check_relevant(cleaned_claim, first_claim_text):
                 print("GFC result is relevant, evaluating")
 
-                verdict = evaluate_url_claim_with_gfc(extracted_text, gfc_data)
+                verdict = evaluate_url_claim_with_gfc(cleaned_claim, gfc_data)
 
                 return Response(
                     {
@@ -178,7 +178,7 @@ def verify_url(request):
     try:
         print("Running Groq Analysis...")
 
-        verdict = evaluate_url_claim_with_tavily(extracted_text, context)
+        verdict = evaluate_url_claim_with_tavily(cleaned_claim, context)
         print(f"AI verdict: {verdict}")
 
         return Response(
