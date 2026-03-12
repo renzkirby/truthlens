@@ -87,52 +87,6 @@ def is_fact_check_relevant(original_text, fact_check_text):
     print("is_fact_check_relevant RESPONSE:", result)
     return "NOT RELEVANT" not in result
 
-
-def evaluate_image_claim_with_gfc(original_claim, gfc_data):
-    """Evaluate an image claim against Google Fact Check data."""
-    fact_check_text = gfc_data.get("claims", [{}])[0].get("text", "")
-
-    response = groq_client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        response_format={"type": "json_object"},
-        messages=[
-            {
-                "role": "system",
-                "content": """
-                Role: Act as the core fact-checking engine for a misinformation filtering platform.
-                Task: Analyze the social media claim against official fact check data.
-
-                Evaluation Criteria:
-                FACT: The fact check directly confirms the core factual elements of the claim.
-                FAKE: The fact check directly contradicts or debunks the claim.
-                UNVERIFIED: The fact check lacks sufficient data to decide.
-
-                Output ONLY a raw valid JSON object. No markdown. No backticks.
-
-                JSON Schema:
-                {
-                    "reasoning": "1-sentence deduction comparing the claim to the fact check.",
-                    "verdict": "MUST be exactly one of: [FACT, FAKE, UNVERIFIED]",
-                    "summary": "1-2 sentence user-facing explanation.",
-                    "confidence_score": "Integer from 1 to 100."
-                }
-                """,
-            },
-            {
-                "role": "user",
-                "content": f'Claim: "{original_claim}"\n\nFact Check Data: "{fact_check_text}"',
-            },
-        ],
-    )
-
-    print("RELEVANCE CHECK RESPONSE:", response.choices[0].message.content)
-    clean_response = response.choices[0].message.content.strip().upper()
-
-    if "NOT RELEVANT" in clean_response:
-        return False
-    return True
-
-
 # Evaluate Google's Fact Check Tools data against the original claim using Groq
 def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data):
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
@@ -188,6 +142,21 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data):
     Official Fact Check Data: 
     "{fact_check_text}"
     """
+    
+    response = groq_client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {
+                "role": "system",
+                "content": system_instructions,
+            },
+            {
+                "role": "user",
+                "content": user_data,
+            },
+        ],
+    )
+    
     try:
         print("evaluate_image_claim_with_gfc OUTPUT:", response.choices[0].message.content)
         return _parse_groq_json(response.choices[0].message.content)

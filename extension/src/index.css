@@ -4,9 +4,12 @@ body {
   padding: 0;
   background-color: transparent;
   overflow: hidden;
-  border-radius: 18px;
+  width: 320px;
+  height: 275px;
 }
+
 #root {
+  width: 320px;
   padding: 0;
   margin: 0;
 }
