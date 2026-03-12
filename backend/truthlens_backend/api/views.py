@@ -99,14 +99,17 @@ def verify_url(request):
                 },
                 status=400,
             )
-
+        
         raw_text = tavily_data["results"][0]["raw_content"]
+        cleaned_text = clean_extracted_text(raw_text)      # regex cleaner first
+        result = extract_search_query(cleaned_text)         # then AI extracts the claim
+
+        cleaned_claim = result["cleaned_claim"]             # full sentence — for AI analysis
+        search_query = result["search_query"]               # short query — for searching
+
         print(f"Raw Text Length: {len(raw_text)} characters")
 
-        extracted_text = clean_extracted_text(raw_text)  # from services.py
-
-        print(f"Cleaned extracted text: {extracted_text}")
-        print(f"Cleaned text length: {len(extracted_text)}")
+        print(f"Cleaned claim text: {cleaned_claim}")
 
     except Exception as e:
         print(f"Tavily extract error: {str(e)}")  # test
@@ -117,7 +120,7 @@ def verify_url(request):
         fact_check_response = requests.get(
             "https://factchecktools.googleapis.com/v1alpha1/claims:search",
             params={
-                "query": extracted_text[:200],
+                "query": search_query[:200],
                 "key": os.environ.get("FACT_CHECK_API_KEY"),
             },
         )
@@ -158,7 +161,7 @@ def verify_url(request):
         tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
 
         search_response = tavily_client.search(
-            query=extracted_text[:300],
+            query=search_query[:300],
             search_depth="advanced",
             topic="news",
             include_answer=True,
