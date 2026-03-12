@@ -6,14 +6,7 @@ from tavily import TavilyClient
 import os
 import json
 import requests
-from .services import (
-    clean_extracted_text,
-    is_gfc_relevant,
-    evaluate_with_gfc,
-    evaluate_with_tavily,
-    process_image,
-    extract_search_query,
-)
+from .services import *
 from .tasks import snippet_fact_check_process
 from .models import Claim
 
@@ -139,10 +132,10 @@ def verify_url(request):
             first_claim_text = claims[0].get("text", "")
             print(f"GFC Found a claim: {first_claim_text[:100]}...")
 
-            if is_gfc_relevant(cleaned_claim, first_claim_text):
+            if is_fact_check_relevant(extracted_text, first_claim_text):
                 print("GFC result is relevant, evaluating")
 
-                verdict = evaluate_with_gfc(cleaned_claim, gfc_data)
+                verdict = evaluate_url_claim_with_gfc(extracted_text, gfc_data)
 
                 return Response(
                     {
@@ -185,7 +178,7 @@ def verify_url(request):
     try:
         print("Running Groq Analysis...")
 
-        verdict = evaluate_with_tavily(cleaned_claim, context)
+        verdict = evaluate_url_claim_with_tavily(extracted_text, context)
         print(f"AI verdict: {verdict}")
 
         return Response(
