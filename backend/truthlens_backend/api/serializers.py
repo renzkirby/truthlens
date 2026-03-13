@@ -2,7 +2,23 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import Claim, Thread, UserProfile, EvidenceSubmission, Vote
 
+class RegisterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True)
 
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'password']
+        
+    def validate_username(self, value):
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("Username already taken.")
+        return value
+    
+    def create(self, validated_data):
+        user = User.objects.create_user(**validated_data)
+        UserProfile.objects.create(user=user)
+        return user
+    
 class UserSerializer(serializers.ModelSerializer):
     trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
 

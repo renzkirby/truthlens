@@ -1,7 +1,10 @@
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth.models import User
 from rest_framework.decorators import api_view
+from rest_framework import status
 from rest_framework.response import Response
+from rest_framework_simplejwt.tokens import RefreshToken
 from tavily import TavilyClient
 import os
 import json
@@ -9,6 +12,7 @@ import requests
 from .services import *
 from .tasks import snippet_fact_check_process
 from .models import Claim
+from .serializers import *
 
 
 # Create your views here.
@@ -194,3 +198,21 @@ def verify_url(request):
     except Exception as e:
         print(f"Groq error: {str(e)}")
         return Response({"error": f"AI analysis failed: {str(e)}"}, status=500)
+
+
+#User registration
+@csrf_exempt
+@api_view(["POST"])
+def register_user(request):
+    serializer = RegisterSerializer(data=request.data)
+    if serializer.is_valid():
+        user = serializer.save()
+        return Response(get_tokens_for_user(user), status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+def get_tokens_for_user(user):
+    refresh = RefreshToken.for_user(user)
+    return {
+        'refresh': str(refresh),
+        'access': str(refresh.access_token),
+    }
