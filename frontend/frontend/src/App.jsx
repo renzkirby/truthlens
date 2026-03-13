@@ -8,8 +8,8 @@ import TruthLensWireframes from "./Pages/wireframe/TruthLens_Wireframes";
 function App() {
    return (
       <>
-         {/* <LandingPage /> */}
-         <TruthLensWireframes />
+         { <LandingPage /> }
+         
       </>
    );
 }
