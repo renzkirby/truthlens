@@ -9,11 +9,11 @@ function App() {
       <>
          <BrowserRouter>
             <Routes>
-               <Routes
+               <Route
                   path="/landing-page"
                   element={<LandingPage />}
                />
-               <Routes
+               <Route
                   path="/community"
                   element={<CommunityFeed />}
                />

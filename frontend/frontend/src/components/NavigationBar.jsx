@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import LogoImage from "../assets/truthlens_logo.png";
 import Icons from "./Icons.jsx";
 import "./NavigationBar.css";
@@ -14,14 +15,22 @@ function NavigationBar() {
                      style={{ height: "40px", width: "auto" }}
                   />
                </div>
-               <span className="logo-text">TruthLens</span>
+               <Link
+                  to="/landing-page"
+                  className="link">
+                  <span className="logo-text">TruthLens</span>
+               </Link>
             </div>
 
             <div className="nav-tabs">
-               <div className="nav-tab active">
-                  <Icons name="globe" />
-                  Community Feed
-               </div>
+               <Link
+                  to="/community"
+                  className="link">
+                  <div className="nav-tab active">
+                     <Icons name="globe" />
+                     Community Feed
+                  </div>
+               </Link>
                <div className="nav-tab">
                   <svg
                      width="18"

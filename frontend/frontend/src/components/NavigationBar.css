@@ -28,6 +28,10 @@
     font-size: 1.25rem;
 }
 
+.logo-text {
+    color: var(--white);
+}
+
 .nav-tabs {
     display: flex;
     height: 100%;
@@ -93,4 +97,8 @@
     border-radius: 12px;
     font-weight: 700;
     font-size: 0.8rem;
+}
+
+.link {
+    text-decoration: none;
 }

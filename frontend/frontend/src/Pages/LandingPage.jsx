@@ -1,5 +1,6 @@
 import React from 'react';
 import './LandingPage.css';
+import { Link } from 'react-router';
 
 const TruthLens = () => {
   return (
@@ -17,7 +18,7 @@ const TruthLens = () => {
           </div>
           <div className="nav-links">
             <a href="#features">Features</a>
-            <a href="#community">Community</a>
+            <Link to="/community">Community</Link>
             <a href="#about">About</a>
           </div>
           <div className="nav-actions">
