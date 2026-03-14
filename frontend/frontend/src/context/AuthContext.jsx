@@ -17,7 +17,43 @@ export function AuthProvider({ children }) {
       setToken(null);
    };
 
-   return <AuthContext.Provider value={{ token, login, logout }}>{children}</AuthContext.Provider>;
+   const authFetch = async (url, options = {}) => {
+      const response = await fetch(url, {
+         method: options.method,
+         headers: {
+            ...options.headers,
+            Authorization: `Bearer ${token}`,
+         },
+         body: options.body,
+      });
+
+      const data = await response.json();
+
+      if (response.status == 401) {
+         const refreshResponse = await fetch("http://localhost:8000/api/auth/refresh/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ refresh: localStorage.getItem("refresh") }),
+         });
+
+         const refreshToken = await refreshResponse.json();
+
+         if (refreshResponse.ok) {
+            login(refreshToken.access, localStorage.getItem("refresh"));
+            return authFetch(url, options);
+         } else {
+            logout();
+         }
+      } else {
+         return data;
+      }
+   };
+
+   return (
+      <AuthContext.Provider value={{ token, login, logout, authFetch }}>
+         {children}
+      </AuthContext.Provider>
+   );
 }
 
 export function useAuth() {
