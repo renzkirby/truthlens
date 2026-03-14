@@ -41,6 +41,8 @@ class ClaimSerializer(serializers.ModelSerializer):
             "claim_type",
             "context_text",
             "verdict",
+            "ai_summary",
+            "source_type",
             "consensus_score",
             "verified_via",
             "last_updated",
