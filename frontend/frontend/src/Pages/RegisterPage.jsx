@@ -5,6 +5,7 @@ import { useState } from "react";
 function RegisterPage() {
    const { login } = useAuth();
    const navigate = useNavigate();
+   const [error, setError] = useState(null);
    const [formValues, setFormValues] = useState({
       username: "",
       email: "",
@@ -35,13 +36,17 @@ function RegisterPage() {
          login(data.access, data.refresh);
          navigate("/community");
       } else {
-         console.error(data.error);
+         setError(data.detail || "Something went wrong");
       }
    };
 
    return (
       <>
-         <form action="#">
+         <form
+            onSubmit={(e) => {
+               e.preventDefault();
+               handleSubmit();
+            }}>
             <label>Username:</label>
             <input
                type="text"
@@ -66,11 +71,9 @@ function RegisterPage() {
                onChange={handleInputChange}
                required
             />
-            <input
-               type="submit"
-               onClick={handleSubmit}
-            />
+            <input type="submit" />
          </form>
+         {error && <p style={{ color: "red" }}>{error}</p>}
       </>
    );
 }
