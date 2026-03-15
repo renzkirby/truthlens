@@ -1,10 +1,14 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 function LoginPage() {
    const { login } = useAuth();
    const navigate = useNavigate();
+   const location = useLocation();
+   const from = location.state?.from
+      ? location.state.from.pathname + location.state.from.search
+      : "/community";
    const [error, setError] = useState(null);
    const [formValues, setFormValues] = useState({
       username: "",
@@ -29,7 +33,7 @@ function LoginPage() {
       const data = await response.json();
       if (response.ok) {
          login(data.access, data.refresh);
-         navigate("/community");
+         navigate(from, { replace: true });
       } else {
          setError(data.detail || "Something went wrong");
       }
