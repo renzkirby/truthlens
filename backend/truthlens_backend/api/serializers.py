@@ -20,7 +20,6 @@ class RegisterSerializer(serializers.ModelSerializer):
         return user
     
 class UserSerializer(serializers.ModelSerializer):
-    trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
 
     class Meta:
         model = User
@@ -28,6 +27,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
     class Meta:
         model = UserProfile
         fields = ["id", "user", "trust_score", "bio"]
@@ -69,7 +69,14 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
 class ThreadSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
     claim = ClaimSerializer(read_only=True)
-    evidence_submissions = EvidenceSubmissionSerializer(many=True, read_only=True)
+    evidence_count = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
+    
+    def get_evidence_count(self, obj):
+        return obj.evidence_submissions.count()
+    
+    def get_comment_count(self, obj):
+        return obj.comments.count()
 
     class Meta:
         model = Thread
@@ -80,7 +87,8 @@ class ThreadSerializer(serializers.ModelSerializer):
             "caption",
             "status",
             "created_at",
-            "evidence_submissions",
+            "evidence_count",
+            "comment_count",
         ]
 
 
