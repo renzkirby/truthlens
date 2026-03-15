@@ -28,7 +28,6 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
-    trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
     class Meta:
         model = UserProfile
         fields = ["id", "user", "trust_score", "bio"]

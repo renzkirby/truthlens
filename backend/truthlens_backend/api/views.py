@@ -240,3 +240,8 @@ class ThreadViewSet(viewsets.ModelViewSet):
         except Claim.DoesNotExist:
             raise NotFound('Claim not found.')
         serializer.save(author=self.request.user, claim=claim)
+
+class ClaimViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = ClaimSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = Claim.objects.all()
