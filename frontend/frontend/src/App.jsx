@@ -6,6 +6,7 @@ import RegisterPage from "./Pages/RegisterPage";
 import TruthLensWireframes from "./Pages/wireframe/TruthLens_Wireframes";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import PrivateRoute from "./components/PrivateRoute";
+import CreateThreadPage from "./Pages/CreateThreadPage";
 
 function App() {
    return (
@@ -37,6 +38,10 @@ function App() {
                   <Route
                      path="/community"
                      element={<CommunityFeed />}
+                  />
+                  <Route
+                     path="/thread/create"
+                     element={<CreateThreadPage />}
                   />
                </Route>
             </Routes>
