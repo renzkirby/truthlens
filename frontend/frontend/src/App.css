@@ -6,6 +6,22 @@
   --card-unverified: #fef3c7;
   --card-fake: #fee2e2;
   --card-fact: #d1fae5;
+
+  --nav-bg: #1e1b4b;
+  --bg-app: #f4f6f8;
+
+  --primary-hover: #4338ca;
+  --text-main: #111827;
+  --text-muted: #6b7280;
+  --border-color: #e5e7eb;
+
+  --misleading-text: #b45309;
+  --misleading-bg: #fffbeb;
+  --misleading-border: #f59e0b;
+
+  --unverified-text: #4b5563;
+  --unverified-bg: #f9fafb;
+  --unverified-border: #9ca3af;
 }
 
 body {

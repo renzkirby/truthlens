@@ -20,6 +20,13 @@
     height: 100%;
 }
 
+.nav-right {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    height: 100%;
+}
+
 .logo-section {
     display: flex;
     align-items: center;
@@ -72,11 +79,18 @@
 .user-profile-pill {
     display: flex;
     align-items: center;
-    gap: 12px;
-    background-color: rgba(255, 255, 255, 0.1);
+    gap: 8px;
+    background: rgba(255, 255, 255, .15);
+    border: rgba(255, 255, 255, 0.5) solid 1px;
+    border-radius: 8px;
     padding: 6px 12px;
-    border-radius: 20px;
-    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.user-profile-pill:hover,
+.user-profile-pill.open {
+    background: rgba(255, 255, 255, 0.13);
 }
 
 .user-icon-sm {
@@ -88,11 +102,10 @@
 
 .username {
     font-weight: 500;
+    color: var(--white);
 }
 
 .trust-score {
-    background-color: #064e3b;
-    color: #34d399;
     padding: 2px 8px;
     border-radius: 12px;
     font-weight: 700;
@@ -101,4 +114,137 @@
 
 .link {
     text-decoration: none;
+}
+
+.logout-btn {
+    padding: 10px 30px;
+    border-radius: 20px;
+    border: none;
+    background-color: var(--primary-blue);
+    color: var(--white);
+    font-size: 1em;
+    font-weight: 700;
+}
+
+.logout-btn:hover {
+    cursor: pointer;
+    background-color: var(--primary-hover);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   NavigationBar.css — Dropdown additions
+   Add these rules to your existing NavigationBar.css file.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Wrapper that holds both the pill and the dropdown (used for outside-click ref) */
+.user-menu-container {
+    position: relative;
+}
+
+/* Profile pill — now a <button> for accessibility */
+
+
+/* Chevron rotates when open */
+.chevron {
+    display: flex;
+    align-items: center;
+    opacity: 0.45;
+    transition: transform 0.15s;
+}
+
+.chevron.rotated {
+    transform: rotate(180deg);
+}
+
+/* ── Dropdown panel ─────────────────────────────────────────────────────── */
+.dropdown-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 220px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+    z-index: 200;
+
+    /* Subtle fade-in */
+    animation: dropdownFadeIn 0.12s ease;
+}
+
+@keyframes dropdownFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* User info header */
+.dropdown-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid #f3f4f6;
+    background: #f9fafb;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.dropdown-username {
+    font-size: 13px;
+    font-weight: 800;
+    color: #111827;
+}
+
+.dropdown-email {
+    font-size: 11px;
+    color: #6b7280;
+}
+
+/* Section grouping (for spacing between groups) */
+.dropdown-section {
+    padding: 6px 0;
+}
+
+/* Divider between nav items and logout */
+.dropdown-divider {
+    height: 1px;
+    background: #f3f4f6;
+    margin: 2px 0;
+}
+
+/* Individual menu item */
+.dropdown-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: transparent;
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.1s;
+}
+
+.dropdown-item:hover {
+    background: #f9fafb;
+}
+
+/* Destructive variant — Log Out */
+.dropdown-item.danger {
+    color: #e02424;
+    font-weight: 700;
+}
+
+.dropdown-item.danger:hover {
+    background: #fef2f2;
 }
