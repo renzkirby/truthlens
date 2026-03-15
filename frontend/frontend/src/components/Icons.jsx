@@ -1,3 +1,4 @@
+// components/Icons.jsx
 import {
    Search,
    Scissors,
@@ -79,14 +80,121 @@ import {
    UserCheck,
    Clock,
    Circle,
+   CirclePlus,
 } from "lucide-react";
 
-function Icons(props) {
-   const icons = {
-      globe: Globe,
-   };
-   const Icon = icons[props.name];
-   return <Icon />;
-}
+const ICON_MAP = {
+   search: Search,
+   "circle-plus": CirclePlus,
+   scissors: Scissors,
+   upload: Upload,
+   link: Link,
+   target: Target,
+   "alert-triangle": AlertTriangle,
+   x: X,
+   "message-circle": MessageCircle,
+   paperclip: Paperclip,
+   "thumbs-up": ThumbsUp,
+   "chevron-up": ChevronUp,
+   "chevron-down": ChevronDown,
+   home: Home,
+   globe: Globe,
+   settings: Settings,
+   user: User,
+   "trending-up": TrendingUp,
+   "check-circle": CheckCircle2,
+   "x-circle": XCircle,
+   "help-circle": HelpCircle,
+   "more-horizontal": MoreHorizontal,
+   shield: Shield,
+   "file-text": FileText,
+   image: Image,
+   star: Star,
+   lightbulb: Lightbulb,
+   eye: Eye,
+   trophy: Trophy,
+   wand: Wand2,
+   newspaper: Newspaper,
+   landmark: Landmark,
+   dashboard: LayoutDashboard,
+   palette: Palette,
+   ruler: Ruler,
+   braces: Braces,
+   puzzle: Puzzle,
+   hash: Hash,
+   "arrow-right": ArrowRight,
+   "external-link": ExternalLink,
+   flag: Flag,
+   "book-open": BookOpen,
+   "bar-chart": BarChart2,
+   "user-circle": UserCircle,
+   "badge-check": BadgeCheck,
+   crosshair: Crosshair,
+   "scan-line": ScanLine,
+   users: Users,
+   "message-square": MessageSquare,
+   sparkles: Sparkles,
+   layers: Layers,
+   "panel-left": PanelLeft,
+   bell: Bell,
+   "bell-off": BellOff,
+   lock: Lock,
+   mail: Mail,
+   smartphone: Smartphone,
+   download: Download,
+   zap: Zap,
+   activity: Activity,
+   "chevron-right": ChevronRight,
+   info: Info,
+   "toggle-left": ToggleLeft,
+   "toggle-right": ToggleRight,
+   "pie-chart": PieChart,
+   minimize: Minimize2,
+   "alert-octagon": AlertOctagon,
+   "list-checks": ListChecks,
+   rocket: Rocket,
+   play: Play,
+   "monitor-smartphone": MonitorSmartphone,
+   check: Check,
+   trash: Trash2,
+   refresh: RefreshCw,
+   "volume-up": Volume2,
+   "volume-off": VolumeX,
+   send: Send,
+   "arrow-left": ArrowLeft,
+   "user-check": UserCheck,
+   clock: Clock,
+   circle: Circle,
+};
 
-export default Icons;
+export default function Icons({
+   name,
+   size = 16,
+   color = "currentColor",
+   strokeWidth = 2,
+   className,
+   style,
+}) {
+   const Icon = ICON_MAP[name];
+
+   if (!Icon) {
+      console.warn(`Icons: unknown icon name "${name}"`);
+      return (
+         <HelpCircle
+            size={size}
+            color="red"
+            strokeWidth={strokeWidth}
+         />
+      );
+   }
+
+   return (
+      <Icon
+         size={size}
+         color={color}
+         strokeWidth={strokeWidth}
+         className={className}
+         style={style}
+      />
+   );
+}
