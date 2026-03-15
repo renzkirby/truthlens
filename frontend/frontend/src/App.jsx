@@ -28,6 +28,10 @@ function App() {
                   path="/"
                   element={<Navigate to="/login" />}
                />
+               <Route
+                  path="/wireframes"
+                  element={<TruthLensWireframes />}
+               />
 
                <Route element={<PrivateRoute />}>
                   <Route

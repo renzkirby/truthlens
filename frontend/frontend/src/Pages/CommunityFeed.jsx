@@ -1,38 +1,47 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import "./CommunityFeed.css";
 import NavigationBar from "../components/NavigationBar.jsx";
+import Icons from "../components/Icons.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
+
+function timeAgo(dateString) {
+   const now = new Date();
+   const past = new Date(dateString);
+   const seconds = Math.floor((now - past) / 1000);
+
+   if (seconds < 60) return `${seconds}s ago`;
+   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+   return `${Math.floor(seconds / 86400)}d ago`;
+}
+
+function getActionText(verdict) {
+   if (!verdict || verdict === "UNVERIFIED") return "Needs Evidence";
+   if (verdict === "FACT" || verdict === "FAKE") return "Verified";
+   return "Pending";
+}
 
 const CommunityFeed = () => {
-   const posts = [
-      {
-         id: 1,
-         author: "@brian_023",
-         time: "2h ago",
-         avatarBg: "#fee2e2",
-         avatarColor: "#ef4444",
-         claim: "Shocking aerial photo shows the aftermath of the 2024 flooding in Valencia, Spain.",
-         status: "Misleading",
-         statusClass: "misleading",
-         confidence: "94 %",
-         actionBtnText: "Needs Evidence",
-         comments: 89,
-         evidenceCount: 15,
-      },
-      {
-         id: 2,
-         author: "@Luffy56",
-         time: "2h ago",
-         avatarBg: "#e0e7ff",
-         avatarColor: "#4f46e5",
-         claim: "Shocking aerial photo shows the aftermath of the 2024 flooding in Valencia, Spain.",
-         status: "Unverified",
-         statusClass: "unverified",
-         confidence: "94 %",
-         actionBtnText: "Pending",
-         comments: 12,
-         evidenceCount: 3,
-      },
-   ];
+   const [threads, setThreads] = useState([]);
+   const [loading, setLoading] = useState(true);
+   const [error, setError] = useState(null);
+   const { authFetch } = useAuth();
+
+   useEffect(() => {
+      const fetchThreads = async () => {
+         try {
+            const threadData = await authFetch("http://localhost:8000/api/threads/", {
+               method: "GET",
+            });
+            setThreads(threadData);
+         } catch (err) {
+            setError("Failed to load threads");
+         } finally {
+            setLoading(false);
+         }
+      };
+      fetchThreads();
+   }, []);
 
    return (
       <div className="feed-layout">
@@ -46,73 +55,20 @@ const CommunityFeed = () => {
                <div className="filter-left">
                   <span className="filter-label">Filter:</span>
                   <button className="filter-btn active">
-                     <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2">
-                        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
-                        <polyline points="16 7 22 7 22 13" />
-                     </svg>
+                     <Icons name="trending-up" />
                      Trending
                   </button>
                   <button className="filter-btn">
-                     <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2">
-                        <polyline points="20 6 9 17 4 12" />
-                     </svg>
+                     <Icons name="check" />
                      Recently Verified
                   </button>
                   <button className="filter-btn">
-                     <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2">
-                        <circle
-                           cx="11"
-                           cy="11"
-                           r="8"
-                        />
-                        <line
-                           x1="21"
-                           y1="21"
-                           x2="16.65"
-                           y2="16.65"
-                        />
-                     </svg>
+                     <Icons name="search" />
                      Needs Evidence
                   </button>
                </div>
                <div className="search-box">
-                  <svg
-                     width="16"
-                     height="16"
-                     viewBox="0 0 24 24"
-                     fill="none"
-                     stroke="#9ca3af"
-                     strokeWidth="2">
-                     <circle
-                        cx="11"
-                        cy="11"
-                        r="8"
-                     />
-                     <line
-                        x1="21"
-                        y1="21"
-                        x2="16.65"
-                        y2="16.65"
-                     />
-                  </svg>
+                  <Icons name="search" />
                   <input
                      type="text"
                      placeholder="Search claims..."
@@ -123,20 +79,10 @@ const CommunityFeed = () => {
             {/* Input Bar */}
             <div className="input-bar box-panel">
                <div className="avatar-icon">
-                  <svg
-                     width="18"
-                     height="18"
-                     viewBox="0 0 24 24"
-                     fill="none"
-                     stroke="currentColor"
-                     strokeWidth="2">
-                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                     <circle
-                        cx="12"
-                        cy="7"
-                        r="4"
-                     />
-                  </svg>
+                  <Icons
+                     name="user"
+                     size={20}
+                  />
                </div>
                <input
                   type="text"
@@ -144,330 +90,128 @@ const CommunityFeed = () => {
                   className="claim-input"
                />
                <button className="snip-btn">
-                  <svg
-                     width="16"
-                     height="16"
-                     viewBox="0 0 24 24"
-                     fill="none"
-                     stroke="currentColor"
-                     strokeWidth="2">
-                     <circle
-                        cx="6"
-                        cy="6"
-                        r="3"
-                     />
-                     <circle
-                        cx="6"
-                        cy="18"
-                        r="3"
-                     />
-                     <line
-                        x1="20"
-                        y1="4"
-                        x2="8.12"
-                        y2="15.88"
-                     />
-                     <line
-                        x1="14.47"
-                        y1="14.48"
-                        x2="20"
-                        y2="20"
-                     />
-                     <line
-                        x1="8.12"
-                        y1="8.12"
-                        x2="12"
-                        y2="12"
-                     />
-                  </svg>
+                  <Icons name="scissors" />
                   Snip
                </button>
             </div>
 
+            {loading && <p>Loading threads...</p>}
+            {error && <p style={{ color: "red" }}>{error}</p>}
+
             {/* Posts List */}
             <div className="posts-list">
-               {posts.map((post) => (
-                  <div
-                     key={post.id}
-                     className="post-card">
-                     {/* Card Header */}
-                     <div className="card-header">
-                        <div className="post-author-info">
-                           <div
-                              className="author-avatar"
-                              style={{ backgroundColor: post.avatarBg, color: post.avatarColor }}>
-                              <svg
-                                 width="20"
-                                 height="20"
-                                 viewBox="0 0 24 24"
-                                 fill="none"
-                                 stroke="currentColor"
-                                 strokeWidth="2">
-                                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                                 <circle
-                                    cx="12"
-                                    cy="7"
-                                    r="4"
-                                 />
-                              </svg>
-                           </div>
-                           <div className="author-meta">
-                              <span className="author-name">{post.author}</span>
-                              <div className="author-time">
-                                 {post.time} ·{" "}
-                                 <span className="via-link">
-                                    <svg
-                                       width="10"
-                                       height="10"
-                                       viewBox="0 0 24 24"
-                                       fill="none"
-                                       stroke="currentColor"
-                                       strokeWidth="2">
-                                       <circle
-                                          cx="11"
-                                          cy="11"
-                                          r="8"
-                                       />
-                                       <line
-                                          x1="21"
-                                          y1="21"
-                                          x2="16.65"
-                                          y2="16.65"
-                                       />
-                                    </svg>{" "}
-                                    via TruthLens
-                                 </span>
+               {!loading && threads.length === 0 ? (
+                  <h2 className="no-threads-text">
+                     No threads yet. Be the first to escalate a claim.
+                  </h2>
+               ) : (
+                  threads.map((thread) => {
+                     const verdict = thread.claim.verdict;
+                     const verdictClass = verdict?.toLowerCase();
+
+                     return (
+                        <div
+                           key={thread.id}
+                           className="post-card">
+                           {/* Card Header */}
+                           <div className="card-header">
+                              <div className="post-author-info">
+                                 <div className="author-avatar">
+                                    <Icons
+                                       name="user"
+                                       size={20}
+                                    />
+                                 </div>
+                                 <div className="author-meta">
+                                    <span className="author-name">@{thread.author.username}</span>
+                                    <div className="author-time">
+                                       {timeAgo(thread.created_at)} ·{" "}
+                                       <span className="via-link">
+                                          <Icons
+                                             name="search"
+                                             size={10}
+                                          />
+                                          via TruthLens
+                                       </span>
+                                    </div>
+                                 </div>
+                              </div>
+                              <div className="header-actions">
+                                 <div className={`status-badge badge-${verdictClass}`}>
+                                    {verdictClass === "misleading" && (
+                                       <Icons name="alert-triangle" />
+                                    )}
+                                    {verdictClass === "unverified" && <Icons name="help-circle" />}
+                                    {verdict}
+                                 </div>
+                                 <button className="more-btn">
+                                    <Icons
+                                       name="more-horizontal"
+                                       size={20}
+                                    />
+                                 </button>
                               </div>
                            </div>
-                        </div>
-                        <div className="header-actions">
-                           <div className={`status-badge badge-${post.statusClass}`}>
-                              {post.statusClass === "misleading" && (
-                                 <svg
-                                    width="14"
-                                    height="14"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2">
-                                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                                    <line
-                                       x1="12"
-                                       y1="9"
-                                       x2="12"
-                                       y2="13"
-                                    />
-                                    <line
-                                       x1="12"
-                                       y1="17"
-                                       x2="12.01"
-                                       y2="17"
-                                    />
-                                 </svg>
-                              )}
-                              {post.statusClass === "unverified" && (
-                                 <svg
-                                    width="14"
-                                    height="14"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2">
-                                    <circle
-                                       cx="12"
-                                       cy="12"
-                                       r="10"
-                                    />
-                                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                                    <line
-                                       x1="12"
-                                       y1="17"
-                                       x2="12.01"
-                                       y2="17"
-                                    />
-                                 </svg>
-                              )}
-                              {post.status}
+
+                           {/* Card Claim Text */}
+                           <div className="card-claim">
+                              <strong>Flagged claim:</strong> "
+                              {thread.claim.ai_summary || thread.claim.context_text}"
                            </div>
-                           <button className="more-btn">
-                              <svg
-                                 width="20"
-                                 height="20"
-                                 viewBox="0 0 24 24"
-                                 fill="none"
-                                 stroke="currentColor"
-                                 strokeWidth="2">
-                                 <circle
-                                    cx="12"
-                                    cy="12"
-                                    r="1"
-                                 />
-                                 <circle
-                                    cx="19"
-                                    cy="12"
-                                    r="1"
-                                 />
-                                 <circle
-                                    cx="5"
-                                    cy="12"
-                                    r="1"
-                                 />
-                              </svg>
-                           </button>
-                        </div>
-                     </div>
 
-                     {/* Card Claim Text */}
-                     <div className="card-claim">
-                        <strong>Flagged claim:</strong> "{post.claim}"
-                     </div>
-
-                     {/* Media Placeholder */}
-                     <div className="card-media">
-                        <div className="media-icon">
-                           <svg
-                              width="28"
-                              height="28"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="#6b7280"
-                              strokeWidth="2">
-                              <circle
-                                 cx="12"
-                                 cy="12"
-                                 r="10"
-                              />
-                              <line
-                                 x1="2"
-                                 y1="12"
-                                 x2="22"
-                                 y2="12"
-                              />
-                              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                           </svg>
-                        </div>
-                        <span className="media-source">Snipped from Twitter / X</span>
-                     </div>
-
-                     {/* AI Analysis Bar */}
-                     <div className={`ai-analysis-bar bar-${post.statusClass}`}>
-                        <div className="ai-info">
-                           <div className={`status-badge solid badge-${post.statusClass}`}>
-                              {post.statusClass === "misleading" && (
-                                 <svg
-                                    width="14"
-                                    height="14"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2">
-                                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                                    <line
-                                       x1="12"
-                                       y1="9"
-                                       x2="12"
-                                       y2="13"
-                                    />
-                                    <line
-                                       x1="12"
-                                       y1="17"
-                                       x2="12.01"
-                                       y2="17"
-                                    />
-                                 </svg>
-                              )}
-                              {post.statusClass === "unverified" && (
-                                 <svg
-                                    width="14"
-                                    height="14"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2">
-                                    <circle
-                                       cx="12"
-                                       cy="12"
-                                       r="10"
-                                    />
-                                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                                    <line
-                                       x1="12"
-                                       y1="17"
-                                       x2="12.01"
-                                       y2="17"
-                                    />
-                                 </svg>
-                              )}
-                              {post.status}
+                           {/* Media Placeholder */}
+                           <div className="card-media">
+                              <div className="media-icon">
+                                 <Icons
+                                    name="globe"
+                                    size={24}
+                                 />
+                              </div>
+                              <span className="media-source">Snipped from Twitter / X</span>
                            </div>
-                           <span className="ai-confidence-text">
-                              AI Confidence: <strong>{post.confidence}</strong>
-                           </span>
+
+                           {/* AI Analysis Bar */}
+                           <div className={`ai-analysis-bar bar-${verdictClass}`}>
+                              <div className="ai-info">
+                                 <div className={`status-badge solid badge-${verdictClass}`}>
+                                    {verdictClass === "misleading" && (
+                                       <Icons name="alert-triangle" />
+                                    )}
+                                    {verdictClass === "unverified" && <Icons name="help-circle" />}
+                                    {verdict}
+                                 </div>
+                                 <span className="ai-confidence-text">
+                                    AI Confidence: <strong>{thread.claim.consensus_score}%</strong>
+                                 </span>
+                              </div>
+                              <button className="needs-evidence-btn">
+                                 {getActionText(verdict)}
+                              </button>
+                           </div>
+
+                           {/* Card Footer actions */}
+                           <div className="card-footer">
+                              <button className="action-item">
+                                 <Icons name="message-square" />
+                                 Comment
+                                 <span className="count-pill">{thread.comment_count}</span>
+                              </button>
+
+                              <button className="action-item primary-action">
+                                 <Icons name="circle-plus" />
+                                 Add Evidence
+                              </button>
+
+                              <button className="action-item">
+                                 <Icons name="paperclip" />
+                                 Evidence
+                                 <span className="count-pill">{thread.evidence_count}</span>
+                              </button>
+                           </div>
                         </div>
-                        <button className="needs-evidence-btn">{post.actionBtnText}</button>
-                     </div>
-
-                     {/* Card Footer actions */}
-                     <div className="card-footer">
-                        <button className="action-item">
-                           <svg
-                              width="18"
-                              height="18"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2">
-                              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                           </svg>
-                           Comment
-                           <span className="count-pill">{post.comments}</span>
-                        </button>
-
-                        <button className="action-item primary-action">
-                           <svg
-                              width="18"
-                              height="18"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2">
-                              <circle
-                                 cx="12"
-                                 cy="12"
-                                 r="10"
-                              />
-                              <line
-                                 x1="12"
-                                 y1="8"
-                                 x2="12"
-                                 y2="16"
-                              />
-                              <line
-                                 x1="8"
-                                 y1="12"
-                                 x2="16"
-                                 y2="12"
-                              />
-                           </svg>
-                           Add Evidence
-                        </button>
-
-                        <button className="action-item">
-                           <svg
-                              width="18"
-                              height="18"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2">
-                              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                           </svg>
-                           Evidence
-                           <span className="count-pill">{post.evidenceCount}</span>
-                        </button>
-                     </div>
-                  </div>
-               ))}
+                     );
+                  })
+               )}
             </div>
          </main>
       </div>
