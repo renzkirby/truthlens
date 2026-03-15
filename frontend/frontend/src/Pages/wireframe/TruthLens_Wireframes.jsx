@@ -81,6 +81,7 @@ import {
    Clock,
    Circle,
    LogOut,
+   PlusCircle,
 } from "lucide-react";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
@@ -4095,6 +4096,856 @@ const ThreadDetail = () => {
    );
 };
 
+// ─── View: Create Thread (from Extension) ────────────────────────────────────
+const CreateThread = () => {
+   const [category, setCategory] = useState("misleading");
+   const [step, setStep] = useState(1); // 1 = form, 2 = preview confirm
+
+   const categories = [
+      { id: "misleading", Icon: AlertTriangle, label: "Misleading", color: T.amber },
+      { id: "fake", Icon: XCircle, label: "Likely False", color: T.red },
+      { id: "unverified", Icon: HelpCircle, label: "Unverified", color: T.gray },
+      { id: "satire", Icon: Wand2, label: "Possible Satire", color: T.violet },
+   ];
+   const cat = categories.find((c) => c.id === category);
+
+   return (
+      <div style={{ background: "#ffffff", minHeight: "100%" }}>
+         <AppNav activePage="feed" />
+
+         {/* Sub-header */}
+         <div
+            style={{
+               background: "#fff",
+               borderBottom: `3px solid ${T.indigo}`,
+               padding: "0 40px",
+               height: 52,
+               display: "flex",
+               alignItems: "center",
+               gap: 16,
+               boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+            }}>
+            <button
+               style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: T.indigo,
+                  padding: "6px 0",
+               }}>
+               <ArrowRight
+                  size={14}
+                  color={T.indigo}
+                  style={{ transform: "rotate(180deg)" }}
+               />
+               Back to extension
+            </button>
+            <span style={{ color: "#e5e7eb", fontSize: 18 }}>›</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>
+               Ask the Community
+            </span>
+            {/* Step indicator */}
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+               {["Review Claim", "Confirm & Post"].map((s, i) => (
+                  <div
+                     key={s}
+                     style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                     <div
+                        style={{
+                           width: 22,
+                           height: 22,
+                           borderRadius: "50%",
+                           background:
+                              step > i + 1 ? T.green : step === i + 1 ? T.indigo : "#e5e7eb",
+                           display: "flex",
+                           alignItems: "center",
+                           justifyContent: "center",
+                        }}>
+                        {step > i + 1 ? (
+                           <CheckCircle2
+                              size={13}
+                              color="#fff"
+                              strokeWidth={3}
+                           />
+                        ) : (
+                           <span
+                              style={{
+                                 fontSize: 11,
+                                 fontWeight: 800,
+                                 color: step === i + 1 ? "#fff" : "#9ca3af",
+                              }}>
+                              {i + 1}
+                           </span>
+                        )}
+                     </div>
+                     <span
+                        style={{
+                           fontSize: 11,
+                           fontWeight: 600,
+                           color: step === i + 1 ? T.indigo : "#9ca3af",
+                        }}>
+                        {s}
+                     </span>
+                     {i < 1 && (
+                        <ArrowRight
+                           size={11}
+                           color="#d1d5db"
+                        />
+                     )}
+                  </div>
+               ))}
+            </div>
+         </div>
+
+         {/* Page intro banner — explains the extension context */}
+         <div
+            style={{
+               background: `${T.indigo}08`,
+               borderBottom: `1px solid ${T.indigo}20`,
+               padding: "16px 40px",
+               display: "flex",
+               alignItems: "center",
+               gap: 12,
+            }}>
+            <div
+               style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  background: T.indigo,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+               }}>
+               <ScanLine
+                  size={18}
+                  color="#fff"
+                  strokeWidth={2}
+               />
+            </div>
+            <div>
+               <div style={{ fontSize: 13, fontWeight: 800, color: T.dark }}>
+                  Claim snipped from <span style={{ color: T.indigo }}>twitter.com</span>
+               </div>
+               <div style={{ fontSize: 11, color: T.gray, marginTop: 2 }}>
+                  TruthLens found this content during your browsing session. Review and post it to
+                  the community for investigation.
+               </div>
+            </div>
+            <div
+               style={{
+                  marginLeft: "auto",
+                  fontSize: 11,
+                  color: T.gray,
+                  background: "#f3f4f6",
+                  borderRadius: 6,
+                  padding: "4px 10px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+               }}>
+               <Clock
+                  size={11}
+                  color={T.gray}
+               />
+               Snipped 2 minutes ago
+            </div>
+         </div>
+
+         {step === 1 && (
+            <div
+               style={{
+                  maxWidth: 1100,
+                  margin: "0 auto",
+                  padding: "36px 40px 64px",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 340px",
+                  gap: 32,
+                  alignItems: "start",
+               }}>
+               {/* ── LEFT: Form ─────────────────────────────────────────── */}
+               <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                  {/* Snipped content preview */}
+                  <div
+                     style={{
+                        background: "#fff",
+                        border: "1.5px solid #e5e7eb",
+                        borderRadius: 14,
+                        overflow: "hidden",
+                        boxShadow: "0 1px 6px rgba(0,0,0,0.05)",
+                     }}>
+                     <div
+                        style={{
+                           padding: "12px 16px",
+                           background: "#f9fafb",
+                           borderBottom: "1px solid #f0f0f0",
+                           display: "flex",
+                           alignItems: "center",
+                           justifyContent: "space-between",
+                        }}>
+                        <span
+                           style={{
+                              fontSize: 11,
+                              fontWeight: 800,
+                              color: T.gray,
+                              letterSpacing: "0.08em",
+                              textTransform: "uppercase",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                           }}>
+                           <Scissors
+                              size={11}
+                              color={T.gray}
+                           />
+                           Snipped Content
+                        </span>
+                        <button
+                           style={{
+                              fontSize: 11,
+                              color: T.indigo,
+                              fontWeight: 700,
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 4,
+                           }}>
+                           <RefreshCw
+                              size={11}
+                              color={T.indigo}
+                           />
+                           Re-snip
+                        </button>
+                     </div>
+                     <ImgPlaceholder
+                        label="Snipped from twitter.com"
+                        Icon={Globe}
+                     />
+                     <div
+                        style={{
+                           padding: "12px 16px",
+                           borderTop: "1px solid #f0f0f0",
+                           display: "flex",
+                           alignItems: "center",
+                           gap: 8,
+                           fontSize: 11,
+                           color: T.gray,
+                        }}>
+                        <Globe
+                           size={11}
+                           color={T.gray}
+                        />
+                        <span>
+                           Source:{" "}
+                           <strong style={{ color: "#374151" }}>
+                              twitter.com/user/status/123456789
+                           </strong>
+                        </span>
+                        <a
+                           style={{
+                              marginLeft: "auto",
+                              color: T.indigo,
+                              fontWeight: 600,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 3,
+                              cursor: "pointer",
+                           }}>
+                           <ExternalLink
+                              size={10}
+                              color={T.indigo}
+                           />
+                           Open original
+                        </a>
+                     </div>
+                  </div>
+
+                  {/* Claim text */}
+                  <div>
+                     <label
+                        style={{
+                           fontSize: 12,
+                           fontWeight: 800,
+                           color: "#374151",
+                           display: "block",
+                           marginBottom: 8,
+                        }}>
+                        Claim Text <span style={{ color: T.red }}>*</span>
+                        <span
+                           style={{ fontSize: 10, fontWeight: 500, color: T.gray, marginLeft: 8 }}>
+                           Auto-extracted — edit if needed
+                        </span>
+                     </label>
+                     <div
+                        style={{
+                           background: "#f9fafb",
+                           border: `1.5px solid ${T.indigo}`,
+                           borderRadius: 10,
+                           padding: "14px 16px",
+                           fontSize: 13,
+                           color: "#374151",
+                           lineHeight: 1.65,
+                           minHeight: 90,
+                           fontStyle: "italic",
+                        }}>
+                        "Shocking aerial photo shows the aftermath of the 2024 flooding in Valencia,
+                        Spain."
+                     </div>
+                     <div
+                        style={{
+                           fontSize: 10,
+                           color: T.gray,
+                           marginTop: 5,
+                           display: "flex",
+                           alignItems: "center",
+                           gap: 4,
+                        }}>
+                        <Info
+                           size={10}
+                           color={T.gray}
+                        />
+                        This is what the community will investigate. Make it as accurate as
+                        possible.
+                     </div>
+                  </div>
+
+                  {/* Source URL */}
+                  <div>
+                     <label
+                        style={{
+                           fontSize: 12,
+                           fontWeight: 800,
+                           color: "#374151",
+                           display: "block",
+                           marginBottom: 8,
+                        }}>
+                        Source URL <span style={{ color: T.red }}>*</span>
+                        <span
+                           style={{ fontSize: 10, fontWeight: 500, color: T.gray, marginLeft: 8 }}>
+                           Auto-filled from your browser tab
+                        </span>
+                     </label>
+                     <div
+                        style={{
+                           background: "#f9fafb",
+                           border: "1.5px solid #e5e7eb",
+                           borderBottom: `2px solid ${T.indigo}`,
+                           borderRadius: "8px 8px 0 0",
+                           padding: "12px 14px",
+                           fontSize: 13,
+                           color: "#374151",
+                           display: "flex",
+                           alignItems: "center",
+                           gap: 8,
+                        }}>
+                        <Link
+                           size={14}
+                           color={T.indigo}
+                        />
+                        twitter.com/user/status/123456789
+                     </div>
+                  </div>
+
+                  {/* Initial verdict category */}
+                  <div>
+                     <label
+                        style={{
+                           fontSize: 12,
+                           fontWeight: 800,
+                           color: "#374151",
+                           display: "block",
+                           marginBottom: 8,
+                        }}>
+                        Why are you flagging this?
+                        <span
+                           style={{ fontSize: 10, fontWeight: 500, color: T.gray, marginLeft: 8 }}>
+                           AI suggestion: Misleading
+                        </span>
+                     </label>
+                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                        {categories.map(({ id, Icon: CI, label, color }) => (
+                           <button
+                              key={id}
+                              onClick={() => setCategory(id)}
+                              style={{
+                                 display: "flex",
+                                 alignItems: "center",
+                                 gap: 10,
+                                 padding: "12px 16px",
+                                 background: category === id ? `${color}12` : "#f9fafb",
+                                 border: `1.5px solid ${category === id ? color : "#e5e7eb"}`,
+                                 borderRadius: 10,
+                                 cursor: "pointer",
+                                 textAlign: "left",
+                                 transition: "all 0.15s",
+                              }}>
+                              <div
+                                 style={{
+                                    width: 32,
+                                    height: 32,
+                                    borderRadius: 8,
+                                    background: category === id ? `${color}20` : "#fff",
+                                    border: `1px solid ${category === id ? color + "40" : "#e5e7eb"}`,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    flexShrink: 0,
+                                 }}>
+                                 <CI
+                                    size={15}
+                                    color={category === id ? color : T.gray}
+                                    strokeWidth={2}
+                                 />
+                              </div>
+                              <div>
+                                 <div
+                                    style={{
+                                       fontSize: 12,
+                                       fontWeight: 700,
+                                       color: category === id ? color : "#374151",
+                                    }}>
+                                    {label}
+                                 </div>
+                                 <div style={{ fontSize: 10, color: T.gray, marginTop: 1 }}>
+                                    {id === "misleading" && "Missing context or partially true"}
+                                    {id === "fake" && "Appears to be fabricated"}
+                                    {id === "unverified" && "Can't confirm either way"}
+                                    {id === "satire" && "Looks like parody content"}
+                                 </div>
+                              </div>
+                              {category === id && (
+                                 <CheckCircle2
+                                    size={14}
+                                    color={color}
+                                    style={{ marginLeft: "auto" }}
+                                 />
+                              )}
+                           </button>
+                        ))}
+                     </div>
+                  </div>
+
+                  {/* Additional context */}
+                  <div>
+                     <label
+                        style={{
+                           fontSize: 12,
+                           fontWeight: 800,
+                           color: "#374151",
+                           display: "block",
+                           marginBottom: 8,
+                        }}>
+                        Additional Context{" "}
+                        <span style={{ fontSize: 10, fontWeight: 500, color: T.gray }}>
+                           Optional
+                        </span>
+                     </label>
+                     <div
+                        style={{
+                           background: "#f9fafb",
+                           border: "1.5px solid #e5e7eb",
+                           borderRadius: 10,
+                           padding: "12px 16px",
+                           fontSize: 12,
+                           color: "#9ca3af",
+                           minHeight: 80,
+                           lineHeight: 1.65,
+                        }}>
+                        Add anything that might help the community investigate this claim…
+                     </div>
+                  </div>
+
+                  {/* Submit row */}
+                  <div style={{ display: "flex", gap: 12, paddingTop: 8 }}>
+                     <button
+                        style={{
+                           flex: 1,
+                           padding: "14px",
+                           background: T.indigo,
+                           color: "#fff",
+                           border: "none",
+                           borderRadius: 10,
+                           fontSize: 14,
+                           fontWeight: 800,
+                           cursor: "pointer",
+                           display: "flex",
+                           alignItems: "center",
+                           justifyContent: "center",
+                           gap: 8,
+                           letterSpacing: "0.02em",
+                        }}
+                        onClick={() => setStep(2)}>
+                        <Users
+                           size={16}
+                           strokeWidth={2.5}
+                        />
+                        Preview & Post to Community
+                        <ArrowRight
+                           size={15}
+                           strokeWidth={2.5}
+                        />
+                     </button>
+                     <button
+                        style={{
+                           padding: "14px 20px",
+                           background: "#f3f4f6",
+                           color: T.gray,
+                           border: "1.5px solid #e5e7eb",
+                           borderRadius: 10,
+                           fontSize: 13,
+                           fontWeight: 700,
+                           cursor: "pointer",
+                        }}>
+                        Save Draft
+                     </button>
+                  </div>
+               </div>
+
+               {/* ── RIGHT SIDEBAR ────────────────────────────────────── */}
+               <div
+                  style={{
+                     display: "flex",
+                     flexDirection: "column",
+                     gap: 16,
+                     position: "sticky",
+                     top: 64,
+                  }}>
+                  {/* AI verdict summary */}
+                  <div
+                     style={{
+                        background: "#fff",
+                        border: "1.5px solid #e5e7eb",
+                        borderRadius: 14,
+                        overflow: "hidden",
+                        boxShadow: "0 1px 6px rgba(0,0,0,0.05)",
+                     }}>
+                     <div
+                        style={{
+                           padding: "14px 16px",
+                           background: `${T.amber}12`,
+                           borderBottom: `1px solid ${T.amber}30`,
+                           display: "flex",
+                           alignItems: "center",
+                           gap: 8,
+                        }}>
+                        <Sparkles
+                           size={13}
+                           color={T.amber}
+                           strokeWidth={2.5}
+                        />
+                        <span
+                           style={{
+                              fontSize: 11,
+                              fontWeight: 800,
+                              color: T.amber,
+                              letterSpacing: "0.06em",
+                              textTransform: "uppercase",
+                           }}>
+                           AI Pre-Analysis
+                        </span>
+                     </div>
+                     <div style={{ padding: "16px" }}>
+                        <div
+                           style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              marginBottom: 14,
+                           }}>
+                           <VerdictBadge verdict="misleading" />
+                           <span style={{ fontSize: 18, fontWeight: 900, color: T.amber }}>
+                              47%
+                           </span>
+                        </div>
+                        <div
+                           style={{
+                              height: 5,
+                              background: "#f3f4f6",
+                              borderRadius: 99,
+                              marginBottom: 8,
+                           }}>
+                           <div
+                              style={{
+                                 width: "47%",
+                                 height: "100%",
+                                 background: T.amber,
+                                 borderRadius: 99,
+                              }}
+                           />
+                        </div>
+                        <p
+                           style={{
+                              fontSize: 11,
+                              color: T.gray,
+                              lineHeight: 1.65,
+                              margin: "0 0 12px",
+                           }}>
+                           Low AI confidence — the image metadata doesn't match the claimed
+                           location. Human review strongly recommended.
+                        </p>
+                        <div
+                           style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              fontSize: 10,
+                              color: T.gray,
+                              background: "#f9fafb",
+                              borderRadius: 7,
+                              padding: "8px 10px",
+                           }}>
+                           <Info
+                              size={11}
+                              color={T.gray}
+                           />
+                           This verdict can change once the community submits evidence.
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* Duplicate check */}
+                  <div
+                     style={{
+                        background: "#fff",
+                        border: "1.5px solid #e5e7eb",
+                        borderRadius: 14,
+                        padding: "16px",
+                        boxShadow: "0 1px 6px rgba(0,0,0,0.05)",
+                     }}>
+                     <div
+                        style={{
+                           fontSize: 11,
+                           fontWeight: 800,
+                           color: T.gray,
+                           letterSpacing: "0.08em",
+                           textTransform: "uppercase",
+                           marginBottom: 12,
+                        }}>
+                        Similar Threads
+                     </div>
+                     {[
+                        {
+                           text: '"Valencia flood photo misidentified"',
+                           verdict: "fake",
+                           threads: 3,
+                        },
+                        {
+                           text: '"2019 SEA flood used in 2024 news coverage"',
+                           verdict: "misleading",
+                           threads: 1,
+                        },
+                     ].map((r, i) => (
+                        <div
+                           key={i}
+                           style={{
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: 8,
+                              padding: "9px 0",
+                              borderBottom: i === 0 ? "1px solid #f3f4f6" : "none",
+                           }}>
+                           <VerdictBadge verdict={r.verdict} />
+                           <div style={{ flex: 1 }}>
+                              <p
+                                 style={{
+                                    fontSize: 11,
+                                    color: "#374151",
+                                    lineHeight: 1.4,
+                                    margin: "0 0 3px",
+                                    fontWeight: 500,
+                                 }}>
+                                 {r.text}
+                              </p>
+                              <span style={{ fontSize: 10, color: T.gray }}>
+                                 {r.threads} existing thread{r.threads > 1 ? "s" : ""}
+                              </span>
+                           </div>
+                           <a
+                              style={{
+                                 fontSize: 10,
+                                 color: T.indigo,
+                                 fontWeight: 700,
+                                 cursor: "pointer",
+                                 flexShrink: 0,
+                              }}>
+                              View
+                           </a>
+                        </div>
+                     ))}
+                     <div
+                        style={{
+                           marginTop: 10,
+                           fontSize: 11,
+                           color: T.gray,
+                           display: "flex",
+                           alignItems: "center",
+                           gap: 5,
+                           background: "#fffbeb",
+                           borderRadius: 7,
+                           padding: "8px 10px",
+                           border: "1px solid #fde68a",
+                        }}>
+                        <AlertTriangle
+                           size={11}
+                           color={T.amber}
+                        />
+                        Consider linking to an existing thread instead of creating a duplicate.
+                     </div>
+                  </div>
+
+                  {/* Community guidelines reminder */}
+                  <div
+                     style={{
+                        background: "#f9fafb",
+                        border: "1.5px solid #e5e7eb",
+                        borderRadius: 14,
+                        padding: "16px",
+                     }}>
+                     <div
+                        style={{
+                           fontSize: 11,
+                           fontWeight: 800,
+                           color: T.gray,
+                           letterSpacing: "0.08em",
+                           textTransform: "uppercase",
+                           marginBottom: 10,
+                        }}>
+                        Before You Post
+                     </div>
+                     {[
+                        "Only flag claims you genuinely believe need investigation",
+                        "Don't post the same claim as an existing thread",
+                        "You earn Trust Score when your flagged claims get verified",
+                     ].map((tip, i) => (
+                        <div
+                           key={i}
+                           style={{
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: 8,
+                              marginBottom: 8,
+                           }}>
+                           <CheckCircle2
+                              size={13}
+                              color={T.green}
+                              strokeWidth={2.5}
+                              style={{ flexShrink: 0, marginTop: 1 }}
+                           />
+                           <span style={{ fontSize: 11, color: "#374151", lineHeight: 1.5 }}>
+                              {tip}
+                           </span>
+                        </div>
+                     ))}
+                  </div>
+               </div>
+            </div>
+         )}
+
+         {/* ── Step 2: Preview & Confirm ──────────────────────────────── */}
+         {step === 2 && (
+            <div style={{ maxWidth: 720, margin: "0 auto", padding: "36px 40px 64px" }}>
+               <div
+                  style={{
+                     background: `${T.indigo}08`,
+                     border: `1.5px solid ${T.indigo}30`,
+                     borderRadius: 12,
+                     padding: "14px 20px",
+                     marginBottom: 24,
+                     display: "flex",
+                     alignItems: "center",
+                     gap: 10,
+                     fontSize: 13,
+                     color: T.indigo,
+                     fontWeight: 600,
+                  }}>
+                  <Eye
+                     size={15}
+                     color={T.indigo}
+                  />
+                  This is how your thread will appear in the Community Feed. Confirm to post.
+               </div>
+               {/* Rendered PostCard preview */}
+               <PostCard
+                  post={{
+                     id: 99,
+                     verdict: "misleading",
+                     avatarKey: "detective",
+                     author: "@verifyme",
+                     date: "Just now",
+                     source: "Twitter / X",
+                     imageIcon: Globe,
+                     caption:
+                        '"Shocking aerial photo shows the aftermath of the 2024 flooding in Valencia, Spain."',
+                     confidence: 47,
+                     comments: 0,
+                     evidence: 0,
+                     status: "Needs Evidence",
+                  }}
+               />
+               <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
+                  <button
+                     onClick={() => setStep(1)}
+                     style={{
+                        padding: "13px 20px",
+                        background: "#f3f4f6",
+                        color: T.gray,
+                        border: "1.5px solid #e5e7eb",
+                        borderRadius: 10,
+                        fontSize: 13,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 7,
+                     }}>
+                     <ArrowRight
+                        size={14}
+                        color={T.gray}
+                        style={{ transform: "rotate(180deg)" }}
+                     />
+                     Edit
+                  </button>
+                  <button
+                     style={{
+                        flex: 1,
+                        padding: "13px",
+                        background: T.indigo,
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: 10,
+                        fontSize: 14,
+                        fontWeight: 800,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                     }}>
+                     <Users
+                        size={16}
+                        strokeWidth={2.5}
+                     />
+                     Post to Community
+                     <ArrowRight
+                        size={15}
+                        strokeWidth={2.5}
+                     />
+                  </button>
+               </div>
+            </div>
+         )}
+      </div>
+   );
+};
+
 // ─── Design System ────────────────────────────────────────────────────────────
 const DesignSystem = () => (
    <div>
@@ -7970,6 +8821,7 @@ const VIEWS = [
    { id: "dashboard", Icon: LayoutDashboard, label: "Dashboard" },
    { id: "feed", Icon: Globe, label: "Community Feed" },
    { id: "thread", Icon: MessageCircle, label: "Thread Detail" },
+   { id: "create-thread", Icon: PlusCircle, label: "Create Thread" },
    { id: "user-profile", Icon: UserCircle, label: "User Profile" },
    { id: "notifications", Icon: Bell, label: "Notifications" },
    { id: "settings", Icon: Settings, label: "Settings" },
@@ -7995,6 +8847,8 @@ const DESC = {
    feed: "Facebook-style post feed with snipped images, verdict overlays, and reaction/action rows.",
    thread:
       "Full post view with collapsible evidence form and tabbed Comments / Evidence Board section.",
+   "create-thread":
+      "Thread creation form opened from the extension 'Ask the Community?' button — pre-populated with snipped content, 2-step flow.",
    "user-profile":
       "Public profile page for other users — Trust Score, contribution history, follow action.",
    notifications:
@@ -8022,6 +8876,7 @@ const TITLE = {
    dashboard: "Personal Dashboard",
    feed: "Community Feed",
    thread: "Thread Detail Page",
+   "create-thread": "Create Thread (from Extension)",
    "user-profile": "Public User Profile",
    notifications: "Notifications Page",
    settings: "Settings Page",
@@ -8219,6 +9074,7 @@ export default function TruthLensWireframes() {
          {/* Feed, Thread, Dashboard, User Profile, Notifications, Settings, Moderation — full bleed in BrowserChrome */}
          {(active === "feed" ||
             active === "thread" ||
+            active === "create-thread" ||
             active === "dashboard" ||
             active === "user-profile" ||
             active === "notifications" ||
@@ -8231,18 +9087,21 @@ export default function TruthLensWireframes() {
                         ? "community"
                         : active === "thread"
                           ? "thread/1042"
-                          : active === "dashboard"
-                            ? "dashboard"
-                            : active === "user-profile"
-                              ? "u/factchecker_ph"
-                              : active === "notifications"
-                                ? "notifications"
-                                : active === "settings"
-                                  ? "settings"
-                                  : "moderation/queue"
+                          : active === "create-thread"
+                            ? "thread/new"
+                            : active === "dashboard"
+                              ? "dashboard"
+                              : active === "user-profile"
+                                ? "u/factchecker_ph"
+                                : active === "notifications"
+                                  ? "notifications"
+                                  : active === "settings"
+                                    ? "settings"
+                                    : "moderation/queue"
                   }>
                   {active === "feed" && <CommunityFeed />}
                   {active === "thread" && <ThreadDetail />}
+                  {active === "create-thread" && <CreateThread />}
                   {active === "dashboard" && <PersonalDashboard />}
                   {active === "user-profile" && <UserProfilePage />}
                   {active === "notifications" && <NotificationsPage />}
@@ -8369,6 +9228,71 @@ export default function TruthLensWireframes() {
                            "Submitting evidence form → optimistic insert to Evidence Board, switch to evidence tab",
                            "Tab switch is instant — data already in component state, no loading",
                            "Evidence sorted: weighted_score DESC on initial load",
+                        ]}
+                     />
+                  </div>
+               )}
+               {active === "create-thread" && (
+                  <div
+                     style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: 16,
+                        marginTop: 28,
+                        padding: "0 32px",
+                     }}>
+                     <Ann
+                        title="Visual Structure"
+                        BoxIcon={Ruler}
+                        color={T.indigo}
+                        items={[
+                           "Full page: white bg · AppNav → context banner → 2-col layout (form + sidebar)",
+                           "Sub-header: same 3px verdict-color border-bottom pattern as Thread Detail",
+                           "Step indicator in sub-header: 2 steps — Review Claim · Confirm & Post",
+                           "Step 1: left col = form fields · right col = sticky sidebar (AI analysis, duplicates, guidelines)",
+                           "Step 2: full-width PostCard preview + Edit / Post to Community buttons",
+                           "Context banner below sub-header: shows source domain + snip timestamp",
+                        ]}
+                     />
+                     <Ann
+                        title="React Components"
+                        BoxIcon={Braces}
+                        color="#7c3aed"
+                        items={[
+                           "<CreateThread> — owns step (1|2) + category state",
+                           "<AppNav> — activePage='feed' (user is still in the feed context)",
+                           "<SnipPreviewCard> — shows the captured image + source URL + Re-snip button",
+                           "<CategoryPicker> — 4-option grid (Misleading / Fake / Unverified / Satire)",
+                           "<AiAnalysisSidebar> — verdict badge + confidence bar + low-confidence note",
+                           "<DuplicateCheck> — lists similar existing threads with View links",
+                           "<PostCard> — reused in step 2 preview, read-only (no onClick)",
+                           "Route: /thread/new?snap={encodedUrl}&claim={encodedText}",
+                        ]}
+                     />
+                     <Ann
+                        title="Extension → Web Handoff"
+                        BoxIcon={Layers}
+                        color={T.amber}
+                        items={[
+                           "Extension passes data via URL query params or localStorage snapshot",
+                           "Params: snap (source URL), claim (extracted text), confidence, verdict",
+                           "Page reads params on mount → pre-populates all fields",
+                           "If user is not logged in → redirect to /login?next=/thread/new&{params}",
+                           "Re-snip button: re-opens extension snip tool on the same source URL",
+                           "Save Draft: persists form state to localStorage for later completion",
+                        ]}
+                     />
+                     <Ann
+                        title="UX Decisions"
+                        BoxIcon={Puzzle}
+                        color={T.green}
+                        items={[
+                           "2-step flow: separates data entry from social commitment (posting)",
+                           "Step 2 preview: user sees exactly how the thread will look before posting",
+                           "Duplicate check sidebar: reduces noise in the feed proactively",
+                           "Category picker: overrides AI suggestion — community context > AI",
+                           "AI analysis is informational only — never blocks the user from posting",
+                           "Trust Score earned when flagged claim gets verified by the community",
                         ]}
                      />
                   </div>
