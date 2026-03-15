@@ -2,7 +2,8 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view
-from rest_framework import status
+from rest_framework import status, viewsets
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from tavily import TavilyClient
@@ -11,7 +12,7 @@ import json
 import requests
 from .services import *
 from .tasks import snippet_fact_check_process
-from .models import Claim
+from .models import *
 from .serializers import *
 
 
@@ -216,3 +217,15 @@ def get_tokens_for_user(user):
         'refresh': str(refresh),
         'access': str(refresh.access_token),
     }
+    
+
+#Threads viewset
+class ThreadViewSet(viewsets.ModelViewSet):
+    serializer_class = ThreadSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Thread.objects.all().order_by("-created_at")
+
+    def perform_create(self, serializer):
+        serializer.save(author=self.request.user)
