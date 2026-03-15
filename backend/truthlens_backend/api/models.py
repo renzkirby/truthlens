@@ -44,6 +44,7 @@ class Claim(models.Model):
     )
 
     source_link = models.URLField(max_length=500, blank=True, null=True)
+    top_verdict_source = models.URLField(max_length=500, blank=True, null=True)
 
     last_updated = models.DateTimeField(auto_now=True)
 
