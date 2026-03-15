@@ -80,6 +80,7 @@ import {
    UserCheck,
    Clock,
    Circle,
+   LogOut,
 } from "lucide-react";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
@@ -461,11 +462,17 @@ const BrowserChrome = ({ url, children }) => (
 
 // Simulated in-page TruthLens app nav (shown inside the browser viewport)
 const AppNav = ({ activePage = "feed" }) => {
+   const [dropdownOpen, setDropdownOpen] = useState(false);
    const pages = [
       { id: "feed", Icon: Globe, label: "Community Feed" },
       { id: "dashboard", Icon: LayoutDashboard, label: "Dashboard" },
       { id: "notifications", Icon: Bell, label: "Notifications" },
       { id: "settings", Icon: Settings, label: "Settings" },
+   ];
+   const menuItems = [
+      { Icon: UserCircle, label: "View Profile", action: "profile" },
+      { Icon: LayoutDashboard, label: "Dashboard", action: "dashboard" },
+      { Icon: Settings, label: "Settings", action: "settings" },
    ];
    return (
       <div
@@ -474,12 +481,12 @@ const AppNav = ({ activePage = "feed" }) => {
             padding: "0 32px",
             display: "flex",
             alignItems: "center",
-            gap: 0,
             boxShadow: "0 2px 12px rgba(0,0,0,0.25)",
             position: "sticky",
             top: 0,
             zIndex: 50,
          }}>
+         {/* Logo */}
          <div
             style={{
                display: "flex",
@@ -496,6 +503,7 @@ const AppNav = ({ activePage = "feed" }) => {
                TruthLens
             </span>
          </div>
+         {/* Nav links */}
          <div style={{ display: "flex", gap: 2, flex: 1 }}>
             {pages.map(({ id, Icon: NI, label }) => (
                <div
@@ -520,16 +528,19 @@ const AppNav = ({ activePage = "feed" }) => {
                </div>
             ))}
          </div>
-         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+         {/* Profile pill + dropdown */}
+         <div style={{ position: "relative" }}>
             <div
+               onClick={() => setDropdownOpen((v) => !v)}
                style={{
                   display: "flex",
                   alignItems: "center",
                   gap: 7,
-                  background: "rgba(255,255,255,0.07)",
+                  background: dropdownOpen ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.07)",
                   borderRadius: 8,
                   padding: "6px 12px",
                   cursor: "pointer",
+                  userSelect: "none",
                }}>
                <Avatar
                   Icon={UserCircle}
@@ -552,7 +563,98 @@ const AppNav = ({ activePage = "feed" }) => {
                   }}>
                   82
                </span>
+               <ChevronDown
+                  size={13}
+                  color="rgba(255,255,255,0.4)"
+                  style={{
+                     transform: dropdownOpen ? "rotate(180deg)" : "rotate(0deg)",
+                     transition: "transform 0.15s",
+                  }}
+               />
             </div>
+
+            {/* Dropdown menu */}
+            {dropdownOpen && (
+               <div
+                  style={{
+                     position: "absolute",
+                     top: "calc(100% + 8px)",
+                     right: 0,
+                     background: "#fff",
+                     borderRadius: 12,
+                     boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+                     border: "1px solid #e5e7eb",
+                     minWidth: 200,
+                     overflow: "hidden",
+                     zIndex: 100,
+                  }}>
+                  {/* User info header */}
+                  <div
+                     style={{
+                        padding: "14px 16px",
+                        borderBottom: "1px solid #f3f4f6",
+                        background: "#f9fafb",
+                     }}>
+                     <div style={{ fontSize: 13, fontWeight: 800, color: "#111827" }}>
+                        @verifyme
+                     </div>
+                     <div style={{ fontSize: 11, color: T.gray, marginTop: 2 }}>
+                        verifyme@email.com
+                     </div>
+                  </div>
+                  {/* Nav items */}
+                  <div style={{ padding: "6px 0" }}>
+                     {menuItems.map(({ Icon: MI, label, action }) => (
+                        <div
+                           key={action}
+                           style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 10,
+                              padding: "9px 16px",
+                              fontSize: 13,
+                              fontWeight: 600,
+                              color: "#374151",
+                              cursor: "pointer",
+                           }}
+                           onMouseEnter={(e) => (e.currentTarget.style.background = "#f9fafb")}
+                           onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                           <MI
+                              size={14}
+                              color={T.gray}
+                              strokeWidth={2}
+                           />
+                           {label}
+                        </div>
+                     ))}
+                  </div>
+                  {/* Divider */}
+                  <div style={{ height: 1, background: "#f3f4f6", margin: "4px 0" }} />
+                  {/* Log out — separated, destructive */}
+                  <div style={{ padding: "6px 0 8px" }}>
+                     <div
+                        style={{
+                           display: "flex",
+                           alignItems: "center",
+                           gap: 10,
+                           padding: "9px 16px",
+                           fontSize: 13,
+                           fontWeight: 700,
+                           color: T.red,
+                           cursor: "pointer",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#fef2f2")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                        <LogOut
+                           size={14}
+                           color={T.red}
+                           strokeWidth={2}
+                        />
+                        Log Out
+                     </div>
+                  </div>
+               </div>
+            )}
          </div>
       </div>
    );
@@ -3745,7 +3847,7 @@ const ThreadDetail = () => {
                         textTransform: "uppercase",
                         marginBottom: 14,
                      }}>
-                     Submitted by
+                     Posted by
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
                      <Avatar
@@ -4525,7 +4627,27 @@ const SettingsPage = () => {
             <Section
                title="Danger Zone"
                Icon={AlertOctagon}>
-               <div style={{ padding: "16px 0", display: "flex", gap: 12 }}>
+               <div style={{ padding: "16px 0", display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  <button
+                     style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: T.gray,
+                        background: "#f3f4f6",
+                        border: "1.5px solid #e5e7eb",
+                        borderRadius: 7,
+                        padding: "8px 16px",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                     }}>
+                     <LogOut
+                        size={13}
+                        color={T.gray}
+                     />
+                     Log Out of All Devices
+                  </button>
                   <button
                      style={{
                         fontSize: 12,

@@ -1,24 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-:root {
-  --nav-bg: #1e1b4b;
-  --bg-app: #f4f6f8;
-  --white: #ffffff;
 
-  --primary-blue: #4f46e5;
-  --primary-hover: #4338ca;
-  --text-main: #111827;
-  --text-muted: #6b7280;
-  --border-color: #e5e7eb;
-
-  --misleading-text: #b45309;
-  --misleading-bg: #fffbeb;
-  --misleading-border: #f59e0b;
-
-  --unverified-text: #4b5563;
-  --unverified-bg: #f9fafb;
-  --unverified-border: #9ca3af;
-}
 
 * {
   box-sizing: border-box;
