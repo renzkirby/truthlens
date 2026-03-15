@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import LogoImage from "../assets/truthlens_logo.png";
 import Icons from "./Icons.jsx";
 import "./NavigationBar.css";
@@ -10,6 +10,7 @@ function NavigationBar() {
    const [isOpen, setIsOpen] = useState(false);
    const dropdownRef = useRef(null);
    const location = useLocation();
+   const navigate = useNavigate();
 
    useEffect(() => {
       function handleClickOutside(e) {
@@ -166,6 +167,7 @@ function NavigationBar() {
                            onClick={() => {
                               setIsOpen(false);
                               logout();
+                              navigate("/login");
                            }}>
                            <Icons name="logout" />
                            Log Out
