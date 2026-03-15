@@ -89,6 +89,7 @@ class ThreadSerializer(serializers.ModelSerializer):
             "author",
             "caption",
             "status",
+            "flag_reason",
             "created_at",
             "evidence_count",
             "comment_count",

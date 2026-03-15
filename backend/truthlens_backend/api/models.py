@@ -52,6 +52,13 @@ class Claim(models.Model):
 
 
 class Thread(models.Model):
+    class FlagReason(models.TextChoices):
+        FACT = "FACT", "Fact"
+        FAKE = "FAKE", "Fake"
+        MISLEADING = "MISLEADING", "Misleading"
+        SATIRE = "SATIRE", "Satire"
+        UNVERIFIED = "UNVERIFIED", "Unverified"
+    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     claim = models.ForeignKey(Claim, on_delete=models.CASCADE, related_name="threads")
     author = models.ForeignKey(
@@ -59,6 +66,7 @@ class Thread(models.Model):
     )
     caption = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=20, blank=True, null=True, default="OPEN")
+    flag_reason = models.CharField(max_length=20, choices=FlagReason.choices, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
