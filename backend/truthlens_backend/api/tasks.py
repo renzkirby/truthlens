@@ -112,6 +112,6 @@ def snippet_fact_check_process(image_hash, base64_string, claim_id):
     claim.verified_via = Claim.VerificationSource.AI_EXTENSION
     claim.source_type = source_type
     claim.context_text = cleaned_text.get("cleaned_claim")
-    claim.source_link = context_data.get("source")
+    claim.top_verdict_source = context_data.get("source")
 
     claim.save()
