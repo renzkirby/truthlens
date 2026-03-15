@@ -45,6 +45,7 @@ class ClaimSerializer(serializers.ModelSerializer):
             "source_type",
             "consensus_score",
             "verified_via",
+            "source_link",
             "last_updated",
         ]
 
