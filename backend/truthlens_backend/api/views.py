@@ -1,11 +1,12 @@
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.exceptions import NotFound
 from tavily import TavilyClient
 import os
 import json
@@ -218,6 +219,11 @@ def get_tokens_for_user(user):
         'access': str(refresh.access_token),
     }
     
+@api_view(["GET"])
+@permission_classes({IsAuthenticated})
+def get_current_user(request):
+    serializer = UserSerializer(request.user)
+    return Response(serializer.data)
 
 #Threads viewset
 class ThreadViewSet(viewsets.ModelViewSet):
@@ -228,4 +234,9 @@ class ThreadViewSet(viewsets.ModelViewSet):
         return Thread.objects.all().order_by("-created_at")
 
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+        claim_id = serializer.validated_data.pop("claim_id")
+        try:
+            claim = Claim.objects.get(id=claim_id)
+        except Claim.DoesNotExist:
+            raise NotFound('Claim not found.')
+        serializer.save(author=self.request.user, claim=claim)

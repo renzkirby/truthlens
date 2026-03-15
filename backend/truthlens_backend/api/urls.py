@@ -11,7 +11,8 @@ urlpatterns = [
     #Auth urls
     path('auth/login/', TokenObtainPairView.as_view()),
     path('auth/refresh/', TokenRefreshView.as_view()),
-    path('auth/register/', views.register_user)
+    path('auth/register/', views.register_user),
+    path('auth/me/', views.get_current_user),
 ]
 
 router = DefaultRouter()
