@@ -3,6 +3,7 @@ import "./CommunityFeed.css";
 import NavigationBar from "../components/NavigationBar.jsx";
 import Icons from "../components/Icons.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useNavigate } from "react-router-dom";
 
 function timeAgo(dateString) {
    const now = new Date();
@@ -25,6 +26,7 @@ const CommunityFeed = () => {
    const [threads, setThreads] = useState([]);
    const [loading, setLoading] = useState(true);
    const [error, setError] = useState(null);
+   const navigate = useNavigate();
    const { authFetch } = useAuth();
 
    useEffect(() => {
@@ -42,6 +44,10 @@ const CommunityFeed = () => {
       };
       fetchThreads();
    }, []);
+
+   const handleThreadClick = (threadID) => {
+      navigate(`/thread/detail?thread_id=${threadID}`);
+   };
 
    return (
       <div className="feed-layout">
@@ -138,6 +144,9 @@ const CommunityFeed = () => {
                               </div>
                               <div className="header-actions">
                                  <div className={`status-badge badge-${verdictClass}`}>
+                                    {verdictClass === "fake" && <Icons name="x-circle" />}
+                                    {verdictClass === "fact" && <Icons name="check-circle" />}
+                                    {verdictClass === "satire" && <Icons name="wand" />}
                                     {verdictClass === "misleading" && (
                                        <Icons name="alert-triangle" />
                                     )}
@@ -160,7 +169,11 @@ const CommunityFeed = () => {
                            </div>
 
                            {/* Media Placeholder */}
-                           <div className="card-media">
+                           <div
+                              className="card-media"
+                              onClick={() => {
+                                 handleThreadClick(thread.id);
+                              }}>
                               <div className="media-icon">
                                  <Icons
                                     name="globe"
