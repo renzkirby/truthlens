@@ -21,10 +21,11 @@ class RegisterSerializer(serializers.ModelSerializer):
     
 class UserSerializer(serializers.ModelSerializer):
     trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
+    date_joined = serializers. DateTimeField(read_only=True)
 
     class Meta:
         model = User
-        fields = ["id", "username", "email", "trust_score"]
+        fields = ["id", "username", "email", "trust_score", "date_joined"]
 
 
 class UserProfileSerializer(serializers.ModelSerializer):

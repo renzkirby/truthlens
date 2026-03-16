@@ -225,6 +225,15 @@ def get_current_user(request):
     serializer = UserSerializer(request.user)
     return Response(serializer.data)
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_claims(request):
+    claims = Claim.objects.filter(
+        threads__author=request.user 
+    ).distinct().order_by("-last_updated")
+    serializer = ClaimSerializer(claims, many=True)
+    return Response(serializer.data)
+
 #Threads viewset
 class ThreadViewSet(viewsets.ModelViewSet):
     serializer_class = ThreadSerializer
@@ -245,3 +254,6 @@ class ClaimViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ClaimSerializer
     permission_classes = [IsAuthenticated]
     queryset = Claim.objects.all()
+
+
+
