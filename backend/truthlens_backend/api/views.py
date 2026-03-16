@@ -220,7 +220,7 @@ def get_tokens_for_user(user):
     }
     
 @api_view(["GET"])
-@permission_classes({IsAuthenticated})
+@permission_classes([IsAuthenticated])
 def get_current_user(request):
     serializer = UserSerializer(request.user)
     return Response(serializer.data)
@@ -240,6 +240,13 @@ class ThreadViewSet(viewsets.ModelViewSet):
         except Claim.DoesNotExist:
             raise NotFound('Claim not found.')
         serializer.save(author=self.request.user, claim=claim)
+
+    def get_serializer_class(self):
+        if self.action == "retrieve":
+            return ThreadDetailSerializer
+        return ThreadSerializer
+            
+        
 
 class ClaimViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ClaimSerializer
