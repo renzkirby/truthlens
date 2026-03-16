@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Claim, Thread, UserProfile, EvidenceSubmission, Vote
+from .models import Claim, Thread, UserProfile, EvidenceSubmission, Vote, ThreadComment
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
@@ -50,21 +50,7 @@ class ClaimSerializer(serializers.ModelSerializer):
         ]
 
 
-class EvidenceSubmissionSerializer(serializers.ModelSerializer):
-    contributor = UserSerializer(read_only=True)
 
-    class Meta:
-        model = EvidenceSubmission
-        fields = [
-            "id",
-            "thread",
-            "contributor",
-            "evidence_caption",
-            "evidence_url",
-            "evidence_type",
-            "contributor_trust_snapshot",
-            "submitted_at",
-        ]
 
 
 class ThreadSerializer(serializers.ModelSerializer):
@@ -95,6 +81,65 @@ class ThreadSerializer(serializers.ModelSerializer):
             "comment_count",
         ]
 
+class ThreadCommentSerializer(serializers.ModelSerializer):
+    commenter = UserSerializer(read_only=True)
+    
+    class Meta:
+        model = ThreadComment
+        fields = [
+            "id",
+            "commenter",
+            "comment_text",
+            "commented_at",
+        ]
+
+class EvidenceSubmissionSerializer(serializers.ModelSerializer):
+    contributor = UserSerializer(read_only=True)
+
+    class Meta:
+        model = EvidenceSubmission
+        fields = [
+            "id",
+            "contributor",
+            "evidence_caption",
+            "evidence_url",
+            "evidence_type",
+            "contributor_trust_snapshot",
+            "submitted_at",
+        ]
+class ThreadDetailSerializer(serializers.ModelSerializer):
+    author = UserSerializer(read_only=True)
+    claim = ClaimSerializer(read_only=True)
+    evidence_submissions = EvidenceSubmissionSerializer(many=True ,read_only=True)
+    comments = ThreadCommentSerializer(many=True, read_only=True)
+
+    claim_id = serializers.UUIDField(write_only=True)
+    evidence_count = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
+    
+    def get_evidence_count(self, obj):
+        return obj.evidence_submissions.count()
+    
+    def get_comment_count(self, obj):
+        return obj.comments.count()
+
+    class Meta:
+        model = Thread
+        fields = [
+            "id",
+            "claim",
+            "claim_id",
+            "author",
+            "caption",
+            "status",
+            "flag_reason",
+            "created_at",
+            "evidence_submissions",
+            "comments",
+            "evidence_count",
+            "comment_count",
+        ]
+
 
 class VoteSerializer(serializers.ModelSerializer):
     voter = UserSerializer(read_only=True)
@@ -109,3 +154,4 @@ class VoteSerializer(serializers.ModelSerializer):
             "vote_trust_snapshot",
             "voted_at",
         ]
+
