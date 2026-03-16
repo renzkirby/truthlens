@@ -6,7 +6,7 @@ import "./UserProfile.css";
 const VERDICT_CONFIG = {
   FACT: { color: "#22c55e", label: "FACT" },
   FAKE: { color: "#ef4444", label: "FAKE" },
-  UNVERIFIED: { color: "#9ca3af", label: "UNVERIFIED" },
+  UNVERIFIED: { color: "#f97316", label: "UNVERIFIED" },
   SATIRE: { color: "#a855f7", label: "SATIRE" },
   PENDING: { color: "#6b7280", label: "PENDING" },
 };

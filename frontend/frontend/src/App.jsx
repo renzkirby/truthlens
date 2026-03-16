@@ -8,6 +8,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import PrivateRoute from "./components/PrivateRoute";
 import CreateThreadPage from "./Pages/CreateThreadPage";
 import UserProfile from "./Pages/UserProfile.jsx"
+import Dashboard from "./Pages/Dashboard.jsx";
 
 function App() {
    return (
@@ -39,6 +40,10 @@ function App() {
                   <Route
                      path="/community"
                      element={<CommunityFeed />}
+                  />
+                  <Route
+                     path="/dashboard"
+                     element={<Dashboard/>}
                   />
                   <Route
                      path="/thread/create"

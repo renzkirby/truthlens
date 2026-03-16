@@ -248,3 +248,8 @@
 .dropdown-item.danger:hover {
     background: #fef2f2;
 }
+
+.dropdown-item.active {
+  font-weight: 700;
+  color: var(--primary-blue);
+}
