@@ -129,7 +129,7 @@ class ThreadComment(models.Model):
     commenter = models.ForeignKey(
         "auth.User", on_delete=models.CASCADE, related_name="user_comments"
     )
-    comment_text = models.TextField()
+    comment_text = models.TextField(blank=True, null=True)
     commented_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
