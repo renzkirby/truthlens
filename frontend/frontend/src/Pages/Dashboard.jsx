@@ -255,6 +255,7 @@ function Dashboard() {
 
         </div>
 
+
         {/* ── Trending Claims Feed ── */}
         <div className="box-panel">
           <h2 className="widget-title"><Icons name="trending-up"/>  Trending in the Community</h2>
