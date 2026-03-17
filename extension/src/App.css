@@ -1,68 +1,84 @@
+/* App.css */
+
 body {
   display: flex;
   justify-content: center;
-  padding: 0px;
+  padding: 0;
+  background: transparent;
 }
 
+/* App.css */
 .card {
-  background: #ffffff;
-  border-radius: 20px;
-  width: 100%;
-  max-width: 420px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  background: var(--bg-surface);
+  width: 380px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  height: 100%;
-  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .header-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px;
-  background-color: #4F46E5;
+  padding: 12px 16px;
+  background-color: var(--brand-primary);
 }
 
-.close-x {
-  color: #fffafa;
+.logo-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logo-box {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
 }
 
 .card h2 {
   margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-  color: #fffafa;
-}
-
-.window-dots {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.red {
-  background-color: #ff5f57;
-}
-
-.orange {
-  background-color: #ffbd2e;
-}
-
-.green {
-  background-color: #28c940;
-}
-
-.close-x {
-  margin-left: 8px;
   font-size: 14px;
-  color: #333;
-  cursor: pointer;
+  font-weight: 800;
+  color: var(--text-inverse);
+}
+
+.version-badge {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.12);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.content-area {
+  padding: 20px 16px;
+  min-height: 200px;
+}
+
+.app-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  border-top: 1.5px solid var(--border-light);
+  background: var(--bg-surface);
+}
+
+.footer-user {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.footer-user strong {
+  color: var(--text-main);
+}
+
+.footer-link {
+  font-size: 10px;
+  color: var(--brand-primary);
+  font-weight: 700;
+  text-decoration: none;
 }

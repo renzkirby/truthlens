@@ -1,15 +1,78 @@
+/* index.css */
+:root {
+  /* ── 1. Brand & Core ── */
+  --brand-primary: #4f46e5;
+  /* Trust Indigo */
+  --brand-primary-hover: #4338ca;
+  --brand-dark: #1e1b4b;
+  /* Used for Nav / Landing Hero */
+
+  /* ── 2. Backgrounds & Surfaces ── */
+  --bg-app: #f1f5f9;
+  /* The main gray app background */
+  --bg-surface: #ffffff;
+  /* White cards, modals, dropdowns */
+  --bg-subtle: #f9fafb;
+  /* Slightly off-white for table headers/inputs */
+
+  /* ── 3. Text & Typography ── */
+  --text-main: #111827;
+  /* Headings, strong text */
+  --text-body: #374151;
+  /* Standard paragraph text */
+  --text-muted: #6b7280;
+  /* Meta text, timestamps, subtitles */
+  --text-inverse: #ffffff;
+  /* Text on dark backgrounds */
+
+  /* ── 4. Borders & Dividers ── */
+  --border-default: #e5e7eb;
+  /* Standard card borders */
+  --border-light: #f3f4f6;
+  /* Subtle dividers inside cards */
+
+  /* ── 5. Semantic Verdict System ── */
+
+  /* Verified / Fact */
+  --verdict-fact-border: #0e9f6e;
+  --verdict-fact-bg: #d1fae5;
+  --verdict-fact-text: #065f46;
+
+  /* Fake / False */
+  --verdict-fake-border: #e02424;
+  --verdict-fake-bg: #fee2e2;
+  --verdict-fake-text: #7f1d1d;
+
+  /* Misleading */
+  --verdict-misleading-border: #d97706;
+  --verdict-misleading-bg: #fef3c7;
+  --verdict-misleading-text: #78350f;
+
+  /* Unverified / Out of Scope */
+  --verdict-unverified-border: #6b7280;
+  --verdict-unverified-bg: #f3f4f6;
+  --verdict-unverified-text: #374151;
+
+  /* Satire */
+  --verdict-satire-border: #7c3aed;
+  --verdict-satire-bg: #ede9fe;
+  --verdict-satire-text: #4c1d95;
+}
+
 html,
 body {
   margin: 0;
   padding: 0;
   background-color: transparent;
-  overflow: hidden;
-  width: 320px;
-  height: 275px;
+  width: 380px;
+  /* Match your .card width! */
+  height: auto;
+  min-height: 350px;
+  /* Gives the popup enough room to render */
 }
 
 #root {
-  width: 320px;
+  width: 380px;
   padding: 0;
   margin: 0;
 }

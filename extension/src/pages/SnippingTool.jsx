@@ -1,16 +1,26 @@
+// SnippingTool.jsx
 import "./SnippingTool.css";
+import { Crosshair } from "lucide-react";
 
 function SnippingTool({ handleSnipClick, isSnipping }) {
    return (
       <div className="snipping-page">
-         <div className="gray-placeholder"></div>
+         <div className="snip-action-box">
+            <div className="snip-icon-wrapper">
+               <Crosshair
+                  size={22}
+                  color="var(--brand-primary)"
+                  strokeWidth={2}
+               />
+            </div>
+            <div className="snip-title">Activate Screen Snip</div>
+            <div className="snip-subtitle">Draw a box around the claim</div>
+         </div>
          <button
             className="snip-btn"
             onClick={handleSnipClick}
-            disabled={isSnipping}
-            style={{ padding: "10px 20px", cursor: "pointer", marginTop: "10px" }}>
-            {isSnipping ? "Snipping..." : "Verify"}
-            <span className="icon">🔍</span>
+            disabled={isSnipping}>
+            {isSnipping ? "Snipping..." : "Start Snipping"}
          </button>
       </div>
    );

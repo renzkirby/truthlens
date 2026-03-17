@@ -1,26 +1,31 @@
+/* NavigationBar.css */
+.extension-navigation-bar {
+     border-bottom: 1.5px solid var(--border-default);
+}
+
 .extension-nav-links {
-     display: grid;
-     grid-template-columns: auto auto auto;
-     border-bottom: hsl(0, 0%, 20%, 0.4) solid 1px;
-     margin-bottom: 15px;
+     display: flex;
 }
 
-.extension-nav-link {
-     color: #333;
-     text-decoration: none;
-     font-weight: 500;
-     padding: 8px 12px;
-     border-radius: 4px;
-     transition: background-color 0.3s, color 0.3s;
-     font-size: .9em;
+.nav-tab {
+     flex: 1;
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     gap: 6px;
+     padding: 10px 4px;
+     font-size: 11px;
+     font-weight: 700;
+     color: var(--text-muted);
+     background: var(--bg-subtle);
+     border: none;
+     border-bottom: 2px solid transparent;
+     cursor: pointer;
+     transition: all 0.2s;
 }
 
-.extension-nav-link:hover {
-     background-color: #f0f0f0;
-     color: #000;
-}
-
-.extension-nav-link.active {
-     background-color: #5d5fef;
-     color: white;
+.nav-tab.active {
+     color: var(--brand-primary);
+     background: var(--bg-surface);
+     border-bottom: 2px solid var(--brand-primary);
 }
