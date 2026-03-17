@@ -66,6 +66,7 @@ def claim_polling_endpoint(request, claim_id):
     else:
         return JsonResponse(
             {
+                "id": str(claim.id),
                 "verdict": claim.verdict,
                 "summary": claim.ai_summary,
                 "confidence_score": claim.consensus_score,
@@ -143,8 +144,20 @@ def verify_url(request):
 
                 verdict = evaluate_url_claim_with_gfc(cleaned_claim, gfc_data)
 
+                claim = Claim.objects.create(
+                        claim_type=Claim.ClaimType.URL,
+                        url_link=url,
+                        ai_summary=verdict.get("summary"),
+                        verdict=verdict.get("verdict"),
+                        consensus_score=verdict.get("confidence_score"),
+                        source_type="Official Fact Check",
+                        source_link=url,
+                        verified_via=Claim.VerificationSource.AI_EXTENSION,
+    )
+
                 return Response(
                     {
+                        "id": str(claim.id),
                         "verdict": verdict.get("verdict"),
                         "summary": verdict.get("summary"),
                         "confidence_score": verdict.get("confidence_score"),
@@ -187,8 +200,20 @@ def verify_url(request):
         verdict = evaluate_url_claim_with_tavily(cleaned_claim, context)
         print(f"AI verdict: {verdict}")
 
+        claim = Claim.objects.create(
+                claim_type=Claim.ClaimType.URL,
+                url_link=url,
+                ai_summary=verdict.get("summary"),
+                verdict=verdict.get("verdict"),
+                consensus_score=verdict.get("confidence_score"),
+                source_type="Live Web Search",
+                source_link=url,
+                verified_via=Claim.VerificationSource.AI_EXTENSION,
+            )
+
         return Response(
             {
+                "id": str(claim.id),
                 "verdict": verdict.get("verdict"),
                 "summary": verdict.get("summary"),
                 "confidence_score": verdict.get("confidence_score"),
