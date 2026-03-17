@@ -74,19 +74,16 @@ function NavigationBar() {
                      Dashboard
                   </div>
                </Link>
-               <Link
-                  to="/notifications"
-                  className="link">
-                  <div
-                     className={`nav-tab ${location.pathname === "/notifications" ? "active" : ""}`}>
-                     <Icons name="bell" />
-                     Notifications
-                  </div>
-               </Link>
             </div>
          </div>
 
          <div className="nav-right">
+            <Link to="/notifications" className="link">
+               <button className="nav-icon-btn">
+                  <Icons name="bell" size={20} color="#9ca3af" />
+               </button>
+            </Link>
+   
             <div
                className="user-menu-container"
                ref={dropdownRef}>
