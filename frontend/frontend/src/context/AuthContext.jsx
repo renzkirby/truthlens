@@ -20,12 +20,14 @@ export function AuthProvider({ children }) {
       setUser(null);
    };
 
-   const authFetch = async (url, options = {}) => {
+   const authFetch = async (url, options = {}, accessToken = null) => {
+      const currentToken = accessToken || token;
+
       const response = await fetch(url, {
          method: options.method,
          headers: {
             ...options.headers,
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${currentToken}`,
          },
          body: options.body,
       });
@@ -43,7 +45,7 @@ export function AuthProvider({ children }) {
 
          if (refreshResponse.ok) {
             login(refreshToken.access, localStorage.getItem("refresh"));
-            return authFetch(url, options);
+            return authFetch(url, options, refreshToken.access);
          } else {
             logout();
          }

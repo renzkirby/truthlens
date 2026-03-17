@@ -290,7 +290,7 @@ class ThreadCommentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        return ThreadComment.objects.all()
+        return ThreadComment.objects.all().order_by("-commented_at")
     
     def perform_create(self, serializer):
         thread_id = serializer.validated_data.pop("thread_id")

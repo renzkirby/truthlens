@@ -7,7 +7,7 @@ import TruthLensWireframes from "./Pages/wireframe/TruthLens_Wireframes";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import PrivateRoute from "./components/PrivateRoute";
 import CreateThreadPage from "./Pages/CreateThreadPage";
-import UserProfile from "./Pages/UserProfile.jsx"
+import UserProfile from "./Pages/UserProfile.jsx";
 import Dashboard from "./Pages/Dashboard.jsx";
 import ThreadDetailPage from "./Pages/ThreadDetailPage";
 
@@ -44,18 +44,18 @@ function App() {
                   />
                   <Route
                      path="/dashboard"
-                     element={<Dashboard/>}
+                     element={<Dashboard />}
                   />
                   <Route
                      path="/thread/create"
                      element={<CreateThreadPage />}
-                  /> 
-                  <Route
-                     path="/profile"
-                     element={<UserProfile/>}
                   />
                   <Route
-                     path="/thread/detail"
+                     path="/profile"
+                     element={<UserProfile />}
+                  />
+                  <Route
+                     path="/thread/detail/:threadId"
                      element={<ThreadDetailPage />}
                   />
                </Route>
