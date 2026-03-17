@@ -10,6 +10,22 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       activateSnippingMode();
       sendResponse({ success: true });
    }
+   
+   if (request.type === "DISPLAY_URL_LOADING") {
+      import("./modules/ui.js").then(({ displayLoadingCard }) => {
+         state.isAnalyzing = true;
+         displayLoadingCard();
+      });
+      sendResponse({ success: true });
+      }
+
+   if (request.type === "DISPLAY_URL_RESULT") {
+      import("./modules/ui.js").then(({ displayResultCard, removeLoadingCard }) => {
+         removeLoadingCard();
+         setTimeout(() => displayResultCard(request.data), 2000);
+      });
+      sendResponse({ success: true });
+   }
 });
 
 function activateSnippingMode() {

@@ -52,7 +52,7 @@ export function displayResultCard(claim) {
       </div>
       ${
          verdict === "UNVERIFIED" || confidence_score < 50
-            ? `<a href='http://localhost:8000/api/thread/create?claim_id=${claim.id}' target='_blank' class='truthlens-source-link'>Want to ask the community?</a>`
+            ? `<a href='http://localhost:5174/thread/create?claim_id=${claim.id}' target='_blank' class='truthlens-source-link'>Want to ask the community?</a>`
             : verdict === "OUT_OF_SCOPE"
               ? ""
               : `<a href="${source_url}" target="_blank" class="truthlens-source-link">View Source</a>`

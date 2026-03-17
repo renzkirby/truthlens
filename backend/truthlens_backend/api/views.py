@@ -145,11 +145,11 @@ def verify_url(request):
 
                 return Response(
                     {
-                        "status": verdict.get("verdict"),
-                        "explanation": verdict.get("summary"),
-                        "confidence": verdict.get("confidence_score"),
+                        "verdict": verdict.get("verdict"),
+                        "summary": verdict.get("summary"),
+                        "confidence_score": verdict.get("confidence_score"),
                         "source_type": "Official Fact Check",
-                        "original_url": url,
+                        "source_url": url,
                     }
                 )
             else:
@@ -189,11 +189,11 @@ def verify_url(request):
 
         return Response(
             {
-                "status": verdict.get("verdict"),
-                "explanation": verdict.get("summary"),
-                "confidence": verdict.get("confidence_score"),
+                "verdict": verdict.get("verdict"),
+                "summary": verdict.get("summary"),
+                "confidence_score": verdict.get("confidence_score"),
                 "source_type": "Live Web Search",
-                "original_url": url,
+                "source_url": url,
             }
         )
 

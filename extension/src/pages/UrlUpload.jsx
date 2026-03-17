@@ -16,23 +16,35 @@ function UrlUpload() {
   const [result, setResult] = useState(null);
 
   const handleVerify = async () => {
-    setLoading(true);
-    setResult(null);
+    if (!url) return;
+    
+      try {
+        const [tab] = await chrome.tabs.query({
+          active: true,
+          currentWindow: true,
+        });
 
-    try {
-      const res = await axios.post("http://localhost:8000/api/verify-url/", {
-        url: url,
-      });
-      setResult(res.data);
-    } catch (error) {
-      setResult({ error: "Something went wrong. Please try again." });
-    }
+        // Tell background.js to handle the verification
+        chrome.runtime.sendMessage({
+          type: "VERIFY_URL",
+          url: url,
+          tabId: tab.id,
+        });
 
-    setLoading(false);
-  };
+        // Show loading card and close popup
+        chrome.tabs.sendMessage(tab.id, {
+          type: "DISPLAY_URL_LOADING",
+        });
+
+        window.close();
+
+      } catch (error) {
+        console.error("Error:", error);
+      }
+    };
 
   const statusInfo =
-    result && result.status ? STATUS_CONFIG[result.status] : null;
+    result && result.verdict ? STATUS_CONFIG[result.verdict] : null;
 
   // console.log(result.status);
   console.log(statusInfo);
@@ -68,33 +80,9 @@ function UrlUpload() {
           {result.error ? (
             <p className="error-msg">{result.error}</p>
           ) : (
-            <>
-              <div className="status-row">
-                <span className="this-post-is">This post is</span>
-                {statusInfo && (
-                  <span
-                    className="status-badge"
-                    style={{ backgroundColor: statusInfo.bg }}
-                  >
-                    {statusInfo.label}
-                  </span>
-                )}
-              </div>
-
-              <div className="summary-box">
-                <p className="summary-title">Summary</p>
-                <p className="summary-text">{result.explanation}</p>
-              </div>
-
-              <a
-                className="source-btn"
-                href={result.original_url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                View source link
-              </a>
-            </>
+            <p className="success-msg">
+              Verification complete! Check the result card on the page.
+            </p>
           )}
         </>
       )}
