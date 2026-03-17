@@ -108,6 +108,7 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
             "contributor_trust_snapshot",
             "submitted_at",
         ]
+        
 class ThreadDetailSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
     claim = ClaimSerializer(read_only=True)
