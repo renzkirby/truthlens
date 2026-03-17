@@ -1,12 +1,12 @@
 /* ================= Navbar ================= */
 .top-navbar {
-    background-color: var(--nav-bg);
+    background-color: var(--brand-dark);
     height: 64px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 0 32px;
-    color: var(--white);
+    color: var(--text-inverse);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     position: sticky;
     top: 0;
@@ -36,7 +36,7 @@
 }
 
 .logo-text {
-    color: var(--white);
+    color: var(--text-inverse);
 }
 
 .nav-tabs {
@@ -58,11 +58,11 @@
 }
 
 .nav-tab:hover {
-    color: var(--white);
+    color: var(--text-inverse);
 }
 
 .nav-tab.active {
-    color: var(--white);
+    color: var(--text-inverse);
 }
 
 .nav-tab.active::after {
@@ -72,7 +72,7 @@
     left: 0;
     right: 0;
     height: 3px;
-    background-color: var(--primary-blue);
+    background-color: var(--brand-primary);
     border-radius: 3px 3px 0 0;
 }
 
@@ -97,12 +97,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #d1d5db;
+    color: var(--border-default);
 }
 
 .username {
     font-weight: 500;
-    color: var(--white);
+    color: var(--text-inverse);
 }
 
 .trust-score {
@@ -120,29 +120,21 @@
     padding: 10px 30px;
     border-radius: 20px;
     border: none;
-    background-color: var(--primary-blue);
-    color: var(--white);
+    background-color: var(--brand-primary);
+    color: var(--text-inverse);
     font-size: 1em;
     font-weight: 700;
 }
 
 .logout-btn:hover {
     cursor: pointer;
-    background-color: var(--primary-hover);
+    background-color: var(--brand-primary-hover);
 }
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   NavigationBar.css — Dropdown additions
-   Add these rules to your existing NavigationBar.css file.
-   ───────────────────────────────────────────────────────────────────────────── */
 
 /* Wrapper that holds both the pill and the dropdown (used for outside-click ref) */
 .user-menu-container {
     position: relative;
 }
-
-/* Profile pill — now a <button> for accessibility */
-
 
 /* Chevron rotates when open */
 .chevron {
@@ -162,8 +154,8 @@
     top: calc(100% + 8px);
     right: 0;
     min-width: 220px;
-    background: #ffffff;
-    border: 1px solid #e5e7eb;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
     border-radius: 12px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08);
     overflow: hidden;
@@ -188,8 +180,8 @@
 /* User info header */
 .dropdown-header {
     padding: 14px 16px;
-    border-bottom: 1px solid #f3f4f6;
-    background: #f9fafb;
+    border-bottom: 1px solid var(--border-light);
+    background: var(--bg-subtle);
     display: flex;
     flex-direction: column;
     gap: 3px;
@@ -198,12 +190,12 @@
 .dropdown-username {
     font-size: 13px;
     font-weight: 800;
-    color: #111827;
+    color: var(--text-main);
 }
 
 .dropdown-email {
     font-size: 11px;
-    color: #6b7280;
+    color: var(--text-muted);
 }
 
 /* Section grouping (for spacing between groups) */
@@ -214,7 +206,7 @@
 /* Divider between nav items and logout */
 .dropdown-divider {
     height: 1px;
-    background: #f3f4f6;
+    background: var(--border-light);
     margin: 2px 0;
 }
 
@@ -229,19 +221,19 @@
     border: none;
     font-size: 13px;
     font-weight: 600;
-    color: #374151;
+    color: var(--text-body);
     cursor: pointer;
     text-align: left;
     transition: background 0.1s;
 }
 
 .dropdown-item:hover {
-    background: #f9fafb;
+    background: var(--bg-subtle);
 }
 
 /* Destructive variant — Log Out */
 .dropdown-item.danger {
-    color: #e02424;
+    color: var(--verdict-fake-border);
     font-weight: 700;
 }
 
@@ -252,4 +244,5 @@
 .dropdown-item.active {
   font-weight: 700;
   color: var(--primary-blue);
+    background: var(--verdict-fake-bg);
 }

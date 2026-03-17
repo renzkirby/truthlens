@@ -9,6 +9,7 @@ import PrivateRoute from "./components/PrivateRoute";
 import CreateThreadPage from "./Pages/CreateThreadPage";
 import UserProfile from "./Pages/UserProfile.jsx"
 import Dashboard from "./Pages/Dashboard.jsx";
+import ThreadDetailPage from "./Pages/ThreadDetailPage";
 
 function App() {
    return (
@@ -52,6 +53,10 @@ function App() {
                   <Route
                      path="/profile"
                      element={<UserProfile/>}
+                  />
+                  <Route
+                     path="/thread/detail"
+                     element={<ThreadDetailPage />}
                   />
                </Route>
             </Routes>
