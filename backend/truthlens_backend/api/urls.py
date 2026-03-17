@@ -13,6 +13,7 @@ urlpatterns = [
     path('auth/refresh/', TokenRefreshView.as_view()),
     path('auth/register/', views.register_user),
     path('auth/me/', views.get_current_user),
+    path('auth/my-claims/', views.my_claims), 
 ]
 
 router = DefaultRouter()

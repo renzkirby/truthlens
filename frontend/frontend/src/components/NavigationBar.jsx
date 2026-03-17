@@ -122,11 +122,11 @@ function NavigationBar() {
                         className="dropdown-section"
                         role="group">
                         <Link
-                           to={`/u/${user?.username}`}
+                           to="/profile"
                            className="link"
                            role="menuitem">
                            <button
-                              className="dropdown-item"
+                              className={`dropdown-item ${location.pathname === "/profile" ? "active" : ""}`}     
                               onClick={() => setIsOpen(false)}>
                               <Icons name="user" />
                               My Public Profile
