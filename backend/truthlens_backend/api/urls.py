@@ -19,5 +19,7 @@ urlpatterns = [
 router = DefaultRouter()
 router.register(r'threads', views.ThreadViewSet, basename='thread')
 router.register(r'claims', views.ClaimViewSet, basename='claim')
+router.register(r'evidence', views.EvidenceSubmissionViewSet, basename='evidence')
+router.register(r'comments', views.ThreadCommentViewSet, basename='comment')
 
 urlpatterns += router.urls
