@@ -284,7 +284,8 @@ function ThreadDetailPage() {
    }
 
    return (
-      <>
+      
+      <div className="thread-layout">
          <NavigationBar />
 
          <div className="tdp-page">

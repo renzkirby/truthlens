@@ -1,6 +1,25 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import NavigationBar from "../components/NavigationBar";
+import Icons from "../components/Icons.jsx";
+import "./CreateThreadPage.css";
+
+const FLAG_OPTIONS = [
+   { value: "FACT",       label: "Fact",        icon: "check-circle",   color: "var(--fact-text)",       bg: "var(--fact-bg)",       border: "var(--fact-border)" },
+   { value: "FAKE",       label: "Fake",         icon: "x-circle",       color: "var(--fake-text)",       bg: "var(--fake-bg)",       border: "var(--fake-border)" },
+   { value: "MISLEADING", label: "Misleading",   icon: "alert-triangle", color: "var(--misleading-text)", bg: "var(--misleading-bg)", border: "var(--misleading-border)" },
+   { value: "SATIRE",     label: "Satire",       icon: "wand",           color: "var(--satire-text)",     bg: "var(--satire-bg)",     border: "var(--satire-border)" },
+   { value: "UNVERIFIED", label: "Unverified",   icon: "help-circle",    color: "var(--unverified-text)", bg: "var(--unverified-bg)", border: "var(--unverified-border)" },
+];
+
+const VERDICT_COLORS = {
+   FACT:        "var(--fact-text)",
+   FAKE:        "var(--fake-text)",
+   MISLEADING:  "var(--misleading-text)",
+   SATIRE:      "var(--satire-text)",
+   UNVERIFIED:  "var(--unverified-text)",
+};
 
 function CreateThreadPage() {
    const [loading, setLoading] = useState(true);
@@ -25,8 +44,18 @@ function CreateThreadPage() {
       });
    };
 
+   const handleFlagSelect = (value) => {
+      setFormValues({ ...formValues, flag_reason: value });
+   };
+
    const handleSubmit = async () => {
+      if (!formValues.flag_reason) {
+         setError("Please select a flag reason before submitting.");
+         return;
+      }
+
       setSubmitting(true);
+      setError(null);
       try {
          const responseData = await authFetch("http://localhost:8000/api/threads/", {
             method: "POST",
@@ -37,7 +66,7 @@ function CreateThreadPage() {
                flag_reason: formValues.flag_reason,
             }),
          });
-         navigate("/community");
+         navigate(`/thread?thread_id=${responseData.id}`);
       } catch (err) {
          setError("Something went wrong in creating a thread.");
       } finally {
@@ -70,104 +99,190 @@ function CreateThreadPage() {
          }
       };
       fetchClaimData();
-   }, []);
+   }, [claimId]);
 
    return (
-      <>
-         {error && <p>{error}</p>}
-         {loading && <p>Thread form loading...</p>}
-         {!loading && claim && (
-            <>
-               <form
-                  onSubmit={(e) => {
-                     e.preventDefault();
-                     handleSubmit();
-                  }}>
-                  <label>Claim Text/Caption</label>
-                  <textarea
-                     name="caption"
-                     onChange={handleInputChange}
-                     value={formValues.caption}
-                  />
-                  <br />
-                  <label>Source URL</label>
-                  <input
-                     name="source_url"
-                     type="url"
-                     onChange={handleInputChange}
-                     value={formValues.source_url}
-                  />
-                  <br />
-                  <label>Why are you flagging this?</label>
-                  <br />
-                  <label htmlFor="fact">
-                     <input
-                        type="radio"
-                        name="flag_reason"
-                        id="fact"
-                        value={"FACT"}
-                        onChange={handleInputChange}
-                     />
-                     Fact
-                  </label>
-                  <br />
-                  <label htmlFor="fake">
-                     <input
-                        type="radio"
-                        name="flag_reason"
-                        id="fake"
-                        value={"FAKE"}
-                        onChange={handleInputChange}
-                     />
-                     Fake
-                  </label>
-                  <br />
-                  <label htmlFor="misleading">
-                     <input
-                        type="radio"
-                        name="flag_reason"
-                        id="misleading"
-                        value={"MISLEADING"}
-                        onChange={handleInputChange}
-                     />
-                     Misleading
-                  </label>
-                  <br />
-                  <label htmlFor="satire">
-                     <input
-                        type="radio"
-                        name="flag_reason"
-                        id="satire"
-                        value={"SATIRE"}
-                        onChange={handleInputChange}
-                     />
-                     Satire
-                  </label>
-                  <br />
-                  <label htmlFor="unverified">
-                     <input
-                        type="radio"
-                        name="flag_reason"
-                        id="unverified"
-                        value={"UNVERIFIED"}
-                        onChange={handleInputChange}
-                     />
-                     Unverified
-                  </label>
-                  <br />
-                  <input type="submit" />
-               </form>
-               <p>------</p>
-               <div>
-                  <h3>AI PRE-ANALYSIS</h3>
-                  <div>
-                     <p>{claim.verdict}</p>
-                     <p>{claim.consensus_score}</p>
-                  </div>
+      <div className="create-thread-layout">
+         <NavigationBar />
+
+         <div className="create-thread-topbar">
+            <div className="breadcrumb">
+               <Link to="/community" className="breadcrumb-link">
+                  <Icons name="globe" size={14} />
+                  Community Feed
+               </Link>
+               <Icons name="chevron-right" size={14} />
+               <span className="breadcrumb-current">Escalate a Claim</span>
+            </div>
+         </div>
+
+         <main className="create-thread-container">
+
+            <div className="create-thread-header">
+               <div className="create-thread-icon">
+                  <Icons name="flag" size={22} color="#fff" />
                </div>
-            </>
-         )}
-      </>
+               <div>
+                  <h1 className="create-thread-title">Escalate to Community</h1>
+                  <p className="create-thread-subtitle">
+                     The AI couldn't verify this claim with confidence. Submit it to the community for review.
+                  </p>
+               </div>
+            </div>
+
+            {loading && <p className="create-thread-loading">Loading claim data...</p>}
+            {error && (
+               <div className="create-thread-error">
+                  <Icons name="alert-triangle" size={15} />
+                  {error}
+               </div>
+            )}
+
+            {!loading && claim && (
+               <div className="create-thread-body">
+
+                  <div className="create-thread-form-col">
+
+                     <div className="form-section box-panel">
+                        <label className="form-label">
+                           <Icons name="file-text" size={15} />
+                           Claim Caption
+                        </label>
+                        <p className="form-hint">Describe the claim you're escalating. You can edit the AI-generated text below.</p>
+                        <textarea
+                           name="caption"
+                           className="form-textarea"
+                           onChange={handleInputChange}
+                           value={formValues.caption}
+                           rows={4}
+                           placeholder="Describe the claim..."
+                        />
+                     </div>
+
+                     {formValues.source_url && (
+                        <div className="form-section box-panel">
+                           <label className="form-label">
+                              <Icons name="link" size={15} />
+                              Source URL
+                           </label>
+                           <p className="form-hint">This was automatically filled from the URL you verified.</p>
+                           <input
+                              name="source_url"
+                              type="url"
+                              className="form-input"
+                              onChange={handleInputChange}
+                              value={formValues.source_url}
+                              placeholder="https://..."
+                           />
+                        </div>
+                     )}
+
+                     <div className="form-section box-panel">
+                        <label className="form-label">
+                           <Icons name="alert-triangle" size={15} />
+                           Why are you flagging this?
+                        </label>
+                        <p className="form-hint">Select the category that best describes this claim.</p>
+                        <div className="flag-options">
+                           {FLAG_OPTIONS.map((opt) => (
+                              <button
+                                 key={opt.value}
+                                 type="button"
+                                 className={`flag-option-btn ${formValues.flag_reason === opt.value ? "selected" : ""}`}
+                                 style={formValues.flag_reason === opt.value ? {
+                                    color: opt.color,
+                                    backgroundColor: opt.bg,
+                                    borderColor: opt.border,
+                                 } : {}}
+                                 onClick={() => handleFlagSelect(opt.value)}
+                              >
+                                 <Icons name={opt.icon} size={15} />
+                                 {opt.label}
+                              </button>
+                           ))}
+                        </div>
+                     </div>
+
+                     <button
+                        className="submit-thread-btn"
+                        onClick={handleSubmit}
+                        disabled={submitting || !formValues.flag_reason}
+                     >
+                        {submitting ? (
+                           <>Submitting...</>
+                        ) : (
+                           <>
+                              <Icons name="send" size={16} />
+                              Submit to Community
+                           </>
+                        )}
+                     </button>
+
+                  </div>
+
+                  <div className="create-thread-sidebar">
+                     <div className="box-panel ai-analysis-card">
+                        <p className="sidebar-label">AI PRE-ANALYSIS</p>
+
+                        <div className="ai-verdict-row">
+                           <span className="ai-analysis-label">Verdict</span>
+                           <span
+                              className="ai-verdict-value"
+                              style={{ color: VERDICT_COLORS[claim.verdict] || "var(--text-muted)" }}
+                           >
+                              {claim.verdict || "—"}
+                           </span>
+                        </div>
+
+                        <div className="ai-verdict-row">
+                           <span className="ai-analysis-label">Confidence Score</span>
+                           <span className="ai-confidence-value">{claim.consensus_score ?? "—"}%</span>
+                        </div>
+
+                        {claim.consensus_score !== null && (
+                           <div className="ai-confidence-bar-track">
+                              <div
+                                 className="ai-confidence-bar-fill"
+                                 style={{
+                                    width: `${claim.consensus_score || 0}%`,
+                                    backgroundColor:
+                                       claim.consensus_score >= 70 ? "var(--fact-text)"
+                                       : claim.consensus_score >= 40 ? "var(--misleading-text)"
+                                       : "var(--fake-text)",
+                                 }}
+                              />
+                           </div>
+                        )}
+
+                        <div className="ai-summary-box">
+                           <span className="ai-analysis-label">AI Summary</span>
+                           <p className="ai-summary-text">{claim.ai_summary || "No summary available."}</p>
+                        </div>
+
+                        <div className="ai-source-row">
+                           <span className="ai-analysis-label">Source Type</span>
+                           <span className="ai-source-value">{claim.source_type || "—"}</span>
+                        </div>
+                     </div>
+
+                     <div className="box-panel info-card">
+                        <p className="sidebar-label">
+                           <Icons name="info" size={13} />
+                           WHY ESCALATE?
+                        </p>
+                        <p className="info-text">
+                           When AI confidence is low or a claim is unverified, the community can weigh in with evidence and votes to reach a final verdict.
+                        </p>
+                        <p className="info-text">
+                           Your Trust Score increases when your escalations are resolved accurately.
+                        </p>
+                     </div>
+                  </div>
+
+               </div>
+            )}
+         </main>
+      </div>
    );
 }
 

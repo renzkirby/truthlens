@@ -144,13 +144,25 @@ def verify_url(request):
 
                 verdict = evaluate_url_claim_with_gfc(cleaned_claim, gfc_data)
 
+                claim = Claim.objects.create(
+                        claim_type=Claim.ClaimType.URL,
+                        url_link=url,
+                        ai_summary=verdict.get("summary"),
+                        verdict=verdict.get("verdict"),
+                        consensus_score=verdict.get("confidence_score"),
+                        source_type="Official Fact Check",
+                        source_link=url,
+                        verified_via=Claim.VerificationSource.AI_EXTENSION,
+    )
+
                 return Response(
                     {
-                        "status": verdict.get("verdict"),
-                        "explanation": verdict.get("summary"),
-                        "confidence": verdict.get("confidence_score"),
+                        "id": str(claim.id),
+                        "verdict": verdict.get("verdict"),
+                        "summary": verdict.get("summary"),
+                        "confidence_score": verdict.get("confidence_score"),
                         "source_type": "Official Fact Check",
-                        "original_url": url,
+                        "source_url": url,
                     }
                 )
             else:
@@ -188,13 +200,25 @@ def verify_url(request):
         verdict = evaluate_url_claim_with_tavily(cleaned_claim, context)
         print(f"AI verdict: {verdict}")
 
+        claim = Claim.objects.create(
+                claim_type=Claim.ClaimType.URL,
+                url_link=url,
+                ai_summary=verdict.get("summary"),
+                verdict=verdict.get("verdict"),
+                consensus_score=verdict.get("confidence_score"),
+                source_type="Live Web Search",
+                source_link=url,
+                verified_via=Claim.VerificationSource.AI_EXTENSION,
+            )
+
         return Response(
             {
-                "status": verdict.get("verdict"),
-                "explanation": verdict.get("summary"),
-                "confidence": verdict.get("confidence_score"),
+                "id": str(claim.id),
+                "verdict": verdict.get("verdict"),
+                "summary": verdict.get("summary"),
+                "confidence_score": verdict.get("confidence_score"),
                 "source_type": "Live Web Search",
-                "original_url": url,
+                "source_url": url,
             }
         )
 

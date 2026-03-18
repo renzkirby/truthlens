@@ -53,6 +53,7 @@
      font-size: 1em;
      text-transform: uppercase;
      margin-left: 4px;
+     color: white;
 }
 
 .truthlens-badge {
@@ -69,6 +70,7 @@
      padding: 12px;
      border-radius: 8px;
      margin-bottom: 15px;
+     z-index: 999999;
 }
 
 .truthlens-summary-title {
