@@ -30,6 +30,7 @@ class Claim(models.Model):
 
     claim_type = models.CharField(max_length=20, choices=ClaimType.choices)
     media_url = models.CharField(max_length=500, blank=True, null=True)
+    image = models.ImageField(upload_to='claims/images/', null=True, blank=True)
     media_hash = models.CharField(max_length=64, blank=True, null=True)
     url_link = models.URLField(max_length=500, blank=True, null=True)
     context_text = models.TextField(blank=True, null=True)

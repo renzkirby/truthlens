@@ -160,3 +160,6 @@ SIMPLE_JWT = {
 AUTHENTICATION_BACKENDS = [
     'api.backends.EmailOrUsernameBackend'
 ]
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
