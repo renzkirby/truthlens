@@ -44,6 +44,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                   return;
                }
                const claim = await fetchClaimResult(data.claim_id);
+               console.log(claim);
                if (claim && claim.verdict !== "PENDING") {
                   clearInterval(pollInterval);
                   chrome.tabs.sendMessage(tabId, {
@@ -51,20 +52,6 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                      data: claim,
                   });
                }
-               // if (!claim) {
-               //    clearInterval(pollInterval);
-               //    chrome.tabs.sendMessage(tabId, {
-               //       type: "DISPLAY_URL_RESULT",
-               //       data: {
-               //          verdict: "OUT_OF_SCOPE",
-               //          summary:
-               //             "The content of the image is not a claim that can be fact-checked.",
-               //          confidence_score: 100,
-               //          source_type: "N/A",
-               //          source_url: url,
-               //       },
-               //    });
-               // }
             }, 3000);
          })
          .catch((err) => {
