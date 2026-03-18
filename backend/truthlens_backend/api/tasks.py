@@ -234,4 +234,4 @@ def url_fact_check_process(url, claim_id):
         claim.consensus_score = context_data.get("confidence_score")
         claim.verified_via = Claim.VerificationSource.AI_EXTENSION
         claim.source_type = context_data.get("source_type")
-        claim.context_text = cleaned_text.get("cleaned_claim")
+        claim.context_text = cleaned_text
