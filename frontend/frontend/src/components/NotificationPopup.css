@@ -1,0 +1,216 @@
+/* ── Container — wraps bell button and popup ── */
+.notif-container {
+    position: relative;
+}
+
+/* ── Bell button active state ── */
+.nav-icon-btn.open {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+/* ── Unread badge on bell icon ── */
+.notif-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: #e02424;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    border: 2px solid var(--brand-dark);
+    pointer-events: none;
+}
+
+/* ── Popup panel ── */
+.notif-popup {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 360px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08);
+    z-index: 200;
+    overflow: hidden;
+    animation: dropdownFadeIn 0.12s ease;
+}
+
+/* Reuse the fade-in animation from NavigationBar.css */
+@keyframes dropdownFadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Header ── */
+.notif-popup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-light);
+    background: var(--bg-subtle);
+}
+
+.notif-popup-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--text-main);
+}
+
+.notif-header-count {
+    background: var(--brand-primary);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 20px;
+}
+
+.notif-mark-all-btn {
+    background: none;
+    border: none;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--brand-primary);
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    padding: 0;
+    transition: opacity 0.15s;
+}
+
+.notif-mark-all-btn:hover:not(:disabled) {
+    text-decoration: underline;
+}
+
+.notif-mark-all-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ── Notification list ── */
+.notif-list {
+    max-height: 380px;
+    overflow-y: auto;
+}
+
+/* ── Individual notification item ── */
+.notif-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-light);
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.notif-item:last-child {
+    border-bottom: none;
+}
+
+.notif-item:hover {
+    background: var(--bg-subtle);
+}
+
+.notif-item.unread {
+    background: #f5f3ff;
+}
+
+.notif-item.unread:hover {
+    background: #ede9fe;
+}
+
+.notif-item-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-default);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--brand-primary);
+}
+
+.notif-item-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.notif-item-message {
+    font-size: 13px;
+    color: var(--text-main);
+    line-height: 1.4;
+    margin: 0 0 3px;
+}
+
+.notif-item-time {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.notif-unread-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--brand-primary);
+    flex-shrink: 0;
+    margin-top: 4px;
+}
+
+/* ── Empty state ── */
+.notif-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 36px 24px;
+    text-align: center;
+}
+
+.notif-empty-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-main);
+    margin: 0;
+}
+
+.notif-empty-subtitle {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: 0;
+    max-width: 260px;
+}
+
+/* ── Footer ── */
+.notif-popup-footer {
+    padding: 10px 16px;
+    border-top: 1px solid var(--border-light);
+    background: var(--bg-subtle);
+    text-align: center;
+}
+
+.notif-see-all-link {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--brand-primary);
+    text-decoration: none;
+}
+
+.notif-see-all-link:hover {
+    text-decoration: underline;
+}

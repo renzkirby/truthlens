@@ -10,6 +10,8 @@ import CreateThreadPage from "./Pages/CreateThreadPage";
 import UserProfile from "./Pages/UserProfile.jsx";
 import Dashboard from "./Pages/Dashboard.jsx";
 import ThreadDetailPage from "./Pages/ThreadDetailPage";
+import VerifyPage from "./Pages/VerifyPage.jsx";
+import ModerationPage from "./Pages/ModerationPage.jsx";
 
 function App() {
    return (
@@ -47,6 +49,10 @@ function App() {
                      element={<Dashboard />}
                   />
                   <Route
+                     path="/verify"
+                     element={<VerifyPage />}
+                  />
+                  <Route
                      path="/thread/create"
                      element={<CreateThreadPage />}
                   />
@@ -57,6 +63,12 @@ function App() {
                   <Route
                      path="/thread/detail/:threadId"
                      element={<ThreadDetailPage />}
+                  />
+
+                  {/* MODERATION PAGE *PARA LANG MAVIEW */}
+                  <Route
+                     path="/moderation"
+                     element={<ModerationPage/>}
                   />
                </Route>
             </Routes>
