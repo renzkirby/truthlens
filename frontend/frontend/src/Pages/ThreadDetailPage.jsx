@@ -211,6 +211,7 @@ function ThreadDetailPage() {
       try {
          await authFetch(`${API_BASE_URL}/evidence/`, {
             method: "POST",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                thread_id: threadId,
                evidence_url: evidenceUrl,
@@ -980,7 +981,7 @@ function ThreadDetailPage() {
                </aside>
             </div>
          </div>
-      </>
+      </div>
    );
 }
 
