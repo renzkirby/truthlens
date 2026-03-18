@@ -1,118 +1,200 @@
-/* UrlUpload.css */
+/* ─────────────────────────────────────────────────────────────────────────────
+   UrlUpload.css
+   Matches the Scan URL tab in the TruthLens extension popup wireframe.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Page wrapper ────────────────────────────────────────────────────────────
+   The popup tab panels share a common padding container — this fills it.      */
 .url-page {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding: 14px 16px;
 }
 
-.input-label {
+/* ── Label ─────────────────────────────────────────────────────────────────── */
+.url-page-label {
   font-size: 11px;
-  color: var(--text-muted);
   font-weight: 600;
+  color: #6b7280;
+  margin: 0;
 }
 
-.input-row {
+/* ── Input row (icon-prefixed input + Scan button) ──────────────────────────  */
+.url-input-row {
   display: flex;
   gap: 6px;
 }
 
-.url-input-wrapper {
+/* Wrapper that holds the icon + the <input> together */
+.url-input-wrap {
   flex: 1;
-  background: var(--bg-subtle);
-  border: 1.5px solid var(--border-default);
-  border-radius: 6px;
-  padding: 8px 10px;
   display: flex;
   align-items: center;
   gap: 6px;
+  background: #f9fafb;
+  border: 1.5px solid #d1d5db;
+  border-radius: 6px;
+  padding: 8px 10px;
+  transition: border-color 0.2s;
 }
 
+.url-input-wrap:focus-within {
+  border-color: #4f46e5;
+  background: #fff;
+}
+
+.url-input-icon {
+  flex-shrink: 0;
+}
+
+/* Bare <input> — no border, no background of its own */
 .url-input {
+  flex: 1;
   border: none;
   background: transparent;
-  outline: none;
   font-size: 11px;
-  color: var(--text-main);
-  width: 100%;
+  color: #374151;
+  outline: none;
+  min-width: 0;
+  /* prevents flex overflow */
+  font-family: inherit;
 }
 
 .url-input::placeholder {
   color: #9ca3af;
 }
 
-.scan-btn {
-  background: var(--brand-primary);
-  color: var(--text-inverse);
+/* Scan button */
+.url-scan-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: #4f46e5;
+  color: #ffffff;
   border: none;
   border-radius: 6px;
   padding: 8px 12px;
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 5px;
+  white-space: nowrap;
+  transition: background 0.15s;
+  flex-shrink: 0;
 }
 
-.scan-btn:disabled {
+.url-scan-btn:hover:not(:disabled) {
+  background: #4338ca;
+}
+
+.url-scan-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-.info-box {
-  background: var(--bg-subtle);
-  border-radius: 6px;
-  padding: 8px 10px;
+/* ── Tip / hint box ─────────────────────────────────────────────────────────── */
+.url-tip-box {
   display: flex;
   align-items: flex-start;
   gap: 6px;
-}
-
-//Josh Changes
-.source-btn:hover {
-  background: #4f46e5;
-}
-
-.confidence-score {
-  font-size: 13px;
-  color: #374151;
-  margin-top: 10px;
-}
-
-.confidence-bar {
-  width: 100%;
-  height: 6px;
-  background: #e5e7eb;
-  border-radius: 10px;
-  overflow: hidden;
-  margin-top: 6px;
-}
-
-.confidence-fill {
-  height: 100%;
-  border-radius: 10px;
-}
-
-.source-footer {
-  font-size: 12px;
-  color: #9ca3af;
-  margin-top: 10px;
-  text-align: center;
-}
-.success-msg {
-  font-size: 13px;
-  color: #0e9f6e;
-  padding: 10px 14px;
-  background: #f0fdf4;
-  border-radius: 10px;
-  margin-top: 10px;
-  text-align: center;
-}
-
-// Renz Changes
-.info-box p {
+  background: #f3f4f6;
+  border-radius: 6px;
+  padding: 8px 10px;
   font-size: 10px;
-  color: var(--text-muted);
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.url-tip-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ── Result feedback ────────────────────────────────────────────────────────── */
+.url-result {
+  margin-top: 4px;
+}
+
+.url-result-success {
+  font-size: 11px;
+  color: #0e9f6e;
+  background: #ecfdf5;
+  border: 1px solid #6ee7b7;
+  border-radius: 6px;
+  padding: 8px 10px;
   margin: 0;
-  line-height: 1.4;
+}
+
+.url-result-error {
+  font-size: 11px;
+  color: #e02424;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 0;
+}
+
+/* ── Legacy classes kept so nothing else breaks ─────────────────────────────
+   (other tabs or shared popup styles may still reference these)               */
+.error-msg {
+  font-size: 11px;
+  color: #ef4444;
+  padding: 8px 10px;
+  background: #fef2f2;
+  border-radius: 6px;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.status-badge {
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 20px;
+  text-transform: uppercase;
+}
+
+.summary-box {
+  background: #f3f4f6;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.summary-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #111;
+}
+
+.summary-text {
+  font-size: 12px;
+  color: #374151;
+  line-height: 1.6;
+}
+
+.source-btn {
+  display: block;
+  background: #4f46e5;
+  color: #fff;
+  text-align: center;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 12px;
+  border-radius: 10px;
+  transition: background 0.2s;
+}
+
+.source-btn:hover {
+  background: #4338ca;
 }
