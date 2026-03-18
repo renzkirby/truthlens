@@ -46,7 +46,7 @@ const CommunityFeed = () => {
    }, []);
 
    const handleThreadClick = (threadID) => {
-      navigate(`/thread/detail?thread_id=${threadID}`);
+      navigate(`/thread/detail/${threadID}`);
    };
 
    return (

@@ -66,7 +66,7 @@ def claim_polling_endpoint(request, claim_id):
     else:
         return JsonResponse(
             {
-                "id": str(claim.id),
+                "id": claim_id,
                 "verdict": claim.verdict,
                 "summary": claim.ai_summary,
                 "confidence_score": claim.consensus_score,
@@ -285,7 +285,44 @@ class ThreadViewSet(viewsets.ModelViewSet):
 class ClaimViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ClaimSerializer
     permission_classes = [IsAuthenticated]
-    queryset = Claim.objects.all()
+    
+    def get_queryset(self):
+        return Claim.objects.all()
 
 
+class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
+    serializer_class = EvidenceSubmissionSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        return EvidenceSubmission.objects.all()
+    
+    def perform_create(self, serializer):
+        thread_id = serializer.validated_data.pop("thread_id")
+        try:
+            thread = Thread.objects.get(id=thread_id)
+        except Thread.DoesNotExist:
+            raise NotFound("Thread not found.")
+        serializer.save(
+            contributor=self.request.user,
+            thread=thread,
+            contributor_trust_snapshot=self.request.user.profile.trust_score,
+        )
 
+class ThreadCommentViewSet(viewsets.ModelViewSet):
+    serializer_class = ThreadCommentSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        return ThreadComment.objects.all().order_by("-commented_at")
+    
+    def perform_create(self, serializer):
+        thread_id = serializer.validated_data.pop("thread_id")
+        try:
+            thread = Thread.objects.get(id=thread_id)
+        except Thread.DoesNotExist:
+            raise NotFound("Thread not found.")
+        serializer.save(
+            commenter=self.request.user,
+            thread=thread,
+        )

@@ -1,7 +1,7 @@
 import { state } from "./state.js";
 
 export function displayResultCard(claim) {
-   const { verdict, summary, confidence_score, source_type, source_url } = claim;
+   const { id, verdict, summary, confidence_score, source_type, source_url } = claim;
    let badgeColor = "#6b7280";
 
    switch (verdict) {
@@ -52,7 +52,7 @@ export function displayResultCard(claim) {
       </div>
       ${
          verdict === "UNVERIFIED" || confidence_score < 50
-            ? `<a href='http://localhost:5174/thread/create?claim_id=${claim.id}' target='_blank' class='truthlens-source-link'>Want to ask the community?</a>`
+            ? `<a href='http://localhost:5174/thread/create?claim_id=${id}' target='_blank' class='truthlens-source-link'>Want to ask the community?</a>`
             : verdict === "OUT_OF_SCOPE"
               ? ""
               : `<a href="${source_url}" target="_blank" class="truthlens-source-link">View Source</a>`

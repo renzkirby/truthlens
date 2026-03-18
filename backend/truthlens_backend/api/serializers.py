@@ -84,11 +84,13 @@ class ThreadSerializer(serializers.ModelSerializer):
 
 class ThreadCommentSerializer(serializers.ModelSerializer):
     commenter = UserSerializer(read_only=True)
+    thread_id = serializers.UUIDField(write_only=True)
     
     class Meta:
         model = ThreadComment
         fields = [
             "id",
+            "thread_id",
             "commenter",
             "comment_text",
             "commented_at",
@@ -96,11 +98,13 @@ class ThreadCommentSerializer(serializers.ModelSerializer):
 
 class EvidenceSubmissionSerializer(serializers.ModelSerializer):
     contributor = UserSerializer(read_only=True)
+    thread_id = serializers.UUIDField(write_only=True)
 
     class Meta:
         model = EvidenceSubmission
         fields = [
             "id",
+            "thread_id",
             "contributor",
             "evidence_caption",
             "evidence_url",
@@ -109,6 +113,7 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
             "submitted_at",
         ]
         
+
 class ThreadDetailSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
     claim = ClaimSerializer(read_only=True)

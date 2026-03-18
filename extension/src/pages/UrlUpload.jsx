@@ -1,14 +1,8 @@
+// UrlUpload.jsx
 import { useState } from "react";
 import axios from "axios";
 import "./UrlUpload.css";
-
-const STATUS_CONFIG = {
-  FACT: { bg: "#22c55e", label: "FACT" },
-  FAKE: { bg: "#ef4444", label: "FAKE" },
-  UNVERIFIED: { bg: "#f97316", label: "UNVERIFIED" },
-  SATIRE: { bg: "#a855f7", label: "SATIRE" },
-  OPINION: { bg: "#6b7280", label: "OPINION" },
-};
+import { Link as LinkIcon, ScanLine, Lightbulb } from "lucide-react";
 
 function UrlUpload() {
   const [url, setUrl] = useState("");
