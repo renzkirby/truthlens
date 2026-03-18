@@ -1,21 +1,19 @@
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
+from django.contrib.auth import authenticate
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import NotFound
-from tavily import TavilyClient
-import os
 import json
-import requests
 from .services import *
 from .tasks import snippet_fact_check_process, url_fact_check_process
 from .models import *
 from .serializers import *
-
+from datetime import timedelta
 
 # Create your views here.
 @csrf_exempt
@@ -138,6 +136,30 @@ def my_claims(request):
     ).distinct().order_by("-last_updated")
     serializer = ClaimSerializer(claims, many=True)
     return Response(serializer.data)
+
+@api_view(["POST"])
+def login_user(request):
+    username = request.data.get("username")
+    password = request.data.get("password")
+    remember_me = request.data.get("remember_me")
+
+    user = authenticate(request, username=username, password=password)
+
+    if user is None:
+        return Response(
+            {"detail": "No active account found with the given credentials"},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
+    refresh = RefreshToken.for_user(user)
+
+    if remember_me:
+        refresh.set_exp(lifetime=timedelta(days=30))
+
+    return Response({
+        "access": str(refresh.access_token),
+        "refresh": str(refresh),
+    })
 
 #Threads viewset
 class ThreadViewSet(viewsets.ModelViewSet):

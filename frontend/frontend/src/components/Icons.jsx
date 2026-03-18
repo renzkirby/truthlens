@@ -81,9 +81,13 @@ import {
    Clock,
    Circle,
    CirclePlus,
+   EyeOff,
+   LogOut,
 } from "lucide-react";
 
 const ICON_MAP = {
+   logout: LogOut,
+   "eye-off": EyeOff,
    search: Search,
    "circle-plus": CirclePlus,
    scissors: Scissors,

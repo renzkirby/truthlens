@@ -9,7 +9,7 @@ urlpatterns = [
     path("verify-url/", views.verify_url, name="verify_url"),
     
     #Auth urls
-    path('auth/login/', TokenObtainPairView.as_view()),
+    path('auth/login/', views.login_user),
     path('auth/refresh/', TokenRefreshView.as_view()),
     path('auth/register/', views.register_user),
     path('auth/me/', views.get_current_user),
