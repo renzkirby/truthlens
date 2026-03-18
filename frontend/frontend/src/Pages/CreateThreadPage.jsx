@@ -6,19 +6,19 @@ import Icons from "../components/Icons.jsx";
 import "./CreateThreadPage.css";
 
 const FLAG_OPTIONS = [
-   { value: "FACT",       label: "Fact",        icon: "check-circle",   color: "var(--fact-text)",       bg: "var(--fact-bg)",       border: "var(--fact-border)" },
-   { value: "FAKE",       label: "Fake",         icon: "x-circle",       color: "var(--fake-text)",       bg: "var(--fake-bg)",       border: "var(--fake-border)" },
-   { value: "MISLEADING", label: "Misleading",   icon: "alert-triangle", color: "var(--misleading-text)", bg: "var(--misleading-bg)", border: "var(--misleading-border)" },
-   { value: "SATIRE",     label: "Satire",       icon: "wand",           color: "var(--satire-text)",     bg: "var(--satire-bg)",     border: "var(--satire-border)" },
-   { value: "UNVERIFIED", label: "Unverified",   icon: "help-circle",    color: "var(--unverified-text)", bg: "var(--unverified-bg)", border: "var(--unverified-border)" },
+   { value: "FACT",       label: "Fact",        icon: "check-circle",   color: "var(--verdict-fact-text)",       bg: "var(--verdict-fact-bg)",       border: "var(--verdict-fact-border)" },
+   { value: "FAKE",       label: "Fake",         icon: "x-circle",       color: "var(--verdict-fake-text)",       bg: "var(--verdict-fake-bg)",       border: "var(--verdict-fake-border)" },
+   { value: "MISLEADING", label: "Misleading",   icon: "alert-triangle", color: "var(--verdict-misleading-text)", bg: "var(--verdict-misleading-bg)", border: "var(--verdict-misleading-border)" },
+   { value: "SATIRE",     label: "Satire",       icon: "wand",           color: "var(--verdict-satire-text)",     bg: "var(--verdict-satire-bg)",     border: "var(--verdict-satire-border)" },
+   { value: "UNVERIFIED", label: "Unverified",   icon: "help-circle",    color: "var(--verdict-unverified-text)", bg: "var(--verdict-unverified-bg)", border: "var(--verdict-unverified-border)" },
 ];
 
 const VERDICT_COLORS = {
-   FACT:        "var(--fact-text)",
-   FAKE:        "var(--fake-text)",
-   MISLEADING:  "var(--misleading-text)",
-   SATIRE:      "var(--satire-text)",
-   UNVERIFIED:  "var(--unverified-text)",
+   FACT:        "var(--verdict-fact-text)",
+   FAKE:        "var(--verdict-fake-text)",
+   MISLEADING:  "var(--verdict-misleading-text)",
+   SATIRE:      "var(--verdict-satire-text)",
+   UNVERIFIED:  "var(--verdict-unverified-text)",
 };
 
 function CreateThreadPage() {
@@ -45,7 +45,8 @@ function CreateThreadPage() {
    };
 
    const handleFlagSelect = (value) => {
-      setFormValues({ ...formValues, flag_reason: value });
+      setformValues({ ...formValues, flag_reason: value });
+      console.log(formValues.flag_reason)
    };
 
    const handleSubmit = async () => {
@@ -66,7 +67,7 @@ function CreateThreadPage() {
                flag_reason: formValues.flag_reason,
             }),
          });
-         navigate(`/thread?thread_id=${responseData.id}`);
+         navigate(`/thread/detail/${responseData.id}`);
       } catch (err) {
          setError("Something went wrong in creating a thread.");
       } finally {
@@ -143,6 +144,7 @@ function CreateThreadPage() {
 
                   <div className="create-thread-form-col">
 
+                  <form>
                      <div className="form-section box-panel">
                         <label className="form-label">
                            <Icons name="file-text" size={15} />
@@ -194,7 +196,9 @@ function CreateThreadPage() {
                                     backgroundColor: opt.bg,
                                     borderColor: opt.border,
                                  } : {}}
-                                 onClick={() => handleFlagSelect(opt.value)}
+                                 onClick={() => {handleFlagSelect(opt.value);
+                                    console.log(opt.color, opt.value, opt.bg, opt.border)
+                                 }}
                               >
                                  <Icons name={opt.icon} size={15} />
                                  {opt.label}
@@ -205,7 +209,7 @@ function CreateThreadPage() {
 
                      <button
                         className="submit-thread-btn"
-                        onClick={handleSubmit}
+                        onClick={() => {handleSubmit()}}
                         disabled={submitting || !formValues.flag_reason}
                      >
                         {submitting ? (
@@ -218,6 +222,7 @@ function CreateThreadPage() {
                         )}
                      </button>
 
+                  </form>
                   </div>
 
                   <div className="create-thread-sidebar">
@@ -246,9 +251,9 @@ function CreateThreadPage() {
                                  style={{
                                     width: `${claim.consensus_score || 0}%`,
                                     backgroundColor:
-                                       claim.consensus_score >= 70 ? "var(--fact-text)"
-                                       : claim.consensus_score >= 40 ? "var(--misleading-text)"
-                                       : "var(--fake-text)",
+                                       claim.consensus_score >= 70 ? "var(--verdict-fact-text)"
+                                       : claim.consensus_score >= 40 ? "var(--verdict-misleading-text)"
+                                       : "var(--verdict-fake-text)",
                                  }}
                               />
                            </div>

@@ -229,7 +229,7 @@
    gap: 8px;
    width: 100%;
    padding: 14px;
-   background: var(--primary-blue);
+   background: var(--brand-primary);
    color: #fff;
    border: none;
    border-radius: 10px;
@@ -241,7 +241,7 @@
 }
 
 .submit-thread-btn:hover:not(:disabled) {
-   background: var(--primary-hover);
+   background: var(--brand-primary-hover);
 }
 
 .submit-thread-btn:disabled {
