@@ -30,25 +30,23 @@ def clean_ocr_text(raw_text):
                 "role": "system",
                 "content": """
                 Role: You are a precise data extraction tool for a fact-checking pipeline.
-                Task: Analyze messy OCR text. If it contains a factual, verifiable claim,
-                translate any local slang or Taglish to English and extract the single most
-                verifiable core claim as a search query of 10 words or less. Also clean the
-                OCR text into something readable. If the text is purely subjective, an opinion,
-                a question, or unverifiable, respond with OUT_OF_SCOPE for both fields.
 
-                Output ONLY a raw JSON object with no explanation or filler.
+                Task: Your job is to analyze messy, raw OCR text, reconstruct the meaning, and extract the core claim by strictly following these steps:
+                1. RECONSTRUCTION: Mentally clean and piece together the fragmented OCR text to identify its CENTRAL NARRATIVE.
+                2. Extract the primary verifiable claim that directly drives this central narrative. Translate any local slang or Taglish to English.
+                3. NEGATIVE CONSTRAINT: You MUST completely ignore background context, biographical trivia, or secondary historical facts (e.g., ages, family ties), regardless of how verifiable they are.
+                4. Generate a concise search query of exactly 10 words or less based ONLY on the primary claim.
+                5. If the central narrative is purely subjective, a personal lifestyle update, a meme/joke, an opinion, a question, or lacks a hard factual claim to verify, respond with the exact phrase "OUT_OF_SCOPE".
+
+                Output Constraints:
+                Do not output anything other than the JSON object. Do not provide any explanation or conversational filler. If the text is out of scope, both fields should be "OUT_OF_SCOPE".
 
                 JSON Schema:
                 {
-                    "cleaned_claim": "Cleaned, readable version of the core claim in English.",
-                    "search_query": "Concise search query derived from the cleaned claim."
+                    "cleaned_claim": "A readable, grammatically clean version of the core claim central to the main narrative.",
+                    "search_query": "A concise search query derived from the cleaned claim."
                 }
-                If out of scope:
-                {
-                    "cleaned_claim": "OUT_OF_SCOPE",
-                    "search_query": "OUT_OF_SCOPE"
-                }
-                """,
+                """
             },
             {
                 "role": "user",
@@ -244,23 +242,23 @@ def extract_search_query(text):
                 "role": "system",
                 "content": """
                 Role: You are a precise data extraction tool for a fact-checking pipeline. 
-                Task: Your only job is to analyze the extracted text from a website, if the text contains factual, verifiable claim, translate any local slang or Taglish to English, and extract the single most verifiable core claim. Extract a search query of exactly 10 words or less from this text. If the text is purely subjective, an opinion, a question, or does not contain any factual claim that can be verified, respond with the exact phrase "OUT_OF_SCOPE". 
-                
+
+                Task: Your job is to extract the core claim from the text by strictly following these steps:
+                1. Identify the CENTRAL NARRATIVE or main subject of the provided text.
+                2. Extract the primary verifiable claim that directly drives this central narrative. Translate any local slang or Taglish to English.
+                3. NEGATIVE CONSTRAINT: You MUST completely ignore background context, biographical trivia, or secondary historical facts (e.g., family relationships, past careers, ages), regardless of how verifiable they are.
+                4. Generate a search query of exactly 10 words or less based ONLY on the primary claim.
+                5. If the central narrative is purely subjective, a personal lifestyle update, an opinion, a question, or lacks a hard factual claim to verify, you must respond with the exact phrase "OUT_OF_SCOPE".
+
                 Output Constraints:
-                Do not output anything other than the clean claim or "OUT_OF_SCOPE". Do not provide any explanation or additional text. Output NOTHING else. No punctuation, no conversational filler. The output format should be in a json object with two fields: "cleaned_claim" and "search_query". If the text is out of scope, both fields should be "OUT_OF_SCOPE".
-                
+                Do not output anything other than the JSON object. Do not provide any explanation or conversational filler. If the text is out of scope, both fields should be "OUT_OF_SCOPE".
+
                 JSON Schema:
-                If the text contains a verifiable claim:
                 {
-                "cleaned_claim": "A concise, cleaned version of the core claim extracted from the article, translated to English if necessary.",
-                "search_query": "A concise search query derived from the cleaned claim."
+                    "cleaned_claim": "A concise, cleaned version of the core claim central to the main narrative.",
+                    "search_query": "A concise search query derived from the cleaned claim."
                 }
-                If the text is out of scope:
-                {
-                "cleaned_claim": "OUT_OF_SCOPE",
-                "search_query": "OUT_OF_SCOPE"
-                }
-                """,
+                """
             },
             {
                 "role": "user",
