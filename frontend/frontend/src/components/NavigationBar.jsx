@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import LogoImage from "../assets/truthlens_logo.png";
 import Icons from "./Icons.jsx";
 import "./NavigationBar.css";
+import NotificationPopup from "./NotificationPopup.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 
 function NavigationBar() {
@@ -84,11 +85,7 @@ function NavigationBar() {
          </div>
 
          <div className="nav-right">
-            <Link to="/notifications" className="link">
-               <button className="nav-icon-btn">
-                  <Icons name="bell" size={20} color="#9ca3af" />
-               </button>
-            </Link>
+            <NotificationPopup />
    
             <div
                className="user-menu-container"
