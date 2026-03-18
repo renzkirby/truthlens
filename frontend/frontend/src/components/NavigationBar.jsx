@@ -74,6 +74,12 @@ function NavigationBar() {
                      Dashboard
                   </div>
                </Link>
+               <Link to="/verify" className="link">
+                  <div className={`nav-tab ${location.pathname === "/verify" ? "active" : ""}`}>
+                     <Icons name="scan-line" />
+                     Verify
+                  </div>
+               </Link>
             </div>
          </div>
 

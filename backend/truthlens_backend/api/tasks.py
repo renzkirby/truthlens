@@ -235,3 +235,4 @@ def url_fact_check_process(url, claim_id):
         claim.verified_via = Claim.VerificationSource.AI_EXTENSION
         claim.source_type = context_data.get("source_type")
         claim.context_text = cleaned_text
+        claim.save()  

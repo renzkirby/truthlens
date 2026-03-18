@@ -10,6 +10,7 @@ import CreateThreadPage from "./Pages/CreateThreadPage";
 import UserProfile from "./Pages/UserProfile.jsx";
 import Dashboard from "./Pages/Dashboard.jsx";
 import ThreadDetailPage from "./Pages/ThreadDetailPage";
+import VerifyPage from "./Pages/VerifyPage.jsx";
 
 function App() {
    return (
@@ -45,6 +46,10 @@ function App() {
                   <Route
                      path="/dashboard"
                      element={<Dashboard />}
+                  />
+                  <Route
+                     path="/verify"
+                     element={<VerifyPage />}
                   />
                   <Route
                      path="/thread/create"
