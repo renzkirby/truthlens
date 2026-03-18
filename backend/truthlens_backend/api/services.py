@@ -16,10 +16,7 @@ def _parse_groq_json(raw_content):
     return json.loads(cleaned)
 
 
-# ──────────────────────────────────────────────
 # IMAGE PIPELINE
-# ──────────────────────────────────────────────
-
 def clean_ocr_text(raw_text):
     """Extract a verifiable core claim and search query from raw OCR text."""
     response = groq_client.chat.completions.create(
@@ -221,10 +218,7 @@ def evaluate_image_claim_with_tavily(original_claim, tavily_results):
         }
 
 
-# ──────────────────────────────────────────────
 # URL PIPELINE
-# ──────────────────────────────────────────────
-
 def clean_extracted_text(text):
     """Strip markdown, links, and short lines from URL-extracted text."""
     text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
@@ -422,10 +416,7 @@ def evaluate_url_claim_with_tavily(extracted_text, context):
         }
 
 
-# ──────────────────────────────────────────────
 # SHARED UTILITIES
-# ──────────────────────────────────────────────
-
 def process_image(raw_base64):
     """Decode a base64 image and compute its perceptual hash."""
     image_bytes = base64.b64decode(raw_base64)

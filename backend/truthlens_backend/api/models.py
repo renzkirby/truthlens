@@ -9,6 +9,8 @@ class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     trust_score = models.FloatField(default=0.0)
     bio = models.TextField(blank=True, null=True)
+    is_email_verified = models.BooleanField(default=False)
+    email_verification_token = models.CharField(max_length=64, blank=True, null=True)
 
     def __str__(self):
         return f"UserProfile {self.id} - User: {self.user.username} - Trust Score: {self.trust_score}"

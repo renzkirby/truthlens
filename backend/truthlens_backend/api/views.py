@@ -1,4 +1,5 @@
 from django.http import JsonResponse
+from django.core.mail import send_mail
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
@@ -9,6 +10,7 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import NotFound
 import json
+import secrets
 from .services import *
 from .tasks import snippet_fact_check_process, url_fact_check_process
 from .models import *
@@ -112,6 +114,19 @@ def register_user(request):
     serializer = RegisterSerializer(data=request.data)
     if serializer.is_valid():
         user = serializer.save()
+        token = secrets.token_urlsafe(32)
+        user.profile.email_verification_token = token
+        user.profile.save()
+
+        verification_link = f"http://localhost:5174/verify-email?token={token}"
+        send_mail(
+            subject="Verify your TruthLens email",
+            message=f"Click the link to verify your email: {verification_link}",
+            from_email=None,
+            recipient_list=[user.email],
+            fail_silently=True,  # don't crash registration if email fails
+        )
+
         return Response(get_tokens_for_user(user), status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -160,6 +175,49 @@ def login_user(request):
         "access": str(refresh.access_token),
         "refresh": str(refresh),
     })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def send_verification_email(request):
+    token = secrets.token_urlsafe(32)
+    try:
+        user_profile = UserProfile.objects.get(user=request.user)
+    except UserProfile.DoesNotExist:
+        return Response({ "error": "User does not exist."}, status=404)
+    
+    user_profile.email_verification_token = token
+    user_profile.save()
+    
+    verification_link = f"http://localhost:5174/verify-email?token={token}"
+    
+    send_mail(
+        subject="Verify your TruthLens email",
+        message=f"Click the link to verify your email: {verification_link}",
+        from_email=None,
+        recipient_list=[request.user.email],
+    )
+    
+    return Response({"message": "Verification email sent."}, status=200) 
+
+@api_view(["GET"])
+def verify_email(request):
+    token = request.query_params.get("token")
+
+    if not token:
+        return Response({"error": "Token is required."}, status=400)
+
+    try:
+        user_profile = UserProfile.objects.get(email_verification_token=token)
+    except UserProfile.DoesNotExist:
+        return Response({"error": "Invalid or expired token"}, status=400)
+    
+    user_profile.is_email_verified = True
+    user_profile.email_verification_token = None
+    user_profile.save()
+    
+    return Response({"message": "Email verified successfully."}, status=200)
+    
 
 #Threads viewset
 class ThreadViewSet(viewsets.ModelViewSet):

@@ -21,11 +21,14 @@ class RegisterSerializer(serializers.ModelSerializer):
     
 class UserSerializer(serializers.ModelSerializer):
     trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
-    date_joined = serializers. DateTimeField(read_only=True)
+    is_email_verified = serializers.BooleanField(
+        source="profile.is_email_verified", read_only=True
+    )
+    date_joined = serializers.DateTimeField(read_only=True)
 
     class Meta:
         model = User
-        fields = ["id", "username", "email", "trust_score", "date_joined"]
+        fields = ["id", "username", "email", "trust_score", "is_email_verified", "date_joined"]
 
 
 class UserProfileSerializer(serializers.ModelSerializer):

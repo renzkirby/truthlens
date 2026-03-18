@@ -1,5 +1,5 @@
 from django.urls import path, include
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework.routers import DefaultRouter
 from . import views
 
@@ -13,7 +13,9 @@ urlpatterns = [
     path('auth/refresh/', TokenRefreshView.as_view()),
     path('auth/register/', views.register_user),
     path('auth/me/', views.get_current_user),
-    path('auth/my-claims/', views.my_claims), 
+    path('auth/my-claims/', views.my_claims),
+    path('auth/send-verification/', views.send_verification_email),
+    path('auth/verify-email/', views.verify_email),
 ]
 
 router = DefaultRouter()
