@@ -43,14 +43,14 @@
   --verdict-fake-text: #7f1d1d;
 
   /* Misleading */
-  --verdict-misleading-border: #d97706;
-  --verdict-misleading-bg: #fef3c7;
-  --verdict-misleading-text: #78350f;
-
-  /* Unverified / Out of Scope */
   --verdict-unverified-border: #6b7280;
   --verdict-unverified-bg: #f3f4f6;
   --verdict-unverified-text: #374151;
+
+  /* Unverified / Out of Scope */
+  --verdict-misleading-border: #d97706;
+  --verdict-misleading-bg: #fef3c7;
+  --verdict-misleading-text: #78350f;
 
   /* Satire */
   --verdict-satire-border: #7c3aed;
