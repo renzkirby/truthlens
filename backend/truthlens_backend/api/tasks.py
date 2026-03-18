@@ -189,49 +189,52 @@ def url_fact_check_process(url, claim_id):
             print(f"GFC error: {str(e)}")
             
         #Tavily
-        try:
-            print("Searching trough tavily....")
+        if not gfc_data.get("claims"):
+            try:
+                print("Searching trough tavily....")
 
-            tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
+                tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
 
-            search_response = tavily_client.search(
-                query=search_query[:300],
-                search_depth="advanced",
-                topic="news",
-                include_answer=True,
-            )
+                search_response = tavily_client.search(
+                    query=search_query[:300],
+                    search_depth="advanced",
+                    topic="news",
+                    include_answer=True,
+                )
 
-            context = search_response.get("answer", "No additional context found")
-            print(f"Tavily search context: {context[:200]}")
+                context = search_response.get("answer", "No additional context found")
+                print(f"Tavily search context: {context[:200]}")
 
-        except Exception as e:
-            print(f"Search error: {str(e)}")
-            context = "Could not retrieve additional context"
+            except Exception as e:
+                print(f"Search error: {str(e)}")
+                context = "Could not retrieve additional context"
 
-        #AI Analysis
-        try:
-            print("Running Groq Analysis...")
+            #AI Analysis
+            try:
+                print("Running Groq Analysis...")
 
-            verdict = evaluate_url_claim_with_tavily(cleaned_claim, context)
-            print(f"AI verdict: {verdict}")
+                verdict = evaluate_url_claim_with_tavily(cleaned_claim, context)
+                print(f"AI verdict: {verdict}")
 
-            context_data ={
-                    "verdict": verdict.get("verdict"),
-                    "summary": verdict.get("summary"),
-                    "confidence_score": verdict.get("confidence_score"),
-                    "source_type": "Live Web Search",
-                    "source_url": url,
-                }
+                context_data ={
+                        "verdict": verdict.get("verdict"),
+                        "summary": verdict.get("summary"),
+                        "confidence_score": verdict.get("confidence_score"),
+                        "source_type": "Live Web Search",
+                        "source_url": url,
+                    }
 
-        except Exception as e:
-            print(f"Groq error: {str(e)}")
-            return {"error": f"AI analysis failed: {str(e)}"}
+            except Exception as e:
+                print(f"Groq error: {str(e)}")
+                return {"error": f"AI analysis failed: {str(e)}"}
         
-        
+        print(context_data)
         claim = Claim.objects.get(id=claim_id)
         claim.verdict = context_data.get("verdict")
         claim.ai_summary = context_data.get("summary")
         claim.consensus_score = context_data.get("confidence_score")
         claim.verified_via = Claim.VerificationSource.AI_EXTENSION
         claim.source_type = context_data.get("source_type")
-        claim.context_text = cleaned_text.get("cleaned_claim")
+        claim.context_text = cleaned_text
+        
+        claim.save()

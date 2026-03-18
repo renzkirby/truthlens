@@ -44,6 +44,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                   return;
                }
                const claim = await fetchClaimResult(data.claim_id);
+               console.log(claim);
                if (claim && claim.verdict !== "PENDING") {
                   clearInterval(pollInterval);
                   chrome.tabs.sendMessage(tabId, {
