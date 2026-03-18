@@ -21,6 +21,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       return true;
    }
 
+   // Needs fix
    if (request.type === "VERIFY_URL") {
       const { url, tabId } = request;
 
