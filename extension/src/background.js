@@ -1,3 +1,6 @@
+import { fetchClaimResult } from "./modules/api.js";
+import { removeLoadingCard } from "./modules/ui.js";
+
 console.log("TruthLens background service worker loaded");
 
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
@@ -28,10 +31,40 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       })
          .then((res) => res.json())
          .then((data) => {
-            chrome.tabs.sendMessage(tabId, {
-               type: "DISPLAY_URL_RESULT",
-               data: data,
-            });
+            let pollCount = 0;
+            const maxPolls = 20;
+
+            const pollInterval = setInterval(async () => {
+               pollCount++;
+               if (pollCount > maxPolls) {
+                  clearInterval(pollInterval);
+                  console.error("Polling timed out");
+                  removeLoadingCard();
+                  return;
+               }
+               const claim = await fetchClaimResult(data.claim_id);
+               if (claim && claim.verdict !== "PENDING") {
+                  clearInterval(pollInterval);
+                  chrome.tabs.sendMessage(tabId, {
+                     type: "DISPLAY_URL_RESULT",
+                     data: claim,
+                  });
+               }
+               // if (!claim) {
+               //    clearInterval(pollInterval);
+               //    chrome.tabs.sendMessage(tabId, {
+               //       type: "DISPLAY_URL_RESULT",
+               //       data: {
+               //          verdict: "OUT_OF_SCOPE",
+               //          summary:
+               //             "The content of the image is not a claim that can be fact-checked.",
+               //          confidence_score: 100,
+               //          source_type: "N/A",
+               //          source_url: url,
+               //       },
+               //    });
+               // }
+            }, 3000);
          })
          .catch((err) => {
             console.error("URL verification failed:", err);
@@ -47,6 +80,6 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             });
          });
 
-      return true; 
+      return true;
    }
 });

@@ -45,7 +45,7 @@ export async function sendImageToServer(image) {
 }
 
 // Getting claim result
-async function fetchClaimResult(claim_id) {
+export async function fetchClaimResult(claim_id) {
    try {
       const response = await fetch(`${state.API_BASE_URL}/claims/${claim_id}/status`);
       const data = await response.json();
@@ -53,5 +53,12 @@ async function fetchClaimResult(claim_id) {
       return data;
    } catch (error) {
       console.error("Error polling claim status:", error);
+      return {
+         verdict: "OUT_OF_SCOPE",
+         summary: "The content of the image is not a claim that can be fact-checked.",
+         confidence_score: 100,
+         source_type: "N/A",
+         source_url: url,
+      };
    }
 }
