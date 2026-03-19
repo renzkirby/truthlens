@@ -15,11 +15,20 @@ import Icons from "../components/Icons.jsx"
 
 
 const VERDICT_CONFIG = {
-  FACT:       { color: "#22c55e", label: "FACT" },
-  FAKE:       { color: "#ef4444", label: "FAKE" },
-  UNVERIFIED: { color: "#f59e0b", label: "UNVERIFIED" },
-  SATIRE:     { color: "#a855f7", label: "SATIRE" },
-  PENDING:    { color: "#9ca3af", label: "PENDING" },
+  FACT: { color: "var(--verdict-fact-text)", bg: "var(--verdict-fact-bg)", label: "FACT" },
+  FAKE: { color: "var(--verdict-fake-text)", bg: "var(--verdict-fake-bg)", label: "FAKE" },
+  UNVERIFIED: {
+      color: "var(--verdict-unverified-text)",
+      bg: "var(--verdict-unverified-bg)",
+      label: "UNVERIFIED",
+   },
+  SATIRE: { color: "var(--verdict-satire-text)", bg: "var(--verdict-satire-bg)", label: "SATIRE" },
+  OUT_OF_SCOPE: {
+      color: "var(--verdict-unverified-text)",
+      bg: "var(--verdict-unverified-bg)",
+      label: "OUT OF SCOPE",
+   },
+  MISLEADING: { color: "var(--verdict-misleading-text)", bg: "var(--verdict-misleading-bg)", label: "MISLEADING" },
 };
 
 
