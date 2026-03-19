@@ -12,6 +12,7 @@ import Dashboard from "./Pages/Dashboard.jsx";
 import ThreadDetailPage from "./Pages/ThreadDetailPage";
 import VerifyPage from "./Pages/VerifyPage.jsx";
 import ModerationPage from "./Pages/ModerationPage.jsx";
+import VerifyEmailPage from "./Pages/VerifyEmailPage.jsx";
 
 function App() {
    return (
@@ -64,11 +65,15 @@ function App() {
                      path="/thread/detail/:threadId"
                      element={<ThreadDetailPage />}
                   />
+                  <Route
+                     path="/verify-email"
+                     element={<VerifyEmailPage />}
+                  />
 
                   {/* MODERATION PAGE *PARA LANG MAVIEW */}
                   <Route
                      path="/moderation"
-                     element={<ModerationPage/>}
+                     element={<ModerationPage />}
                   />
                </Route>
             </Routes>
