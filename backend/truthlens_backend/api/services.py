@@ -28,20 +28,20 @@ def clean_ocr_text(raw_text):
                 "content": """
                 Role: You are a precise data extraction tool for a fact-checking pipeline.
 
-                Task: Your job is to analyze messy, raw OCR text, reconstruct the meaning, and extract the core claim by strictly following these steps:
-                1. RECONSTRUCTION: Mentally clean and piece together the fragmented OCR text to identify its CENTRAL NARRATIVE.
-                2. Extract the primary verifiable claim that directly drives this central narrative. Translate any local slang or Taglish to English.
-                3. NEGATIVE CONSTRAINT: You MUST completely ignore background context, biographical trivia, or secondary historical facts (e.g., ages, family ties), regardless of how verifiable they are.
-                4. Generate a concise search query of exactly 10 words or less based ONLY on the primary claim.
-                5. If the central narrative is purely subjective, a personal lifestyle update, a meme/joke, an opinion, a question, or lacks a hard factual claim to verify, respond with the exact phrase "OUT_OF_SCOPE".
-
-                Output Constraints:
-                Do not output anything other than the JSON object. Do not provide any explanation or conversational filler. If the text is out of scope, both fields should be "OUT_OF_SCOPE".
+                Task: Your job is to extract the core claim from the text by strictly following these steps:
+                1. Identify the CENTRAL NARRATIVE of the provided text.
+                2. Extract the primary verifiable claim. Translate any local slang or Taglish to English.
+                3. CONTEXT RETENTION: You MUST include essential context in the cleaned_claim (e.g., specific names, dates, locations, and the specific event being alleged). Do not over-prune.
+                4. Generate a highly optimized search query of exactly 6-10 keywords. Use distinct nouns and entities that a search engine can easily find.
+                5. If the text is purely subjective, an opinion, a meme, or lacks a factual claim, respond with "OUT_OF_SCOPE".
+                
+                SPECIAL RULE — KNOWN SATIRE SOURCES:
+                If the text originates from a known satire or parody publication, do NOT classify as OUT_OF_SCOPE. Extract the claim normally and set search_query to the topic being satirized.
 
                 JSON Schema:
                 {
-                    "cleaned_claim": "A readable, grammatically clean version of the core claim central to the main narrative.",
-                    "search_query": "A concise search query derived from the cleaned claim."
+                    "cleaned_claim": "A complete, grammatically correct sentence detailing the core claim AND its specific context.",
+                    "search_query": "Keyword1 Keyword2 Keyword3..."
                 }
                 """
             },
@@ -61,14 +61,15 @@ def is_fact_check_relevant(original_text, fact_check_text):
     """Check if a fact check result is relevant to the original claim or article."""
     response = groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile",
+        response_format={"type": "json_object"},
         messages=[
             {
                 "role": "system",
                 "content": (
-                    "You are a relevance checker for a fact-checking pipeline. "
-                    "Compare the two texts and determine if the fact check result is "
-                    "directly relevant to verifying the claim. "
-                    "Output ONLY 'Relevant' or 'Not Relevant'. No explanation."
+                    "You are a strict relevance checker for a fact-checking pipeline. "
+                    "Two texts are relevant ONLY if they discuss the exact same real-world "
+                    "event, person, and time period. "
+                    "Output a JSON object with 'reasoning' (1 sentence of deduction) and 'is_relevant' (boolean true/false)."
                 ),
             },
             {
@@ -78,9 +79,9 @@ def is_fact_check_relevant(original_text, fact_check_text):
         ],
     )
 
-    result = response.choices[0].message.content.strip().upper()
+    result = _parse_groq_json(response.choices[0].message.content)
     print("is_fact_check_relevant RESPONSE:", result)
-    return "NOT RELEVANT" not in result
+    return result.get("is_relevant", False)
 
 # Evaluate Google's Fact Check Tools data against the original claim using Groq
 def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data):
@@ -95,20 +96,23 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data):
         1. STRICT EVIDENCE BINDING: You are a forensic reading comprehension engine, NOT an omniscient knowledge base. You must evaluate the claim EXCLUSIVELY based on the facts explicitly provided in the evidence block.
         2. NO PRE-TRAINED KNOWLEDGE: Do not use your internal weights, historical knowledge, or external facts to verify or debunk the claim. If the evidence does not contain the specific information needed to definitively judge the claim, you MUST classify it as UNVERIFIED.
         3. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
+        4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
 
         CLASSIFICATION TIERS & EVALUATION LOGIC:
-        You must map your evaluation to EXACTLY ONE of the following 4 tiers. Pay close attention to the epistemological rules regarding "Missing Context" and "Satire".
+        You must map your evaluation to EXACTLY ONE of the following 5 tiers. 
 
         1. FACT: The core subjects, actions, statistical figures, and temporal context of the claim are completely supported by the evidence. Minor semantic variations that do not alter the fundamental truth are acceptable.
 
-        2. FAKE: The claim is explicitly contradicted by the evidence. 
-        - THE "MISSING CONTEXT" RULE: If the evidence states the claim uses genuine media (real photos/videos/quotes) but places them in a false context (e.g., wrong date, wrong location, unrelated event), the claim is FAKE. The intent is to deceive via recontextualization.
-        - THE "MISLEADING" RULE: If true statistics or facts are cherry-picked to construct a mathematically or logically false narrative, it maps to FAKE.
+        2. FAKE: The claim is entirely fabricated or explicitly contradicted by the evidence.
 
-        3. SATIRE: The claim is a joke, parody, or humorous critique.
+        3. MISLEADING: The claim contains a mix of truth and falsehoods. 
+        - THE "MISSING CONTEXT" RULE: If the evidence states the claim uses genuine media (real photos/videos/quotes) but places them in a false context (e.g., wrong date, wrong location, unrelated event), the claim is MISLEADING. 
+        - THE CHERRY-PICKING RULE: If true statistics or partial facts are intentionally cherry-picked to construct a mathematically or logically false overall narrative, it is MISLEADING.
+
+        4. SATIRE: The claim is a joke, parody, or humorous critique.
         - DETECTION PROTOCOL: Look beyond explicit labels. Satire is present if the text exhibits extreme hyperbole, semantic dissonance (mixing formal institutional language with sheer absurdity), or echoic mention (mocking repetition). Be highly alert for "dry sarcasm," exaggerated "pavictim" (playing victim) narratives, or claims originating from known parody sources. If a claim is so absurd that it breaches the threshold of reality without malicious deception, it is SATIRE.
 
-        4. UNVERIFIED: The provided evidence is irrelevant, inconclusive, or completely absent. Or, the claim is a subjective opinion, political prediction, or emotional expression that cannot be objectively proven true or false. 
+        5. UNVERIFIED: The provided evidence is irrelevant, inconclusive, or completely absent. Or, the claim is a subjective opinion, political prediction, or emotional expression that cannot be objectively proven true or false. 
         - AUTHORIZED ABSTENTION: If you do not know the answer based strictly on the evidence, you must choose UNVERIFIED.
 
         PHILIPPINE MISINFORMATION TROPES:
@@ -117,13 +121,13 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data):
 
         JSON OUTPUT SCHEMA & ENFORCEMENT:
         You must output ONLY a raw, valid JSON object. 
-        DO NOT wrap the JSON in markdown formatting. Do not use the word json and backticks.
+        DO NOT wrap the JSON in markdown formatting (e.g., no ```json blocks).
         DO NOT include conversational filler, preambles, or explanations outside the JSON object.
 
         Your JSON must exactly match this structure:
         {
         "reasoning": "Think step-by-step here. 1) Analyze the core assertion of the claim. 2) Summarize the provided evidence. 3) Compare the two for alignment, contradictions, or missing context. 4) Evaluate for satire or absurdity. Do this logical deduction BEFORE stating the verdict.",
-        "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'UNVERIFIED', 'SATIRE'",
+        "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
         "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language. E.g., 'While the photo is real, the evidence shows it was taken in 2018 during a different event, not yesterday.'",
         "confidence_score": 95
         }
@@ -177,26 +181,47 @@ def evaluate_image_claim_with_tavily(original_claim, tavily_results):
             {
                 "role": "system",
                 "content": """
-                Role: Act as the core fact-checking engine for a misinformation filtering platform.
-                Task: Analyze the social media claim against retrieved live news evidence.
+                Role: You are the TruthLens Core Logic Engine, an expert automated fact-checking AI, forensic linguist, and misinformation analyst. 
+                Task: Your sole function is to evaluate a specific social media claim strictly against a provided dossier of evidence, and output a structured JSON analysis.
 
-                Evaluation Criteria (strict hierarchy):
-                SATIRE: Claim contains satire markers OR evidence confirms a satirical source.
-                UNVERIFIED: Evidence is unrelated OR lacks sufficient data to decide.
-                FACT: Evidence directly and substantially confirms the claim.
-                FAKE: Evidence directly contradicts or debunks the claim.
+                CRITICAL DIRECTIVES & HALLUCINATION PREVENTION:
+                1. STRICT EVIDENCE BINDING: You are a forensic reading comprehension engine, NOT an omniscient knowledge base. You must evaluate the claim EXCLUSIVELY based on the facts explicitly provided in the evidence block.
+                2. NO PRE-TRAINED KNOWLEDGE: Do not use your internal weights, historical knowledge, or external facts to verify or debunk the claim. If the evidence does not contain the specific information needed to definitively judge the claim, you MUST classify it as UNVERIFIED.
+                3. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
+                4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
 
-                Summary rules: For UNVERIFIED, state that current sources lack enough verified
-                information. For FACT/FAKE, do not mention evidence sufficiency.
+                CLASSIFICATION TIERS & EVALUATION LOGIC:
+                You must map your evaluation to EXACTLY ONE of the following 5 tiers. 
 
-                Output ONLY a raw valid JSON object. No markdown. No backticks.
+                1. FACT: The core subjects, actions, statistical figures, and temporal context of the claim are completely supported by the evidence. Minor semantic variations that do not alter the fundamental truth are acceptable.
 
-                JSON Schema:
+                2. FAKE: The claim is entirely fabricated or explicitly contradicted by the evidence.
+
+                3. MISLEADING: The claim contains a mix of truth and falsehoods. 
+                - THE "MISSING CONTEXT" RULE: If the evidence states the claim uses genuine media (real photos/videos/quotes) but places them in a false context (e.g., wrong date, wrong location, unrelated event), the claim is MISLEADING. 
+                - THE CHERRY-PICKING RULE: If true statistics or partial facts are intentionally cherry-picked to construct a mathematically or logically false overall narrative, it is MISLEADING.
+
+                4. SATIRE: The claim is a joke, parody, or humorous critique.
+                - DETECTION PROTOCOL: Look beyond explicit labels. Satire is present if the text exhibits extreme hyperbole, semantic dissonance (mixing formal institutional language with sheer absurdity), or echoic mention (mocking repetition). Be highly alert for "dry sarcasm," exaggerated "pavictim" (playing victim) narratives, or claims originating from known parody sources. If a claim is so absurd that it breaches the threshold of reality without malicious deception, it is SATIRE.
+
+                5. UNVERIFIED: The provided evidence is irrelevant, inconclusive, or completely absent. Or, the claim is a subjective opinion, political prediction, or emotional expression that cannot be objectively proven true or false. 
+                - AUTHORIZED ABSTENTION: If you do not know the answer based strictly on the evidence, you must choose UNVERIFIED.
+
+                PHILIPPINE MISINFORMATION TROPES:
+                - "CTTO" (Credit to the Owner): Treat claims containing "CTTO" with extreme skepticism; it is predominantly used to strip original provenance and launder decontextualized media.
+                - Clickbait Markers: Phrases like "Look at this," excessive capitalization, or extreme punctuation (!!!) often accompany Missing Context memes. Evaluate the core assertion against the evidence rigorously.
+
+                JSON OUTPUT SCHEMA & ENFORCEMENT:
+                You must output ONLY a raw, valid JSON object. 
+                DO NOT wrap the JSON in markdown formatting (e.g., no ```json blocks).
+                DO NOT include conversational filler, preambles, or explanations outside the JSON object.
+
+                Your JSON must exactly match this structure:
                 {
-                    "reasoning": "1-sentence deduction comparing the claim to the evidence.",
-                    "verdict": "MUST be exactly one of: [FACT, FAKE, UNVERIFIED, SATIRE]",
-                    "summary": "1-2 sentence user-facing explanation.",
-                    "confidence_score": "Integer from 1 to 100. Not 100 unless indisputable."
+                "reasoning": "Think step-by-step here. 1) Analyze the core assertion of the claim. 2) Summarize the provided evidence. 3) Compare the two for alignment, contradictions, or missing context. 4) Evaluate for satire or absurdity. Do this logical deduction BEFORE stating the verdict.",
+                "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
+                "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language. E.g., 'While the photo is real, the evidence shows it was taken in 2018 during a different event, not yesterday.'",
+                "confidence_score": 95
                 }
                 """,
             },
@@ -235,22 +260,22 @@ def extract_search_query(text):
             {
                 "role": "system",
                 "content": """
-                Role: You are a precise data extraction tool for a fact-checking pipeline. 
+                Role: You are a precise data extraction tool for a fact-checking pipeline.
 
                 Task: Your job is to extract the core claim from the text by strictly following these steps:
-                1. Identify the CENTRAL NARRATIVE or main subject of the provided text.
-                2. Extract the primary verifiable claim that directly drives this central narrative. Translate any local slang or Taglish to English.
-                3. NEGATIVE CONSTRAINT: You MUST completely ignore background context, biographical trivia, or secondary historical facts (e.g., family relationships, past careers, ages), regardless of how verifiable they are.
-                4. Generate a search query of exactly 10 words or less based ONLY on the primary claim.
-                5. If the central narrative is purely subjective, a personal lifestyle update, an opinion, a question, or lacks a hard factual claim to verify, you must respond with the exact phrase "OUT_OF_SCOPE".
-
-                Output Constraints:
-                Do not output anything other than the JSON object. Do not provide any explanation or conversational filler. If the text is out of scope, both fields should be "OUT_OF_SCOPE".
+                1. Identify the CENTRAL NARRATIVE of the provided text.
+                2. Extract the primary verifiable claim. Translate any local slang or Taglish to English.
+                3. CONTEXT RETENTION: You MUST include essential context in the cleaned_claim (e.g., specific names, dates, locations, and the specific event being alleged). Do not over-prune.
+                4. Generate a highly optimized search query of exactly 6-10 keywords. Use distinct nouns and entities that a search engine can easily find.
+                5. If the text is purely subjective, an opinion, a meme, or lacks a factual claim, respond with "OUT_OF_SCOPE".
+                
+                SPECIAL RULE — KNOWN SATIRE SOURCES:
+                If the text originates from a known satire or parody publication, do NOT classify as OUT_OF_SCOPE. Extract the claim normally and set search_query to the topic being satirized.
 
                 JSON Schema:
                 {
-                    "cleaned_claim": "A concise, cleaned version of the core claim central to the main narrative.",
-                    "search_query": "A concise search query derived from the cleaned claim."
+                    "cleaned_claim": "A complete, grammatically correct sentence detailing the core claim AND its specific context.",
+                    "search_query": "Keyword1 Keyword2 Keyword3..."
                 }
                 """
             },
@@ -268,7 +293,7 @@ def extract_search_query(text):
     return json.loads(extracted_search_query)
 
 
-def evaluate_url_claim_with_gfc(extracted_text, gfc_data):
+def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRAL"):
     """Evaluate a URL article claim against Google Fact Check data."""
     gfc_claim_text = gfc_data.get("claims", [{}])[0].get("text", "")
     gfc_rating = (
@@ -291,20 +316,23 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data):
                     1. STRICT EVIDENCE BINDING: You are a forensic reading comprehension engine, NOT an omniscient knowledge base. You must evaluate the claim EXCLUSIVELY based on the facts explicitly provided in the evidence block.
                     2. NO PRE-TRAINED KNOWLEDGE: Do not use your internal weights, historical knowledge, or external facts to verify or debunk the claim. If the evidence does not contain the specific information needed to definitively judge the claim, you MUST classify it as UNVERIFIED.
                     3. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
+                    4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
 
                     CLASSIFICATION TIERS & EVALUATION LOGIC:
-                    You must map your evaluation to EXACTLY ONE of the following 4 tiers. Pay close attention to the epistemological rules regarding "Missing Context" and "Satire".
+                    You must map your evaluation to EXACTLY ONE of the following 5 tiers. 
 
                     1. FACT: The core subjects, actions, statistical figures, and temporal context of the claim are completely supported by the evidence. Minor semantic variations that do not alter the fundamental truth are acceptable.
 
-                    2. FAKE: The claim is explicitly contradicted by the evidence. 
-                    - THE "MISSING CONTEXT" RULE: If the evidence states the claim uses genuine media (real photos/videos/quotes) but places them in a false context (e.g., wrong date, wrong location, unrelated event), the claim is FAKE. The intent is to deceive via recontextualization.
-                    - THE "MISLEADING" RULE: If true statistics or facts are cherry-picked to construct a mathematically or logically false narrative, it maps to FAKE.
+                    2. FAKE: The claim is entirely fabricated or explicitly contradicted by the evidence.
 
-                    3. SATIRE: The claim is a joke, parody, or humorous critique.
+                    3. MISLEADING: The claim contains a mix of truth and falsehoods. 
+                    - THE "MISSING CONTEXT" RULE: If the evidence states the claim uses genuine media (real photos/videos/quotes) but places them in a false context (e.g., wrong date, wrong location, unrelated event), the claim is MISLEADING. 
+                    - THE CHERRY-PICKING RULE: If true statistics or partial facts are intentionally cherry-picked to construct a mathematically or logically false overall narrative, it is MISLEADING.
+
+                    4. SATIRE: The claim is a joke, parody, or humorous critique.
                     - DETECTION PROTOCOL: Look beyond explicit labels. Satire is present if the text exhibits extreme hyperbole, semantic dissonance (mixing formal institutional language with sheer absurdity), or echoic mention (mocking repetition). Be highly alert for "dry sarcasm," exaggerated "pavictim" (playing victim) narratives, or claims originating from known parody sources. If a claim is so absurd that it breaches the threshold of reality without malicious deception, it is SATIRE.
 
-                    4. UNVERIFIED: The provided evidence is irrelevant, inconclusive, or completely absent. Or, the claim is a subjective opinion, political prediction, or emotional expression that cannot be objectively proven true or false. 
+                    5. UNVERIFIED: The provided evidence is irrelevant, inconclusive, or completely absent. Or, the claim is a subjective opinion, political prediction, or emotional expression that cannot be objectively proven true or false. 
                     - AUTHORIZED ABSTENTION: If you do not know the answer based strictly on the evidence, you must choose UNVERIFIED.
 
                     PHILIPPINE MISINFORMATION TROPES:
@@ -313,13 +341,13 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data):
 
                     JSON OUTPUT SCHEMA & ENFORCEMENT:
                     You must output ONLY a raw, valid JSON object. 
-                    DO NOT wrap the JSON in markdown formatting. Do not use the word json and backticks.
+                    DO NOT wrap the JSON in markdown formatting (e.g., no ```json blocks).
                     DO NOT include conversational filler, preambles, or explanations outside the JSON object.
 
                     Your JSON must exactly match this structure:
                     {
                     "reasoning": "Think step-by-step here. 1) Analyze the core assertion of the claim. 2) Summarize the provided evidence. 3) Compare the two for alignment, contradictions, or missing context. 4) Evaluate for satire or absurdity. Do this logical deduction BEFORE stating the verdict.",
-                    "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'UNVERIFIED', 'SATIRE'",
+                    "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
                     "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language. E.g., 'While the photo is real, the evidence shows it was taken in 2018 during a different event, not yesterday.'",
                     "confidence_score": 95
                     }
@@ -328,7 +356,8 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data):
             {
                 "role": "user",
                 "content": (
-                    f'Article: "{extracted_text[:500]}"\n\n'
+                    f'Claim: "{extracted_text}"\n\n'
+                    f'Article Stance: "{article_stance}"\n\n'
                     f'Official Fact Check: "{gfc_claim_text}"\n'
                     f'Official Rating: "{gfc_rating}"'
                 ),
@@ -346,7 +375,7 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data):
         }
 
 
-def evaluate_url_claim_with_tavily(extracted_text, context):
+def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUTRAL"):
     """Evaluate a URL article claim against Tavily web search context."""
     response = groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -362,20 +391,23 @@ def evaluate_url_claim_with_tavily(extracted_text, context):
                     1. STRICT EVIDENCE BINDING: You are a forensic reading comprehension engine, NOT an omniscient knowledge base. You must evaluate the claim EXCLUSIVELY based on the facts explicitly provided in the evidence block.
                     2. NO PRE-TRAINED KNOWLEDGE: Do not use your internal weights, historical knowledge, or external facts to verify or debunk the claim. If the evidence does not contain the specific information needed to definitively judge the claim, you MUST classify it as UNVERIFIED.
                     3. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
+                    4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
 
                     CLASSIFICATION TIERS & EVALUATION LOGIC:
-                    You must map your evaluation to EXACTLY ONE of the following 4 tiers. Pay close attention to the epistemological rules regarding "Missing Context" and "Satire".
+                    You must map your evaluation to EXACTLY ONE of the following 5 tiers. 
 
                     1. FACT: The core subjects, actions, statistical figures, and temporal context of the claim are completely supported by the evidence. Minor semantic variations that do not alter the fundamental truth are acceptable.
 
-                    2. FAKE: The claim is explicitly contradicted by the evidence. 
-                    - THE "MISSING CONTEXT" RULE: If the evidence states the claim uses genuine media (real photos/videos/quotes) but places them in a false context (e.g., wrong date, wrong location, unrelated event), the claim is FAKE. The intent is to deceive via recontextualization.
-                    - THE "MISLEADING" RULE: If true statistics or facts are cherry-picked to construct a mathematically or logically false narrative, it maps to FAKE.
+                    2. FAKE: The claim is entirely fabricated or explicitly contradicted by the evidence.
 
-                    3. SATIRE: The claim is a joke, parody, or humorous critique.
+                    3. MISLEADING: The claim contains a mix of truth and falsehoods. 
+                    - THE "MISSING CONTEXT" RULE: If the evidence states the claim uses genuine media (real photos/videos/quotes) but places them in a false context (e.g., wrong date, wrong location, unrelated event), the claim is MISLEADING. 
+                    - THE CHERRY-PICKING RULE: If true statistics or partial facts are intentionally cherry-picked to construct a mathematically or logically false overall narrative, it is MISLEADING.
+
+                    4. SATIRE: The claim is a joke, parody, or humorous critique.
                     - DETECTION PROTOCOL: Look beyond explicit labels. Satire is present if the text exhibits extreme hyperbole, semantic dissonance (mixing formal institutional language with sheer absurdity), or echoic mention (mocking repetition). Be highly alert for "dry sarcasm," exaggerated "pavictim" (playing victim) narratives, or claims originating from known parody sources. If a claim is so absurd that it breaches the threshold of reality without malicious deception, it is SATIRE.
 
-                    4. UNVERIFIED: The provided evidence is irrelevant, inconclusive, or completely absent. Or, the claim is a subjective opinion, political prediction, or emotional expression that cannot be objectively proven true or false. 
+                    5. UNVERIFIED: The provided evidence is irrelevant, inconclusive, or completely absent. Or, the claim is a subjective opinion, political prediction, or emotional expression that cannot be objectively proven true or false. 
                     - AUTHORIZED ABSTENTION: If you do not know the answer based strictly on the evidence, you must choose UNVERIFIED.
 
                     PHILIPPINE MISINFORMATION TROPES:
@@ -384,13 +416,13 @@ def evaluate_url_claim_with_tavily(extracted_text, context):
 
                     JSON OUTPUT SCHEMA & ENFORCEMENT:
                     You must output ONLY a raw, valid JSON object. 
-                    DO NOT wrap the JSON in markdown formatting. Do not use the word json and backticks.
+                    DO NOT wrap the JSON in markdown formatting (e.g., no ```json blocks).
                     DO NOT include conversational filler, preambles, or explanations outside the JSON object.
 
                     Your JSON must exactly match this structure:
                     {
                     "reasoning": "Think step-by-step here. 1) Analyze the core assertion of the claim. 2) Summarize the provided evidence. 3) Compare the two for alignment, contradictions, or missing context. 4) Evaluate for satire or absurdity. Do this logical deduction BEFORE stating the verdict.",
-                    "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'UNVERIFIED', 'SATIRE'",
+                    "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
                     "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language. E.g., 'While the photo is real, the evidence shows it was taken in 2018 during a different event, not yesterday.'",
                     "confidence_score": 95
                     }
@@ -399,7 +431,8 @@ def evaluate_url_claim_with_tavily(extracted_text, context):
             {
                 "role": "user",
                 "content": (
-                    f'Article Claim: "{extracted_text[:500]}"\n\n'
+                    f'Claim: "{extracted_text}"\n\n'
+                    f'Article Stance: "{article_stance}"\n\n'
                     f'Evidence from Live News: "{context}"'
                 ),
             },

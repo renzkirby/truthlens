@@ -72,7 +72,7 @@ def snippet_fact_check_process(image_hash, base64_string, claim_id):
             search_depth="advanced",
             topic="news",
             days=3,
-            include_answer=False,
+            include_answer=True,
         )
         tavily_results = tavily_response.get("results", [])
         ai_verdict = evaluate_image_claim_with_tavily(cleaned_claim, tavily_results)
@@ -110,6 +110,7 @@ def url_fact_check_process(url, claim_id):
 
         cleaned_claim = result.get("cleaned_claim")
         search_query = result.get("search_query")
+        article_stance = result.get("article_stance", "NEUTRAL")
 
     except Exception as e:
         print(f"URL extraction error: {str(e)}")
@@ -136,7 +137,7 @@ def url_fact_check_process(url, claim_id):
         if gfc_claims:
             first_claim_text = gfc_claims[0].get("text", "")
             if is_fact_check_relevant(cleaned_claim, first_claim_text):
-                ai_verdict = evaluate_url_claim_with_gfc(cleaned_claim, gfc_data)
+                ai_verdict = evaluate_url_claim_with_gfc(cleaned_claim, gfc_data, article_stance)
                 _save_claim(claim_id, ai_verdict, "Official Fact Check", cleaned_text, url)
                 return
 
@@ -153,7 +154,7 @@ def url_fact_check_process(url, claim_id):
             include_answer=True,
         )
         context = search_response.get("answer", "No additional context found")
-        ai_verdict = evaluate_url_claim_with_tavily(cleaned_claim, context)
+        ai_verdict = evaluate_url_claim_with_tavily(cleaned_claim, context, article_stance)
         _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_text, url)
 
     except Exception as e:
@@ -171,7 +172,10 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_url=""):
         claim = Claim.objects.get(id=claim_id)
         claim.verdict = verdict.get("verdict")
         claim.ai_summary = verdict.get("summary")
-        claim.consensus_score = verdict.get("confidence_score")
+        confidence = verdict.get("confidence_score", 0)
+        if verdict.get("verdict") == "UNVERIFIED" and (confidence == 0 or confidence is None):
+            confidence = 40
+        claim.consensus_score = confidence
         claim.source_type = source_type
         claim.context_text = context_text
         claim.source_link = source_url or None
