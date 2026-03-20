@@ -3,9 +3,11 @@ import os
 import json
 import re
 import imagehash
+import uuid
 import base64
 from io import BytesIO
 from PIL import Image
+from supabase import create_client
 
 groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
@@ -456,3 +458,24 @@ def process_image(raw_base64):
     pil_img = Image.open(BytesIO(image_bytes))
     image_hash = str(imagehash.phash(pil_img))
     return image_hash, image_bytes
+
+def upload_image_to_database(base64_string):
+    supabase = create_client(
+        os.environ.get("SUPABASE_URL"),
+        os.environ.get("SUPABASE_SERVICE_KEY"),
+    )
+    
+    image_bytes = base64.b64decode(base64_string)
+    file_name = f"{uuid.uuid4()}.png"
+
+    supabase.storage.from_("claim-images").upload(
+        file_name,
+        image_bytes,
+        {"content-type": "image/png"},
+    )
+    
+    public_url = supabase.storage.from_("claim-images").get_public_url(file_name)
+    print("PUBLIC URL TYPE:", type(public_url))
+    print("PUBLIC URL VALUE:", public_url)
+    return public_url
+    

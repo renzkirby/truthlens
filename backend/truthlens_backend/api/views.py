@@ -32,11 +32,15 @@ def receive_snippet(request):
 
     # Decode the base64 string and save it as an image
     image_hash, _ = process_image(base64_string)
+    
+    media_url = upload_image_to_database(base64_string)
+    
     print("IMAGE HASH:", image_hash)
 
     claim = Claim.objects.create(
         claim_type=Claim.ClaimType.IMAGE,
         media_hash=image_hash,
+        media_url=media_url,
         verdict=None,
         verified_via=Claim.VerificationSource.PENDING,
     )
