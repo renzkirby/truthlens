@@ -83,7 +83,7 @@
     background: rgba(255, 255, 255, .15);
     border: rgba(255, 255, 255, 0.5) solid 1px;
     border-radius: 8px;
-    padding: 6px 12px;
+    padding: 8px 12px;
     cursor: pointer;
     transition: background 0.15s;
 }
@@ -110,6 +110,7 @@
     border-radius: 12px;
     font-weight: 700;
     font-size: 0.8rem;
+    border: 1px solid;
 }
 
 .link {
@@ -149,20 +150,20 @@
 }
 
 .nav-icon-btn {
-   display: flex;
-   align-items: center;
-   justify-content: center;
-   width: 38px;
-   height: 38px;
-   border-radius: 8px;
-   border: 1px solid rgba(255, 255, 255, 0.2);
-   background: rgba(255, 255, 255, 0.08);
-   cursor: pointer;
-   transition: background 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
+    cursor: pointer;
+    transition: background 0.15s;
 }
 
 .nav-icon-btn:hover {
-   background: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.15);
 }
 
 /* ── Dropdown panel ─────────────────────────────────────────────────────── */
@@ -259,7 +260,26 @@
 }
 
 .dropdown-item.active {
-  font-weight: 700;
-  color: var(--primary-blue);
+    font-weight: 700;
+    color: var(--primary-blue);
     background: var(--verdict-fake-bg);
+}
+
+.search-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: var(--bg-subtle);
+    border: 1px solid var(--border-default);
+    padding: 8px 16px;
+    border-radius: 20px;
+}
+
+.search-box input {
+    border: none;
+    background: transparent;
+    outline: none;
+    font-size: 0.85rem;
+    color: var(--text-main);
+    width: 150px;
 }

@@ -214,7 +214,7 @@ function CreateThreadPage() {
                         />
                      </div>
 
-                     {formValues.source_url && (
+                     {!loading && claim && (
                         <div className="form-section box-panel">
                            <label className="form-label">
                               <Icons

@@ -192,7 +192,7 @@
 }
 
 .widget-badge.unverified {
-  background-color: #f59e0b;
+  background-color: var(--verdict-unverified-text);
 }
 
 .widget-time {

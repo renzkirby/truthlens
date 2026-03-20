@@ -285,7 +285,6 @@ function ThreadDetailPage() {
    }
 
    return (
-      
       <div className="thread-layout">
          <NavigationBar />
 
@@ -456,16 +455,26 @@ function ThreadDetailPage() {
                      </div>
                      {/* Snipped image placeholder */}
                      <div className="tdp-snip-placeholder">
-                        <div className="tdp-snip-icon-wrap">
-                           <Icons
-                              name="globe"
-                              size={28}
-                              color="#9ca3af"
+                        {thread.claim.media_url ? (
+                           <img
+                              src={thread.claim.media_url}
+                              alt="Snipped claim"
+                              className="card-media-image"
                            />
-                        </div>
-                        <span className="tdp-snip-label">
-                           Snipped from {thread.source || "external source"}
-                        </span>
+                        ) : (
+                           <>
+                              <div className="tdp-snip-icon-wrap">
+                                 <Icons
+                                    name="globe"
+                                    size={28}
+                                    color="#9ca3af"
+                                 />
+                              </div>
+                              <span className="tdp-snip-label">
+                                 Snipped from {thread.source || "external source"}
+                              </span>
+                           </>
+                        )}
                      </div>
                   </div>
 

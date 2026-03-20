@@ -73,32 +73,6 @@ const CommunityFeed = () => {
                      Needs Evidence
                   </button>
                </div>
-               <div className="search-box">
-                  <Icons name="search" />
-                  <input
-                     type="text"
-                     placeholder="Search claims..."
-                  />
-               </div>
-            </div>
-
-            {/* Input Bar */}
-            <div className="input-bar box-panel">
-               <div className="avatar-icon">
-                  <Icons
-                     name="user"
-                     size={20}
-                  />
-               </div>
-               <input
-                  type="text"
-                  placeholder="Flag a new claim for the community.."
-                  className="claim-input"
-               />
-               <button className="snip-btn">
-                  <Icons name="scissors" />
-                  Snip
-               </button>
             </div>
 
             {loading && <p>Loading threads...</p>}
@@ -164,8 +138,9 @@ const CommunityFeed = () => {
 
                            {/* Card Claim Text */}
                            <div className="card-claim">
-                              <strong>Flagged claim:</strong> "
-                              {thread.claim.ai_summary || thread.claim.context_text}"
+                              {/* <strong>Flagged claim:</strong> "
+                              {thread.claim.ai_summary || thread.claim.context_text}" */}
+                              {thread.caption}
                            </div>
 
                            {/* Media Placeholder */}
@@ -174,13 +149,23 @@ const CommunityFeed = () => {
                               onClick={() => {
                                  handleThreadClick(thread.id);
                               }}>
-                              <div className="media-icon">
-                                 <Icons
-                                    name="globe"
-                                    size={24}
+                              {thread.claim.media_url ? (
+                                 <img
+                                    src={thread.claim.media_url}
+                                    alt="Snipped claim"
+                                    className="card-media-image"
                                  />
-                              </div>
-                              <span className="media-source">Snipped from Twitter / X</span>
+                              ) : (
+                                 <>
+                                    <div className="media-icon">
+                                       <Icons
+                                          name="globe"
+                                          size={24}
+                                       />
+                                    </div>
+                                    <span className="media-source">Snipped from Twitter / X</span>
+                                 </>
+                              )}
                            </div>
 
                            {/* AI Analysis Bar */}

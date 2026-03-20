@@ -75,24 +75,6 @@ body {
   color: var(--text-inverse);
 }
 
-.search-box {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background-color: var(--bg-subtle);
-  border: 1px solid var(--border-default);
-  padding: 8px 16px;
-  border-radius: 20px;
-}
-
-.search-box input {
-  border: none;
-  background: transparent;
-  outline: none;
-  font-size: 0.85rem;
-  color: var(--text-main);
-  width: 150px;
-}
 
 /* Input Bar */
 .input-bar {

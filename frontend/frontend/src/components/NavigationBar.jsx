@@ -75,7 +75,9 @@ function NavigationBar() {
                      Dashboard
                   </div>
                </Link>
-               <Link to="/verify" className="link">
+               <Link
+                  to="/verify"
+                  className="link">
                   <div className={`nav-tab ${location.pathname === "/verify" ? "active" : ""}`}>
                      <Icons name="scan-line" />
                      Verify
@@ -85,8 +87,18 @@ function NavigationBar() {
          </div>
 
          <div className="nav-right">
+            <div className="search-box">
+               <Icons
+                  name="search"
+                  color="gray"
+               />
+               <input
+                  type="text"
+                  placeholder="Search claims..."
+               />
+            </div>
             <NotificationPopup />
-   
+
             <div
                className="user-menu-container"
                ref={dropdownRef}>
@@ -101,11 +113,14 @@ function NavigationBar() {
                   <span className="username">@{user?.username}</span>
                   <span
                      className="trust-score"
-                     style={{ color, borderColor: `${color}55`, background: `${color}20` }}>
+                     style={{ color, borderColor: `${color}99`, background: `${color}75` }}>
                      {user?.trust_score}
                   </span>
                   <span className={`chevron ${isOpen ? "rotated" : ""}`}>
-                     <Icons name="chevron-down" />
+                     <Icons
+                        name="chevron-down"
+                        color="#fff"
+                     />
                   </span>
                </button>
 
@@ -126,7 +141,7 @@ function NavigationBar() {
                            className="link"
                            role="menuitem">
                            <button
-                              className={`dropdown-item ${location.pathname === "/profile" ? "active" : ""}`}     
+                              className={`dropdown-item ${location.pathname === "/profile" ? "active" : ""}`}
                               onClick={() => setIsOpen(false)}>
                               <Icons name="user" />
                               My Public Profile
