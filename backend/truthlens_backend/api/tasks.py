@@ -36,6 +36,7 @@ def snippet_fact_check_process(image_hash, base64_string, claim_id):
 
     cleaned_claim = cleaned.get("cleaned_claim")
     search_query = cleaned.get("search_query")
+    article_stance = cleaned.get("article_stance", "NEUTRAL")
 
     # Try GFC first — return early if relevant result found
     try:
@@ -52,7 +53,7 @@ def snippet_fact_check_process(image_hash, base64_string, claim_id):
         if gfc_claims:
             first_claim_text = gfc_claims[0].get("text", "")
             if is_fact_check_relevant(cleaned_claim, first_claim_text):
-                ai_verdict = evaluate_image_claim_with_gfc(cleaned_claim, gfc_data)
+                ai_verdict = evaluate_image_claim_with_gfc(cleaned_claim, gfc_data, article_stance)
                 source_url = (
                     gfc_claims[0]
                     .get("claimReview", [{}])[0]
@@ -70,12 +71,13 @@ def snippet_fact_check_process(image_hash, base64_string, claim_id):
         tavily_response = tavily_client.search(
             query=search_query,
             search_depth="advanced",
-            topic="news",
-            days=3,
+            topic="general",
             include_answer=True,
         )
         tavily_results = tavily_response.get("results", [])
-        ai_verdict = evaluate_image_claim_with_tavily(cleaned_claim, tavily_results)
+        tavily_answer = tavily_response.get("answer", "No additional web context found.")
+        combined_context = f"Original Image Text:\n{ocr_result}\n\nWeb Search Context:\n{tavily_answer}"
+        ai_verdict = evaluate_image_claim_with_tavily(cleaned_claim, combined_context, article_stance)
         source_url = tavily_results[0].get("url", "") if tavily_results else ""
         _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_claim, source_url)
 
@@ -92,6 +94,19 @@ def snippet_fact_check_process(image_hash, base64_string, claim_id):
 @shared_task
 def url_fact_check_process(url, claim_id):
     # Step 1 — Extract and clean text from URL
+    SATIRE_DOMAINS = ["theonion.com", "babylonbee.com", "adobochronicles.com"]
+        
+    print(f"URL received: {url}")
+    print(f"Satire check: {any(domain in url.lower() for domain in SATIRE_DOMAINS)}")
+
+
+    if any(domain in url.lower() for domain in SATIRE_DOMAINS):
+        _save_claim(claim_id, {
+                "verdict": "SATIRE",
+                "summary": "This content originates from a known satire or parody publication and is not intended to be factual.",
+                "confidence_score": 99,
+            }, "Satire Detection", url, url)
+        return
     try:
         response = requests.post(
             "https://api.tavily.com/extract",
@@ -106,7 +121,10 @@ def url_fact_check_process(url, claim_id):
 
         raw_text = tavily_data["results"][0]["raw_content"]
         cleaned_text = clean_extracted_text(raw_text)
-        result = extract_search_query(cleaned_text)
+
+        
+
+        result = extract_search_query(cleaned_text, url)
 
         cleaned_claim = result.get("cleaned_claim")
         search_query = result.get("search_query")
@@ -120,6 +138,13 @@ def url_fact_check_process(url, claim_id):
     # Step 2 — OUT_OF_SCOPE check
     if not cleaned_claim or cleaned_claim == "OUT_OF_SCOPE":
         Claim.objects.filter(id=claim_id).delete()
+        return
+    if article_stance == "SATIRE":
+        _save_claim(claim_id, {
+            "verdict": "SATIRE",
+            "summary": "This content originates from a known satire or parody publication and is not intended to be factual.",
+            "confidence_score": 99,
+        }, "Satire Detection", cleaned_claim, url)
         return
 
     # Step 3 — Try GFC first, return early if relevant
@@ -150,11 +175,12 @@ def url_fact_check_process(url, claim_id):
         search_response = tavily_client.search(
             query=search_query[:300],
             search_depth="advanced",
-            topic="news",
+            topic="general",
             include_answer=True,
         )
-        context = search_response.get("answer", "No additional context found")
-        ai_verdict = evaluate_url_claim_with_tavily(cleaned_claim, context, article_stance)
+        tavily_answer = search_response.get("answer", "No additional web context found.")
+        combined_context = f"Original Article Content:\n{cleaned_text[:1500]}\n\nWeb Search Context:\n{tavily_answer}"
+        ai_verdict = evaluate_url_claim_with_tavily(cleaned_claim, combined_context, article_stance)
         _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_text, url)
 
     except Exception as e:
