@@ -31,17 +31,24 @@ def clean_ocr_text(raw_text):
                 Task: Your job is to extract the core claim from the text by strictly following these steps:
                 1. Identify the CENTRAL NARRATIVE of the provided text.
                 2. Extract the primary verifiable claim. Translate any local slang or Taglish to English.
-                3. CONTEXT RETENTION: You MUST include essential context in the cleaned_claim (e.g., specific names, dates, locations, and the specific event being alleged). Do not over-prune.
-                4. Generate a highly optimized search query of exactly 6-10 keywords. Use distinct nouns and entities that a search engine can easily find.
-                5. If the text is purely subjective, an opinion, a meme, or lacks a factual claim, respond with "OUT_OF_SCOPE".
-                
+                3. UNDERLYING CLAIM EXTRACTION: If the text is actively debunking, fact-checking, or clarifying a rumor, your cleaned_claim MUST be the original fake rumor itself, NOT the fact-checker's conclusion.
+                - Example: If text says "Fake News: Pope did not wear a puffer jacket", you extract "The Pope wore a white puffer jacket."
+                4. CONTEXT RETENTION: You MUST include essential context in the cleaned_claim (e.g., specific names, dates, locations, and the specific event being alleged). Do not over-prune.
+                5. Generate a highly optimized search query of exactly 6-10 keywords. Use distinct nouns and entities that a search engine can easily find.
+                6. Determine the article's own stance toward the extracted claim:
+                    - DEBUNKING: The article is a fact-check disproving the extracted claim.
+                    - REPORTING: The article neutrally reports the extracted claim as true.
+                    - SATIRE: The text is from a parody source OR the text is deeply absurd/comedic.
+
                 SPECIAL RULE — KNOWN SATIRE SOURCES:
-                If the text originates from a known satire or parody publication, do NOT classify as OUT_OF_SCOPE. Extract the claim normally and set search_query to the topic being satirized.
+                If the text or Source URL originates from known satire (e.g., theonion.com, babylonbee), MUST set "article_stance" to "SATIRE".
 
                 JSON Schema:
+                You MUST output EXACTLY this JSON object with ALL THREE keys.
                 {
-                    "cleaned_claim": "A complete, grammatically correct sentence detailing the core claim AND its specific context.",
-                    "search_query": "Keyword1 Keyword2 Keyword3..."
+                    "cleaned_claim": "A complete sentence detailing the core claim AND its specific context.",
+                    "search_query": "Keyword1 Keyword2 Keyword3...",
+                    "article_stance": "DEBUNKING, REPORTING, or SATIRE"
                 }
                 """
             },
@@ -84,7 +91,7 @@ def is_fact_check_relevant(original_text, fact_check_text):
     return result.get("is_relevant", False)
 
 # Evaluate Google's Fact Check Tools data against the original claim using Groq
-def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data):
+def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, article_stance="NEUTRAL"):
 
     fact_check_text = google_fact_check_data.get("claims", [{}])[0].get("text", "")
 
@@ -97,6 +104,10 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data):
         2. NO PRE-TRAINED KNOWLEDGE: Do not use your internal weights, historical knowledge, or external facts to verify or debunk the claim. If the evidence does not contain the specific information needed to definitively judge the claim, you MUST classify it as UNVERIFIED.
         3. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
         4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
+        5. ARTICLE STANCE AWARENESS: You will be given the stance of the source text toward the claim.
+            - If DEBUNKING: The source is actively disproving the claim. Treat the claim as the original fake rumor being debunked — it is likely FAKE or MISLEADING.
+            - If REPORTING: The source is a primary news report confirming the claim. Evaluate if broader evidence aligns.
+            - If NEUTRAL: Evaluate purely from the evidence.
 
         CLASSIFICATION TIERS & EVALUATION LOGIC:
         You must map your evaluation to EXACTLY ONE of the following 5 tiers. 
@@ -132,14 +143,12 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data):
         "confidence_score": 95
         }
         """
-    user_data = f"""
-    Inputs to Analyze:
-    
-    Claim: "{original_claim}"
-    
-    Official Fact Check Data: 
-    "{fact_check_text}"
-    """
+    user_data = (
+            f"<claim>{original_claim}</claim>\n\n"
+            f"<stance>{article_stance}</stance>\n\n"
+            f"<evidence>{fact_check_text}</evidence>\n\n"
+            "CRITICAL OVERRIDE: If the <stance> is SATIRE, you MUST bypass evidence checking and immediately output a verdict of SATIRE."
+        )
     
     response = groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -166,7 +175,7 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data):
         }
 
 
-def evaluate_image_claim_with_tavily(original_claim, tavily_results):
+def evaluate_image_claim_with_tavily(original_claim, tavily_results, article_stance="NEUTRAL"):
     """Evaluate an image claim against Tavily live news results."""
     evidence_text = ""
     for i, result in enumerate(tavily_results[:3]):
@@ -189,6 +198,10 @@ def evaluate_image_claim_with_tavily(original_claim, tavily_results):
                 2. NO PRE-TRAINED KNOWLEDGE: Do not use your internal weights, historical knowledge, or external facts to verify or debunk the claim. If the evidence does not contain the specific information needed to definitively judge the claim, you MUST classify it as UNVERIFIED.
                 3. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
                 4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
+                5. ARTICLE STANCE AWARENESS: You will be given the stance of the source text toward the claim.
+                    - If DEBUNKING: The source is actively disproving the claim. Treat the claim as the original fake rumor being debunked — it is likely FAKE or MISLEADING.
+                    - If REPORTING: The source is a primary news report confirming the claim. Evaluate if broader evidence aligns.
+                    - If NEUTRAL: Evaluate purely from the evidence.
 
                 CLASSIFICATION TIERS & EVALUATION LOGIC:
                 You must map your evaluation to EXACTLY ONE of the following 5 tiers. 
@@ -227,7 +240,12 @@ def evaluate_image_claim_with_tavily(original_claim, tavily_results):
             },
             {
                 "role": "user",
-                "content": f'Claim: "{original_claim}"\n\nEvidence: "{evidence_text}"',
+                "content": (
+                    f"<claim>{original_claim}</claim>\n\n"
+                    f"<stance>{article_stance}</stance>\n\n"
+                    f"<evidence>{evidence_text}</evidence>\n\n"
+                    "CRITICAL OVERRIDE: If the <stance> is SATIRE, you MUST bypass evidence checking and immediately output a verdict of SATIRE."
+                ),
             },
         ],
     )
@@ -252,7 +270,7 @@ def clean_extracted_text(text):
     lines = [line.strip() for line in text.split("\n") if len(line.strip()) > 40]
     return "\n".join(lines)[:3000]
 
-def extract_search_query(text):
+def extract_search_query(text, source_url=""):
     response = groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         response_format={"type": "json_object"},
@@ -265,23 +283,30 @@ def extract_search_query(text):
                 Task: Your job is to extract the core claim from the text by strictly following these steps:
                 1. Identify the CENTRAL NARRATIVE of the provided text.
                 2. Extract the primary verifiable claim. Translate any local slang or Taglish to English.
-                3. CONTEXT RETENTION: You MUST include essential context in the cleaned_claim (e.g., specific names, dates, locations, and the specific event being alleged). Do not over-prune.
-                4. Generate a highly optimized search query of exactly 6-10 keywords. Use distinct nouns and entities that a search engine can easily find.
-                5. If the text is purely subjective, an opinion, a meme, or lacks a factual claim, respond with "OUT_OF_SCOPE".
-                
+                3. UNDERLYING CLAIM EXTRACTION: If the text is actively debunking, fact-checking, or clarifying a rumor, your cleaned_claim MUST be the original fake rumor itself, NOT the fact-checker's conclusion.
+                - Example: If text says "Fake News: Pope did not wear a puffer jacket", you extract "The Pope wore a white puffer jacket."
+                4. CONTEXT RETENTION: You MUST include essential context in the cleaned_claim (e.g., specific names, dates, locations, and the specific event being alleged). Do not over-prune.
+                5. Generate a highly optimized search query of exactly 6-10 keywords. Use distinct nouns and entities that a search engine can easily find.
+                6. Determine the article's own stance toward the extracted claim:
+                    - DEBUNKING: The article is a fact-check disproving the extracted claim.
+                    - REPORTING: The article neutrally reports the extracted claim as true.
+                    - SATIRE: The text is from a parody source OR the text is deeply absurd/comedic.
+
                 SPECIAL RULE — KNOWN SATIRE SOURCES:
-                If the text originates from a known satire or parody publication, do NOT classify as OUT_OF_SCOPE. Extract the claim normally and set search_query to the topic being satirized.
+                If the text or Source URL originates from known satire (e.g., theonion.com, babylonbee), MUST set "article_stance" to "SATIRE".
 
                 JSON Schema:
+                You MUST output EXACTLY this JSON object with ALL THREE keys.
                 {
-                    "cleaned_claim": "A complete, grammatically correct sentence detailing the core claim AND its specific context.",
-                    "search_query": "Keyword1 Keyword2 Keyword3..."
+                    "cleaned_claim": "A complete sentence detailing the core claim AND its specific context.",
+                    "search_query": "Keyword1 Keyword2 Keyword3...",
+                    "article_stance": "DEBUNKING, REPORTING, or SATIRE"
                 }
                 """
             },
             {
                 "role": "user",
-                "content": f"Text: {text}",
+                "content": f"Source URL: {source_url}\n\nText: {text}",
             },
         ],
     )
@@ -356,10 +381,10 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
             {
                 "role": "user",
                 "content": (
-                    f'Claim: "{extracted_text}"\n\n'
-                    f'Article Stance: "{article_stance}"\n\n'
-                    f'Official Fact Check: "{gfc_claim_text}"\n'
-                    f'Official Rating: "{gfc_rating}"'
+                    f"<claim>{extracted_text}</claim>\n\n"
+                    f"<stance>{article_stance}</stance>\n\n"
+                    f"<evidence>{gfc_claim_text} (Official Rating: {gfc_rating})</evidence>\n\n"
+                    "CRITICAL OVERRIDE: If the <stance> is SATIRE, you MUST bypass evidence checking and immediately output a verdict of SATIRE."
                 ),
             },
         ],
@@ -392,6 +417,10 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
                     2. NO PRE-TRAINED KNOWLEDGE: Do not use your internal weights, historical knowledge, or external facts to verify or debunk the claim. If the evidence does not contain the specific information needed to definitively judge the claim, you MUST classify it as UNVERIFIED.
                     3. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
                     4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
+                    5. ARTICLE STANCE AWARENESS: You will be given the stance of the source article toward the claim.
+                       - If DEBUNKING: The article is actively disproving the claim. Treat the claim as something being debunked.
+                       - If REPORTING: The article is a primary news source confirming the claim. You must evaluate if the broader evidence aligns with or contradicts this reporting. If the evidence generally supports the narrative or is from the same original source, the verdict is FACT.
+                       - If NEUTRAL: Evaluate purely from the evidence.
 
                     CLASSIFICATION TIERS & EVALUATION LOGIC:
                     You must map your evaluation to EXACTLY ONE of the following 5 tiers. 
@@ -431,9 +460,10 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
             {
                 "role": "user",
                 "content": (
-                    f'Claim: "{extracted_text}"\n\n'
-                    f'Article Stance: "{article_stance}"\n\n'
-                    f'Evidence from Live News: "{context}"'
+                    f"<claim>{extracted_text}</claim>\n\n"
+                    f"<stance>{article_stance}</stance>\n\n"
+                    f"<evidence>{context}</evidence>\n\n"
+                    "CRITICAL OVERRIDE: If the <stance> is SATIRE, you MUST bypass evidence checking and immediately output a verdict of SATIRE."
                 ),
             },
         ],
