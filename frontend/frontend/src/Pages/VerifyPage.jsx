@@ -19,6 +19,7 @@ const VERDICT_CONFIG = {
       bg: "var(--verdict-unverified-bg)",
       label: "OUT OF SCOPE",
    },
+   MISLEADING: { color: "var(--verdict-misleading-text)", bg: "var(--verdict-misleading-bg)", label: "MISLEADING" },
 };
 
 // ── Result Card component ─────────────────────────────────────────────────────
