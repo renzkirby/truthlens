@@ -195,7 +195,9 @@ const CommunityFeed = () => {
                                  <span className="count-pill">{thread.comment_count}</span>
                               </button>
 
-                              <button className="action-item primary-action">
+                              <button
+                                 className="action-item primary-action"
+                                 onClick={() => handleThreadClick(thread.id)}>
                                  <Icons name="circle-plus" />
                                  Add Evidence
                               </button>

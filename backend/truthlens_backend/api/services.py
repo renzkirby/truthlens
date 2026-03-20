@@ -130,7 +130,7 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data):
         {
         "reasoning": "Think step-by-step here. 1) Analyze the core assertion of the claim. 2) Summarize the provided evidence. 3) Compare the two for alignment, contradictions, or missing context. 4) Evaluate for satire or absurdity. Do this logical deduction BEFORE stating the verdict.",
         "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
-        "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language. E.g., 'While the photo is real, the evidence shows it was taken in 2018 during a different event, not yesterday.'",
+        "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language.",
         "confidence_score": 95
         }
         """
@@ -222,7 +222,7 @@ def evaluate_image_claim_with_tavily(original_claim, tavily_results):
                 {
                 "reasoning": "Think step-by-step here. 1) Analyze the core assertion of the claim. 2) Summarize the provided evidence. 3) Compare the two for alignment, contradictions, or missing context. 4) Evaluate for satire or absurdity. Do this logical deduction BEFORE stating the verdict.",
                 "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
-                "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language. E.g., 'While the photo is real, the evidence shows it was taken in 2018 during a different event, not yesterday.'",
+                "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language.",
                 "confidence_score": 95
                 }
                 """,
@@ -350,7 +350,7 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
                     {
                     "reasoning": "Think step-by-step here. 1) Analyze the core assertion of the claim. 2) Summarize the provided evidence. 3) Compare the two for alignment, contradictions, or missing context. 4) Evaluate for satire or absurdity. Do this logical deduction BEFORE stating the verdict.",
                     "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
-                    "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language. E.g., 'While the photo is real, the evidence shows it was taken in 2018 during a different event, not yesterday.'",
+                    "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language.",
                     "confidence_score": 95
                     }
                     """,
@@ -425,7 +425,7 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
                     {
                     "reasoning": "Think step-by-step here. 1) Analyze the core assertion of the claim. 2) Summarize the provided evidence. 3) Compare the two for alignment, contradictions, or missing context. 4) Evaluate for satire or absurdity. Do this logical deduction BEFORE stating the verdict.",
                     "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
-                    "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language. E.g., 'While the photo is real, the evidence shows it was taken in 2018 during a different event, not yesterday.'",
+                    "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language.",
                     "confidence_score": 95
                     }
                     """,
