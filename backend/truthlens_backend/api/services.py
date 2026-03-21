@@ -181,7 +181,8 @@ def evaluate_image_claim_with_tavily(original_claim, tavily_results, article_sta
     """Evaluate an image claim against Tavily live news results."""
     evidence_text = ""
     for i, result in enumerate(tavily_results[:3]):
-        evidence_text += f"Source {i+1} ({result.get('url')}): {result.get('content')}\n\n"
+        if isinstance(result, dict):
+            evidence_text += f"Source {i+1} ({result.get('url')}): {result.get('content')}\n\n"
 
     print("EVIDENCE TEXT:", evidence_text)
 

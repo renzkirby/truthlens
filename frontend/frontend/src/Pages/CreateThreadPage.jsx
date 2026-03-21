@@ -214,7 +214,7 @@ function CreateThreadPage() {
                         />
                      </div>
 
-                     {!loading && claim && (
+                     {/*!loading && claim && (
                         <div className="form-section box-panel">
                            <label className="form-label">
                               <Icons
@@ -235,7 +235,7 @@ function CreateThreadPage() {
                               placeholder="https://..."
                            />
                         </div>
-                     )}
+                     )*/}
 
                      <div className="form-section box-panel">
                         <label className="form-label">

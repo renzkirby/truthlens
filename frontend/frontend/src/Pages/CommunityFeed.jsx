@@ -148,7 +148,7 @@ const CommunityFeed = () => {
                               className="card-media"
                               onClick={() => {
                                  handleThreadClick(thread.id);
-                              }}>
+                              }} style={thread.claim.media_url ? ({height: "auto"}) :({ height: "350px"}) }>
                               {thread.claim.media_url ? (
                                  <img
                                     src={thread.claim.media_url}
