@@ -170,7 +170,7 @@ function ThreadDetailPage() {
    // Evidence form state
    const [showForm, setShowForm] = useState(false);
    const [evidenceUrl, setEvidenceUrl] = useState("");
-   const [evidenceType, setEvidenceType] = useState("Contradicts Claim");
+   const [evidenceType, setEvidenceType] = useState("CONTRADICTS CLAIM");
    const [explanation, setExplanation] = useState("");
    const [submitting, setSubmitting] = useState(false);
 
@@ -534,10 +534,14 @@ function ThreadDetailPage() {
                                        className="tdp-select"
                                        value={evidenceType}
                                        onChange={(e) => setEvidenceType(e.target.value)}>
-                                       <option>Contradicts Claim</option>
-                                       <option>Supports Claim</option>
-                                       <option>Provides Context</option>
-                                       <option>Source Verification</option>
+                                       <option value={"CONTRADICTS CLAIM"}>
+                                          Contradicts Claim
+                                       </option>
+                                       <option value={"SUPPORTS CLAIM"}>Supports Claim</option>
+                                       <option value={"PROVIDES CONTEXT"}>Provides Context</option>
+                                       <option value={"SOURCE VERIFICATION"}>
+                                          Source Verification
+                                       </option>
                                     </select>
                                     <Icons
                                        name="chevron-down"
@@ -751,9 +755,55 @@ function ThreadDetailPage() {
                               const score = ev.contributor?.trust_score ?? 0;
                               const tc = tierColor(score);
                               const isTop = i === 0 && evidenceList.length > 1;
+                              const upvotes = ev.upvotes ?? 0;
+                              const downvotes = ev.downvotes ?? 0;
                               const weighted =
                                  ev.weighted_score ??
-                                 (ev.upvotes * (score / 100) - ev.downvotes * 0.5).toFixed(1);
+                                 (upvotes * (score / 100) - downvotes * 0.5).toFixed(1);
+                              const sourceInfo = ev.evidence_url
+                                 ? (() => {
+                                      try {
+                                         const parsed = new URL(ev.evidence_url);
+                                         return {
+                                            host: parsed.hostname.replace(/^www\./, ""),
+                                            path:
+                                               parsed.pathname && parsed.pathname !== "/"
+                                                  ? parsed.pathname
+                                                  : "",
+                                         };
+                                      } catch {
+                                         return {
+                                            host: ev.evidence_url.replace(/^https?:\/\//, ""),
+                                            path: "",
+                                         };
+                                      }
+                                   })()
+                                 : { host: "", path: "" };
+                              const sourcePathPreview =
+                                 sourceInfo.path.length > 34
+                                    ? `${sourceInfo.path.slice(0, 34)}...`
+                                    : sourceInfo.path;
+                              const evidenceTypeRaw = ev.evidence_type || "SOURCE";
+                              const evidenceTypeLabel = evidenceTypeRaw
+                                 .replace(/_/g, " ")
+                                 .toLowerCase()
+                                 .replace(/\b\w/g, (letter) => letter.toUpperCase());
+                              const evidenceTypeClass = (() => {
+                                 if (evidenceTypeRaw.includes("CONTRADICT")) return "contradicts";
+                                 if (evidenceTypeRaw.includes("SUPPORT")) return "supports";
+                                 if (evidenceTypeRaw.includes("CONTEXT")) return "context";
+                                 if (evidenceTypeRaw.includes("VERIFICATION"))
+                                    return "verification";
+                                 return "neutral";
+                              })();
+                              const headline = ev.evidence_caption?.trim() || "Source shared";
+                              const submittedLabel = ev.submitted_at
+                                 ? new Date(ev.submitted_at).toLocaleDateString(undefined, {
+                                      month: "short",
+                                      day: "numeric",
+                                      year: "numeric",
+                                   })
+                                 : "Date unknown";
                               return (
                                  <div
                                     key={ev.id || i}
@@ -781,38 +831,61 @@ function ThreadDetailPage() {
                                              </div>
                                           </div>
                                        </div>
-                                       <div className="tdp-evidence-card-right">
-                                          {isTop && (
-                                             <span className="tdp-top-badge">
-                                                <Icons
-                                                   name="star"
-                                                   size={8}
-                                                   strokeWidth={2.5}
-                                                   color="#065f46"
-                                                />
-                                                Top
+                                       {isTop && (
+                                          <span className="tdp-top-badge">
+                                             <Icons
+                                                name="star"
+                                                size={8}
+                                                strokeWidth={2.5}
+                                                color="#065f46"
+                                             />
+                                             Top
+                                          </span>
+                                       )}
+                                    </div>
+
+                                    <p className="tdp-evidence-headline">{headline}</p>
+
+                                    {ev.evidence_url && (
+                                       <a
+                                          href={ev.evidence_url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="tdp-source-link prominent">
+                                          <span className="tdp-source-link-kicker">
+                                             <span
+                                                className="tdp-source-brand-badge"
+                                                aria-hidden="true">
+                                                {(sourceInfo.host?.[0] || "?").toUpperCase()}
+                                             </span>
+                                             Primary source
+                                          </span>
+                                          <span className="tdp-source-link-url">
+                                             {sourceInfo.host}
+                                          </span>
+                                          {sourcePathPreview && (
+                                             <span className="tdp-source-link-path">
+                                                {sourcePathPreview}
                                              </span>
                                           )}
-                                          {ev.evidence_url && (
-                                             <a
-                                                href={ev.evidence_url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="tdp-source-link">
-                                                <Icons
-                                                   name="external-link"
-                                                   size={10}
-                                                   color="#4f46e5"
-                                                />
-                                                {ev.evidence_url
-                                                   .replace(/^https?:\/\//, "")
-                                                   .slice(0, 28)}
-                                                {ev.evidence_url.length > 40 ? "…" : ""}
-                                             </a>
-                                          )}
-                                       </div>
+                                          <span className="tdp-source-link-cta">
+                                             Read article
+                                             <Icons
+                                                name="external-link"
+                                                size={11}
+                                                color="#1d4ed8"
+                                             />
+                                          </span>
+                                       </a>
+                                    )}
+
+                                    <div className="tdp-evidence-news-meta">
+                                       <span className={`tdp-meta-chip type ${evidenceTypeClass}`}>
+                                          {evidenceTypeLabel}
+                                       </span>
+                                       <span className="tdp-meta-dot">•</span>
+                                       <span className="tdp-meta-chip">{submittedLabel}</span>
                                     </div>
-                                    <p className="tdp-evidence-text">{ev.evidence_caption}</p>
                                     <div className="tdp-evidence-votes">
                                        <button className="tdp-vote-btn up">
                                           <Icons
@@ -821,7 +894,7 @@ function ThreadDetailPage() {
                                              strokeWidth={2.5}
                                              color="#166534"
                                           />
-                                          {ev.upvotes ?? 0}
+                                          {upvotes}
                                        </button>
                                        <button className="tdp-vote-btn down">
                                           <Icons
@@ -830,7 +903,7 @@ function ThreadDetailPage() {
                                              strokeWidth={2.5}
                                              color="#991b1b"
                                           />
-                                          {ev.downvotes ?? 0}
+                                          {downvotes}
                                        </button>
                                        <span className="tdp-weighted-score">
                                           <Icons
