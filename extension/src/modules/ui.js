@@ -95,3 +95,45 @@ export function removeLoadingCard() {
       setTimeout(() => loadingCard.remove(), 300);
    }
 }
+
+export function displayErrorCard(message) {
+   const card = document.createElement("div");
+   card.id = "truthlens-error-card";
+   card.className = "truthlens-card";
+   card.innerHTML = `
+      <div class="truthlens-header">
+         <strong class="truthlens-title">TruthLens</strong>
+      </div>
+      <div class="truthlens-error">
+         <div class="truthlens-error-icon">!</div>
+         <div class="truthlens-error-text">${message}</div>
+      </div>
+   `;
+   document.body.appendChild(card);
+   setTimeout(() => card.classList.add("show"), 100);
+   setTimeout(() => {
+      card.classList.remove("show");
+      setTimeout(() => card.remove(), 300);
+   });
+}
+
+export function successCard(message) {
+   const card = document.createElement("div");
+   card.id = "truthlens-success-card";
+   card.className = "truthlens-card";
+   card.innerHTML = `
+      <div class="truthlens-header">
+         <strong class="truthlens-title">TruthLens</strong>
+      </div>
+      <div class="truthlens-success">
+         <div class="truthlens-success-icon">✓</div>
+         <div class="truthlens-success-text">${message}</div>
+      </div>
+   `;
+   document.body.appendChild(card);
+   setTimeout(() => card.classList.add("show"), 100);
+   setTimeout(() => {
+      card.classList.remove("show");
+      setTimeout(() => card.remove(), 300);
+   });
+}

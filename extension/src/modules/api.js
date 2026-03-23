@@ -1,5 +1,5 @@
 import { state } from "./state.js";
-import { displayResultCard, removeLoadingCard } from "./ui.js";
+import { displayResultCard, removeLoadingCard, displayErrorCard, successCard } from "./ui.js";
 
 // Sending snipped image to backend
 export async function sendImageToServer(image) {
@@ -14,6 +14,7 @@ export async function sendImageToServer(image) {
    if (!response.ok) {
       console.error("Failed to send image to server:", response.statusText);
       removeLoadingCard();
+      displayErrorCard("Failed to send image to server. Please try again later.");
       return;
    }
 
@@ -31,15 +32,17 @@ export async function sendImageToServer(image) {
          clearInterval(pollInterval);
          console.error("Polling timed out");
          removeLoadingCard();
+         displayErrorCard("Failed to get claim result. Please try again later.");
          return;
       }
       const claim = await fetchClaimResult(claim_id);
       if (claim && claim.verdict !== "PENDING") {
          clearInterval(pollInterval);
-         displayResultCard(claim);
          setTimeout(() => {
             removeLoadingCard();
          }, 2000);
+         successCard("Analysis complete!");
+         displayResultCard(claim);
       }
    }, 3000);
 }
