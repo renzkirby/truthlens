@@ -5,17 +5,47 @@ from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import status, viewsets
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, BasePermission, SAFE_METHODS
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import NotFound
 import json
 import secrets
-from .services import *
+from .services import process_image, upload_image_to_database
 from .tasks import snippet_fact_check_process, url_fact_check_process
-from .models import *
-from .serializers import *
+from .models import Claim, Thread, UserProfile, EvidenceSubmission, ThreadComment
+from .serializers import (
+    RegisterSerializer,
+    UserSerializer,
+    UserProfileSerializer,
+    ClaimSerializer,
+    ThreadSerializer,
+    ThreadCommentSerializer,
+    EvidenceSubmissionSerializer,
+    ThreadDetailSerializer,
+    VoteSerializer
+)
+
 from datetime import timedelta
+
+
+class IsThreadOwnerOrReadOnly(BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if request.method in SAFE_METHODS:
+            return True
+        return obj.author == request.user
+    
+class IsEvidenceContributorOrReadOnly(BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if request.method in SAFE_METHODS:
+            return True
+        return obj.contributor == request.user
+
+class IsCommenterOrReadOnly(BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if request.method in SAFE_METHODS:
+            return True
+        return obj.commenter == request.user
 
 # Create your views here.
 @csrf_exempt
@@ -226,7 +256,7 @@ def verify_email(request):
 #Threads viewset
 class ThreadViewSet(viewsets.ModelViewSet):
     serializer_class = ThreadSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsThreadOwnerOrReadOnly]
 
     def get_queryset(self):
         return Thread.objects.all().order_by("-created_at")
@@ -256,8 +286,8 @@ class ClaimViewSet(viewsets.ReadOnlyModelViewSet):
 
 class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
     serializer_class = EvidenceSubmissionSerializer
-    permission_classes = [IsAuthenticated]
-    
+    permission_classes = [IsAuthenticated, IsEvidenceContributorOrReadOnly]
+
     def get_queryset(self):
         return EvidenceSubmission.objects.all()
     
@@ -275,7 +305,7 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
 
 class ThreadCommentViewSet(viewsets.ModelViewSet):
     serializer_class = ThreadCommentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsCommenterOrReadOnly]
     
     def get_queryset(self):
         return ThreadComment.objects.all().order_by("-commented_at")
