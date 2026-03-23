@@ -241,12 +241,17 @@ body {
 
 .card-media {
   background-color: var(--bg-app);
-  height: 280px;
+  height: 300px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   gap: 12px;
+}
+
+.card-media-image {
+  width: 100%;
+  object-fit: cover;
 }
 
 .card-media:hover {
