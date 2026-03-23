@@ -1,4 +1,4 @@
-from rest_framework import serializers
+﻿from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import Claim, Thread, UserProfile, EvidenceSubmission, Vote, ThreadComment
 
@@ -8,17 +8,17 @@ class RegisterSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['username', 'email', 'password']
-        
+
     def validate_username(self, value):
         if User.objects.filter(username=value).exists():
             raise serializers.ValidationError("Username already taken.")
         return value
-    
+
     def create(self, validated_data):
         user = User.objects.create_user(**validated_data)
         UserProfile.objects.create(user=user)
         return user
-    
+
 class UserSerializer(serializers.ModelSerializer):
     trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
     is_email_verified = serializers.BooleanField(
@@ -55,21 +55,25 @@ class ClaimSerializer(serializers.ModelSerializer):
         ]
 
 
-
-
-
 class ThreadSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
     claim = ClaimSerializer(read_only=True)
     claim_id = serializers.UUIDField(write_only=True)
     evidence_count = serializers.SerializerMethodField()
     comment_count = serializers.SerializerMethodField()
-    
+
     def get_evidence_count(self, obj):
         return obj.evidence_submissions.count()
-    
+
     def get_comment_count(self, obj):
         return obj.comments.count()
+
+    def validate(self, attrs):
+        if self.instance and "claim_id" in attrs:
+            raise serializers.ValidationError(
+                {"claim_id": "Cannot be changed after thread creation."}
+            )
+        return attrs
 
     class Meta:
         model = Thread
@@ -85,11 +89,22 @@ class ThreadSerializer(serializers.ModelSerializer):
             "evidence_count",
             "comment_count",
         ]
+        read_only_fields = [
+            "id",
+            "claim",
+            "author",
+            "status",
+            "flag_reason",
+            "created_at",
+            "evidence_count",
+            "comment_count",
+        ]
+
 
 class ThreadCommentSerializer(serializers.ModelSerializer):
     commenter = UserSerializer(read_only=True)
     thread_id = serializers.UUIDField(write_only=True)
-    
+
     class Meta:
         model = ThreadComment
         fields = [
@@ -99,6 +114,15 @@ class ThreadCommentSerializer(serializers.ModelSerializer):
             "comment_text",
             "commented_at",
         ]
+        read_only_fields = ["id", "commenter", "commented_at"]
+
+    def validate(self, attrs):
+        if self.instance and "thread_id" in attrs:
+            raise serializers.ValidationError(
+                {"thread_id": "Cannot be changed after comment creation."}
+            )
+        return attrs
+
 
 class EvidenceSubmissionSerializer(serializers.ModelSerializer):
     contributor = UserSerializer(read_only=True)
@@ -116,21 +140,34 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
             "contributor_trust_snapshot",
             "submitted_at",
         ]
-        
+        read_only_fields = [
+            "id",
+            "contributor",
+            "contributor_trust_snapshot",
+            "submitted_at",
+        ]
+
+    def validate(self, attrs):
+        if self.instance and "thread_id" in attrs:
+            raise serializers.ValidationError(
+                {"thread_id": "Cannot be changed after evidence creation."}
+            )
+        return attrs
+
 
 class ThreadDetailSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
     claim = ClaimSerializer(read_only=True)
-    evidence_submissions = EvidenceSubmissionSerializer(many=True ,read_only=True)
+    evidence_submissions = EvidenceSubmissionSerializer(many=True, read_only=True)
     comments = ThreadCommentSerializer(many=True, read_only=True)
 
     claim_id = serializers.UUIDField(write_only=True)
     evidence_count = serializers.SerializerMethodField()
     comment_count = serializers.SerializerMethodField()
-    
+
     def get_evidence_count(self, obj):
         return obj.evidence_submissions.count()
-    
+
     def get_comment_count(self, obj):
         return obj.comments.count()
 
@@ -165,4 +202,3 @@ class VoteSerializer(serializers.ModelSerializer):
             "vote_trust_snapshot",
             "voted_at",
         ]
-
