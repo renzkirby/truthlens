@@ -137,6 +137,7 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
             "evidence_caption",
             "evidence_url",
             "evidence_type",
+            "evidence_verdict",
             "contributor_trust_snapshot",
             "submitted_at",
         ]

@@ -79,8 +79,10 @@ class Thread(models.Model):
 
 class EvidenceSubmission(models.Model):
     class EvidenceType(models.TextChoices):
-        IMAGE = "IMAGE", "Image"
-        URL_LINK = "URL_LINK", "URL Link"
+        CONTRADICTS = "CONTRADICTS CLAIM", "Contradicts Claim"
+        SUPPORTS = "SUPPORTS CLAIM", "Supports Claim"
+        PROVIDES_CONTEXT = "PROVIDES CONTEXT", "Provides Context"
+        SOURCE_VERIFICATION = "SOURCE VERIFICATION", "Source Verification"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     thread = models.ForeignKey(
@@ -94,6 +96,7 @@ class EvidenceSubmission(models.Model):
     evidence_type = models.CharField(
         max_length=20, choices=EvidenceType.choices, blank=True, null=True
     )
+    evidence_verdict = models.CharField(max_length=20, blank=True, null=True)
     contributor_trust_snapshot = models.FloatField(blank=True, null=True)
     submitted_at = models.DateTimeField(auto_now_add=True)
 
