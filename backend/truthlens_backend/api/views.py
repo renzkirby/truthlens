@@ -3,17 +3,21 @@ from django.core.mail import send_mail
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
+from django.utils import timezone
+from django.db import IntegrityError
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated, BasePermission, SAFE_METHODS
 from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import NotFound
+from datetime import timedelta
 import json
 import secrets
 from .services import process_image, upload_image_to_database
 from .tasks import snippet_fact_check_process, url_fact_check_process
-from .models import Claim, Thread, UserProfile, EvidenceSubmission, ThreadComment
+from .models import Claim, Thread, UserProfile, EvidenceSubmission, ThreadComment, ThreadFlag
 from .serializers import (
     RegisterSerializer,
     UserSerializer,
@@ -23,10 +27,11 @@ from .serializers import (
     ThreadCommentSerializer,
     EvidenceSubmissionSerializer,
     ThreadDetailSerializer,
-    VoteSerializer
+    VoteSerializer,
+    ThreadFlagSerializer,
+    ModerationDecisionSerializer,
 )
 
-from datetime import timedelta
 
 
 class IsThreadOwnerOrReadOnly(BasePermission):
@@ -46,6 +51,11 @@ class IsCommenterOrReadOnly(BasePermission):
         if request.method in SAFE_METHODS:
             return True
         return obj.commenter == request.user
+
+class IsModerator(BasePermission):
+    def has_permission(self, request, view):
+        return (request.user.is_authenticated and request.user.profile.role == UserProfile.Role.MODERATOR)
+    
 
 # Create your views here.
 @csrf_exempt
@@ -253,13 +263,70 @@ def verify_email(request):
     return Response({"message": "Email verified successfully."}, status=200)
     
 
-#Threads viewset
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsModerator])
+def moderation_queue(request):
+    status_filter = request.query_params.get("status", Thread.Status.PENDING)
+    allowed = {"ALL", Thread.Status.PENDING, Thread.Status.OPEN, Thread.Status.CLOSED, Thread.Status.REJECTED}
+    if status_filter not in allowed:
+        return Response(
+            {"detail": "Invalid status filter."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    queryset = Thread.objects.filter(flags__isnull=False).distinct().order_by("-created_at")
+    if status_filter != "ALL":
+        queryset = queryset.filter(status=status_filter)
+
+    serializer = ThreadSerializer(queryset, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsModerator])
+def moderation_resolve_thread(request, thread_id):
+    try:
+        thread = Thread.objects.get(id=thread_id)
+    except Thread.DoesNotExist:
+        raise NotFound("Thread not found.")
+
+    serializer = ModerationDecisionSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    moderator_verdict = serializer.validated_data["moderator_verdict"]
+    moderator_notes = serializer.validated_data.get("moderator_notes", "")
+    next_status = serializer.validated_data.get("status", Thread.Status.CLOSED)
+
+    thread.moderator_verdict = moderator_verdict
+    thread.moderator_notes = moderator_notes
+    thread.status = next_status
+    thread.moderated_by = request.user
+    thread.moderated_at = timezone.now()
+    thread.save(
+        update_fields=[
+            "moderator_verdict",
+            "moderator_notes",
+            "status",
+            "moderated_by",
+            "moderated_at",
+        ]
+    )
+
+    # Final moderator decision becomes the canonical claim verdict for feed consumers.
+    thread.claim.verdict = moderator_verdict
+    thread.claim.last_updated = timezone.now()
+    thread.claim.save(update_fields=["verdict", "last_updated"])
+
+    return Response(ThreadDetailSerializer(thread).data, status=status.HTTP_200_OK)
+
+
+#Viewsets
 class ThreadViewSet(viewsets.ModelViewSet):
     serializer_class = ThreadSerializer
     permission_classes = [IsAuthenticated, IsThreadOwnerOrReadOnly]
 
     def get_queryset(self):
-        return Thread.objects.all().order_by("-created_at")
+        return Thread.objects.exclude(status=Thread.Status.REJECTED).order_by("-created_at")
 
     def perform_create(self, serializer):
         claim_id = serializer.validated_data.pop("claim_id")
@@ -320,3 +387,33 @@ class ThreadCommentViewSet(viewsets.ModelViewSet):
             commenter=self.request.user,
             thread=thread,
         )
+
+
+class ThreadFlagViewSet(viewsets.ModelViewSet):
+    serializer_class = ThreadFlagSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        if self.request.user.profile.role == UserProfile.Role.MODERATOR:
+            return ThreadFlag.objects.select_related("thread", "flagged_by").order_by("-flagged_at")
+        return ThreadFlag.objects.filter(flagged_by=self.request.user).select_related(
+            "thread", "flagged_by"
+        ).order_by("-flagged_at")
+
+    def perform_create(self, serializer):
+        thread_id = serializer.validated_data.pop("thread_id")
+        try:
+            thread = Thread.objects.get(id=thread_id)
+        except Thread.DoesNotExist:
+            raise NotFound("Thread not found.")
+
+        try:
+            serializer.save(flagged_by=self.request.user, thread=thread)
+        except IntegrityError:
+            raise ValidationError({"detail": "You already flagged this thread."})
+
+        # Flagged threads are routed into moderation review without blocking all new threads.
+        if thread.status == Thread.Status.OPEN:
+            thread.status = Thread.Status.PENDING
+            thread.save(update_fields=["status"])
+
