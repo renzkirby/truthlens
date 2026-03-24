@@ -549,14 +549,12 @@ function ThreadDetailPage() {
                   <div className="tdp-post-card">
                      <div className="tdp-post-header">
                         <UserAvatar
-                           username={
-                              thread.original_poster?.username || thread.flagged_by?.username || ""
-                           }
+                           username={thread.author?.username || thread.flagged_by?.username || ""}
                            size={38}
                         />
                         <div className="tdp-post-author">
                            <span className="tdp-author-name">
-                              {thread.original_poster?.username || thread.flagged_by?.username}
+                              {thread.author?.username || thread.flagged_by?.username}
                            </span>
                            <div className="tdp-author-meta">
                               <span>{thread.created_at || thread.posted_at || ""}</span>
@@ -1233,12 +1231,12 @@ function ThreadDetailPage() {
                      <div className="tdp-sidebar-card-label">POSTED BY</div>
                      <div className="tdp-posted-by-row">
                         <UserAvatar
-                           username={thread.flagged_by?.username || ""}
+                           username={thread.author?.username || ""}
                            size={44}
                         />
                         <div className="tdp-posted-by-info">
                            <div className="tdp-posted-by-name">
-                              {thread.flagged_by?.username || "Unknown"}
+                              {thread.author?.username || "Unknown"}
                            </div>
                            {thread.flagged_by?.is_trusted_contributor && (
                               <div className="tdp-trusted-label">
