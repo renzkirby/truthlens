@@ -51,22 +51,37 @@ const VERDICT_META = {
 
 const EVIDENCE_VERDICT_META = {
    FACT: {
+      color: "#0e9f6e",
+      bg: "#ecfdf5",
+      border: "#6ee7b7",
       icon: "check-circle",
       label: "Fact",
    },
    FAKE: {
+      color: "#e02424",
+      bg: "#fef2f2",
+      border: "#fca5a5",
       icon: "x-circle",
       label: "Fake",
    },
    MISLEADING: {
+      color: "#d97706",
+      bg: "#fffbeb",
+      border: "#fde68a",
       icon: "alert-triangle",
       label: "Misleading",
    },
    SATIRE: {
+      color: "#7c3aed",
+      bg: "#f5f3ff",
+      border: "#c4b5fd",
       icon: "wand",
       label: "Satire",
    },
    UNVERIFIED: {
+      color: "#6b7280",
+      bg: "#f9fafb",
+      border: "#e5e7eb",
       icon: "help-circle",
       label: "Unverified",
    },
@@ -684,7 +699,7 @@ function ThreadDetailPage() {
                               </div>
                            </div>
                            <div className="tdp-form-group">
-                              <label className="tdp-form-label">Evidence Verdict</label>
+                              <label className="tdp-form-label">What's the verdict?</label>
                               <div className="tdp-evidence-verdicts">
                                  {Object.entries(EVIDENCE_VERDICT_META).map(([key, meta]) => {
                                     return (
@@ -1025,8 +1040,7 @@ function ThreadDetailPage() {
                               return (
                                  <div
                                     key={ev.id || i}
-                                    className="tdp-evidence-card"
-                                    style={{ borderLeftColor: tc }}>
+                                    className="tdp-evidence-card">
                                     <div className="tdp-evidence-card-header">
                                        <div className="tdp-evidence-contributor">
                                           <UserAvatar

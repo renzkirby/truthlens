@@ -1052,7 +1052,7 @@
 .tdp-evidence-card {
     background: linear-gradient(180deg, #ffffff 0%, #f8fbff 72%, #f1f7ff 100%);
     border: 1px solid #dbe6f3;
-    border-left: 4px solid #6b7280;
+    /* border-left: 4px solid #6b7280; */
     /* overridden inline */
     border-radius: 14px;
     padding: 16px 16px 14px;
@@ -1121,8 +1121,8 @@
 }
 
 .tdp-evidence-headline {
-    font-size: 17px;
-    font-weight: 800;
+    font-size: 16px;
+    font-weight: 600;
     letter-spacing: -0.01em;
     color: #0f172a;
     line-height: 1.4;
