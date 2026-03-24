@@ -1,60 +1,33 @@
+/**
+ * Create Thread Page
+ * ══════════════════════════════════════════════════════════════════
+ * User submits a claim to community for escalated discussion/evidence collection.
+ *
+ * Features:
+ *   - Display AI analysis result for a claim
+ *   - Flag reason selection (allows users to challenge/discuss AI verdict)
+ *   - Caption and source URL input
+ *   - Escalate to community discussion
+ *
+ * State:
+ *   - Claim data (from URL parameter)
+ *   - Form inputs: caption, source_url, flag_reason
+ *   - Submission state (loading, errors)
+ */
+
 import { useEffect, useState } from "react";
-import { useAuth } from "../context/AuthContext";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import NavigationBar from "../components/NavigationBar";
 import Icons from "../components/Icons.jsx";
+
+// ── Utilities & Constants ──
+import { getAiVerdict } from "../utils/verdict";
+import { VERDICT_CONFIG, VERDICT_OPTIONS, FLAG_OPTIONS, VERDICT_COLORS } from "../utils/constants";
+import { useEndpoint } from "../utils/api";
+
+// ── Styles ──
 import "./CreateThreadPage.css";
-
-const FLAG_OPTIONS = [
-   {
-      value: "FACT",
-      label: "Fact",
-      icon: "check-circle",
-      color: "var(--verdict-fact-text)",
-      bg: "var(--verdict-fact-bg)",
-      border: "var(--verdict-fact-border)",
-   },
-   {
-      value: "FAKE",
-      label: "Fake",
-      icon: "x-circle",
-      color: "var(--verdict-fake-text)",
-      bg: "var(--verdict-fake-bg)",
-      border: "var(--verdict-fake-border)",
-   },
-   {
-      value: "MISLEADING",
-      label: "Misleading",
-      icon: "alert-triangle",
-      color: "var(--verdict-misleading-text)",
-      bg: "var(--verdict-misleading-bg)",
-      border: "var(--verdict-misleading-border)",
-   },
-   {
-      value: "SATIRE",
-      label: "Satire",
-      icon: "wand",
-      color: "var(--verdict-satire-text)",
-      bg: "var(--verdict-satire-bg)",
-      border: "var(--verdict-satire-border)",
-   },
-   {
-      value: "UNVERIFIED",
-      label: "Unverified",
-      icon: "help-circle",
-      color: "var(--verdict-unverified-text)",
-      bg: "var(--verdict-unverified-bg)",
-      border: "var(--verdict-unverified-border)",
-   },
-];
-
-const VERDICT_COLORS = {
-   FACT: "var(--verdict-fact-text)",
-   FAKE: "var(--verdict-fake-text)",
-   MISLEADING: "var(--verdict-misleading-text)",
-   SATIRE: "var(--verdict-satire-text)",
-   UNVERIFIED: "var(--verdict-unverified-text)",
-};
 
 function CreateThreadPage() {
    const [loading, setLoading] = useState(true);
@@ -65,25 +38,36 @@ function CreateThreadPage() {
    const claimId = searchParams.get("claim_id");
    const { authFetch } = useAuth();
    const navigate = useNavigate();
-   const [formValues, setformValues] = useState({
+   const [formValues, setFormValues] = useState({
       caption: "",
       source_url: "",
       flag_reason: "",
    });
 
+   /**
+    * Handle form input changes (caption, source_url)
+    * @param {Event} e - Input change event
+    */
    const handleInputChange = (e) => {
       const { name, value } = e.target;
-      setformValues({
+      setFormValues({
          ...formValues,
          [name]: value,
       });
    };
 
+   /**
+    * Handle flag reason selection
+    * @param {string} value - Selected flag reason value
+    */
    const handleFlagSelect = (value) => {
-      setformValues({ ...formValues, flag_reason: value });
-      console.log(formValues.flag_reason);
+      setFormValues({ ...formValues, flag_reason: value });
    };
 
+   /**
+    * Submit thread escalation to backend
+    * Validates flag_reason, creates thread with claim and form data
+    */
    const handleSubmit = async () => {
       if (!formValues.flag_reason) {
          setError("Please select a flag reason before submitting.");
@@ -93,7 +77,8 @@ function CreateThreadPage() {
       setSubmitting(true);
       setError(null);
       try {
-         const responseData = await authFetch("http://localhost:8000/api/threads/", {
+         const url = useEndpoint("THREADS");
+         const responseData = await authFetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -118,11 +103,12 @@ function CreateThreadPage() {
       }
       const fetchClaimData = async () => {
          try {
-            const claimData = await authFetch(`http://localhost:8000/api/claims/${claimId}/`, {
+            const claimUrl = useEndpoint("CLAIMS") + claimId + "/";
+            const claimData = await authFetch(claimUrl, {
                method: "GET",
             });
             setClaim(claimData);
-            setformValues((prev) => ({
+            setFormValues((prev) => ({
                ...prev,
                caption: claimData.ai_summary || "",
                source_url: claimData.source_link || "",
@@ -136,6 +122,8 @@ function CreateThreadPage() {
       };
       fetchClaimData();
    }, [claimId]);
+
+   const aiVerdict = getAiVerdict(claim);
 
    return (
       <div className="create-thread-layout">
@@ -263,10 +251,7 @@ function CreateThreadPage() {
                                          }
                                        : {}
                                  }
-                                 onClick={() => {
-                                    handleFlagSelect(opt.value);
-                                    console.log(opt.color, opt.value, opt.bg, opt.border);
-                                 }}>
+                                 onClick={() => handleFlagSelect(opt.value)}>
                                  <Icons
                                     name={opt.icon}
                                     size={15}
@@ -306,9 +291,9 @@ function CreateThreadPage() {
                            <span
                               className="ai-verdict-value"
                               style={{
-                                 color: VERDICT_COLORS[claim.verdict] || "var(--text-muted)",
+                                 color: VERDICT_COLORS[aiVerdict] || "var(--text-muted)",
                               }}>
-                              {claim.verdict || "—"}
+                              {aiVerdict || "—"}
                            </span>
                         </div>
 

@@ -1,50 +1,58 @@
-import React, { useEffect, useState } from "react";
-import "./CommunityFeed.css";
+/**
+ * Community Feed Page
+ * ══════════════════════════════════════════════════════════════════
+ * Displays all community threads (flagged/escalated claims).
+ * Users can explore claims, read verdicts, and engage in discussion.
+ *
+ * Features:
+ *   - Browse all community threads
+ *   - Filter by status (trending, verified, needs evidence)
+ *   - View verdict status and evidence
+ *   - Navigate to thread details
+ *
+ * State Management:
+ *   - Custom hook (useFetchThreads) handles data fetching
+ *   - Verdict utilities for consistent display
+ *   - Centralized constants for configurations
+ */
+
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext.jsx";
 import NavigationBar from "../components/NavigationBar.jsx";
 import Icons from "../components/Icons.jsx";
-import { useAuth } from "../context/AuthContext.jsx";
-import { useNavigate } from "react-router-dom";
 
-function timeAgo(dateString) {
-   const now = new Date();
-   const past = new Date(dateString);
-   const seconds = Math.floor((now - past) / 1000);
+// ── Utilities & Hooks ──
+import timeAgo from "../utils/timeAgo";
+import { getEffectiveVerdict } from "../utils/verdict";
+import { useFetchThreads } from "../hooks";
 
-   if (seconds < 60) return `${seconds}s ago`;
-   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-   return `${Math.floor(seconds / 86400)}d ago`;
-}
+// ── Styles ──
+import "./CommunityFeed.css";
 
+/**
+ * Get user-friendly action text based on claim verdict status
+ * @param {string} verdict - Verdict value (FACT, FAKE, etc.)
+ * @returns {string} Action text describing what to do next
+ */
 function getActionText(verdict) {
    if (!verdict || verdict === "UNVERIFIED") return "Needs Evidence";
    if (verdict === "FACT" || verdict === "FAKE") return "Verified";
    return "Pending";
 }
 
-const CommunityFeed = () => {
-   const [threads, setThreads] = useState([]);
-   const [loading, setLoading] = useState(true);
-   const [error, setError] = useState(null);
+/**
+ * CommunityFeed Component
+ * Shows browsable feed of community-escalated claims
+ */
+function CommunityFeed() {
    const navigate = useNavigate();
    const { authFetch } = useAuth();
 
-   useEffect(() => {
-      const fetchThreads = async () => {
-         try {
-            const threadData = await authFetch("http://localhost:8000/api/threads/", {
-               method: "GET",
-            });
-            setThreads(threadData);
-         } catch (err) {
-            setError("Failed to load threads");
-         } finally {
-            setLoading(false);
-         }
-      };
-      fetchThreads();
-   }, []);
+   // ── Data Fetching ──
+   // Use custom hook to eliminate boilerplate fetch logic
+   const { threads, loading, error } = useFetchThreads(authFetch);
 
+   // ── Handler: Navigate to thread detail view ──
    const handleThreadClick = (threadID, tab = null) => {
       if (tab) {
          navigate(`/thread/detail/${threadID}?tab=${tab}`);
@@ -55,12 +63,11 @@ const CommunityFeed = () => {
 
    return (
       <div className="feed-layout">
-         {/* Navbar */}
          <NavigationBar />
 
-         {/* Main Feed Area */}
          <main className="feed-container">
-            {/* Filter Bar */}
+            {/* ── Filter Bar ── */}
+            {/* Note: Filter buttons are currently placeholders (functionality can be added) */}
             <div className="filter-bar box-panel">
                <div className="filter-left">
                   <span className="filter-label">Filter:</span>
@@ -79,10 +86,12 @@ const CommunityFeed = () => {
                </div>
             </div>
 
+            {/* ── Loading & Error States ── */}
             {loading && <p>Loading threads...</p>}
             {error && <p style={{ color: "red" }}>{error}</p>}
 
-            {/* Posts List */}
+            {/* ── Threads List ── */}
+            {/* Empty state or thread cards */}
             <div className="posts-list">
                {!loading && threads.length === 0 ? (
                   <h2 className="no-threads-text">
@@ -90,7 +99,7 @@ const CommunityFeed = () => {
                   </h2>
                ) : (
                   threads.map((thread) => {
-                     const verdict = thread.claim.verdict;
+                     const verdict = getEffectiveVerdict(thread.claim);
                      const verdictClass = verdict?.toLowerCase();
 
                      return (
@@ -227,6 +236,6 @@ const CommunityFeed = () => {
          </main>
       </div>
    );
-};
+}
 
 export default CommunityFeed;

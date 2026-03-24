@@ -1,104 +1,81 @@
-import { useState, useEffect } from "react";
-import { useAuth } from "../context/AuthContext.jsx";
+/**
+ * Dashboard Page
+ * ══════════════════════════════════════════════════════════════════
+ * User dashboard showing metrics, recent activity, and trending claims.
+ *
+ * Features:
+ *   - Quick stats: total scans, fake news stopped, community threads
+ *   - Widgets: claims needing votes, recent scans, verdict breakdown chart
+ *   - Trending claims from the community
+ *
+ * State Management:
+ *   - Custom hooks (useFetchThreads, useFetchClaims) handle data fetching
+ *   - Verdict utility functions for consistent verdict display
+ *   - Centralized constants for verdict configurations
+ */
+
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext.jsx";
 import NavigationBar from "../components/NavigationBar.jsx";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import "./Dashboard.css";
 import Icons from "../components/Icons.jsx";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
-const VERDICT_CONFIG = {
-   FACT: { color: "var(--verdict-fact-text)", bg: "var(--verdict-fact-bg)", label: "FACT" },
-   FAKE: { color: "var(--verdict-fake-text)", bg: "var(--verdict-fake-bg)", label: "FAKE" },
-   UNVERIFIED: {
-      color: "var(--verdict-unverified-text)",
-      bg: "var(--verdict-unverified-bg)",
-      label: "UNVERIFIED",
-   },
-   SATIRE: { color: "var(--verdict-satire-text)", bg: "var(--verdict-satire-bg)", label: "SATIRE" },
-   OUT_OF_SCOPE: {
-      color: "var(--verdict-unverified-text)",
-      bg: "var(--verdict-unverified-bg)",
-      label: "OUT OF SCOPE",
-   },
-   MISLEADING: {
-      color: "var(--verdict-misleading-text)",
-      bg: "var(--verdict-misleading-bg)",
-      label: "MISLEADING",
-   },
-};
+// ── Utilities & Hooks ──
+import timeAgo from "../utils/timeAgo";
+import { VERDICT_CONFIG } from "../utils/constants";
+import { getEffectiveVerdict } from "../utils/verdict";
+import { useFetchThreads, useFetchClaims } from "../hooks";
 
-function timeAgo(dateStr) {
-   if (!dateStr) return "—";
-   const diff = Date.now() - new Date(dateStr).getTime();
-   const mins = Math.floor(diff / 60000);
-   const hours = Math.floor(diff / 3600000);
-   const days = Math.floor(diff / 86400000);
-   if (mins < 1) return "Just now";
-   if (mins < 60) return `${mins}m ago`;
-   if (hours < 24) return `${hours}h ago`;
-   if (days < 7) return `${days}d ago`;
-   return `${Math.floor(days / 7)}w ago`;
-}
+// ── Styles ──
+import "./Dashboard.css";
 
+/**
+ * Dashboard Component
+ * Shows user overview with metrics, recent activity, trending claims
+ */
 function Dashboard() {
-   const { authFetch, user } = useAuth();
+   const { user } = useAuth();
+   const { authFetch } = useAuth();
    const navigate = useNavigate();
 
-   const [threads, setThreads] = useState([]);
-   const [claims, setClaims] = useState([]);
-   const [loading, setLoading] = useState(true);
-   const [error, setError] = useState(null);
+   // ── Data Fetching ──
+   // Use custom hooks to eliminate boilerplate fetch logic
+   const { threads, loading: threadsLoading } = useFetchThreads(authFetch);
+   const { claims, loading: claimsLoading } = useFetchClaims(authFetch, "my-claims");
 
-   useEffect(() => {
-      const fetchThreads = async () => {
-         try {
-            const data = await authFetch("http://localhost:8000/api/threads/", {
-               method: "GET",
-            });
-            setThreads(data || []);
-         } catch (err) {
-            setError("Failed to load threads");
-         }
-      };
+   // Overall loading state (true if either is loading)
+   const loading = threadsLoading || claimsLoading;
 
-      const fetchClaims = async () => {
-         try {
-            const data = await authFetch("http://localhost:8000/api/auth/my-claims/", {
-               method: "GET",
-            });
-            setClaims(data || []);
-         } catch (err) {
-            setError("Failed to load claims");
-         } finally {
-            setLoading(false);
-         }
-      };
-
-      fetchThreads();
-      fetchClaims();
-   }, []);
-
+   // ── Compute Dashboard Stats ──
+   // Derived from claims and threads data
    const totalScans = claims.length;
-   const fakesStopped = claims.filter((c) => c.verdict === "FAKE").length;
+   const fakesStopped = claims.filter((c) => getEffectiveVerdict(c) === "FAKE").length;
 
-   // "Needs Your Vote"
+   // ── Widget Data: Needs Your Vote ──
+   // Show up to 3 unverified threads
    const needsVote = threads
-      .filter((t) => t.claim?.verdict === "UNVERIFIED" || !t.claim?.verdict)
-      .slice(0, 3); // show max 3
+      .filter((t) => {
+         const verdict = getEffectiveVerdict(t.claim);
+         return verdict === "UNVERIFIED" || !verdict;
+      })
+      .slice(0, 3);
 
-   // Recent scans
+   // ── Widget Data: My Recent Scans ──
+   // Show 4 most recent claims (sorted by last_updated)
    const recentScans = [...claims]
       .sort((a, b) => new Date(b.last_updated) - new Date(a.last_updated))
       .slice(0, 4);
 
-   // Trending threads
+   // ── Widget Data: Trending Threads ──
+   // Show 5 most recent threads (sorted by created_at)
    const trendingThreads = [...threads]
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       .slice(0, 5);
 
-   // Recharts data
+   // ── Chart Data: Verdict Breakdown ──
+   // Count claims by verdict for pie chart visualization
    const verdictTally = claims.reduce((acc, claim) => {
-      const v = claim.verdict || "PENDING";
+      const v = getEffectiveVerdict(claim) || "PENDING";
       acc[v] = (acc[v] || 0) + 1;
       return acc;
    }, {});
@@ -113,6 +90,7 @@ function Dashboard() {
          <NavigationBar />
 
          <main className="dashboard-container">
+            {/* ── Welcome Header ── */}
             <div className="welcome-header">
                <div>
                   <h1 className="welcome-title">
@@ -128,7 +106,8 @@ function Dashboard() {
                </div>
             </div>
 
-            {/* ── Stats ── */}
+            {/* ── Quick Stats Row ── */}
+            {/* Shows: total scans, fake stopped, community threads, claims needing votes */}
             <div className="stats-row">
                <div className="quick-stat-card">
                   <p className="qs-label">Total Scans</p>
@@ -149,8 +128,8 @@ function Dashboard() {
             </div>
 
             {/* ── Middle Row: Widgets + Chart ── */}
+            {/* Left: Stacked widgets (votes & recent scans) | Right: Verdict breakdown chart */}
             <div className="middle-row">
-               {/* Left column: two widgets stacked */}
                <div className="widgets-column">
                   {/* Needs Your Vote */}
                   <div className="box-panel widget">
@@ -197,7 +176,8 @@ function Dashboard() {
                      ) : (
                         <div className="widget-list">
                            {recentScans.map((claim) => {
-                              const v = VERDICT_CONFIG[claim.verdict] || VERDICT_CONFIG.PENDING;
+                              const verdict = getEffectiveVerdict(claim);
+                              const v = VERDICT_CONFIG[verdict] || VERDICT_CONFIG.PENDING;
                               return (
                                  <div
                                     key={claim.id}
@@ -270,7 +250,8 @@ function Dashboard() {
                ) : (
                   <div className="trending-list">
                      {trendingThreads.map((thread) => {
-                        const v = VERDICT_CONFIG[thread.claim?.verdict] || VERDICT_CONFIG.PENDING;
+                        const verdict = getEffectiveVerdict(thread.claim);
+                        const v = VERDICT_CONFIG[verdict] || VERDICT_CONFIG.PENDING;
                         return (
                            <div
                               key={thread.id}

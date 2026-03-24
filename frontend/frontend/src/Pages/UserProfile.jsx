@@ -1,77 +1,102 @@
-import { useState, useEffect } from "react";
+/**
+ * User Profile Page
+ * ══════════════════════════════════════════════════════════════════
+ * Displays user profile information, reputation metrics, and claim history.
+ *
+ * Features:
+ *   - User identity and trust level
+ *   - Reputation dashboard (trust score, accuracy rate)
+ *   - Claim history (scans, contributions, drafts)
+ *   - Activity timeline
+ *
+ * State Management:
+ *   - Custom hook (useFetchClaims) handles claim fetching
+ *   - Verdict utilities for consistent verdict display
+ *   - Centralized constants
+ */
+
+import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import NavigationBar from "../components/NavigationBar.jsx";
+
+// ── Utilities & Hooks ──
+import { getEffectiveVerdict } from "../utils/verdict";
+import { VERDICT_CONFIG } from "../utils/constants";
+import { useFetchClaims } from "../hooks";
+
+// ── Styles ──
 import "./UserProfile.css";
 
-const VERDICT_CONFIG = {
-   FACT: { color: "#22c55e", label: "FACT" },
-   FAKE: { color: "#ef4444", label: "FAKE" },
-   UNVERIFIED: { color: "#f97316", label: "UNVERIFIED" },
-   SATIRE: { color: "#a855f7", label: "SATIRE" },
-   PENDING: { color: "#6b7280", label: "PENDING" },
-};
+/**
+ * Get trust level label and color based on score
+ * @param {number} score - User's trust score (0-100)
+ * @returns {object} { label, color }
+ */
+function getTrustLevel(score) {
+   if (score >= 80) return { label: "Expert", color: "#22c55e" };
+   if (score >= 60) return { label: "Trusted", color: "var(--primary-blue)" };
+   if (score >= 40) return { label: "Contributor", color: "#f97316" };
+   return { label: "Newcomer", color: "var(--text-muted)" };
+}
 
+/**
+ * Format date string to readable format
+ * @param {string} dateStr - ISO date string
+ * @returns {string} Formatted date (e.g., "January 15, 2024")
+ */
+function formatDate(dateStr) {
+   if (!dateStr) return "—";
+   return new Date(dateStr).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+   });
+}
+
+/**
+ * Convert date to relative time format
+ * @param {string} dateStr - ISO date string
+ * @returns {string} Relative time (e.g., "2d ago", "Today")
+ */
+function timeAgo(dateStr) {
+   if (!dateStr) return "—";
+   const diff = Date.now() - new Date(dateStr).getTime();
+   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+   if (days === 0) return "Today";
+   if (days === 1) return "Yesterday";
+   if (days < 7) return `${days}d ago`;
+   if (days < 30) return `${Math.floor(days / 7)}w ago`;
+   return `${Math.floor(days / 30)}mo ago`;
+}
+
+/**
+ * UserProfile Component
+ * Shows user identity, reputation, and contribution history
+ */
 function UserProfile() {
    const { user, authFetch } = useAuth();
-   const [claims, setClaims] = useState([]);
    const [activeTab, setActiveTab] = useState("scans");
-   const [loading, setLoading] = useState(true);
 
-   useEffect(() => {
-      const fetchClaims = async () => {
-         try {
-            const data = await authFetch("http://localhost:8000/api/auth/my-claims/");
-            setClaims(data || []);
-         } catch (err) {
-            console.error("Failed to fetch claims:", err);
-         } finally {
-            setLoading(false);
-         }
-      };
-      fetchClaims();
-   }, []);
+   // ── Data Fetching ──
+   // Use custom hook to eliminate boilerplate fetch logic
+   const { claims, loading } = useFetchClaims(authFetch, "my-claims");
 
+   // ── Compute Profile Stats ──
    const totalScans = claims.length;
-   const fakesStopped = claims.filter((c) => c.verdict === "FAKE").length;
-   const verifiedClaims = claims.filter((c) => c.verdict === "FACT").length;
+   const fakesStopped = claims.filter((c) => getEffectiveVerdict(c) === "FAKE").length;
+   const verifiedClaims = claims.filter((c) => getEffectiveVerdict(c) === "FACT").length;
    const accuracyRate =
       totalScans > 0 ? Math.round(((fakesStopped + verifiedClaims) / totalScans) * 100) : 0;
 
-   const getTrustLevel = (score) => {
-      if (score >= 80) return { label: "Expert", color: "#22c55e" };
-      if (score >= 60) return { label: "Trusted", color: "var(--primary-blue)" };
-      if (score >= 40) return { label: "Contributor", color: "#f97316" };
-      return { label: "Newcomer", color: "var(--text-muted)" };
-   };
-
    const trustLevel = getTrustLevel(user?.trust_score || 0);
-
-   const formatDate = (dateStr) => {
-      if (!dateStr) return "—";
-      return new Date(dateStr).toLocaleDateString("en-US", {
-         year: "numeric",
-         month: "long",
-         day: "numeric",
-      });
-   };
-
-   const timeAgo = (dateStr) => {
-      if (!dateStr) return "—";
-      const diff = Date.now() - new Date(dateStr).getTime();
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      if (days === 0) return "Today";
-      if (days === 1) return "Yesterday";
-      if (days < 7) return `${days}d ago`;
-      if (days < 30) return `${Math.floor(days / 7)}w ago`;
-      return `${Math.floor(days / 30)}mo ago`;
-   };
 
    return (
       <div className="profile-layout">
          <NavigationBar />
 
          <main className="profile-container">
-            {/* Identity Header */}
+            {/* ── User Identity Header ── */}
+            {/* Shows avatar, username, email, trust level, join date */}
             <div className="profile-header">
                <div className="profile-avatar">{user?.username?.[0]?.toUpperCase() || "?"}</div>
                <div className="profile-identity">
@@ -88,7 +113,8 @@ function UserProfile() {
                </div>
             </div>
 
-            {/* Reputation Dashboard */}
+            {/* ── Reputation Dashboard ── */}
+            {/* Displays: trust score, accuracy rate, fake news stopped, total scans */}
             <div className="box-panel">
                <h2 className="section-title">Reputation Dashboard</h2>
                <div className="stats-grid">
@@ -127,7 +153,8 @@ function UserProfile() {
                </div>
             </div>
 
-            {/* Activity History */}
+            {/* ── Activity History & Claims ── */}
+            {/* Tabbed view: scans history with verdict status, time, and summary */}
             <div className="box-panel">
                <div className="tabs-row">
                   <button
@@ -152,7 +179,8 @@ function UserProfile() {
                         <div className="claims-list">
                            {claims.map((claim) => {
                               const verdict =
-                                 VERDICT_CONFIG[claim.verdict] || VERDICT_CONFIG.PENDING;
+                                 VERDICT_CONFIG[getEffectiveVerdict(claim)] ||
+                                 VERDICT_CONFIG.PENDING;
                               return (
                                  <div
                                     className="claim-card"

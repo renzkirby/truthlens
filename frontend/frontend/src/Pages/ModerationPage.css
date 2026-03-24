@@ -128,6 +128,38 @@
    gap: 16px;
 }
 
+.mod-tab-bar {
+   display: flex;
+   gap: 8px;
+   padding: 8px;
+}
+
+.mod-tab-btn {
+   display: inline-flex;
+   align-items: center;
+   gap: 6px;
+   padding: 10px 14px;
+   border-radius: 10px;
+   border: 1px solid var(--border-default);
+   background: var(--bg-surface);
+   color: var(--text-muted);
+   font-size: 13px;
+   font-weight: 700;
+   cursor: pointer;
+   transition: all 0.15s;
+}
+
+.mod-tab-btn:hover {
+   border-color: var(--brand-primary);
+   color: var(--brand-primary);
+}
+
+.mod-tab-btn.active {
+   background: var(--brand-primary);
+   border-color: var(--brand-primary);
+   color: var(--text-inverse);
+}
+
 /* ── Filters ── */
 .mod-filters {
    display: flex;
@@ -247,6 +279,14 @@
    align-items: center;
    padding: 12px 24px;
    border-bottom: 1px solid var(--border-light);
+}
+
+.mod-table-row-safety {
+   grid-template-columns: 2.2fr 1fr 0.8fr 1fr 0.8fr 0.6fr;
+}
+
+.mod-table-row-verdict {
+   grid-template-columns: 2.2fr 0.9fr 0.9fr 0.8fr 0.5fr;
 }
 
 .mod-table-row:last-child {
@@ -373,6 +413,222 @@
    gap: 6px;
 }
 
+.mod-report-cell {
+   display: flex;
+   flex-direction: column;
+   align-items: flex-start;
+   gap: 2px;
+}
+
+.mod-report-count {
+   font-size: 16px;
+   font-weight: 800;
+   color: var(--text-main);
+   line-height: 1;
+}
+
+.mod-report-label {
+   font-size: 11px;
+   color: var(--text-muted);
+}
+
+/* Expandable row pattern */
+.mod-expandable-row-wrapper {
+   display: flex;
+   flex-direction: column;
+}
+
+.mod-row-actions {
+   display: flex;
+   gap: 6px;
+   justify-content: center;
+}
+
+.mod-expand-btn {
+   width: 30px;
+   height: 30px;
+   border-radius: 8px;
+   border: 1px solid var(--border-default);
+   background: var(--bg-surface);
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   cursor: pointer;
+   transition: all 0.15s;
+}
+
+.mod-expand-btn:hover {
+   border-color: var(--brand-primary);
+   color: var(--brand-primary);
+   background: #ede9fe;
+}
+
+.mod-expanded-panel-wrapper {
+   grid-column: 1 / -1;
+   padding: 0 24px 16px;
+   background: var(--bg-subtle);
+   border-top: 1px solid var(--border-light);
+   border-bottom: 1px solid var(--border-light);
+}
+
+/* Moderator decision panel */
+.mod-decision-panel {
+   background: var(--bg-surface);
+   border-radius: 10px;
+   padding: 20px;
+   border: 1px solid var(--border-default);
+}
+
+.mod-decision-header {
+   display: flex;
+   justify-content: space-between;
+   align-items: center;
+   margin-bottom: 20px;
+}
+
+.mod-decision-title {
+   font-size: 14px;
+   font-weight: 700;
+   color: var(--text-main);
+   margin: 0;
+}
+
+.mod-decision-close-btn {
+   width: 28px;
+   height: 28px;
+   border-radius: 6px;
+   border: 1px solid var(--border-default);
+   background: transparent;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   cursor: pointer;
+   transition: all 0.15s;
+   color: var(--text-muted);
+}
+
+.mod-decision-close-btn:hover {
+   border-color: var(--text-muted);
+   color: var(--text-main);
+}
+
+.mod-decision-content {
+   display: grid;
+   grid-template-columns: 1fr 1fr;
+   gap: 20px;
+   margin-bottom: 20px;
+}
+
+.mod-decision-section {
+   display: flex;
+   flex-direction: column;
+   gap: 8px;
+}
+
+.mod-decision-section:nth-child(3) {
+   grid-column: 1 / -1;
+}
+
+.mod-decision-label {
+   font-size: 12px;
+   font-weight: 700;
+   color: var(--text-main);
+   text-transform: uppercase;
+   letter-spacing: 0.3px;
+}
+
+.mod-decision-select,
+.mod-decision-textarea {
+   width: 100%;
+   border: 1px solid var(--border-default);
+   border-radius: 8px;
+   padding: 10px 12px;
+   font-size: 13px;
+   color: var(--text-main);
+   font-family: 'Inter', sans-serif;
+   background: var(--bg-subtle);
+   box-sizing: border-box;
+   appearance: none;
+   background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+   background-repeat: no-repeat;
+   background-position: right 10px center;
+   background-size: 16px;
+   padding-right: 36px;
+}
+
+.mod-decision-textarea {
+   font-family: 'Inter', sans-serif;
+   resize: vertical;
+   min-height: 100px;
+}
+
+.mod-decision-select:focus,
+.mod-decision-textarea:focus {
+   outline: none;
+   border-color: var(--brand-primary);
+   background-color: var(--bg-surface);
+}
+
+.mod-decision-hint {
+   font-size: 12px;
+   color: var(--text-muted);
+   margin: 0;
+   line-height: 1.4;
+}
+
+.mod-decision-actions {
+   display: flex;
+   gap: 8px;
+}
+
+.mod-decision-resolve-btn {
+   flex: 1;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   gap: 8px;
+   border: 1px solid var(--brand-primary);
+   border-radius: 8px;
+   background: var(--brand-primary);
+   color: var(--text-inverse);
+   font-size: 13px;
+   font-weight: 700;
+   padding: 10px 14px;
+   cursor: pointer;
+   transition: all 0.15s;
+}
+
+.mod-decision-resolve-btn:hover:not(:disabled) {
+   opacity: 0.9;
+   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.mod-decision-resolve-btn:disabled {
+   opacity: 0.65;
+   cursor: not-allowed;
+}
+
+.mod-decision-cancel-btn {
+   flex: 1;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   border: 1px solid var(--border-default);
+   border-radius: 8px;
+   background: var(--bg-surface);
+   color: var(--text-main);
+   font-size: 13px;
+   font-weight: 700;
+   padding: 10px 14px;
+   cursor: pointer;
+   transition: all 0.15s;
+}
+
+.mod-decision-cancel-btn:hover {
+   border-color: var(--text-muted);
+   background: var(--bg-subtle);
+}
+
 .mod-action-btn {
    width: 30px;
    height: 30px;
@@ -384,6 +640,7 @@
    justify-content: center;
    cursor: pointer;
    transition: all 0.15s;
+   flex-shrink: 0;
 }
 
 .mod-action-btn.view:hover {
@@ -539,8 +796,9 @@
       grid-template-columns: repeat(2, 1fr);
    }
 
-   .mod-table-row {
-      grid-template-columns: 2fr 1fr 1fr 1fr 0.5fr 0.5fr;
+   .mod-table-row-safety,
+   .mod-table-row-verdict {
+      grid-template-columns: 1fr 1fr;
    }
 }
 
@@ -556,8 +814,13 @@
       padding: 20px;
    }
 
-   .mod-table-row {
-      grid-template-columns: 1fr 1fr;
+   .mod-tab-bar {
+      flex-direction: column;
+   }
+
+   .mod-table-row-safety,
+   .mod-table-row-verdict {
+      grid-template-columns: 1fr;
       gap: 8px;
    }
 }

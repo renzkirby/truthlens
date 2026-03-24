@@ -1,8 +1,32 @@
+/**
+ * Register Page (Account Creation)
+ * ══════════════════════════════════════════════════════════════════
+ * User registration interface for creating new TruthLens accounts.
+ *
+ * Features:
+ *   - Username, email, and password input
+ *   - Show/hide password toggle
+ *   - Account creation with backend validation
+ *   - Switch to login if user already has account
+ *   - Social login options (placeholder)
+ *   - Redirect to requested page after registration
+ *
+ * State:
+ *   - Form inputs: username, email, password
+ *   - UI state: showPassword
+ *   - Error handling for registration failures
+ */
+
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import LogoImage from "../assets/truthlens_logo.png";
 import Icons from "../components/Icons.jsx";
+
+// ── Utilities & Constants ──
+import { useEndpoint } from "../utils/api";
+
+// ── Styles ──
 import "./RegisterPage.css";
 
 function RegisterPage() {
@@ -28,8 +52,13 @@ function RegisterPage() {
       });
    };
 
+   /**
+    * Handle form submission and account creation
+    * Posts credentials to backend, stores tokens, redirects on success
+    */
    const handleSubmit = async () => {
-      const response = await fetch("http://localhost:8000/api/auth/register/", {
+      const registerEndpoint = useEndpoint("REGISTER");
+      const response = await fetch(registerEndpoint, {
          method: "POST",
          headers: { "Content-Type": "application/json" },
          body: JSON.stringify({

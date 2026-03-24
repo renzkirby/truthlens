@@ -1,99 +1,52 @@
+/**
+ * Thread Detail Page
+ * ══════════════════════════════════════════════════════════════════
+ * Displays full thread discussion including claim verdict, evidence, and comments.
+ *
+ * Features:
+ *   - Full claim information with AI verdict and verdict badge
+ *   - Evidence collection (user-submitted supporting/contradicting evidence)
+ *   - Comment thread for discussion
+ *   - User reputation/trust scores
+ *   - Evidence and comment editing capabilities
+ *
+ * Sections:
+ *   - Main verdict display with AI analysis
+ *   - Evidence tab: Browse and submit supporting/contradicting evidence
+ *   - Comments tab: Read and participate in discussion
+ */
+
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import NavigationBar from "../components/NavigationBar";
 import Icons from "../components/Icons";
+
+// ── Utilities & Constants ──
+import { getEffectiveVerdict } from "../utils/verdict";
+import { VERDICT_CONFIG } from "../utils/constants";
+import timeAgo from "../utils/timeAgo";
+
+// ── Styles ──
 import "./ThreadDetailPage.css";
 
-// Verdict config
-const VERDICT_META = {
-   fact: {
-      color: "#0e9f6e",
-      bg: "#ecfdf5",
-      border: "#6ee7b7",
-      icon: "check-circle",
-      label: "Fact",
-      desc: "This claim has been confirmed by multiple trusted sources.",
-   },
-   fake: {
-      color: "#e02424",
-      bg: "#fef2f2",
-      border: "#fca5a5",
-      icon: "x-circle",
-      label: "Fake",
-      desc: "This claim has been debunked by reliable fact-checkers.",
-   },
-   misleading: {
-      color: "#d97706",
-      bg: "#fffbeb",
-      border: "#fde68a",
-      icon: "alert-triangle",
-      label: "Misleading",
-      desc: "This claim contains partial truths but omits key context.",
-   },
-   unverified: {
-      color: "#6b7280",
-      bg: "#f9fafb",
-      border: "#e5e7eb",
-      icon: "help-circle",
-      label: "Unverified",
-      desc: "Insufficient evidence to confirm or deny this claim.",
-   },
-   satire: {
-      color: "#7c3aed",
-      bg: "#f5f3ff",
-      border: "#c4b5fd",
-      icon: "wand",
-      label: "Satire",
-      desc: "This content is intentional satire or parody.",
-   },
-};
-
-const EVIDENCE_VERDICT_META = {
-   FACT: {
-      color: "#0e9f6e",
-      bg: "#ecfdf5",
-      border: "#6ee7b7",
-      icon: "check-circle",
-      label: "Fact",
-   },
-   FAKE: {
-      color: "#e02424",
-      bg: "#fef2f2",
-      border: "#fca5a5",
-      icon: "x-circle",
-      label: "Fake",
-   },
-   MISLEADING: {
-      color: "#d97706",
-      bg: "#fffbeb",
-      border: "#fde68a",
-      icon: "alert-triangle",
-      label: "Misleading",
-   },
-   SATIRE: {
-      color: "#7c3aed",
-      bg: "#f5f3ff",
-      border: "#c4b5fd",
-      icon: "wand",
-      label: "Satire",
-   },
-   UNVERIFIED: {
-      color: "#6b7280",
-      bg: "#f9fafb",
-      border: "#e5e7eb",
-      icon: "help-circle",
-      label: "Unverified",
-   },
-};
-
-//Helpers
+/**
+ * Get trust score display color based on tier
+ * @param {number} score - Trust score (0-100)
+ * @returns {string} Hex color for the tier
+ */
 function tierColor(score) {
-   if (score >= 75) return "#0e9f6e";
-   if (score >= 45) return "#d97706";
-   return "#e02424";
+   if (score >= 75) return "#0e9f6e"; // Green: High trust
+   if (score >= 45) return "#d97706"; // Orange: Medium trust
+   return "#e02424"; // Red: Low trust
 }
 
+/**
+ * Generate user avatar background/text colors deterministically from username
+ * @param {string} username - Username to hash
+ * @param {boolean} isMod - Whether user is a moderator
+ * @returns {object} { bg, color } for avatar styling
+ */
 function avatarStyle(username = "", isMod = false) {
    if (isMod) return { bg: "#d1fae5", color: "#059669" };
    const palettes = [
@@ -108,16 +61,23 @@ function avatarStyle(username = "", isMod = false) {
    return palettes[hash % palettes.length];
 }
 
-//Sub-components
+// ── Sub-components ──
 
+/**
+ * VerdictBadge: Display formatted verdict with icon and color
+ */
 function VerdictBadge({ verdict }) {
-   const meta = VERDICT_META[verdict] || VERDICT_META.unverified;
+   const meta = VERDICT_CONFIG[verdict] || VERDICT_CONFIG.UNVERIFIED;
    return (
       <span
          className="verdict-badge"
-         style={{ color: meta.color, background: meta.bg, borderColor: meta.border }}>
+         style={{
+            color: meta.color,
+            background: meta.bg,
+            borderColor: meta.border,
+         }}>
          <Icons
-            name={meta.icon}
+            name={meta.icon || "help-circle"}
             size={12}
             color={meta.color}
             strokeWidth={2.5}
@@ -127,6 +87,9 @@ function VerdictBadge({ verdict }) {
    );
 }
 
+/**
+ * TrustGauge: SVG circular progress bar showing trust score
+ */
 function TrustGauge({ score = 0 }) {
    const r = 30;
    const circ = 2 * Math.PI * r;
@@ -172,6 +135,9 @@ function TrustGauge({ score = 0 }) {
    );
 }
 
+/**
+ * UserAvatar: Colored circle with user initials
+ */
 function UserAvatar({ username = "", isMod = false, size = 36 }) {
    const style = avatarStyle(username, isMod);
    const initials = username.replace("@", "").slice(0, 1).toUpperCase();
@@ -195,8 +161,6 @@ function UserAvatar({ username = "", isMod = false, size = 36 }) {
       </div>
    );
 }
-
-// Main component
 function ThreadDetailPage() {
    const [searchParams, setSearchParams] = useSearchParams();
    const initialTab = searchParams.get("tab") === "evidence" ? "evidence" : "comments";
@@ -228,10 +192,12 @@ function ThreadDetailPage() {
    const { authFetch, user } = useAuth();
    const { threadId } = useParams();
    const navigate = useNavigate();
-   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+   const apiUrl = (path) =>
+      `${import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api"}/${path}`;
 
+   // ── Fetch thread data from API ──
    const refreshThreadData = async () => {
-      const threadData = await authFetch(`${API_BASE_URL}/threads/${threadId}/`, {
+      const threadData = await authFetch(apiUrl(`threads/${threadId}/`), {
          method: "GET",
       });
       setThread(threadData);
@@ -278,7 +244,7 @@ function ThreadDetailPage() {
       setSearchParams({ tab: section });
    };
 
-   const verdict = thread?.verdict || "unverified";
+   const verdict = (getEffectiveVerdict(thread?.claim) || "UNVERIFIED").toLowerCase();
    const vm = VERDICT_META[verdict] || VERDICT_META.unverified;
    const evidenceTypeTone = (() => {
       if (evidenceType.includes("SUPPORT")) return "is-supports";
@@ -833,7 +799,7 @@ function ThreadDetailPage() {
                                  <p className="tdp-empty">No comments yet. Be the first!</p>
                               )}
                               {comments.map((comment, i) => {
-                                 const isMod = comment.commenter?.is_moderator;
+                                 const isMod = comment.commenter?.role === "MODERATOR";
                                  const username = comment.commenter?.username || "Unknown";
                                  const isOwner = comment.commenter?.id === user?.id;
                                  return (
@@ -1350,7 +1316,9 @@ function ThreadDetailPage() {
                            <div
                               key={rc.id || i}
                               className={`tdp-related-claim ${i < thread.related_claims.length - 1 ? "bordered" : ""}`}>
-                              <VerdictBadge verdict={rc.verdict} />
+                              <VerdictBadge
+                                 verdict={(getEffectiveVerdict(rc) || "UNVERIFIED").toLowerCase()}
+                              />
                               <p className="tdp-related-text">{rc.caption}</p>
                            </div>
                         ))}

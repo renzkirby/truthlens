@@ -1,8 +1,32 @@
+/**
+ * Login Page (Authentication)
+ * ══════════════════════════════════════════════════════════════════
+ * User authentication interface for existing TruthLens members.
+ *
+ * Features:
+ *   - Email/username and password authentication
+ *   - Remember me toggling for persistent sessions
+ *   - Show/hide password toggle
+ *   - Forgot password link (placeholder)
+ *   - Social login options (placeholder)
+ *   - Redirect to requested page after login
+ *
+ * State:
+ *   - Form inputs: username, password, remember_me
+ *   - UI state: showPassword, isSigningIn
+ *   - Error handling for failed logins
+ */
+
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import LogoImage from "../assets/truthlens_logo.png";
 import Icons from "../components/Icons.jsx";
+
+// ── Utilities & Constants ──
+import { useEndpoint } from "../utils/api";
+
+// ── Styles ──
 import "./LoginPage.css";
 
 function LoginPage() {
@@ -30,6 +54,10 @@ function LoginPage() {
       });
    };
 
+   /**
+    * Handle remember me checkbox toggle
+    * @param {Event} e - Checkbox change event
+    */
    const handleCheckbox = (e) => {
       setFormValues({
          ...formValues,
@@ -37,10 +65,14 @@ function LoginPage() {
       });
    };
 
+   /**
+    * Handle form submission and authentication
+    * Posts credentials to backend, stores tokens, redirects on success
+    */
    const handleSubmit = async () => {
-      console.log(formValues);
       setIsSigningIn(true);
-      const response = await fetch("http://localhost:8000/api/auth/login/", {
+      const loginEndpoint = useEndpoint("LOGIN");
+      const response = await fetch(loginEndpoint, {
          method: "POST",
          headers: { "Content-Type": "application/json" },
          body: JSON.stringify({

@@ -1,29 +1,37 @@
+/**
+ * Verify Page (Fact Checking Interface)
+ * ══════════════════════════════════════════════════════════════════
+ * Main fact-checking interface where users submit claims for AI analysis.
+ *
+ * Features:
+ *   - Multiple input methods (text snippet, URL, image/screenshot)
+ *   - AI analysis results with confidence score
+ *   - Verdict display with explanation
+ *   - Escalation to community if unverified or low confidence
+ *   - Result card with source links and context
+ *
+ * Workflow:
+ *   1. User inputs claim (snippet, URL, or image)
+ *   2. Backend processes via AI pipeline
+ *   3. Results display with verdict, confidence, and summary
+ *   4. User can escalate to community if desired
+ */
+
 import { useState, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import NavigationBar from "../components/NavigationBar.jsx";
 import Icons from "../components/Icons.jsx";
+
+// ── Utilities & Constants ──
+import { VERDICT_CONFIG } from "../utils/constants";
+
+// ── Styles ──
 import "./VerifyPage.css";
 
-const VERDICT_CONFIG = {
-   FACT: { color: "var(--verdict-fact-text)", bg: "var(--verdict-fact-bg)", label: "FACT" },
-   FAKE: { color: "var(--verdict-fake-text)", bg: "var(--verdict-fake-bg)", label: "FAKE" },
-   UNVERIFIED: {
-      color: "var(--verdict-unverified-text)",
-      bg: "var(--verdict-unverified-bg)",
-      label: "UNVERIFIED",
-   },
-   SATIRE: { color: "var(--verdict-satire-text)", bg: "var(--verdict-satire-bg)", label: "SATIRE" },
-   OUT_OF_SCOPE: {
-      color: "var(--verdict-unverified-text)",
-      bg: "var(--verdict-unverified-bg)",
-      label: "OUT OF SCOPE",
-   },
-   MISLEADING: { color: "var(--verdict-misleading-text)", bg: "var(--verdict-misleading-bg)", label: "MISLEADING" },
-};
-
-// ── Result Card component ─────────────────────────────────────────────────────
-function ResultCard({ result, onEscalate }) {
+// ── Result Card Component ──
+// Displays AI analysis result with verdict badge, confidence, and CTA buttons
+const ResultCard = ({ result, onEscalate }) => {
    const config = VERDICT_CONFIG[result.verdict] || VERDICT_CONFIG.UNVERIFIED;
 
    const confidenceColor =
@@ -100,7 +108,7 @@ function ResultCard({ result, onEscalate }) {
          )}
       </div>
    );
-}
+};
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 function VerifyPage() {
