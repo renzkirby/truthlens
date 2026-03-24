@@ -4,7 +4,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from django.utils import timezone
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated, BasePermission, SAFE_METHODS
@@ -32,7 +32,12 @@ from .serializers import (
     ModerationDecisionSerializer,
 )
 
-
+ALLOWED_MODERATION_TRANSITIONS = {
+    "PENDING": {"OPEN", "CLOSED", "REJECTED"},
+    "OPEN": {"CLOSED", "REJECTED"},
+    "CLOSED": {"OPEN"},
+    "REJECTED": set(),
+}
 
 class IsThreadOwnerOrReadOnly(BasePermission):
     def has_object_permission(self, request, view, obj):
@@ -297,25 +302,34 @@ def moderation_resolve_thread(request, thread_id):
     moderator_notes = serializer.validated_data.get("moderator_notes", "")
     next_status = serializer.validated_data.get("status", Thread.Status.CLOSED)
 
-    thread.moderator_verdict = moderator_verdict
-    thread.moderator_notes = moderator_notes
-    thread.status = next_status
-    thread.moderated_by = request.user
-    thread.moderated_at = timezone.now()
-    thread.save(
-        update_fields=[
-            "moderator_verdict",
-            "moderator_notes",
-            "status",
-            "moderated_by",
-            "moderated_at",
-        ]
-    )
+    current_status = thread.status or Thread.Status.OPEN
+    if next_status not in ALLOWED_MODERATION_TRANSITIONS.get(current_status, set()):
+        return Response(
+            {"detail": f"Invalid status transition from {current_status} to {next_status}."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    with transaction.atomic():
+        thread.moderator_verdict = moderator_verdict
+        thread.moderator_notes = moderator_notes
+        thread.status = next_status
+        thread.moderated_by = request.user
+        thread.moderated_at = timezone.now()
+        thread.save(
+            update_fields=[
+                "moderator_verdict",
+                "moderator_notes",
+                "status",
+                "moderated_by",
+                "moderated_at",
+            ]
+        )
 
     # Final moderator decision becomes the canonical claim verdict for feed consumers.
-    thread.claim.verdict = moderator_verdict
-    thread.claim.last_updated = timezone.now()
-    thread.claim.save(update_fields=["verdict", "last_updated"])
+    with transaction.atomic():
+        thread.claim.verdict = moderator_verdict
+        thread.claim.last_updated = timezone.now()
+        thread.claim.save(update_fields=["verdict", "last_updated"])
 
     return Response(ThreadDetailSerializer(thread).data, status=status.HTTP_200_OK)
 
