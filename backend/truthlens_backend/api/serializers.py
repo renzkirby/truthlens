@@ -1,6 +1,6 @@
 ﻿from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Claim, Thread, UserProfile, EvidenceSubmission, Vote, ThreadComment
+from .models import Claim, Thread, UserProfile, EvidenceSubmission, Vote, ThreadComment, ThreadFlag
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
@@ -25,16 +25,17 @@ class UserSerializer(serializers.ModelSerializer):
         source="profile.is_email_verified", read_only=True
     )
     date_joined = serializers.DateTimeField(read_only=True)
+    role = serializers.CharField(source="profile.role", read_only=True)
 
     class Meta:
         model = User
-        fields = ["id", "username", "email", "trust_score", "is_email_verified", "date_joined"]
+        fields = ["id", "username", "email", "trust_score", "is_email_verified", "date_joined", "role"]
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
-        fields = ["id", "user", "trust_score", "bio"]
+        fields = ["id", "user", "trust_score", "bio", "is_email_verified", "role"]
 
 
 class ClaimSerializer(serializers.ModelSerializer):
@@ -61,6 +62,10 @@ class ThreadSerializer(serializers.ModelSerializer):
     claim_id = serializers.UUIDField(write_only=True)
     evidence_count = serializers.SerializerMethodField()
     comment_count = serializers.SerializerMethodField()
+    flag_count = serializers.SerializerMethodField()
+
+    def get_flag_count(self, obj):
+        return obj.flags.count()
 
     def get_evidence_count(self, obj):
         return obj.evidence_submissions.count()
@@ -88,6 +93,7 @@ class ThreadSerializer(serializers.ModelSerializer):
             "created_at",
             "evidence_count",
             "comment_count",
+            "flag_count",
         ]
         read_only_fields = [
             "id",
@@ -98,7 +104,27 @@ class ThreadSerializer(serializers.ModelSerializer):
             "created_at",
             "evidence_count",
             "comment_count",
+            "flag_count",
         ]
+        
+
+class ThreadFlagSerializer(serializers.ModelSerializer):
+    flagged_by = UserSerializer(read_only=True)
+    thread = ThreadSerializer(read_only=True)
+    thread_id = serializers.UUIDField(write_only=True)
+    
+    class Meta:
+        model = ThreadFlag
+        fields = [
+            "id",
+            "thread_id",
+            "flagged_by",
+            "thread",
+            "reason",
+            "notes",
+            "flagged_at",
+        ]
+        read_only_fields = ["id", "flagged_by", "thread"]
 
 
 class ThreadCommentSerializer(serializers.ModelSerializer):
@@ -162,16 +188,21 @@ class ThreadDetailSerializer(serializers.ModelSerializer):
     claim = ClaimSerializer(read_only=True)
     evidence_submissions = EvidenceSubmissionSerializer(many=True, read_only=True)
     comments = ThreadCommentSerializer(many=True, read_only=True)
+    moderated_by = UserSerializer(read_only=True)
 
     claim_id = serializers.UUIDField(write_only=True)
     evidence_count = serializers.SerializerMethodField()
     comment_count = serializers.SerializerMethodField()
+    flag_count = serializers.SerializerMethodField()
 
     def get_evidence_count(self, obj):
         return obj.evidence_submissions.count()
 
     def get_comment_count(self, obj):
         return obj.comments.count()
+
+    def get_flag_count(self, obj):
+        return obj.flags.count()
 
     class Meta:
         model = Thread
@@ -183,12 +214,25 @@ class ThreadDetailSerializer(serializers.ModelSerializer):
             "caption",
             "status",
             "flag_reason",
+            "moderator_verdict",
+            "moderator_notes",
+            "moderated_by",
+            "moderated_at",
             "created_at",
             "evidence_submissions",
             "comments",
             "evidence_count",
             "comment_count",
+            "flag_count",
         ]
+
+
+class ModerationDecisionSerializer(serializers.Serializer):
+    moderator_verdict = serializers.ChoiceField(
+        choices=["FACT", "FAKE", "MISLEADING", "SATIRE", "UNVERIFIED"]
+    )
+    moderator_notes = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    status = serializers.ChoiceField(choices=["OPEN", "CLOSED", "REJECTED"], required=False)
 
 
 class VoteSerializer(serializers.ModelSerializer):
