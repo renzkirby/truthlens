@@ -180,24 +180,39 @@ export const VERDICT_META = {
 // Maps evidence submission types to their visual properties and icons
 // Used in ThreadDetailPage for evidence type selection
 export const EVIDENCE_VERDICT_META = {
-   "SUPPORTS CLAIM": {
-      icon: "thumbs-up",
-      label: "Supports Claim",
-      color: "var(--verdict-fact-text)",
-   },
-   "CONTRADICTS CLAIM": {
-      icon: "thumbs-down",
-      label: "Contradicts Claim",
-      color: "var(--verdict-fake-text)",
-   },
-   "PROVIDES CONTEXT": {
-      icon: "info",
-      label: "Provides Context",
-      color: "var(--verdict-misleading-text)",
-   },
-   "SOURCE VERIFICATION": {
+   FACT: {
+      color: "#0e9f6e",
+      bg: "#ecfdf5",
+      border: "#6ee7b7",
       icon: "check-circle",
-      label: "Source Verification",
-      color: "var(--verdict-fact-text)",
+      label: "Fact",
+   },
+   FAKE: {
+      color: "#e02424",
+      bg: "#fef2f2",
+      border: "#fca5a5",
+      icon: "x-circle",
+      label: "Fake",
+   },
+   MISLEADING: {
+      color: "#d97706",
+      bg: "#fffbeb",
+      border: "#fde68a",
+      icon: "alert-triangle",
+      label: "Misleading",
+   },
+   SATIRE: {
+      color: "#7c3aed",
+      bg: "#f5f3ff",
+      border: "#c4b5fd",
+      icon: "wand",
+      label: "Satire",
+   },
+   UNVERIFIED: {
+      color: "#6b7280",
+      bg: "#f9fafb",
+      border: "#e5e7eb",
+      icon: "help-circle",
+      label: "Unverified",
    },
 };
