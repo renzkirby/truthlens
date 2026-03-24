@@ -42,6 +42,8 @@ class Claim(models.Model):
     url_link = models.URLField(max_length=500, blank=True, null=True)
     context_text = models.TextField(blank=True, null=True)
     ai_summary = models.TextField(blank=True, null=True)
+    ai_verdict = models.CharField(max_length=20, blank=True, null=True)
+    final_verdict = models.CharField(max_length=20, blank=True, null=True)
     verdict = models.CharField(max_length=20, blank=True, null=True)
     consensus_score = models.FloatField(blank=True, null=True)
     source_type = models.CharField(max_length=50, blank=True, null=True)
@@ -57,7 +59,7 @@ class Claim(models.Model):
     last_updated = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Claim {self.id} - Type: {self.claim_type} - Verdict: {self.verdict}"
+        return f"Claim {self.id} - Type: {self.claim_type} - Final Verdict: {self.final_verdict or self.verdict}"
 
 
 class Thread(models.Model):
