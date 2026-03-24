@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import NavigationBar from "../components/NavigationBar";
 import Icons from "../components/Icons";
@@ -183,12 +183,14 @@ function UserAvatar({ username = "", isMod = false, size = 36 }) {
 
 // Main component
 function ThreadDetailPage() {
+   const [searchParams, setSearchParams] = useSearchParams();
+   const initialTab = searchParams.get("tab") === "evidence" ? "evidence" : "comments";
    const [thread, setThread] = useState(null);
    const [comments, setComments] = useState([]);
    const [evidenceList, setEvidenceList] = useState([]);
    const [loading, setLoading] = useState(true);
    const [error, setError] = useState(null);
-   const [currentSection, setCurrentSection] = useState("comments");
+   const [currentSection, setCurrentSection] = useState(initialTab);
 
    // Evidence form state
    const [showForm, setShowForm] = useState(false);
@@ -205,6 +207,8 @@ function ThreadDetailPage() {
    const [editingEvidenceId, setEditingEvidenceId] = useState(null);
    const [editingEvidenceText, setEditingEvidenceText] = useState("");
    const [editingEvidenceVerdict, setEditingEvidenceVerdict] = useState("UNVERIFIED");
+   const tabsSectionRef = useRef(null);
+   const didAutoScrollRef = useRef(false);
 
    const { authFetch, user } = useAuth();
    const { threadId } = useParams();
@@ -232,6 +236,32 @@ function ThreadDetailPage() {
       };
       fetchThread();
    }, [threadId]);
+
+   useEffect(() => {
+      didAutoScrollRef.current = false;
+   }, [threadId]);
+
+   useEffect(() => {
+      const tabFromQuery = searchParams.get("tab");
+      const normalizedTab = tabFromQuery === "evidence" ? "evidence" : "comments";
+      setCurrentSection(normalizedTab);
+
+      if (!loading && tabFromQuery && tabsSectionRef.current && !didAutoScrollRef.current) {
+         const prefersReducedMotion =
+            typeof window !== "undefined" &&
+            window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+         tabsSectionRef.current.scrollIntoView({
+            behavior: prefersReducedMotion ? "auto" : "smooth",
+            block: "start",
+         });
+         didAutoScrollRef.current = true;
+      }
+   }, [searchParams, loading]);
+
+   const handleSectionChange = (section) => {
+      setCurrentSection(section);
+      setSearchParams({ tab: section });
+   };
 
    const verdict = thread?.verdict || "unverified";
    const vm = VERDICT_META[verdict] || VERDICT_META.unverified;
@@ -266,7 +296,7 @@ function ThreadDetailPage() {
          setEvidenceUrl("");
          setExplanation("");
          setEvidenceVerdict("UNVERIFIED");
-         setCurrentSection("evidence");
+         handleSectionChange("evidence");
       } catch {
          setError("Error in submitting evidence");
       } finally {
@@ -725,11 +755,13 @@ function ThreadDetailPage() {
                   </div>
 
                   {/* Tabs */}
-                  <div className="tdp-tabs-section">
+                  <div
+                     className="tdp-tabs-section"
+                     ref={tabsSectionRef}>
                      <div className="tdp-tab-bar">
                         <button
                            className={`tdp-tab ${currentSection === "comments" ? "active" : ""}`}
-                           onClick={() => setCurrentSection("comments")}>
+                           onClick={() => handleSectionChange("comments")}>
                            <Icons
                               name="message-circle"
                               size={13}
@@ -740,7 +772,7 @@ function ThreadDetailPage() {
                         </button>
                         <button
                            className={`tdp-tab ${currentSection === "evidence" ? "active" : ""}`}
-                           onClick={() => setCurrentSection("evidence")}>
+                           onClick={() => handleSectionChange("evidence")}>
                            <Icons
                               name="paperclip"
                               size={13}

@@ -731,6 +731,7 @@
     border: 1.5px solid #e5e7eb;
     border-radius: 14px;
     overflow: hidden;
+    scroll-margin-top: 132px;
 }
 
 .tdp-tab-bar {

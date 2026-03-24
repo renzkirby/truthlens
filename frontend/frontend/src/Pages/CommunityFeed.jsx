@@ -45,7 +45,11 @@ const CommunityFeed = () => {
       fetchThreads();
    }, []);
 
-   const handleThreadClick = (threadID) => {
+   const handleThreadClick = (threadID, tab = null) => {
+      if (tab) {
+         navigate(`/thread/detail/${threadID}?tab=${tab}`);
+         return;
+      }
       navigate(`/thread/detail/${threadID}`);
    };
 
@@ -148,7 +152,10 @@ const CommunityFeed = () => {
                               className="card-media"
                               onClick={() => {
                                  handleThreadClick(thread.id);
-                              }} style={thread.claim.media_url ? ({height: "auto"}) :({ height: "350px"}) }>
+                              }}
+                              style={
+                                 thread.claim.media_url ? { height: "auto" } : { height: "350px" }
+                              }>
                               {thread.claim.media_url ? (
                                  <img
                                     src={thread.claim.media_url}
@@ -189,7 +196,9 @@ const CommunityFeed = () => {
 
                            {/* Card Footer actions */}
                            <div className="card-footer">
-                              <button className="action-item">
+                              <button
+                                 className="action-item"
+                                 onClick={() => handleThreadClick(thread.id, "comments")}>
                                  <Icons name="message-square" />
                                  Comment
                                  <span className="count-pill">{thread.comment_count}</span>
@@ -197,12 +206,14 @@ const CommunityFeed = () => {
 
                               <button
                                  className="action-item primary-action"
-                                 onClick={() => handleThreadClick(thread.id)}>
+                                 onClick={() => handleThreadClick(thread.id, "evidence")}>
                                  <Icons name="circle-plus" />
                                  Add Evidence
                               </button>
 
-                              <button className="action-item">
+                              <button
+                                 className="action-item"
+                                 onClick={() => handleThreadClick(thread.id, "evidence")}>
                                  <Icons name="paperclip" />
                                  Evidence
                                  <span className="count-pill">{thread.evidence_count}</span>
