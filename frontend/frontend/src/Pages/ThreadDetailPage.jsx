@@ -699,7 +699,7 @@ function ThreadDetailPage() {
                               </div>
                            </div>
                            <div className="tdp-form-group">
-                              <label className="tdp-form-label">What's the verdict?</label>
+                              <label className="tdp-form-label">Supporting Verdict</label>
                               <div className="tdp-evidence-verdicts">
                                  {Object.entries(EVIDENCE_VERDICT_META).map(([key, meta]) => {
                                     return (
@@ -1031,10 +1031,12 @@ function ThreadDetailPage() {
                               const headline = ev.evidence_caption?.trim() || "Source shared";
                               const isEvidenceOwner = ev.contributor?.id === user?.id;
                               const submittedLabel = ev.submitted_at
-                                 ? new Date(ev.submitted_at).toLocaleDateString(undefined, {
+                                 ? new Date(ev.submitted_at).toLocaleTimeString(undefined, {
                                       month: "short",
                                       day: "numeric",
                                       year: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
                                    })
                                  : "Date unknown";
                               return (
@@ -1224,6 +1226,10 @@ function ThreadDetailPage() {
                                              color="#6b7280"
                                           />
                                           Weighted: {weighted}
+                                       </span>
+                                       <span
+                                          className={`tdp-evidence-status evidence-status-${ev.evidence_status.toLowerCase()}`}>
+                                          Status: {ev.evidence_status}
                                        </span>
                                     </div>
                                  </div>

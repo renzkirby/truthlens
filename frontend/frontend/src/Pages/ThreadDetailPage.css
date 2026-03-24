@@ -1852,6 +1852,37 @@
     background: #64748b;
 }
 
+.tdp-evidence-status {
+    display: inline-flex;
+    align-items: center;
+    margin-left: auto;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
+    background: #f8fafc;
+    border: 1px solid #dbe3ee;
+    border-radius: 999px;
+    padding: 4px 10px;
+}
+
+.evidence-status-unverified {
+    color: #475569;
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+
+.evidence-status-verified {
+    color: #166534;
+    background: #ecfdf3;
+    border-color: #86efac;
+}
+
+.evidence-status-rejected {
+    color: #991b1b;
+    background: #fef2f2;
+    border-color: #fca5a5;
+}
 
 /* ── Responsive ─────────────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
