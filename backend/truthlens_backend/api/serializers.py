@@ -39,12 +39,20 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 
 class ClaimSerializer(serializers.ModelSerializer):
+    effective_verdict = serializers.SerializerMethodField()
+
+    def get_effective_verdict(self, obj):
+        return obj.final_verdict or obj.verdict or obj.ai_verdict
+
     class Meta:
         model = Claim
         fields = [
             "id",
             "claim_type",
             "context_text",
+            "ai_verdict",
+            "final_verdict",
+            "effective_verdict",
             "verdict",
             "ai_summary",
             "source_type",
@@ -90,6 +98,9 @@ class ThreadSerializer(serializers.ModelSerializer):
             "caption",
             "status",
             "flag_reason",
+            "moderator_verdict",
+            "moderator_notes",
+            "moderated_at",
             "created_at",
             "evidence_count",
             "comment_count",
@@ -101,6 +112,9 @@ class ThreadSerializer(serializers.ModelSerializer):
             "author",
             "status",
             "flag_reason",
+            "moderator_verdict",
+            "moderator_notes",
+            "moderated_at",
             "created_at",
             "evidence_count",
             "comment_count",

@@ -196,10 +196,16 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_url=""):
     """Save the final verdict back to the Claim record."""
     try:
         claim = Claim.objects.get(id=claim_id)
-        claim.verdict = verdict.get("verdict")
+        ai_verdict_value = verdict.get("verdict")
+        claim.ai_verdict = ai_verdict_value
+        # Keep final verdict independent for moderator overrides, but initialize it from AI once.
+        if not claim.final_verdict:
+            claim.final_verdict = ai_verdict_value
+        # Backward compatibility for existing UI/API consumers.
+        claim.verdict = claim.final_verdict
         claim.ai_summary = verdict.get("summary")
         confidence = verdict.get("confidence_score", 0)
-        if verdict.get("verdict") == "UNVERIFIED" and (confidence == 0 or confidence is None):
+        if ai_verdict_value == "UNVERIFIED" and (confidence == 0 or confidence is None):
             confidence = 40
         claim.consensus_score = confidence
         claim.source_type = source_type
@@ -207,7 +213,9 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_url=""):
         claim.source_link = source_url or None
         claim.verified_via = Claim.VerificationSource.AI_EXTENSION
         claim.save()
-        print(f"Claim {claim_id} saved — verdict: {claim.verdict}")
+        print(
+            f"Claim {claim_id} saved — ai_verdict: {claim.ai_verdict}, final_verdict: {claim.final_verdict}"
+        )
     except Claim.DoesNotExist:
         print(f"Claim {claim_id} not found — skipping save")
     except Exception as e:

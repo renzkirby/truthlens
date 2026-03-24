@@ -115,13 +115,16 @@ def claim_polling_endpoint(request, claim_id):
             "source_type": "N/A",
             }, status=200)
 
-    if claim.verdict is None:
+    ai_verdict = claim.ai_verdict or claim.verdict
+    if ai_verdict is None:
         return JsonResponse({"verdict": "PENDING"}, status=200)
     else:
         return JsonResponse(
             {
                 "id": claim_id,
-                "verdict": claim.verdict,
+                "verdict": ai_verdict,
+                "ai_verdict": ai_verdict,
+                "final_verdict": claim.final_verdict,
                 "summary": claim.ai_summary,
                 "confidence_score": claim.consensus_score,
                 "source_type": claim.source_type,
@@ -271,6 +274,7 @@ def verify_email(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsModerator])
 def moderation_queue(request):
+    # Safety queue: reported/flagged threads requiring moderator review for conduct issues.
     status_filter = request.query_params.get("status", Thread.Status.PENDING)
     allowed = {"ALL", Thread.Status.PENDING, Thread.Status.OPEN, Thread.Status.CLOSED, Thread.Status.REJECTED}
     if status_filter not in allowed:
@@ -282,6 +286,28 @@ def moderation_queue(request):
     queryset = Thread.objects.filter(flags__isnull=False).distinct().order_by("-created_at")
     if status_filter != "ALL":
         queryset = queryset.filter(status=status_filter)
+
+    serializer = ThreadSerializer(queryset, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsModerator])
+def verdict_queue(request):
+    # Verdict queue: claim adjudication workflow, independent of report/flag status.
+    reviewed_filter = request.query_params.get("reviewed", "pending")
+    allowed = {"all", "pending", "resolved"}
+    if reviewed_filter not in allowed:
+        return Response(
+            {"detail": "Invalid reviewed filter. Use all, pending, or resolved."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    queryset = Thread.objects.select_related("claim", "author", "moderated_by").order_by("-created_at")
+    if reviewed_filter == "pending":
+        queryset = queryset.filter(moderator_verdict__isnull=True)
+    elif reviewed_filter == "resolved":
+        queryset = queryset.filter(moderator_verdict__isnull=False)
 
     serializer = ThreadSerializer(queryset, many=True)
     return Response(serializer.data)
@@ -325,11 +351,12 @@ def moderation_resolve_thread(request, thread_id):
             ]
         )
 
-    # Final moderator decision becomes the canonical claim verdict for feed consumers.
-    with transaction.atomic():
+        # Keep AI verdict immutable and write moderator decision to final verdict.
+        thread.claim.final_verdict = moderator_verdict
+        # Backward compatibility for existing consumers still reading claim.verdict.
         thread.claim.verdict = moderator_verdict
         thread.claim.last_updated = timezone.now()
-        thread.claim.save(update_fields=["verdict", "last_updated"])
+        thread.claim.save(update_fields=["final_verdict", "verdict", "last_updated"])
 
     return Response(ThreadDetailSerializer(thread).data, status=status.HTTP_200_OK)
 
