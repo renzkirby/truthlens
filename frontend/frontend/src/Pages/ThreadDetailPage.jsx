@@ -7,12 +7,12 @@ import "./ThreadDetailPage.css";
 
 // Verdict config
 const VERDICT_META = {
-   verified: {
+   fact: {
       color: "#0e9f6e",
       bg: "#ecfdf5",
       border: "#6ee7b7",
       icon: "check-circle",
-      label: "Verified",
+      label: "Fact",
       desc: "This claim has been confirmed by multiple trusted sources.",
    },
    fake: {
@@ -20,7 +20,7 @@ const VERDICT_META = {
       bg: "#fef2f2",
       border: "#fca5a5",
       icon: "x-circle",
-      label: "Fake / False",
+      label: "Fake",
       desc: "This claim has been debunked by reliable fact-checkers.",
    },
    misleading: {
@@ -46,6 +46,29 @@ const VERDICT_META = {
       icon: "wand",
       label: "Satire",
       desc: "This content is intentional satire or parody.",
+   },
+};
+
+const EVIDENCE_VERDICT_META = {
+   FACT: {
+      icon: "check-circle",
+      label: "Fact",
+   },
+   FAKE: {
+      icon: "x-circle",
+      label: "Fake",
+   },
+   MISLEADING: {
+      icon: "alert-triangle",
+      label: "Misleading",
+   },
+   SATIRE: {
+      icon: "wand",
+      label: "Satire",
+   },
+   UNVERIFIED: {
+      icon: "help-circle",
+      label: "Unverified",
    },
 };
 
@@ -172,25 +195,35 @@ function ThreadDetailPage() {
    const [evidenceUrl, setEvidenceUrl] = useState("");
    const [evidenceType, setEvidenceType] = useState("CONTRADICTS CLAIM");
    const [explanation, setExplanation] = useState("");
+   const [evidenceVerdict, setEvidenceVerdict] = useState("UNVERIFIED");
    const [submitting, setSubmitting] = useState(false);
 
    // Comment input state
    const [newComment, setNewComment] = useState("");
+   const [editingCommentId, setEditingCommentId] = useState(null);
+   const [editingCommentText, setEditingCommentText] = useState("");
+   const [editingEvidenceId, setEditingEvidenceId] = useState(null);
+   const [editingEvidenceText, setEditingEvidenceText] = useState("");
+   const [editingEvidenceVerdict, setEditingEvidenceVerdict] = useState("UNVERIFIED");
 
    const { authFetch, user } = useAuth();
    const { threadId } = useParams();
    const navigate = useNavigate();
    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
+   const refreshThreadData = async () => {
+      const threadData = await authFetch(`${API_BASE_URL}/threads/${threadId}/`, {
+         method: "GET",
+      });
+      setThread(threadData);
+      setComments(threadData.comments || []);
+      setEvidenceList(threadData.evidence_submissions || []);
+   };
+
    useEffect(() => {
       const fetchThread = async () => {
          try {
-            const threadData = await authFetch(`${API_BASE_URL}/threads/${threadId}/`, {
-               method: "GET",
-            });
-            setThread(threadData);
-            setComments(threadData.comments || []);
-            setEvidenceList(threadData.evidence_submissions || []);
+            await refreshThreadData();
          } catch (err) {
             setError("Failed to load thread.");
          } finally {
@@ -202,6 +235,13 @@ function ThreadDetailPage() {
 
    const verdict = thread?.verdict || "unverified";
    const vm = VERDICT_META[verdict] || VERDICT_META.unverified;
+   const evidenceTypeTone = (() => {
+      if (evidenceType.includes("SUPPORT")) return "is-supports";
+      if (evidenceType.includes("CONTRADICT")) return "is-contradicts";
+      if (evidenceType.includes("CONTEXT")) return "is-context";
+      if (evidenceType.includes("VERIFICATION")) return "is-verification";
+      return "is-neutral";
+   })();
 
    //Evidence submit handler
    async function handleEvidenceSubmit(e) {
@@ -216,15 +256,16 @@ function ThreadDetailPage() {
                thread_id: threadId,
                evidence_url: evidenceUrl,
                evidence_type: evidenceType,
+               evidence_verdict: evidenceVerdict,
                evidence_caption: explanation,
             }),
          });
 
-         const updated = await authFetch(`${API_BASE_URL}/threads/${threadId}/`, { method: "GET" });
-         setEvidenceList(updated.evidence_submissions || []);
+         await refreshThreadData();
          setShowForm(false);
          setEvidenceUrl("");
          setExplanation("");
+         setEvidenceVerdict("UNVERIFIED");
          setCurrentSection("evidence");
       } catch {
          setError("Error in submitting evidence");
@@ -243,11 +284,72 @@ function ThreadDetailPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ thread_id: threadId, comment_text: newComment }),
          });
-         const updated = await authFetch(`${API_BASE_URL}/threads/${threadId}/`, { method: "GET" });
-         setComments(updated.comments || []);
+         await refreshThreadData();
          setNewComment("");
       } catch {
          setError("Error in sending comment");
+      }
+   }
+
+   async function handleDeleteComment(commentId) {
+      const confirmed = window.confirm("Delete this comment?");
+      if (!confirmed) return;
+      try {
+         await authFetch(`${API_BASE_URL}/comments/${commentId}/`, {
+            method: "DELETE",
+         });
+         await refreshThreadData();
+      } catch {
+         setError("Error deleting comment");
+      }
+   }
+
+   async function handleSaveCommentEdit(commentId) {
+      if (!editingCommentText.trim()) return;
+      try {
+         await authFetch(`${API_BASE_URL}/comments/${commentId}/`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ comment_text: editingCommentText }),
+         });
+         await refreshThreadData();
+         setEditingCommentId(null);
+         setEditingCommentText("");
+      } catch {
+         setError("Error editing comment");
+      }
+   }
+
+   async function handleDeleteEvidence(evidenceId) {
+      const confirmed = window.confirm("Delete this evidence?");
+      if (!confirmed) return;
+      try {
+         await authFetch(`${API_BASE_URL}/evidence/${evidenceId}/`, {
+            method: "DELETE",
+         });
+         await refreshThreadData();
+      } catch {
+         setError("Error deleting evidence");
+      }
+   }
+
+   async function handleSaveEvidenceEdit(evidenceId) {
+      if (!editingEvidenceText.trim()) return;
+      try {
+         await authFetch(`${API_BASE_URL}/evidence/${evidenceId}/`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+               evidence_caption: editingEvidenceText,
+               evidence_verdict: editingEvidenceVerdict,
+            }),
+         });
+         await refreshThreadData();
+         setEditingEvidenceId(null);
+         setEditingEvidenceText("");
+         setEditingEvidenceVerdict("UNVERIFIED");
+      } catch {
+         setError("Error editing evidence");
       }
    }
 
@@ -529,9 +631,10 @@ function ThreadDetailPage() {
                               </div>
                               <div className="tdp-form-group">
                                  <label className="tdp-form-label">Evidence</label>
-                                 <div className="tdp-select-wrap">
+                                 <div
+                                    className={`tdp-select-wrap tdp-evidence-type-wrap ${evidenceTypeTone}`}>
                                     <select
-                                       className="tdp-select"
+                                       className="tdp-select tdp-evidence-type-select"
                                        value={evidenceType}
                                        onChange={(e) => setEvidenceType(e.target.value)}>
                                        <option value={"CONTRADICTS CLAIM"}>
@@ -547,8 +650,28 @@ function ThreadDetailPage() {
                                        name="chevron-down"
                                        size={13}
                                        color="#6b7280"
+                                       className="tdp-select-chevron"
                                     />
                                  </div>
+                              </div>
+                           </div>
+                           <div className="tdp-form-group">
+                              <label className="tdp-form-label">Evidence Verdict</label>
+                              <div className="tdp-evidence-verdicts">
+                                 {Object.entries(EVIDENCE_VERDICT_META).map(([key, meta]) => {
+                                    return (
+                                       <button
+                                          type="button"
+                                          key={key}
+                                          className={`tdp-evidence-verdict tdp-evidence-verdict--${key.toLowerCase()} ${evidenceVerdict === key ? "selected" : ""}`}
+                                          onClick={(e) => {
+                                             setEvidenceVerdict(key);
+                                          }}>
+                                          <Icons name={meta.icon} />
+                                          {meta.label}
+                                       </button>
+                                    );
+                                 })}
                               </div>
                            </div>
                            <div className="tdp-form-group">
@@ -667,6 +790,7 @@ function ThreadDetailPage() {
                               {comments.map((comment, i) => {
                                  const isMod = comment.commenter?.is_moderator;
                                  const username = comment.commenter?.username || "Unknown";
+                                 const isOwner = comment.commenter?.id === user?.id;
                                  return (
                                     <div
                                        key={comment.id || i}
@@ -695,22 +819,79 @@ function ThreadDetailPage() {
                                                    {comment.created_at || comment.timestamp || ""}
                                                 </span>
                                              </div>
-                                             <p className="tdp-comment-text">
-                                                {comment.comment_text}
-                                             </p>
+                                             {editingCommentId === comment.id ? (
+                                                <div className="tdp-inline-edit-wrap">
+                                                   <textarea
+                                                      className="tdp-inline-edit-textarea"
+                                                      value={editingCommentText}
+                                                      onChange={(e) =>
+                                                         setEditingCommentText(e.target.value)
+                                                      }
+                                                      rows={3}
+                                                   />
+                                                   <div className="tdp-inline-edit-actions">
+                                                      <button
+                                                         className="tdp-owner-action save"
+                                                         type="button"
+                                                         onClick={() =>
+                                                            handleSaveCommentEdit(comment.id)
+                                                         }>
+                                                         Save
+                                                      </button>
+                                                      <button
+                                                         className="tdp-owner-action"
+                                                         type="button"
+                                                         onClick={() => {
+                                                            setEditingCommentId(null);
+                                                            setEditingCommentText("");
+                                                         }}>
+                                                         Cancel
+                                                      </button>
+                                                   </div>
+                                                </div>
+                                             ) : (
+                                                <p className="tdp-comment-text">
+                                                   {comment.comment_text}
+                                                </p>
+                                             )}
                                           </div>
-                                          <div className="tdp-comment-actions">
-                                             <button className="tdp-comment-like">
-                                                <Icons
-                                                   name="thumbs-up"
-                                                   size={11}
-                                                   color="#6b7280"
-                                                   strokeWidth={2}
-                                                />
-                                                {comment.likes ?? 0}
-                                             </button>
-                                             <button className="tdp-comment-reply">Reply</button>
-                                          </div>
+                                          {editingCommentId !== comment.id && (
+                                             <div className="tdp-comment-actions">
+                                                <button className="tdp-comment-like">
+                                                   <Icons
+                                                      name="thumbs-up"
+                                                      size={11}
+                                                      color="#6b7280"
+                                                      strokeWidth={2}
+                                                   />
+                                                   {comment.likes ?? 0}
+                                                </button>
+                                                <button className="tdp-comment-reply">Reply</button>
+                                                {isOwner && (
+                                                   <>
+                                                      <button
+                                                         className="tdp-owner-action"
+                                                         type="button"
+                                                         onClick={() => {
+                                                            setEditingCommentId(comment.id);
+                                                            setEditingCommentText(
+                                                               comment.comment_text || "",
+                                                            );
+                                                         }}>
+                                                         Edit
+                                                      </button>
+                                                      <button
+                                                         className="tdp-owner-action danger"
+                                                         type="button"
+                                                         onClick={() =>
+                                                            handleDeleteComment(comment.id)
+                                                         }>
+                                                         Delete
+                                                      </button>
+                                                   </>
+                                                )}
+                                             </div>
+                                          )}
                                        </div>
                                     </div>
                                  );
@@ -788,6 +969,12 @@ function ThreadDetailPage() {
                                  .replace(/_/g, " ")
                                  .toLowerCase()
                                  .replace(/\b\w/g, (letter) => letter.toUpperCase());
+                              const evidenceVerdictRaw = (
+                                 ev.evidence_verdict || "UNVERIFIED"
+                              ).toUpperCase();
+                              const evidenceVerdictMeta =
+                                 EVIDENCE_VERDICT_META[evidenceVerdictRaw] ||
+                                 EVIDENCE_VERDICT_META.UNVERIFIED;
                               const evidenceTypeClass = (() => {
                                  if (evidenceTypeRaw.includes("CONTRADICT")) return "contradicts";
                                  if (evidenceTypeRaw.includes("SUPPORT")) return "supports";
@@ -797,6 +984,7 @@ function ThreadDetailPage() {
                                  return "neutral";
                               })();
                               const headline = ev.evidence_caption?.trim() || "Source shared";
+                              const isEvidenceOwner = ev.contributor?.id === user?.id;
                               const submittedLabel = ev.submitted_at
                                  ? new Date(ev.submitted_at).toLocaleDateString(undefined, {
                                       month: "short",
@@ -831,27 +1019,98 @@ function ThreadDetailPage() {
                                              </div>
                                           </div>
                                        </div>
-                                       {isTop && (
-                                          <span className="tdp-top-badge">
-                                             <Icons
-                                                name="star"
-                                                size={8}
-                                                strokeWidth={2.5}
-                                                color="#065f46"
-                                             />
-                                             Top
-                                          </span>
-                                       )}
+                                       <div className="tdp-evidence-header-actions">
+                                          {isTop && (
+                                             <span className="tdp-top-badge">
+                                                <Icons
+                                                   name="star"
+                                                   size={8}
+                                                   strokeWidth={2.5}
+                                                   color="#065f46"
+                                                />
+                                                Top
+                                             </span>
+                                          )}
+                                          {isEvidenceOwner && editingEvidenceId !== ev.id && (
+                                             <>
+                                                <button
+                                                   className="tdp-owner-action"
+                                                   type="button"
+                                                   onClick={() => {
+                                                      setEditingEvidenceId(ev.id);
+                                                      setEditingEvidenceText(
+                                                         ev.evidence_caption || "",
+                                                      );
+                                                      setEditingEvidenceVerdict(evidenceVerdictRaw);
+                                                   }}>
+                                                   Edit
+                                                </button>
+                                                <button
+                                                   className="tdp-owner-action danger"
+                                                   type="button"
+                                                   onClick={() => handleDeleteEvidence(ev.id)}>
+                                                   Delete
+                                                </button>
+                                             </>
+                                          )}
+                                       </div>
                                     </div>
 
-                                    <p className="tdp-evidence-headline">{headline}</p>
+                                    {editingEvidenceId === ev.id ? (
+                                       <div className="tdp-inline-edit-wrap evidence">
+                                          <textarea
+                                             className="tdp-inline-edit-textarea"
+                                             value={editingEvidenceText}
+                                             onChange={(e) =>
+                                                setEditingEvidenceText(e.target.value)
+                                             }
+                                             rows={3}
+                                          />
+                                          <div className="tdp-inline-edit-row">
+                                             <select
+                                                className="tdp-inline-edit-select"
+                                                value={editingEvidenceVerdict}
+                                                onChange={(e) =>
+                                                   setEditingEvidenceVerdict(e.target.value)
+                                                }>
+                                                {Object.keys(EVIDENCE_VERDICT_META).map((key) => (
+                                                   <option
+                                                      key={key}
+                                                      value={key}>
+                                                      {EVIDENCE_VERDICT_META[key].label}
+                                                   </option>
+                                                ))}
+                                             </select>
+                                             <div className="tdp-inline-edit-actions">
+                                                <button
+                                                   className="tdp-owner-action save"
+                                                   type="button"
+                                                   onClick={() => handleSaveEvidenceEdit(ev.id)}>
+                                                   Save
+                                                </button>
+                                                <button
+                                                   className="tdp-owner-action"
+                                                   type="button"
+                                                   onClick={() => {
+                                                      setEditingEvidenceId(null);
+                                                      setEditingEvidenceText("");
+                                                      setEditingEvidenceVerdict("UNVERIFIED");
+                                                   }}>
+                                                   Cancel
+                                                </button>
+                                             </div>
+                                          </div>
+                                       </div>
+                                    ) : (
+                                       <p className="tdp-evidence-headline">{headline}</p>
+                                    )}
 
                                     {ev.evidence_url && (
                                        <a
                                           href={ev.evidence_url}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="tdp-source-link prominent">
+                                          className={`tdp-source-link prominent ${evidenceTypeClass}`}>
                                           <span className="tdp-source-link-kicker">
                                              <span
                                                 className="tdp-source-brand-badge"
@@ -880,6 +1139,15 @@ function ThreadDetailPage() {
                                     )}
 
                                     <div className="tdp-evidence-news-meta">
+                                       <span
+                                          className={`tdp-meta-chip verdict ${evidenceVerdictRaw.toLowerCase()}`}>
+                                          <Icons
+                                             name={evidenceVerdictMeta.icon}
+                                             size={10}
+                                          />
+                                          {evidenceVerdictMeta.label}
+                                       </span>
+                                       <span className="tdp-meta-dot">•</span>
                                        <span className={`tdp-meta-chip type ${evidenceTypeClass}`}>
                                           {evidenceTypeLabel}
                                        </span>

@@ -32,7 +32,16 @@ export function AuthProvider({ children }) {
          body: options.body,
       });
 
-      const data = await response.json();
+      let data = null;
+      if (response.status !== 204) {
+         const contentType = response.headers.get("content-type") || "";
+         if (contentType.includes("application/json")) {
+            data = await response.json();
+         } else {
+            const text = await response.text();
+            data = text ? { detail: text } : null;
+         }
+      }
 
       if (response.status == 401) {
          const refreshResponse = await fetch("http://localhost:8000/api/auth/refresh/", {
@@ -48,10 +57,15 @@ export function AuthProvider({ children }) {
             return authFetch(url, options, refreshToken.access);
          } else {
             logout();
+            throw new Error("Session expired");
          }
-      } else {
-         return data;
       }
+
+      if (!response.ok) {
+         throw new Error(data?.detail || "Request failed");
+      }
+
+      return data;
    };
 
    const fetchUser = async (accessToken) => {
