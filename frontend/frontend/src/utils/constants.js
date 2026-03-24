@@ -164,3 +164,40 @@ export const MODERATION_TRANSITIONS = {
    CLOSED: new Set(["OPEN"]),
    REJECTED: new Set([]),
 };
+
+// ── Verdict Metadata (Lowercase) ──
+// Maps lowercase verdict names to their configuration (for case-insensitive lookups)
+export const VERDICT_META = {
+   fact: VERDICT_CONFIG.FACT,
+   fake: VERDICT_CONFIG.FAKE,
+   misleading: VERDICT_CONFIG.MISLEADING,
+   satire: VERDICT_CONFIG.SATIRE,
+   unverified: VERDICT_CONFIG.UNVERIFIED,
+   pending: VERDICT_CONFIG.PENDING,
+};
+
+// ── Evidence Verdict Metadata ──
+// Maps evidence submission types to their visual properties and icons
+// Used in ThreadDetailPage for evidence type selection
+export const EVIDENCE_VERDICT_META = {
+   "SUPPORTS CLAIM": {
+      icon: "thumbs-up",
+      label: "Supports Claim",
+      color: "var(--verdict-fact-text)",
+   },
+   "CONTRADICTS CLAIM": {
+      icon: "thumbs-down",
+      label: "Contradicts Claim",
+      color: "var(--verdict-fake-text)",
+   },
+   "PROVIDES CONTEXT": {
+      icon: "info",
+      label: "Provides Context",
+      color: "var(--verdict-misleading-text)",
+   },
+   "SOURCE VERIFICATION": {
+      icon: "check-circle",
+      label: "Source Verification",
+      color: "var(--verdict-fact-text)",
+   },
+};

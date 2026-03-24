@@ -24,7 +24,7 @@ import Icons from "../components/Icons";
 
 // ── Utilities & Constants ──
 import { getEffectiveVerdict } from "../utils/verdict";
-import { VERDICT_CONFIG } from "../utils/constants";
+import { VERDICT_CONFIG, VERDICT_META, EVIDENCE_VERDICT_META } from "../utils/constants";
 import timeAgo from "../utils/timeAgo";
 
 // ── Styles ──
