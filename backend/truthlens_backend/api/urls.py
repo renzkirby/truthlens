@@ -16,6 +16,8 @@ urlpatterns = [
     path('auth/my-claims/', views.my_claims),
     path('auth/send-verification/', views.send_verification_email),
     path('auth/verify-email/', views.verify_email),
+    path('moderation/queue/', views.moderation_queue),
+    path('moderation/threads/<uuid:thread_id>/resolve/', views.moderation_resolve_thread),
 ]
 
 router = DefaultRouter()
@@ -23,5 +25,6 @@ router.register(r'threads', views.ThreadViewSet, basename='thread')
 router.register(r'claims', views.ClaimViewSet, basename='claim')
 router.register(r'evidence', views.EvidenceSubmissionViewSet, basename='evidence')
 router.register(r'comments', views.ThreadCommentViewSet, basename='comment')
+router.register(r'thread-flags', views.ThreadFlagViewSet, basename='thread-flag')
 
 urlpatterns += router.urls
