@@ -33,9 +33,12 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    trust_score = serializers.FloatField(read_only=True)
+    role = serializers.CharField(read_only=True)
     class Meta:
         model = UserProfile
         fields = ["id", "user", "trust_score", "bio", "is_email_verified", "role"]
+        read_only_fields = ["id", "user", "trust_score", "is_email_verified", "role"]
 
 
 class ClaimSerializer(serializers.ModelSerializer):

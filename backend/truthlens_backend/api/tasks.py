@@ -2,7 +2,7 @@ from celery import shared_task
 from tavily import TavilyClient
 import os
 import requests
-
+from django.contrib.auth.models import User
 from .ocr_service import extract_text_from_image
 from .services import (
     process_image,
@@ -15,7 +15,7 @@ from .services import (
     evaluate_url_claim_with_gfc,
     evaluate_url_claim_with_tavily,
 )
-from .models import Claim
+from .models import Claim, UserProfile
 
 
 # IMAGE PIPELINE
@@ -222,3 +222,33 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_url=""):
         print(f"Save failed for claim {claim_id}: {str(e)}")
         import traceback
         traceback.print_exc()
+
+@shared_task
+def update_contributor_trust_score(contributor_id, evidence_status):
+    """
+    Update the contributor's trust score based on evidence verification decision.
+    
+    Args:
+        contributor_id: User ID of evidence contributor
+        evidence_status: "VERIFIED" or "REJECTED"
+        
+    Scoring:
+        VERIFIED -> +2 POINTS
+        REJECTED -> -1 POINT
+    """
+    try:
+        user = User.objects.get(id=contributor_id)
+        profile = user.profile
+    except User.DoesNotExist:
+        return
+    
+    if evidence_status == "VERIFIED":
+        delta = 2.0
+    elif evidence_status == "REJECTED":
+        delta = -1.0
+    else:
+        return
+    
+    new_score = profile.trust_score + delta
+    profile.trust_score = max(0.0, min(100.0, new_score))
+    profile.save(update_fields=["trust_score"])
