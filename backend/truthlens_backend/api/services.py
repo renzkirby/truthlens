@@ -16,7 +16,7 @@ def _parse_groq_json(raw_content):
     """Strip markdown formatting and parse JSON from Groq responses."""
     cleaned = raw_content.strip().replace("```json", "").replace("```", "").strip()
     return json.loads(cleaned)
-
+ 
 
 # IMAGE PIPELINE
 def clean_ocr_text(raw_text):
@@ -272,7 +272,7 @@ def clean_extracted_text(text):
     text = re.sub(r"http\S+", "", text)
     lines = [line.strip() for line in text.split("\n") if len(line.strip()) > 40]
     return "\n".join(lines)[:3000]
-
+ 
 def extract_search_query(text, source_url=""):
     response = groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile",
