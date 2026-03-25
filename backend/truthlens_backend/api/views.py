@@ -60,7 +60,12 @@ class IsCommenterOrReadOnly(BasePermission):
 class IsModerator(BasePermission):
     def has_permission(self, request, view):
         return (request.user.is_authenticated and request.user.profile.role == UserProfile.Role.MODERATOR)
-    
+
+class IsNotModerator(BasePermission):
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        return request.user.profile.role != UserProfile.Role.MODERATOR
 
 # Create your views here.
 @csrf_exempt
@@ -394,7 +399,7 @@ class ClaimViewSet(viewsets.ReadOnlyModelViewSet):
 
 class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
     serializer_class = EvidenceSubmissionSerializer
-    permission_classes = [IsAuthenticated, IsEvidenceContributorOrReadOnly]
+    permission_classes = [IsAuthenticated, IsNotModerator, IsEvidenceContributorOrReadOnly]
 
     def get_queryset(self):
         return EvidenceSubmission.objects.all()
