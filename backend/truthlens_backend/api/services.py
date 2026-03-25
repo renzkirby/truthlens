@@ -107,9 +107,9 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, articl
         3. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
         4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
         5. ARTICLE STANCE AWARENESS: You will be given the stance of the source text toward the claim.
-            - If DEBUNKING: The source is actively disproving the claim. Treat the claim as the original fake rumor being debunked — it is likely FAKE or MISLEADING.
-            - If REPORTING: The source is a primary news report confirming the claim. Evaluate if broader evidence aligns.
-            - If NEUTRAL: Evaluate purely from the evidence.
+                    - If DEBUNKING: The source is actively disproving the claim. Treat the claim as the original fake rumor being debunked — it is likely FAKE or MISLEADING.
+                    - If REPORTING: The source is a primary news report confirming the claim. You must evaluate if the broader evidence aligns with or contradicts this reporting. If the evidence generally supports the narrative or is from the same original source, the verdict is FACT.
+                    - If NEUTRAL: Evaluate purely from the evidence.
 
         CLASSIFICATION TIERS & EVALUATION LOGIC:
         You must map your evaluation to EXACTLY ONE of the following 5 tiers. 
@@ -177,12 +177,9 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, articl
         }
 
 
-def evaluate_image_claim_with_tavily(original_claim, tavily_results, article_stance="NEUTRAL"):
+def evaluate_image_claim_with_tavily(original_claim, combined_context, article_stance="NEUTRAL"):
     """Evaluate an image claim against Tavily live news results."""
-    evidence_text = ""
-    for i, result in enumerate(tavily_results[:3]):
-        if isinstance(result, dict):
-            evidence_text += f"Source {i+1} ({result.get('url')}): {result.get('content')}\n\n"
+    evidence_text = combined_context
 
     print("EVIDENCE TEXT:", evidence_text)
 
@@ -203,7 +200,7 @@ def evaluate_image_claim_with_tavily(original_claim, tavily_results, article_sta
                 4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
                 5. ARTICLE STANCE AWARENESS: You will be given the stance of the source text toward the claim.
                     - If DEBUNKING: The source is actively disproving the claim. Treat the claim as the original fake rumor being debunked — it is likely FAKE or MISLEADING.
-                    - If REPORTING: The source is a primary news report confirming the claim. Evaluate if broader evidence aligns.
+                    - If REPORTING: The source is a primary news report confirming the claim. You must evaluate if the broader evidence aligns with or contradicts this reporting. If the evidence generally supports the narrative or is from the same original source, the verdict is FACT.
                     - If NEUTRAL: Evaluate purely from the evidence.
 
                 CLASSIFICATION TIERS & EVALUATION LOGIC:
