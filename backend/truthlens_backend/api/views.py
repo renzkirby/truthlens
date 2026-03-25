@@ -399,7 +399,7 @@ class ClaimViewSet(viewsets.ReadOnlyModelViewSet):
 
 class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
     serializer_class = EvidenceSubmissionSerializer
-    permission_classes = [IsAuthenticated, IsNotModerator, IsEvidenceContributorOrReadOnly]
+    permission_classes = [IsAuthenticated, IsNotModerator, IsEvidenceContributorOrReadOnly] #If moderator submits evidence, returns an error
 
     def get_queryset(self):
         return EvidenceSubmission.objects.all()
