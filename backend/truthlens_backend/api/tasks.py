@@ -17,6 +17,32 @@ from .services import (
 )
 from .models import Claim
 
+# added this rough function because there is an error - there is an import in iews but the function doesn't exist yet.
+@shared_task
+def update_contributor_trust_score(user_id, evidence_status):
+    """
+    Updates a user's trust score asynchronously based on a moderator's decision 
+    regarding their submitted evidence.
+    """
+    try:
+        profile = UserProfile.objects.get(user__id=user_id)
+        
+        # Basic scoring math (you can tweak these values later!)
+        if evidence_status == "VERIFIED":
+            profile.trust_score += 10.0
+        elif evidence_status == "REJECTED":
+            profile.trust_score -= 10.0
+            
+        # Ensure the score stays within a 0 to 100 range
+        profile.trust_score = max(0.0, min(100.0, profile.trust_score))
+        profile.save(update_fields=["trust_score"])
+        
+        print(f"Successfully updated trust score for user {user_id}. New score: {profile.trust_score}")
+        
+    except UserProfile.DoesNotExist:
+        print(f"UserProfile for user ID {user_id} not found. Cannot update trust score.")
+    except Exception as e:
+        print(f"Error updating trust score: {str(e)}")
 
 # IMAGE PIPELINE
 @shared_task
