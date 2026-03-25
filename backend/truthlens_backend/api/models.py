@@ -150,6 +150,13 @@ class EvidenceSubmission(models.Model):
     )
     contributor_trust_snapshot = models.FloatField(blank=True, null=True)
     submitted_at = models.DateTimeField(auto_now_add=True)
+    verified_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="verified_evidence", help_text="Moderator who verified this evidence"
+    )
+    verified_at = models.DateTimeField(
+        null=True, blank=True, help_text="Timestamp when evidence was verified by moderator"
+    )
+    moderator_notes = models.TextField(blank=True, null=True, help_text="Notes from moderator why evidence was verified/rejected")
 
     def __str__(self):
         return f"EvidenceSubmission {self.id} - Thread ID: {self.thread.id} - Contributor: {self.contributor.username}"
