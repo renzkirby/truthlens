@@ -5,6 +5,7 @@ import re
 import imagehash
 import uuid
 import base64
+import requests
 from io import BytesIO
 from PIL import Image
 from supabase import create_client
@@ -507,3 +508,34 @@ def upload_image_to_database(base64_string):
     print("PUBLIC URL VALUE:", public_url)
     return public_url
     
+
+# AI DEEPFAKE/AI GENERATED IMAGE PIPELINE
+def detect_ai_image(image_bytes):
+    """Sends image to Hugging Face's inference API to detect AI generation."""
+    API_URL = "https://router.huggingface.co/hf-inference/models/umm-maybe/AI-image-detector"
+    headers = {
+            "Authorization": f"Bearer {os.environ.get('HUGGINGFACE_API_KEY')}",
+            "Content-Type": "application/octet-stream"
+        }
+    
+    try:
+        response = requests.post(API_URL, headers=headers, data=image_bytes)
+        
+        if response.status_code != 200:
+            print(f"API Error: {response.text}")
+            return 0.0 
+            
+        result = response.json()
+        print("Deepfake Detection Result:", result)
+        
+        if isinstance(result, list) and len(result) > 0 and isinstance(result[0], list):
+            result = result[0]
+
+        for label_data in result:
+            if label_data.get('label', '').lower() in ['artificial', 'fake', 'ai-generated']:
+                return float(label_data.get('score', 0.0))
+                
+        return 0.0
+    except Exception as e:
+        print(f"Detection Error: {str(e)}")
+        return 0.0

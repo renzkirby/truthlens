@@ -7,6 +7,7 @@ urlpatterns = [
     path("analyze/", views.receive_snippet, name="analyze_snippet"),
     path("claims/<claim_id>/status", views.claim_polling_endpoint, name="claim_status"),
     path("verify-url/", views.verify_url, name="verify_url"),
+    path("test-deepfake/", views.test_deepfake, name="test_deepfake"),
     
     #Auth urls
     path('auth/login/', views.login_user),
