@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from django.utils import timezone
 from django.db import IntegrityError, transaction
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated, BasePermission, SAFE_METHODS
 from rest_framework.response import Response
@@ -16,7 +16,7 @@ from datetime import timedelta
 import json
 import secrets
 from .services import process_image, upload_image_to_database
-from .tasks import snippet_fact_check_process, url_fact_check_process
+from .tasks import snippet_fact_check_process, url_fact_check_process, update_contributor_trust_score
 from .models import Claim, Thread, UserProfile, EvidenceSubmission, ThreadComment, ThreadFlag
 from .serializers import (
     RegisterSerializer,
@@ -365,6 +365,27 @@ def moderation_resolve_thread(request, thread_id):
 
     return Response(ThreadDetailSerializer(thread).data, status=status.HTTP_200_OK)
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsModerator])
+def evidence_moderation_queue(request):
+    """
+    Returns unverified evidence submissions for review. Moderators only.
+    
+    Query params:
+    - status: filter by status (UNVERIFIED, VERIFIED, REJECTED)
+    - thread_id: filter by thread
+    """
+    
+    status = request.query_params.get("status", "UNVERIFIED")
+    thread_id = request.query_params.get("thread_id")
+
+    evidence = EvidenceSubmission.objects.filter(evidence_status=status).select_related("contributor", "thread__claim").order_by("-submitted_at")
+    
+    if thread_id:
+        evidence = evidence.filter(thread_id=thread_id)
+        
+    serializer = EvidenceSubmissionSerializer(evidence, many=True)
+    return Response(serializer.data, status=200)
 
 #Viewsets
 class ThreadViewSet(viewsets.ModelViewSet):
@@ -386,8 +407,6 @@ class ThreadViewSet(viewsets.ModelViewSet):
         if self.action == "retrieve":
             return ThreadDetailSerializer
         return ThreadSerializer
-            
-        
 
 class ClaimViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ClaimSerializer
@@ -415,7 +434,40 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
             thread=thread,
             contributor_trust_snapshot=self.request.user.profile.trust_score,
         )
+        
+    @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated, IsModerator])
+    def verify(self, request, pk=None):
+        """
+        Verify or reject an evidence. Moderators only.
+        Request body:
+        {
+            "evidence_status": "VERIFIED" or "REJECTED",
+            "moderator_notes": "Optional notes",
+        }
+        """
+        
+        evidence = self.get_object()
 
+        status = request.data.get("evidence_status")
+        notes = request.data.get("moderator_notes", "")
+
+        if status not in ["VERIFIED", "REJECTED"]:
+            return Response({
+                "detail": "Invalid evidence_status. Must be VERIFIED or REJECTED."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        evidence.evidence_status = status
+        evidence.verified_by = request.user
+        evidence.verified_at = timezone.now()
+        evidence.moderator_notes = notes
+        evidence.save(update_fields=["evidence_status", "verified_by", "verified_at", "moderator_notes"])
+        
+        update_contributor_trust_score.delay(evidence.contributor.id, status) # Update trust score asynchronously after moderation decision
+        
+        serializer = EvidenceSubmissionSerializer(evidence)
+        return Response(serializer.data, status=200)
+        
+        
 class ThreadCommentViewSet(viewsets.ModelViewSet):
     serializer_class = ThreadCommentSerializer
     permission_classes = [IsAuthenticated, IsCommenterOrReadOnly]

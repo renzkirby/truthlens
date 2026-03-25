@@ -17,6 +17,7 @@ urlpatterns = [
     path('auth/send-verification/', views.send_verification_email),
     path('auth/verify-email/', views.verify_email),
     path('moderation/queue/', views.moderation_queue),
+    path('moderation/evidence-queue/', views.evidence_moderation_queue),
     path('moderation/verdict-queue/', views.verdict_queue),
     path('moderation/threads/<uuid:thread_id>/resolve/', views.moderation_resolve_thread),
 ]
