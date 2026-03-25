@@ -181,12 +181,18 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
             "evidence_status",
             "contributor_trust_snapshot",
             "submitted_at",
+            "verified_by",
+            "verified_at",
+            "moderator_notes",
         ]
         read_only_fields = [
             "id",
             "contributor",
             "contributor_trust_snapshot",
             "submitted_at",
+            "verified_by",
+            "verified_at",
+            "moderator_notes",
         ]
 
     def validate(self, attrs):
