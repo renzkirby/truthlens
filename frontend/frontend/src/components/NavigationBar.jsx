@@ -6,6 +6,19 @@ import "./NavigationBar.css";
 import NotificationPopup from "./NotificationPopup.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 
+/**
+ *
+ * @param {Object} user - User object from auth context
+ * @returns {string} Dashboard path (/moderation or /dashboard)
+ */
+
+const getDashboardPath = (user) => {
+   if (user?.role === "MODERATOR") {
+      return "/moderation";
+   }
+   return "/dashboard";
+};
+
 function NavigationBar() {
    const { user, logout } = useAuth();
    const [isOpen, setIsOpen] = useState(false);
@@ -68,10 +81,11 @@ function NavigationBar() {
                   </div>
                </Link>
                <Link
-                  to="/dashboard"
+                  to={getDashboardPath(user)}
                   className="link">
-                  <div className={`nav-tab ${location.pathname === "/dashboard" ? "active" : ""}`}>
-                     <Icons name="dashboard" />
+                  <div
+                     className={`nav-tab ${location.pathname === getDashboardPath(user) ? "active" : ""}`}>
+                     <Icons name={user?.role === "MODERATOR" ? "shield" : "dashboard"} />
                      Dashboard
                   </div>
                </Link>
@@ -148,13 +162,13 @@ function NavigationBar() {
                            </button>
                         </Link>
                         <Link
-                           to="/dashboard"
+                           to={getDashboardPath(user)}
                            className="link"
                            role="menuitem">
                            <button
                               className="dropdown-item"
                               onClick={() => setIsOpen(false)}>
-                              <Icons name="dashboard" />
+                              <Icons name={user?.role === "MODERATOR" ? "shield" : "dashboard"} />
                               Dashboard
                            </button>
                         </Link>
