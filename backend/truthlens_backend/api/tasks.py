@@ -54,67 +54,96 @@ def snippet_fact_check_process(image_hash, base64_string, claim_id):
         Claim.objects.filter(id=claim_id).delete()
         return
 
-    cleaned = clean_ocr_text(ocr_result)
+    print("Image processed successfully. Passing to Core Text Pipeline...")
+    # passes to text pipeline
+    execute_core_text_pipeline(ocr_result, claim_id)
 
-    if cleaned.get("cleaned_claim") == "OUT_OF_SCOPE":
-        Claim.objects.filter(id=claim_id).delete()
-        return
-
-    cleaned_claim = cleaned.get("cleaned_claim")
-    search_query = cleaned.get("search_query")
-    article_stance = cleaned.get("article_stance", "NEUTRAL")
-
-    # Try GFC first — return early if relevant result found
+# TEXT PIPELINE
+@shared_task
+def text_fact_check_process(raw_text, claim_id):
+    print(f"Received raw text. Passing to Core Text Pipeline...")
+    
+    execute_core_text_pipeline(raw_text, claim_id)
+    
+def execute_core_text_pipeline(raw_text, claim_id):
+    """The shared brain for both Snippets and pure Text claims."""
     try:
-        gfc_response = requests.get(
-            "https://factchecktools.googleapis.com/v1alpha1/claims:search",
-            params={
-                "query": search_query,
-                "key": os.environ.get("FACT_CHECK_API_KEY"),
-            },
-        )
-        gfc_data = gfc_response.json()
-        gfc_claims = gfc_data.get("claims", [])
+        cleaned = clean_ocr_text(raw_text)
 
-        if gfc_claims:
-            first_claim_text = gfc_claims[0].get("text", "")
-            if is_fact_check_relevant(cleaned_claim, first_claim_text):
-                ai_verdict = evaluate_image_claim_with_gfc(cleaned_claim, gfc_data, article_stance)
-                source_url = (
-                    gfc_claims[0]
-                    .get("claimReview", [{}])[0]
-                    .get("url", "")
-                )
-                _save_claim(claim_id, ai_verdict, "Official Fact Check", cleaned_claim, source_url)
-                return
+        if cleaned.get("cleaned_claim") == "OUT_OF_SCOPE":
+            Claim.objects.filter(id=claim_id).delete()
+            return
 
+        cleaned_claim = cleaned.get("cleaned_claim")
+        search_query = cleaned.get("search_query")
+        article_stance = cleaned.get("article_stance", "NEUTRAL")
+
+        # Try GFC first — return early if relevant result found
+        try:
+            gfc_response = requests.get(
+                "https://factchecktools.googleapis.com/v1alpha1/claims:search",
+                params={
+                    "query": search_query,
+                    "key": os.environ.get("FACT_CHECK_API_KEY"),
+                },
+            )
+            gfc_data = gfc_response.json()
+            gfc_claims = gfc_data.get("claims", [])
+
+            if gfc_claims:
+                first_claim_text = gfc_claims[0].get("text", "")
+                if is_fact_check_relevant(cleaned_claim, first_claim_text):
+                    ai_verdict = evaluate_image_claim_with_gfc(cleaned_claim, gfc_data, article_stance)
+                    source_url = (
+                        gfc_claims[0]
+                        .get("claimReview", [{}])[0]
+                        .get("url", "")
+                    )
+                    _save_claim(claim_id, ai_verdict, "Official Fact Check", cleaned_claim, source_url)
+                    return
+
+        except Exception as e:
+            print(f"GFC error: {str(e)}")
+
+        # Fallback — Tavily web search
+        try:
+            tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
+            tavily_response = tavily_client.search(
+                query=search_query,
+                search_depth="advanced",
+                topic="general",
+                include_answer=True,
+            )
+            tavily_results = tavily_response.get("results", [])
+            tavily_answer = tavily_response.get("answer", "No additional web context found.")
+            
+            # FIXED: Changed ocr_result to raw_text
+            combined_context = f"Original Source Text:\n{raw_text}\n\nWeb Search Context:\n{tavily_answer}"
+            
+            ai_verdict = evaluate_image_claim_with_tavily(cleaned_claim, combined_context, article_stance)
+            source_url = tavily_results[0].get("url", "") if tavily_results else ""
+            _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_claim, source_url)
+
+        except Exception as e:
+            print(f"Tavily error: {str(e)}")
+            _save_claim(claim_id, {
+                "verdict": "UNVERIFIED",
+                "summary": "Could not retrieve relevant information to verify the claim.",
+                "confidence_score": 0,
+            }, "Live Web Search", cleaned_claim, "")
+
+    # This catches catastrophic errors (like Groq going down completely)
     except Exception as e:
-        print(f"GFC error: {str(e)}")
-
-    # Fallback — Tavily web search
-    try:
-        tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
-        tavily_response = tavily_client.search(
-            query=search_query,
-            search_depth="advanced",
-            topic="general",
-            include_answer=True,
-        )
-        tavily_results = tavily_response.get("results", [])
-        tavily_answer = tavily_response.get("answer", "No additional web context found.")
-        combined_context = f"Original Image Text:\n{ocr_result}\n\nWeb Search Context:\n{tavily_answer}"
-        ai_verdict = evaluate_image_claim_with_tavily(cleaned_claim, combined_context, article_stance)
-        source_url = tavily_results[0].get("url", "") if tavily_results else ""
-        _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_claim, source_url)
-
-    except Exception as e:
-        print(f"Tavily error: {str(e)}")
-        _save_claim(claim_id, {
-            "verdict": "UNVERIFIED",
-            "summary": "Could not retrieve relevant information to verify the claim.",
-            "confidence_score": 0,
-        }, "Live Web Search", cleaned_claim, "")
-
+        print(f"Core Fact Check Error (Fatal): {e}")
+        try:
+            claim = Claim.objects.get(id=claim_id)
+            claim.verdict = "UNVERIFIED"
+            claim.ai_verdict = "UNVERIFIED"
+            claim.final_verdict = "UNVERIFIED"
+            claim.ai_summary = "An error occurred during analysis."
+            claim.save()
+        except Claim.DoesNotExist:
+            pass
 
 # URL PIPELINE
 @shared_task

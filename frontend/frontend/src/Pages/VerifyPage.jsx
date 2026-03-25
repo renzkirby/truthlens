@@ -120,6 +120,7 @@ function VerifyPage() {
    const [url, setUrl] = useState("");
    const [image, setImage] = useState(null);
    const [imagePreview, setImagePreview] = useState(null);
+   const [text, setText] = useState(""); 
    const [loading, setLoading] = useState(false);
    const [result, setResult] = useState(null);
    const [error, setError] = useState(null);
@@ -255,6 +256,28 @@ function VerifyPage() {
          setLoading(false);
       }
    };
+
+   // ── Text verification handler ────────────────────────────────────────────
+   const handleTextVerify = async () => {
+      if (!text.trim()) return;
+      setLoading(true);
+      setResult(null);
+      setError(null);
+
+      try {
+         // We will build this endpoint in Django next!
+         const data = await authFetch("http://localhost:8000/api/verify-text/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+         });
+         pollForResult(data.claim_id);
+      } catch (err) {
+         setError("Failed to submit text. Please try again.");
+         setLoading(false);
+      }
+   };
+
    // ── Tab switch handler ────────────────────────────────────────────────────
    const handleTabSwitch = (tab) => {
       setActiveTab(tab);
@@ -308,6 +331,15 @@ function VerifyPage() {
                      size={15}
                   />
                   Verify Image
+               </button>
+               <button
+                  className={`verify-tab-btn ${activeTab === "text" ? "active" : ""}`}
+                  onClick={() => handleTabSwitch("text")}>
+                  <Icons
+                     name="file-text"
+                     size={15}
+                  />
+                  Verify Text
                </button>
                <button 
                   className={`verify-tab-btn ${activeTab === "deepfake" ? "active" : ""}`}
@@ -509,7 +541,58 @@ function VerifyPage() {
                      </p>
                   </div>
                )}
+               {/* Text Tab */}
+               {activeTab === "text" && (
+                  <div className="verify-panel box-panel">
+                     <label className="panel-label">
+                        <Icons
+                           name="file-text"
+                           size={14}
+                        />
+                        Paste a claim, quote, or social media post
+                     </label>
+                     
+                     <textarea
+                        className="url-input"
+                        placeholder="e.g., 'The government just announced a nationwide lockdown starting tomorrow...'"
+                        value={text}
+                        onChange={(e) => setText(e.target.value)}
+                        disabled={loading}
+                        rows={5}
+                        style={{ 
+                           resize: "vertical", 
+                           height: "auto", 
+                           minHeight: "100px",
+                           padding: "12px",
+                           marginBottom: "15px",
+                           width: "100%"
+                        }}
+                     />
 
+                     <button
+                        className="verify-submit-btn full-width"
+                        onClick={handleTextVerify}
+                        disabled={loading || !text.trim()}>
+                        {loading ? (
+                           <>
+                              <div className="btn-spinner" />
+                              Analyzing text...
+                           </>
+                        ) : (
+                           <>
+                              <Icons
+                                 name="search"
+                                 size={15}
+                              />
+                              Verify Text
+                           </>
+                        )}
+                     </button>
+                     <p className="panel-hint">
+                        Our AI will extract the core claim, cross-reference it with live news, and evaluate its factual accuracy.
+                     </p>
+                  </div>
+               )}
                {/* Deepfake Tab */}
                {activeTab === "deepfake" && (
                   <div className="verify-panel box-panel">

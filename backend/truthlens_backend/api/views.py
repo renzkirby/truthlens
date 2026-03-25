@@ -18,7 +18,7 @@ import secrets
 import base64
 from .services import detect_ai_image
 from .services import process_image, upload_image_to_database
-from .tasks import snippet_fact_check_process, url_fact_check_process, update_contributor_trust_score
+from .tasks import snippet_fact_check_process, url_fact_check_process, update_contributor_trust_score, text_fact_check_process
 from .models import Claim, Thread, UserProfile, EvidenceSubmission, ThreadComment, ThreadFlag
 from .serializers import (
     RegisterSerializer,
@@ -541,3 +541,32 @@ def test_deepfake(request):
         "ai_probability": ai_probability,
         "is_fake": ai_probability > 0.65
     }, status=200)
+
+@csrf_exempt
+@api_view(["POST"])
+def verify_text(request):
+    """Endpoint for pure text fact-checking."""
+    text_content = request.data.get("text")
+    
+    if not text_content:
+        return Response({"error": "Text is required"}, status=400)
+        
+    print(f"Received Text: {text_content[:100]}...")
+
+    # TEMP HACK: Save as URL so we don't have to run migrations yet.
+    # We set url_link to a short string so it doesn't crash the 500-character database limit!
+    claim = Claim.objects.create(
+        claim_type=Claim.ClaimType.URL, 
+        url_link="Text Claim Input", 
+        verdict=None,
+        verified_via=Claim.VerificationSource.PENDING,
+    )
+    claim_id = claim.id
+    
+    # Send the raw text to the Celery worker
+    text_fact_check_process.delay(text_content, claim_id)
+    
+    return JsonResponse(
+        {"claim_id": str(claim_id)},
+        status=200,
+    )
