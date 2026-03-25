@@ -40,6 +40,15 @@ function App() {
                   element={<TruthLensWireframes />}
                />
 
+               {/* Protected Moderator Page */}
+               <Route element={<PrivateRoute requiredRole="MODERATOR" />}>
+                  <Route
+                     path="/moderation"
+                     element={<ModerationPage />}
+                  />
+               </Route>
+
+               {/* Protected Routes - accessible to any authenticated user */}
                <Route element={<PrivateRoute />}>
                   <Route
                      path="/community"
@@ -68,12 +77,6 @@ function App() {
                   <Route
                      path="/verify-email"
                      element={<VerifyEmailPage />}
-                  />
-
-                  {/* MODERATION PAGE *PARA LANG MAVIEW */}
-                  <Route
-                     path="/moderation"
-                     element={<ModerationPage />}
                   />
                </Route>
             </Routes>
