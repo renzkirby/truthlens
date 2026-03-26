@@ -5,6 +5,7 @@ import re
 import imagehash
 import uuid
 import base64
+import requests
 from io import BytesIO
 from PIL import Image
 from supabase import create_client
@@ -16,7 +17,7 @@ def _parse_groq_json(raw_content):
     """Strip markdown formatting and parse JSON from Groq responses."""
     cleaned = raw_content.strip().replace("```json", "").replace("```", "").strip()
     return json.loads(cleaned)
-
+ 
 
 # IMAGE PIPELINE
 def clean_ocr_text(raw_text):
@@ -107,9 +108,9 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, articl
         3. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
         4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
         5. ARTICLE STANCE AWARENESS: You will be given the stance of the source text toward the claim.
-            - If DEBUNKING: The source is actively disproving the claim. Treat the claim as the original fake rumor being debunked — it is likely FAKE or MISLEADING.
-            - If REPORTING: The source is a primary news report confirming the claim. Evaluate if broader evidence aligns.
-            - If NEUTRAL: Evaluate purely from the evidence.
+                    - If DEBUNKING: The source is actively disproving the claim. Treat the claim as the original fake rumor being debunked — it is likely FAKE or MISLEADING.
+                    - If REPORTING: The source is a primary news report confirming the claim. You must evaluate if the broader evidence aligns with or contradicts this reporting. If the evidence generally supports the narrative or is from the same original source, the verdict is FACT.
+                    - If NEUTRAL: Evaluate purely from the evidence.
 
         CLASSIFICATION TIERS & EVALUATION LOGIC:
         You must map your evaluation to EXACTLY ONE of the following 5 tiers. 
@@ -177,12 +178,9 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, articl
         }
 
 
-def evaluate_image_claim_with_tavily(original_claim, tavily_results, article_stance="NEUTRAL"):
+def evaluate_image_claim_with_tavily(original_claim, combined_context, article_stance="NEUTRAL"):
     """Evaluate an image claim against Tavily live news results."""
-    evidence_text = ""
-    for i, result in enumerate(tavily_results[:3]):
-        if isinstance(result, dict):
-            evidence_text += f"Source {i+1} ({result.get('url')}): {result.get('content')}\n\n"
+    evidence_text = combined_context
 
     print("EVIDENCE TEXT:", evidence_text)
 
@@ -203,7 +201,7 @@ def evaluate_image_claim_with_tavily(original_claim, tavily_results, article_sta
                 4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
                 5. ARTICLE STANCE AWARENESS: You will be given the stance of the source text toward the claim.
                     - If DEBUNKING: The source is actively disproving the claim. Treat the claim as the original fake rumor being debunked — it is likely FAKE or MISLEADING.
-                    - If REPORTING: The source is a primary news report confirming the claim. Evaluate if broader evidence aligns.
+                    - If REPORTING: The source is a primary news report confirming the claim. You must evaluate if the broader evidence aligns with or contradicts this reporting. If the evidence generally supports the narrative or is from the same original source, the verdict is FACT.
                     - If NEUTRAL: Evaluate purely from the evidence.
 
                 CLASSIFICATION TIERS & EVALUATION LOGIC:
@@ -272,7 +270,7 @@ def clean_extracted_text(text):
     text = re.sub(r"http\S+", "", text)
     lines = [line.strip() for line in text.split("\n") if len(line.strip()) > 40]
     return "\n".join(lines)[:3000]
-
+ 
 def extract_search_query(text, source_url=""):
     response = groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -510,3 +508,34 @@ def upload_image_to_database(base64_string):
     print("PUBLIC URL VALUE:", public_url)
     return public_url
     
+
+# AI DEEPFAKE/AI GENERATED IMAGE PIPELINE
+def detect_ai_image(image_bytes):
+    """Sends image to Hugging Face's inference API to detect AI generation."""
+    API_URL = "https://router.huggingface.co/hf-inference/models/umm-maybe/AI-image-detector"
+    headers = {
+            "Authorization": f"Bearer {os.environ.get('HUGGINGFACE_API_KEY')}",
+            "Content-Type": "application/octet-stream"
+        }
+    
+    try:
+        response = requests.post(API_URL, headers=headers, data=image_bytes)
+        
+        if response.status_code != 200:
+            print(f"API Error: {response.text}")
+            return 0.0 
+            
+        result = response.json()
+        print("Deepfake Detection Result:", result)
+        
+        if isinstance(result, list) and len(result) > 0 and isinstance(result[0], list):
+            result = result[0]
+
+        for label_data in result:
+            if label_data.get('label', '').lower() in ['artificial', 'fake', 'ai-generated']:
+                return float(label_data.get('score', 0.0))
+                
+        return 0.0
+    except Exception as e:
+        print(f"Detection Error: {str(e)}")
+        return 0.0

@@ -120,6 +120,7 @@ function VerifyPage() {
    const [url, setUrl] = useState("");
    const [image, setImage] = useState(null);
    const [imagePreview, setImagePreview] = useState(null);
+   const [text, setText] = useState(""); 
    const [loading, setLoading] = useState(false);
    const [result, setResult] = useState(null);
    const [error, setError] = useState(null);
@@ -222,6 +223,60 @@ function VerifyPage() {
          setLoading(false);
       }
    };
+   // ── AI-GENERATED IMAGE DETECTION handler ────────────────────────────────────────────────────
+   const handleDeepfakeTest = async () => {
+      if (!image) return;
+      setLoading(true);
+      setResult(null);
+      setError(null);
+
+      const base64 = await new Promise((resolve, reject) => {
+         const reader = new FileReader();
+         reader.onload = () => resolve(reader.result);
+         reader.onerror = reject;
+         reader.readAsDataURL(image);
+      });
+
+      try {
+         const response = await authFetch("http://localhost:8000/api/test-deepfake/", {
+               method: "POST",
+               headers: { "Content-Type": "application/json" },
+               body: JSON.stringify({ image_data: base64 }),
+         });
+         
+         // Custom simple result for the sandbox
+         setResult({
+               isDeepfakeTest: true,
+               score: (response.ai_probability * 100).toFixed(1),
+               verdict: response.is_fake ? "AI GENERATED" : "REAL IMAGE"
+         });
+      } catch (err) {
+         setError("Deepfake test failed.");
+      } finally {
+         setLoading(false);
+      }
+   };
+
+   // ── Text verification handler ────────────────────────────────────────────
+   const handleTextVerify = async () => {
+      if (!text.trim()) return;
+      setLoading(true);
+      setResult(null);
+      setError(null);
+
+      try {
+         // We will build this endpoint in Django next!
+         const data = await authFetch("http://localhost:8000/api/verify-text/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+         });
+         pollForResult(data.claim_id);
+      } catch (err) {
+         setError("Failed to submit text. Please try again.");
+         setLoading(false);
+      }
+   };
 
    // ── Tab switch handler ────────────────────────────────────────────────────
    const handleTabSwitch = (tab) => {
@@ -233,6 +288,8 @@ function VerifyPage() {
       setImage(null);
       setImagePreview(null);
    };
+
+
 
    return (
       <div className="verify-layout">
@@ -275,9 +332,81 @@ function VerifyPage() {
                   />
                   Verify Image
                </button>
+               <button
+                  className={`verify-tab-btn ${activeTab === "text" ? "active" : ""}`}
+                  onClick={() => handleTabSwitch("text")}>
+                  <Icons
+                     name="file-text"
+                     size={15}
+                  />
+                  Verify Text
+               </button>
+               <button 
+                  className={`verify-tab-btn ${activeTab === "deepfake" ? "active" : ""}`}
+                  onClick={() => { setActiveTab("deepfake"); setResult(null); setError(null); }}
+               >
+                  <Icons name="sparkles" size={16} />
+                  Deepfake Test
+               </button>
             </div>
 
             <div className="verify-body">
+               {/* Loading State */}
+               {loading && (
+                  <div className="verify-loading box-panel">
+                     <div className="loading-spinner" />
+                     <div>
+                        <p className="loading-title">Analyzing your content...</p>
+                        <p className="loading-subtitle">
+                           This usually takes 10–30 seconds. Please wait.
+                        </p>
+                     </div>
+                  </div>
+               )}
+               {/* Error State */}
+               {error && (
+                  <div className="verify-error">
+                     <Icons
+                        name="alert-triangle"
+                        size={15}
+                     />
+                     {error}
+                  </div>
+               )}
+               {/* ── Standard Fact-Check Result ── */}
+               {result && !result.isDeepfakeTest && !loading && (
+                  <ResultCard
+                     result={result}
+                     onEscalate={() => navigate(`/thread/create?claim_id=${result.id}`)}
+                  />
+               )}
+
+               {/* ── Deepfake Test Custom Result ── */}
+               {result && result.isDeepfakeTest && !loading && (
+                  <div className="result-card box-panel">
+                     <div className="result-verdict-row">
+                        <span className="result-label">Deepfake Analysis:</span>
+                        <span 
+                           className="result-badge" 
+                           style={{ 
+                              backgroundColor: result.verdict === "AI GENERATED" ? "var(--fake-bg, #fee2e2)" : "var(--fact-bg, #dcfce7)",
+                              color: result.verdict === "AI GENERATED" ? "var(--fake-text, #991b1b)" : "var(--fact-text, #166534)",
+                              border: `1px solid ${result.verdict === "AI GENERATED" ? "var(--fake-border, #f87171)" : "var(--fact-border, #86efac)"}`
+                           }}
+                        >
+                           {result.verdict}
+                        </span>
+                     </div>
+
+                     <div className="result-summary-box">
+                        <p className="result-summary-title">AI Confidence Score</p>
+                        <p className="result-summary-text">
+                           The forensic model is <strong>{result.score}%</strong> confident that this image was generated or manipulated by AI.
+                        </p>
+                     </div>
+                  </div>
+               )}
+               
                {/* ── URL Tab ── */}
                {activeTab === "url" && (
                   <div className="verify-panel box-panel">
@@ -412,36 +541,147 @@ function VerifyPage() {
                      </p>
                   </div>
                )}
-
-               {loading && (
-                  <div className="verify-loading box-panel">
-                     <div className="loading-spinner" />
-                     <div>
-                        <p className="loading-title">Analyzing your content...</p>
-                        <p className="loading-subtitle">
-                           This usually takes 10–30 seconds. Please wait.
-                        </p>
-                     </div>
-                  </div>
-               )}
-
-               {error && (
-                  <div className="verify-error">
-                     <Icons
-                        name="alert-triangle"
-                        size={15}
+               {/* Text Tab */}
+               {activeTab === "text" && (
+                  <div className="verify-panel box-panel">
+                     <label className="panel-label">
+                        <Icons
+                           name="file-text"
+                           size={14}
+                        />
+                        Paste a claim, quote, or social media post
+                     </label>
+                     
+                     <textarea
+                        className="url-input"
+                        placeholder="e.g., 'The government just announced a nationwide lockdown starting tomorrow...'"
+                        value={text}
+                        onChange={(e) => setText(e.target.value)}
+                        disabled={loading}
+                        rows={5}
+                        style={{ 
+                           resize: "vertical", 
+                           height: "auto", 
+                           minHeight: "100px",
+                           padding: "12px",
+                           marginBottom: "15px",
+                           width: "100%"
+                        }}
                      />
-                     {error}
+
+                     <button
+                        className="verify-submit-btn full-width"
+                        onClick={handleTextVerify}
+                        disabled={loading || !text.trim()}>
+                        {loading ? (
+                           <>
+                              <div className="btn-spinner" />
+                              Analyzing text...
+                           </>
+                        ) : (
+                           <>
+                              <Icons
+                                 name="search"
+                                 size={15}
+                              />
+                              Verify Text
+                           </>
+                        )}
+                     </button>
+                     <p className="panel-hint">
+                        Our AI will extract the core claim, cross-reference it with live news, and evaluate its factual accuracy.
+                     </p>
                   </div>
                )}
+               {/* Deepfake Tab */}
+               {activeTab === "deepfake" && (
+                  <div className="verify-panel box-panel">
+                     <label className="panel-label">
+                        <Icons
+                           name="sparkles"
+                           size={14}
+                        />
+                        Upload a photo for Deepfake detection
+                     </label>
 
-               {/* ── Result ── */}
-               {result && !loading && (
-                  <ResultCard
-                     result={result}
-                     onEscalate={() => navigate(`/thread/create?claim_id=${result.id}`)}
-                  />
+                     <div
+                        className={`drop-zone ${imagePreview ? "has-image" : ""}`}
+                        onClick={() => !imagePreview && fileInputRef.current?.click()}
+                        onDrop={handleDrop}
+                        onDragOver={(e) => e.preventDefault()}>
+                        {imagePreview ? (
+                           <div className="image-preview-wrapper">
+                              <img
+                                 src={imagePreview}
+                                 alt="Preview"
+                                 className="image-preview"
+                              />
+                              <button
+                                 className="remove-image-btn"
+                                 onClick={(e) => {
+                                    e.stopPropagation();
+                                    setImage(null);
+                                    setImagePreview(null);
+                                    setResult(null);
+                                 }}>
+                                 <Icons
+                                    name="x"
+                                    size={14}
+                                 />{" "}
+                                 Remove
+                              </button>
+                           </div>
+                        ) : (
+                           <div className="drop-zone-content">
+                              <Icons
+                                 name="upload"
+                                 size={32}
+                                 color="#9ca3af"
+                              />
+                              <p className="drop-zone-text">
+                                 Drag and drop an image here, or{" "}
+                                 <span className="drop-zone-link">browse</span>
+                              </p>
+                              <p className="drop-zone-hint">PNG, JPG, WEBP supported</p>
+                           </div>
+                        )}
+                     </div>
+
+                     {/* Hidden file input */}
+                     <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden-file-input"
+                        onChange={handleImageSelect}
+                     />
+
+                     <button
+                        className="verify-submit-btn full-width"
+                        onClick={handleDeepfakeTest}
+                        disabled={loading || !image}>
+                        {loading ? (
+                           <>
+                              <div className="btn-spinner" />
+                              Analyzing pixels...
+                           </>
+                        ) : (
+                           <>
+                              <Icons
+                                 name="scan-line"
+                                 size={15}
+                              />
+                              Run Deepfake Test
+                           </>
+                        )}
+                     </button>
+                     <p className="panel-hint">
+                        Our AI model will analyze the image for digital fabrication or AI generation.
+                     </p>
+                  </div>
                )}
+               
+               
             </div>
          </main>
       </div>
