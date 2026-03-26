@@ -1,0 +1,377 @@
+/* ModeratorPanel.css - Global evidence moderation queue */
+
+.mod-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px;
+    background: #ffffff;
+    border-radius: 8px;
+}
+
+/* Header */
+.mod-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #10b981;
+}
+
+.mod-panel-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #111827;
+    flex: 1;
+}
+
+.mod-queue-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 8px;
+    background: #fbbf24;
+    color: #78350f;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* Error banner */
+.mod-error-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+    border-radius: 6px;
+    color: #991b1b;
+    font-size: 13px;
+}
+
+.mod-error-banner span {
+    flex: 1;
+}
+
+.mod-retry-btn {
+    padding: 4px 10px;
+    background: #dc2626;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.mod-retry-btn:hover {
+    background: #b91c1c;
+}
+
+/* Loading state */
+.mod-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 40px 20px;
+    color: #6b7280;
+}
+
+.mod-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid #e5e7eb;
+    border-top-color: #10b981;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.mod-loading p {
+    margin: 0;
+    font-size: 14px;
+}
+
+/* Evidence list & Grouping */
+.mod-evidence-list {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+/* Thread/Claim group */
+.mod-thread-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.mod-thread-group:hover {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+}
+
+/* Claim context header */
+.mod-claim-context {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    background: linear-gradient(135deg, #f3e8ff 0%, #ede9fe 100%);
+    border-left: 4px solid #7c3aed;
+    border-radius: 6px;
+}
+
+.mod-claim-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.mod-claim-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.mod-claim-text {
+    font-size: 14px;
+    font-weight: 600;
+    color: #111827;
+    line-height: 1.4;
+    margin: 0;
+    word-break: break-word;
+}
+
+.mod-claim-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+}
+
+.mod-claim-verdict {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.mod-claim-verdict.verdict-fact {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.mod-claim-verdict.verdict-fake {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.mod-claim-verdict.verdict-misleading {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.mod-claim-verdict.verdict-satire {
+    background: #dbeafe;
+    color: #0c4a6e;
+}
+
+.mod-claim-verdict.verdict-unverified {
+    background: #f3f4f6;
+    color: #4b5563;
+}
+
+.mod-claim-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    background: #fbbf24;
+    color: #78350f;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.mod-claim-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.mod-action-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 6px 10px;
+    background: #7c3aed;
+    color: white;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 11px;
+    font-weight: 600;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.mod-action-link:hover {
+    background: #6d28d9;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.mod-action-link.thread {
+    background: #0284c7;
+}
+
+.mod-action-link.thread:hover {
+    background: #0369a1;
+}
+
+/* Thread info / caption */
+.mod-thread-info {
+    padding: 8px 10px;
+    background: #eff6ff;
+    border-left: 3px solid #0284c7;
+    border-radius: 4px;
+}
+
+.mod-thread-caption {
+    font-size: 12px;
+    color: #0c4a6e;
+    font-style: italic;
+    display: block;
+}
+
+/* Evidence items within group */
+.mod-evidence-items {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.mod-evidence-index {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    padding: 2px 6px;
+    background: #e5e7eb;
+    border-radius: 3px;
+    width: fit-content;
+}
+
+.mod-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 60px 20px;
+    color: #6b7280;
+    text-align: center;
+    margin: 0;
+}
+
+.mod-empty svg {
+    flex-shrink: 0;
+}
+
+/* Evidence wrapper with thread context */
+.mod-evidence-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    background: white;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.mod-evidence-wrapper:hover {
+    background: #f9fafb;
+    border-color: #9ca3af;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* Old thread context styling - deprecated, replaced by mod-claim-context */
+.mod-evidence-thread-context {
+    display: none;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .mod-panel {
+        padding: 16px;
+        gap: 12px;
+    }
+
+    .mod-panel-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .mod-panel-header h3 {
+        font-size: 16px;
+    }
+
+    .mod-thread-group {
+        padding: 12px;
+        gap: 10px;
+    }
+
+    .mod-claim-context {
+        padding: 10px;
+        gap: 8px;
+    }
+
+    .mod-claim-header {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .mod-claim-actions {
+        justify-content: flex-start;
+    }
+
+    .mod-action-link {
+        flex: 1;
+        justify-content: center;
+    }
+
+    .mod-evidence-wrapper {
+        gap: 6px;
+        padding: 8px;
+    }
+
+    .mod-evidence-index {
+        font-size: 9px;
+        padding: 2px 4px;
+    }
+}

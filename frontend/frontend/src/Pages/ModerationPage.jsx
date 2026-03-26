@@ -6,6 +6,7 @@ import Icons from "../components/Icons.jsx";
 import SafetyReviewTab from "../components/moderation/SafetyReviewTab";
 import VerdictReviewTab from "../components/moderation/VerdictReviewTab";
 import ModerationSidebar from "../components/moderation/ModerationSidebar";
+import ModeratorPanel from "../components/moderation/ModeratorPanel";
 import { getEffectiveVerdict } from "../utils/verdict";
 import "./ModerationPage.css";
 
@@ -262,6 +263,15 @@ function ModerationPage() {
                         />
                         Verdict Review
                      </button>
+                     <button
+                        className={`mod-tab-btn ${activeTab === "evidence" ? "active" : ""}`}
+                        onClick={() => setActiveTab("evidence")}>
+                        <Icons
+                           name="paperclip"
+                           size={14}
+                        />
+                        Evidence Review
+                     </button>
                   </div>
 
                   {activeTab === "safety" ? (
@@ -275,6 +285,10 @@ function ModerationPage() {
                         onSearchChange={setSafetySearch}
                         onOpenThread={handleOpenThread}
                      />
+                  ) : activeTab === "evidence" ? (
+                     <div className="mod-evidence-tab-content">
+                        <ModeratorPanel onVerificationComplete={() => {}} />
+                     </div>
                   ) : (
                      <VerdictReviewTab
                         threads={verdictThreads}

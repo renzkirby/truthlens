@@ -170,12 +170,31 @@ class ThreadCommentSerializer(serializers.ModelSerializer):
 class EvidenceSubmissionSerializer(serializers.ModelSerializer):
     contributor = UserSerializer(read_only=True)
     thread_id = serializers.UUIDField(write_only=True)
+    # Include full thread and claim for moderation context
+    thread = serializers.SerializerMethodField(read_only=True)
+
+    def get_thread(self, obj):
+        """Return full thread with nested claim for moderation queue display."""
+        if obj.thread:
+            return {
+                "id": str(obj.thread.id),
+                "caption": obj.thread.caption,
+                "status": obj.thread.status,
+                "created_at": obj.thread.created_at,
+                "claim": {
+                    "id": str(obj.thread.claim.id),
+                    "context_text": obj.thread.claim.context_text,
+                    "verdict": obj.thread.claim.verdict,
+                } if obj.thread.claim else None,
+            }
+        return None
 
     class Meta:
         model = EvidenceSubmission
         fields = [
             "id",
             "thread_id",
+            "thread",
             "contributor",
             "evidence_caption",
             "evidence_url",
@@ -196,6 +215,7 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
             "verified_by",
             "verified_at",
             "moderator_notes",
+            "thread",
         ]
 
     def validate(self, attrs):

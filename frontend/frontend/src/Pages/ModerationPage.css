@@ -786,6 +786,14 @@
    margin: 12px 24px;
 }
 
+/* ── Evidence Tab Content ── */
+.mod-evidence-tab-content {
+   display: flex;
+   flex-direction: column;
+   gap: 16px;
+   flex: 1;
+}
+
 /* ── Responsive ── */
 @media (max-width: 1024px) {
    .mod-body {

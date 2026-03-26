@@ -21,6 +21,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import NavigationBar from "../components/NavigationBar";
 import Icons from "../components/Icons";
+import EvidenceCard from "../components/EvidenceCard";
 
 // ── Utilities & Constants ──
 import { getEffectiveVerdict } from "../utils/verdict";
@@ -190,6 +191,7 @@ function ThreadDetailPage() {
    const didAutoScrollRef = useRef(false);
 
    const { authFetch, user } = useAuth();
+   const isModerator = user?.role === "MODERATOR";
    const { threadId } = useParams();
    const navigate = useNavigate();
    const apiUrl = (path) =>
@@ -943,264 +945,44 @@ function ThreadDetailPage() {
                               </p>
                            )}
 
-                           {evidenceList.map((ev, i) => {
-                              const score = ev.contributor?.trust_score ?? 0;
-                              const tc = tierColor(score);
-                              const isTop = i === 0 && evidenceList.length > 1;
-                              const upvotes = ev.upvotes ?? 0;
-                              const downvotes = ev.downvotes ?? 0;
-                              const weighted =
-                                 ev.weighted_score ??
-                                 (upvotes * (score / 100) - downvotes * 0.5).toFixed(1);
-                              const sourceInfo = ev.evidence_url
-                                 ? (() => {
-                                      try {
-                                         const parsed = new URL(ev.evidence_url);
-                                         return {
-                                            host: parsed.hostname.replace(/^www\./, ""),
-                                            path:
-                                               parsed.pathname && parsed.pathname !== "/"
-                                                  ? parsed.pathname
-                                                  : "",
-                                         };
-                                      } catch {
-                                         return {
-                                            host: ev.evidence_url.replace(/^https?:\/\//, ""),
-                                            path: "",
-                                         };
-                                      }
-                                   })()
-                                 : { host: "", path: "" };
-                              const sourcePathPreview =
-                                 sourceInfo.path.length > 34
-                                    ? `${sourceInfo.path.slice(0, 34)}...`
-                                    : sourceInfo.path;
-                              const evidenceTypeRaw = ev.evidence_type || "SOURCE";
-                              const evidenceTypeLabel = evidenceTypeRaw
-                                 .replace(/_/g, " ")
-                                 .toLowerCase()
-                                 .replace(/\b\w/g, (letter) => letter.toUpperCase());
-                              const evidenceVerdictRaw = (
-                                 ev.evidence_verdict || "UNVERIFIED"
-                              ).toUpperCase();
-                              const evidenceVerdictMeta =
-                                 EVIDENCE_VERDICT_META[evidenceVerdictRaw] ||
-                                 EVIDENCE_VERDICT_META.UNVERIFIED;
-                              const evidenceTypeClass = (() => {
-                                 if (evidenceTypeRaw.includes("CONTRADICT")) return "contradicts";
-                                 if (evidenceTypeRaw.includes("SUPPORT")) return "supports";
-                                 if (evidenceTypeRaw.includes("CONTEXT")) return "context";
-                                 if (evidenceTypeRaw.includes("VERIFICATION"))
-                                    return "verification";
-                                 return "neutral";
-                              })();
-                              const headline = ev.evidence_caption?.trim() || "Source shared";
-                              const isEvidenceOwner = ev.contributor?.id === user?.id;
-                              const submittedLabel = ev.submitted_at
-                                 ? new Date(ev.submitted_at).toLocaleTimeString(undefined, {
-                                      month: "short",
-                                      day: "numeric",
-                                      year: "numeric",
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                   })
-                                 : "Date unknown";
-                              return (
-                                 <div
-                                    key={ev.id || i}
-                                    className="tdp-evidence-card">
-                                    <div className="tdp-evidence-card-header">
-                                       <div className="tdp-evidence-contributor">
-                                          <UserAvatar
-                                             username={ev.contributor?.username || ""}
-                                             size={30}
-                                          />
-                                          <div>
-                                             <div className="tdp-ev-username">
-                                                {ev.contributor?.username}
-                                             </div>
-                                             <div
-                                                className="tdp-ev-trust"
-                                                style={{ color: tc }}>
-                                                <Icons
-                                                   name="badge-check"
-                                                   size={9}
-                                                   color={tc}
-                                                />
-                                                Trust: <strong>{score}</strong>
-                                             </div>
-                                          </div>
-                                       </div>
-                                       <div className="tdp-evidence-header-actions">
-                                          {isTop && (
-                                             <span className="tdp-top-badge">
-                                                <Icons
-                                                   name="star"
-                                                   size={8}
-                                                   strokeWidth={2.5}
-                                                   color="#065f46"
-                                                />
-                                                Top
-                                             </span>
-                                          )}
-                                          {isEvidenceOwner && editingEvidenceId !== ev.id && (
-                                             <>
-                                                <button
-                                                   className="tdp-owner-action"
-                                                   type="button"
-                                                   onClick={() => {
-                                                      setEditingEvidenceId(ev.id);
-                                                      setEditingEvidenceText(
-                                                         ev.evidence_caption || "",
-                                                      );
-                                                      setEditingEvidenceVerdict(evidenceVerdictRaw);
-                                                   }}>
-                                                   Edit
-                                                </button>
-                                                <button
-                                                   className="tdp-owner-action danger"
-                                                   type="button"
-                                                   onClick={() => handleDeleteEvidence(ev.id)}>
-                                                   Delete
-                                                </button>
-                                             </>
-                                          )}
-                                       </div>
-                                    </div>
-
-                                    {editingEvidenceId === ev.id ? (
-                                       <div className="tdp-inline-edit-wrap evidence">
-                                          <textarea
-                                             className="tdp-inline-edit-textarea"
-                                             value={editingEvidenceText}
-                                             onChange={(e) =>
-                                                setEditingEvidenceText(e.target.value)
-                                             }
-                                             rows={3}
-                                          />
-                                          <div className="tdp-inline-edit-row">
-                                             <select
-                                                className="tdp-inline-edit-select"
-                                                value={editingEvidenceVerdict}
-                                                onChange={(e) =>
-                                                   setEditingEvidenceVerdict(e.target.value)
-                                                }>
-                                                {Object.keys(EVIDENCE_VERDICT_META).map((key) => (
-                                                   <option
-                                                      key={key}
-                                                      value={key}>
-                                                      {EVIDENCE_VERDICT_META[key].label}
-                                                   </option>
-                                                ))}
-                                             </select>
-                                             <div className="tdp-inline-edit-actions">
-                                                <button
-                                                   className="tdp-owner-action save"
-                                                   type="button"
-                                                   onClick={() => handleSaveEvidenceEdit(ev.id)}>
-                                                   Save
-                                                </button>
-                                                <button
-                                                   className="tdp-owner-action"
-                                                   type="button"
-                                                   onClick={() => {
-                                                      setEditingEvidenceId(null);
-                                                      setEditingEvidenceText("");
-                                                      setEditingEvidenceVerdict("UNVERIFIED");
-                                                   }}>
-                                                   Cancel
-                                                </button>
-                                             </div>
-                                          </div>
-                                       </div>
-                                    ) : (
-                                       <p className="tdp-evidence-headline">{headline}</p>
-                                    )}
-
-                                    {ev.evidence_url && (
-                                       <a
-                                          href={ev.evidence_url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className={`tdp-source-link prominent ${evidenceTypeClass}`}>
-                                          <span className="tdp-source-link-kicker">
-                                             <span
-                                                className="tdp-source-brand-badge"
-                                                aria-hidden="true">
-                                                {(sourceInfo.host?.[0] || "?").toUpperCase()}
-                                             </span>
-                                             Primary source
-                                          </span>
-                                          <span className="tdp-source-link-url">
-                                             {sourceInfo.host}
-                                          </span>
-                                          {sourcePathPreview && (
-                                             <span className="tdp-source-link-path">
-                                                {sourcePathPreview}
-                                             </span>
-                                          )}
-                                          <span className="tdp-source-link-cta">
-                                             Read article
-                                             <Icons
-                                                name="external-link"
-                                                size={11}
-                                                color="#1d4ed8"
-                                             />
-                                          </span>
-                                       </a>
-                                    )}
-
-                                    <div className="tdp-evidence-news-meta">
-                                       <span
-                                          className={`tdp-meta-chip verdict ${evidenceVerdictRaw.toLowerCase()}`}>
-                                          <Icons
-                                             name={evidenceVerdictMeta.icon}
-                                             size={10}
-                                          />
-                                          {evidenceVerdictMeta.label}
-                                       </span>
-                                       <span className="tdp-meta-dot">•</span>
-                                       <span className={`tdp-meta-chip type ${evidenceTypeClass}`}>
-                                          {evidenceTypeLabel}
-                                       </span>
-                                       <span className="tdp-meta-dot">•</span>
-                                       <span className="tdp-meta-chip">{submittedLabel}</span>
-                                    </div>
-                                    <div className="tdp-evidence-votes">
-                                       <button className="tdp-vote-btn up">
-                                          <Icons
-                                             name="chevron-up"
-                                             size={13}
-                                             strokeWidth={2.5}
-                                             color="#166534"
-                                          />
-                                          {upvotes}
-                                       </button>
-                                       <button className="tdp-vote-btn down">
-                                          <Icons
-                                             name="chevron-down"
-                                             size={13}
-                                             strokeWidth={2.5}
-                                             color="#991b1b"
-                                          />
-                                          {downvotes}
-                                       </button>
-                                       <span className="tdp-weighted-score">
-                                          <Icons
-                                             name="hash"
-                                             size={9}
-                                             color="#6b7280"
-                                          />
-                                          Weighted: {weighted}
-                                       </span>
-                                       <span
-                                          className={`tdp-evidence-status evidence-status-${ev.evidence_status.toLowerCase()}`}>
-                                          Status: {ev.evidence_status}
-                                       </span>
-                                    </div>
-                                 </div>
-                              );
-                           })}
+                           {evidenceList.map((ev, i) => (
+                              <EvidenceCard
+                                 key={ev.id || i}
+                                 evidence={ev}
+                                 isModerator={isModerator}
+                                 isOwner={ev.contributor?.id === user?.id}
+                                 isTop={i === 0 && evidenceList.length > 1}
+                                 onEdit={handleSaveEvidenceEdit}
+                                 onDelete={handleDeleteEvidence}
+                                 onVerify={async (evidenceId, status, notes) => {
+                                    const API_BASE_URL =
+                                       import.meta.env.VITE_API_BASE_URL ||
+                                       "http://localhost:8000/api";
+                                    try {
+                                       await authFetch(
+                                          `${API_BASE_URL}/evidence/${evidenceId}/verify/`,
+                                          {
+                                             method: "PATCH",
+                                             headers: { "Content-Type": "application/json" },
+                                             body: JSON.stringify({
+                                                evidence_status: status,
+                                                moderator_notes: notes,
+                                             }),
+                                          },
+                                       );
+                                       await refreshThreadData();
+                                    } catch (error) {
+                                       setError("Error verifying evidence");
+                                    }
+                                 }}
+                                 editingId={editingEvidenceId}
+                                 editingText={editingEvidenceText}
+                                 editingVerdict={editingEvidenceVerdict}
+                                 setEditingId={setEditingEvidenceId}
+                                 setEditingText={setEditingEvidenceText}
+                                 setEditingVerdict={setEditingEvidenceVerdict}
+                              />
+                           ))}
 
                            {evidenceList.length > 5 && (
                               <button className="tdp-see-more">See More…</button>
