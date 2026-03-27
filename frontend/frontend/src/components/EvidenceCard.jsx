@@ -298,41 +298,96 @@ function EvidenceCard({
          {/* Actions - voting (users) vs verification (mods) */}
          {isModerator ? (
             // MODERATOR MODE
-            <div className="tdp-evidence-moderation">
-               <textarea
-                  className="tdp-mod-notes"
-                  placeholder="Moderator notes (optional)..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  disabled={isVerifying}
-               />
-               <div className="tdp-mod-actions">
-                  <button
-                     className="tdp-mod-btn verify"
-                     onClick={() => handleVerify("VERIFIED")}
-                     disabled={isVerifying}>
+            ev.evidence_status && ev.evidence_status !== "UNVERIFIED" ? (
+               // Verified/Rejected - Show read-only status
+               <div
+                  className={`tdp-evidence-verified-info ${
+                     ev.evidence_status === "REJECTED" ? "rejected" : ""
+                  }`}>
+                  <div className="tdp-verification-badge">
                      <Icons
-                        name="check"
-                        size={14}
+                        name={ev.evidence_status === "VERIFIED" ? "check-circle" : "x-circle"}
+                        size={16}
+                        color={ev.evidence_status === "VERIFIED" ? "#10b981" : "#dc2626"}
                      />
-                     Verify
-                  </button>
-                  <button
-                     className="tdp-mod-btn reject"
-                     onClick={() => handleVerify("REJECTED")}
-                     disabled={isVerifying}>
-                     <Icons
-                        name="x"
-                        size={14}
-                     />
-                     Reject
-                  </button>
+                     <span className="tdp-verification-status">
+                        {ev.evidence_status === "VERIFIED" ? "Verified" : "Rejected"}
+                     </span>
+                  </div>
+
+                  <div className="tdp-verification-details">
+                     <div className="tdp-verified-by">
+                        <span className="tdp-label">Reviewed by:</span>
+                        <span className="tdp-value">
+                           {ev.verified_by?.username || "Moderator"}
+                        </span>{" "}
+                        <span className="tdp-mod-badge">
+                           <Icons
+                              name="shield"
+                              size={8}
+                              color="#059669"
+                              strokeWidth={2.5}
+                           />
+                           MOD
+                        </span>
+                     </div>
+                     {ev.verified_at && (
+                        <div className="tdp-verified-at">
+                           <span className="tdp-label">On:</span>
+                           <span className="tdp-value">
+                              {new Date(ev.verified_at).toLocaleString(undefined, {
+                                 month: "short",
+                                 day: "numeric",
+                                 year: "numeric",
+                                 hour: "2-digit",
+                                 minute: "2-digit",
+                              })}
+                           </span>
+                        </div>
+                     )}
+                  </div>
+
+                  {ev.moderator_notes && (
+                     <div className="tdp-moderator-notes-display">
+                        <div className="tdp-notes-label">Moderator Notes:</div>
+                        <div className="tdp-notes-text">{ev.moderator_notes}</div>
+                     </div>
+                  )}
                </div>
-               <span
-                  className={`tdp-evidence-status evidence-status-${ev.evidence_status?.toLowerCase()}`}>
-                  Status: {ev.evidence_status}
-               </span>
-            </div>
+            ) : (
+               // Unverified - Show verification form
+               <div className="tdp-evidence-moderation">
+                  <textarea
+                     className="tdp-mod-notes"
+                     placeholder="Moderator notes (optional)..."
+                     value={notes}
+                     onChange={(e) => setNotes(e.target.value)}
+                     disabled={isVerifying}
+                  />
+                  <div className="tdp-mod-actions">
+                     <button
+                        className="tdp-mod-btn verify"
+                        onClick={() => handleVerify("VERIFIED")}
+                        disabled={isVerifying}>
+                        <Icons
+                           name="check"
+                           size={14}
+                        />
+                        Verify
+                     </button>
+                     <button
+                        className="tdp-mod-btn reject"
+                        onClick={() => handleVerify("REJECTED")}
+                        disabled={isVerifying}>
+                        <Icons
+                           name="x"
+                           size={14}
+                        />
+                        Reject
+                     </button>
+                  </div>
+               </div>
+            )
          ) : (
             // USER MODE
             <div className="tdp-evidence-votes">

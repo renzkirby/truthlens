@@ -169,6 +169,7 @@ class ThreadCommentSerializer(serializers.ModelSerializer):
 
 class EvidenceSubmissionSerializer(serializers.ModelSerializer):
     contributor = UserSerializer(read_only=True)
+    verified_by = UserSerializer(read_only=True)  # Serialize moderator who verified it
     thread_id = serializers.UUIDField(write_only=True)
     # Include full thread and claim for moderation context
     thread = serializers.SerializerMethodField(read_only=True)

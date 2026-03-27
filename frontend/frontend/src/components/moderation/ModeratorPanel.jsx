@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { useNotification } from "../../context/NotificationContext";
 import { API_BASE_URL } from "../../utils/constants";
 import Icons from "../Icons";
 import EvidenceCard from "../EvidenceCard";
@@ -7,6 +8,7 @@ import "./ModeratorPanel.css";
 
 function ModeratorPanel({ onVerificationComplete }) {
    const { authFetch } = useAuth();
+   const { addToast } = useNotification();
    const [unverifiedEvidence, setUnverifiedEvidence] = useState([]);
    const [loading, setLoading] = useState(false);
    const [error, setError] = useState(null);
@@ -58,11 +60,29 @@ function ModeratorPanel({ onVerificationComplete }) {
                moderator_notes: notes,
             }),
          });
+
+         // Show success toast
+         const statusLabel = status === "VERIFIED" ? "Verified" : "Rejected";
+         addToast({
+            type: "success",
+            title: `Evidence ${statusLabel}`,
+            message: `This evidence has been marked as ${statusLabel.toLowerCase()}.`,
+            duration: 3000,
+         });
+
          await loadGlobalQueue();
          onVerificationComplete?.();
       } catch (error) {
          console.error("Failed to verify evidence:", error);
          setError("Failed to verify evidence. Please try again.");
+
+         // Show error toast
+         addToast({
+            type: "error",
+            title: "Verification Failed",
+            message: error.message || "An error occurred. Please try again.",
+            duration: 4000,
+         });
       } finally {
          setVerifyingId(null);
       }
@@ -149,7 +169,7 @@ function ModeratorPanel({ onVerificationComplete }) {
                                  </div>
                               </div>
                               <div className="mod-claim-actions">
-                                 {claim?.id && (
+                                 {/* {claim?.id && (
                                     <a
                                        href={`/claim/${claim.id}`}
                                        className="mod-action-link claim"
@@ -162,7 +182,7 @@ function ModeratorPanel({ onVerificationComplete }) {
                                        />
                                        Claim
                                     </a>
-                                 )}
+                                 )} */}
                                  {thread?.id && (
                                     <a
                                        href={`/thread/detail/${thread.id}?tab=evidence`}
