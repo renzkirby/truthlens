@@ -19,6 +19,7 @@ import secrets
 import base64
 from .services import detect_ai_image
 from .services import process_image, upload_image_to_database
+from .services import validate_public_url, check_url_threat_reputation
 from .tasks import snippet_fact_check_process, url_fact_check_process, update_contributor_trust_score, text_fact_check_process
 from .models import Claim, Thread, UserProfile, EvidenceSubmission, ThreadComment, ThreadFlag
 from .serializers import (
@@ -166,21 +167,32 @@ def verify_url(request):
     # gets the data from fronted ('yung URL)
     url = request.data.get("url")
     print(f"Received URL: {url}")
-    if not url:
-        return Response({"error": "URL is required"}, status=400)
+    safe_url, url_error = validate_public_url(url)
+    if url_error:
+        return Response({"detail": url_error}, status=400)
+
+    url_safety = check_url_threat_reputation(safe_url)
+    if url_safety.get("status") == "UNSAFE":
+        return Response(
+            {
+                "detail": "This URL is flagged as unsafe and cannot be analyzed.",
+                "url_safety": url_safety,
+            },
+            status=400,
+        )
 
     claim = Claim.objects.create(
         claim_type=Claim.ClaimType.URL,
-        url_link=url,
+        url_link=safe_url,
         verdict=None,
         verified_via=Claim.VerificationSource.PENDING,
     )
     claim_id = claim.id
     
-    url_fact_check_process.delay(url, claim_id)
+    url_fact_check_process.delay(safe_url, claim_id)
     
     return JsonResponse(
-        {"claim_id": str(claim_id)},
+        {"claim_id": str(claim_id), "url_safety": url_safety},
         status=200,
     )
 
@@ -385,6 +397,48 @@ def moderation_resolve_thread(request, thread_id):
         thread.claim.save(update_fields=["final_verdict", "verdict", "last_updated"])
 
     return Response(ThreadDetailSerializer(thread).data, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsModerator])
+def moderation_resolve_safety_thread(request, thread_id):
+    """Resolve a reported thread directly from the safety queue."""
+    try:
+        thread = Thread.objects.get(id=thread_id)
+    except Thread.DoesNotExist:
+        raise NotFound("Thread not found.")
+
+    action = (request.data.get("action") or "").strip().upper()
+    moderator_notes = (request.data.get("moderator_notes") or "").strip()
+    allowed_actions = {"DISMISS", "REMOVE", "ESCALATE"}
+    if action not in allowed_actions:
+        return Response(
+            {"detail": "Invalid action. Use DISMISS, REMOVE, or ESCALATE."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    with transaction.atomic():
+        if action == "DISMISS":
+            thread.status = Thread.Status.OPEN
+        elif action == "REMOVE":
+            thread.status = Thread.Status.REJECTED
+        else:
+            thread.status = Thread.Status.CLOSED
+
+        thread.moderated_by = request.user
+        thread.moderated_at = timezone.now()
+        if moderator_notes:
+            thread.moderator_notes = moderator_notes
+
+        update_fields = ["status", "moderated_by", "moderated_at"]
+        if moderator_notes:
+            update_fields.append("moderator_notes")
+        thread.save(update_fields=update_fields)
+
+        # Mark safety report as handled by clearing related flags.
+        thread.flags.all().delete()
+
+    return Response(ThreadSerializer(thread).data, status=status.HTTP_200_OK)
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsModerator])

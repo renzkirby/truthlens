@@ -22,6 +22,7 @@ urlpatterns = [
     path('moderation/evidence-queue/', views.evidence_moderation_queue),
     path('moderation/verdict-queue/', views.verdict_queue),
     path('moderation/threads/<uuid:thread_id>/resolve/', views.moderation_resolve_thread),
+    path('moderation/threads/<uuid:thread_id>/safety-action/', views.moderation_resolve_safety_thread),
 ]
 
 router = DefaultRouter()

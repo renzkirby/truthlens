@@ -1,6 +1,7 @@
 ﻿from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import Claim, Thread, UserProfile, EvidenceSubmission, Vote, ThreadComment, ThreadFlag
+from .services import validate_public_url, check_url_threat_reputation
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
@@ -218,6 +219,22 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
                 } if obj.thread.claim else None,
             }
         return None
+
+    def validate_evidence_url(self, value):
+        if value in (None, ""):
+            return value
+
+        safe_url, url_error = validate_public_url(value)
+        if url_error:
+            raise serializers.ValidationError(url_error)
+
+        url_safety = check_url_threat_reputation(safe_url)
+        if url_safety.get("status") == "UNSAFE":
+            raise serializers.ValidationError(
+                "This evidence URL is flagged as unsafe and cannot be submitted."
+            )
+
+        return safe_url
 
     class Meta:
         model = EvidenceSubmission
