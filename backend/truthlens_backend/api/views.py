@@ -431,7 +431,7 @@ class ThreadViewSet(viewsets.ModelViewSet):
     pagination_class = StandardCursorPagination
 
     def get_queryset(self):
-        return Thread.objects.exclude(status=Thread.Status.REJECTED).order_by("-created_at")
+        return Thread.objects.exclude(status=Thread.Status.REJECTED).select_related('claim').prefetch_related('evidence_submissions').order_by("-created_at")
 
     def perform_create(self, serializer):
         claim_id = serializer.validated_data.pop("claim_id")
