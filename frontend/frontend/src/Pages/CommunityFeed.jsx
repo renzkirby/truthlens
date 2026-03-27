@@ -413,21 +413,6 @@ function CommunityFeed() {
                         textAlign: "center",
                         color: "#9ca3af",
                      }}>
-                     {loading && (
-                        <div
-                           style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              alignItems: "center",
-                              gap: "12px",
-                           }}>
-                           <Icons
-                              name="loader"
-                              size={24}
-                           />
-                           <p style={{ margin: 0 }}>Loading more threads...</p>
-                        </div>
-                     )}
                      {!loading && hasMore && <p>Scroll to load more</p>}
                   </div>
                )}
