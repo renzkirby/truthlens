@@ -63,7 +63,7 @@ function CommunityFeed() {
    const [currentCursor, setCurrentCursor] = useState(null);
    const [activeFilter, setActiveFilter] = useState(FEED_FILTERS.TRENDING);
    const observerTarget = useRef(null);
-   const pageSize = 20;
+   const requestedPagesRef = useRef(new Set());
 
    const isModeratorVerified = (thread) => Boolean(thread?.claim?.moderator_verdict_info);
    const isPendingConsensus = (thread) => {
@@ -83,27 +83,38 @@ function CommunityFeed() {
 
    // ── Fetch threads with pagination ──
    const fetchThreadsPage = useCallback(
-      async (cursor = null) => {
+      async (pageUrl = null) => {
+         const pageKey = pageUrl || "FIRST";
+         if (requestedPagesRef.current.has(pageKey)) return;
+
          try {
+            requestedPagesRef.current.add(pageKey);
             setLoading(true);
             setError(null);
 
-            // Build URL with cursor parameter
+            // DRF cursor pagination already returns the full next URL.
             const baseUrl = useEndpoint("THREADS");
-            const url = cursor ? `${baseUrl}?cursor=${cursor}` : baseUrl;
+            const url = pageUrl || baseUrl;
 
             const response = await authFetch(url, { method: "GET" });
 
             // Handle paginated response
             const newThreads = response.results || response || [];
-            setThreads((prev) => [...prev, ...newThreads]);
+            setThreads((prev) => {
+               const existingIds = new Set(prev.map((thread) => thread.id));
+               const dedupedIncoming = newThreads.filter(
+                  (thread) => thread?.id && !existingIds.has(thread.id),
+               );
+               return [...prev, ...dedupedIncoming];
+            });
 
-            // Update cursor for next page
-            setCurrentCursor(response.next || null);
+            // Update next-page URL
+            setCurrentCursor(response?.next || null);
 
             // Check if there are more pages
-            setHasMore(!!response.next);
+            setHasMore(Boolean(response?.next));
          } catch (err) {
+            requestedPagesRef.current.delete(pageKey);
             console.error("Failed to fetch threads:", err);
             setError("Failed to load threads");
          } finally {
@@ -124,7 +135,7 @@ function CommunityFeed() {
 
       const observer = new IntersectionObserver(
          (entries) => {
-            if (entries[0].isIntersecting && hasMore && !loading) {
+            if (entries[0].isIntersecting && hasMore && !loading && currentCursor) {
                fetchThreadsPage(currentCursor);
             }
          },
