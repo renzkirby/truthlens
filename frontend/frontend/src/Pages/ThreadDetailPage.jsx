@@ -251,6 +251,11 @@ function ThreadDetailPage() {
 
    const verdict = (getEffectiveVerdict(thread?.claim) || "UNVERIFIED").toLowerCase();
    const vm = VERDICT_META[verdict] || VERDICT_META.unverified;
+   const sortedComments = [...comments].sort((a, b) => {
+      const aTime = new Date(a?.commented_at || a?.created_at || a?.timestamp || 0).getTime();
+      const bTime = new Date(b?.commented_at || b?.created_at || b?.timestamp || 0).getTime();
+      return bTime - aTime;
+   });
    const evidenceTypeTone = (() => {
       if (evidenceType.includes("SUPPORT")) return "is-supports";
       if (evidenceType.includes("CONTRADICT")) return "is-contradicts";
@@ -960,7 +965,7 @@ function ThreadDetailPage() {
                               color={currentSection === "comments" ? "#4f46e5" : "#6b7280"}
                               strokeWidth={2.5}
                            />
-                           Comments ({comments.length})
+                           Comments ({sortedComments.length})
                         </button>
                         <button
                            className={`tdp-tab ${currentSection === "evidence" ? "active" : ""}`}
@@ -1008,13 +1013,18 @@ function ThreadDetailPage() {
 
                            {/* Comment list */}
                            <div className="tdp-comment-list">
-                              {comments.length === 0 && (
+                              {sortedComments.length === 0 && (
                                  <p className="tdp-empty">No comments yet. Be the first!</p>
                               )}
-                              {comments.map((comment, i) => {
+                              {sortedComments.map((comment, i) => {
                                  const isMod = comment.commenter?.role === "MODERATOR";
                                  const username = comment.commenter?.username || "Unknown";
                                  const isOwner = comment.commenter?.id === user?.id;
+                                 const commentDateTime = comment.commented_at
+                                    ? new Date(comment.commented_at).toLocaleString()
+                                    : comment.created_at
+                                      ? new Date(comment.created_at).toLocaleString()
+                                      : comment.timestamp || "";
                                  return (
                                     <div
                                        key={comment.id || i}
@@ -1040,7 +1050,7 @@ function ThreadDetailPage() {
                                                    </span>
                                                 )}
                                                 <span className="tdp-comment-time">
-                                                   {comment.created_at || comment.timestamp || ""}
+                                                   {commentDateTime}
                                                 </span>
                                              </div>
                                              {editingCommentId === comment.id ? (
