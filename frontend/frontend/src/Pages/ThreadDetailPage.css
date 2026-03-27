@@ -395,6 +395,136 @@
     font-weight: 500;
 }
 
+/* ── Action dialogs (report/confirm) ─────────────────────────────────────── */
+.tdp-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(17, 24, 39, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1200;
+    padding: 16px;
+}
+
+.tdp-dialog {
+    width: min(520px, 100%);
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.22);
+    padding: 18px;
+}
+
+.tdp-dialog-title {
+    margin: 0 0 8px;
+    font-size: 17px;
+    font-weight: 800;
+    color: #111827;
+}
+
+.tdp-dialog-policy-chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    border: 1px solid;
+    padding: 4px 10px;
+    margin-bottom: 10px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+}
+
+.tdp-dialog-policy-chip.warning {
+    background: #fef3c7;
+    border-color: #fbbf24;
+    color: #92400e;
+}
+
+.tdp-dialog-policy-chip.danger {
+    background: #fee2e2;
+    border-color: #fca5a5;
+    color: #991b1b;
+}
+
+.tdp-dialog-text {
+    margin: 0 0 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #4b5563;
+}
+
+.tdp-dialog-form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.tdp-dialog-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #374151;
+}
+
+.tdp-dialog-select,
+.tdp-dialog-textarea {
+    width: 100%;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+    color: #111827;
+    background: #ffffff;
+}
+
+.tdp-dialog-textarea {
+    resize: vertical;
+    min-height: 88px;
+}
+
+.tdp-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.tdp-dialog-btn {
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 9px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.tdp-dialog-btn.secondary {
+    background: #ffffff;
+    color: #374151;
+    border-color: #d1d5db;
+}
+
+.tdp-dialog-btn.primary {
+    background: #4f46e5;
+    color: #ffffff;
+}
+
+.tdp-dialog-btn.warning {
+    background: #fef3c7;
+    border-color: #fbbf24;
+    color: #92400e;
+}
+
+.tdp-dialog-btn.danger {
+    background: #dc2626;
+    color: #ffffff;
+}
+
+.tdp-dialog-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
 /* ── Evidence toggle button ─────────────────────────────────────────────────── */
 .tdp-evidence-toggle-wrap {
     display: flex;

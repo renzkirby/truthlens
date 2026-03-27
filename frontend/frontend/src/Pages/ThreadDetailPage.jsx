@@ -16,7 +16,7 @@
  *   - Comments tab: Read and participate in discussion
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useNotification } from "../context/NotificationContext";
@@ -189,6 +189,14 @@ function ThreadDetailPage() {
    const [editingEvidenceText, setEditingEvidenceText] = useState("");
    const [editingEvidenceVerdict, setEditingEvidenceVerdict] = useState("UNVERIFIED");
    const [reporting, setReporting] = useState(false);
+   const [confirmDialog, setConfirmDialog] = useState({
+      open: false,
+      type: null,
+      targetId: null,
+   });
+   const [reportDialogOpen, setReportDialogOpen] = useState(false);
+   const [reportReason, setReportReason] = useState("OTHER");
+   const [reportNotes, setReportNotes] = useState("");
    const tabsSectionRef = useRef(null);
    const didAutoScrollRef = useRef(false);
 
@@ -263,6 +271,30 @@ function ThreadDetailPage() {
       if (evidenceType.includes("VERIFICATION")) return "is-verification";
       return "is-neutral";
    })();
+   const confirmActionMeta = useMemo(() => {
+      if (confirmDialog.type === "comment") {
+         return {
+            code: "REMOVE COMMENT",
+            title: "Policy Action: Remove Comment",
+            description: "This comment will be permanently removed from the discussion thread.",
+            cta: "Confirm Remove",
+         };
+      }
+
+      return {
+         code: "REMOVE EVIDENCE",
+         title: "Policy Action: Remove Evidence",
+         description: "This evidence item will be permanently removed from the thread.",
+         cta: "Confirm Remove",
+      };
+   }, [confirmDialog.type]);
+
+   const reportActionMeta = {
+      code: "FLAG THREAD",
+      title: "Policy Action: Flag Thread",
+      description: "Submit a report so moderators can investigate this thread for policy concerns.",
+      cta: "Submit Flag",
+   };
 
    //Evidence submit handler
    async function handleEvidenceSubmit(e) {
@@ -334,9 +366,11 @@ function ThreadDetailPage() {
       }
    }
 
-   async function handleDeleteComment(commentId) {
-      const confirmed = window.confirm("Delete this comment?");
-      if (!confirmed) return;
+   async function handleDeleteComment(commentId, shouldProceed = false) {
+      if (!shouldProceed) {
+         setConfirmDialog({ open: true, type: "comment", targetId: commentId });
+         return;
+      }
       try {
          await authFetch(apiUrl(`comments/${commentId}/`), {
             method: "DELETE",
@@ -381,9 +415,11 @@ function ThreadDetailPage() {
       }
    }
 
-   async function handleDeleteEvidence(evidenceId) {
-      const confirmed = window.confirm("Delete this evidence?");
-      if (!confirmed) return;
+   async function handleDeleteEvidence(evidenceId, shouldProceed = false) {
+      if (!shouldProceed) {
+         setConfirmDialog({ open: true, type: "evidence", targetId: evidenceId });
+         return;
+      }
       try {
          await authFetch(apiUrl(`evidence/${evidenceId}/`), {
             method: "DELETE",
@@ -432,14 +468,13 @@ function ThreadDetailPage() {
       }
    }
 
-   async function handleReportThread() {
+   function handleReportThread() {
       if (!thread?.id || reporting) return;
+      setReportDialogOpen(true);
+   }
 
-      const reasonInput = window
-         .prompt("Report reason (INAPPROPRIATE, SPAM, HARASSMENT, OTHER)", "OTHER")
-         ?.trim()
-         .toUpperCase();
-
+   async function submitReportThread() {
+      const reasonInput = reportReason?.trim().toUpperCase();
       if (!reasonInput) return;
 
       const allowedReasons = new Set(["INAPPROPRIATE", "SPAM", "HARASSMENT", "OTHER"]);
@@ -451,8 +486,6 @@ function ThreadDetailPage() {
          return;
       }
 
-      const notesInput = window.prompt("Additional notes (optional)", "") || "";
-
       setReporting(true);
       try {
          await authFetch(apiUrl("thread-flags/"), {
@@ -461,7 +494,7 @@ function ThreadDetailPage() {
             body: JSON.stringify({
                thread_id: thread.id,
                reason: reasonInput,
-               notes: notesInput.trim(),
+               notes: reportNotes.trim(),
             }),
          });
 
@@ -471,6 +504,9 @@ function ThreadDetailPage() {
             duration: 2500,
          });
 
+         setReportDialogOpen(false);
+         setReportReason("OTHER");
+         setReportNotes("");
          await refreshThreadData();
       } catch (reportError) {
          addToast({
@@ -479,6 +515,18 @@ function ThreadDetailPage() {
          });
       } finally {
          setReporting(false);
+      }
+   }
+
+   async function handleConfirmAction() {
+      const { type, targetId } = confirmDialog;
+      if (!type || !targetId) return;
+
+      setConfirmDialog({ open: false, type: null, targetId: null });
+      if (type === "comment") {
+         await handleDeleteComment(targetId, true);
+      } else if (type === "evidence") {
+         await handleDeleteEvidence(targetId, true);
       }
    }
 
@@ -1355,6 +1403,83 @@ function ThreadDetailPage() {
                </aside>
             </div>
          </div>
+
+         {confirmDialog.open && (
+            <div className="tdp-dialog-overlay">
+               <div className="tdp-dialog">
+                  <div className="tdp-dialog-policy-chip danger">{confirmActionMeta.code}</div>
+                  <h3 className="tdp-dialog-title">{confirmActionMeta.title}</h3>
+                  <p className="tdp-dialog-text">{confirmActionMeta.description}</p>
+                  <div className="tdp-dialog-actions">
+                     <button
+                        type="button"
+                        className="tdp-dialog-btn secondary"
+                        onClick={() =>
+                           setConfirmDialog({ open: false, type: null, targetId: null })
+                        }>
+                        Cancel
+                     </button>
+                     <button
+                        type="button"
+                        className="tdp-dialog-btn danger"
+                        onClick={handleConfirmAction}>
+                        {confirmActionMeta.cta}
+                     </button>
+                  </div>
+               </div>
+            </div>
+         )}
+
+         {reportDialogOpen && (
+            <div className="tdp-dialog-overlay">
+               <div className="tdp-dialog">
+                  <div className="tdp-dialog-policy-chip warning">{reportActionMeta.code}</div>
+                  <h3 className="tdp-dialog-title">{reportActionMeta.title}</h3>
+                  <p className="tdp-dialog-text">{reportActionMeta.description}</p>
+                  <div className="tdp-dialog-form-row">
+                     <label className="tdp-dialog-label">Reason</label>
+                     <select
+                        className="tdp-dialog-select"
+                        value={reportReason}
+                        onChange={(e) => setReportReason(e.target.value)}>
+                        <option value="INAPPROPRIATE">Inappropriate</option>
+                        <option value="SPAM">Spam</option>
+                        <option value="HARASSMENT">Harassment</option>
+                        <option value="OTHER">Other</option>
+                     </select>
+                  </div>
+                  <div className="tdp-dialog-form-row">
+                     <label className="tdp-dialog-label">Notes (optional)</label>
+                     <textarea
+                        className="tdp-dialog-textarea"
+                        rows={3}
+                        value={reportNotes}
+                        onChange={(e) => setReportNotes(e.target.value)}
+                     />
+                  </div>
+                  <div className="tdp-dialog-actions">
+                     <button
+                        type="button"
+                        className="tdp-dialog-btn secondary"
+                        disabled={reporting}
+                        onClick={() => {
+                           setReportDialogOpen(false);
+                           setReportReason("OTHER");
+                           setReportNotes("");
+                        }}>
+                        Cancel
+                     </button>
+                     <button
+                        type="button"
+                        className="tdp-dialog-btn warning"
+                        disabled={reporting}
+                        onClick={submitReportThread}>
+                        {reporting ? "Submitting..." : reportActionMeta.cta}
+                     </button>
+                  </div>
+               </div>
+            </div>
+         )}
       </div>
    );
 }
