@@ -38,6 +38,7 @@ function ModerationPage() {
 
    const [decisionDrafts, setDecisionDrafts] = useState({});
    const [resolvingThreadId, setResolvingThreadId] = useState(null);
+   const [safetyActingThreadId, setSafetyActingThreadId] = useState(null);
 
    const loadSafetyQueue = async () => {
       try {
@@ -143,6 +144,41 @@ function ModerationPage() {
          setVerdictError(error?.message || "Unable to resolve thread.");
       } finally {
          setResolvingThreadId(null);
+      }
+   };
+
+   const handleSafetyAction = async (threadId, action) => {
+      const thread = safetyThreads.find((item) => item.id === threadId);
+      if (!thread) return;
+
+      const notes =
+         window.prompt(
+            "Moderator notes (optional)",
+            action === "REMOVE"
+               ? "Removed after safety review."
+               : action === "DISMISS"
+                 ? "Reports reviewed and dismissed."
+                 : "Escalated from safety queue for further review.",
+         ) || "";
+
+      try {
+         setSafetyActingThreadId(threadId);
+         const updated = await authFetch(apiUrl(`moderation/threads/${threadId}/safety-action/`), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action, moderator_notes: notes }),
+         });
+
+         // Safety queue only contains flagged threads; action clears flags so it drops from this list.
+         setSafetyThreads((prev) => prev.filter((item) => item.id !== threadId));
+         // Keep verdict queue in sync with updated status/notes.
+         setVerdictThreads((prev) =>
+            prev.map((item) => (item.id === threadId ? { ...item, ...updated } : item)),
+         );
+      } catch (error) {
+         setSafetyError(error?.message || "Unable to apply safety action.");
+      } finally {
+         setSafetyActingThreadId(null);
       }
    };
 
@@ -284,6 +320,8 @@ function ModerationPage() {
                         searchQuery={safetySearch}
                         onSearchChange={setSafetySearch}
                         onOpenThread={handleOpenThread}
+                        onSafetyAction={handleSafetyAction}
+                        actingThreadId={safetyActingThreadId}
                      />
                   ) : activeTab === "evidence" ? (
                      <div className="mod-evidence-tab-content">

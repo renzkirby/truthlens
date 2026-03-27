@@ -14,6 +14,8 @@ function SafetyReviewTab({
    searchQuery,
    onSearchChange,
    onOpenThread,
+   onSafetyAction,
+   actingThreadId,
 }) {
    const filteredThreads = useMemo(() => {
       return threads.filter((thread) => {
@@ -94,52 +96,85 @@ function SafetyReviewTab({
                      <span>Action</span>
                   </div>
 
-                  {filteredThreads.map((thread) => (
-                     <div
-                        key={thread.id}
-                        className="mod-table-row mod-table-data mod-table-row-safety">
-                        <div className="mod-claim-cell">
-                           <p className="mod-claim-text">
-                              {thread.claim?.ai_summary || thread.caption || "No summary"}
-                           </p>
-                           <span className="mod-claim-time">{timeAgo(thread.created_at)}</span>
-                        </div>
+                  {filteredThreads.map((thread) => {
+                     const isActing = actingThreadId === thread.id;
+                     return (
+                        <div
+                           key={thread.id}
+                           className="mod-table-row mod-table-data mod-table-row-safety">
+                           <div className="mod-claim-cell">
+                              <p className="mod-claim-text">
+                                 {thread.claim?.ai_summary || thread.caption || "No summary"}
+                              </p>
+                              <span className="mod-claim-time">{timeAgo(thread.created_at)}</span>
+                           </div>
 
-                        <div>
-                           {getAiVerdict(thread.claim) ? (
-                              <VerdictBadge verdict={getAiVerdict(thread.claim)} />
-                           ) : (
-                              <span className="mod-na">-</span>
-                           )}
-                        </div>
+                           <div>
+                              {getAiVerdict(thread.claim) ? (
+                                 <VerdictBadge verdict={getAiVerdict(thread.claim)} />
+                              ) : (
+                                 <span className="mod-na">-</span>
+                              )}
+                           </div>
 
-                        <div className="mod-report-cell">
-                           <span className="mod-report-count">{thread.flag_count || 0}</span>
-                           <span className="mod-report-label">reports</span>
-                        </div>
+                           <div className="mod-report-cell">
+                              <span className="mod-report-count">{thread.flag_count || 0}</span>
+                              <span className="mod-report-label">reports</span>
+                           </div>
 
-                        <div className="mod-author-cell">
-                           <span className="mod-author-name">@{thread.author?.username}</span>
-                           <span className="mod-trust-score">
-                              Trust: {thread.author?.trust_score?.toFixed(1) || "0.0"}
-                           </span>
-                        </div>
+                           <div className="mod-author-cell">
+                              <span className="mod-author-name">@{thread.author?.username}</span>
+                              <span className="mod-trust-score">
+                                 Trust: {thread.author?.trust_score?.toFixed(1) || "0.0"}
+                              </span>
+                           </div>
 
-                        <StatusBadge status={thread.status} />
+                           <StatusBadge status={thread.status} />
 
-                        <div className="mod-actions-cell">
-                           <button
-                              className="mod-action-btn view"
-                              onClick={() => onOpenThread(thread.id)}
-                              title="Open thread detail">
-                              <Icons
-                                 name="eye"
-                                 size={13}
-                              />
-                           </button>
+                           <div className="mod-actions-cell">
+                              <button
+                                 className="mod-action-btn view"
+                                 onClick={() => onOpenThread(thread.id)}
+                                 title="Open thread detail">
+                                 <Icons
+                                    name="eye"
+                                    size={13}
+                                 />
+                              </button>
+                              <button
+                                 className="mod-action-btn reopen"
+                                 onClick={() => onSafetyAction(thread.id, "DISMISS")}
+                                 disabled={isActing}
+                                 title="Dismiss reports and keep thread open">
+                                 <Icons
+                                    name="check-circle"
+                                    size={13}
+                                 />
+                              </button>
+                              <button
+                                 className="mod-action-btn close"
+                                 onClick={() => onSafetyAction(thread.id, "REMOVE")}
+                                 disabled={isActing}
+                                 title="Remove thread from community feed">
+                                 <Icons
+                                    name="x-circle"
+                                    size={13}
+                                 />
+                              </button>
+                              <button
+                                 className="mod-action-btn"
+                                 onClick={() => onSafetyAction(thread.id, "ESCALATE")}
+                                 disabled={isActing}
+                                 title="Escalate for full moderator review">
+                                 <Icons
+                                    name="arrow-right"
+                                    size={13}
+                                 />
+                              </button>
+                           </div>
                         </div>
-                     </div>
-                  ))}
+                     );
+                  })}
                </div>
             )}
          </div>
