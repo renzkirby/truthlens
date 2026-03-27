@@ -268,6 +268,7 @@ function ThreadDetailPage() {
             thread_id: threadId,
             evidence_url: evidenceUrl,
             evidence_type: evidenceType,
+            evidence_verdict: evidenceVerdict,
             evidence_caption: explanation,
          };
 
@@ -563,11 +564,11 @@ function ThreadDetailPage() {
                                     textTransform: "uppercase",
                                     letterSpacing: "0.05em",
                                  }}>
-                                 ✓ Final Verdict (Moderator-Verified)
+                                 Final Verdict (Moderator-Verified)
                               </span>
                            </div>
                            <VerdictBadge
-                              verdict={thread.claim.moderator_verdict_info.verdict.toLowerCase()}
+                              verdict={thread.claim.moderator_verdict_info.verdict.toUpperCase()}
                            />
                            <p className="tdp-verdict-desc">
                               {VERDICT_META[
