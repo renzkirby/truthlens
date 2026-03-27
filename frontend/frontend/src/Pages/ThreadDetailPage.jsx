@@ -551,8 +551,7 @@ function ThreadDetailPage() {
 
                   {/* Right: verdict card */}
                   <div className="tdp-verdict-card">
-                     {thread.claim?.has_moderator_verdict &&
-                     thread.claim?.moderator_verdict_info ? (
+                     {thread.claim?.moderator_verdict_info ? (
                         // MODERATOR VERDICT VERSION
                         <>
                            <div style={{ marginBottom: "12px" }}>
@@ -586,6 +585,66 @@ function ThreadDetailPage() {
                                     : ""}
                               </span>
                            </div>
+
+                           {/* REFINEMENT #9: Evidence Breakdown for MISLEADING verdicts */}
+                           {thread.claim.moderator_verdict_info.verdict === "MISLEADING" && (
+                              <div
+                                 style={{
+                                    marginTop: "12px",
+                                    padding: "10px",
+                                    backgroundColor: "#fef3c7",
+                                    borderRadius: "6px",
+                                    fontSize: "12px",
+                                 }}>
+                                 <span style={{ color: "#92400e", fontWeight: "500" }}>
+                                    Mixed Evidence:
+                                 </span>
+                                 <div style={{ marginTop: "6px", color: "#78350f" }}>
+                                    <div>Some evidence supports</div>
+                                    <div>Some evidence contradicts</div>
+                                    <div style={{ marginTop: "4px", fontSize: "11px" }}>
+                                       This claim is partially accurate
+                                    </div>
+                                 </div>
+                              </div>
+                           )}
+                        </>
+                     ) : thread.claim?.verified_evidence_count > 0 &&
+                       !thread.claim?.moderator_verdict_info ? (
+                        // REFINEMENT #7: Pending Consensus - Evidence Under Review
+                        <>
+                           <div style={{ marginBottom: "12px" }}>
+                              <span
+                                 style={{
+                                    fontSize: "11px",
+                                    fontWeight: "600",
+                                    color: "#d97706",
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.05em",
+                                 }}>
+                                 Verdict Pending
+                              </span>
+                           </div>
+                           <VerdictBadge verdict="unverified" />
+                           <p className="tdp-verdict-desc">Evidence under review by moderators</p>
+                           <div className="tdp-evidence-count-row">
+                              <span className="tdp-confidence-label">Evidence Under Review</span>
+                              <span
+                                 className="tdp-evidence-count-val"
+                                 style={{ color: "#d97706" }}>
+                                 {thread.claim.verified_evidence_count} item
+                                 {thread.claim.verified_evidence_count !== 1 ? "s" : ""}
+                              </span>
+                           </div>
+                           <p
+                              style={{
+                                 marginTop: "10px",
+                                 fontSize: "12px",
+                                 color: "#9ca3af",
+                                 fontStyle: "italic",
+                              }}>
+                              Final verdict will be determined once moderators reach consensus
+                           </p>
                         </>
                      ) : (
                         // AI VERDICT VERSION (fallback)
