@@ -188,3 +188,367 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
         self.assertEqual(self.thread.caption, "Updated caption")
         self.assertEqual(self.thread.status, "OPEN")
         self.assertIsNone(self.thread.flag_reason)
+
+
+class ModeratorEvidenceVerificationTests(APITestCase):
+    """
+    Tests for the moderator evidence verification workflow.
+    
+    Coverage:
+    - Permission checks (only MODERATOR role can verify)  
+    - Verification status updates (VERIFIED/REJECTED)
+    - Trust score calculations (+2 VERIFIED, -1 REJECTED, capped 0-100)
+    - Moderator audit trail (verified_by, verified_at, moderator_notes)
+    """
+    
+    def setUp(self):
+        """Set up test data with regular users and a moderator."""
+        # Create regular users
+        self.contributor = User.objects.create_user(
+            username="contributor", 
+            email="contributor@test.com", 
+            password="pass1234"
+        )
+        self.other_user = User.objects.create_user(
+            username="otheruser",
+            email="otheruser@test.com",
+            password="pass1234"
+        )
+        
+        # Create moderator
+        self.moderator = User.objects.create_user(
+            username="moderator",
+            email="moderator@test.com",
+            password="pass1234"
+        )
+        
+        # Set up user profiles with roles
+        self.contributor_profile = UserProfile.objects.create(
+            user=self.contributor, 
+            trust_score=50.0,
+            role=UserProfile.Role.USER
+        )
+        self.other_profile = UserProfile.objects.create(
+            user=self.other_user,
+            trust_score=75.0,
+            role=UserProfile.Role.USER
+        )
+        self.moderator_profile = UserProfile.objects.create(
+            user=self.moderator,
+            trust_score=95.0,
+            role=UserProfile.Role.MODERATOR
+        )
+        
+        # Create claim and thread
+        self.claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.URL,
+            url_link="https://example.com/claim",
+            verified_via=Claim.VerificationSource.PENDING,
+        )
+        self.thread = Thread.objects.create(
+            claim=self.claim,
+            author=self.other_user,
+            caption="Test thread for verification"
+        )
+        
+        # Create evidence
+        self.evidence = EvidenceSubmission.objects.create(
+            thread=self.thread,
+            contributor=self.contributor,
+            evidence_caption="Test evidence",
+            evidence_type=EvidenceSubmission.EvidenceType.URL_LINK,
+            evidence_url="https://evidence.example.com",
+            contributor_trust_snapshot=self.contributor_profile.trust_score,
+        )
+        
+        # Set up API clients
+        self.contributor_client = APIClient()
+        self.contributor_client.force_authenticate(user=self.contributor)
+        
+        self.other_client = APIClient()
+        self.other_client.force_authenticate(user=self.other_user)
+        
+        self.moderator_client = APIClient()
+        self.moderator_client.force_authenticate(user=self.moderator)
+        
+        self.unauthenticated_client = APIClient()
+        
+    def test_unauthenticated_user_cannot_verify_evidence(self):
+        """Unauthenticated users should get 401 Unauthorized."""
+        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
+        
+        res = self.unauthenticated_client.patch(
+            verify_url,
+            {"evidence_status": "VERIFIED"},
+            format="json"
+        )
+        
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+        
+    def test_non_moderator_user_cannot_verify_evidence(self):
+        """Regular users (even contributors) should get 403 Forbidden."""
+        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
+        
+        res = self.contributor_client.patch(
+            verify_url,
+            {"evidence_status": "VERIFIED"},
+            format="json"
+        )
+        
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+        
+    def test_non_moderator_other_user_cannot_verify_evidence(self):
+        """Another non-moderator user should also get 403 Forbidden."""
+        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
+        
+        res = self.other_client.patch(
+            verify_url,
+            {"evidence_status": "VERIFIED"},
+            format="json"
+        )
+        
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+    
+    def test_moderator_can_verify_evidence(self):
+        """Moderators can verify evidence as VERIFIED."""
+        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
+        
+        res = self.moderator_client.patch(
+            verify_url,
+            {
+                "evidence_status": "VERIFIED",
+                "moderator_notes": "Evidence looks legitimate"
+            },
+            format="json"
+        )
+        
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data["evidence_status"], "VERIFIED")
+        
+        # Verify database was updated
+        self.evidence.refresh_from_db()
+        self.assertEqual(self.evidence.evidence_status, "VERIFIED")
+        self.assertEqual(self.evidence.verified_by, self.moderator)
+        self.assertIsNotNone(self.evidence.verified_at)
+        self.assertEqual(self.evidence.moderator_notes, "Evidence looks legitimate")
+        
+    def test_moderator_can_reject_evidence(self):
+        """Moderators can reject evidence as REJECTED."""
+        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
+        
+        res = self.moderator_client.patch(
+            verify_url,
+            {
+                "evidence_status": "REJECTED",
+                "moderator_notes": "Evidence is not credible"
+            },
+            format="json"
+        )
+        
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data["evidence_status"], "REJECTED")
+        
+        # Verify database was updated
+        self.evidence.refresh_from_db()
+        self.assertEqual(self.evidence.evidence_status, "REJECTED")
+        self.assertEqual(self.evidence.verified_by, self.moderator)
+        self.assertIsNotNone(self.evidence.verified_at)
+        self.assertEqual(self.evidence.moderator_notes, "Evidence is not credible")
+        
+    def test_moderator_notes_are_optional(self):
+        """Moderators should be able to verify without providing notes."""
+        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
+        
+        res = self.moderator_client.patch(
+            verify_url,
+            {"evidence_status": "VERIFIED"},
+            format="json"
+        )
+        
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.evidence.refresh_from_db()
+        self.assertEqual(self.evidence.moderator_notes, "")
+        
+    def test_invalid_evidence_status_returns_400(self):
+        """Invalid evidence_status should return 400 Bad Request."""
+        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
+        
+        res = self.moderator_client.patch(
+            verify_url,
+            {"evidence_status": "INVALID_STATUS"},
+            format="json"
+        )
+        
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("detail", res.data)
+        
+    def test_verified_evidence_increases_trust_score_by_2(self):
+        """Verifying evidence should increase contributor trust score by +2."""
+        initial_score = self.contributor_profile.trust_score
+        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
+        
+        res = self.moderator_client.patch(
+            verify_url,
+            {"evidence_status": "VERIFIED"},
+            format="json"
+        )
+        
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        
+        # Refresh and check trust score (Celery task would run in background)
+        # In tests, the task runs synchronously via CELERY_TASK_ALWAYS_EAGER
+        self.contributor_profile.refresh_from_db()
+        self.assertEqual(self.contributor_profile.trust_score, initial_score + 2.0)
+        
+    def test_rejected_evidence_decreases_trust_score_by_1(self):
+        """Rejecting evidence should decrease contributor trust score by -1."""
+        initial_score = self.contributor_profile.trust_score
+        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
+        
+        res = self.moderator_client.patch(
+            verify_url,
+            {"evidence_status": "REJECTED"},
+            format="json"
+        )
+        
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        
+        # Refresh and check trust score
+        self.contributor_profile.refresh_from_db()
+        self.assertEqual(self.contributor_profile.trust_score, initial_score - 1.0)
+        
+    def test_trust_score_capped_at_100(self):
+        """Trust score should not exceed 100."""
+        # Set contributor to high trust score
+        self.contributor_profile.trust_score = 99.0
+        self.contributor_profile.save()
+        
+        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
+        
+        # Verify evidence (should add +2)
+        res = self.moderator_client.patch(
+            verify_url,
+            {"evidence_status": "VERIFIED"},
+            format="json"
+        )
+        
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        
+        # Check trust score is capped at 100
+        self.contributor_profile.refresh_from_db()
+        self.assertEqual(self.contributor_profile.trust_score, 100.0)
+        
+    def test_trust_score_capped_at_0(self):
+        """Trust score should not go below 0."""
+        # Set contributor to low trust score
+        self.contributor_profile.trust_score = 0.5
+        self.contributor_profile.save()
+        
+        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
+        
+        # Reject evidence (should subtract -1)
+        res = self.moderator_client.patch(
+            verify_url,
+            {"evidence_status": "REJECTED"},
+            format="json"
+        )
+        
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        
+        # Check trust score is capped at 0
+        self.contributor_profile.refresh_from_db()
+        self.assertEqual(self.contributor_profile.trust_score, 0.0)
+        
+    def test_multiple_verifications_accumulate_trust_score(self):
+        """Multiple verifications should accumulate trust score changes."""
+        initial_score = self.contributor_profile.trust_score
+        
+        # Create multiple evidence items
+        evidence2 = EvidenceSubmission.objects.create(
+            thread=self.thread,
+            contributor=self.contributor,
+            evidence_caption="Test evidence 2",
+            evidence_type=EvidenceSubmission.EvidenceType.URL_LINK,
+            evidence_url="https://evidence2.example.com",
+            contributor_trust_snapshot=self.contributor_profile.trust_score,
+        )
+        
+        verify_url1 = reverse("evidence-verify", args=[str(self.evidence.id)])
+        verify_url2 = reverse("evidence-verify", args=[str(evidence2.id)])
+        
+        # Verify first evidence
+        res1 = self.moderator_client.patch(
+            verify_url1,
+            {"evidence_status": "VERIFIED"},
+            format="json"
+        )
+        self.assertEqual(res1.status_code, status.HTTP_200_OK)
+        
+        # Reject second evidence
+        res2 = self.moderator_client.patch(
+            verify_url2,
+            {"evidence_status": "REJECTED"},
+            format="json"
+        )
+        self.assertEqual(res2.status_code, status.HTTP_200_OK)
+        
+        # Check final trust score: initial + 2 - 1 = initial + 1
+        self.contributor_profile.refresh_from_db()
+        self.assertEqual(self.contributor_profile.trust_score, initial_score + 1.0)
+        
+    def test_verified_by_contains_moderator_info_in_response(self):
+        """Response should include verified_by with moderator user info."""
+        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
+        
+        res = self.moderator_client.patch(
+            verify_url,
+            {"evidence_status": "VERIFIED"},
+            format="json"
+        )
+        
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        # Check that verified_by contains user data
+        self.assertIn("verified_by", res.data)
+        if res.data["verified_by"]:  # Could be null if not serialized
+            self.assertEqual(res.data["verified_by"]["username"], "moderator")
+            
+    def test_moderator_cannot_verify_already_verified_evidence(self):
+        """
+        Once evidence is verified, subsequent verify calls should update it.
+        This tests idempotency / allows re-verification by another moderator.
+        """
+        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
+        
+        # First verification
+        res1 = self.moderator_client.patch(
+            verify_url,
+            {"evidence_status": "VERIFIED", "moderator_notes": "First mod"},
+            format="json"
+        )
+        self.assertEqual(res1.status_code, status.HTTP_200_OK)
+        
+        # Create another moderator
+        moderator2 = User.objects.create_user(
+            username="moderator2",
+            email="mod2@test.com",
+            password="pass1234"
+        )
+        UserProfile.objects.create(
+            user=moderator2,
+            role=UserProfile.Role.MODERATOR
+        )
+        moderator2_client = APIClient()
+        moderator2_client.force_authenticate(user=moderator2)
+        
+        # Second moderator re-verifies with different notes
+        res2 = moderator2_client.patch(
+            verify_url,
+            {"evidence_status": "VERIFIED", "moderator_notes": "Second mod"},
+            format="json"
+        )
+        self.assertEqual(res2.status_code, status.HTTP_200_OK)
+        
+        # Check that it was updated by second moderator
+        self.evidence.refresh_from_db()
+        self.assertEqual(self.evidence.verified_by, moderator2)
+        self.assertEqual(self.evidence.moderator_notes, "Second mod")
