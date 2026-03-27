@@ -26,7 +26,12 @@ function ModeratorPanel({ onVerificationComplete }) {
             `${API_BASE_URL}/moderation/evidence-queue/?status=UNVERIFIED`,
             { method: "GET" },
          );
-         setUnverifiedEvidence(data);
+         const normalizedEvidence = Array.isArray(data)
+            ? data
+            : Array.isArray(data?.results)
+              ? data.results
+              : [];
+         setUnverifiedEvidence(normalizedEvidence);
       } catch (error) {
          console.error("Failed to load evidence queue:", error);
          setError("Failed to load evidence queue. Please try again.");
