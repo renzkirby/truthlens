@@ -75,6 +75,7 @@ class IsNotModerator(BasePermission):
 def receive_snippet(request):
     parsed_data = json.loads(request.body)
     base64_string = parsed_data.get("image_data")
+    check_deepfake = parsed_data.get("check_deepfake", False)
 
     if not base64_string:
         return JsonResponse({"error": "No image data provided"}, status=400)
@@ -88,6 +89,7 @@ def receive_snippet(request):
     media_url = upload_image_to_database(base64_string)
     
     print("IMAGE HASH:", image_hash)
+    print("DEEPFAKE CHECK ENABLED:", check_deepfake)
 
     claim = Claim.objects.create(
         claim_type=Claim.ClaimType.IMAGE,
@@ -98,12 +100,13 @@ def receive_snippet(request):
     )
     claim_id = claim.id  # Get the ID of the saved claim
 
-    snippet_fact_check_process.delay(image_hash, base64_string, str(claim_id))
+    snippet_fact_check_process.delay(image_hash, base64_string, str(claim_id), check_deepfake)
 
     return JsonResponse(
         {"claim_id": str(claim_id)},
         status=200,
     )
+
 
 
 @csrf_exempt

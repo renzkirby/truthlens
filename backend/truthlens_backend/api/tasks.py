@@ -14,40 +14,35 @@ from .services import (
     evaluate_image_claim_with_tavily,
     evaluate_url_claim_with_gfc,
     evaluate_url_claim_with_tavily,
+    detect_ai_image,
 )
 from .models import Claim
 
-# added this rough function because there is an error - there is an import in iews but the function doesn't exist yet.
-@shared_task
-def update_contributor_trust_score(user_id, evidence_status):
-    """
-    Updates a user's trust score asynchronously based on a moderator's decision 
-    regarding their submitted evidence.
-    """
-    try:
-        profile = UserProfile.objects.get(user__id=user_id)
-        
-        # Basic scoring math (you can tweak these values later!)
-        if evidence_status == "VERIFIED":
-            profile.trust_score += 10.0
-        elif evidence_status == "REJECTED":
-            profile.trust_score -= 10.0
-            
-        # Ensure the score stays within a 0 to 100 range
-        profile.trust_score = max(0.0, min(100.0, profile.trust_score))
-        profile.save(update_fields=["trust_score"])
-        
-        print(f"Successfully updated trust score for user {user_id}. New score: {profile.trust_score}")
-        
-    except UserProfile.DoesNotExist:
-        print(f"UserProfile for user ID {user_id} not found. Cannot update trust score.")
-    except Exception as e:
-        print(f"Error updating trust score: {str(e)}")
-
 # IMAGE PIPELINE
 @shared_task
-def snippet_fact_check_process(image_hash, base64_string, claim_id):
+def snippet_fact_check_process(image_hash, base64_string, claim_id, check_deepfake=False):
     _, image_bytes = process_image(base64_string)
+
+    # deepfake check
+    if check_deepfake:
+        print("User requested deepfake check. Scanning image...")
+        ai_probability = detect_ai_image(image_bytes)
+        
+        if ai_probability > 0.65:
+            print(f"Deepfake detected! Confidence: {ai_probability}")
+            
+            # Save the fake verdict and short-circuit the pipeline
+            ai_verdict = {
+                "verdict": "FAKE",
+                "summary": f"Forensic analysis indicates with {int(ai_probability * 100)}% confidence that this image is AI-generated or digitally fabricated.",
+                "confidence_score": int(ai_probability * 100)
+            }
+            _save_claim(claim_id, ai_verdict, "AI Deepfake Detector", "AI Generated Image")
+            
+            return # Stop here! Do not run OCR.
+    else:
+        print("Skipping AI deepfake check based on user preference.")
+    # OCR
     ocr_result = extract_text_from_image(image_bytes)
 
     if not ocr_result:

@@ -1,5 +1,5 @@
 // App.jsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "./App.css";
 import NavigationBar from "./components/NavigationBar";
 import FileUpload from "./pages/FileUpload";
@@ -10,6 +10,25 @@ import { Search } from "lucide-react";
 function App() {
    const [isSnipping, setIsSnipping] = useState(false);
    const [activeLink, setActiveLink] = useState("snipping");
+   const [checkDeepfake, setCheckDeepfake] = useState(false); 
+
+   // load checkDeepfake choice from switch
+   useEffect(() => {
+      if (typeof chrome !== "undefined" && chrome.storage) {
+         chrome.storage.local.get(["checkDeepfake"], (result) => {
+            if (result.checkDeepfake !== undefined) {
+               setCheckDeepfake(result.checkDeepfake);
+            }
+         });
+      }
+   }, []);
+
+   const handleToggleDeepfake = (checked) => {
+      setCheckDeepfake(checked);
+      if (typeof chrome !== "undefined" && chrome.storage) {
+         chrome.storage.local.set({ checkDeepfake: checked });
+      }
+   };
 
    const handleSnipClick = async () => {
       setIsSnipping(true);
@@ -38,6 +57,8 @@ function App() {
                <SnippingTool
                   handleSnipClick={handleSnipClick}
                   isSnipping={isSnipping}
+                  checkDeepfake={checkDeepfake}
+                  onToggleDeepfake={handleToggleDeepfake}
                />
             );
          case "file-upload":
