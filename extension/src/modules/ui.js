@@ -1,7 +1,7 @@
 import { state } from "./state.js";
 
 export function displayResultCard(claim) {
-   const { id, verdict, summary, confidence_score, source_type, source_url } = claim;
+   const { id, verdict, summary, confidence_score, source_type, source_url, is_ai_generated } = claim;
    let badgeColor = "#6b7280";
 
    switch (verdict) {
@@ -30,6 +30,20 @@ export function displayResultCard(claim) {
    else if (confidence_score >= 40 && confidence_score < 70) confidence_bar_color = "#ebdc09";
    else if (confidence_score >= 70) confidence_bar_color = "#0e9f6e";
 
+   const sparklesIconSVG = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+         <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.937A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0z"/>
+         <path d="M20 3h4"/><path d="M22 1v4"/><path d="M1 20h4"/><path d="M3 18v4"/>
+      </svg>
+   `;
+
+   const aiWarningHTML = is_ai_generated 
+      ? `<div style="background-color: #f5f3ff; color: #5b21b6; border: 1.5px solid #8b5cf6; padding: 10px 14px; border-radius: 8px; font-size: 11px; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
+            <span style="display: flex; align-items: center; color: #8b5cf6;">${sparklesIconSVG}</span>
+            AI-GENERATED MEDIA DETECTED
+         </div>` 
+      : "";
+
    const card = document.createElement("div");
    card.id = "truthlens-result-card";
    card.className = "truthlens-card";
@@ -42,10 +56,12 @@ export function displayResultCard(claim) {
       <div class="truthlens-verdict-text">
          This post is <span class="truthlens-verdict" style="background-color: ${badgeColor};">${verdict}</span>
       </div>
-      <div class="truthlens-summary-box">
+
+      ${aiWarningHTML} <div class="truthlens-summary-box">
          <div class="truthlens-summary-title">AI Summary</div>
          <div style="font-size: 14px; line-height: 1.4;">${summary}</div>
       </div>
+
       <div class="truthlens-confidence-score">Confidence Score: ${confidence_score}</div>
       <div class="truthlens-confidence-bar">
          <div class="truthlens-confidence-fill" style="width: ${confidence_score}%; background-color: ${confidence_bar_color};"></div>

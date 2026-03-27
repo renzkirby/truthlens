@@ -139,6 +139,7 @@ def claim_polling_endpoint(request, claim_id):
                 "confidence_score": claim.consensus_score,
                 "source_type": claim.source_type,
                 "source_url": claim.top_verdict_source,
+                "is_ai_generated": claim.is_ai_generated,
             },
             status=200,
         )

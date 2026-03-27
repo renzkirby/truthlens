@@ -57,6 +57,7 @@ class Claim(models.Model):
     top_verdict_source = models.URLField(max_length=500, blank=True, null=True)
 
     last_updated = models.DateTimeField(auto_now=True)
+    is_ai_generated = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Claim {self.id} - Type: {self.claim_type} - Final Verdict: {self.final_verdict or self.verdict}"

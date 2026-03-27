@@ -23,34 +23,41 @@ from .models import Claim
 def snippet_fact_check_process(image_hash, base64_string, claim_id, check_deepfake=False):
     _, image_bytes = process_image(base64_string)
 
-    # deepfake check
+    is_deepfake = False
+    ai_prob = 0.0
+
+    # 1. PARALLEL CHECK: Deepfake Detection
     if check_deepfake:
         print("User requested deepfake check. Scanning image...")
-        ai_probability = detect_ai_image(image_bytes)
+        ai_prob = detect_ai_image(image_bytes)
         
-        if ai_probability > 0.65:
-            print(f"Deepfake detected! Confidence: {ai_probability}")
-            
-            # Save the fake verdict and short-circuit the pipeline
-            ai_verdict = {
-                "verdict": "FAKE",
-                "summary": f"Forensic analysis indicates with {int(ai_probability * 100)}% confidence that this image is AI-generated or digitally fabricated.",
-                "confidence_score": int(ai_probability * 100)
-            }
-            _save_claim(claim_id, ai_verdict, "AI Deepfake Detector", "AI Generated Image")
-            
-            return # Stop here! Do not run OCR.
+        if ai_prob > 0.65:
+            print(f"Deepfake detected! Confidence: {ai_prob}")
+            is_deepfake = True
+            # Update the claim flag in the database, but DO NOT STOP.
+            Claim.objects.filter(id=claim_id).update(is_ai_generated=True)
     else:
         print("Skipping AI deepfake check based on user preference.")
-    # OCR
+        
+    # 2. PARALLEL CHECK: OCR
     ocr_result = extract_text_from_image(image_bytes)
 
     if not ocr_result:
-        Claim.objects.filter(id=claim_id).delete()
+        # If there is no text, BUT it is an AI image, give them a verdict!
+        if is_deepfake:
+            ai_verdict = {
+                "verdict": "MISLEADING",
+                "summary": f"This image contains no verifiable text, but forensic analysis indicates with {int(ai_prob * 100)}% confidence that the image itself is AI-generated.",
+                "confidence_score": int(ai_prob * 100)
+            }
+            _save_claim(claim_id, ai_verdict, "AI Deepfake Detector", "AI Generated Image")
+        else:
+            # No text and not a deepfake = delete it.
+            Claim.objects.filter(id=claim_id).delete()
         return
 
     print("Image processed successfully. Passing to Core Text Pipeline...")
-    # passes to text pipeline
+    # 3. Hand off the text to the fact-checker!
     execute_core_text_pipeline(ocr_result, claim_id)
 
 # TEXT PIPELINE
@@ -272,3 +279,25 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_url=""):
         print(f"Save failed for claim {claim_id}: {str(e)}")
         import traceback
         traceback.print_exc()
+
+@shared_task
+def update_contributor_trust_score(contributor_id, evidence_status):
+    """
+    Update the contributor's trust score based on evidence verification decision.
+    """
+    try:
+        user = User.objects.get(id=contributor_id)
+        profile = user.profile
+    except User.DoesNotExist:
+        return
+    
+    if evidence_status == "VERIFIED":
+        delta = 2.0
+    elif evidence_status == "REJECTED":
+        delta = -1.0
+    else:
+        return
+    
+    new_score = profile.trust_score + delta
+    profile.trust_score = max(0.0, min(100.0, new_score))
+    profile.save(update_fields=["trust_score"])
