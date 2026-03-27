@@ -43,9 +43,39 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 class ClaimSerializer(serializers.ModelSerializer):
     effective_verdict = serializers.SerializerMethodField()
+    has_moderator_verdict = serializers.SerializerMethodField()
+    verified_evidence_count = serializers.SerializerMethodField()
+    moderator_verdict_info = serializers.SerializerMethodField()
 
     def get_effective_verdict(self, obj):
         return obj.final_verdict or obj.verdict or obj.ai_verdict
+    
+    def get_has_moderator_verdict(self, obj):
+        """Check if there are any verified/rejected evidence for this claim"""
+        from .models import EvidenceSubmission
+        verified_exists = EvidenceSubmission.objects.filter(
+            thread__claim=obj,
+            evidence_status__in=['VERIFIED', 'REJECTED']
+        ).exists()
+        return verified_exists
+    
+    def get_verified_evidence_count(self, obj):
+        """Get count of verified evidence for this claim"""
+        from .models import EvidenceSubmission
+        return EvidenceSubmission.objects.filter(
+            thread__claim=obj,
+            evidence_status='VERIFIED'
+        ).count()
+    
+    def get_moderator_verdict_info(self, obj):
+        """Return moderator verdict status and supporting evidence"""
+        if obj.final_verdict:
+            return {
+                "verdict": obj.final_verdict,
+                "source": "MODERATORS",
+                "verified_evidence_count": self.get_verified_evidence_count(obj)
+            }
+        return None
 
     class Meta:
         model = Claim
@@ -63,6 +93,9 @@ class ClaimSerializer(serializers.ModelSerializer):
             "verified_via",
             "source_link",
             "media_url",
+            "has_moderator_verdict",
+            "verified_evidence_count",
+            "moderator_verdict_info",
             "last_updated",
         ]
 

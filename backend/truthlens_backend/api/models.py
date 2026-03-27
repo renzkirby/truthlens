@@ -60,6 +60,48 @@ class Claim(models.Model):
 
     def __str__(self):
         return f"Claim {self.id} - Type: {self.claim_type} - Final Verdict: {self.final_verdict or self.verdict}"
+    
+    def compute_final_verdict(self):
+        """
+        Compute final verdict based on verified evidence in all threads for this claim.
+        Returns the verdict that should be set as final_verdict.
+        
+        Logic:
+        - If all verified evidence SUPPORTS → FACT
+        - If all verified evidence CONTRADICTS → FAKE
+        - If mixed → MISLEADING (partially accurate)
+        - If only CONTEXT/VERIFICATION → no change (keep existing)
+        - If no verified evidence → no change
+        """
+        from django.db.models import Q
+        
+        # Get all threads for this claim
+        threads = self.thread_set.all()
+        
+        # Get all VERIFIED evidence submissions for these threads
+        verified_evidence = EvidenceSubmission.objects.filter(
+            thread__in=threads,
+            evidence_status='VERIFIED'
+        ).select_related('thread')
+        
+        if not verified_evidence.exists():
+            return None
+        
+        # Count evidence types
+        supports_count = verified_evidence.filter(evidence_type='SUPPORTS CLAIM').count()
+        contradicts_count = verified_evidence.filter(evidence_type='CONTRADICTS CLAIM').count()
+        context_count = verified_evidence.filter(evidence_type='PROVIDES CONTEXT').count()
+        verification_count = verified_evidence.filter(evidence_type='SOURCE VERIFICATION').count()
+        
+        # Determine verdict based on evidence
+        if contradicts_count == 0 and supports_count > 0:
+            return 'FACT'  # All verified evidence supports the claim
+        elif supports_count == 0 and contradicts_count > 0:
+            return 'FAKE'  # All verified evidence contradicts the claim
+        elif supports_count > 0 and contradicts_count > 0:
+            return 'MISLEADING'  # Mixed evidence - partially accurate
+        else:
+            return None  # Not enough decisive evidence
 
 
 class Thread(models.Model):

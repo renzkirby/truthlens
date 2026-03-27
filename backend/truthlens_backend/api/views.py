@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import NotFound
+from rest_framework.pagination import CursorPagination
 from datetime import timedelta
 import json
 import secrets
@@ -34,6 +35,17 @@ from .serializers import (
     ModerationDecisionSerializer,
 )
 
+# ── Pagination Configuration ──
+class StandardCursorPagination(CursorPagination):
+    """
+    Cursor-based pagination for efficient infinite scrolling.
+    More efficient than offset pagination for large datasets.
+    """
+    page_size = 20
+    ordering = '-created_at'
+    cursor_query_param = 'cursor'
+    template = None  # Disable HTML template
+
 ALLOWED_MODERATION_TRANSITIONS = {
     "PENDING": {"OPEN", "CLOSED", "REJECTED"},
     "OPEN": {"CLOSED", "REJECTED"},
@@ -48,6 +60,13 @@ class IsThreadOwnerOrReadOnly(BasePermission):
         return obj.author == request.user
     
 class IsEvidenceContributorOrReadOnly(BasePermission):
+    def has_permission(self, request, view):
+        # Allow authenticated users to create evidence (POST)
+        if request.method == "POST":
+            return request.user.is_authenticated
+        # Allow everyone to read
+        return True
+    
     def has_object_permission(self, request, view, obj):
         if request.method in SAFE_METHODS:
             return True
@@ -376,23 +395,40 @@ def evidence_moderation_queue(request):
     Query params:
     - status: filter by status (UNVERIFIED, VERIFIED, REJECTED)
     - thread_id: filter by thread
+    - limit: number of items per page (default 20)
+    - offset: number of items to skip (default 0)
     """
     
     status = request.query_params.get("status", "UNVERIFIED")
     thread_id = request.query_params.get("thread_id")
+    limit = int(request.query_params.get("limit", 20))
+    offset = int(request.query_params.get("offset", 0))
 
-    evidence = EvidenceSubmission.objects.filter(evidence_status=status).select_related("contributor", "thread__claim").order_by("-submitted_at")
+    evidence_query = EvidenceSubmission.objects.filter(evidence_status=status).select_related("contributor", "thread__claim").order_by("-submitted_at")
     
     if thread_id:
-        evidence = evidence.filter(thread_id=thread_id)
+        evidence_query = evidence_query.filter(thread_id=thread_id)
+    
+    # Get total count for pagination info
+    total_count = evidence_query.count()
+    
+    # Apply pagination
+    evidence = evidence_query[offset:offset + limit]
         
     serializer = EvidenceSubmissionSerializer(evidence, many=True)
-    return Response(serializer.data, status=200)
+    
+    return Response({
+        "count": total_count,
+        "limit": limit,
+        "offset": offset,
+        "results": serializer.data
+    }, status=200)
 
 #Viewsets
 class ThreadViewSet(viewsets.ModelViewSet):
     serializer_class = ThreadSerializer
     permission_classes = [IsAuthenticated, IsThreadOwnerOrReadOnly]
+    pagination_class = StandardCursorPagination
 
     def get_queryset(self):
         return Thread.objects.exclude(status=Thread.Status.REJECTED).order_by("-created_at")
@@ -463,6 +499,13 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
         evidence.verified_at = timezone.now()
         evidence.moderator_notes = notes
         evidence.save(update_fields=["evidence_status", "verified_by", "verified_at", "moderator_notes"])
+        
+        # Auto-compute final verdict for the claim based on verified evidence
+        claim = evidence.thread.claim
+        final_verdict = claim.compute_final_verdict()
+        if final_verdict:
+            claim.final_verdict = final_verdict
+            claim.save(update_fields=["final_verdict"])
         
         update_contributor_trust_score.delay(evidence.contributor.id, status) # Update trust score asynchronously after moderation decision
         

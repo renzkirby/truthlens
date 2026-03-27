@@ -19,6 +19,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useNotification } from "../context/NotificationContext";
 import NavigationBar from "../components/NavigationBar";
 import Icons from "../components/Icons";
 import EvidenceCard from "../components/EvidenceCard";
@@ -191,6 +192,7 @@ function ThreadDetailPage() {
    const didAutoScrollRef = useRef(false);
 
    const { authFetch, user } = useAuth();
+   const { addToast } = useNotification();
    const isModerator = user?.role === "MODERATOR";
    const { threadId } = useParams();
    const navigate = useNavigate();
@@ -262,16 +264,23 @@ function ThreadDetailPage() {
       if (!evidenceUrl.trim() || !explanation.trim()) return;
       setSubmitting(true);
       try {
-         await authFetch(`${API_BASE_URL}/evidence/`, {
+         const payload = {
+            thread_id: threadId,
+            evidence_url: evidenceUrl,
+            evidence_type: evidenceType,
+            evidence_caption: explanation,
+         };
+
+         await authFetch(apiUrl("evidence/"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-               thread_id: threadId,
-               evidence_url: evidenceUrl,
-               evidence_type: evidenceType,
-               evidence_verdict: evidenceVerdict,
-               evidence_caption: explanation,
-            }),
+            body: JSON.stringify(payload),
+         });
+
+         addToast({
+            type: "success",
+            message: "Evidence submitted successfully!",
+            duration: 3000,
          });
 
          await refreshThreadData();
@@ -280,8 +289,13 @@ function ThreadDetailPage() {
          setExplanation("");
          setEvidenceVerdict("UNVERIFIED");
          handleSectionChange("evidence");
-      } catch {
-         setError("Error in submitting evidence");
+      } catch (error) {
+         console.error("Error submitting evidence:", error);
+         addToast({
+            type: "error",
+            message: `Error submitting evidence: ${error.message || "Unknown error"}`,
+         });
+         setError(`Error: ${error.message}`);
       } finally {
          setSubmitting(false);
       }
@@ -292,15 +306,24 @@ function ThreadDetailPage() {
       e.preventDefault();
       if (!newComment.trim()) return;
       try {
-         await authFetch(`${API_BASE_URL}/comments/`, {
+         await authFetch(apiUrl("comments/"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ thread_id: threadId, comment_text: newComment }),
          });
+         addToast({
+            type: "success",
+            message: "Comment posted successfully!",
+            duration: 2000,
+         });
          await refreshThreadData();
          setNewComment("");
-      } catch {
-         setError("Error in sending comment");
+      } catch (error) {
+         console.error("Error posting comment:", error);
+         addToast({
+            type: "error",
+            message: "Failed to post comment",
+         });
       }
    }
 
@@ -308,28 +331,46 @@ function ThreadDetailPage() {
       const confirmed = window.confirm("Delete this comment?");
       if (!confirmed) return;
       try {
-         await authFetch(`${API_BASE_URL}/comments/${commentId}/`, {
+         await authFetch(apiUrl(`comments/${commentId}/`), {
             method: "DELETE",
          });
+         addToast({
+            type: "success",
+            message: "Comment deleted successfully",
+            duration: 2000,
+         });
          await refreshThreadData();
-      } catch {
-         setError("Error deleting comment");
+      } catch (error) {
+         console.error("Error deleting comment:", error);
+         addToast({
+            type: "error",
+            message: "Failed to delete comment",
+         });
       }
    }
 
    async function handleSaveCommentEdit(commentId) {
       if (!editingCommentText.trim()) return;
       try {
-         await authFetch(`${API_BASE_URL}/comments/${commentId}/`, {
+         await authFetch(apiUrl(`comments/${commentId}/`), {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ comment_text: editingCommentText }),
          });
+         addToast({
+            type: "success",
+            message: "Comment updated successfully",
+            duration: 2000,
+         });
          await refreshThreadData();
          setEditingCommentId(null);
          setEditingCommentText("");
-      } catch {
-         setError("Error editing comment");
+      } catch (error) {
+         console.error("Error editing comment:", error);
+         addToast({
+            type: "error",
+            message: "Failed to update comment",
+         });
       }
    }
 
@@ -337,19 +378,28 @@ function ThreadDetailPage() {
       const confirmed = window.confirm("Delete this evidence?");
       if (!confirmed) return;
       try {
-         await authFetch(`${API_BASE_URL}/evidence/${evidenceId}/`, {
+         await authFetch(apiUrl(`evidence/${evidenceId}/`), {
             method: "DELETE",
          });
+         addToast({
+            type: "success",
+            message: "Evidence deleted successfully",
+            duration: 2000,
+         });
          await refreshThreadData();
-      } catch {
-         setError("Error deleting evidence");
+      } catch (error) {
+         console.error("Error deleting evidence:", error);
+         addToast({
+            type: "error",
+            message: "Failed to delete evidence",
+         });
       }
    }
 
    async function handleSaveEvidenceEdit(evidenceId) {
       if (!editingEvidenceText.trim()) return;
       try {
-         await authFetch(`${API_BASE_URL}/evidence/${evidenceId}/`, {
+         await authFetch(apiUrl(`evidence/${evidenceId}/`), {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -357,12 +407,21 @@ function ThreadDetailPage() {
                evidence_verdict: editingEvidenceVerdict,
             }),
          });
+         addToast({
+            type: "success",
+            message: "Evidence updated successfully",
+            duration: 2000,
+         });
          await refreshThreadData();
          setEditingEvidenceId(null);
          setEditingEvidenceText("");
          setEditingEvidenceVerdict("UNVERIFIED");
-      } catch {
-         setError("Error editing evidence");
+      } catch (error) {
+         console.error("Error editing evidence:", error);
+         addToast({
+            type: "error",
+            message: "Failed to update evidence",
+         });
       }
    }
 
@@ -492,35 +551,76 @@ function ThreadDetailPage() {
 
                   {/* Right: verdict card */}
                   <div className="tdp-verdict-card">
-                     <VerdictBadge verdict={verdict} />
-                     <p className="tdp-verdict-desc">{vm.desc}</p>
-                     <div className="tdp-confidence">
-                        <div className="tdp-confidence-row">
-                           <span className="tdp-confidence-label">AI Confidence</span>
-                           <span
-                              className="tdp-confidence-value"
-                              style={{ color: vm.color }}>
-                              {thread.claim.consensus_score ?? "—"}%
-                           </span>
-                        </div>
-                        <div className="tdp-confidence-track">
-                           <div
-                              className="tdp-confidence-fill"
-                              style={{
-                                 width: `${thread.claim.consensus_score ?? 0}%`,
-                                 background: vm.color,
-                              }}
+                     {thread.claim?.has_moderator_verdict &&
+                     thread.claim?.moderator_verdict_info ? (
+                        // MODERATOR VERDICT VERSION
+                        <>
+                           <div style={{ marginBottom: "12px" }}>
+                              <span
+                                 style={{
+                                    fontSize: "11px",
+                                    fontWeight: "600",
+                                    color: "#6b7280",
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.05em",
+                                 }}>
+                                 ✓ Final Verdict (Moderator-Verified)
+                              </span>
+                           </div>
+                           <VerdictBadge
+                              verdict={thread.claim.moderator_verdict_info.verdict.toLowerCase()}
                            />
-                        </div>
-                     </div>
-                     <div className="tdp-evidence-count-row">
-                        <span className="tdp-confidence-label">Evidence submissions</span>
-                        <span
-                           className="tdp-evidence-count-val"
-                           style={{ color: vm.color }}>
-                           {evidenceList.length}
-                        </span>
-                     </div>
+                           <p className="tdp-verdict-desc">
+                              {VERDICT_META[
+                                 thread.claim.moderator_verdict_info.verdict.toLowerCase()
+                              ]?.desc || "Moderators have reviewed the evidence."}
+                           </p>
+                           <div className="tdp-evidence-count-row">
+                              <span className="tdp-confidence-label">Verified Evidence</span>
+                              <span
+                                 className="tdp-evidence-count-val"
+                                 style={{ color: "#10b981" }}>
+                                 {thread.claim.moderator_verdict_info.verified_evidence_count} item
+                                 {thread.claim.moderator_verdict_info.verified_evidence_count !== 1
+                                    ? "s"
+                                    : ""}
+                              </span>
+                           </div>
+                        </>
+                     ) : (
+                        // AI VERDICT VERSION (fallback)
+                        <>
+                           <VerdictBadge verdict={verdict} />
+                           <p className="tdp-verdict-desc">{vm.desc}</p>
+                           <div className="tdp-confidence">
+                              <div className="tdp-confidence-row">
+                                 <span className="tdp-confidence-label">AI Confidence</span>
+                                 <span
+                                    className="tdp-confidence-value"
+                                    style={{ color: vm.color }}>
+                                    {thread.claim.consensus_score ?? "—"}%
+                                 </span>
+                              </div>
+                              <div className="tdp-confidence-track">
+                                 <div
+                                    className="tdp-confidence-fill"
+                                    style={{
+                                       width: `${thread.claim.consensus_score ?? 0}%`,
+                                       background: vm.color,
+                                    }}
+                                 />
+                              </div>
+                           </div>
+                           <div className="tdp-evidence-count-row">
+                              <span className="tdp-confidence-label">Evidence submissions</span>
+                              <span
+                                 className="tdp-evidence-count-val"
+                                 style={{ color: vm.color }}>
+                                 {evidenceList.length}
+                              </span>
+                           </div>
+                        </>
+                     )}
                   </div>
                </div>
             </div>
