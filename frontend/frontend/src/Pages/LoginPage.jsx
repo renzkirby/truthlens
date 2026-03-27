@@ -17,7 +17,7 @@
  *   - Error handling for failed logins
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import LogoImage from "../assets/truthlens_logo.png";
@@ -30,21 +30,32 @@ import { useEndpoint } from "../utils/api";
 import "./LoginPage.css";
 
 function LoginPage() {
-   const { login } = useAuth();
+   const { login, user, loading } = useAuth();
    const navigate = useNavigate();
    const location = useLocation();
    const [showPassword, setShowPassword] = useState(false);
    const [isSigningIn, setIsSigningIn] = useState(false);
+   const [justLoggedIn, setJustLoggedIn] = useState(false);
 
    const from = location.state?.from
       ? location.state.from.pathname + location.state.from.search
-      : "/community";
+      : null;
+
    const [error, setError] = useState(null);
    const [formValues, setFormValues] = useState({
       username: "",
       password: "",
       remember_me: false,
    });
+
+   // When user data loads after login, redirect to appropriate dashboard
+   useEffect(() => {
+      if (justLoggedIn && user && !loading) {
+         setJustLoggedIn(false);
+         const destination = from || (user.role === "MODERATOR" ? "/moderation" : "/dashboard");
+         navigate(destination, { replace: true });
+      }
+   }, [user, loading, justLoggedIn, from, navigate]);
 
    const handleInputChange = (event) => {
       const { name, value } = event.target;
@@ -84,9 +95,8 @@ function LoginPage() {
 
       const data = await response.json();
       if (response.ok) {
-         setIsSigningIn(false);
          login(data.access, data.refresh);
-         navigate(from, { replace: true });
+         setJustLoggedIn(true); // Flag that we're waiting for user data to load
       } else {
          setIsSigningIn(false);
          setError(data.detail || "Something went wrong");

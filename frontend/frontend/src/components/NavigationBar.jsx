@@ -122,7 +122,11 @@ function NavigationBar() {
                   aria-haspopup="menu"
                   aria-expanded={isOpen}>
                   <div className="user-icon-sm">
-                     <Icons name="user" />
+                     {user?.role === "MODERATOR" ? (
+                        <Icons name="shield-user" />
+                     ) : (
+                        <Icons name="user" />
+                     )}
                   </div>
                   <span className="username">@{user?.username}</span>
                   <span

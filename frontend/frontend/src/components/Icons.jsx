@@ -83,9 +83,13 @@ import {
    CirclePlus,
    EyeOff,
    LogOut,
+   AlertCircle,
+   ShieldUser,
 } from "lucide-react";
 
 const ICON_MAP = {
+   "shield-user": ShieldUser,
+   "alert-circle": AlertCircle,
    logout: LogOut,
    "eye-off": EyeOff,
    search: Search,
