@@ -254,7 +254,8 @@ function CommunityFeed() {
                                  <div className="ai-info">
                                     <div
                                        className={`status-badge solid badge-${thread.claim.moderator_verdict_info.verdict.toLowerCase()}`}>
-                                       <Icons name="check-circle" />✓ Verified
+                                       <Icons name="check-circle" />
+                                       Verified
                                     </div>
                                     <span className="ai-confidence-text">
                                        Final Verdict:{" "}

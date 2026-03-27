@@ -51,13 +51,9 @@ class ClaimSerializer(serializers.ModelSerializer):
         return obj.final_verdict or obj.verdict or obj.ai_verdict
     
     def get_has_moderator_verdict(self, obj):
-        """Check if there are any verified/rejected evidence for this claim"""
-        from .models import EvidenceSubmission
-        verified_exists = EvidenceSubmission.objects.filter(
-            thread__claim=obj,
-            evidence_status__in=['VERIFIED', 'REJECTED']
-        ).exists()
-        return verified_exists
+        """Check if moderators have set a final verdict on this claim"""
+        # Direct check: final_verdict is only set when moderators have verified evidence
+        return bool(obj.final_verdict)
     
     def get_verified_evidence_count(self, obj):
         """Get count of verified evidence for this claim"""
