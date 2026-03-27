@@ -188,6 +188,7 @@ function ThreadDetailPage() {
    const [editingEvidenceId, setEditingEvidenceId] = useState(null);
    const [editingEvidenceText, setEditingEvidenceText] = useState("");
    const [editingEvidenceVerdict, setEditingEvidenceVerdict] = useState("UNVERIFIED");
+   const [reporting, setReporting] = useState(false);
    const tabsSectionRef = useRef(null);
    const didAutoScrollRef = useRef(false);
 
@@ -423,6 +424,56 @@ function ThreadDetailPage() {
             type: "error",
             message: "Failed to update evidence",
          });
+      }
+   }
+
+   async function handleReportThread() {
+      if (!thread?.id || reporting) return;
+
+      const reasonInput = window
+         .prompt("Report reason (INAPPROPRIATE, SPAM, HARASSMENT, OTHER)", "OTHER")
+         ?.trim()
+         .toUpperCase();
+
+      if (!reasonInput) return;
+
+      const allowedReasons = new Set(["INAPPROPRIATE", "SPAM", "HARASSMENT", "OTHER"]);
+      if (!allowedReasons.has(reasonInput)) {
+         addToast({
+            type: "error",
+            message: "Invalid reason. Use INAPPROPRIATE, SPAM, HARASSMENT, or OTHER.",
+         });
+         return;
+      }
+
+      const notesInput = window.prompt("Additional notes (optional)", "") || "";
+
+      setReporting(true);
+      try {
+         await authFetch(apiUrl("thread-flags/"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+               thread_id: thread.id,
+               reason: reasonInput,
+               notes: notesInput.trim(),
+            }),
+         });
+
+         addToast({
+            type: "success",
+            message: "Thread reported. Moderators have been notified.",
+            duration: 2500,
+         });
+
+         await refreshThreadData();
+      } catch (reportError) {
+         addToast({
+            type: "error",
+            message: reportError?.message || "Failed to report thread.",
+         });
+      } finally {
+         setReporting(false);
       }
    }
 
@@ -1269,14 +1320,17 @@ function ThreadDetailPage() {
 
                   {/* Report / Share */}
                   <div className="tdp-sidebar-actions">
-                     <button className="tdp-report-btn">
+                     <button
+                        className="tdp-report-btn"
+                        onClick={handleReportThread}
+                        disabled={reporting}>
                         <Icons
                            name="flag"
                            size={13}
                            color="#e02424"
                            strokeWidth={2.5}
                         />
-                        Report
+                        {reporting ? "Reporting..." : "Report"}
                      </button>
                      <button className="tdp-share-btn">
                         <Icons
