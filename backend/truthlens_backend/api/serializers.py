@@ -1,6 +1,7 @@
 ﻿from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import Claim, Thread, UserProfile, EvidenceSubmission, Vote, ThreadComment, ThreadFlag
+from .services import validate_public_url, check_url_threat_reputation
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
@@ -33,16 +34,45 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    trust_score = serializers.FloatField(read_only=True)
+    role = serializers.CharField(read_only=True)
     class Meta:
         model = UserProfile
         fields = ["id", "user", "trust_score", "bio", "is_email_verified", "role"]
+        read_only_fields = ["id", "user", "trust_score", "is_email_verified", "role"]
 
 
 class ClaimSerializer(serializers.ModelSerializer):
     effective_verdict = serializers.SerializerMethodField()
+    has_moderator_verdict = serializers.SerializerMethodField()
+    verified_evidence_count = serializers.SerializerMethodField()
+    moderator_verdict_info = serializers.SerializerMethodField()
 
     def get_effective_verdict(self, obj):
         return obj.final_verdict or obj.verdict or obj.ai_verdict
+    
+    def get_has_moderator_verdict(self, obj):
+        """Check if moderators have set a final verdict on this claim"""
+        # Direct check: final_verdict is only set when moderators have verified evidence
+        return bool(obj.final_verdict)
+    
+    def get_verified_evidence_count(self, obj):
+        """Get count of verified evidence for this claim"""
+        from .models import EvidenceSubmission
+        return EvidenceSubmission.objects.filter(
+            thread__claim=obj,
+            evidence_status='VERIFIED'
+        ).count()
+    
+    def get_moderator_verdict_info(self, obj):
+        """Return moderator verdict status and supporting evidence"""
+        if obj.final_verdict:
+            return {
+                "verdict": obj.final_verdict,
+                "source": "MODERATORS",
+                "verified_evidence_count": self.get_verified_evidence_count(obj)
+            }
+        return None
 
     class Meta:
         model = Claim
@@ -60,6 +90,9 @@ class ClaimSerializer(serializers.ModelSerializer):
             "verified_via",
             "source_link",
             "media_url",
+            "has_moderator_verdict",
+            "verified_evidence_count",
+            "moderator_verdict_info",
             "last_updated",
         ]
 
@@ -166,13 +199,49 @@ class ThreadCommentSerializer(serializers.ModelSerializer):
 
 class EvidenceSubmissionSerializer(serializers.ModelSerializer):
     contributor = UserSerializer(read_only=True)
+    verified_by = UserSerializer(read_only=True)  # Serialize moderator who verified it
     thread_id = serializers.UUIDField(write_only=True)
+    # Include full thread and claim for moderation context
+    thread = serializers.SerializerMethodField(read_only=True)
+
+    def get_thread(self, obj):
+        """Return full thread with nested claim for moderation queue display."""
+        if obj.thread:
+            return {
+                "id": str(obj.thread.id),
+                "caption": obj.thread.caption,
+                "status": obj.thread.status,
+                "created_at": obj.thread.created_at,
+                "claim": {
+                    "id": str(obj.thread.claim.id),
+                    "context_text": obj.thread.claim.context_text,
+                    "verdict": obj.thread.claim.verdict,
+                } if obj.thread.claim else None,
+            }
+        return None
+
+    def validate_evidence_url(self, value):
+        if value in (None, ""):
+            return value
+
+        safe_url, url_error = validate_public_url(value)
+        if url_error:
+            raise serializers.ValidationError(url_error)
+
+        url_safety = check_url_threat_reputation(safe_url)
+        if url_safety.get("status") == "UNSAFE":
+            raise serializers.ValidationError(
+                "This evidence URL is flagged as unsafe and cannot be submitted."
+            )
+
+        return safe_url
 
     class Meta:
         model = EvidenceSubmission
         fields = [
             "id",
             "thread_id",
+            "thread",
             "contributor",
             "evidence_caption",
             "evidence_url",
@@ -193,6 +262,7 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
             "verified_by",
             "verified_at",
             "moderator_notes",
+            "thread",
         ]
 
     def validate(self, attrs):

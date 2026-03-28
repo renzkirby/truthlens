@@ -5,6 +5,7 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
    const [token, setToken] = useState(localStorage.getItem("access") || null);
    const [user, setUser] = useState(null);
+   const [loading, setLoading] = useState(!!localStorage.getItem("access")); // Loading if we have a saved token
 
    const login = (access, refresh) => {
       localStorage.setItem("access", access);
@@ -18,6 +19,7 @@ export function AuthProvider({ children }) {
       localStorage.removeItem("refresh");
       setToken(null);
       setUser(null);
+      setLoading(false);
    };
 
    const authFetch = async (url, options = {}, accessToken = null) => {
@@ -69,22 +71,32 @@ export function AuthProvider({ children }) {
    };
 
    const fetchUser = async (accessToken) => {
-      const response = await fetch("http://localhost:8000/api/auth/me/", {
-         headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      const data = await response.json();
-      setUser(data);
+      try {
+         const response = await fetch("http://localhost:8000/api/auth/me/", {
+            headers: { Authorization: `Bearer ${accessToken}` },
+         });
+         const data = await response.json();
+         setUser(data);
+         return data; // Return user data so caller can use it
+      } catch (error) {
+         console.error("Failed to fetch user:", error);
+         return null;
+      } finally {
+         setLoading(false);
+      }
    };
 
    useEffect(() => {
       const savedToken = localStorage.getItem("access");
       if (savedToken) {
          fetchUser(savedToken);
+      } else {
+         setLoading(false);
       }
    }, []);
 
    return (
-      <AuthContext.Provider value={{ token, login, logout, authFetch, user }}>
+      <AuthContext.Provider value={{ token, login, logout, authFetch, user, loading }}>
          {children}
       </AuthContext.Provider>
    );

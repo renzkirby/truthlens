@@ -25,6 +25,7 @@ export const VERDICT_CONFIG = {
       border: "var(--verdict-fact-border)",
       label: "Fact",
       desc: "This claim has been confirmed by trusted sources.",
+      icon: "check-circle",
    },
    FAKE: {
       color: "var(--verdict-fake-text)",
@@ -32,6 +33,7 @@ export const VERDICT_CONFIG = {
       border: "var(--verdict-fake-border)",
       label: "Fake",
       desc: "This claim has been debunked.",
+      icon: "x-circle",
    },
    MISLEADING: {
       color: "var(--verdict-misleading-text)",
@@ -39,6 +41,7 @@ export const VERDICT_CONFIG = {
       border: "var(--verdict-misleading-border)",
       label: "Misleading",
       desc: "This claim contains partial truths but lacks context.",
+      icon: "alert-triangle",
    },
    SATIRE: {
       color: "var(--verdict-satire-text)",
@@ -46,6 +49,7 @@ export const VERDICT_CONFIG = {
       border: "var(--verdict-satire-border)",
       label: "Satire",
       desc: "This is satire or parody content.",
+      icon: "wand",
    },
    UNVERIFIED: {
       color: "var(--verdict-unverified-text)",
@@ -53,6 +57,7 @@ export const VERDICT_CONFIG = {
       border: "var(--verdict-unverified-border)",
       label: "Unverified",
       desc: "Insufficient evidence to confirm or deny.",
+      icon: "help-circle",
    },
    PENDING: {
       color: "var(--text-muted)",
@@ -60,6 +65,7 @@ export const VERDICT_CONFIG = {
       border: "var(--border-default)",
       label: "Pending",
       desc: "Analysis in progress...",
+      icon: "clock",
    },
 };
 

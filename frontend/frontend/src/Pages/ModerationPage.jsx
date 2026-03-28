@@ -6,6 +6,7 @@ import Icons from "../components/Icons.jsx";
 import SafetyReviewTab from "../components/moderation/SafetyReviewTab";
 import VerdictReviewTab from "../components/moderation/VerdictReviewTab";
 import ModerationSidebar from "../components/moderation/ModerationSidebar";
+import ModeratorPanel from "../components/moderation/ModeratorPanel";
 import { getEffectiveVerdict } from "../utils/verdict";
 import "./ModerationPage.css";
 
@@ -37,6 +38,13 @@ function ModerationPage() {
 
    const [decisionDrafts, setDecisionDrafts] = useState({});
    const [resolvingThreadId, setResolvingThreadId] = useState(null);
+   const [safetyActingThreadId, setSafetyActingThreadId] = useState(null);
+   const [safetyActionDialog, setSafetyActionDialog] = useState({
+      open: false,
+      threadId: null,
+      action: null,
+      notes: "",
+   });
 
    const loadSafetyQueue = async () => {
       try {
@@ -144,6 +152,84 @@ function ModerationPage() {
          setResolvingThreadId(null);
       }
    };
+
+   const handleSafetyAction = async (threadId, action) => {
+      const defaultNotes =
+         action === "REMOVE"
+            ? "Removed after safety review."
+            : action === "DISMISS"
+              ? "Reports reviewed and dismissed."
+              : "Escalated from safety queue for further review.";
+
+      setSafetyActionDialog({
+         open: true,
+         threadId,
+         action,
+         notes: defaultNotes,
+      });
+   };
+
+   const submitSafetyAction = async () => {
+      const threadId = safetyActionDialog.threadId;
+      const action = safetyActionDialog.action;
+      const notes = safetyActionDialog.notes || "";
+      if (!threadId || !action) return;
+
+      try {
+         setSafetyActingThreadId(threadId);
+         const updated = await authFetch(apiUrl(`moderation/threads/${threadId}/safety-action/`), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action, moderator_notes: notes }),
+         });
+
+         // Safety queue only contains flagged threads; action clears flags so it drops from this list.
+         setSafetyThreads((prev) => prev.filter((item) => item.id !== threadId));
+         // Keep verdict queue in sync with updated status/notes.
+         setVerdictThreads((prev) =>
+            prev.map((item) => (item.id === threadId ? { ...item, ...updated } : item)),
+         );
+         setSafetyActionDialog({ open: false, threadId: null, action: null, notes: "" });
+      } catch (error) {
+         setSafetyError(error?.message || "Unable to apply safety action.");
+      } finally {
+         setSafetyActingThreadId(null);
+      }
+   };
+
+   const safetyActionMeta = useMemo(() => {
+      const action = safetyActionDialog.action;
+      if (action === "REMOVE") {
+         return {
+            code: "REMOVE",
+            title: "Policy Action: REMOVE",
+            description:
+               "Permanently remove this thread from active circulation after confirming harmful or policy-violating content.",
+            cta: "Confirm Remove",
+            tone: "danger",
+         };
+      }
+
+      if (action === "ESCALATE") {
+         return {
+            code: "ESCALATE",
+            title: "Policy Action: ESCALATE",
+            description:
+               "Escalate this thread for deeper review when evidence is contested or needs senior moderation attention.",
+            cta: "Confirm Escalation",
+            tone: "warning",
+         };
+      }
+
+      return {
+         code: "DISMISS",
+         title: "Policy Action: DISMISS",
+         description:
+            "Dismiss the report after review when no policy violation is found and keep the thread visible.",
+         cta: "Confirm Dismissal",
+         tone: "neutral",
+      };
+   }, [safetyActionDialog.action]);
 
    const recentClaims = useMemo(() => {
       return [...claims]
@@ -262,6 +348,15 @@ function ModerationPage() {
                         />
                         Verdict Review
                      </button>
+                     <button
+                        className={`mod-tab-btn ${activeTab === "evidence" ? "active" : ""}`}
+                        onClick={() => setActiveTab("evidence")}>
+                        <Icons
+                           name="paperclip"
+                           size={14}
+                        />
+                        Evidence Review
+                     </button>
                   </div>
 
                   {activeTab === "safety" ? (
@@ -274,7 +369,13 @@ function ModerationPage() {
                         searchQuery={safetySearch}
                         onSearchChange={setSafetySearch}
                         onOpenThread={handleOpenThread}
+                        onSafetyAction={handleSafetyAction}
+                        actingThreadId={safetyActingThreadId}
                      />
+                  ) : activeTab === "evidence" ? (
+                     <div className="mod-evidence-tab-content">
+                        <ModeratorPanel onVerificationComplete={() => {}} />
+                     </div>
                   ) : (
                      <VerdictReviewTab
                         threads={verdictThreads}
@@ -295,6 +396,50 @@ function ModerationPage() {
 
                <ModerationSidebar recentClaims={claimsLoading || claimsError ? [] : recentClaims} />
             </div>
+
+            {safetyActionDialog.open && (
+               <div className="mod-dialog-overlay">
+                  <div className="mod-dialog">
+                     <div className={`mod-dialog-policy-chip ${safetyActionMeta.tone}`}>
+                        {safetyActionMeta.code}
+                     </div>
+                     <h3 className="mod-dialog-title">{safetyActionMeta.title}</h3>
+                     <p className="mod-dialog-text">{safetyActionMeta.description}</p>
+                     <label className="mod-dialog-label">Moderator notes</label>
+                     <textarea
+                        className="mod-dialog-textarea"
+                        rows={4}
+                        value={safetyActionDialog.notes}
+                        onChange={(e) =>
+                           setSafetyActionDialog((prev) => ({ ...prev, notes: e.target.value }))
+                        }
+                     />
+                     <div className="mod-dialog-actions">
+                        <button
+                           type="button"
+                           className="mod-dialog-btn secondary"
+                           disabled={Boolean(safetyActingThreadId)}
+                           onClick={() =>
+                              setSafetyActionDialog({
+                                 open: false,
+                                 threadId: null,
+                                 action: null,
+                                 notes: "",
+                              })
+                           }>
+                           Cancel
+                        </button>
+                        <button
+                           type="button"
+                           className={`mod-dialog-btn ${safetyActionMeta.tone}`}
+                           disabled={Boolean(safetyActingThreadId)}
+                           onClick={submitSafetyAction}>
+                           {safetyActingThreadId ? "Applying..." : safetyActionMeta.cta}
+                        </button>
+                     </div>
+                  </div>
+               </div>
+            )}
          </main>
       </div>
    );

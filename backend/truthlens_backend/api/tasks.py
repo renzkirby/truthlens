@@ -2,7 +2,7 @@ from celery import shared_task
 from tavily import TavilyClient
 import os
 import requests
-
+from django.contrib.auth.models import User
 from .ocr_service import extract_text_from_image
 from .services import (
     process_image,
@@ -16,7 +16,7 @@ from .services import (
     evaluate_url_claim_with_tavily,
     detect_ai_image,
 )
-from .models import Claim
+from .models import Claim, UserProfile
 
 # IMAGE PIPELINE
 @shared_task
@@ -141,7 +141,8 @@ def execute_core_text_pipeline(raw_text, claim_id):
             claim = Claim.objects.get(id=claim_id)
             claim.verdict = "UNVERIFIED"
             claim.ai_verdict = "UNVERIFIED"
-            claim.final_verdict = "UNVERIFIED"
+            # Keep moderator verdict channel empty until moderator or consensus sets it.
+            claim.final_verdict = None
             claim.ai_summary = "An error occurred during analysis."
             claim.save()
         except Claim.DoesNotExist:
@@ -250,16 +251,13 @@ def url_fact_check_process(url, claim_id):
 
 
 def _save_claim(claim_id, verdict, source_type, context_text, source_url=""):
-    """Save the final verdict back to the Claim record."""
+    """Save AI analysis output to the Claim record without setting final moderator verdict."""
     try:
         claim = Claim.objects.get(id=claim_id)
         ai_verdict_value = verdict.get("verdict")
         claim.ai_verdict = ai_verdict_value
-        # Keep final verdict independent for moderator overrides, but initialize it from AI once.
-        if not claim.final_verdict:
-            claim.final_verdict = ai_verdict_value
-        # Backward compatibility for existing UI/API consumers.
-        claim.verdict = claim.final_verdict
+        # Keep final_verdict reserved for moderator or verified-evidence consensus decisions.
+        claim.verdict = ai_verdict_value
         claim.ai_summary = verdict.get("summary")
         confidence = verdict.get("confidence_score", 0)
         if ai_verdict_value == "UNVERIFIED" and (confidence == 0 or confidence is None):
@@ -284,6 +282,14 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_url=""):
 def update_contributor_trust_score(contributor_id, evidence_status):
     """
     Update the contributor's trust score based on evidence verification decision.
+    
+    Args:
+        contributor_id: User ID of evidence contributor
+        evidence_status: "VERIFIED" or "REJECTED"
+        
+    Scoring:
+        VERIFIED -> +2 POINTS
+        REJECTED -> -1 POINT
     """
     try:
         user = User.objects.get(id=contributor_id)

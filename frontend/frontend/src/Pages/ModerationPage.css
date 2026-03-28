@@ -319,6 +319,7 @@
    margin: 0;
    display: -webkit-box;
    -webkit-line-clamp: 2;
+   line-clamp: 2;
    -webkit-box-orient: vertical;
    overflow: hidden;
    line-height: 1.4;
@@ -704,6 +705,7 @@
    margin: 0;
    display: -webkit-box;
    -webkit-line-clamp: 2;
+   line-clamp: 2;
    -webkit-box-orient: vertical;
    overflow: hidden;
 }
@@ -786,6 +788,180 @@
    margin: 12px 24px;
 }
 
+/* ── Evidence Tab Content ── */
+.mod-evidence-tab-content {
+   display: flex;
+   flex-direction: column;
+   gap: 16px;
+   flex: 1;
+}
+
+.mod-dialog-overlay {
+   position: fixed;
+   inset: 0;
+   z-index: 1200;
+   background: rgba(9, 15, 26, 0.45);
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   padding: 20px;
+}
+
+.mod-dialog {
+   width: min(560px, 100%);
+   background: var(--bg-surface);
+   border-radius: 14px;
+   border: 1px solid var(--border-default);
+   box-shadow: 0 18px 48px rgba(7, 18, 31, 0.24);
+   padding: 20px;
+   display: flex;
+   flex-direction: column;
+   gap: 12px;
+}
+
+.mod-dialog-title {
+   margin: 0;
+   font-size: 18px;
+   font-weight: 800;
+   color: var(--text-main);
+}
+
+.mod-dialog-policy-chip {
+   align-self: flex-start;
+   display: inline-flex;
+   align-items: center;
+   border-radius: 999px;
+   border: 1px solid;
+   padding: 4px 10px;
+   font-size: 11px;
+   font-weight: 800;
+   letter-spacing: 0.35px;
+}
+
+.mod-dialog-policy-chip.neutral {
+   background: var(--verdict-fact-bg);
+   border-color: var(--verdict-fact-border);
+   color: var(--verdict-fact-text);
+}
+
+.mod-dialog-policy-chip.warning {
+   background: var(--verdict-misleading-bg);
+   border-color: var(--verdict-misleading-border);
+   color: var(--verdict-misleading-text);
+}
+
+.mod-dialog-policy-chip.danger {
+   background: var(--verdict-fake-bg);
+   border-color: var(--verdict-fake-border);
+   color: var(--verdict-fake-text);
+}
+
+.mod-dialog-text {
+   margin: 0;
+   font-size: 13px;
+   color: var(--text-muted);
+   line-height: 1.5;
+}
+
+.mod-dialog-label {
+   font-size: 12px;
+   font-weight: 700;
+   color: var(--text-main);
+   text-transform: uppercase;
+   letter-spacing: 0.35px;
+}
+
+.mod-dialog-textarea {
+   width: 100%;
+   border: 1px solid var(--border-default);
+   border-radius: 10px;
+   padding: 10px 12px;
+   font-size: 13px;
+   color: var(--text-main);
+   font-family: 'Inter', sans-serif;
+   background: var(--bg-subtle);
+   resize: vertical;
+   outline: none;
+   box-sizing: border-box;
+   min-height: 96px;
+}
+
+.mod-dialog-textarea:focus {
+   border-color: var(--brand-primary);
+   background: var(--bg-surface);
+}
+
+.mod-dialog-actions {
+   display: flex;
+   justify-content: flex-end;
+   gap: 10px;
+}
+
+.mod-dialog-btn {
+   border-radius: 10px;
+   border: 1px solid transparent;
+   padding: 10px 16px;
+   font-size: 13px;
+   font-weight: 700;
+   font-family: 'Inter', sans-serif;
+   cursor: pointer;
+   transition: 0.18s ease;
+}
+
+.mod-dialog-btn.secondary {
+   background: var(--bg-subtle);
+   border-color: var(--border-default);
+   color: var(--text-main);
+}
+
+.mod-dialog-btn.secondary:hover:not(:disabled) {
+   border-color: var(--text-muted);
+}
+
+.mod-dialog-btn.primary {
+   background: var(--brand-primary);
+   color: var(--text-inverse);
+}
+
+.mod-dialog-btn.primary:hover:not(:disabled) {
+   opacity: 0.93;
+}
+
+.mod-dialog-btn.neutral {
+   background: var(--verdict-fact-bg);
+   border-color: var(--verdict-fact-border);
+   color: var(--verdict-fact-text);
+}
+
+.mod-dialog-btn.neutral:hover:not(:disabled) {
+   filter: brightness(0.98);
+}
+
+.mod-dialog-btn.warning {
+   background: var(--verdict-misleading-bg);
+   border-color: var(--verdict-misleading-border);
+   color: var(--verdict-misleading-text);
+}
+
+.mod-dialog-btn.warning:hover:not(:disabled) {
+   filter: brightness(0.98);
+}
+
+.mod-dialog-btn.danger {
+   background: var(--verdict-fake-bg);
+   border-color: var(--verdict-fake-border);
+   color: var(--verdict-fake-text);
+}
+
+.mod-dialog-btn.danger:hover:not(:disabled) {
+   filter: brightness(0.98);
+}
+
+.mod-dialog-btn:disabled {
+   cursor: not-allowed;
+   opacity: 0.65;
+}
+
 /* ── Responsive ── */
 @media (max-width: 1024px) {
    .mod-body {
@@ -822,5 +998,17 @@
    .mod-table-row-verdict {
       grid-template-columns: 1fr;
       gap: 8px;
+   }
+
+   .mod-dialog {
+      padding: 16px;
+   }
+
+   .mod-dialog-actions {
+      flex-direction: column-reverse;
+   }
+
+   .mod-dialog-btn {
+      width: 100%;
    }
 }

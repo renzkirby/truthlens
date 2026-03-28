@@ -2,6 +2,8 @@ from groq import Groq
 import os
 import json
 import re
+from urllib.parse import urlparse
+import ipaddress
 import imagehash
 import uuid
 import base64
@@ -17,6 +19,109 @@ def _parse_groq_json(raw_content):
     """Strip markdown formatting and parse JSON from Groq responses."""
     cleaned = raw_content.strip().replace("```json", "").replace("```", "").strip()
     return json.loads(cleaned)
+
+
+def validate_public_url(raw_url):
+    """Allow only public http(s) URLs to reduce unsafe URL processing risk."""
+    if not raw_url or not isinstance(raw_url, str):
+        return None, "URL is required."
+
+    candidate = raw_url.strip()
+    if len(candidate) > 500:
+        return None, "URL is too long."
+
+    parsed = urlparse(candidate)
+    scheme = (parsed.scheme or "").lower()
+    host = (parsed.hostname or "").lower()
+
+    if scheme not in {"http", "https"}:
+        return None, "Only http/https URLs are allowed."
+    if not host:
+        return None, "Invalid URL format."
+
+    if host in {"localhost", "127.0.0.1", "::1"}:
+        return None, "Local URLs are not allowed."
+    if host.endswith(".local") or host.endswith(".internal") or host.endswith(".localhost"):
+        return None, "Private network URLs are not allowed."
+
+    try:
+        ip = ipaddress.ip_address(host)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
+            return None, "Private network URLs are not allowed."
+    except ValueError:
+        # Host is a domain name, which is allowed.
+        pass
+
+    sanitized = parsed._replace(fragment="").geturl()
+    return sanitized, None
+
+
+def check_url_threat_reputation(candidate_url):
+    """
+    Reputation-style URL threat check using Google Safe Browsing API.
+
+    Returns a dict with status in: SAFE, UNSAFE, UNKNOWN.
+    """
+    api_key = os.environ.get("SAFE_BROWSING_API_KEY")
+    if not api_key:
+        return {
+            "status": "UNKNOWN",
+            "provider": "GOOGLE_SAFE_BROWSING",
+            "reason": "SAFE_BROWSING_API_KEY not configured",
+        }
+
+    endpoint = f"https://safebrowsing.googleapis.com/v4/threatMatches:find?key={api_key}"
+    payload = {
+        "client": {"clientId": "truthlens", "clientVersion": "1.0.0"},
+        "threatInfo": {
+            "threatTypes": [
+                "MALWARE",
+                "SOCIAL_ENGINEERING",
+                "UNWANTED_SOFTWARE",
+                "POTENTIALLY_HARMFUL_APPLICATION",
+            ],
+            "platformTypes": ["ANY_PLATFORM"],
+            "threatEntryTypes": ["URL"],
+            "threatEntries": [{"url": candidate_url}],
+        },
+    }
+
+    try:
+        response = requests.post(endpoint, json=payload, timeout=6)
+        if response.status_code != 200:
+            return {
+                "status": "UNKNOWN",
+                "provider": "GOOGLE_SAFE_BROWSING",
+                "reason": f"provider_error_{response.status_code}",
+            }
+
+        data = response.json() if response.content else {}
+        matches = data.get("matches", [])
+        if matches:
+            threat_types = sorted(
+                {
+                    match.get("threatType")
+                    for match in matches
+                    if isinstance(match, dict) and match.get("threatType")
+                }
+            )
+            return {
+                "status": "UNSAFE",
+                "provider": "GOOGLE_SAFE_BROWSING",
+                "threat_types": threat_types,
+            }
+
+        return {
+            "status": "SAFE",
+            "provider": "GOOGLE_SAFE_BROWSING",
+            "threat_types": [],
+        }
+    except requests.RequestException:
+        return {
+            "status": "UNKNOWN",
+            "provider": "GOOGLE_SAFE_BROWSING",
+            "reason": "provider_unreachable",
+        }
  
 
 # IMAGE PIPELINE
