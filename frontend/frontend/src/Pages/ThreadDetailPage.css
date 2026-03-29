@@ -1790,6 +1790,12 @@
     border-radius: 99px;
 }
 
+.tdp-trust-impact {
+    margin-top: 4px;
+    font-size: 11px;
+    color: #6b7280;
+}
+
 .tdp-full-breakdown {
     display: flex;
     align-items: center;
@@ -1806,6 +1812,13 @@
 
 .tdp-full-breakdown:hover {
     text-decoration: underline;
+}
+
+.tdp-trust-breakdown-meta {
+    margin-top: 8px;
+    font-size: 11px;
+    color: #6b7280;
+    line-height: 1.5;
 }
 
 /* Related claims */

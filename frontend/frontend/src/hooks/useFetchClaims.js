@@ -32,6 +32,12 @@ function useFetchClaims(authFetch, claimType = "claims") {
    const [loading, setLoading] = useState(true);
    const [error, setError] = useState(null);
 
+   const normalizeClaimResponse = (payload) => {
+      if (Array.isArray(payload)) return payload;
+      if (payload && Array.isArray(payload.results)) return payload.results;
+      return [];
+   };
+
    // ── Determine endpoint based on claimType ──
    const getEndpointUrl = () => {
       if (claimType === "my-claims") {
@@ -49,7 +55,7 @@ function useFetchClaims(authFetch, claimType = "claims") {
          const url = getEndpointUrl();
          const data = await authFetch(url, { method: "GET" });
 
-         setClaims(data || []);
+         setClaims(normalizeClaimResponse(data));
       } catch (err) {
          console.error(`Failed to fetch ${claimType}:`, err);
          setError(`Failed to load ${claimType}`);

@@ -531,8 +531,9 @@ function ThreadDetailPage() {
    }
 
    //Weight display
-   const trustScore = user?.trust_score ?? 0;
+   const trustScore = Number(user?.trust_breakdown?.trust_score ?? user?.trust_score ?? 0);
    const weight = (1 + trustScore / 100).toFixed(1);
+   const authorTrustBreakdown = thread?.author?.trust_breakdown || {};
 
    if (loading) {
       return (
@@ -1275,7 +1276,7 @@ function ThreadDetailPage() {
                            <div className="tdp-posted-by-name">
                               {thread.author?.username || "Unknown"}
                            </div>
-                           {thread.flagged_by?.is_trusted_contributor && (
+                           {thread.author?.trust_score >= 80 && (
                               <div className="tdp-trusted-label">
                                  <Icons
                                     name="badge-check"
@@ -1286,57 +1287,66 @@ function ThreadDetailPage() {
                               </div>
                            )}
                         </div>
-                        <TrustGauge score={thread.flagged_by?.trust_score ?? 0} />
+                        <TrustGauge score={thread.author?.trust_score ?? 0} />
                      </div>
                      <div className="tdp-poster-stats">
                         <div className="tdp-poster-stat">
                            <span className="tdp-stat-val">
-                              {thread.flagged_by?.total_scans ?? "—"}
+                              {thread.author?.trust_score?.toFixed(1) || "0.0"}
                            </span>
-                           <span className="tdp-stat-lbl">Scans</span>
+                           <span className="tdp-stat-lbl">Trust</span>
                         </div>
                         <div className="tdp-poster-stat">
-                           <span className="tdp-stat-val">
-                              {thread.flagged_by?.total_evidence ?? "—"}
-                           </span>
+                           <span className="tdp-stat-val">{thread.evidence_count ?? 0}</span>
                            <span className="tdp-stat-lbl">Evidence</span>
                         </div>
                         <div className="tdp-poster-stat">
-                           <span className="tdp-stat-val">
-                              {thread.flagged_by?.accuracy_percentage != null
-                                 ? `${thread.flagged_by.accuracy_percentage}%`
-                                 : "—"}
-                           </span>
-                           <span className="tdp-stat-lbl">Accuracy</span>
+                           <span className="tdp-stat-val">{thread.comment_count ?? 0}</span>
+                           <span className="tdp-stat-lbl">Comments</span>
                         </div>
                      </div>
                   </div>
 
-                  {/* Community Trust Score */}
+                  {/* Author Trust Score */}
                   <div className="tdp-sidebar-card">
-                     <div className="tdp-sidebar-card-label">COMMUNITY TRUST SCORE</div>
+                     <div className="tdp-sidebar-card-label">AUTHOR TRUST SCORE BREAKDOWN</div>
                      {[
                         {
-                           label: "Accuracy Rate",
-                           score: thread.flagged_by?.accuracy_rate ?? 0,
+                           label: "Base Score",
+                           score: authorTrustBreakdown.base_score ?? 50,
+                           share: authorTrustBreakdown.base_share_pct ?? 0,
+                           max: 50,
+                           color: "#4f46e5",
+                        },
+                        {
+                           label: "Contribution Accuracy",
+                           score: authorTrustBreakdown.contribution_points ?? 0,
+                           share: authorTrustBreakdown.contribution_share_pct ?? 0,
+                           max: 30,
                            color: "#0e9f6e",
                         },
                         {
-                           label: "Evidence Quality",
-                           score: thread.flagged_by?.evidence_quality ?? 0,
-                           color: "#d97706",
-                        },
-                        {
                            label: "Vote Balance",
-                           score: thread.flagged_by?.vote_balance ?? 0,
+                           score: authorTrustBreakdown.vote_points ?? 0,
+                           share: authorTrustBreakdown.vote_share_pct ?? 0,
+                           max: 15,
                            color: "#d97706",
                         },
                         {
                            label: "Tenure Bonus",
-                           score: thread.flagged_by?.tenure_bonus ?? 0,
+                           score: authorTrustBreakdown.tenure_points ?? 0,
+                           share: authorTrustBreakdown.tenure_share_pct ?? 0,
+                           max: 5,
                            color: "#4f46e5",
                         },
-                     ].map(({ label, score, color }) => (
+                        {
+                           label: "Conduct Penalties",
+                           score: authorTrustBreakdown.penalties ?? 0,
+                           share: authorTrustBreakdown.penalties_share_pct ?? 0,
+                           max: 30,
+                           color: "#dc2626",
+                        },
+                     ].map(({ label, score, share, max, color }) => (
                         <div
                            key={label}
                            className="tdp-trust-row">
@@ -1345,18 +1355,30 @@ function ThreadDetailPage() {
                               <span
                                  className="tdp-trust-row-val"
                                  style={{ color }}>
-                                 {score}
+                                 {Number(share || 0).toFixed(1)}%
                               </span>
                            </div>
                            <div className="tdp-trust-track">
                               <div
                                  className="tdp-trust-fill"
-                                 style={{ width: `${score}%`, background: color }}
+                                 style={{
+                                    width: `${Math.max(0, Math.min(100, Number(share || 0)))}%`,
+                                    background: color,
+                                 }}
                               />
+                           </div>
+                           <div className="tdp-trust-impact">
+                              Impact: {label === "Conduct Penalties" ? "-" : "+"}
+                              {Math.abs(Number(score || 0)).toFixed(1)} pts
                            </div>
                         </div>
                      ))}
-                     <button className="tdp-full-breakdown">Full breakdown</button>
+                     <div className="tdp-trust-breakdown-meta">
+                        Accuracy:{" "}
+                        {Math.round((authorTrustBreakdown.contribution_accuracy_rate || 0) * 100)}%
+                        | Net votes: {authorTrustBreakdown.net_votes ?? 0} | Months:{" "}
+                        {authorTrustBreakdown.months_active ?? 0}
+                     </div>
                   </div>
 
                   {/* Related claims */}

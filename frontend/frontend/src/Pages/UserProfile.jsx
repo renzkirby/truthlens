@@ -15,7 +15,7 @@
  *   - Centralized constants
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import NavigationBar from "../components/NavigationBar.jsx";
 
@@ -74,7 +74,7 @@ function timeAgo(dateStr) {
  * Shows user identity, reputation, and contribution history
  */
 function UserProfile() {
-   const { user, authFetch } = useAuth();
+   const { user, authFetch, refreshUser } = useAuth();
    const [activeTab, setActiveTab] = useState("scans");
 
    // ── Data Fetching ──
@@ -88,7 +88,50 @@ function UserProfile() {
    const accuracyRate =
       totalScans > 0 ? Math.round(((fakesStopped + verifiedClaims) / totalScans) * 100) : 0;
 
-   const trustLevel = getTrustLevel(user?.trust_score || 0);
+   const trustBreakdown = user?.trust_breakdown || {};
+   const displayTrustScore = Number(trustBreakdown.trust_score ?? user?.trust_score ?? 0);
+   const trustLevel = getTrustLevel(displayTrustScore);
+   const breakdownRows = [
+      {
+         label: "Base Score",
+         value: trustBreakdown.base_score ?? 50,
+         share: trustBreakdown.base_share_pct ?? 0,
+         max: 50,
+         color: "#4f46e5",
+      },
+      {
+         label: "Contribution Accuracy",
+         value: trustBreakdown.contribution_points ?? 0,
+         share: trustBreakdown.contribution_share_pct ?? 0,
+         max: 30,
+         color: "#0e9f6e",
+      },
+      {
+         label: "Vote Balance",
+         value: trustBreakdown.vote_points ?? 0,
+         share: trustBreakdown.vote_share_pct ?? 0,
+         max: 15,
+         color: "#d97706",
+      },
+      {
+         label: "Tenure Bonus",
+         value: trustBreakdown.tenure_points ?? 0,
+         share: trustBreakdown.tenure_share_pct ?? 0,
+         max: 5,
+         color: "#2563eb",
+      },
+      {
+         label: "Conduct Penalties",
+         value: trustBreakdown.penalties ?? 0,
+         share: trustBreakdown.penalties_share_pct ?? 0,
+         max: 30,
+         color: "#dc2626",
+      },
+   ];
+
+   useEffect(() => {
+      refreshUser?.();
+   }, []);
 
    return (
       <div className="profile-layout">
@@ -120,12 +163,12 @@ function UserProfile() {
                <div className="stats-grid">
                   <div className="stat-card">
                      <p className="stat-label">Trust Score</p>
-                     <p className="stat-value">{user?.trust_score?.toFixed(1) || "0.0"}</p>
+                     <p className="stat-value">{displayTrustScore.toFixed(1)}</p>
                      <div className="trust-bar-track">
                         <div
                            className="trust-bar-fill"
                            style={{
-                              width: `${Math.min(user?.trust_score || 0, 100)}%`,
+                              width: `${Math.min(displayTrustScore, 100)}%`,
                               backgroundColor: trustLevel.color,
                            }}
                         />
@@ -150,6 +193,47 @@ function UserProfile() {
                      <p className="stat-value">{totalScans}</p>
                      <p className="stat-sublabel">claims analyzed</p>
                   </div>
+               </div>
+
+               <div className="trust-breakdown-card">
+                  <div className="trust-breakdown-header">
+                     <h3 className="trust-breakdown-title">Trust Score Breakdown</h3>
+                     <span className="trust-breakdown-formula">T = B + C + V + t - P</span>
+                  </div>
+                  <div className="trust-breakdown-list">
+                     {breakdownRows.map((row) => {
+                        const width = Math.max(0, Math.min(100, Number(row.share || 0)));
+                        return (
+                           <div
+                              className="trust-breakdown-row"
+                              key={row.label}>
+                              <div className="trust-breakdown-row-top">
+                                 <span className="trust-breakdown-row-label">{row.label}</span>
+                                 <span
+                                    className="trust-breakdown-row-value"
+                                    style={{ color: row.color }}>
+                                    {width.toFixed(1)}%
+                                 </span>
+                              </div>
+                              <div className="trust-breakdown-track">
+                                 <div
+                                    className="trust-breakdown-fill"
+                                    style={{ width: `${width}%`, backgroundColor: row.color }}
+                                 />
+                              </div>
+                              <p className="trust-breakdown-impact">
+                                 Impact: {row.label === "Conduct Penalties" ? "-" : "+"}
+                                 {Math.abs(Number(row.value || 0)).toFixed(1)} pts
+                              </p>
+                           </div>
+                        );
+                     })}
+                  </div>
+                  <p className="trust-breakdown-meta">
+                     Accuracy: {Math.round((trustBreakdown.contribution_accuracy_rate || 0) * 100)}%
+                     | Net votes: {trustBreakdown.net_votes ?? 0} | Months active:{" "}
+                     {trustBreakdown.months_active ?? 0}
+                  </p>
                </div>
             </div>
 

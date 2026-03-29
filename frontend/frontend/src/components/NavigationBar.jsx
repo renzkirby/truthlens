@@ -53,7 +53,8 @@ function NavigationBar() {
       if (score >= 45) return "#d97706";
       return "#e02424";
    }
-   const color = trustColor(user?.trust_score ?? 0);
+   const displayTrustScore = Number(user?.trust_breakdown?.trust_score ?? user?.trust_score ?? 0);
+   const color = trustColor(displayTrustScore);
 
    return (
       <nav className="top-navbar">
@@ -132,7 +133,7 @@ function NavigationBar() {
                   <span
                      className="trust-score"
                      style={{ color, borderColor: `${color}99`, background: `${color}75` }}>
-                     {user?.trust_score}
+                     {displayTrustScore.toFixed(1)}
                   </span>
                   <span className={`chevron ${isOpen ? "rotated" : ""}`}>
                      <Icons

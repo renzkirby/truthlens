@@ -14,6 +14,7 @@
  *   - Centralized constants for verdict configurations
  */
 
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import NavigationBar from "../components/NavigationBar.jsx";
@@ -34,9 +35,12 @@ import "./Dashboard.css";
  * Shows user overview with metrics, recent activity, trending claims
  */
 function Dashboard() {
-   const { user } = useAuth();
-   const { authFetch } = useAuth();
+   const { user, authFetch, refreshUser } = useAuth();
    const navigate = useNavigate();
+
+   useEffect(() => {
+      refreshUser?.();
+   }, []);
 
    // ── Data Fetching ──
    // Use custom hooks to eliminate boilerplate fetch logic

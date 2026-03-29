@@ -31,6 +31,12 @@ function useFetchThreads(authFetch) {
    const [loading, setLoading] = useState(true);
    const [error, setError] = useState(null);
 
+   const normalizeThreadResponse = (payload) => {
+      if (Array.isArray(payload)) return payload;
+      if (payload && Array.isArray(payload.results)) return payload.results;
+      return [];
+   };
+
    // ── Fetch threads from API ──
    const fetchThreads = async () => {
       try {
@@ -41,7 +47,7 @@ function useFetchThreads(authFetch) {
          const url = useEndpoint("THREADS");
          const data = await authFetch(url, { method: "GET" });
 
-         setThreads(data || []);
+         setThreads(normalizeThreadResponse(data));
       } catch (err) {
          console.error("Failed to fetch threads:", err);
          setError("Failed to load threads");

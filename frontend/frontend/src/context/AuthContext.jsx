@@ -76,14 +76,27 @@ export function AuthProvider({ children }) {
             headers: { Authorization: `Bearer ${accessToken}` },
          });
          const data = await response.json();
-         setUser(data);
-         return data; // Return user data so caller can use it
+         const normalizedTrustScore = Number(
+            data?.trust_breakdown?.trust_score ?? data?.trust_score ?? 0,
+         );
+         const normalizedUser = {
+            ...data,
+            trust_score: normalizedTrustScore,
+         };
+         setUser(normalizedUser);
+         return normalizedUser; // Return user data so caller can use it
       } catch (error) {
          console.error("Failed to fetch user:", error);
          return null;
       } finally {
          setLoading(false);
       }
+   };
+
+   const refreshUser = () => {
+      const activeToken = token || localStorage.getItem("access");
+      if (!activeToken) return Promise.resolve(null);
+      return fetchUser(activeToken);
    };
 
    useEffect(() => {
@@ -96,7 +109,7 @@ export function AuthProvider({ children }) {
    }, []);
 
    return (
-      <AuthContext.Provider value={{ token, login, logout, authFetch, user, loading }}>
+      <AuthContext.Provider value={{ token, login, logout, authFetch, user, loading, refreshUser }}>
          {children}
       </AuthContext.Provider>
    );

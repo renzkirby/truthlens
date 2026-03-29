@@ -149,6 +149,87 @@
   transition: width 0.5s ease;
 }
 
+.trust-breakdown-card {
+  margin-top: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.trust-breakdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.trust-breakdown-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.trust-breakdown-formula {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: #f3f4f6;
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.trust-breakdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.trust-breakdown-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.trust-breakdown-row-label {
+  font-size: 12px;
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.trust-breakdown-row-value {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.trust-breakdown-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: #eef2f7;
+  overflow: hidden;
+}
+
+.trust-breakdown-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.trust-breakdown-impact {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.trust-breakdown-meta {
+  margin: 12px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 /* ── Tabs ── */
 .tabs-row {
   display: flex;
