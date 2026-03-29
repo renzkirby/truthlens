@@ -17,6 +17,7 @@ from .services import (
     detect_ai_image,
 )
 from .models import Claim, UserProfile
+from .trust_service import recompute_user_trust_score
 
 # IMAGE PIPELINE
 @shared_task
@@ -279,31 +280,17 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_url=""):
         traceback.print_exc()
 
 @shared_task
-def update_contributor_trust_score(contributor_id, evidence_status):
-    """
-    Update the contributor's trust score based on evidence verification decision.
-    
-    Args:
-        contributor_id: User ID of evidence contributor
-        evidence_status: "VERIFIED" or "REJECTED"
-        
-    Scoring:
-        VERIFIED -> +2 POINTS
-        REJECTED -> -1 POINT
-    """
+def update_contributor_trust_score(contributor_id, evidence_status=None):
+    """Backward-compatible task entrypoint; now recalculates trust from the full formula."""
     try:
-        user = User.objects.get(id=contributor_id)
-        profile = user.profile
+        recompute_user_trust_score(contributor_id)
     except User.DoesNotExist:
         return
-    
-    if evidence_status == "VERIFIED":
-        delta = 2.0
-    elif evidence_status == "REJECTED":
-        delta = -1.0
-    else:
+
+
+@shared_task
+def recompute_user_trust_score_task(user_id):
+    try:
+        recompute_user_trust_score(user_id)
+    except User.DoesNotExist:
         return
-    
-    new_score = profile.trust_score + delta
-    profile.trust_score = max(0.0, min(100.0, new_score))
-    profile.save(update_fields=["trust_score"])

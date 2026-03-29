@@ -29,6 +29,7 @@ router = DefaultRouter()
 router.register(r'threads', views.ThreadViewSet, basename='thread')
 router.register(r'claims', views.ClaimViewSet, basename='claim')
 router.register(r'evidence', views.EvidenceSubmissionViewSet, basename='evidence')
+router.register(r'votes', views.VoteViewSet, basename='vote')
 router.register(r'comments', views.ThreadCommentViewSet, basename='comment')
 router.register(r'thread-flags', views.ThreadFlagViewSet, basename='thread-flag')
 

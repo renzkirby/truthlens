@@ -20,11 +20,28 @@ import base64
 from .services import detect_ai_image
 from .services import process_image, upload_image_to_database
 from .services import validate_public_url, check_url_threat_reputation
-from .tasks import snippet_fact_check_process, url_fact_check_process, update_contributor_trust_score, text_fact_check_process
-from .models import Claim, Thread, UserProfile, EvidenceSubmission, ThreadComment, ThreadFlag
+from .tasks import (
+    snippet_fact_check_process,
+    url_fact_check_process,
+    update_contributor_trust_score,
+    text_fact_check_process,
+    recompute_user_trust_score_task,
+)
+from .models import (
+    Claim,
+    Thread,
+    UserProfile,
+    EvidenceSubmission,
+    ThreadComment,
+    ThreadFlag,
+    FlagResolutionLog,
+    Vote,
+)
+from .trust_service import recompute_user_trust_score
 from .serializers import (
     RegisterSerializer,
     UserSerializer,
+    CurrentUserSerializer,
     UserProfileSerializer,
     ClaimSerializer,
     ThreadSerializer,
@@ -78,6 +95,13 @@ class IsCommenterOrReadOnly(BasePermission):
         if request.method in SAFE_METHODS:
             return True
         return obj.commenter == request.user
+
+
+class IsVoterOrReadOnly(BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if request.method in SAFE_METHODS:
+            return True
+        return obj.voter == request.user
 
 class IsModerator(BasePermission):
     def has_permission(self, request, view):
@@ -234,7 +258,7 @@ def get_tokens_for_user(user):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_current_user(request):
-    serializer = UserSerializer(request.user)
+    serializer = CurrentUserSerializer(request.user)
     return Response(serializer.data)
 
 @api_view(["GET"])
@@ -439,8 +463,38 @@ def moderation_resolve_safety_thread(request, thread_id):
             update_fields.append("moderator_notes")
         thread.save(update_fields=update_fields)
 
-        # Mark safety report as handled by clearing related flags.
+        # Persist resolved report history for trust-score accuracy metrics.
+        current_flags = list(thread.flags.select_related("flagged_by"))
+        resolved_logs = []
+        reporter_ids = set()
+        for flag in current_flags:
+            reporter_ids.add(flag.flagged_by_id)
+            resolved_logs.append(
+                FlagResolutionLog(
+                    thread=thread,
+                    flagged_by=flag.flagged_by,
+                    reason=flag.reason,
+                    notes=flag.notes,
+                    flagged_at=flag.flagged_at,
+                    resolved_action=action,
+                    is_valid_report=(action == "REMOVE"),
+                    resolved_by=request.user,
+                )
+            )
+
+        if resolved_logs:
+            FlagResolutionLog.objects.bulk_create(resolved_logs)
+
+        # Keep active queue clean after archiving resolved entries.
         thread.flags.all().delete()
+
+    # Recompute trust for all reporters involved in the resolved moderation event.
+    for reporter_id in reporter_ids:
+        recompute_user_trust_score_task.delay(reporter_id)
+
+    # Conduct penalties apply to the thread author when a thread is removed.
+    if action == "REMOVE":
+        recompute_user_trust_score_task.delay(thread.author_id)
 
     return Response(ThreadSerializer(thread).data, status=status.HTTP_200_OK)
 
@@ -565,7 +619,10 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
             claim.final_verdict = final_verdict
             claim.save(update_fields=["final_verdict"])
         
-        update_contributor_trust_score.delay(evidence.contributor.id, status) # Update trust score asynchronously after moderation decision
+        # Persist trust immediately so UI does not show stale overall score after moderation.
+        recompute_user_trust_score(evidence.contributor.id)
+        # Keep async recompute as a safety net for eventual consistency.
+        update_contributor_trust_score.delay(evidence.contributor.id, status)
         
         serializer = EvidenceSubmissionSerializer(evidence)
         return Response(serializer.data, status=200)
@@ -593,6 +650,7 @@ class ThreadCommentViewSet(viewsets.ModelViewSet):
 class ThreadFlagViewSet(viewsets.ModelViewSet):
     serializer_class = ThreadFlagSerializer
     permission_classes = [IsAuthenticated]
+    http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
         if self.request.user.profile.role == UserProfile.Role.MODERATOR:
@@ -617,6 +675,41 @@ class ThreadFlagViewSet(viewsets.ModelViewSet):
         if thread.status == Thread.Status.OPEN:
             thread.status = Thread.Status.PENDING
             thread.save(update_fields=["status"])
+
+        # Reporting activity affects contribution denominator immediately.
+        recompute_user_trust_score_task.delay(self.request.user.id)
+
+
+class VoteViewSet(viewsets.ModelViewSet):
+    serializer_class = VoteSerializer
+    permission_classes = [IsAuthenticated, IsVoterOrReadOnly]
+
+    def get_queryset(self):
+        return Vote.objects.select_related("evidence", "voter", "evidence__contributor")
+
+    def perform_create(self, serializer):
+        evidence = serializer.validated_data["evidence"]
+        if evidence.contributor_id == self.request.user.id:
+            raise ValidationError({"detail": "You cannot vote on your own evidence."})
+
+        try:
+            vote = serializer.save(
+                voter=self.request.user,
+                vote_trust_snapshot=self.request.user.profile.trust_score,
+            )
+        except IntegrityError:
+            raise ValidationError({"detail": "You already voted on this evidence."})
+
+        recompute_user_trust_score_task.delay(vote.evidence.contributor_id)
+
+    def perform_update(self, serializer):
+        vote = serializer.save()
+        recompute_user_trust_score_task.delay(vote.evidence.contributor_id)
+
+    def perform_destroy(self, instance):
+        contributor_id = instance.evidence.contributor_id
+        instance.delete()
+        recompute_user_trust_score_task.delay(contributor_id)
 
 
 # FOR AI-GENERATED IMAGE DETECTION
