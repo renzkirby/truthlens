@@ -12,7 +12,7 @@ class UserProfile(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.USER)
-    trust_score = models.FloatField(default=0.0)
+    trust_score = models.FloatField(default=50.0)
     bio = models.TextField(blank=True, null=True)
     is_email_verified = models.BooleanField(default=False)
     email_verification_token = models.CharField(max_length=64, blank=True, null=True)
@@ -77,7 +77,7 @@ class Claim(models.Model):
         from django.db.models import Q
         
         # Get all threads for this claim
-        threads = self.thread_set.all()
+        threads = self.threads.all()
         
         # Get all VERIFIED evidence submissions for these threads
         verified_evidence = EvidenceSubmission.objects.filter(
@@ -162,6 +162,31 @@ class ThreadFlag(models.Model):
                 fields=["thread", "flagged_by"], name="unique_flag_per_thread_per_user"
             )
         ]
+
+
+class FlagResolutionLog(models.Model):
+    class ResolutionAction(models.TextChoices):
+        DISMISS = "DISMISS", "Dismiss"
+        REMOVE = "REMOVE", "Remove"
+        ESCALATE = "ESCALATE", "Escalate"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    thread = models.ForeignKey(Thread, on_delete=models.CASCADE, related_name="flag_resolution_logs")
+    flagged_by = models.ForeignKey(
+        "auth.User", on_delete=models.CASCADE, related_name="resolved_thread_flags"
+    )
+    reason = models.CharField(max_length=20, choices=ThreadFlag.Reason.choices)
+    notes = models.TextField(blank=True, null=True)
+    flagged_at = models.DateTimeField()
+    resolved_action = models.CharField(max_length=20, choices=ResolutionAction.choices)
+    is_valid_report = models.BooleanField(default=False)
+    resolved_by = models.ForeignKey(
+        "auth.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="resolved_flags_moderated"
+    )
+    resolved_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-resolved_at"]
 
 class EvidenceSubmission(models.Model):
     class EvidenceType(models.TextChoices):

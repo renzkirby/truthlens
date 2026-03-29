@@ -2,6 +2,7 @@
 from django.contrib.auth.models import User
 from .models import Claim, Thread, UserProfile, EvidenceSubmission, Vote, ThreadComment, ThreadFlag
 from .services import validate_public_url, check_url_threat_reputation
+from .trust_service import calculate_trust_components
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
@@ -22,15 +23,33 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
+    trust_breakdown = serializers.SerializerMethodField()
     is_email_verified = serializers.BooleanField(
         source="profile.is_email_verified", read_only=True
     )
     date_joined = serializers.DateTimeField(read_only=True)
     role = serializers.CharField(source="profile.role", read_only=True)
 
+    def get_trust_breakdown(self, obj):
+        return calculate_trust_components(obj)
+
     class Meta:
         model = User
-        fields = ["id", "username", "email", "trust_score", "is_email_verified", "date_joined", "role"]
+        fields = [
+            "id",
+            "username",
+            "email",
+            "trust_score",
+            "trust_breakdown",
+            "is_email_verified",
+            "date_joined",
+            "role",
+        ]
+
+
+class CurrentUserSerializer(UserSerializer):
+    class Meta(UserSerializer.Meta):
+        fields = UserSerializer.Meta.fields
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -338,3 +357,11 @@ class VoteSerializer(serializers.ModelSerializer):
             "vote_trust_snapshot",
             "voted_at",
         ]
+        read_only_fields = ["id", "voter", "vote_trust_snapshot", "voted_at"]
+
+    def validate(self, attrs):
+        if self.instance and "evidence" in attrs:
+            raise serializers.ValidationError(
+                {"evidence": "Cannot be changed after vote creation."}
+            )
+        return attrs
