@@ -108,12 +108,16 @@ npm run dev
 2. Enable Developer mode in the top right corner.
 3. Click Load unpacked and select the truthlens-capstone/extension/dist/ directory (after running npm run build in your extension folder).
 
-## THE TEAM
+---
+
+## The Team
 
 > Brian Josh Yaiso
 > Keanna Nicole Montero
 > Lhoraine Palenzuela
 > Rachele Rosal
 > Renz Kirby Ramirez
+
+===
 
 ### Developed for academic project — targeting a cleaner, safer, and more verifiable internet.
