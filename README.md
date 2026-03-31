@@ -96,9 +96,11 @@ python manage.py runserver
 
 ### 2. Frontend Dashboard Setup
 
+```powershell
 cd ../../frontend/dashboard/
 npm install
 npm run dev
+```
 
 ### 3. Chrome Extension Setup
 
@@ -108,10 +110,10 @@ npm run dev
 
 ## THE TEAM
 
-Brian Josh Yaiso
-Keanna Nicole Montero
-Lhoraine Palenzuela
-Rachele Rosal
-Renz Kirby Ramirez
+> Brian Josh Yaiso
+> Keanna Nicole Montero
+> Lhoraine Palenzuela
+> Rachele Rosal
+> Renz Kirby Ramirez
 
 ### Developed for academic project — targeting a cleaner, safer, and more verifiable internet.
