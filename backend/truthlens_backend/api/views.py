@@ -349,7 +349,12 @@ def moderation_queue(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    queryset = Thread.objects.filter(flags__isnull=False).distinct().order_by("-created_at")
+    queryset = (
+        Thread.objects.filter(flags__isnull=False)
+        .select_related("claim", "author", "author__profile")
+        .distinct()
+        .order_by("-created_at")
+    )
     if status_filter != "ALL":
         queryset = queryset.filter(status=status_filter)
 
@@ -369,7 +374,12 @@ def verdict_queue(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    queryset = Thread.objects.select_related("claim", "author", "moderated_by").order_by("-created_at")
+    queryset = (
+        Thread.objects.select_related(
+            "claim", "author", "author__profile", "moderated_by", "moderated_by__profile"
+        )
+        .order_by("-created_at")
+    )
     if reviewed_filter == "pending":
         queryset = queryset.filter(moderator_verdict__isnull=True)
     elif reviewed_filter == "resolved":
@@ -401,6 +411,10 @@ def moderation_resolve_thread(request, thread_id):
             status=status.HTTP_400_BAD_REQUEST
         )
     
+    contributor_ids = set(
+        thread.evidence_submissions.values_list("contributor_id", flat=True).distinct()
+    )
+
     with transaction.atomic():
         thread.moderator_verdict = moderator_verdict
         thread.moderator_notes = moderator_notes
@@ -424,6 +438,9 @@ def moderation_resolve_thread(request, thread_id):
         thread.claim.last_updated = timezone.now()
         thread.claim.save(update_fields=["final_verdict", "verdict", "last_updated"])
 
+    for contributor_id in contributor_ids:
+        recompute_user_trust_score_task.delay(contributor_id)
+
     return Response(ThreadDetailSerializer(thread).data, status=status.HTTP_200_OK)
 
 
@@ -444,6 +461,10 @@ def moderation_resolve_safety_thread(request, thread_id):
             {"detail": "Invalid action. Use DISMISS, REMOVE, or ESCALATE."},
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+    contributor_ids = set(
+        thread.evidence_submissions.values_list("contributor_id", flat=True).distinct()
+    )
 
     with transaction.atomic():
         if action == "DISMISS":
@@ -496,6 +517,9 @@ def moderation_resolve_safety_thread(request, thread_id):
     if action == "REMOVE":
         recompute_user_trust_score_task.delay(thread.author_id)
 
+    for contributor_id in contributor_ids:
+        recompute_user_trust_score_task.delay(contributor_id)
+
     return Response(ThreadSerializer(thread).data, status=status.HTTP_200_OK)
 
 @api_view(["GET"])
@@ -527,7 +551,7 @@ def evidence_moderation_queue(request):
     # Apply pagination
     evidence = evidence_query[offset:offset + limit]
         
-    serializer = EvidenceSubmissionSerializer(evidence, many=True)
+    serializer = EvidenceSubmissionSerializer(evidence, many=True, context={"request": request})
     
     return Response({
         "count": total_count,
@@ -543,7 +567,24 @@ class ThreadViewSet(viewsets.ModelViewSet):
     pagination_class = StandardCursorPagination
 
     def get_queryset(self):
-        return Thread.objects.exclude(status=Thread.Status.REJECTED).select_related('claim').prefetch_related('evidence_submissions').order_by("-created_at")
+        queryset = (
+            Thread.objects.exclude(status=Thread.Status.REJECTED)
+            .select_related("claim", "author", "author__profile")
+            .order_by("-created_at")
+        )
+
+        if getattr(self, "action", None) == "retrieve":
+            queryset = queryset.prefetch_related(
+                "flags",
+                "evidence_submissions__votes",
+                "evidence_submissions__contributor__profile",
+                "evidence_submissions__verified_by__profile",
+                "comments__commenter__profile",
+            )
+        else:
+            queryset = queryset.prefetch_related("evidence_submissions")
+
+        return queryset
 
     def perform_create(self, serializer):
         claim_id = serializer.validated_data.pop("claim_id")
@@ -624,7 +665,7 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
         # Keep async recompute as a safety net for eventual consistency.
         update_contributor_trust_score.delay(evidence.contributor.id, status)
         
-        serializer = EvidenceSubmissionSerializer(evidence)
+        serializer = EvidenceSubmissionSerializer(evidence, context={"request": request})
         return Response(serializer.data, status=200)
         
         
