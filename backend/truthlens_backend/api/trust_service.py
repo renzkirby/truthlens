@@ -11,6 +11,7 @@ VOTE_POINTS_CAP = 15.0
 TENURE_POINTS_CAP = 5.0
 TENURE_POINTS_PER_MONTH = 1.0
 THREAD_REMOVAL_PENALTY = 15.0
+RESOLVED_THREAD_STATUSES = [Thread.Status.CLOSED, Thread.Status.REJECTED]
 
 
 def _months_since(start_dt, end_dt):
@@ -46,8 +47,16 @@ def calculate_trust_components(user):
     )
     contribution_points = contribution_accuracy_rate * ACCURACY_MAX_POINTS
 
-    upvotes = Vote.objects.filter(evidence__contributor=user, vote_value=True).count()
-    downvotes = Vote.objects.filter(evidence__contributor=user, vote_value=False).count()
+    upvotes = Vote.objects.filter(
+        evidence__contributor=user,
+        evidence__thread__status__in=RESOLVED_THREAD_STATUSES,
+        vote_value=True,
+    ).count()
+    downvotes = Vote.objects.filter(
+        evidence__contributor=user,
+        evidence__thread__status__in=RESOLVED_THREAD_STATUSES,
+        vote_value=False,
+    ).count()
     net_votes = upvotes - downvotes
     vote_points = max(-VOTE_POINTS_CAP, min(VOTE_POINTS_CAP, float(net_votes)))
 
