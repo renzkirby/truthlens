@@ -63,9 +63,12 @@ function EvidenceCard({
    evidence,
    isModerator,
    isOwner,
+   currentUserId,
    isTop,
    onEdit,
    onDelete,
+   onVote,
+   votingEvidenceId,
    onVerify,
    editingId,
    editingText,
@@ -136,6 +139,9 @@ function EvidenceCard({
       : "Date unknown";
 
    const weighted = ev.weighted_score ?? (upvotes * (score / 100) - downvotes * 0.5).toFixed(1);
+   const myVoteValue = ev.my_vote?.vote_value;
+   const isOwnEvidence = ev.contributor?.id === currentUserId;
+   const isVoting = votingEvidenceId === ev.id;
 
    const handleVerify = async (status) => {
       setIsVerifying(true);
@@ -391,7 +397,11 @@ function EvidenceCard({
          ) : (
             // USER MODE
             <div className="tdp-evidence-votes">
-               <button className="tdp-vote-btn up">
+               <button
+                  className={`tdp-vote-btn up ${myVoteValue === true ? "active" : ""}`}
+                  onClick={() => onVote?.(ev, true)}
+                  disabled={isVoting || isOwnEvidence}
+                  title={isOwnEvidence ? "You cannot vote on your own evidence." : "Upvote"}>
                   <Icons
                      name="chevron-up"
                      size={13}
@@ -400,7 +410,11 @@ function EvidenceCard({
                   />
                   {upvotes}
                </button>
-               <button className="tdp-vote-btn down">
+               <button
+                  className={`tdp-vote-btn down ${myVoteValue === false ? "active" : ""}`}
+                  onClick={() => onVote?.(ev, false)}
+                  disabled={isVoting || isOwnEvidence}
+                  title={isOwnEvidence ? "You cannot vote on your own evidence." : "Downvote"}>
                   <Icons
                      name="chevron-down"
                      size={13}
@@ -420,6 +434,11 @@ function EvidenceCard({
                <span
                   className={`tdp-evidence-status evidence-status-${ev.evidence_status?.toLowerCase()}`}>
                   Status: {ev.evidence_status}
+               </span>
+               <span className="tdp-vote-policy-hint">
+                  {isVoting
+                     ? "Syncing vote..."
+                     : "Votes are recorded now; trust impact applies after thread resolution."}
                </span>
             </div>
          )}

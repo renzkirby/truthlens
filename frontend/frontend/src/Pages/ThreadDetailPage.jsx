@@ -188,6 +188,7 @@ function ThreadDetailPage() {
    const [editingEvidenceId, setEditingEvidenceId] = useState(null);
    const [editingEvidenceText, setEditingEvidenceText] = useState("");
    const [editingEvidenceVerdict, setEditingEvidenceVerdict] = useState("UNVERIFIED");
+   const [votingEvidenceId, setVotingEvidenceId] = useState(null);
    const [reporting, setReporting] = useState(false);
    const [confirmDialog, setConfirmDialog] = useState({
       open: false,
@@ -515,6 +516,119 @@ function ThreadDetailPage() {
          });
       } finally {
          setReporting(false);
+      }
+   }
+
+   async function handleVote(evidence, nextVoteValue) {
+      if (!evidence?.id) return;
+
+      if (evidence?.contributor?.id === user?.id) {
+         addToast({
+            type: "error",
+            message: "You cannot vote on your own evidence.",
+         });
+         return;
+      }
+
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+      setVotingEvidenceId(evidence.id);
+
+      const previousEvidenceList = evidenceList;
+      const previousThreadEvidence = thread?.evidence_submissions || [];
+
+      const applyOptimisticVote = (item) => {
+         if (!item || item.id !== evidence.id) return item;
+
+         const upvotes = Number(item.upvotes || 0);
+         const downvotes = Number(item.downvotes || 0);
+         const currentVote = item.my_vote?.vote_value;
+
+         let nextUpvotes = upvotes;
+         let nextDownvotes = downvotes;
+         let nextMyVote = item.my_vote || null;
+
+         if (!item.my_vote) {
+            if (nextVoteValue) nextUpvotes += 1;
+            else nextDownvotes += 1;
+            nextMyVote = { id: "optimistic", vote_value: nextVoteValue };
+         } else if (currentVote === nextVoteValue) {
+            if (currentVote) nextUpvotes = Math.max(0, upvotes - 1);
+            else nextDownvotes = Math.max(0, downvotes - 1);
+            nextMyVote = null;
+         } else {
+            if (currentVote) {
+               nextUpvotes = Math.max(0, upvotes - 1);
+               nextDownvotes += 1;
+            } else {
+               nextDownvotes = Math.max(0, downvotes - 1);
+               nextUpvotes += 1;
+            }
+            nextMyVote = { ...(item.my_vote || {}), vote_value: nextVoteValue };
+         }
+
+         const contributorTrust = Number(item.contributor?.trust_score || 0);
+         const nextWeighted = Number(
+            (nextUpvotes * (contributorTrust / 100) - nextDownvotes * 0.5).toFixed(2),
+         );
+
+         return {
+            ...item,
+            upvotes: nextUpvotes,
+            downvotes: nextDownvotes,
+            my_vote: nextMyVote,
+            weighted_score: nextWeighted,
+         };
+      };
+
+      setEvidenceList((prev) => prev.map(applyOptimisticVote));
+      setThread((prev) => {
+         if (!prev) return prev;
+         return {
+            ...prev,
+            evidence_submissions: (prev.evidence_submissions || []).map(applyOptimisticVote),
+         };
+      });
+
+      try {
+         const myVote = evidence.my_vote;
+
+         if (!myVote) {
+            await authFetch(`${API_BASE_URL}/votes/`, {
+               method: "POST",
+               headers: { "Content-Type": "application/json" },
+               body: JSON.stringify({
+                  evidence: evidence.id,
+                  vote_value: nextVoteValue,
+               }),
+            });
+         } else if (myVote.vote_value === nextVoteValue) {
+            await authFetch(`${API_BASE_URL}/votes/${myVote.id}/`, {
+               method: "DELETE",
+            });
+         } else {
+            await authFetch(`${API_BASE_URL}/votes/${myVote.id}/`, {
+               method: "PATCH",
+               headers: { "Content-Type": "application/json" },
+               body: JSON.stringify({ vote_value: nextVoteValue }),
+            });
+         }
+
+         await refreshThreadData();
+      } catch (voteError) {
+         setEvidenceList(previousEvidenceList);
+         setThread((prev) => {
+            if (!prev) return prev;
+            return {
+               ...prev,
+               evidence_submissions: previousThreadEvidence,
+            };
+         });
+         addToast({
+            type: "error",
+            message: voteError?.message || "Failed to cast vote.",
+         });
+      } finally {
+         setVotingEvidenceId(null);
       }
    }
 
@@ -1221,9 +1335,12 @@ function ThreadDetailPage() {
                                  evidence={ev}
                                  isModerator={isModerator}
                                  isOwner={ev.contributor?.id === user?.id}
+                                 currentUserId={user?.id}
                                  isTop={i === 0 && evidenceList.length > 1}
                                  onEdit={handleSaveEvidenceEdit}
                                  onDelete={handleDeleteEvidence}
+                                 onVote={handleVote}
+                                 votingEvidenceId={votingEvidenceId}
                                  onVerify={async (evidenceId, status, notes) => {
                                     const API_BASE_URL =
                                        import.meta.env.VITE_API_BASE_URL ||

@@ -260,6 +260,27 @@
     color: #854d0e;
 }
 
+.tdp-vote-btn.active.up {
+    background: #dcfce7;
+    border-color: #16a34a;
+}
+
+.tdp-vote-btn.active.down {
+    background: #fee2e2;
+    border-color: #dc2626;
+}
+
+.tdp-vote-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.tdp-vote-policy-hint {
+    margin-left: auto;
+    font-size: 11px;
+    color: #6b7280;
+}
+
 .tdp-meta-chip.verdict.satire {
     background: #e0e7ff;
     color: #3730a3;
