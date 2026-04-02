@@ -23,15 +23,11 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
-    trust_breakdown = serializers.SerializerMethodField()
     is_email_verified = serializers.BooleanField(
         source="profile.is_email_verified", read_only=True
     )
     date_joined = serializers.DateTimeField(read_only=True)
     role = serializers.CharField(source="profile.role", read_only=True)
-
-    def get_trust_breakdown(self, obj):
-        return calculate_trust_components(obj)
 
     class Meta:
         model = User
@@ -40,16 +36,25 @@ class UserSerializer(serializers.ModelSerializer):
             "username",
             "email",
             "trust_score",
-            "trust_breakdown",
             "is_email_verified",
             "date_joined",
             "role",
         ]
 
 
-class CurrentUserSerializer(UserSerializer):
+class UserWithTrustBreakdownSerializer(UserSerializer):
+    trust_breakdown = serializers.SerializerMethodField()
+
+    def get_trust_breakdown(self, obj):
+        return calculate_trust_components(obj)
+
     class Meta(UserSerializer.Meta):
-        fields = UserSerializer.Meta.fields
+        fields = UserSerializer.Meta.fields + ["trust_breakdown"]
+
+
+class CurrentUserSerializer(UserWithTrustBreakdownSerializer):
+    class Meta(UserWithTrustBreakdownSerializer.Meta):
+        fields = UserWithTrustBreakdownSerializer.Meta.fields
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -222,6 +227,10 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
     thread_id = serializers.UUIDField(write_only=True)
     # Include full thread and claim for moderation context
     thread = serializers.SerializerMethodField(read_only=True)
+    upvotes = serializers.SerializerMethodField(read_only=True)
+    downvotes = serializers.SerializerMethodField(read_only=True)
+    my_vote = serializers.SerializerMethodField(read_only=True)
+    weighted_score = serializers.SerializerMethodField(read_only=True)
 
     def get_thread(self, obj):
         """Return full thread with nested claim for moderation queue display."""
@@ -238,6 +247,42 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
                 } if obj.thread.claim else None,
             }
         return None
+
+    def get_upvotes(self, obj):
+        prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("votes")
+        if prefetched is not None:
+            return sum(1 for vote in prefetched if vote.vote_value is True)
+        return obj.votes.filter(vote_value=True).count()
+
+    def get_downvotes(self, obj):
+        prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("votes")
+        if prefetched is not None:
+            return sum(1 for vote in prefetched if vote.vote_value is False)
+        return obj.votes.filter(vote_value=False).count()
+
+    def get_my_vote(self, obj):
+        request = self.context.get("request")
+        if not request or not request.user or not request.user.is_authenticated:
+            return None
+
+        prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("votes")
+        if prefetched is not None:
+            vote = next((entry for entry in prefetched if entry.voter_id == request.user.id), None)
+        else:
+            vote = obj.votes.filter(voter=request.user).first()
+        if not vote:
+            return None
+
+        return {
+            "id": str(vote.id),
+            "vote_value": vote.vote_value,
+        }
+
+    def get_weighted_score(self, obj):
+        upvotes = self.get_upvotes(obj)
+        downvotes = self.get_downvotes(obj)
+        contributor_trust = obj.contributor.profile.trust_score if hasattr(obj.contributor, "profile") else 0
+        return round((upvotes * (contributor_trust / 100)) - (downvotes * 0.5), 2)
 
     def validate_evidence_url(self, value):
         if value in (None, ""):
@@ -272,6 +317,10 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
             "verified_by",
             "verified_at",
             "moderator_notes",
+            "upvotes",
+            "downvotes",
+            "my_vote",
+            "weighted_score",
         ]
         read_only_fields = [
             "id",
@@ -293,7 +342,7 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
 
 
 class ThreadDetailSerializer(serializers.ModelSerializer):
-    author = UserSerializer(read_only=True)
+    author = UserWithTrustBreakdownSerializer(read_only=True)
     claim = ClaimSerializer(read_only=True)
     evidence_submissions = EvidenceSubmissionSerializer(many=True, read_only=True)
     comments = ThreadCommentSerializer(many=True, read_only=True)
