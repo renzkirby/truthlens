@@ -20,6 +20,7 @@ import base64
 from .services import detect_ai_image
 from .services import process_image, upload_image_to_database
 from .services import validate_public_url, check_url_threat_reputation
+from .claim_matching import compute_fingerprint, find_matching_claim, get_match_result
 from .tasks import (
     snippet_fact_check_process,
     url_fact_check_process,
@@ -51,6 +52,7 @@ from .serializers import (
     VoteSerializer,
     ThreadFlagSerializer,
     ModerationDecisionSerializer,
+    ClaimMatchSerializer,
 )
 
 # ── Pagination Configuration ──
@@ -129,7 +131,19 @@ def receive_snippet(request):
 
     # Decode the base64 string and save it as an image
     image_hash, _ = process_image(base64_string)
-    
+
+    # ── Claim Deduplication Pre-Check ──
+    fingerprint = compute_fingerprint("IMAGE", image_hash)
+    if fingerprint:
+        matched_claim = find_matching_claim(fingerprint, "IMAGE")
+        if matched_claim and matched_claim.final_verdict:
+            # A moderator has already resolved this claim — return cached verdict
+            match_result = get_match_result(matched_claim)
+            return JsonResponse(
+                {"claim_id": str(matched_claim.id), "cached": True, "match": match_result},
+                status=200,
+            )
+
     media_url = upload_image_to_database(base64_string)
     
     print("IMAGE HASH:", image_hash)
@@ -139,6 +153,7 @@ def receive_snippet(request):
         claim_type=Claim.ClaimType.IMAGE,
         media_hash=image_hash,
         media_url=media_url,
+        claim_fingerprint=fingerprint,
         verdict=None,
         verified_via=Claim.VerificationSource.PENDING,
     )
@@ -147,7 +162,7 @@ def receive_snippet(request):
     snippet_fact_check_process.delay(image_hash, base64_string, str(claim_id), check_deepfake)
 
     return JsonResponse(
-        {"claim_id": str(claim_id)},
+        {"claim_id": str(claim_id), "cached": False},
         status=200,
     )
 
@@ -173,17 +188,30 @@ def claim_polling_endpoint(request, claim_id):
     if ai_verdict is None:
         return JsonResponse({"verdict": "PENDING"}, status=200)
     else:
+        # Include community verdict info when available
+        effective_verdict = claim.final_verdict or ai_verdict
+        active_thread = claim.threads.exclude(status="REJECTED").order_by("-created_at").first()
+        moderator_notes = None
+        if claim.final_verdict:
+            resolved_thread = claim.threads.filter(
+                moderator_verdict__isnull=False
+            ).order_by("-moderated_at").first()
+            if resolved_thread:
+                moderator_notes = resolved_thread.moderator_notes
+
         return JsonResponse(
             {
                 "id": claim_id,
-                "verdict": ai_verdict,
+                "verdict": effective_verdict,
                 "ai_verdict": ai_verdict,
                 "final_verdict": claim.final_verdict,
-                "summary": claim.ai_summary,
+                "summary": moderator_notes or claim.ai_summary,
                 "confidence_score": claim.consensus_score,
                 "source_type": claim.source_type,
                 "source_url": claim.top_verdict_source,
                 "is_ai_generated": claim.is_ai_generated,
+                "thread_id": str(active_thread.id) if active_thread else None,
+                "has_community_verdict": bool(claim.final_verdict),
             },
             status=200,
         )
@@ -209,9 +237,21 @@ def verify_url(request):
             status=400,
         )
 
+    # ── Claim Deduplication Pre-Check ──
+    fingerprint = compute_fingerprint("URL", safe_url)
+    if fingerprint:
+        matched_claim = find_matching_claim(fingerprint, "URL")
+        if matched_claim and matched_claim.final_verdict:
+            match_result = get_match_result(matched_claim)
+            return JsonResponse(
+                {"claim_id": str(matched_claim.id), "url_safety": url_safety, "cached": True, "match": match_result},
+                status=200,
+            )
+
     claim = Claim.objects.create(
         claim_type=Claim.ClaimType.URL,
         url_link=safe_url,
+        claim_fingerprint=fingerprint,
         verdict=None,
         verified_via=Claim.VerificationSource.PENDING,
     )
@@ -220,7 +260,7 @@ def verify_url(request):
     url_fact_check_process.delay(safe_url, claim_id)
     
     return JsonResponse(
-        {"claim_id": str(claim_id), "url_safety": url_safety},
+        {"claim_id": str(claim_id), "url_safety": url_safety, "cached": False},
         status=200,
     )
 
@@ -592,7 +632,50 @@ class ThreadViewSet(viewsets.ModelViewSet):
             claim = Claim.objects.get(id=claim_id)
         except Claim.DoesNotExist:
             raise NotFound('Claim not found.')
+
+        # ── Thread Deduplication: Block + Redirect ──
+        # Check if this claim (or a matching claim) already has an active thread
+        existing_thread = self._find_existing_thread(claim)
+        if existing_thread:
+            raise ValidationError({
+                "detail": "A community discussion already exists for this claim.",
+                "existing_thread_id": str(existing_thread.id),
+                "redirect": True,
+            })
+
         serializer.save(author=self.request.user, claim=claim)
+
+    def _find_existing_thread(self, claim):
+        """
+        Check if the claim (or a fingerprint-matched claim) already has an
+        active thread. Returns the existing Thread or None.
+        """
+        # Direct check: does this exact claim already have a non-rejected thread?
+        direct_thread = (
+            Thread.objects
+            .filter(claim=claim)
+            .exclude(status=Thread.Status.REJECTED)
+            .order_by("-created_at")
+            .first()
+        )
+        if direct_thread:
+            return direct_thread
+
+        # Fingerprint check: does a matching claim have a thread?
+        if claim.claim_fingerprint:
+            matched_claim = find_matching_claim(claim.claim_fingerprint, claim.claim_type)
+            if matched_claim and matched_claim.id != claim.id:
+                matched_thread = (
+                    Thread.objects
+                    .filter(claim=matched_claim)
+                    .exclude(status=Thread.Status.REJECTED)
+                    .order_by("-created_at")
+                    .first()
+                )
+                if matched_thread:
+                    return matched_thread
+
+        return None
 
     def get_serializer_class(self):
         if self.action == "retrieve":
@@ -788,11 +871,23 @@ def verify_text(request):
         
     print(f"Received Text: {text_content[:100]}...")
 
+    # ── Claim Deduplication Pre-Check ──
+    fingerprint = compute_fingerprint("TEXT", text_content)
+    if fingerprint:
+        matched_claim = find_matching_claim(fingerprint, "TEXT")
+        if matched_claim and matched_claim.final_verdict:
+            match_result = get_match_result(matched_claim)
+            return JsonResponse(
+                {"claim_id": str(matched_claim.id), "cached": True, "match": match_result},
+                status=200,
+            )
+
     # TEMP HACK: Save as URL so we don't have to run migrations yet.
     # We set url_link to a short string so it doesn't crash the 500-character database limit!
     claim = Claim.objects.create(
         claim_type=Claim.ClaimType.URL, 
-        url_link="Text Claim Input", 
+        url_link="Text Claim Input",
+        claim_fingerprint=fingerprint,
         verdict=None,
         verified_via=Claim.VerificationSource.PENDING,
     )
@@ -802,6 +897,33 @@ def verify_text(request):
     text_fact_check_process.delay(text_content, claim_id)
     
     return JsonResponse(
-        {"claim_id": str(claim_id)},
+        {"claim_id": str(claim_id), "cached": False},
         status=200,
     )
+
+
+@csrf_exempt
+@api_view(["GET"])
+def claim_match(request):
+    """
+    Pre-check endpoint for the extension to check if a claim already exists.
+    Used to skip AI pipeline entirely when a resolved verdict is cached.
+
+    Query params:
+        fingerprint: the computed claim fingerprint
+        claim_type: IMAGE, URL, or TEXT
+    """
+    fingerprint = request.query_params.get("fingerprint")
+    claim_type = request.query_params.get("claim_type", "").upper()
+
+    if not fingerprint:
+        return Response({"match": None}, status=200)
+
+    matched_claim = find_matching_claim(fingerprint, claim_type)
+    if matched_claim:
+        match_result = get_match_result(matched_claim)
+        serializer = ClaimMatchSerializer(data=match_result)
+        serializer.is_valid(raise_exception=True)
+        return Response({"match": serializer.validated_data}, status=200)
+
+    return Response({"match": None}, status=200)
