@@ -253,6 +253,8 @@ def url_fact_check_process(url, claim_id):
 
 def _save_claim(claim_id, verdict, source_type, context_text, source_url=""):
     """Save AI analysis output to the Claim record without setting final moderator verdict."""
+    from .claim_matching import compute_fingerprint
+
     try:
         claim = Claim.objects.get(id=claim_id)
         ai_verdict_value = verdict.get("verdict")
@@ -268,9 +270,20 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_url=""):
         claim.context_text = context_text
         claim.source_link = source_url or None
         claim.verified_via = Claim.VerificationSource.AI_EXTENSION
+
+        # Compute fingerprint if not already set (e.g., text claims where
+        # context_text is only available after OCR/extraction)
+        if not claim.claim_fingerprint:
+            if claim.claim_type == "IMAGE" and claim.media_hash:
+                claim.claim_fingerprint = compute_fingerprint("IMAGE", claim.media_hash)
+            elif claim.claim_type == "URL" and claim.url_link:
+                claim.claim_fingerprint = compute_fingerprint("URL", claim.url_link)
+            elif context_text:
+                claim.claim_fingerprint = compute_fingerprint("TEXT", context_text)
+
         claim.save()
         print(
-            f"Claim {claim_id} saved — ai_verdict: {claim.ai_verdict}, final_verdict: {claim.final_verdict}"
+            f"Claim {claim_id} saved — ai_verdict: {claim.ai_verdict}, final_verdict: {claim.final_verdict}, fingerprint: {claim.claim_fingerprint}"
         )
     except Claim.DoesNotExist:
         print(f"Claim {claim_id} not found — skipping save")

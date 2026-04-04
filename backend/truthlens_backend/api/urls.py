@@ -9,6 +9,7 @@ urlpatterns = [
     path("verify-url/", views.verify_url, name="verify_url"),
     path("test-deepfake/", views.test_deepfake, name="test_deepfake"),
     path("verify-text/", views.verify_text, name="verify_text"),
+    path("claims/match/", views.claim_match, name="claim_match"),
     
     #Auth urls
     path('auth/login/', views.login_user),
