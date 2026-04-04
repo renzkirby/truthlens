@@ -1,4 +1,4 @@
-﻿from rest_framework import serializers
+from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import Claim, Thread, UserProfile, EvidenceSubmission, Vote, ThreadComment, ThreadFlag
 from .services import validate_public_url, check_url_threat_reputation
@@ -414,3 +414,25 @@ class VoteSerializer(serializers.ModelSerializer):
                 {"evidence": "Cannot be changed after vote creation."}
             )
         return attrs
+
+
+class ClaimMatchSerializer(serializers.Serializer):
+    """Serializer for claim match/deduplication responses."""
+    match_type = serializers.ChoiceField(
+        choices=["resolved", "has_thread", "has_verdict", "no_verdict"],
+        help_text="Type of match: resolved (moderator verdict), has_thread (active thread), has_verdict (AI only), no_verdict"
+    )
+    claim_id = serializers.CharField()
+    claim_type = serializers.CharField()
+    verdict = serializers.CharField(allow_null=True)
+    ai_verdict = serializers.CharField(allow_null=True)
+    final_verdict = serializers.CharField(allow_null=True)
+    summary = serializers.CharField(allow_null=True)
+    confidence_score = serializers.FloatField(allow_null=True)
+    source_type = serializers.CharField(allow_null=True)
+    source_url = serializers.CharField(allow_null=True)
+    is_ai_generated = serializers.BooleanField()
+    thread_id = serializers.CharField(allow_null=True)
+    thread_status = serializers.CharField(allow_null=True)
+    moderator_notes = serializers.CharField(allow_null=True)
+

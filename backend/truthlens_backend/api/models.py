@@ -59,6 +59,12 @@ class Claim(models.Model):
     last_updated = models.DateTimeField(auto_now=True)
     is_ai_generated = models.BooleanField(default=False)
 
+    # Deduplication fingerprint for claim matching / resolution cache
+    claim_fingerprint = models.CharField(
+        max_length=128, db_index=True, blank=True, null=True,
+        help_text="Canonical fingerprint for deduplication (pHash for images, normalized URL hash, or text hash)"
+    )
+
     def __str__(self):
         return f"Claim {self.id} - Type: {self.claim_type} - Final Verdict: {self.final_verdict or self.verdict}"
     
