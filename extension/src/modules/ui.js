@@ -1,10 +1,13 @@
 import { state } from "./state.js";
 
 export function displayResultCard(claim) {
-   const { id, verdict, summary, confidence_score, source_type, source_url, is_ai_generated } = claim;
+   const { id, verdict, summary, confidence_score, source_type, source_url, is_ai_generated, has_community_verdict, thread_id, final_verdict, ai_verdict } = claim;
+   
+   // Use community verdict if available, otherwise AI verdict
+   const displayVerdict = final_verdict || verdict;
    let badgeColor = "#6b7280";
 
-   switch (verdict) {
+   switch (displayVerdict) {
       case "FACT":
          badgeColor = "#0e9f6e";
          break;
@@ -44,6 +47,14 @@ export function displayResultCard(claim) {
          </div>` 
       : "";
 
+   // Community verdict banner
+   const communityBannerHTML = has_community_verdict
+      ? `<div style="background-color: #ecfdf5; color: #065f46; border: 1.5px solid #0e9f6e; padding: 10px 14px; border-radius: 8px; font-size: 11px; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+            COMMUNITY VERIFIED
+         </div>`
+      : "";
+
    const card = document.createElement("div");
    card.id = "truthlens-result-card";
    card.className = "truthlens-card";
@@ -54,11 +65,13 @@ export function displayResultCard(claim) {
          <button id="truthlens-close-btn" class="truthlens-close-btn">&times;</button>
       </div>
       <div class="truthlens-verdict-text">
-         This post is <span class="truthlens-verdict" style="background-color: ${badgeColor};">${verdict}</span>
+         This post is <span class="truthlens-verdict" style="background-color: ${badgeColor};">${displayVerdict}</span>
       </div>
 
-      ${aiWarningHTML} <div class="truthlens-summary-box">
-         <div class="truthlens-summary-title">AI Summary</div>
+      ${communityBannerHTML}
+      ${aiWarningHTML}
+      <div class="truthlens-summary-box">
+         <div class="truthlens-summary-title">${has_community_verdict ? 'Community Verdict Summary' : 'AI Summary'}</div>
          <div style="font-size: 14px; line-height: 1.4;">${summary}</div>
       </div>
 
@@ -67,13 +80,15 @@ export function displayResultCard(claim) {
          <div class="truthlens-confidence-fill" style="width: ${confidence_score}%; background-color: ${confidence_bar_color};"></div>
       </div>
       ${
-         verdict === "UNVERIFIED" || confidence_score < 50
-            ? `<a href='http://localhost:5174/thread/create?claim_id=${id}' target='_blank' class='truthlens-source-link'>Want to ask the community?</a>`
-            : verdict === "OUT_OF_SCOPE"
-              ? ""
-              : `<a href="${source_url}" target="_blank" class="truthlens-source-link">View Source</a>`
+         thread_id
+            ? `<a href='http://localhost:5174/thread/detail/${thread_id}' target='_blank' class='truthlens-source-link'>View Community Discussion</a>`
+            : (displayVerdict === "UNVERIFIED" || confidence_score < 50)
+               ? `<a href='http://localhost:5174/thread/create?claim_id=${id}' target='_blank' class='truthlens-source-link'>Want to ask the community?</a>`
+               : displayVerdict === "OUT_OF_SCOPE"
+                 ? ""
+                 : `<a href="${source_url}" target="_blank" class="truthlens-source-link">View Source</a>`
       }
-      <div class="truthlens-footer">Source Type: ${source_type}</div>
+      <div class="truthlens-footer">Source Type: ${has_community_verdict ? 'Community Moderation' : source_type}</div>
    `;
 
    document.body.appendChild(card);
@@ -149,6 +164,78 @@ export function successCard(message) {
    document.body.appendChild(card);
    setTimeout(() => card.classList.add("show"), 100);
    setTimeout(() => {
+      card.classList.remove("show");
+      setTimeout(() => card.remove(), 300);
+   });
+}
+
+/**
+ * Display a result card for claims that were resolved by the community (cached verdict).
+ * Shows a distinctive "Community Verified" treatment vs the standard AI result.
+ */
+export function displayCachedResultCard(match) {
+   const { verdict, final_verdict, summary, confidence_score, thread_id, moderator_notes, claim_id, source_type, is_ai_generated } = match;
+   const displayVerdict = final_verdict || verdict;
+
+   let badgeColor = "#6b7280";
+   switch (displayVerdict) {
+      case "FACT":       badgeColor = "#0e9f6e"; break;
+      case "FAKE":       badgeColor = "#e02424"; break;
+      case "MISLEADING": badgeColor = "#f97316"; break;
+      case "SATIRE":     badgeColor = "#8b5cf6"; break;
+      case "UNVERIFIED": badgeColor = "#ebdc09"; break;
+   }
+
+   let confidence_bar_color = "#6b7280";
+   if (confidence_score < 40) confidence_bar_color = "#e02424";
+   else if (confidence_score >= 40 && confidence_score < 70) confidence_bar_color = "#ebdc09";
+   else if (confidence_score >= 70) confidence_bar_color = "#0e9f6e";
+
+   const displaySummary = moderator_notes || summary || "This claim has been reviewed by the community.";
+
+   const card = document.createElement("div");
+   card.id = "truthlens-result-card";
+   card.className = "truthlens-card";
+
+   card.innerHTML = `
+      <div class="truthlens-header">
+         <strong class="truthlens-title">TruthLens</strong>
+         <button id="truthlens-close-btn" class="truthlens-close-btn">&times;</button>
+      </div>
+
+      <div style="background-color: #ecfdf5; color: #065f46; border: 1.5px solid #0e9f6e; padding: 10px 14px; border-radius: 8px; font-size: 11px; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
+         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+         COMMUNITY VERIFIED — CACHED RESULT
+      </div>
+
+      <div class="truthlens-verdict-text">
+         This post is <span class="truthlens-verdict" style="background-color: ${badgeColor};">${displayVerdict}</span>
+      </div>
+
+      <div class="truthlens-summary-box">
+         <div class="truthlens-summary-title">Community Verdict Summary</div>
+         <div style="font-size: 14px; line-height: 1.4;">${displaySummary}</div>
+      </div>
+
+      ${confidence_score !== null ? `
+         <div class="truthlens-confidence-score">Confidence Score: ${confidence_score}</div>
+         <div class="truthlens-confidence-bar">
+            <div class="truthlens-confidence-fill" style="width: ${confidence_score}%; background-color: ${confidence_bar_color};"></div>
+         </div>
+      ` : ''}
+
+      ${thread_id
+         ? `<a href='http://localhost:5174/thread/detail/${thread_id}' target='_blank' class='truthlens-source-link'>View Community Discussion</a>`
+         : ''
+      }
+      <div class="truthlens-footer">Source Type: Community Moderation</div>
+   `;
+
+   document.body.appendChild(card);
+   void card.offsetWidth;
+   setTimeout(() => card.classList.add("show"), 100);
+
+   document.getElementById("truthlens-close-btn").addEventListener("click", () => {
       card.classList.remove("show");
       setTimeout(() => card.remove(), 300);
    });

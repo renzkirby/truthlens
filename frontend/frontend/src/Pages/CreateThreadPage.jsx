@@ -34,6 +34,7 @@ function CreateThreadPage() {
    const [submitting, setSubmitting] = useState(false);
    const [claim, setClaim] = useState(null);
    const [error, setError] = useState(null);
+   const [existingThread, setExistingThread] = useState(null);
    const [searchParams] = useSearchParams();
    const claimId = searchParams.get("claim_id");
    const { authFetch } = useAuth();
@@ -89,7 +90,17 @@ function CreateThreadPage() {
          });
          navigate(`/thread/detail/${responseData.id}`);
       } catch (err) {
-         setError("Something went wrong in creating a thread.");
+         // Handle thread deduplication redirect
+         if (err?.existing_thread_id && err?.redirect) {
+            setExistingThread(err.existing_thread_id);
+            setError(null);
+            // Auto-redirect after a brief moment
+            setTimeout(() => {
+               navigate(`/thread/detail/${err.existing_thread_id}`);
+            }, 3000);
+            return;
+         }
+         setError(err?.detail || "Something went wrong in creating a thread.");
       } finally {
          setSubmitting(false);
       }
@@ -113,6 +124,25 @@ function CreateThreadPage() {
                caption: claimData.ai_summary || "",
                source_url: claimData.source_link || "",
             }));
+
+            // Check if this claim already has existing threads (pre-check dedup)
+            try {
+               const threadsUrl = useEndpoint("THREADS");
+               const threadsData = await authFetch(threadsUrl + `?claim_id=${claimId}`, {
+                  method: "GET",
+               });
+               // threadsData may be paginated (cursor-based), check results array
+               const threads = threadsData?.results || threadsData || [];
+               if (Array.isArray(threads) && threads.length > 0) {
+                  // Found existing thread — set redirect
+                  const existingId = threads[0].id;
+                  setExistingThread(existingId);
+               }
+            } catch (threadErr) {
+               // Non-critical — if thread check fails, we still allow the form
+               console.warn("Thread pre-check failed:", threadErr);
+            }
+
             console.log(claimData);
          } catch (err) {
             setError("Failed loading form");
@@ -174,6 +204,46 @@ function CreateThreadPage() {
                      size={15}
                   />
                   {error}
+               </div>
+            )}
+
+            {/* Thread Deduplication: Redirect Notice */}
+            {existingThread && (
+               <div style={{
+                  backgroundColor: "#ecfdf5",
+                  border: "1.5px solid #0e9f6e",
+                  borderRadius: "12px",
+                  padding: "20px 24px",
+                  marginBottom: "20px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px",
+               }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#065f46", fontWeight: 700, fontSize: "14px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                     <Icons name="info" size={16} />
+                     A Community Discussion Already Exists
+                  </div>
+                  <p style={{ color: "#065f46", fontSize: "14px", lineHeight: "1.5", margin: 0 }}>
+                     This claim has already been escalated by another user. You can view the existing discussion and contribute evidence there instead of creating a duplicate.
+                  </p>
+                  <Link
+                     to={`/thread/detail/${existingThread}`}
+                     style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        backgroundColor: "#0e9f6e",
+                        color: "#fff",
+                        padding: "10px 20px",
+                        borderRadius: "8px",
+                        fontWeight: 600,
+                        fontSize: "14px",
+                        textDecoration: "none",
+                        width: "fit-content",
+                     }}>
+                     <Icons name="arrow-right" size={16} />
+                     Go to Existing Thread
+                  </Link>
                </div>
             )}
 
