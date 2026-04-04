@@ -1,5 +1,5 @@
 import { state } from "./state.js";
-import { displayResultCard, removeLoadingCard, displayErrorCard, successCard, displayCachedResultCard } from "./ui.js";
+import { displayResultCard, removeLoadingCard, displayErrorCard, successCard, displayCachedResultCard } from "./ui.jsx";
 
 // Sending snipped image to backend
 export async function sendImageToServer(image) {

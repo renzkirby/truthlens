@@ -12,7 +12,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
    }
    
    if (request.type === "DISPLAY_URL_LOADING") {
-      import("./modules/ui.js").then(({ displayLoadingCard }) => {
+      import("./modules/ui.jsx").then(({ displayLoadingCard }) => {
          state.isAnalyzing = true;
          displayLoadingCard();
       });
@@ -20,7 +20,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       }
 
    if (request.type === "DISPLAY_URL_RESULT") {
-      import("./modules/ui.js").then(({ displayResultCard, removeLoadingCard }) => {
+      import("./modules/ui.jsx").then(({ displayResultCard, removeLoadingCard }) => {
          removeLoadingCard();
          setTimeout(() => displayResultCard(request.data), 2000);
       });

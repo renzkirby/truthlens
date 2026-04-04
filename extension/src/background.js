@@ -1,5 +1,5 @@
 import { fetchClaimResult } from "./modules/api.js";
-import { removeLoadingCard } from "./modules/ui.js";
+import { removeLoadingCard } from "./modules/ui.jsx";
 
 console.log("TruthLens background service worker loaded");
 
