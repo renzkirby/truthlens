@@ -74,7 +74,7 @@ export function displayResultCard(claim) {
          <div style="font-size: 14px; line-height: 1.4;">${summary}</div>
       </div>
 
-      <div class="truthlens-confidence-score">Confidence Score: ${confidence_score}</div>
+      <div class="truthlens-confidence-score">Confidence Score: <strong>${confidence_score}%</strong></div>
       <div class="truthlens-confidence-bar">
          <div class="truthlens-confidence-fill" style="width: ${confidence_score}%; background-color: ${confidence_bar_color};"></div>
       </div>
@@ -85,10 +85,9 @@ export function displayResultCard(claim) {
       <br>
       ` : ''}
       ${thread_id
-         ? `<a href='http://localhost:5174/thread/detail/${thread_id}' target='_blank' class='truthlens-source-link'>View Community Discussion</a>`
+         ? `<a href='http://localhost:5174/thread/detail/${thread_id}' target='_blank' class='truthlens-source-link' style='display: block; text-align: center; background: #f3f4f6; padding: 8px; border-radius: 6px; text-decoration: none; color: #4f46e5; font-weight: 600; margin-top: 12px; border: 1px solid #e5e7eb;'>View Community Discussion</a>`
          : (displayVerdict === "UNVERIFIED" || confidence_score < 50)
-            ? `<a href='http://localhost:5174/thread/create?claim_id=${id}' target='_blank' class='truthlens-source-link'>Want to ask the community?</a>`
-            : displayVerdict === "OUT_OF_SCOPE"
+            ? `<a href='http://localhost:5174/thread/create?claim_id=${id}' target='_blank' class='truthlens-source-link' style='display: block; text-align: center; background: #eff6ff; padding: 8px; border-radius: 6px; text-decoration: none; color: var(--brand-primary, #4f46e5); font-weight: 600; margin-top: 12px; border: 1px dashed #bfdbfe;'>[+] Ask the community</a>`: displayVerdict === "OUT_OF_SCOPE"
                ? ""
                : `<a href="${source_url}" target="_blank" class="truthlens-source-link">View Source</a>`
       }

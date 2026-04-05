@@ -29,3 +29,7 @@
      background: var(--bg-surface);
      border-bottom: 2px solid var(--brand-primary);
 }
+
+.nav-tab.active svg {
+   color: var(--brand-primary);
+}
