@@ -122,7 +122,7 @@ def check_url_threat_reputation(candidate_url):
             "provider": "GOOGLE_SAFE_BROWSING",
             "reason": "provider_unreachable",
         }
- 
+
 
 # IMAGE PIPELINE
 def clean_ocr_text(raw_text):
@@ -248,7 +248,8 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, articl
         "reasoning": "Think step-by-step here. 1) Analyze the core assertion of the claim. 2) Summarize the provided evidence. 3) Compare the two for alignment, contradictions, or missing context. 4) Evaluate for satire or absurdity. Do this logical deduction BEFORE stating the verdict.",
         "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
         "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language.",
-        "confidence_score": 95
+        "confidence_score": 95,
+        "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score. (e.g., 'Strong consensus across multiple reputable news outlets.')"
         }
         """
     user_data = (
@@ -340,7 +341,8 @@ def evaluate_image_claim_with_tavily(original_claim, combined_context, article_s
                 "reasoning": "Think step-by-step here. 1) Analyze the core assertion of the claim. 2) Summarize the provided evidence. 3) Compare the two for alignment, contradictions, or missing context. 4) Evaluate for satire or absurdity. Do this logical deduction BEFORE stating the verdict.",
                 "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
                 "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language.",
-                "confidence_score": 95
+                "confidence_score": 95,
+                "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score. (e.g., 'Strong consensus across multiple reputable news outlets.')"
                 }
                 """,
             },
@@ -375,7 +377,7 @@ def clean_extracted_text(text):
     text = re.sub(r"http\S+", "", text)
     lines = [line.strip() for line in text.split("\n") if len(line.strip()) > 40]
     return "\n".join(lines)[:3000]
- 
+
 def extract_search_query(text, source_url=""):
     response = groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -480,7 +482,8 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
                     "reasoning": "Think step-by-step here. 1) Analyze the core assertion of the claim. 2) Summarize the provided evidence. 3) Compare the two for alignment, contradictions, or missing context. 4) Evaluate for satire or absurdity. Do this logical deduction BEFORE stating the verdict.",
                     "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
                     "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language.",
-                    "confidence_score": 95
+                    "confidence_score": 95,
+                    "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score. (e.g., 'Strong consensus across multiple reputable news outlets.')"
                     }
                     """,
             },
@@ -524,9 +527,9 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
                     3. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
                     4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
                     5. ARTICLE STANCE AWARENESS: You will be given the stance of the source article toward the claim.
-                       - If DEBUNKING: The article is actively disproving the claim. Treat the claim as something being debunked.
-                       - If REPORTING: The article is a primary news source confirming the claim. You must evaluate if the broader evidence aligns with or contradicts this reporting. If the evidence generally supports the narrative or is from the same original source, the verdict is FACT.
-                       - If NEUTRAL: Evaluate purely from the evidence.
+                    - If DEBUNKING: The article is actively disproving the claim. Treat the claim as something being debunked.
+                    - If REPORTING: The article is a primary news source confirming the claim. You must evaluate if the broader evidence aligns with or contradicts this reporting. If the evidence generally supports the narrative or is from the same original source, the verdict is FACT.
+                    - If NEUTRAL: Evaluate purely from the evidence.
 
                     CLASSIFICATION TIERS & EVALUATION LOGIC:
                     You must map your evaluation to EXACTLY ONE of the following 5 tiers. 
@@ -559,7 +562,8 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
                     "reasoning": "Think step-by-step here. 1) Analyze the core assertion of the claim. 2) Summarize the provided evidence. 3) Compare the two for alignment, contradictions, or missing context. 4) Evaluate for satire or absurdity. Do this logical deduction BEFORE stating the verdict.",
                     "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
                     "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language.",
-                    "confidence_score": 95
+                    "confidence_score": 95,
+                    "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score. (e.g., 'Strong consensus across multiple reputable news outlets.')"
                     }
                     """,
             },

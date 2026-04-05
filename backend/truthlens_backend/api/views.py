@@ -212,6 +212,7 @@ def claim_polling_endpoint(request, claim_id):
                 "is_ai_generated": claim.is_ai_generated,
                 "thread_id": str(active_thread.id) if active_thread else None,
                 "has_community_verdict": bool(claim.final_verdict),
+                "score_context": claim.score_context,
             },
             status=200,
         )

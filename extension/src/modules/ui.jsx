@@ -7,7 +7,7 @@ const sparklesIconSVG = renderToString(React.createElement(Sparkles, { size: 14 
 const shieldCheckSVG = renderToString(React.createElement(ShieldCheck, { size: 14 }));
 
 export function displayResultCard(claim) {
-   const { id, verdict, summary, confidence_score, source_type, source_url, is_ai_generated, has_community_verdict, thread_id, final_verdict, ai_verdict } = claim;
+   const { id, verdict, summary, confidence_score, source_type, source_url, is_ai_generated, has_community_verdict, thread_id, final_verdict, ai_verdict, score_context } = claim;
 
    // Use community verdict if available, otherwise AI verdict
    const displayVerdict = final_verdict || verdict;
@@ -78,6 +78,12 @@ export function displayResultCard(claim) {
       <div class="truthlens-confidence-bar">
          <div class="truthlens-confidence-fill" style="width: ${confidence_score}%; background-color: ${confidence_bar_color};"></div>
       </div>
+      ${score_context ? `
+      <div class="truthlens-score-context" style="font-size: 12px; color: #6b7280; margin-top: 8px; line-height: 1.3;">
+         <strong>Context:</strong> ${score_context}
+      </div>
+      <br>
+      ` : ''}
       ${thread_id
          ? `<a href='http://localhost:5174/thread/detail/${thread_id}' target='_blank' class='truthlens-source-link'>View Community Discussion</a>`
          : (displayVerdict === "UNVERIFIED" || confidence_score < 50)
@@ -172,7 +178,7 @@ export function successCard(message) {
  * Shows a distinctive "Community Verified" treatment vs the standard AI result.
  */
 export function displayCachedResultCard(match) {
-   const { verdict, final_verdict, summary, confidence_score, thread_id, moderator_notes, claim_id, source_type, is_ai_generated } = match;
+   const { verdict, final_verdict, summary, confidence_score, thread_id, moderator_notes, claim_id, source_type, is_ai_generated, score_context } = match;
    const displayVerdict = final_verdict || verdict;
 
    let badgeColor = "#6b7280";
@@ -231,6 +237,11 @@ export function displayCachedResultCard(match) {
          <div class="truthlens-confidence-bar">
             <div class="truthlens-confidence-fill" style="width: ${confidence_score}%; background-color: ${confidence_bar_color};"></div>
          </div>
+         ${score_context ? `
+         <div class="truthlens-score-context" style="font-size: 12px; color: #6b7280; margin-top: 8px; line-height: 1.3;">
+            <strong>Context:</strong> ${score_context}
+         </div>
+         ` : ''}
       ` : ''}
 
       ${thread_id
