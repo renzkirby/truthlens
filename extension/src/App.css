@@ -31,7 +31,7 @@ body {
 }
 
 .logo-box {
-  background: rgba(255, 255, 255, 0.2);
+  /* background: rgba(255, 255, 255, 0.2); */
   padding: 4px;
   border-radius: 6px;
   display: flex;

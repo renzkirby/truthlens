@@ -1,6 +1,7 @@
 // App.jsx
 import { useState, useEffect } from "react";
 import "./App.css";
+import truthlensIcon from "./assets/truthlens-icon.png";
 import NavigationBar from "./components/NavigationBar";
 import FileUpload from "./pages/FileUpload";
 import SnippingTool from "./pages/SnippingTool";
@@ -75,10 +76,10 @@ function App() {
          <div className="header-row">
             <div className="logo-container">
                <div className="logo-box">
-                  <Search
-                     size={14}
-                     color="#fff"
-                     strokeWidth={2.5}
+                  <img 
+                     src={truthlensIcon} 
+                     alt="TruthLens" 
+                     style={{ width: "25px", height: "25px", objectFit: "contain" }} 
                   />
                </div>
                <h2>TruthLens</h2>
