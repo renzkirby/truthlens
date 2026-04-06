@@ -151,6 +151,7 @@ class Thread(models.Model):
     )
     caption = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=20, blank=True, null=True, default="OPEN")
+    # flag_reason = models.CharField(max_length=20, choices=FlagReason.choices, blank=True, null=True)
     escalation_reason = models.CharField(max_length=20, choices=EscalationReason.choices, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     moderator_verdict = models.CharField(max_length=20, blank=True, null=True)
