@@ -222,7 +222,10 @@ def url_fact_check_process(url, claim_id):
             first_claim_text = gfc_claims[0].get("text", "")
             if is_fact_check_relevant(cleaned_claim, first_claim_text):
                 ai_verdict = evaluate_url_claim_with_gfc(cleaned_claim, gfc_data, article_stance)
-                _save_claim(claim_id, ai_verdict, "Official Fact Check", cleaned_text, url)
+
+                evidence_url = gfc_claims[0].get("claimReview", [{}])[0].get("url", "")
+
+                _save_claim(claim_id, ai_verdict, "Official Fact Check", cleaned_text, evidence_url)
                 return
 
     except Exception as e:
@@ -237,10 +240,14 @@ def url_fact_check_process(url, claim_id):
             topic="general",
             include_answer=True,
         )
+
+        tavily_results = search_response.get("results", [])
+        evidence_url = tavily_results[0].get("url", "") if tavily_results else ""
+
         tavily_answer = search_response.get("answer", "No additional web context found.")
         combined_context = f"Original Article Content:\n{cleaned_text[:1500]}\n\nWeb Search Context:\n{tavily_answer}"
         ai_verdict = evaluate_url_claim_with_tavily(cleaned_claim, combined_context, article_stance)
-        _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_text, url)
+        _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_text, evidence_url)
 
     except Exception as e:
         print(f"Tavily search error: {str(e)}")
@@ -271,6 +278,7 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_url=""):
         claim.source_type = source_type
         claim.context_text = context_text
         claim.source_link = source_url or None
+        claim.top_verdict_source = source_url or None
         claim.verified_via = Claim.VerificationSource.AI_EXTENSION
 
         # Compute fingerprint if not already set (e.g., text claims where
