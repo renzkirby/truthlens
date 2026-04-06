@@ -19,6 +19,9 @@ import re
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
 from django.db.models import Q
+from pgvector.django import CosineDistance
+
+from .embedding_service import generate_embedding
 
 
 def compute_fingerprint(claim_type, data):
@@ -120,13 +123,50 @@ def _hamming_distance(hash1, hash2):
         return 999  # Return large distance on error
 
 
-def find_matching_claim(fingerprint, claim_type, hamming_threshold=5):
+def find_semantic_match(embedding, claim_type="TEXT", threshold=0.85):
     """
-    Search the database for an existing claim that matches the given fingerprint.
+    Search for a semantically similar claim using cosine distance.
+    Returns the best match that has a cosine similarity > threshold.
+    Similarity = 1 - CosineDistance. So we look for distance < (1 - threshold).
+    """
+    from .models import Claim
+
+    if not embedding:
+        return None
+
+    max_distance = 1.0 - threshold
+
+    candidates = (
+        Claim.objects
+        .exclude(claim_embedding__isnull=True)
+        .filter(claim_type=claim_type)
+        .annotate(distance=CosineDistance("claim_embedding", embedding))
+        .filter(distance__lt=max_distance)
+        .prefetch_related("threads")
+        .order_by("distance", "-last_updated")
+    )
+
+    # Prioritization: resolved -> thread -> any match
+    resolved = candidates.filter(final_verdict__isnull=False).first()
+    if resolved:
+        return resolved
+
+    with_thread = candidates.filter(threads__isnull=False).distinct().first()
+    if with_thread:
+        return with_thread
+
+    # Just return whatever is closest
+    return candidates.first()
+
+
+def find_matching_claim(fingerprint, claim_type, hamming_threshold=5, context_text=None, semantic_threshold=0.80):
+    """
+    Search the database for an existing claim that matches the given fingerprint or text.
 
     Matching logic:
       - For IMAGE claims: exact fingerprint match OR Hamming distance ≤ threshold
-      - For URL/TEXT claims: exact fingerprint match only
+      - For URL claims: exact fingerprint match only
+      - For TEXT claims: exact fingerprint match OR semantic similarity > threshold
 
     Returns the best matching Claim object, prioritizing:
       1. Claims with a final_verdict (moderator-resolved) — most recent first
@@ -137,43 +177,39 @@ def find_matching_claim(fingerprint, claim_type, hamming_threshold=5):
     """
     from .models import Claim  # Local import to avoid circular dependency
 
-    if not fingerprint:
-        return None
+    # --- 1. Exact fingerprint match (all types) ---
+    if fingerprint:
+        exact_matches = (
+            Claim.objects
+            .filter(claim_fingerprint=fingerprint)
+            .select_related()
+            .prefetch_related("threads")
+            .order_by("-last_updated")
+        )
 
-    # --- Exact fingerprint match (all types) ---
-    exact_matches = (
-        Claim.objects
-        .filter(claim_fingerprint=fingerprint)
-        .select_related()
-        .prefetch_related("threads")
-        .order_by("-last_updated")
-    )
+        # Prioritize: resolved claims first, then claims with threads, then any
+        resolved = exact_matches.filter(final_verdict__isnull=False).first()
+        if resolved:
+            return resolved
 
-    # Prioritize: resolved claims first, then claims with threads, then any
-    resolved = exact_matches.filter(final_verdict__isnull=False).first()
-    if resolved:
-        return resolved
+        with_thread = exact_matches.filter(threads__isnull=False).distinct().first()
+        if with_thread:
+            return with_thread
 
-    with_thread = exact_matches.filter(threads__isnull=False).distinct().first()
-    if with_thread:
-        return with_thread
+        any_match = exact_matches.first()
+        if any_match:
+            return any_match
 
-    any_match = exact_matches.first()
-    if any_match:
-        return any_match
-
-    # --- Near-match for IMAGE claims (Hamming distance) ---
-    if claim_type == "IMAGE" and fingerprint.startswith("img:"):
+    # --- 2. Near-match for IMAGE claims (Hamming distance) ---
+    if claim_type == "IMAGE" and fingerprint and fingerprint.startswith("img:"):
         incoming_hash = fingerprint[4:]  # Strip "img:" prefix
-        # Query all image fingerprints and check Hamming distance in Python
-        # This is acceptable for moderate datasets; for large scale, use pg_trgm or specialized index
         image_candidates = (
             Claim.objects
             .filter(
                 claim_type="IMAGE",
                 claim_fingerprint__startswith="img:",
             )
-            .exclude(claim_fingerprint=fingerprint)  # Already checked above
+            .exclude(claim_fingerprint=fingerprint)
             .prefetch_related("threads")
             .order_by("-last_updated")
         )
@@ -181,7 +217,7 @@ def find_matching_claim(fingerprint, claim_type, hamming_threshold=5):
         best_match = None
         best_distance = hamming_threshold + 1
 
-        for candidate in image_candidates[:200]:  # Cap to prevent full table scan
+        for candidate in image_candidates[:200]:
             candidate_hash = candidate.claim_fingerprint[4:]
             distance = _hamming_distance(incoming_hash, candidate_hash)
             if distance <= hamming_threshold and distance < best_distance:
@@ -190,6 +226,19 @@ def find_matching_claim(fingerprint, claim_type, hamming_threshold=5):
 
         if best_match:
             return best_match
+
+    # --- 3. Semantic similarity match for TEXT/URL claims (Phase 2 Fallback) ---
+    # Only applies if we have context_text and didn't find an exact match above
+    if claim_type in ["TEXT", "URL"] and context_text:
+        print(f"No exact match found for {claim_type}. Generating embedding for semantic check...")
+        embedding = generate_embedding(context_text)
+        if embedding:
+            semantic_match = find_semantic_match(embedding, claim_type, semantic_threshold)
+            if semantic_match:
+                print(f"Semantic match found! (Threshold {semantic_threshold}) -> Claim ID: {semantic_match.id}")
+                return semantic_match
+            else:
+                print("No semantic match found above threshold.")
 
     return None
 
