@@ -278,33 +278,21 @@ function CommunityFeed() {
                               {thread.caption}
                            </div>
 
-                           {/* Media Placeholder */}
-                           <div
-                              className="card-media"
-                              onClick={() => {
-                                 handleThreadClick(thread.id);
-                              }}
-                              style={
-                                 thread.claim.media_url ? { height: "auto" } : { height: "350px" }
-                              }>
-                              {thread.claim.media_url ? (
+                           {/* Card Media */}
+                              {thread.claim.media_url && (
+                              <div
+                                 className="card-media"
+                                 onClick={() => {
+                                    handleThreadClick(thread.id);
+                                 }}
+                                 style={{ height: "auto" }}>
                                  <img
                                     src={thread.claim.media_url}
                                     alt="Snipped claim"
                                     className="card-media-image"
                                  />
-                              ) : (
-                                 <>
-                                    <div className="media-icon">
-                                       <Icons
-                                          name="globe"
-                                          size={24}
-                                       />
-                                    </div>
-                                    <span className="media-source">Snipped from Twitter / X</span>
-                                 </>
+                              </div>
                               )}
-                           </div>
 
                            {/* AI Analysis Bar or Moderator Verdict */}
                            <div className={`ai-analysis-bar bar-${verdictClass}`}>

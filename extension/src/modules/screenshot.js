@@ -1,7 +1,7 @@
 import { state } from "./state.js";
 import { cleanup } from "./overlay.js";
 import { sendImageToServer } from "./api.js";
-import { displayLoadingCard } from "./ui.js";
+import { displayLoadingCard } from "./ui.jsx";
 
 export function captureScreenshot(coords) {
    console.log("Requesting screenshot with coords:", coords);

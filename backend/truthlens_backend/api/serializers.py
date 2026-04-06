@@ -118,6 +118,7 @@ class ClaimSerializer(serializers.ModelSerializer):
             "verified_evidence_count",
             "moderator_verdict_info",
             "last_updated",
+            "score_context"
         ]
 
 
@@ -435,4 +436,5 @@ class ClaimMatchSerializer(serializers.Serializer):
     thread_id = serializers.CharField(allow_null=True)
     thread_status = serializers.CharField(allow_null=True)
     moderator_notes = serializers.CharField(allow_null=True)
+    score_context = serializers.CharField(allow_null=True, required=False)
 

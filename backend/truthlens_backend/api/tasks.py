@@ -262,6 +262,8 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_url=""):
         # Keep final_verdict reserved for moderator or verified-evidence consensus decisions.
         claim.verdict = ai_verdict_value
         claim.ai_summary = verdict.get("summary")
+        claim.score_context = verdict.get("score_context")
+        
         confidence = verdict.get("confidence_score", 0)
         if ai_verdict_value == "UNVERIFIED" and (confidence == 0 or confidence is None):
             confidence = 40

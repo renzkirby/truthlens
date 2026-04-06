@@ -42,11 +42,13 @@ class Claim(models.Model):
     media_hash = models.CharField(max_length=64, blank=True, null=True)
     url_link = models.URLField(max_length=500, blank=True, null=True)
     context_text = models.TextField(blank=True, null=True)
+
     ai_summary = models.TextField(blank=True, null=True)
     ai_verdict = models.CharField(max_length=20, blank=True, null=True)
     final_verdict = models.CharField(max_length=20, blank=True, null=True)
     verdict = models.CharField(max_length=20, blank=True, null=True)
     consensus_score = models.FloatField(blank=True, null=True)
+    score_context = models.CharField(max_length=255, null=True, blank=True)
     source_type = models.CharField(max_length=50, blank=True, null=True)
     verified_via = models.CharField(
         max_length=20,
