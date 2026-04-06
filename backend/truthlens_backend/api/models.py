@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from pgvector.django import VectorField, HnswIndex
 import uuid
 
 
@@ -67,6 +68,12 @@ class Claim(models.Model):
         help_text="Canonical fingerprint for deduplication (pHash for images, normalized URL hash, or text hash)"
     )
 
+    # Semantic similarity embedding for paraphrase detection
+    claim_embedding = VectorField(
+        dimensions=384, null=True, blank=True,
+        help_text="384-dim embedding vector from all-MiniLM-L6-v2 for semantic claim matching"
+    )
+
     def __str__(self):
         return f"Claim {self.id} - Type: {self.claim_type} - Final Verdict: {self.final_verdict or self.verdict}"
     
@@ -112,6 +119,17 @@ class Claim(models.Model):
         else:
             return None  # Not enough decisive evidence
 
+    class Meta:
+        indexes = [
+            HnswIndex(
+                name="claim_embedding_hnsw_idx",
+                fields=["claim_embedding"],
+                m=16,
+                ef_construction=64,
+                opclasses=["vector_cosine_ops"],
+            )
+        ]
+
 
 class Thread(models.Model):
     class Status(models.TextChoices):
@@ -119,12 +137,12 @@ class Thread(models.Model):
         OPEN = "OPEN", "Open"
         CLOSED = "CLOSED", "Closed"
         REJECTED = "REJECTED", "Rejected"    
-    class FlagReason(models.TextChoices):
-        FACT = "FACT", "Fact"
-        FAKE = "FAKE", "Fake"
-        MISLEADING = "MISLEADING", "Misleading"
-        SATIRE = "SATIRE", "Satire"
-        UNVERIFIED = "UNVERIFIED", "Unverified"
+    class EscalationReason(models.TextChoices):
+        INCORRECT_VERDICT = "INCORRECT_VERDICT", "AI gave an incorrect or unverified verdict"
+        LOW_CONFIDENCE = "LOW_CONFIDENCE", "AI confidence score is too low"
+        MISSING_CONTEXT = "MISSING_CONTEXT", "The context provided is incomplete or missing"
+        OUTDATED_INFO = "OUTDATED_INFO", "The AI relied on outdated information or news"
+        OTHER = "OTHER", "Other"
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     claim = models.ForeignKey(Claim, on_delete=models.CASCADE, related_name="threads")
@@ -134,6 +152,7 @@ class Thread(models.Model):
     caption = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=20, blank=True, null=True, default="OPEN")
     # flag_reason = models.CharField(max_length=20, choices=FlagReason.choices, blank=True, null=True)
+    escalation_reason = models.CharField(max_length=20, choices=EscalationReason.choices, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     moderator_verdict = models.CharField(max_length=20, blank=True, null=True)
     moderator_notes = models.TextField(blank=True, null=True)

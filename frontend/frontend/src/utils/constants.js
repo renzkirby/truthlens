@@ -108,46 +108,36 @@ export const API_ENDPOINTS = {
 // ── Flag Reason Options ──
 // Options for flagging/escalating claims to the community
 // Maps verdict types to visual properties for flag selection buttons
-export const FLAG_OPTIONS = [
+export const ESCALATION_OPTIONS = [
    {
-      value: "FACT",
-      label: "Fact",
-      icon: "check-circle",
-      color: VERDICT_CONFIG.FACT.color,
-      bg: VERDICT_CONFIG.FACT.bg,
-      border: VERDICT_CONFIG.FACT.border,
+      value: "INCORRECT_VERDICT",
+      label: "Incorrect Verdict",
+      desc: "AI gave an incorrect or unverified verdict",
+      icon: "alert-circle",
    },
    {
-      value: "FAKE",
-      label: "Fake",
-      icon: "x-circle",
-      color: VERDICT_CONFIG.FAKE.color,
-      bg: VERDICT_CONFIG.FAKE.bg,
-      border: VERDICT_CONFIG.FAKE.border,
+      value: "LOW_CONFIDENCE",
+      label: "Low Confidence",
+      desc: "AI confidence score is too low",
+      icon: "bar-chart-2",
    },
    {
-      value: "MISLEADING",
-      label: "Misleading",
-      icon: "alert-triangle",
-      color: VERDICT_CONFIG.MISLEADING.color,
-      bg: VERDICT_CONFIG.MISLEADING.bg,
-      border: VERDICT_CONFIG.MISLEADING.border,
-   },
-   {
-      value: "SATIRE",
-      label: "Satire",
-      icon: "smile",
-      color: VERDICT_CONFIG.SATIRE.color,
-      bg: VERDICT_CONFIG.SATIRE.bg,
-      border: VERDICT_CONFIG.SATIRE.border,
-   },
-   {
-      value: "UNVERIFIED",
-      label: "Unverified",
+      value: "MISSING_CONTEXT",
+      label: "Missing Context",
+      desc: "The context provided is incomplete",
       icon: "help-circle",
-      color: VERDICT_CONFIG.UNVERIFIED.color,
-      bg: VERDICT_CONFIG.UNVERIFIED.bg,
-      border: VERDICT_CONFIG.UNVERIFIED.border,
+   },
+   {
+      value: "OUTDATED_INFO",
+      label: "Outdated Information",
+      desc: "The analysis relied on outdated news",
+      icon: "clock",
+   },
+   {
+      value: "OTHER",
+      label: "Other",
+      desc: "Other miscellaneous reasons",
+      icon: "more-horizontal",
    },
 ];
 

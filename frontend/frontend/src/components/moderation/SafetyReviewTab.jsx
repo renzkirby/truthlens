@@ -32,7 +32,7 @@ function SafetyReviewTab({
             thread.claim?.ai_summary?.toLowerCase().includes(query) ||
             thread.caption?.toLowerCase().includes(query) ||
             thread.author?.username?.toLowerCase().includes(query) ||
-            thread.flag_reason?.toLowerCase().includes(query);
+            thread.escalation_reason?.toLowerCase().includes(query);
 
          return matchesStatus && matchesSearch;
       });

@@ -283,6 +283,16 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_url=""):
             elif context_text:
                 claim.claim_fingerprint = compute_fingerprint("TEXT", context_text)
 
+        # Compute semantic embedding if context_text exists and not already set
+        if context_text and not claim.claim_embedding:
+            from .embedding_service import generate_embedding
+            try:
+                embedding = generate_embedding(context_text)
+                if embedding:
+                    claim.claim_embedding = embedding
+            except Exception as e:
+                print(f"Failed to generate embedding during _save_claim: {e}")
+
         claim.save()
         print(
             f"Claim {claim_id} saved — ai_verdict: {claim.ai_verdict}, final_verdict: {claim.final_verdict}, fingerprint: {claim.claim_fingerprint}"

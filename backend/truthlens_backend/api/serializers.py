@@ -144,6 +144,10 @@ class ThreadSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"claim_id": "Cannot be changed after thread creation."}
             )
+        if self.instance and "escalation_reason" in attrs:
+            raise serializers.ValidationError(
+                {"escalation_reason": "Cannot be changed after thread creation."}
+            )
         return attrs
 
     class Meta:
@@ -156,6 +160,7 @@ class ThreadSerializer(serializers.ModelSerializer):
             "caption",
             "status",
             # "flag_reason",
+            "escalation_reason",
             "moderator_verdict",
             "moderator_notes",
             "moderated_at",
@@ -373,6 +378,7 @@ class ThreadDetailSerializer(serializers.ModelSerializer):
             "caption",
             "status",
             # "flag_reason",
+            "escalation_reason",
             "moderator_verdict",
             "moderator_notes",
             "moderated_by",

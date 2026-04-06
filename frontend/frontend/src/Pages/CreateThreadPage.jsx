@@ -11,7 +11,7 @@
  *
  * State:
  *   - Claim data (from URL parameter)
- *   - Form inputs: caption, source_url, flag_reason
+ *   - Form inputs: caption, source_url, escalation_reason
  *   - Submission state (loading, errors)
  */
 
@@ -23,7 +23,7 @@ import Icons from "../components/Icons.jsx";
 
 // ── Utilities & Constants ──
 import { getAiVerdict } from "../utils/verdict";
-import { VERDICT_CONFIG, VERDICT_OPTIONS, FLAG_OPTIONS, VERDICT_COLORS } from "../utils/constants";
+import { VERDICT_CONFIG, VERDICT_OPTIONS, ESCALATION_OPTIONS, VERDICT_COLORS } from "../utils/constants";
 import { useEndpoint } from "../utils/api";
 
 // ── Styles ──
@@ -42,7 +42,7 @@ function CreateThreadPage() {
    const [formValues, setFormValues] = useState({
       caption: "",
       source_url: "",
-      flag_reason: "",
+      escalation_reason: "",
    });
 
    /**
@@ -62,16 +62,16 @@ function CreateThreadPage() {
     * @param {string} value - Selected flag reason value
     */
    const handleFlagSelect = (value) => {
-      setFormValues({ ...formValues, flag_reason: value });
+      setFormValues({ ...formValues, escalation_reason: value });
    };
 
    /**
     * Submit thread escalation to backend
-    * Validates flag_reason, creates thread with claim and form data
+    * Validates escalation_reason, creates thread with claim and form data
     */
    const handleSubmit = async () => {
-      if (!formValues.flag_reason) {
-         setError("Please select a flag reason before submitting.");
+      if (!formValues.escalation_reason) {
+         setError("Please select a reason for escalating this thread before submitting.");
          return;
       }
 
@@ -85,7 +85,7 @@ function CreateThreadPage() {
             body: JSON.stringify({
                claim_id: claimId,
                caption: formValues.caption,
-               flag_reason: formValues.flag_reason,
+               escalation_reason: formValues.escalation_reason,
             }),
          });
          navigate(`/thread/detail/${responseData.id}`);
@@ -307,26 +307,20 @@ function CreateThreadPage() {
                            Select the category that best describes this claim.
                         </p>
                         <div className="flag-options">
-                           {FLAG_OPTIONS.map((opt) => (
+                           {ESCALATION_OPTIONS.map((opt) => (
                               <button
                                  key={opt.value}
                                  type="button"
-                                 className={`flag-option-btn ${formValues.flag_reason === opt.value ? "selected" : ""}`}
-                                 style={
-                                    formValues.flag_reason === opt.value
-                                       ? {
-                                            color: opt.color,
-                                            backgroundColor: opt.bg,
-                                            borderColor: opt.border,
-                                         }
-                                       : {}
-                                 }
+                                 className={`escalation-option-btn ${formValues.escalation_reason === opt.value ? "selected" : ""}`}
                                  onClick={() => handleFlagSelect(opt.value)}>
-                                 <Icons
-                                    name={opt.icon}
-                                    size={15}
-                                 />
-                                 {opt.label}
+                                 <div className="escalation-header">
+                                    <Icons
+                                       name={opt.icon}
+                                       size={15}
+                                    />
+                                    <strong>{opt.label}</strong>
+                                 </div>
+                                 <span className="escalation-desc">{opt.desc}</span>
                               </button>
                            ))}
                         </div>
@@ -337,7 +331,7 @@ function CreateThreadPage() {
                         onClick={() => {
                            handleSubmit();
                         }}
-                        disabled={submitting || !formValues.flag_reason}>
+                        disabled={submitting || !formValues.escalation_reason}>
                         {submitting ? (
                            <>Submitting...</>
                         ) : (

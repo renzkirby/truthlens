@@ -39,11 +39,11 @@ export function displayResultCard(claim) {
    else if (confidence_score >= 40 && confidence_score < 70) confidence_bar_color = "#ebdc09";
    else if (confidence_score >= 70) confidence_bar_color = "#0e9f6e";
 
-   const aiWarningHTML = is_ai_generated 
+   const aiWarningHTML = is_ai_generated
       ? `<div class="truthlens-banner truthlens-ai-warning">
             <span class="truthlens-banner-icon">${sparklesIconSVG}</span>
             AI-GENERATED MEDIA DETECTED
-         </div>` 
+         </div>`
       : "";
 
    // Community verdict banner
@@ -87,7 +87,7 @@ export function displayResultCard(claim) {
       ${thread_id
          ? `<a href='http://localhost:5174/thread/detail/${thread_id}' target='_blank' class='truthlens-source-link' style='display: block; text-align: center; background: #f3f4f6; padding: 8px; border-radius: 6px; text-decoration: none; color: #4f46e5; font-weight: 600; margin-top: 12px; border: 1px solid #e5e7eb;'>View Community Discussion</a>`
          : (displayVerdict === "UNVERIFIED" || confidence_score < 50)
-            ? `<a href='http://localhost:5174/thread/create?claim_id=${id}' target='_blank' class='truthlens-source-link' style='display: block; text-align: center; background: #eff6ff; padding: 8px; border-radius: 6px; text-decoration: none; color: var(--brand-primary, #4f46e5); font-weight: 600; margin-top: 12px; border: 1px dashed #bfdbfe;'>[+] Ask the community</a>`: displayVerdict === "OUT_OF_SCOPE"
+            ? `<a href='http://localhost:5174/thread/create?claim_id=${id}' target='_blank' class='truthlens-source-link' style='display: block; text-align: center; background: #eff6ff; padding: 8px; border-radius: 6px; text-decoration: none; color: var(--brand-primary, #4f46e5); font-weight: 600; margin-top: 12px; border: 1px dashed #bfdbfe;'>[+] Ask the community</a>` : displayVerdict === "OUT_OF_SCOPE"
                ? ""
                : `<a href="${source_url}" target="_blank" class="truthlens-source-link">View Source</a>`
       }
@@ -206,7 +206,7 @@ export function displayCachedResultCard(match) {
    const communityBannerHTML = `
       <div class="truthlens-banner truthlens-community-verified">
          <span class="truthlens-banner-icon">${shieldCheckSVG}</span>
-         COMMUNITY VERIFIED — CACHED RESULT
+         COMMUNITY VERIFIED
       </div>`;
 
    const card = document.createElement("div");
