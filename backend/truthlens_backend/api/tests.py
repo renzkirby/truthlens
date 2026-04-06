@@ -1,4 +1,4 @@
-﻿from django.contrib.auth.models import User
+from django.contrib.auth.models import User
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase, APIClient
@@ -174,12 +174,12 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("thread_id", res.data)
 
-    def test_thread_status_and_flag_reason_are_read_only_for_normal_thread_flow(self):
+    def test_thread_status_is_read_only_for_normal_thread_flow(self):
         thread_detail = reverse("thread-detail", args=[str(self.thread.id)])
 
         res = self.owner_client.patch(
             thread_detail,
-            {"status": "CLOSED", "flag_reason": "FAKE", "caption": "Updated caption"},
+            {"status": "CLOSED", "caption": "Updated caption"},
             format="json",
         )
 
@@ -187,7 +187,18 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
         self.thread.refresh_from_db()
         self.assertEqual(self.thread.caption, "Updated caption")
         self.assertEqual(self.thread.status, "OPEN")
-        self.assertIsNone(self.thread.flag_reason)
+
+    def test_escalation_reason_is_immutable_on_update(self):
+        thread_detail = reverse("thread-detail", args=[str(self.thread.id)])
+
+        res = self.owner_client.patch(
+            thread_detail,
+            {"escalation_reason": "LOW_CONFIDENCE", "caption": "Try update"},
+            format="json",
+        )
+
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("escalation_reason", res.data)
 
 
 class ModeratorEvidenceVerificationTests(APITestCase):

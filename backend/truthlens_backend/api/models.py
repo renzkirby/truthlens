@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
-from pgvector.django import VectorField
+from pgvector.django import VectorField, HnswIndex
 import uuid
 
 
@@ -119,6 +119,17 @@ class Claim(models.Model):
         else:
             return None  # Not enough decisive evidence
 
+    class Meta:
+        indexes = [
+            HnswIndex(
+                name="claim_embedding_hnsw_idx",
+                fields=["claim_embedding"],
+                m=16,
+                ef_construction=64,
+                opclasses=["vector_cosine_ops"],
+            )
+        ]
+
 
 class Thread(models.Model):
     class Status(models.TextChoices):
@@ -126,12 +137,12 @@ class Thread(models.Model):
         OPEN = "OPEN", "Open"
         CLOSED = "CLOSED", "Closed"
         REJECTED = "REJECTED", "Rejected"    
-    class FlagReason(models.TextChoices):
-        FACT = "FACT", "Fact"
-        FAKE = "FAKE", "Fake"
-        MISLEADING = "MISLEADING", "Misleading"
-        SATIRE = "SATIRE", "Satire"
-        UNVERIFIED = "UNVERIFIED", "Unverified"
+    class EscalationReason(models.TextChoices):
+        INCORRECT_VERDICT = "INCORRECT_VERDICT", "AI gave an incorrect or unverified verdict"
+        LOW_CONFIDENCE = "LOW_CONFIDENCE", "AI confidence score is too low"
+        MISSING_CONTEXT = "MISSING_CONTEXT", "The context provided is incomplete or missing"
+        OUTDATED_INFO = "OUTDATED_INFO", "The AI relied on outdated information or news"
+        OTHER = "OTHER", "Other"
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     claim = models.ForeignKey(Claim, on_delete=models.CASCADE, related_name="threads")
@@ -140,7 +151,7 @@ class Thread(models.Model):
     )
     caption = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=20, blank=True, null=True, default="OPEN")
-    flag_reason = models.CharField(max_length=20, choices=FlagReason.choices, blank=True, null=True)
+    escalation_reason = models.CharField(max_length=20, choices=EscalationReason.choices, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     moderator_verdict = models.CharField(max_length=20, blank=True, null=True)
     moderator_notes = models.TextField(blank=True, null=True)
