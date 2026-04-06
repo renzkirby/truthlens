@@ -614,6 +614,10 @@ class ThreadViewSet(viewsets.ModelViewSet):
             .order_by("-created_at")
         )
 
+        claim_id = self.request.query_params.get("claim_id")
+        if claim_id:
+            queryset = queryset.filter(claim_id=claim_id)
+
         if getattr(self, "action", None) == "retrieve":
             queryset = queryset.prefetch_related(
                 "flags",
