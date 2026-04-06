@@ -3,8 +3,20 @@
     "name": "TruthLens",
     "version": "0.1.0",
     "description": "AI-driven misinformation detection",
+    "icons": {
+    "16": "truthlens_logo.png",
+    "32": "truthlens_logo.png",
+    "48": "truthlens_logo.png",
+    "128": "truthlens_logo.png"
+    },
     "action": {
-        "default_popup": "index.html"
+        "default_popup": "index.html",
+        "default_icon": {
+        "16": "truthlens_logo.png",
+        "32": "truthlens_logo.png",
+        "48": "truthlens_logo.png",
+        "128": "truthlens_logo.png"
+    }
     },
     "permissions": [
         "activeTab",
