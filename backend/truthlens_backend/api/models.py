@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from pgvector.django import VectorField
 import uuid
 
 
@@ -63,6 +64,12 @@ class Claim(models.Model):
     claim_fingerprint = models.CharField(
         max_length=128, db_index=True, blank=True, null=True,
         help_text="Canonical fingerprint for deduplication (pHash for images, normalized URL hash, or text hash)"
+    )
+
+    # Semantic similarity embedding for paraphrase detection (Phase 2)
+    claim_embedding = VectorField(
+        dimensions=384, null=True, blank=True,
+        help_text="384-dim embedding vector from all-MiniLM-L6-v2 for semantic claim matching"
     )
 
     def __str__(self):
