@@ -342,7 +342,8 @@ def evaluate_image_claim_with_tavily(original_claim, combined_context, article_s
                 "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
                 "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language.",
                 "confidence_score": 95,
-                "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score. (e.g., 'Strong consensus across multiple reputable news outlets.')"
+                "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score. (e.g., 'Strong consensus across multiple reputable news outlets.')",
+                "source_url": "The exact URL of the most reliable article from the search context that proves this verdict (or null if none found)"
                 }
                 """,
             },
