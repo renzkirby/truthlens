@@ -66,7 +66,7 @@ class Claim(models.Model):
         help_text="Canonical fingerprint for deduplication (pHash for images, normalized URL hash, or text hash)"
     )
 
-    # Semantic similarity embedding for paraphrase detection (Phase 2)
+    # Semantic similarity embedding for paraphrase detection
     claim_embedding = VectorField(
         dimensions=384, null=True, blank=True,
         help_text="384-dim embedding vector from all-MiniLM-L6-v2 for semantic claim matching"
