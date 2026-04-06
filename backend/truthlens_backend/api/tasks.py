@@ -31,7 +31,7 @@ def snippet_fact_check_process(image_hash, claim_id, check_deepfake=False):
         return
 
     print(f"Downloading image from Supabase: {claim.media_url}")
-    response = request.get(claim.media_url)
+    response = requests.get(claim.media_url)
     image_bytes = response.content
 
     is_deepfake = False
