@@ -873,14 +873,15 @@ def verify_text(request):
 
     # ── Claim Deduplication Pre-Check ──
     fingerprint = compute_fingerprint("TEXT", text_content)
-    if fingerprint:
-        matched_claim = find_matching_claim(fingerprint, "TEXT")
-        if matched_claim and matched_claim.final_verdict:
-            match_result = get_match_result(matched_claim)
-            return JsonResponse(
-                {"claim_id": str(matched_claim.id), "cached": True, "match": match_result},
-                status=200,
-            )
+    # Even if fingerprint is None or exact match fails, we want semantic fallback!
+    matched_claim = find_matching_claim(fingerprint, "TEXT", context_text=text_content)
+    
+    if matched_claim and matched_claim.final_verdict:
+        match_result = get_match_result(matched_claim)
+        return JsonResponse(
+            {"claim_id": str(matched_claim.id), "cached": True, "match": match_result},
+            status=200,
+        )
 
     # TEMP HACK: Save as URL so we don't have to run migrations yet.
     # We set url_link to a short string so it doesn't crash the 500-character database limit!
@@ -912,14 +913,16 @@ def claim_match(request):
     Query params:
         fingerprint: the computed claim fingerprint
         claim_type: IMAGE, URL, or TEXT
+        text: (optional) raw text for semantic matching fallback
     """
     fingerprint = request.query_params.get("fingerprint")
     claim_type = request.query_params.get("claim_type", "").upper()
+    text = request.query_params.get("text")
 
-    if not fingerprint:
+    if not fingerprint and not text:
         return Response({"match": None}, status=200)
 
-    matched_claim = find_matching_claim(fingerprint, claim_type)
+    matched_claim = find_matching_claim(fingerprint, claim_type, context_text=text)
     if matched_claim:
         match_result = get_match_result(matched_claim)
         serializer = ClaimMatchSerializer(data=match_result)
