@@ -21,8 +21,18 @@ from .trust_service import recompute_user_trust_score
 
 # IMAGE PIPELINE
 @shared_task
-def snippet_fact_check_process(image_hash, base64_string, claim_id, check_deepfake=False):
-    _, image_bytes = process_image(base64_string)
+def snippet_fact_check_process(image_hash, claim_id, check_deepfake=False):
+    # _, image_bytes = process_image(base64_string)
+
+    try:
+        claim = Claim.objects.get(id=claim_id)
+    except Claim.DoesNotExist:
+        print(f"Claim {claim_id} not found.")
+        return
+
+    print(f"Downloading image from Supabase: {claim.media_url}")
+    response = request.get(claim.media_url)
+    image_bytes = response.content
 
     is_deepfake = False
     ai_prob = 0.0
