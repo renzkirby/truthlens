@@ -46,7 +46,7 @@ export function AuthProvider({ children }) {
       }
 
       if (response.status == 401) {
-         const refreshResponse = await fetch("http://localhost:8000/api/auth/refresh/", {
+         const refreshResponse = await fetch(`${VITE_API_BASE_URL}/auth/refresh/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ refresh: localStorage.getItem("refresh") }),
@@ -72,7 +72,7 @@ export function AuthProvider({ children }) {
 
    const fetchUser = async (accessToken) => {
       try {
-         const response = await fetch("http://localhost:8000/api/auth/me/", {
+         const response = await fetch(`${VITE_API_BASE_URL}/auth/me/`, {
             headers: { Authorization: `Bearer ${accessToken}` },
          });
          const data = await response.json();
