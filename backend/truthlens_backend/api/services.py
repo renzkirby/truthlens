@@ -140,10 +140,10 @@ def clean_ocr_text(raw_text):
                 1. Identify the CENTRAL NARRATIVE of the provided text.
                 2. Extract the primary verifiable claim. Translate any local slang or Taglish to English.
                 3. UNDERLYING CLAIM EXTRACTION: If the text is actively debunking, fact-checking, or clarifying a rumor, your cleaned_claim MUST be the original fake rumor itself, NOT the fact-checker's conclusion.
-                - Example: If text says "Fake News: Pope did not wear a puffer jacket", you extract "The Pope wore a white puffer jacket."
-                4. CONTEXT RETENTION: You MUST include essential context in the cleaned_claim (e.g., specific names, dates, locations, and the specific event being alleged). Do not over-prune.
-                5. Generate a highly optimized search query of exactly 6-10 keywords. Use distinct nouns and entities that a search engine can easily find.
-                6. Determine the article's own stance toward the extracted claim:
+                4. QUOTE CARDS & ATTRIBUTIONS (CRITICAL): If the text is a quote attributed to a specific person, journalist, or publication (e.g., a quote card), the `cleaned_claim` MUST explicitly state who said it (e.g., "Ogie Diaz stated that..."). Do not strip the speaker's name.
+                5. CONTEXT RETENTION: You MUST include essential context in the cleaned_claim (e.g., specific names, dates, locations). Do not over-prune. 
+                6. SEARCH QUERY OPTIMIZATION: Generate a highly optimized search query of exactly 6-10 keywords. You MUST prioritize proper nouns, the speaker's name, and unique identifiers to prevent ambiguous search results.
+                7. Determine the article's own stance toward the extracted claim:
                     - DEBUNKING: The article is a fact-check disproving the extracted claim.
                     - REPORTING: The article neutrally reports the extracted claim as true.
                     - SATIRE: The text is from a parody source OR the text is deeply absurd/comedic.
@@ -233,6 +233,10 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, articl
 
         5. UNVERIFIED: The provided evidence is irrelevant, inconclusive, or completely absent. Or, the claim is a subjective opinion, political prediction, or emotional expression that cannot be objectively proven true or false. 
         - AUTHORIZED ABSTENTION: If you do not know the answer based strictly on the evidence, you must choose UNVERIFIED.
+
+        6. STRICT ENTITY MATCHING (THE 'KEYWORD SALAD' TRAP): Do not stamp 'FACT' just because keywords match. You must verify EXACT identities. If the claim is about a specific public figure and the evidence discusses a different person or entity that merely shares the same name, they are NOT the same. In these cases, you must classify it as UNVERIFIED or FAKE.
+                
+        7. GRAMMAR & ATTRIBUTION ACCURACY: Pay strict grammatical attention to WHO is doing WHAT. The roles in the claim (subject, object, action) must perfectly align with the evidence. (e.g., If the claim says Person A committed an action against Person B, evidence showing Person B did it to Person A means the claim is FAKE). Furthermore, if the claim attributes a quote or statement to a specific individual, journalist, or organization, the evidence MUST explicitly confirm that the specific entity actually made that statement.
 
         PHILIPPINE MISINFORMATION TROPES:
         - "CTTO" (Credit to the Owner): Treat claims containing "CTTO" with extreme skepticism; it is predominantly used to strip original provenance and launder decontextualized media.
@@ -326,6 +330,11 @@ def evaluate_image_claim_with_tavily(original_claim, combined_context, article_s
 
                 5. UNVERIFIED: The provided evidence is irrelevant, inconclusive, or completely absent. Or, the claim is a subjective opinion, political prediction, or emotional expression that cannot be objectively proven true or false. 
                 - AUTHORIZED ABSTENTION: If you do not know the answer based strictly on the evidence, you must choose UNVERIFIED.
+                
+                6. STRICT ENTITY MATCHING (THE 'KEYWORD SALAD' TRAP): Do not stamp 'FACT' just because keywords match. You must verify EXACT identities. If the claim is about a specific public figure and the evidence discusses a different person or entity that merely shares the same name, they are NOT the same. In these cases, you must classify it as UNVERIFIED or FAKE.
+                        
+                7. GRAMMAR & ATTRIBUTION ACCURACY: Pay strict grammatical attention to WHO is doing WHAT. The roles in the claim (subject, object, action) must perfectly align with the evidence. (e.g., If the claim says Person A committed an action against Person B, evidence showing Person B did it to Person A means the claim is FAKE). Furthermore, if the claim attributes a quote or statement to a specific individual, journalist, or organization, the evidence MUST explicitly confirm that the specific entity actually made that statement.
+
 
                 PHILIPPINE MISINFORMATION TROPES:
                 - "CTTO" (Credit to the Owner): Treat claims containing "CTTO" with extreme skepticism; it is predominantly used to strip original provenance and launder decontextualized media.
@@ -468,6 +477,11 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
 
                     5. UNVERIFIED: The provided evidence is irrelevant, inconclusive, or completely absent. Or, the claim is a subjective opinion, political prediction, or emotional expression that cannot be objectively proven true or false. 
                     - AUTHORIZED ABSTENTION: If you do not know the answer based strictly on the evidence, you must choose UNVERIFIED.
+                  
+                    6. STRICT ENTITY MATCHING (THE 'KEYWORD SALAD' TRAP): Do not stamp 'FACT' just because keywords match. You must verify EXACT identities. If the claim is about a specific public figure and the evidence discusses a different person or entity that merely shares the same name, they are NOT the same. In these cases, you must classify it as UNVERIFIED or FAKE.
+                            
+                    7. GRAMMAR & ATTRIBUTION ACCURACY: Pay strict grammatical attention to WHO is doing WHAT. The roles in the claim (subject, object, action) must perfectly align with the evidence. (e.g., If the claim says Person A committed an action against Person B, evidence showing Person B did it to Person A means the claim is FAKE). Furthermore, if the claim attributes a quote or statement to a specific individual, journalist, or organization, the evidence MUST explicitly confirm that the specific entity actually made that statement.
+                
 
                     PHILIPPINE MISINFORMATION TROPES:
                     - "CTTO" (Credit to the Owner): Treat claims containing "CTTO" with extreme skepticism; it is predominantly used to strip original provenance and launder decontextualized media.
@@ -548,6 +562,10 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
 
                     5. UNVERIFIED: The provided evidence is irrelevant, inconclusive, or completely absent. Or, the claim is a subjective opinion, political prediction, or emotional expression that cannot be objectively proven true or false. 
                     - AUTHORIZED ABSTENTION: If you do not know the answer based strictly on the evidence, you must choose UNVERIFIED.
+       
+                    6. STRICT ENTITY MATCHING (THE 'KEYWORD SALAD' TRAP): Do not stamp 'FACT' just because keywords match. You must verify EXACT identities. If the claim is about a specific public figure and the evidence discusses a different person or entity that merely shares the same name, they are NOT the same. In these cases, you must classify it as UNVERIFIED or FAKE.
+                            
+                    7. GRAMMAR & ATTRIBUTION ACCURACY: Pay strict grammatical attention to WHO is doing WHAT. The roles in the claim (subject, object, action) must perfectly align with the evidence. (e.g., If the claim says Person A committed an action against Person B, evidence showing Person B did it to Person A means the claim is FAKE). Furthermore, if the claim attributes a quote or statement to a specific individual, journalist, or organization, the evidence MUST explicitly confirm that the specific entity actually made that statement.
 
                     PHILIPPINE MISINFORMATION TROPES:
                     - "CTTO" (Credit to the Owner): Treat claims containing "CTTO" with extreme skepticism; it is predominantly used to strip original provenance and launder decontextualized media.
