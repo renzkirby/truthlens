@@ -140,7 +140,7 @@ function VerifyPage() {
          }
 
          try {
-            const data = await authFetch(`${VITE_API_BASE_URL}/claims/${claimId}/status`);
+            const data = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/claims/${claimId}/status`);
 
             if (data.verdict !== "PENDING") {
                clearInterval(interval);
@@ -163,7 +163,7 @@ function VerifyPage() {
       setError(null);
 
       try {
-         const data = await authFetch("${VITE_API_BASE_URL}/verify-url/", {
+         const data = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/verify-url/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ url }),
@@ -211,7 +211,7 @@ function VerifyPage() {
             reader.readAsDataURL(image);
          });
 
-         const data = await authFetch("${VITE_API_BASE_URL}/analyze/", {
+         const data = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/analyze/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ image_data: base64 }),
@@ -238,7 +238,7 @@ function VerifyPage() {
       });
 
       try {
-         const response = await authFetch("${VITE_API_BASE_URL}/test-deepfake/", {
+         const response = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/test-deepfake/`, {
                method: "POST",
                headers: { "Content-Type": "application/json" },
                body: JSON.stringify({ image_data: base64 }),
@@ -266,7 +266,7 @@ function VerifyPage() {
 
       try {
          // We will build this endpoint in Django next!
-         const data = await authFetch("${VITE_API_BASE_URL}/verify-text/", {
+         const data = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/verify-text/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text }),
