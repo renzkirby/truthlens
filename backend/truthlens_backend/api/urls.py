@@ -16,6 +16,8 @@ urlpatterns = [
     path('auth/refresh/', TokenRefreshView.as_view()),
     path('auth/register/', views.register_user),
     path('auth/me/', views.get_current_user),
+    path('users/<str:username>/', views.get_public_user_profile),
+    path('users/<str:username>/claims/', views.public_user_claims),
     path('auth/my-claims/', views.my_claims),
     path('auth/send-verification/', views.send_verification_email),
     path('auth/verify-email/', views.verify_email),

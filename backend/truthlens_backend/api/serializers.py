@@ -118,7 +118,9 @@ class ClaimSerializer(serializers.ModelSerializer):
             "verified_evidence_count",
             "moderator_verdict_info",
             "last_updated",
-            "score_context"
+            "score_context",
+            "top_verdict_source", 
+            "is_ai_generated"
         ]
 
 

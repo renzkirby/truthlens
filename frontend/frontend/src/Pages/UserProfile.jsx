@@ -16,6 +16,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import NavigationBar from "../components/NavigationBar.jsx";
 
@@ -74,12 +75,60 @@ function timeAgo(dateStr) {
  * Shows user identity, reputation, and contribution history
  */
 function UserProfile() {
-   const { user, authFetch, refreshUser } = useAuth();
+   const { username } = useParams(); // Get username from URL if it exists
+   const { user: authUser, authFetch, refreshUser } = useAuth();
+   
    const [activeTab, setActiveTab] = useState("scans");
+   const [publicUser, setPublicUser] = useState(null);
+   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
 
-   // ── Data Fetching ──
-   // Use custom hook to eliminate boilerplate fetch logic
-   const { claims, loading } = useFetchClaims(authFetch, "my-claims");
+   // Determine if we are viewing our own profile or someone else's
+   const isOwnProfile = !username || username === authUser?.username;
+   const displayUser = isOwnProfile ? authUser : publicUser;
+
+   // Dynamic Claims URL depending on whose profile we are viewing
+   const claimsEndpoint = isOwnProfile 
+      ? "auth/my-claims/" 
+      : `users/${username}/claims/`;
+      
+   const { claims, loading: claimsLoading } = useFetchClaims(authFetch, claimsEndpoint);
+
+   // Fetch public profile if we are viewing someone else
+   useEffect(() => {
+      if (isOwnProfile) {
+         refreshUser?.();
+      } else {
+         setIsLoadingProfile(true);
+         authFetch(`http://127.0.0.1:8000/api/users/${username}/`, { method: "GET" })
+            .then((data) => {
+               setPublicUser(data);
+            })
+            .catch((err) => console.error("Failed to load user", err))
+            .finally(() => setIsLoadingProfile(false));
+      }
+   }, [username, isOwnProfile]);
+
+   if (isLoadingProfile) {
+      return (
+         <div className="profile-layout">
+            <NavigationBar />
+            <main className="profile-container">
+               <p style={{ textAlign: "center", marginTop: "50px" }}>Loading profile...</p>
+            </main>
+         </div>
+      );
+   }
+
+   if (!displayUser && !isOwnProfile) {
+       return (
+         <div className="profile-layout">
+            <NavigationBar />
+            <main className="profile-container">
+               <h2 style={{ textAlign: "center", marginTop: "50px" }}>User not found.</h2>
+            </main>
+         </div>
+      );
+   }
 
    // ── Compute Profile Stats ──
    const totalScans = claims.length;
@@ -88,50 +137,17 @@ function UserProfile() {
    const accuracyRate =
       totalScans > 0 ? Math.round(((fakesStopped + verifiedClaims) / totalScans) * 100) : 0;
 
-   const trustBreakdown = user?.trust_breakdown || {};
-   const displayTrustScore = Number(trustBreakdown.trust_score ?? user?.trust_score ?? 0);
+   const trustBreakdown = displayUser?.trust_breakdown || {};
+   const displayTrustScore = Number(trustBreakdown.trust_score ?? displayUser?.trust_score ?? 0);
    const trustLevel = getTrustLevel(displayTrustScore);
+   
    const breakdownRows = [
-      {
-         label: "Base Score",
-         value: trustBreakdown.base_score ?? 50,
-         share: trustBreakdown.base_share_pct ?? 0,
-         max: 50,
-         color: "#4f46e5",
-      },
-      {
-         label: "Contribution Accuracy",
-         value: trustBreakdown.contribution_points ?? 0,
-         share: trustBreakdown.contribution_share_pct ?? 0,
-         max: 30,
-         color: "#0e9f6e",
-      },
-      {
-         label: "Vote Balance",
-         value: trustBreakdown.vote_points ?? 0,
-         share: trustBreakdown.vote_share_pct ?? 0,
-         max: 15,
-         color: "#d97706",
-      },
-      {
-         label: "Tenure Bonus",
-         value: trustBreakdown.tenure_points ?? 0,
-         share: trustBreakdown.tenure_share_pct ?? 0,
-         max: 5,
-         color: "#2563eb",
-      },
-      {
-         label: "Conduct Penalties",
-         value: trustBreakdown.penalties ?? 0,
-         share: trustBreakdown.penalties_share_pct ?? 0,
-         max: 30,
-         color: "#dc2626",
-      },
+      { label: "Base Score", value: trustBreakdown.base_score ?? 50, share: trustBreakdown.base_share_pct ?? 0, max: 50, color: "#4f46e5" },
+      { label: "Contribution Accuracy", value: trustBreakdown.contribution_points ?? 0, share: trustBreakdown.contribution_share_pct ?? 0, max: 30, color: "#0e9f6e" },
+      { label: "Vote Balance", value: trustBreakdown.vote_points ?? 0, share: trustBreakdown.vote_share_pct ?? 0, max: 15, color: "#d97706" },
+      { label: "Tenure Bonus", value: trustBreakdown.tenure_points ?? 0, share: trustBreakdown.tenure_share_pct ?? 0, max: 5, color: "#2563eb" },
+      { label: "Conduct Penalties", value: trustBreakdown.penalties ?? 0, share: trustBreakdown.penalties_share_pct ?? 0, max: 30, color: "#dc2626" },
    ];
-
-   useEffect(() => {
-      refreshUser?.();
-   }, []);
 
    return (
       <div className="profile-layout">
@@ -139,25 +155,24 @@ function UserProfile() {
 
          <main className="profile-container">
             {/* ── User Identity Header ── */}
-            {/* Shows avatar, username, email, trust level, join date */}
             <div className="profile-header">
-               <div className="profile-avatar">{user?.username?.[0]?.toUpperCase() || "?"}</div>
+               <div className="profile-avatar">{displayUser?.username?.[0]?.toUpperCase() || "?"}</div>
                <div className="profile-identity">
-                  <h1 className="profile-username">{user?.username || "—"}</h1>
-                  <p className="profile-email">{user?.email || "—"}</p>
+                  <h1 className="profile-username">{displayUser?.username || "—"}</h1>
+                  {/* Hide email if viewing a public profile to protect privacy */}
+                  {isOwnProfile && <p className="profile-email">{displayUser?.email || "—"}</p>}
                   <div className="profile-meta">
                      <span
                         className="trust-level-badge"
                         style={{ backgroundColor: trustLevel.color }}>
                         {trustLevel.label}
                      </span>
-                     <span className="join-date">Joined {formatDate(user?.date_joined)}</span>
+                     <span className="join-date">Joined {formatDate(displayUser?.date_joined)}</span>
                   </div>
                </div>
             </div>
 
             {/* ── Reputation Dashboard ── */}
-            {/* Displays: trust score, accuracy rate, fake news stopped, total scans */}
             <div className="box-panel">
                <h2 className="section-title">Reputation Dashboard</h2>
                <div className="stats-grid">
@@ -204,14 +219,10 @@ function UserProfile() {
                      {breakdownRows.map((row) => {
                         const width = Math.max(0, Math.min(100, Number(row.share || 0)));
                         return (
-                           <div
-                              className="trust-breakdown-row"
-                              key={row.label}>
+                           <div className="trust-breakdown-row" key={row.label}>
                               <div className="trust-breakdown-row-top">
                                  <span className="trust-breakdown-row-label">{row.label}</span>
-                                 <span
-                                    className="trust-breakdown-row-value"
-                                    style={{ color: row.color }}>
+                                 <span className="trust-breakdown-row-value" style={{ color: row.color }}>
                                     {width.toFixed(1)}%
                                  </span>
                               </div>
@@ -229,36 +240,25 @@ function UserProfile() {
                         );
                      })}
                   </div>
-                  <p className="trust-breakdown-meta">
-                     Accuracy: {Math.round((trustBreakdown.contribution_accuracy_rate || 0) * 100)}%
-                     | Net votes: {trustBreakdown.net_votes ?? 0} | Months active:{" "}
-                     {trustBreakdown.months_active ?? 0}
-                  </p>
                </div>
             </div>
 
             {/* ── Activity History & Claims ── */}
-            {/* Tabbed view: scans history with verdict status, time, and summary */}
             <div className="box-panel">
                <div className="tabs-row">
                   <button
                      className={`tab-btn ${activeTab === "scans" ? "active" : ""}`}
                      onClick={() => setActiveTab("scans")}>
-                     My Personal Scans
-                  </button>
-                  <button
-                     className={`tab-btn ${activeTab === "contributions" ? "active" : ""}`}
-                     onClick={() => setActiveTab("contributions")}>
-                     Community Contributions
+                     {isOwnProfile ? "My Personal Scans" : `${displayUser?.username}'s Scans`}
                   </button>
                </div>
 
                {activeTab === "scans" && (
                   <div className="tab-content">
-                     {loading ? (
-                        <p className="empty-msg">Loading your scans...</p>
+                     {claimsLoading ? (
+                        <p className="empty-msg">Loading scans...</p>
                      ) : claims.length === 0 ? (
-                        <p className="empty-msg">No scans yet. Start verifying claims!</p>
+                        <p className="empty-msg">No scans yet.</p>
                      ) : (
                         <div className="claims-list">
                            {claims.map((claim) => {
@@ -266,9 +266,7 @@ function UserProfile() {
                                  VERDICT_CONFIG[getEffectiveVerdict(claim)] ||
                                  VERDICT_CONFIG.PENDING;
                               return (
-                                 <div
-                                    className="claim-card"
-                                    key={claim.id}>
+                                 <div className="claim-card" key={claim.id}>
                                     <div className="claim-top">
                                        <span
                                           className="claim-verdict-badge"
@@ -299,33 +297,19 @@ function UserProfile() {
                      )}
                   </div>
                )}
+            </div>
 
-               {activeTab === "contributions" && (
-                  <div className="tab-content">
-                     <p className="empty-msg">Community contribution history coming soon.</p>
+            {/* Account Settings - ONLY SHOW IF VIEWING OWN PROFILE */}
+            {isOwnProfile && (
+               <div className="box-panel">
+                  <h2 className="section-title">Account Settings</h2>
+                  <div className="settings-grid">
+                     <button className="settings-btn">Change Password</button>
+                     <button className="settings-btn">Change Email</button>
+                     <button className="settings-btn danger">Delete Account</button>
                   </div>
-               )}
-            </div>
-
-            {/* Account Settings */}
-            <div className="box-panel">
-               <h2 className="section-title">Account Settings</h2>
-               <div className="settings-grid">
-                  <button className="settings-btn">Change Password</button>
-                  <button className="settings-btn">Change Email</button>
-                  <button className="settings-btn danger">Delete Account</button>
                </div>
-               <div className="privacy-row">
-                  <span className="privacy-label">Make Community Contributions Public</span>
-                  <label className="toggle-switch">
-                     <input
-                        type="checkbox"
-                        defaultChecked
-                     />
-                     <span className="toggle-slider" />
-                  </label>
-               </div>
-            </div>
+            )}
          </main>
       </div>
    );

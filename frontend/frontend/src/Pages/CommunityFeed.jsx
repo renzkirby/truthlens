@@ -230,7 +230,14 @@ function CommunityFeed() {
                            className="post-card">
                            {/* Card Header */}
                            <div className="card-header">
-                              <div className="post-author-info">
+                              <div 
+                                 className="post-author-info" 
+                                 style={{ cursor: "pointer" }}
+                                 onClick={(e) => {
+                                    e.stopPropagation(); // Prevents triggering the thread card click
+                                    navigate(`/user/${thread.author.username}`);
+                                 }}
+                              >
                                  <div className="author-avatar">
                                     <Icons
                                        name="user"
@@ -238,7 +245,9 @@ function CommunityFeed() {
                                     />
                                  </div>
                                  <div className="author-meta">
-                                    <span className="author-name">@{thread.author.username}</span>
+                                    <span className="author-name">
+                                       @{thread.author.username}
+                                    </span>
                                     <div className="author-time">
                                        {timeAgo(thread.created_at)} ·{" "}
                                        <span className="via-link">

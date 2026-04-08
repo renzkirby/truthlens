@@ -14,6 +14,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import NotFound
 from rest_framework.pagination import CursorPagination
 from datetime import timedelta
+from django.shortcuts import get_object_or_404
 import json
 import secrets
 import base64
@@ -53,6 +54,7 @@ from .serializers import (
     ThreadFlagSerializer,
     ModerationDecisionSerializer,
     ClaimMatchSerializer,
+    UserWithTrustBreakdownSerializer,
 )
 
 # ── Pagination Configuration ──
@@ -935,3 +937,27 @@ def claim_match(request):
         return Response({"match": serializer.validated_data}, status=200)
 
     return Response({"match": None}, status=200)
+
+# for user view
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_public_user_profile(request, username):
+    """Fetch public profile data for any user by their username."""
+    # Look up the user, return 404 if they don't exist
+    target_user = get_object_or_404(User, username=username)
+    
+    # We can reuse your existing serializer that includes the trust breakdown!
+    serializer = UserWithTrustBreakdownSerializer(target_user)
+    return Response(serializer.data)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def public_user_claims(request, username):
+    """Fetch public claims submitted by a specific user."""
+    target_user = get_object_or_404(User, username=username)
+    claims = Claim.objects.filter(
+        threads__author=target_user
+    ).distinct().order_by("-last_updated")
+    
+    serializer = ClaimSerializer(claims, many=True)
+    return Response(serializer.data)

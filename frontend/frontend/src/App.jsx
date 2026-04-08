@@ -80,6 +80,10 @@ function App() {
                      path="/verify-email"
                      element={<VerifyEmailPage />}
                   />
+                  <Route
+                     path="/user/:username"
+                     element={<UserProfile />} 
+                  />
                </Route>
             </Routes>
          </BrowserRouter>
