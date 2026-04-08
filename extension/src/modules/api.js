@@ -36,7 +36,7 @@ export async function sendImageToServer(image) {
 
    // Added polling for continuous claim calling until result is given
    let pollCount = 0;
-   const maxPolls = 20;
+   const maxPolls = 50;
 
    const pollInterval = setInterval(async () => {
       pollCount++;
