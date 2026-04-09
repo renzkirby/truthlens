@@ -22,7 +22,7 @@ import NavigationBar from "../components/NavigationBar.jsx";
 
 // ── Utilities & Hooks ──
 import { getEffectiveVerdict } from "../utils/verdict";
-import { VERDICT_CONFIG } from "../utils/constants";
+import { VERDICT_CONFIG, API_BASE_URL } from "../utils/constants";
 import { useFetchClaims } from "../hooks";
 
 // ── Styles ──
@@ -35,7 +35,7 @@ import "./UserProfile.css";
  */
 function getTrustLevel(score) {
    if (score >= 80) return { label: "Expert", color: "#22c55e" };
-   if (score >= 60) return { label: "Trusted", color: "var(--primary-blue)" };
+   if (score >= 60) return { label: "Trusted", color: "#3b82f6" };
    if (score >= 40) return { label: "Contributor", color: "#f97316" };
    return { label: "Newcomer", color: "var(--text-muted)" };
 }
@@ -77,7 +77,7 @@ function timeAgo(dateStr) {
 function UserProfile() {
    const { username } = useParams(); // Get username from URL if it exists
    const { user: authUser, authFetch, refreshUser } = useAuth();
-   
+
    const [activeTab, setActiveTab] = useState("scans");
    const [publicUser, setPublicUser] = useState(null);
    const [isLoadingProfile, setIsLoadingProfile] = useState(false);
@@ -87,10 +87,8 @@ function UserProfile() {
    const displayUser = isOwnProfile ? authUser : publicUser;
 
    // Dynamic Claims URL depending on whose profile we are viewing
-   const claimsEndpoint = isOwnProfile 
-      ? "auth/my-claims/" 
-      : `users/${username}/claims/`;
-      
+   const claimsEndpoint = isOwnProfile ? "auth/my-claims/" : `users/${username}/claims/`;
+
    const { claims, loading: claimsLoading } = useFetchClaims(authFetch, claimsEndpoint);
 
    // Fetch public profile if we are viewing someone else
@@ -99,7 +97,7 @@ function UserProfile() {
          refreshUser?.();
       } else {
          setIsLoadingProfile(true);
-         authFetch(`http://127.0.0.1:8000/api/users/${username}/`, { method: "GET" })
+         authFetch(`${API_BASE_URL}/users/${username}/`, { method: "GET" })
             .then((data) => {
                setPublicUser(data);
             })
@@ -120,7 +118,7 @@ function UserProfile() {
    }
 
    if (!displayUser && !isOwnProfile) {
-       return (
+      return (
          <div className="profile-layout">
             <NavigationBar />
             <main className="profile-container">
@@ -140,13 +138,43 @@ function UserProfile() {
    const trustBreakdown = displayUser?.trust_breakdown || {};
    const displayTrustScore = Number(trustBreakdown.trust_score ?? displayUser?.trust_score ?? 0);
    const trustLevel = getTrustLevel(displayTrustScore);
-   
+
    const breakdownRows = [
-      { label: "Base Score", value: trustBreakdown.base_score ?? 50, share: trustBreakdown.base_share_pct ?? 0, max: 50, color: "#4f46e5" },
-      { label: "Contribution Accuracy", value: trustBreakdown.contribution_points ?? 0, share: trustBreakdown.contribution_share_pct ?? 0, max: 30, color: "#0e9f6e" },
-      { label: "Vote Balance", value: trustBreakdown.vote_points ?? 0, share: trustBreakdown.vote_share_pct ?? 0, max: 15, color: "#d97706" },
-      { label: "Tenure Bonus", value: trustBreakdown.tenure_points ?? 0, share: trustBreakdown.tenure_share_pct ?? 0, max: 5, color: "#2563eb" },
-      { label: "Conduct Penalties", value: trustBreakdown.penalties ?? 0, share: trustBreakdown.penalties_share_pct ?? 0, max: 30, color: "#dc2626" },
+      {
+         label: "Base Score",
+         value: trustBreakdown.base_score ?? 50,
+         share: trustBreakdown.base_share_pct ?? 0,
+         max: 50,
+         color: "#4f46e5",
+      },
+      {
+         label: "Contribution Accuracy",
+         value: trustBreakdown.contribution_points ?? 0,
+         share: trustBreakdown.contribution_share_pct ?? 0,
+         max: 30,
+         color: "#0e9f6e",
+      },
+      {
+         label: "Vote Balance",
+         value: trustBreakdown.vote_points ?? 0,
+         share: trustBreakdown.vote_share_pct ?? 0,
+         max: 15,
+         color: "#d97706",
+      },
+      {
+         label: "Tenure Bonus",
+         value: trustBreakdown.tenure_points ?? 0,
+         share: trustBreakdown.tenure_share_pct ?? 0,
+         max: 5,
+         color: "#2563eb",
+      },
+      {
+         label: "Conduct Penalties",
+         value: trustBreakdown.penalties ?? 0,
+         share: trustBreakdown.penalties_share_pct ?? 0,
+         max: 30,
+         color: "#dc2626",
+      },
    ];
 
    return (
@@ -156,7 +184,9 @@ function UserProfile() {
          <main className="profile-container">
             {/* ── User Identity Header ── */}
             <div className="profile-header">
-               <div className="profile-avatar">{displayUser?.username?.[0]?.toUpperCase() || "?"}</div>
+               <div className="profile-avatar">
+                  {displayUser?.username?.[0]?.toUpperCase() || "?"}
+               </div>
                <div className="profile-identity">
                   <h1 className="profile-username">{displayUser?.username || "—"}</h1>
                   {/* Hide email if viewing a public profile to protect privacy */}
@@ -167,7 +197,9 @@ function UserProfile() {
                         style={{ backgroundColor: trustLevel.color }}>
                         {trustLevel.label}
                      </span>
-                     <span className="join-date">Joined {formatDate(displayUser?.date_joined)}</span>
+                     <span className="join-date">
+                        Joined {formatDate(displayUser?.date_joined)}
+                     </span>
                   </div>
                </div>
             </div>
@@ -219,10 +251,14 @@ function UserProfile() {
                      {breakdownRows.map((row) => {
                         const width = Math.max(0, Math.min(100, Number(row.share || 0)));
                         return (
-                           <div className="trust-breakdown-row" key={row.label}>
+                           <div
+                              className="trust-breakdown-row"
+                              key={row.label}>
                               <div className="trust-breakdown-row-top">
                                  <span className="trust-breakdown-row-label">{row.label}</span>
-                                 <span className="trust-breakdown-row-value" style={{ color: row.color }}>
+                                 <span
+                                    className="trust-breakdown-row-value"
+                                    style={{ color: row.color }}>
                                     {width.toFixed(1)}%
                                  </span>
                               </div>
@@ -266,7 +302,9 @@ function UserProfile() {
                                  VERDICT_CONFIG[getEffectiveVerdict(claim)] ||
                                  VERDICT_CONFIG.PENDING;
                               return (
-                                 <div className="claim-card" key={claim.id}>
+                                 <div
+                                    className="claim-card"
+                                    key={claim.id}>
                                     <div className="claim-top">
                                        <span
                                           className="claim-verdict-badge"

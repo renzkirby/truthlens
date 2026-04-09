@@ -160,7 +160,7 @@ body {
   font-weight: 700;
   font-size: 1rem;
   display: block;
-  text-decoration: underline;
+  text-decoration: none;
   text-underline-offset: 2px;
 }
 
