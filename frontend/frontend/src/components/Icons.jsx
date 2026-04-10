@@ -88,6 +88,8 @@ import {
    Loader,
    Share2,
    Pencil,
+   UserPlus,
+   UserMinus,
 } from "lucide-react";
 
 const ICON_MAP = {
@@ -179,6 +181,8 @@ const ICON_MAP = {
    "user-check": UserCheck,
    clock: Clock,
    circle: Circle,
+   "user-plus": UserPlus,   
+   "user-minus": UserMinus,
 };
 
 export default function Icons({

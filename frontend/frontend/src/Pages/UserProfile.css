@@ -245,6 +245,13 @@
    font-size: 13px;
 }
 
+
+.user-bio {
+  margin: 4px 0 8px 0;
+  color: #4b5563;
+  font-size: 14px;
+}
+
 /* ----------- */
 .join-date {
   font-size: 12px;

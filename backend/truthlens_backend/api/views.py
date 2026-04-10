@@ -1005,3 +1005,32 @@ def get_user_following(request, username):
     following = User.objects.filter(profile__followers=target_user)
     serializer = UserSerializer(following, many=True, context={"request": request})
     return Response(serializer.data)
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def update_profile(request):
+    """Update user's bio and profile picture."""
+    profile = request.user.profile
+    data = request.data
+    
+    # Update Bio if provided
+    if "bio" in data:
+        profile.bio = data["bio"]
+        
+    # Update Avatar if base64 image is provided
+    if "avatar_base64" in data and data["avatar_base64"]:
+        base64_string = data["avatar_base64"]
+        # Strip the data:image/png;base64, header if it exists
+        if "," in base64_string:
+            base64_string = base64_string.split(",")[1]
+            
+        # Reuse your awesome existing upload service!
+        avatar_url = upload_image_to_database(base64_string)
+        if avatar_url:
+            profile.avatar_url = avatar_url
+            
+    profile.save()
+    
+    # Return the updated user data
+    serializer = UserWithTrustBreakdownSerializer(request.user, context={"request": request})
+    return Response(serializer.data, status=200)

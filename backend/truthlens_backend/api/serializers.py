@@ -31,6 +31,8 @@ class UserSerializer(serializers.ModelSerializer):
     followers_count = serializers.SerializerMethodField()
     following_count = serializers.SerializerMethodField()
     is_following = serializers.SerializerMethodField()
+    avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
+    bio = serializers.CharField(source="profile.bio", read_only=True)
 
     def get_followers_count(self, obj):
         return obj.profile.followers.count()
@@ -59,6 +61,8 @@ class UserSerializer(serializers.ModelSerializer):
             "followers_count", 
             "following_count", 
             "is_following",
+            "avatar_url", 
+            "bio",
         ]
 
 

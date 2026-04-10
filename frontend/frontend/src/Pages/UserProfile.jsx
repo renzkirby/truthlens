@@ -127,6 +127,12 @@ function UserProfile() {
    const [modalType, setModalType] = useState(null); // 'followers' or 'following'
    const [modalData, setModalData] = useState([]);
    const [isModalLoading, setIsModalLoading] = useState(false);
+   
+   // ── Edit Profile State ──
+   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+   const [editBio, setEditBio] = useState("");
+   const [editAvatarBase64, setEditAvatarBase64] = useState(null);
+   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
    const openFollowModal = async (type) => {
       setModalType(type);
@@ -233,6 +239,48 @@ function UserProfile() {
       },
    ];
 
+   const openEditModal = () => {
+      setEditBio(displayUser?.bio || "");
+      setEditAvatarBase64(null); // Reset pending image
+      setIsEditModalOpen(true);
+   };
+
+   // Convert chosen file to Base64
+   const handleImageUpload = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+         const reader = new FileReader();
+         reader.onloadend = () => {
+            setEditAvatarBase64(reader.result);
+         };
+         reader.readAsDataURL(file);
+      }
+   };
+
+   // Save changes to the backend
+   const handleSaveProfile = async () => {
+      setIsSavingProfile(true);
+      try {
+         const payload = { bio: editBio };
+         if (editAvatarBase64) {
+            payload.avatar_base64 = editAvatarBase64;
+         }
+
+         const response = await authFetch(`${API_BASE_URL}/auth/profile/update/`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+         });
+         
+         setIsEditModalOpen(false);
+         refreshUser?.(); // Force context to update with new data
+      } catch (err) {
+         console.error("Failed to update profile:", err);
+      } finally {
+         setIsSavingProfile(false);
+      }
+   };
+
    return (
       <div className="profile-layout">
          <NavigationBar />
@@ -240,13 +288,30 @@ function UserProfile() {
          <main className="profile-container">
             {/* ── User Identity Header ── */}
             <div className="profile-header">
-               <div className="profile-avatar">{displayUser?.username?.[0]?.toUpperCase() || "?"}</div>
+               <div className="profile-avatar" style={{ overflow: "hidden", position: "relative" }}>
+                  {displayUser?.avatar_url ? (
+                     <img 
+                        src={displayUser.avatar_url} 
+                        alt={`${displayUser.username}'s avatar`} 
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }} 
+                     />
+                  ) : (
+                     displayUser?.username?.[0]?.toUpperCase() || "?"
+                  )}
+               </div>
                <div className="profile-identity">
                   
                   <div className="profile-header-top">
                      <h1 className="profile-username" style={{ margin: 0 }}>
                         {displayUser?.username || "—"}
                      </h1>
+                     
+                     {/* ── EDIT PROFILE BUTTON (Only you can see this) ── */}
+                     {isOwnProfile && (
+                        <button className="settings-btn" style={{ padding: "4px 12px", fontSize: "12px", marginBottom: "0" }} onClick={openEditModal}>
+                           <Icons name="pencil" size={14} style={{ marginRight: "4px" }}/> Edit Profile
+                        </button>
+                     )}
                      
                      {/* ── FOLLOW BUTTON ── */}
                      {!isOwnProfile && displayUser && (
@@ -265,8 +330,14 @@ function UserProfile() {
                            )}
                         </button>
                      )}
+
                   </div>
 
+                  {/* BIO */}
+                  {displayUser?.bio &&  
+                     <p className="user-bio">
+                  {displayUser.bio}</p>}
+                     
                   {isOwnProfile && <p className="profile-email">{displayUser?.email || "—"}</p>}
                   
                   <div className="profile-meta">
@@ -473,6 +544,59 @@ function UserProfile() {
                               </div>
                            ))
                         )}
+                     </div>
+                  </div>
+               </div>
+            )}
+            {/* ── EDIT PROFILE MODAL ── */}
+            {isEditModalOpen && (
+               <div className="modal-overlay" onClick={() => setIsEditModalOpen(false)}>
+                  <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ padding: "24px" }}>
+                     <div className="modal-header" style={{ padding: "0 0 16px 0", marginBottom: "16px" }}>
+                        <h3 style={{ margin: 0, fontSize: "18px" }}>Edit Profile</h3>
+                        <button className="close-modal-btn" onClick={() => setIsEditModalOpen(false)}>
+                           <Icons name="x" size={20} />
+                        </button>
+                     </div>
+                     
+                     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                        {/* Avatar Upload */}
+                        <div>
+                           <label style={{ display: "block", marginBottom: "8px", fontWeight: "600", fontSize: "14px" }}>Profile Picture</label>
+                           <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                              <div className="profile-avatar" style={{ width: "60px", height: "60px", overflow: "hidden" }}>
+                                 {editAvatarBase64 ? (
+                                    <img src={editAvatarBase64} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                 ) : displayUser?.avatar_url ? (
+                                    <img src={displayUser.avatar_url} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                 ) : (
+                                    displayUser?.username?.[0]?.toUpperCase()
+                                 )}
+                              </div>
+                              <input type="file" accept="image/*" onChange={handleImageUpload} style={{ fontSize: "14px" }} />
+                           </div>
+                        </div>
+
+                        {/* Bio Textarea */}
+                        <div>
+                           <label style={{ display: "block", marginBottom: "8px", fontWeight: "600", fontSize: "14px" }}>Bio</label>
+                           <textarea 
+                              value={editBio} 
+                              onChange={(e) => setEditBio(e.target.value)}
+                              placeholder="Tell the community about yourself..."
+                              style={{ width: "100%", padding: "8px", borderRadius: "8px", border: "1px solid #d1d5db", minHeight: "80px", resize: "vertical" }}
+                           />
+                        </div>
+
+                        {/* Save Button */}
+                        <button 
+                           onClick={handleSaveProfile} 
+                           disabled={isSavingProfile}
+                           className="follow-btn following" 
+                           style={{ width: "100%", marginTop: "8px" }}
+                        >
+                           {isSavingProfile ? "Saving..." : "Save Changes"}
+                        </button>
                      </div>
                   </div>
                </div>

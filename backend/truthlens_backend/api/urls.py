@@ -16,6 +16,7 @@ urlpatterns = [
     path('auth/refresh/', TokenRefreshView.as_view()),
     path('auth/register/', views.register_user),
     path('auth/me/', views.get_current_user),
+    path('auth/profile/update/', views.update_profile),
     path('users/<str:username>/', views.get_public_user_profile),
     path('users/<str:username>/follow/', views.toggle_follow_user),
     path('users/<str:username>/followers/', views.get_user_followers), 

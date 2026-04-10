@@ -470,11 +470,16 @@ function CommunityFeed() {
                                     e.stopPropagation(); // Prevents triggering the thread card click
                                     navigate(`/user/${thread.author.username}`);
                                  }}>
-                                 <div className="author-avatar">
-                                    <Icons
-                                       name="user"
-                                       size={20}
-                                    />
+                                 <div className="author-avatar" style={{ overflow: "hidden" }}>
+                                    {thread.author.avatar_url ? (
+                                       <img 
+                                          src={thread.author.avatar_url} 
+                                          alt={`${thread.author.username}'s avatar`} 
+                                          style={{ width: "100%", height: "100%", objectFit: "cover" }} 
+                                       />
+                                    ) : (
+                                       <Icons name="user" size={20} />
+                                    )}
                                  </div>
                                  <div className="author-meta">
                                     <span className="author-name">@{thread.author.username}</span>
