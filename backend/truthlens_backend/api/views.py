@@ -159,7 +159,7 @@ def receive_snippet(request):
     )
     claim_id = claim.id  # Get the ID of the saved claim
 
-    snippet_fact_check_process.delay(image_hash, base64_string, str(claim_id), check_deepfake)
+    snippet_fact_check_process.delay(image_hash, str(claim_id), check_deepfake)
 
     return JsonResponse(
         {"claim_id": str(claim_id), "cached": False},

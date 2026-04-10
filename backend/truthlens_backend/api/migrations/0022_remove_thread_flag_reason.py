@@ -10,8 +10,8 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name='thread',
-            name='flag_reason',
-        ),
+        # migrations.RemoveField(
+        #     model_name='thread',
+        #     name='flag_reason',
+        # ),
     ]
