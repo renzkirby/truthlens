@@ -947,7 +947,7 @@ def get_public_user_profile(request, username):
     target_user = get_object_or_404(User, username=username)
     
     # We can reuse your existing serializer that includes the trust breakdown!
-    serializer = UserWithTrustBreakdownSerializer(target_user)
+    serializer = UserWithTrustBreakdownSerializer(target_user, context={"request": request})
     return Response(serializer.data)
 
 @api_view(["GET"])
@@ -961,3 +961,76 @@ def public_user_claims(request, username):
     
     serializer = ClaimSerializer(claims, many=True)
     return Response(serializer.data)
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def toggle_follow_user(request, username):
+    """Toggle follow/unfollow for a specific user."""
+    if request.user.username == username:
+        return Response({"error": "You cannot follow yourself."}, status=400)
+        
+    target_user = get_object_or_404(User, username=username)
+    profile = target_user.profile
+    
+    # If already following, UNFOLLOW
+    if profile.followers.filter(id=request.user.id).exists():
+        profile.followers.remove(request.user)
+        is_following = False
+    # If not following, FOLLOW
+    else:
+        profile.followers.add(request.user)
+        is_following = True
+        
+    return Response({
+        "is_following": is_following,
+        "followers_count": profile.followers.count()
+    }, status=200)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_user_followers(request, username):
+    """Get a list of users who follow this profile."""
+    target_user = get_object_or_404(User, username=username)
+    # Get all User objects inside this profile's followers list
+    followers = target_user.profile.followers.all()
+    serializer = UserSerializer(followers, many=True, context={"request": request})
+    return Response(serializer.data)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_user_following(request, username):
+    """Get a list of users this profile is following."""
+    target_user = get_object_or_404(User, username=username)
+    # Find all Users whose profiles include the target_user as a follower
+    following = User.objects.filter(profile__followers=target_user)
+    serializer = UserSerializer(following, many=True, context={"request": request})
+    return Response(serializer.data)
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def update_profile(request):
+    """Update user's bio and profile picture."""
+    profile = request.user.profile
+    data = request.data
+    
+    # Update Bio if provided
+    if "bio" in data:
+        profile.bio = data["bio"]
+        
+    # Update Avatar if base64 image is provided
+    if "avatar_base64" in data and data["avatar_base64"]:
+        base64_string = data["avatar_base64"]
+        # Strip the data:image/png;base64, header if it exists
+        if "," in base64_string:
+            base64_string = base64_string.split(",")[1]
+            
+        # Reuse your awesome existing upload service!
+        avatar_url = upload_image_to_database(base64_string)
+        if avatar_url:
+            profile.avatar_url = avatar_url
+            
+    profile.save()
+    
+    # Return the updated user data
+    serializer = UserWithTrustBreakdownSerializer(request.user, context={"request": request})
+    return Response(serializer.data, status=200)

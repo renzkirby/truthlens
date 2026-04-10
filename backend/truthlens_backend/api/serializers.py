@@ -28,6 +28,25 @@ class UserSerializer(serializers.ModelSerializer):
     )
     date_joined = serializers.DateTimeField(read_only=True)
     role = serializers.CharField(source="profile.role", read_only=True)
+    followers_count = serializers.SerializerMethodField()
+    following_count = serializers.SerializerMethodField()
+    is_following = serializers.SerializerMethodField()
+    avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
+    bio = serializers.CharField(source="profile.bio", read_only=True)
+
+    def get_followers_count(self, obj):
+        return obj.profile.followers.count()
+
+    def get_following_count(self, obj):
+        # Counts how many profiles this specific user is following
+        return obj.following_profiles.count()
+
+    def get_is_following(self, obj):
+        # Checks if the CURRENT logged-in user is in the target user's followers list
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            return obj.profile.followers.filter(id=request.user.id).exists()
+        return False
 
     class Meta:
         model = User
@@ -39,6 +58,11 @@ class UserSerializer(serializers.ModelSerializer):
             "is_email_verified",
             "date_joined",
             "role",
+            "followers_count", 
+            "following_count", 
+            "is_following",
+            "avatar_url", 
+            "bio",
         ]
 
 

@@ -23,6 +23,7 @@
   display: flex;
   align-items: center;
   gap: 24px;
+  margin-bottom: 4px;
   border-radius: 12px;
   background: linear-gradient(135deg, #1e1b4b 0%, #4f46e5 100%);
   padding: 24px;
@@ -70,7 +71,74 @@
   gap: 10px;
   margin-top: 6px;
 }
+/* ── Modern Follow System Styles ── */
+.profile-header-top {
+   display: flex;
+   align-items: center;
+   gap: 16px;
+   margin-bottom: 4px;
+}
 
+.follow-btn {
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   gap: 6px;
+   padding: 6px 16px;
+   border-radius: 20px;
+   cursor: pointer;
+   font-weight: 600;
+   font-size: 14px;
+   min-width: 100px; /* Keeps button size perfectly stable */
+   transition: all 0.2s ease-in-out;
+}
+
+/* STATE 1: "Follow" (Transparent/Outline Style) */
+.follow-btn:not(.following) {
+   background-color: transparent;
+   border: 1px solid #d1d5db; /* Light border */
+   color: #d1d5db; /* Dark text so it is readable */
+}
+
+.follow-btn:not(.following):hover {
+   background-color: #f3f4f6; /* Subtle hover tint */
+   border-color: #9ca3af;
+}
+
+/* STATE 2: "Following" (Solid Blue Style) */
+.follow-btn.following {
+   background-color: var(--primary-blue, #2563eb);
+   border: 1px solid var(--primary-blue, #2563eb);
+   color: #ffffff; /* White text! */
+}
+
+/* Hovering while Following (Darker Blue, NO RED) */
+.follow-btn.following:hover {
+   background-color: #1e40af; 
+   border-color: #1e40af;
+}
+
+.follow-stats {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6); 
+  margin-right: 8px;
+}
+
+.follow-stats span {
+   cursor: pointer;
+}
+
+.follow-stats span:hover {
+   /* text-decoration: underline;
+   text-underline-offset: 2px; */
+   color: #fff;
+}
+
+.follow-stats strong {
+   font-weight: 1000;
+}
 .trust-level-badge {
   font-size: 11px;
   font-weight: 700;
@@ -81,6 +149,110 @@
   text-transform: uppercase;
 }
 
+/* ── Modal Styles ── */
+.modal-overlay {
+   position: fixed;
+   top: 0;
+   left: 0;
+   right: 0;
+   bottom: 0;
+   background-color: rgba(0, 0, 0, 0.5);
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   z-index: 1000;
+}
+
+.modal-content {
+   background-color: #ffffff;
+   border-radius: 12px;
+   width: 90%;
+   max-width: 400px;
+   max-height: 80vh;
+   display: flex;
+   flex-direction: column;
+   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+   overflow: hidden;
+}
+
+.modal-header {
+   display: flex;
+   justify-content: space-between;
+   align-items: center;
+   padding: 16px 20px;
+   border-bottom: 1px solid #e5e7eb;
+}
+
+.close-modal-btn {
+   background: none;
+   border: none;
+   cursor: pointer;
+   color: #6b7280;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   padding: 4px;
+   border-radius: 50%;
+}
+
+.close-modal-btn:hover {
+   background-color: #f3f4f6;
+   color: #111827;
+}
+
+.modal-user-list {
+   overflow-y: auto;
+   padding: 8px 0;
+}
+
+.modal-user-item {
+   display: flex;
+   align-items: center;
+   gap: 12px;
+   padding: 12px 20px;
+   cursor: pointer;
+   transition: background-color 0.2s;
+}
+
+.modal-user-item:hover {
+   background-color: #f9fafb;
+}
+
+.modal-user-avatar {
+   width: 40px;
+   height: 40px;
+   border-radius: 50%;
+   background-color: #e5e7eb;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   font-weight: bold;
+   color: #4b5563;
+}
+
+.modal-user-info {
+   display: flex;
+   flex-direction: column;
+}
+
+.modal-user-info strong {
+   color: #111827;
+   font-size: 15px;
+}
+
+.modal-user-info span {
+   color: #6b7280;
+   font-size: 13px;
+}
+
+
+.user-bio {
+  margin: 4px 0 8px 0;
+  color: #4b5563;
+  font-size: 14px;
+}
+
+/* ----------- */
 .join-date {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.6);
