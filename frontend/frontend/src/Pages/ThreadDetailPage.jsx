@@ -291,10 +291,10 @@ function ThreadDetailPage() {
    }, [confirmDialog.type]);
 
    const reportActionMeta = {
-      code: "FLAG THREAD",
-      title: "Policy Action: Flag Thread",
+      code: "REPORT THREAD",
+      title: "Policy Action: Report Thread",
       description: "Submit a report so moderators can investigate this thread for policy concerns.",
-      cta: "Submit Flag",
+      cta: "Submit Report",
    };
 
    //Evidence submit handler
