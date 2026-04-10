@@ -86,9 +86,13 @@ import {
    AlertCircle,
    ShieldUser,
    Loader,
+   Share2,
+   Pencil,
 } from "lucide-react";
 
 const ICON_MAP = {
+   pencil: Pencil,
+   "share-2": Share2,
    loader: Loader,
    "shield-user": ShieldUser,
    "alert-circle": AlertCircle,
