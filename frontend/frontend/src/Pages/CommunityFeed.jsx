@@ -19,13 +19,14 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useNotification } from "../context/NotificationContext";
 import NavigationBar from "../components/NavigationBar.jsx";
 import Icons from "../components/Icons.jsx";
 
 // ── Utilities & Hooks ──
 import timeAgo from "../utils/timeAgo";
 import { getEffectiveVerdict } from "../utils/verdict";
-import { useEndpoint } from "../utils/api";
+import { buildApiUrl, useEndpoint } from "../utils/api";
 
 // ── Styles ──
 import "./CommunityFeed.css";
@@ -53,7 +54,9 @@ const FEED_FILTERS = {
  */
 function CommunityFeed() {
    const navigate = useNavigate();
-   const { authFetch } = useAuth();
+   const { authFetch, user } = useAuth();
+   const { addToast } = useNotification();
+   const threadsEndpoint = useEndpoint("THREADS");
 
    // ── Infinite Scroll State ──
    const [threads, setThreads] = useState([]);
@@ -64,6 +67,235 @@ function CommunityFeed() {
    const [activeFilter, setActiveFilter] = useState(FEED_FILTERS.TRENDING);
    const observerTarget = useRef(null);
    const requestedPagesRef = useRef(new Set());
+
+   // ── UI State for thread actions (menus, editing) ──
+   const [openMenuThreadId, setOpenMenuThreadId] = useState(null);
+   const [editingThreadId, setEditingThreadId] = useState(null);
+   const [editingCaption, setEditingCaption] = useState("");
+   const [savingThreadId, setSavingThreadId] = useState(null);
+   const [deletingThreadId, setDeletingThreadId] = useState(null);
+   const [reportingThreadId, setReportingThreadId] = useState(null);
+   const [sharingThreadId, setSharingThreadId] = useState(null);
+   const [reportDialog, setReportDialog] = useState({
+      open: false,
+      threadId: null,
+      reason: "OTHER",
+      notes: "",
+   });
+   const [deleteDialog, setDeleteDialog] = useState({
+      open: false,
+      threadId: null,
+      caption: "",
+   });
+
+   const isThreadOwner = (thread) => thread?.author?.id === user?.id;
+
+   const threadDetailUrl = (threadId) => `${threadsEndpoint}${threadId}/`;
+   const threadFlagsEndpoint = buildApiUrl("thread-flags/");
+   const reportActionMeta = {
+      code: "REPORT THREAD",
+      title: "Policy Action: Report Thread",
+      description: "Submit a report so moderators can investigate this thread for policy concerns.",
+      cta: "Submit Report",
+   };
+
+   const toggleThreadMenu = (e, threadId) => {
+      e.stopPropagation();
+      setOpenMenuThreadId((prev) => (prev === threadId ? null : threadId));
+   };
+
+   // Close thread action menu when clicking outside
+   useEffect(() => {
+      const handleClickOutside = (event) => {
+         if (!event.target.closest(".thread-actions-menu-wrap")) {
+            setOpenMenuThreadId(null);
+         }
+      };
+
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+   }, []);
+
+   // Edit thread handlers
+   const startEditThread = (e, thread) => {
+      e.stopPropagation();
+      setEditingThreadId(thread.id);
+      setEditingCaption(thread.caption || "");
+      setOpenMenuThreadId(null);
+   };
+
+   const cancelEditThread = () => {
+      setEditingThreadId(null);
+      setEditingCaption("");
+   };
+
+   const saveEditThread = async (e, threadId) => {
+      e.stopPropagation();
+      if (!editingCaption.trim()) {
+         addToast({ type: "warning", message: "Thread caption cannot be empty." });
+         return;
+      }
+
+      try {
+         setSavingThreadId(threadId);
+
+         const updated = await authFetch(threadDetailUrl(threadId), {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ caption: editingCaption.trim() }),
+         });
+
+         setThreads((prev) =>
+            prev.map((thread) => (thread.id === threadId ? { ...thread, ...updated } : thread)),
+         );
+         cancelEditThread();
+         addToast({ type: "success", message: "Thread updated successfully." });
+      } catch (err) {
+         const message = err?.message || "Failed to update thread.";
+         setError(message);
+         addToast({ type: "error", message });
+      } finally {
+         setSavingThreadId(null);
+      }
+   };
+
+   const openDeleteDialog = (e, thread) => {
+      e.stopPropagation();
+      setDeleteDialog({
+         open: true,
+         threadId: thread.id,
+         caption: thread.caption || "this thread",
+      });
+      setOpenMenuThreadId(null);
+   };
+
+   const closeDeleteDialog = () => {
+      setDeleteDialog({ open: false, threadId: null, caption: "" });
+   };
+
+   const openReportDialog = (e, thread) => {
+      e.stopPropagation();
+      if (!thread?.id || isThreadOwner(thread)) return;
+
+      setReportDialog({
+         open: true,
+         threadId: thread.id,
+         reason: "OTHER",
+         notes: "",
+      });
+      setOpenMenuThreadId(null);
+   };
+
+   const closeReportDialog = () => {
+      if (reportingThreadId) return;
+      setReportDialog({
+         open: false,
+         threadId: null,
+         reason: "OTHER",
+         notes: "",
+      });
+   };
+
+   const submitReportThread = async () => {
+      const reasonInput = reportDialog.reason?.trim().toUpperCase();
+      if (!reportDialog.threadId || !reasonInput) return;
+
+      const allowedReasons = new Set(["INAPPROPRIATE", "SPAM", "HARASSMENT", "OTHER"]);
+      if (!allowedReasons.has(reasonInput)) {
+         addToast({
+            type: "error",
+            message: "Invalid reason. Use INAPPROPRIATE, SPAM, HARASSMENT, or OTHER.",
+         });
+         return;
+      }
+
+      try {
+         setReportingThreadId(reportDialog.threadId);
+         await authFetch(threadFlagsEndpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+               thread_id: reportDialog.threadId,
+               reason: reasonInput,
+               notes: reportDialog.notes.trim(),
+            }),
+         });
+
+         addToast({
+            type: "success",
+            message: "Thread reported. Moderators have been notified.",
+         });
+         setReportDialog({
+            open: false,
+            threadId: null,
+            reason: "OTHER",
+            notes: "",
+         });
+      } catch (err) {
+         const message = err?.message || "Failed to report thread.";
+         setError(message);
+         addToast({ type: "error", message });
+      } finally {
+         setReportingThreadId(null);
+      }
+   };
+
+   const shareThread = async (e, thread) => {
+      e.stopPropagation();
+      if (!thread?.id) return;
+
+      const shareUrl = `${window.location.origin}/thread/detail/${thread.id}`;
+      const shareText = thread?.caption?.trim() || "Check this TruthLens thread.";
+
+      try {
+         setSharingThreadId(thread.id);
+
+         if (navigator.share) {
+            await navigator.share({
+               title: "TruthLens Thread",
+               text: shareText,
+               url: shareUrl,
+            });
+            addToast({ type: "success", message: "Thread link shared." });
+         } else if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(shareUrl);
+            addToast({ type: "success", message: "Thread link copied to clipboard." });
+         } else {
+            addToast({ type: "warning", message: "Sharing is not supported on this browser." });
+         }
+      } catch (err) {
+         if (err?.name !== "AbortError") {
+            addToast({ type: "error", message: err?.message || "Failed to share thread." });
+         }
+      } finally {
+         setSharingThreadId(null);
+         setOpenMenuThreadId(null);
+      }
+   };
+
+   // Delete thread handler
+   const confirmDeleteThread = async () => {
+      const threadId = deleteDialog.threadId;
+      if (!threadId) return;
+
+      try {
+         setDeletingThreadId(threadId);
+
+         await authFetch(threadDetailUrl(threadId), {
+            method: "DELETE",
+         });
+
+         setThreads((prev) => prev.filter((thread) => thread.id !== threadId));
+         closeDeleteDialog();
+         addToast({ type: "success", message: "Thread deleted successfully." });
+      } catch (err) {
+         const message = err?.message || "Failed to delete thread.";
+         setError(message);
+         addToast({ type: "error", message });
+      } finally {
+         setDeletingThreadId(null);
+      }
+   };
 
    const isModeratorVerified = (thread) => Boolean(thread?.claim?.moderator_verdict_info);
    const isPendingConsensus = (thread) => {
@@ -93,8 +325,7 @@ function CommunityFeed() {
             setError(null);
 
             // DRF cursor pagination already returns the full next URL.
-            const baseUrl = useEndpoint("THREADS");
-            const url = pageUrl || baseUrl;
+            const url = pageUrl || threadsEndpoint;
 
             const response = await authFetch(url, { method: "GET" });
 
@@ -116,12 +347,14 @@ function CommunityFeed() {
          } catch (err) {
             requestedPagesRef.current.delete(pageKey);
             console.error("Failed to fetch threads:", err);
-            setError("Failed to load threads");
+            const message = "Failed to load threads.";
+            setError(message);
+            addToast({ type: "error", message });
          } finally {
             setLoading(false);
          }
       },
-      [authFetch],
+      [authFetch, addToast, threadsEndpoint],
    );
 
    // ── Initial load ──
@@ -268,20 +501,105 @@ function CommunityFeed() {
                                     {verdictClass === "unverified" && <Icons name="help-circle" />}
                                     {verdict}
                                  </div>
-                                 <button className="more-btn">
-                                    <Icons
-                                       name="more-horizontal"
-                                       size={20}
-                                    />
-                                 </button>
+
+                                 <div className="thread-actions-menu-wrap">
+                                    <button
+                                       className="more-btn"
+                                       onClick={(e) => toggleThreadMenu(e, thread.id)}
+                                       aria-haspopup="menu"
+                                       aria-expanded={openMenuThreadId === thread.id}>
+                                       <Icons
+                                          name="more-horizontal"
+                                          size={20}
+                                       />
+                                    </button>
+
+                                    {openMenuThreadId === thread.id && (
+                                       <div className="thread-owner-menu">
+                                          {isThreadOwner(thread) ? (
+                                             <>
+                                                <button
+                                                   className="thread-owner-menu-item"
+                                                   onClick={(e) => startEditThread(e, thread)}>
+                                                   <Icons name="pencil" />
+                                                   Edit Thread
+                                                </button>
+                                                <button
+                                                   className="thread-owner-menu-item"
+                                                   onClick={(e) => shareThread(e, thread)}
+                                                   disabled={sharingThreadId === thread.id}>
+                                                   <Icons name="share-2" />
+                                                   {sharingThreadId === thread.id
+                                                      ? "Sharing..."
+                                                      : "Share"}
+                                                </button>
+                                                <button
+                                                   className="thread-owner-menu-item danger"
+                                                   onClick={(e) => openDeleteDialog(e, thread)}
+                                                   disabled={deletingThreadId === thread.id}>
+                                                   <Icons name="trash" />
+                                                   {deletingThreadId === thread.id
+                                                      ? "Deleting..."
+                                                      : "Delete Thread"}
+                                                </button>
+                                             </>
+                                          ) : (
+                                             <>
+                                                <button
+                                                   className="thread-owner-menu-item"
+                                                   onClick={(e) => openReportDialog(e, thread)}
+                                                   disabled={reportingThreadId === thread.id}>
+                                                   <Icons name="flag" />
+                                                   {reportingThreadId === thread.id
+                                                      ? "Reporting..."
+                                                      : "Report Thread"}
+                                                </button>
+                                                <button
+                                                   className="thread-owner-menu-item"
+                                                   onClick={(e) => shareThread(e, thread)}
+                                                   disabled={sharingThreadId === thread.id}>
+                                                   <Icons name="share-2" />
+                                                   {sharingThreadId === thread.id
+                                                      ? "Sharing..."
+                                                      : "Share"}
+                                                </button>
+                                             </>
+                                          )}
+                                       </div>
+                                    )}
+                                 </div>
                               </div>
                            </div>
 
                            {/* Card Claim Text */}
                            <div className="card-claim">
-                              {/* <strong>Flagged claim:</strong> "
-                              {thread.claim.ai_summary || thread.claim.context_text}" */}
-                              {thread.caption}
+                              {editingThreadId === thread.id ? (
+                                 <div
+                                    className="thread-edit-wrap"
+                                    onClick={(e) => e.stopPropagation()}>
+                                    <textarea
+                                       className="thread-edit-input"
+                                       value={editingCaption}
+                                       onChange={(e) => setEditingCaption(e.target.value)}
+                                       rows={3}
+                                    />
+                                    <div className="thread-edit-actions">
+                                       <button
+                                          className="action-item primary-action"
+                                          onClick={(e) => saveEditThread(e, thread.id)}
+                                          disabled={savingThreadId === thread.id}>
+                                          {savingThreadId === thread.id ? "Saving..." : "Save"}
+                                       </button>
+                                       <button
+                                          className="action-item"
+                                          onClick={cancelEditThread}>
+                                          Cancel
+                                       </button>
+                                    </div>
+                                 </div>
+                              ) : (
+                                 thread.caption
+                              )}
                            </div>
 
                            {/* Card Media */}
@@ -423,6 +741,92 @@ function CommunityFeed() {
                   </div>
                )}
             </div>
+
+            {deleteDialog.open && (
+               <div
+                  className="feed-modal-overlay"
+                  onClick={closeDeleteDialog}>
+                  <div
+                     className="feed-modal"
+                     onClick={(e) => e.stopPropagation()}>
+                     <h3 className="feed-modal-title">Delete Thread</h3>
+                     <p className="feed-modal-text">
+                        This action cannot be undone. Are you sure you want to delete this thread?
+                     </p>
+                     <div className="feed-modal-actions">
+                        <button
+                           type="button"
+                           className="feed-modal-btn secondary"
+                           onClick={closeDeleteDialog}
+                           disabled={Boolean(deletingThreadId)}>
+                           Cancel
+                        </button>
+                        <button
+                           type="button"
+                           className="feed-modal-btn danger"
+                           onClick={confirmDeleteThread}
+                           disabled={Boolean(deletingThreadId)}>
+                           {deletingThreadId ? "Deleting..." : "Delete"}
+                        </button>
+                     </div>
+                  </div>
+               </div>
+            )}
+
+            {reportDialog.open && (
+               <div
+                  className="feed-modal-overlay"
+                  onClick={closeReportDialog}>
+                  <div
+                     className="feed-modal"
+                     onClick={(e) => e.stopPropagation()}>
+                     <div className="feed-modal-policy-chip warning">{reportActionMeta.code}</div>
+                     <h3 className="feed-modal-title">{reportActionMeta.title}</h3>
+                     <p className="feed-modal-text">{reportActionMeta.description}</p>
+                     <div className="feed-modal-form-row">
+                        <label className="feed-modal-label">Reason</label>
+                        <select
+                           className="feed-modal-select"
+                           value={reportDialog.reason}
+                           onChange={(e) =>
+                              setReportDialog((prev) => ({ ...prev, reason: e.target.value }))
+                           }>
+                           <option value="INAPPROPRIATE">Inappropriate</option>
+                           <option value="SPAM">Spam</option>
+                           <option value="HARASSMENT">Harassment</option>
+                           <option value="OTHER">Other</option>
+                        </select>
+                     </div>
+                     <div className="feed-modal-form-row">
+                        <label className="feed-modal-label">Notes (optional)</label>
+                        <textarea
+                           className="feed-modal-textarea"
+                           rows={4}
+                           value={reportDialog.notes}
+                           onChange={(e) =>
+                              setReportDialog((prev) => ({ ...prev, notes: e.target.value }))
+                           }
+                        />
+                     </div>
+                     <div className="feed-modal-actions">
+                        <button
+                           type="button"
+                           className="feed-modal-btn secondary"
+                           onClick={closeReportDialog}
+                           disabled={Boolean(reportingThreadId)}>
+                           Cancel
+                        </button>
+                        <button
+                           type="button"
+                           className="feed-modal-btn warning"
+                           onClick={submitReportThread}
+                           disabled={Boolean(reportingThreadId)}>
+                           {reportingThreadId ? "Submitting..." : reportActionMeta.cta}
+                        </button>
+                     </div>
+                  </div>
+               </div>
+            )}
          </main>
       </div>
    );
