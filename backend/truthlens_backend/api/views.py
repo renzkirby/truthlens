@@ -985,3 +985,23 @@ def toggle_follow_user(request, username):
         "is_following": is_following,
         "followers_count": profile.followers.count()
     }, status=200)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_user_followers(request, username):
+    """Get a list of users who follow this profile."""
+    target_user = get_object_or_404(User, username=username)
+    # Get all User objects inside this profile's followers list
+    followers = target_user.profile.followers.all()
+    serializer = UserSerializer(followers, many=True, context={"request": request})
+    return Response(serializer.data)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_user_following(request, username):
+    """Get a list of users this profile is following."""
+    target_user = get_object_or_404(User, username=username)
+    # Find all Users whose profiles include the target_user as a follower
+    following = User.objects.filter(profile__followers=target_user)
+    serializer = UserSerializer(following, many=True, context={"request": request})
+    return Response(serializer.data)

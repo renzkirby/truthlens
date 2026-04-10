@@ -18,6 +18,8 @@ urlpatterns = [
     path('auth/me/', views.get_current_user),
     path('users/<str:username>/', views.get_public_user_profile),
     path('users/<str:username>/follow/', views.toggle_follow_user),
+    path('users/<str:username>/followers/', views.get_user_followers), 
+    path('users/<str:username>/following/', views.get_user_following),
     path('users/<str:username>/claims/', views.public_user_claims),
     path('auth/my-claims/', views.my_claims),
     path('auth/send-verification/', views.send_verification_email),

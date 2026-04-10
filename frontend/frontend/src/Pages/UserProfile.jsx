@@ -16,7 +16,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import NavigationBar from "../components/NavigationBar.jsx";
 
@@ -25,6 +25,7 @@ import { getEffectiveVerdict } from "../utils/verdict";
 import { VERDICT_CONFIG, API_BASE_URL } from "../utils/constants";
 import { useFetchClaims } from "../hooks";
 import Icons from "../components/Icons.jsx";
+
 
 // ── Styles ──
 import "./UserProfile.css";
@@ -77,6 +78,7 @@ function timeAgo(dateStr) {
  */
 function UserProfile() {
    const { username } = useParams(); // Get username from URL if it exists
+   const navigate = useNavigate();
    const { user: authUser, authFetch, refreshUser } = useAuth();
 
    const [activeTab, setActiveTab] = useState("scans");
@@ -119,6 +121,28 @@ function UserProfile() {
          setFollowersCount(response.followers_count);
       } catch (err) {
          console.error("Failed to toggle follow status:", err);
+      }
+   };
+   // ── Modal State ──
+   const [modalType, setModalType] = useState(null); // 'followers' or 'following'
+   const [modalData, setModalData] = useState([]);
+   const [isModalLoading, setIsModalLoading] = useState(false);
+
+   const openFollowModal = async (type) => {
+      setModalType(type);
+      setIsModalLoading(true);
+      try {
+         const response = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/users/${displayUser.username}/${type}/`, {
+            method: "GET"
+         });
+         
+         const data = response?.data || response?.results || response || [];
+         setModalData(Array.isArray(data) ? data : []);
+      } catch (err) {
+         console.error(`Failed to fetch ${type}:`, err);
+         setModalData([]);
+      } finally {
+         setIsModalLoading(false);
       }
    };
 
@@ -254,8 +278,12 @@ function UserProfile() {
                      
                      {/* ── FOLLOWER STATS ── */}
                      <div className="follow-stats">
-                        <span><strong>{followersCount}</strong>&nbsp; Followers</span>
-                        <span><strong>{followingCount}</strong>&nbsp; Following</span>
+                        <span onClick={() => openFollowModal('followers')}>
+                           <strong>{followersCount}</strong>&nbsp; Followers
+                        </span>
+                        <span onClick={() => openFollowModal('following')}>
+                           <strong>{followingCount}</strong>&nbsp; Following
+                        </span>
                      </div>
 
                      <span className="join-date">Joined {formatDate(displayUser?.date_joined)}</span>
@@ -404,6 +432,48 @@ function UserProfile() {
                      <button className="settings-btn">Change Password</button>
                      <button className="settings-btn">Change Email</button>
                      <button className="settings-btn danger">Delete Account</button>
+                  </div>
+               </div>
+            )}
+
+            {/* ── FOLLOW MODAL ── */}
+            {modalType && (
+               <div className="modal-overlay" onClick={() => setModalType(null)}>
+                  <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                     <div className="modal-header">
+                        <h3 style={{ margin: 0, fontSize: "18px" }}>
+                           {modalType === 'followers' ? 'Followers' : 'Following'}
+                        </h3>
+                        <button className="close-modal-btn" onClick={() => setModalType(null)}>
+                           <Icons name="x" size={20} />
+                        </button>
+                     </div>
+                     
+                     <div className="modal-user-list">
+                        {isModalLoading ? (
+                           <p className="empty-msg" style={{ padding: "20px" }}>Loading...</p>
+                        ) : modalData.length === 0 ? (
+                           <p className="empty-msg" style={{ padding: "20px" }}>No {modalType} found.</p>
+                        ) : (
+                           modalData.map((u) => (
+                              <div 
+                                 key={u.id} 
+                                 className="modal-user-item"
+                                 onClick={() => {
+                                    setModalType(null); // Close modal
+                                    navigate(`/user/${u.username}`); // <--- FAST REACT NAVIGATION!
+                                 }}
+                              >
+                                 {/* Added safe chaining to prevent crashes */}
+                                 <div className="modal-user-avatar">{u?.username?.[0]?.toUpperCase() || "?"}</div>
+                                 <div className="modal-user-info">
+                                    <strong>{u?.username || "Unknown"}</strong>
+                                    <span>{getTrustLevel(u?.trust_score || 0).label}</span>
+                                 </div>
+                              </div>
+                           ))
+                        )}
+                     </div>
                   </div>
                </div>
             )}
