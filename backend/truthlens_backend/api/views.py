@@ -947,7 +947,7 @@ def get_public_user_profile(request, username):
     target_user = get_object_or_404(User, username=username)
     
     # We can reuse your existing serializer that includes the trust breakdown!
-    serializer = UserWithTrustBreakdownSerializer(target_user)
+    serializer = UserWithTrustBreakdownSerializer(target_user, context={"request": request})
     return Response(serializer.data)
 
 @api_view(["GET"])
@@ -961,3 +961,27 @@ def public_user_claims(request, username):
     
     serializer = ClaimSerializer(claims, many=True)
     return Response(serializer.data)
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def toggle_follow_user(request, username):
+    """Toggle follow/unfollow for a specific user."""
+    if request.user.username == username:
+        return Response({"error": "You cannot follow yourself."}, status=400)
+        
+    target_user = get_object_or_404(User, username=username)
+    profile = target_user.profile
+    
+    # If already following, UNFOLLOW
+    if profile.followers.filter(id=request.user.id).exists():
+        profile.followers.remove(request.user)
+        is_following = False
+    # If not following, FOLLOW
+    else:
+        profile.followers.add(request.user)
+        is_following = True
+        
+    return Response({
+        "is_following": is_following,
+        "followers_count": profile.followers.count()
+    }, status=200)

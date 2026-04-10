@@ -24,6 +24,7 @@ import NavigationBar from "../components/NavigationBar.jsx";
 import { getEffectiveVerdict } from "../utils/verdict";
 import { VERDICT_CONFIG, API_BASE_URL } from "../utils/constants";
 import { useFetchClaims } from "../hooks";
+import Icons from "../components/Icons.jsx";
 
 // ── Styles ──
 import "./UserProfile.css";
@@ -91,6 +92,36 @@ function UserProfile() {
 
    const { claims, loading: claimsLoading } = useFetchClaims(authFetch, claimsEndpoint);
 
+   // ── Follow System State ──
+   const [isFollowing, setIsFollowing] = useState(false);
+   const [followersCount, setFollowersCount] = useState(0);
+   const [followingCount, setFollowingCount] = useState(0);
+
+   // Sync state when the user data loads
+   useEffect(() => {
+      if (displayUser) {
+         setIsFollowing(displayUser.is_following || false);
+         setFollowersCount(displayUser.followers_count || 0);
+         setFollowingCount(displayUser.following_count || 0);
+      }
+   }, [displayUser]);
+
+   
+   // Handle follow button click
+   const handleFollowToggle = async () => {
+      try {
+         // Updated to use the dynamic API_BASE_URL!
+         const response = await authFetch(`${API_BASE_URL}/users/${displayUser.username}/follow/`, {
+            method: "POST"
+         });
+         // Instantly update the UI with the backend's response
+         setIsFollowing(response.is_following);
+         setFollowersCount(response.followers_count);
+      } catch (err) {
+         console.error("Failed to toggle follow status:", err);
+      }
+   };
+
    // Fetch public profile if we are viewing someone else
    useEffect(() => {
       if (isOwnProfile) {
@@ -127,6 +158,7 @@ function UserProfile() {
          </div>
       );
    }
+
 
    // ── Compute Profile Stats ──
    const totalScans = claims.length;
@@ -184,22 +216,49 @@ function UserProfile() {
          <main className="profile-container">
             {/* ── User Identity Header ── */}
             <div className="profile-header">
-               <div className="profile-avatar">
-                  {displayUser?.username?.[0]?.toUpperCase() || "?"}
-               </div>
+               <div className="profile-avatar">{displayUser?.username?.[0]?.toUpperCase() || "?"}</div>
                <div className="profile-identity">
-                  <h1 className="profile-username">{displayUser?.username || "—"}</h1>
-                  {/* Hide email if viewing a public profile to protect privacy */}
+                  
+                  <div className="profile-header-top">
+                     <h1 className="profile-username" style={{ margin: 0 }}>
+                        {displayUser?.username || "—"}
+                     </h1>
+                     
+                     {/* ── FOLLOW BUTTON ── */}
+                     {!isOwnProfile && displayUser && (
+                        <button 
+                           className={`follow-btn ${isFollowing ? "following" : ""}`}
+                           onClick={handleFollowToggle}
+                        >
+                           {isFollowing ? (
+                              <>
+                                 Following
+                              </>
+                           ) : (
+                              <>
+                                 Follow
+                              </>
+                           )}
+                        </button>
+                     )}
+                  </div>
+
                   {isOwnProfile && <p className="profile-email">{displayUser?.email || "—"}</p>}
+                  
                   <div className="profile-meta">
                      <span
                         className="trust-level-badge"
                         style={{ backgroundColor: trustLevel.color }}>
                         {trustLevel.label}
                      </span>
-                     <span className="join-date">
-                        Joined {formatDate(displayUser?.date_joined)}
-                     </span>
+                     
+                     {/* ── FOLLOWER STATS ── */}
+                     <div className="follow-stats">
+                        <span><strong>{followersCount}</strong>&nbsp; Followers</span>
+                        <span><strong>{followingCount}</strong>&nbsp; Following</span>
+                     </div>
+
+                     <span className="join-date">Joined {formatDate(displayUser?.date_joined)}</span>
                   </div>
                </div>
             </div>

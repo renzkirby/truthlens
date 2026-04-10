@@ -17,6 +17,7 @@ class UserProfile(models.Model):
     bio = models.TextField(blank=True, null=True)
     is_email_verified = models.BooleanField(default=False)
     email_verification_token = models.CharField(max_length=64, blank=True, null=True)
+    followers = models.ManyToManyField(User, related_name="following_profiles", blank=True)
 
     def __str__(self):
         return f"UserProfile {self.id} - User: {self.user.username} - Trust Score: {self.trust_score}"
