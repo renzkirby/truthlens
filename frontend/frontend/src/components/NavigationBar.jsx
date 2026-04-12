@@ -81,7 +81,7 @@ function NavigationBar() {
                      Community Feed
                   </div>
                </Link>
-               <Link
+               {/* <Link
                   to={getDashboardPath(user)}
                   className="link">
                   <div
@@ -89,7 +89,7 @@ function NavigationBar() {
                      <Icons name={user?.role === "MODERATOR" ? "shield" : "dashboard"} />
                      Dashboard
                   </div>
-               </Link>
+               </Link> */}
                <Link
                   to="/verify"
                   className="link">

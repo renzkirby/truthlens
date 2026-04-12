@@ -286,81 +286,88 @@ function UserProfile() {
          <NavigationBar />
 
          <main className="profile-container">
-            {/* ── User Identity Header ── */}
-            <div className="profile-header">
-               <div className="profile-avatar" style={{ overflow: "hidden", position: "relative" }}>
-                  {displayUser?.avatar_url ? (
-                     <img 
-                        src={displayUser.avatar_url} 
-                        alt={`${displayUser.username}'s avatar`} 
-                        style={{ width: "100%", height: "100%", objectFit: "cover" }} 
-                     />
-                  ) : (
-                     displayUser?.username?.[0]?.toUpperCase() || "?"
+            {/* ── User Identity Header (X-Style Layout) ── */}
+            <div className="profile-header-container">
+               
+               {/* 1. Cover Banner */}
+               <div className="profile-cover-banner">
+                  {displayUser?.cover_photo_url && (
+                     <img src={displayUser.cover_photo_url} alt="Cover" />
                   )}
                </div>
-               <div className="profile-identity">
+
+               <div className="profile-header-body">
                   
-                  <div className="profile-header-top">
-                     <h1 className="profile-username" style={{ margin: 0 }}>
-                        {displayUser?.username || "—"}
-                     </h1>
-                     
-                     {/* ── EDIT PROFILE BUTTON (Only you can see this) ── */}
-                     {isOwnProfile && (
-                        <button className="settings-btn" style={{ padding: "4px 12px", fontSize: "12px", marginBottom: "0" }} onClick={openEditModal}>
-                           <Icons name="pencil" size={14} style={{ marginRight: "4px" }}/> Edit Profile
-                        </button>
-                     )}
-                     
-                     {/* ── FOLLOW BUTTON ── */}
-                     {!isOwnProfile && displayUser && (
+                  {/* 2. Overlapping Avatar */}
+                  <div className="profile-avatar-wrapper">
+                     <div className="profile-avatar">
+                        {displayUser?.avatar_url ? (
+                           <img 
+                              src={displayUser.avatar_url} 
+                              alt={`${displayUser.username}'s avatar`} 
+                           />
+                        ) : (
+                           displayUser?.username?.[0]?.toUpperCase() || "?"
+                        )}
+                     </div>
+                  </div>
+
+                  {/* 3. Action Buttons (Right Aligned) */}
+                  <div className="profile-action-row">
+                     {isOwnProfile ? (
                         <button 
-                           className={`follow-btn ${isFollowing ? "following" : ""}`}
+                           className="action-btn" /* <--- CHANGED THIS CLASS */
+                           onClick={openEditModal}
+                        >
+                           Edit profile
+                        </button>
+                     ) : displayUser ? (
+                        <button 
+                           className={`action-btn ${isFollowing ? "following" : ""}`}
                            onClick={handleFollowToggle}
                         >
-                           {isFollowing ? (
-                              <>
-                                 Following
-                              </>
-                           ) : (
-                              <>
-                                 Follow
-                              </>
-                           )}
+                           {isFollowing ? "Following" : "Follow"}
                         </button>
-                     )}
-
+                     ) : null}
                   </div>
 
-                  {/* BIO */}
-                  {displayUser?.bio &&  
-                     <p className="user-bio">
-                  {displayUser.bio}</p>}
-                     
-                  {isOwnProfile && <p className="profile-email">{displayUser?.email || "—"}</p>}
-                  
-                  <div className="profile-meta">
-                     <span
-                        className="trust-level-badge"
-                        style={{ backgroundColor: trustLevel.color }}>
-                        {trustLevel.label}
-                     </span>
-                     
-                     {/* ── FOLLOWER STATS ── */}
-                     <div className="follow-stats">
-                        <span onClick={() => openFollowModal('followers')}>
-                           <strong>{followersCount}</strong>&nbsp; Followers
-                        </span>
-                        <span onClick={() => openFollowModal('following')}>
-                           <strong>{followingCount}</strong>&nbsp; Following
+                  {/* 4. Identity & Bio */}
+                  <div className="profile-identity">
+                     <h1 className="profile-username">{displayUser?.username || "—"}</h1>
+                     <p className="profile-handle">@{displayUser?.username?.toLowerCase() || "—"}</p>
+                  </div>
+
+                  {displayUser?.bio && (
+                     <p className="user-bio">{displayUser.bio}</p>
+                  )}
+
+                  {/* 5. Meta Info (Join Date, Trust Badge) */}
+                  <div className="profile-meta-row">
+                     {/* You could add location/website here later! */}
+                     <div className="meta-item">
+                        <span className="trust-level-badge" style={{ backgroundColor: trustLevel.color }}>
+                           {trustLevel.label}
                         </span>
                      </div>
-
-                     <span className="join-date">Joined {formatDate(displayUser?.date_joined)}</span>
+                     <div className="meta-item">
+                        <Icons name="calendar" size={16} />
+                        Joined {formatDate(displayUser?.date_joined)}
+                     </div>
                   </div>
+
+                  {/* 6. Follower Stats */}
+                  <div className="follow-stats">
+                     <span onClick={() => openFollowModal('following')}>
+                        <strong>{followingCount}</strong> Following
+                     </span>
+                     <span onClick={() => openFollowModal('followers')}>
+                        <strong>{followersCount}</strong> Followers
+                     </span>
+                  </div>
+
                </div>
             </div>
+            {/* ── End Header ── */}
 
             {/* ── Reputation Dashboard ── */}
             <div className="box-panel">

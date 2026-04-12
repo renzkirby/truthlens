@@ -90,6 +90,7 @@ import {
    Pencil,
    UserPlus,
    UserMinus,
+   Calendar
 } from "lucide-react";
 
 const ICON_MAP = {
@@ -181,6 +182,7 @@ const ICON_MAP = {
    "user-check": UserCheck,
    clock: Clock,
    circle: Circle,
+   calendar: Calendar,
    "user-plus": UserPlus,   
    "user-minus": UserMinus,
 };
