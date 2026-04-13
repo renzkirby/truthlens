@@ -17,18 +17,23 @@
   flex-direction: column;
   gap: 20px;
 }
+
 /* ── Identity Header (X-Style Layout) ── */
 .profile-header-container {
   position: relative;
-  border-radius: 10px; /* Matched to your other box-panels */
-  background-color: #ffffff; /* CHANGED: Makes it a solid white card */
-  border: 1px solid var(--border-color, #e5e7eb); /* Adds the visible outline */
-  overflow: hidden; 
+  border-radius: 10px;
+  /* Matched to your other box-panels */
+  background-color: #ffffff;
+  /* CHANGED: Makes it a solid white card */
+  border: 1px solid var(--border-color, #e5e7eb);
+  /* Adds the visible outline */
+  overflow: hidden;
   margin-bottom: 5px;
 }
 
 .profile-cover-banner {
-  height: 150px; /* Thinner banner as requested */
+  height: 150px;
+  /* Thinner banner as requested */
   width: 100%;
   /* Default gradient placeholder keeping TruthLens colors */
   background: linear-gradient(135deg, #1e1b4b 0%, #4f46e5 100%);
@@ -49,13 +54,16 @@
 /* The Overlapping Avatar */
 .profile-avatar-wrapper {
   position: absolute;
-  top: -60px; /* Pulls it up into the banner */
+  top: -60px;
+  /* Pulls it up into the banner */
   left: 16px;
   width: 120px;
   height: 120px;
   border-radius: 50%;
-  background-color: var(--bg-app); /* Matches page background to look seamless */
-  padding: 4px; /* Creates the "border" effect cutting into the banner */
+  background-color: var(--bg-app);
+  /* Matches page background to look seamless */
+  padding: 4px;
+  /* Creates the "border" effect cutting into the banner */
 }
 
 .profile-avatar {
@@ -81,10 +89,13 @@
 /* Action Button Row (Edit/Follow) */
 .profile-action-row {
   display: flex;
-  justify-content: flex-end; /* Pushes button to the right */
-  height: 48px; /* Matches the vertical space taken by the overlapping avatar */
+  justify-content: flex-end;
+  /* Pushes button to the right */
+  height: 48px;
+  /* Matches the vertical space taken by the overlapping avatar */
   margin-bottom: 12px;
 }
+
 /* ── Updated Identity Text & Bio ── */
 .profile-identity {
   display: flex;
@@ -96,7 +107,8 @@
   font-size: 20px;
   font-weight: 800;
   margin: 0;
-  color: var(--text-main, #111827); /* Ensure dark text */
+  color: var(--text-main, #111827);
+  /* Ensure dark text */
   line-height: 1.2;
 }
 
@@ -108,24 +120,28 @@
 
 .user-bio {
   margin: 12px 0;
-  color: var(--text-muted, #52565e); 
+  color: var(--text-muted, #52565e);
   font-size: 15px;
   line-height: 1.4;
-  white-space: pre-wrap; 
+  white-space: pre-wrap;
 }
 
 /* ── Updated Action Row & Edit Button ── */
 .profile-action-row {
   display: flex;
-  justify-content: flex-end; 
-  align-items: flex-start; /* Aligns button to the top */
-  height: 60px; /* Gives the overlapping avatar room to breathe */
-  padding-top: 12px; /* Pushes button down slightly from banner */
+  justify-content: flex-end;
+  align-items: flex-start;
+  /* Aligns button to the top */
+  height: 60px;
+  /* Gives the overlapping avatar room to breathe */
+  padding-top: 12px;
+  /* Pushes button down slightly from banner */
 }
 
 .action-btn {
   padding: 6px 16px;
-  border-radius: 999px; /* Creates the perfect pill shape */
+  border-radius: 999px;
+  /* Creates the perfect pill shape */
   border: 1px solid #d1d5db;
   background-color: transparent;
   font-weight: 700;
@@ -136,8 +152,10 @@
 }
 
 .action-btn:hover {
-  background-color: #e5e7eb; /* Soft gray on hover */
+  background-color: #e5e7eb;
+  /* Soft gray on hover */
 }
+
 /* Meta Data (Location, Join Date) */
 .profile-meta-row {
   display: flex;
@@ -191,98 +209,98 @@
 
 /* ── Modal Styles ── */
 .modal-overlay {
-   position: fixed;
-   top: 0;
-   left: 0;
-   right: 0;
-   bottom: 0;
-   background-color: rgba(0, 0, 0, 0.5);
-   display: flex;
-   align-items: center;
-   justify-content: center;
-   z-index: 1000;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
 }
 
 .modal-content {
-   background-color: #ffffff;
-   border-radius: 12px;
-   width: 90%;
-   max-width: 400px;
-   max-height: 80vh;
-   display: flex;
-   flex-direction: column;
-   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-   overflow: hidden;
+  background-color: #ffffff;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 400px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
 }
 
 .modal-header {
-   display: flex;
-   justify-content: space-between;
-   align-items: center;
-   padding: 16px 20px;
-   border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .close-modal-btn {
-   background: none;
-   border: none;
-   cursor: pointer;
-   color: #6b7280;
-   display: flex;
-   align-items: center;
-   justify-content: center;
-   padding: 4px;
-   border-radius: 50%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 50%;
 }
 
 .close-modal-btn:hover {
-   background-color: #f3f4f6;
-   color: #111827;
+  background-color: #f3f4f6;
+  color: #111827;
 }
 
 .modal-user-list {
-   overflow-y: auto;
-   padding: 8px 0;
+  overflow-y: auto;
+  padding: 8px 0;
 }
 
 .modal-user-item {
-   display: flex;
-   align-items: center;
-   gap: 12px;
-   padding: 12px 20px;
-   cursor: pointer;
-   transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  cursor: pointer;
+  transition: background-color 0.2s;
 }
 
 .modal-user-item:hover {
-   background-color: #f9fafb;
+  background-color: #f9fafb;
 }
 
 .modal-user-avatar {
-   width: 40px;
-   height: 40px;
-   border-radius: 50%;
-   background-color: #e5e7eb;
-   display: flex;
-   align-items: center;
-   justify-content: center;
-   font-weight: bold;
-   color: #4b5563;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  color: #4b5563;
 }
 
 .modal-user-info {
-   display: flex;
-   flex-direction: column;
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-user-info strong {
-   color: #111827;
-   font-size: 15px;
+  color: #111827;
+  font-size: 15px;
 }
 
 .modal-user-info span {
-   color: #6b7280;
-   font-size: 13px;
+  color: #6b7280;
+  font-size: 13px;
 }
 
 
