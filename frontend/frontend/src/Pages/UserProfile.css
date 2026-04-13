@@ -18,133 +18,184 @@
   gap: 20px;
 }
 
-/* ── Identity Header ── */
-.profile-header {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  margin-bottom: 4px;
-  border-radius: 12px;
+/* ── Identity Header (X-Style Layout) ── */
+.profile-header-container {
+  position: relative;
+  border-radius: 10px;
+  /* Matched to your other box-panels */
+  background-color: #ffffff;
+  /* CHANGED: Makes it a solid white card */
+  border: 1px solid var(--border-color, #e5e7eb);
+  /* Adds the visible outline */
+  overflow: hidden;
+  margin-bottom: 5px;
+}
+
+.profile-cover-banner {
+  height: 150px;
+  /* Thinner banner as requested */
+  width: 100%;
+  /* Default gradient placeholder keeping TruthLens colors */
   background: linear-gradient(135deg, #1e1b4b 0%, #4f46e5 100%);
-  padding: 24px;
-  border: 1px solid var(--border-color);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  display: block;
+}
+
+.profile-cover-banner img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-header-body {
+  padding: 16px;
+  position: relative;
+}
+
+/* The Overlapping Avatar */
+.profile-avatar-wrapper {
+  position: absolute;
+  top: -60px;
+  /* Pulls it up into the banner */
+  left: 16px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background-color: var(--bg-app);
+  /* Matches page background to look seamless */
+  padding: 4px;
+  /* Creates the "border" effect cutting into the banner */
 }
 
 .profile-avatar {
-  width: 70px;
-  height: 70px;
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.15);
+  background: #e5e7eb;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 26px;
+  font-size: 40px;
   font-weight: 800;
-  color: #fff;
-  flex-shrink: 0;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  color: #4b5563;
+  overflow: hidden;
 }
 
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Action Button Row (Edit/Follow) */
+.profile-action-row {
+  display: flex;
+  justify-content: flex-end;
+  /* Pushes button to the right */
+  height: 48px;
+  /* Matches the vertical space taken by the overlapping avatar */
+  margin-bottom: 12px;
+}
+
+/* ── Updated Identity Text & Bio ── */
 .profile-identity {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .profile-username {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 800;
   margin: 0;
-  color: #fff;
+  color: var(--text-main, #111827);
+  /* Ensure dark text */
+  line-height: 1.2;
 }
 
-.profile-email {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
+.profile-handle {
+  font-size: 15px;
+  color: var(--text-muted, #6b7280);
   margin: 0;
 }
 
-.profile-meta {
+.user-bio {
+  margin: 12px 0;
+  color: var(--text-muted, #52565e);
+  font-size: 15px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+/* ── Updated Action Row & Edit Button ── */
+.profile-action-row {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 6px;
+  justify-content: flex-end;
+  align-items: flex-start;
+  /* Aligns button to the top */
+  height: 60px;
+  /* Gives the overlapping avatar room to breathe */
+  padding-top: 12px;
+  /* Pushes button down slightly from banner */
 }
 
-/* ── Modern Follow System Styles ── */
-.profile-header-top {
+.action-btn {
+  padding: 6px 16px;
+  border-radius: 999px;
+  /* Creates the perfect pill shape */
+  border: 1px solid #d1d5db;
+  background-color: transparent;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text-main, #111827);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.action-btn:hover {
+  background-color: #e5e7eb;
+  /* Soft gray on hover */
+}
+
+/* Meta Data (Location, Join Date) */
+.profile-meta-row {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-bottom: 4px;
+  margin-bottom: 12px;
+  color: var(--text-muted);
+  font-size: 15px;
+  flex-wrap: wrap;
 }
 
-.follow-btn {
+.meta-item {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 6px 16px;
-  border-radius: 20px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 14px;
-  min-width: 100px;
-  /* Keeps button size perfectly stable */
-  transition: all 0.2s ease-in-out;
+  gap: 4px;
 }
 
-/* STATE 1: "Follow" (Transparent/Outline Style) */
-.follow-btn:not(.following) {
-  background-color: transparent;
-  border: 1px solid #d1d5db;
-  /* Light border */
-  color: #d1d5db;
-  /* Dark text so it is readable */
-}
-
-.follow-btn:not(.following):hover {
-  background-color: #f3f4f6;
-  /* Subtle hover tint */
-  border-color: #9ca3af;
-}
-
-/* STATE 2: "Following" (Solid Blue Style) */
-.follow-btn.following {
-  background-color: var(--primary-blue, #2563eb);
-  border: 1px solid var(--primary-blue, #2563eb);
-  color: #ffffff;
-  /* White text! */
-}
-
-/* Hovering while Following (Darker Blue, NO RED) */
-.follow-btn.following:hover {
-  background-color: #1e40af;
-  border-color: #1e40af;
-}
-
+/* Stats Row */
 .follow-stats {
   display: flex;
-  gap: 16px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
-  margin-right: 8px;
+  gap: 20px;
+  font-size: 15px;
+  color: var(--text-muted);
 }
 
 .follow-stats span {
   cursor: pointer;
+  transition: opacity 0.2s;
 }
 
 .follow-stats span:hover {
-  /* text-decoration: underline;
-   text-underline-offset: 2px; */
-  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .follow-stats strong {
-  font-weight: 1000;
+  color: var(--text-main);
+  font-weight: 700;
 }
+
 
 .trust-level-badge {
   font-size: 11px;
@@ -253,11 +304,6 @@
 }
 
 
-.user-bio {
-  margin: 4px 0 8px 0;
-  color: #fff;
-  font-size: 14px;
-}
 
 /* ----------- */
 .join-date {
