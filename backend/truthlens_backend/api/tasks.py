@@ -126,15 +126,28 @@ def execute_core_text_pipeline(raw_text, claim_id):
                 search_depth="advanced",
                 topic="general",
                 include_answer=True,
+                exclude_domains=[
+                    "facebook.com", "twitter.com", "x.com", 
+                    "tiktok.com", "reddit.com", "instagram.com", "youtube.com"
+                ]
             )
             tavily_results = tavily_response.get("results", [])
             tavily_answer = tavily_response.get("answer", "No additional web context found.")
             
-            # FIXED: Changed ocr_result to raw_text
-            combined_context = f"Original Source Text:\n{raw_text}\n\nWeb Search Context:\n{tavily_answer}"
+            # BUILD RICHER CONTEXT: Give the AI the top 3 actual articles to read
+            results_context = ""
+            for i, res in enumerate(tavily_results[:3]):
+                results_context += f"Source {i+1}: {res.get('title', 'No Title')}\nURL: {res.get('url', '')}\nContent: {res.get('content', '')}\n\n"
+
+            combined_context = f"Original Source Text:\n{raw_text}\n\nWeb Search Answer:\n{tavily_answer}\n\nTop Search Results:\n{results_context}"
             
             ai_verdict = evaluate_image_claim_with_tavily(cleaned_claim, combined_context, article_stance)
-            source_url = tavily_results[0].get("url", "") if tavily_results else ""
+            
+            # EXTRACT URL DIRECTLY FROM AI DECISION
+            source_url = ai_verdict.get("source_url")
+            if source_url == "null" or not source_url:
+                source_url = ""
+
             _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_claim, source_url)
 
         except Exception as e:
@@ -249,15 +262,30 @@ def url_fact_check_process(url, claim_id):
             search_depth="advanced",
             topic="general",
             include_answer=True,
+            exclude_domains=[
+                    "facebook.com", "twitter.com", "x.com", 
+                    "tiktok.com", "reddit.com", "instagram.com", "youtube.com"
+                ]
         )
 
         tavily_results = search_response.get("results", [])
-        evidence_url = tavily_results[0].get("url", "") if tavily_results else ""
-
         tavily_answer = search_response.get("answer", "No additional web context found.")
-        combined_context = f"Original Article Content:\n{cleaned_text[:1500]}\n\nWeb Search Context:\n{tavily_answer}"
+
+        # BUILD RICHER CONTEXT: Give the AI the top 3 actual articles to read
+        results_context = ""
+        for i, res in enumerate(tavily_results[:3]):
+            results_context += f"Source {i+1}: {res.get('title', 'No Title')}\nURL: {res.get('url', '')}\nContent: {res.get('content', '')}\n\n"
+
+        combined_context = f"Original Article Content:\n{cleaned_text[:1500]}\n\nWeb Search Answer:\n{tavily_answer}\n\nTop Search Results:\n{results_context}"
+        
         ai_verdict = evaluate_url_claim_with_tavily(cleaned_claim, combined_context, article_stance)
-        _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_text, evidence_url)
+        
+        # EXTRACT URL DIRECTLY FROM AI DECISION
+        source_url = ai_verdict.get("source_url")
+        if source_url == "null" or not source_url:
+            source_url = ""
+
+        _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_text, source_url)
 
     except Exception as e:
         print(f"Tavily search error: {str(e)}")

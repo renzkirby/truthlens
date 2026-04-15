@@ -11,7 +11,7 @@ import requests
 from io import BytesIO
 from PIL import Image
 from supabase import create_client
-
+ 
 groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
 
@@ -148,9 +148,10 @@ def clean_ocr_text(raw_text):
                     - REPORTING: The article neutrally reports the extracted claim as true.
                     - SATIRE: The text is from a parody source OR the text is deeply absurd/comedic.
 
-                SPECIAL RULE — KNOWN SATIRE SOURCES:
-                If the text or Source URL originates from known satire (e.g., theonion.com, babylonbee), MUST set "article_stance" to "SATIRE".
-
+                SPECIAL RULE — KNOWN SATIRE & MEME TROPES:
+                1. If the text or Source URL originates from known satire (e.g., theonion.com, babylonbee), set "article_stance" to "SATIRE".
+                2. MEME DETECTION: Be highly vigilant for misspelled news logos (e.g., "INQIURER" instead of "INQUIRER") or the use of fictional/pop-culture characters (e.g., TV doctors, actors, adult film stars) placed in real-world news contexts. If detected, you MUST set "article_stance" to "SATIRE".
+                
                 JSON Schema:
                 You MUST output EXACTLY this JSON object with ALL THREE keys.
                 {
@@ -201,7 +202,14 @@ def is_fact_check_relevant(original_text, fact_check_text):
 # Evaluate Google's Fact Check Tools data against the original claim using Groq
 def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, article_stance="NEUTRAL"):
 
-    fact_check_text = google_fact_check_data.get("claims", [{}])[0].get("text", "")
+    # 1. Safely extract the data blocks
+    claim_data = google_fact_check_data.get("claims", [{}])[0]
+    review_data = claim_data.get("claimReview", [{}])[0]
+
+    # 2. Extract the rumor AND the official rating
+    fact_check_text = claim_data.get("text", "Unknown claim")
+    gfc_rating = review_data.get("textualRating", "UNKNOWN")
+    publisher = review_data.get("publisher", {}).get("name", "Official Fact Checker")
 
     system_instructions = """
         Role: You are the TruthLens Core Logic Engine, an expert automated fact-checking AI, forensic linguist, and misinformation analyst. 
@@ -209,7 +217,8 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, articl
 
         CRITICAL DIRECTIVES & HALLUCINATION PREVENTION:
         1. STRICT EVIDENCE BINDING: You are a forensic reading comprehension engine, NOT an omniscient knowledge base. You must evaluate the claim EXCLUSIVELY based on the facts explicitly provided in the evidence block.
-        2. NO PRE-TRAINED KNOWLEDGE: Do not use your internal weights, historical knowledge, or external facts to verify or debunk the claim. If the evidence does not contain the specific information needed to definitively judge the claim, you MUST classify it as UNVERIFIED.
+        2. NO PRE-TRAINED KNOWLEDGE: Do not use your internal weights to verify the claim. 
+        EXCEPTION: You MAY use your pre-trained world knowledge to identify if the claim relies on obviously fictional characters (e.g., TV/movie characters), well-known internet memes, or sheer physical impossibilities. If the claim relies on a fictional character performing a real-world action, immediately classify it as SATIRE or FAKE, overriding the provided evidence if the evidence is gullible.
         3. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
         4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
         5. ARTICLE STANCE AWARENESS: You will be given the stance of the source text toward the claim.
@@ -259,7 +268,7 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, articl
     user_data = (
             f"<claim>{original_claim}</claim>\n\n"
             f"<stance>{article_stance}</stance>\n\n"
-            f"<evidence>{fact_check_text}</evidence>\n\n"
+            f"<evidence>The claim '{fact_check_text}' was reviewed by {publisher} and received an Official Rating of: {gfc_rating.upper()}</evidence>\n\n"
             "CRITICAL OVERRIDE: If the <stance> is SATIRE, you MUST bypass evidence checking and immediately output a verdict of SATIRE."
         )
     
@@ -329,7 +338,8 @@ def evaluate_image_claim_with_tavily(original_claim, combined_context, article_s
                 - DETECTION PROTOCOL: Look beyond explicit labels. Satire is present if the text exhibits extreme hyperbole, semantic dissonance (mixing formal institutional language with sheer absurdity), or echoic mention (mocking repetition). Be highly alert for "dry sarcasm," exaggerated "pavictim" (playing victim) narratives, or claims originating from known parody sources. If a claim is so absurd that it breaches the threshold of reality without malicious deception, it is SATIRE.
 
                 5. UNVERIFIED: The provided evidence is irrelevant, inconclusive, or completely absent. Or, the claim is a subjective opinion, political prediction, or emotional expression that cannot be objectively proven true or false. 
-                - AUTHORIZED ABSTENTION: If you do not know the answer based strictly on the evidence, you must choose UNVERIFIED.
+                    - AUTHORIZED ABSTENTION: If you do not know the answer based strictly on the evidence, you must choose UNVERIFIED.
+                    - THE GOSSIP RULE: If the claim is based on a "blind item," an unverified statement by a showbiz vlogger/insider (e.g., "Ogie Diaz revealed..."), or an anonymous source, AND the evidence does not contain official statements from the actual people involved confirming it, you MUST classify it as UNVERIFIED. The fact that a vlogger said a rumor exists does not make the rumor a FACT.
                 
                 6. STRICT ENTITY MATCHING (THE 'KEYWORD SALAD' TRAP): Do not stamp 'FACT' just because keywords match. You must verify EXACT identities. If the claim is about a specific public figure and the evidence discusses a different person or entity that merely shares the same name, they are NOT the same. In these cases, you must classify it as UNVERIFIED or FAKE.
                         
@@ -352,7 +362,7 @@ def evaluate_image_claim_with_tavily(original_claim, combined_context, article_s
                 "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language.",
                 "confidence_score": 95,
                 "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score. (e.g., 'Strong consensus across multiple reputable news outlets.')",
-                "source_url": "The exact URL of the most reliable article from the search context that proves this verdict (or null if none found)"
+                "source_url": "The exact URL from the evidence block. If no explicit URL is provided in the evidence text, you MUST return null. DO NOT make up or hallucinate a URL like example.com."
                 }
                 """,
             },
@@ -432,7 +442,7 @@ def extract_search_query(text, source_url=""):
     extracted_search_query = response.choices[0].message.content
 
     print("JSON OUTPUT:", extracted_search_query)
-
+ 
     return json.loads(extracted_search_query)
 
 
@@ -538,7 +548,8 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
 
                     CRITICAL DIRECTIVES & HALLUCINATION PREVENTION:
                     1. STRICT EVIDENCE BINDING: You are a forensic reading comprehension engine, NOT an omniscient knowledge base. You must evaluate the claim EXCLUSIVELY based on the facts explicitly provided in the evidence block.
-                    2. NO PRE-TRAINED KNOWLEDGE: Do not use your internal weights, historical knowledge, or external facts to verify or debunk the claim. If the evidence does not contain the specific information needed to definitively judge the claim, you MUST classify it as UNVERIFIED.
+                    2. NO PRE-TRAINED KNOWLEDGE: Do not use your internal weights to verify the claim. 
+                    EXCEPTION: You MAY use your pre-trained world knowledge to identify if the claim relies on obviously fictional characters (e.g., TV/movie characters), well-known internet memes, or sheer physical impossibilities. If the claim relies on a fictional character performing a real-world action, immediately classify it as SATIRE or FAKE, overriding the provided evidence if the evidence is gullible.
                     3. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
                     4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
                     5. ARTICLE STANCE AWARENESS: You will be given the stance of the source article toward the claim.
@@ -562,7 +573,8 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
 
                     5. UNVERIFIED: The provided evidence is irrelevant, inconclusive, or completely absent. Or, the claim is a subjective opinion, political prediction, or emotional expression that cannot be objectively proven true or false. 
                     - AUTHORIZED ABSTENTION: If you do not know the answer based strictly on the evidence, you must choose UNVERIFIED.
-       
+                    - THE GOSSIP RULE: If the claim is based on a "blind item," an unverified statement by a showbiz vlogger/insider (e.g., "Ogie Diaz revealed..."), or an anonymous source, AND the evidence does not contain official statements from the actual people involved confirming it, you MUST classify it as UNVERIFIED. The fact that a vlogger said a rumor exists does not make the rumor a FACT.
+                    
                     6. STRICT ENTITY MATCHING (THE 'KEYWORD SALAD' TRAP): Do not stamp 'FACT' just because keywords match. You must verify EXACT identities. If the claim is about a specific public figure and the evidence discusses a different person or entity that merely shares the same name, they are NOT the same. In these cases, you must classify it as UNVERIFIED or FAKE.
                             
                     7. GRAMMAR & ATTRIBUTION ACCURACY: Pay strict grammatical attention to WHO is doing WHAT. The roles in the claim (subject, object, action) must perfectly align with the evidence. (e.g., If the claim says Person A committed an action against Person B, evidence showing Person B did it to Person A means the claim is FAKE). Furthermore, if the claim attributes a quote or statement to a specific individual, journalist, or organization, the evidence MUST explicitly confirm that the specific entity actually made that statement.
@@ -582,7 +594,8 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
                     "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
                     "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language.",
                     "confidence_score": 95,
-                    "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score. (e.g., 'Strong consensus across multiple reputable news outlets.')"
+                    "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score. (e.g., 'Strong consensus across multiple reputable news outlets.')",
+                    "source_url": "The exact URL from the evidence block. If no explicit URL is provided in the evidence text, you MUST return null. DO NOT make up or hallucinate a URL like example.com."
                     }
                     """,
             },
