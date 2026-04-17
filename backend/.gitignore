@@ -3,3 +3,4 @@
 venv/
 img/
 __pycache__/
+google-credentials.json
