@@ -4,4 +4,3 @@ venv/
 img/
 __pycache__/
 google-credentials.json
-ocr_adapter.py
