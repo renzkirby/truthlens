@@ -2,6 +2,7 @@ from groq import Groq
 import os
 import json
 import re
+import logging
 from urllib.parse import urlparse
 import ipaddress
 import imagehash
@@ -12,6 +13,23 @@ from io import BytesIO
 from PIL import Image
 from supabase import create_client
  
+logger = logging.getLogger(__name__)
+
+
+def _float_env(name, default):
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        return float(raw_value)
+    except ValueError:
+        logger.warning("Invalid %s value '%s'; using default %.2f", name, raw_value, default)
+        return default
+
+
+HF_DETECT_TIMEOUT_SEC = _float_env("HF_DETECT_TIMEOUT_SEC", 18.0)
+
+
 groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
 
@@ -660,7 +678,12 @@ def detect_ai_image(image_bytes):
         }
     
     try:
-        response = requests.post(API_URL, headers=headers, data=image_bytes)
+        response = requests.post(
+            API_URL,
+            headers=headers,
+            data=image_bytes,
+            timeout=HF_DETECT_TIMEOUT_SEC,
+        )
         
         if response.status_code != 200:
             print(f"API Error: {response.text}")
