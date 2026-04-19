@@ -1,7 +1,23 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.conf import settings
 from pgvector.django import VectorField, HnswIndex
 import uuid
+
+
+def _claim_vector_indexes():
+    engine = settings.DATABASES.get("default", {}).get("ENGINE", "")
+    if "postgresql" not in engine:
+        return []
+    return [
+        HnswIndex(
+            name="claim_embedding_hnsw_idx",
+            fields=["claim_embedding"],
+            m=16,
+            ef_construction=64,
+            opclasses=["vector_cosine_ops"],
+        )
+    ]
 
 
 # Create your models here.
@@ -14,6 +30,7 @@ class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.USER)
     trust_score = models.FloatField(default=50.0)
+    fact_check_points = models.PositiveIntegerField(default=0)
     bio = models.TextField(blank=True, null=True)
     avatar_url = models.URLField(max_length=500, blank=True, null=True)
     is_email_verified = models.BooleanField(default=False)
@@ -122,15 +139,7 @@ class Claim(models.Model):
             return None  # Not enough decisive evidence
 
     class Meta:
-        indexes = [
-            HnswIndex(
-                name="claim_embedding_hnsw_idx",
-                fields=["claim_embedding"],
-                m=16,
-                ef_construction=64,
-                opclasses=["vector_cosine_ops"],
-            )
-        ]
+        indexes = _claim_vector_indexes()
 
 
 class Thread(models.Model):
@@ -168,6 +177,19 @@ class Thread(models.Model):
 
     def __str__(self):
         return f"Thread {self.id} - Claim ID: {self.claim.id} - Author: {self.author.username}"
+
+
+class ClaimCheckHistory(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey("auth.User", on_delete=models.CASCADE, related_name="claim_check_history")
+    claim = models.ForeignKey(Claim, on_delete=models.CASCADE, related_name="check_history")
+    checked_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-checked_at"]
+
+    def __str__(self):
+        return f"ClaimCheckHistory {self.id} - User: {self.user.username} - Claim ID: {self.claim.id}"
 
 class ThreadFlag(models.Model):
     class Reason(models.TextChoices):
