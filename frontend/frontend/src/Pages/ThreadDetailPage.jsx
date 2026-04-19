@@ -344,21 +344,61 @@ function ThreadDetailPage() {
    //Comment submit handler
    async function handleCommentSubmit(e) {
       e.preventDefault();
-      if (!newComment.trim()) return;
+      const trimmedComment = newComment.trim();
+      if (!trimmedComment) return;
+
+      const optimisticId = `optimistic-${Date.now()}`;
+      const optimisticComment = {
+         id: optimisticId,
+         comment_text: trimmedComment,
+         commenter: {
+            id: user?.id,
+            username: user?.username || "You",
+            role: user?.role || null,
+         },
+         commented_at: new Date().toISOString(),
+         likes: 0,
+      };
+
+      const previousComments = comments;
+      const previousCommentCount = Number(thread?.comment_count ?? comments.length);
+
+      setComments((prev) => [optimisticComment, ...prev]);
+      setThread((prev) => {
+         if (!prev) return prev;
+         return {
+            ...prev,
+            comment_count: previousCommentCount + 1,
+         };
+      });
+      setNewComment("");
+
       try {
-         await authFetch(apiUrl("comments/"), {
+         const createdComment = await authFetch(apiUrl("comments/"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ thread_id: threadId, comment_text: newComment }),
+            body: JSON.stringify({ thread_id: threadId, comment_text: trimmedComment }),
          });
+
+         setComments((prev) =>
+            prev.map((comment) => (comment.id === optimisticId ? createdComment : comment)),
+         );
+
          addToast({
             type: "success",
             message: "Comment posted successfully!",
             duration: 2000,
          });
-         await refreshThreadData();
-         setNewComment("");
       } catch (error) {
+         setComments(previousComments);
+         setThread((prev) => {
+            if (!prev) return prev;
+            return {
+               ...prev,
+               comment_count: previousCommentCount,
+            };
+         });
+         setNewComment(trimmedComment);
          console.error("Error posting comment:", error);
          addToast({
             type: "error",
@@ -372,6 +412,22 @@ function ThreadDetailPage() {
          setConfirmDialog({ open: true, type: "comment", targetId: commentId });
          return;
       }
+
+      const previousComments = comments;
+      const previousCommentCount = Number(thread?.comment_count ?? comments.length);
+      const hasComment = comments.some((comment) => comment.id === commentId);
+
+      if (hasComment) {
+         setComments((prev) => prev.filter((comment) => comment.id !== commentId));
+         setThread((prev) => {
+            if (!prev) return prev;
+            return {
+               ...prev,
+               comment_count: Math.max(0, previousCommentCount - 1),
+            };
+         });
+      }
+
       try {
          await authFetch(apiUrl(`comments/${commentId}/`), {
             method: "DELETE",
@@ -381,8 +437,17 @@ function ThreadDetailPage() {
             message: "Comment deleted successfully",
             duration: 2000,
          });
-         await refreshThreadData();
       } catch (error) {
+         if (hasComment) {
+            setComments(previousComments);
+            setThread((prev) => {
+               if (!prev) return prev;
+               return {
+                  ...prev,
+                  comment_count: previousCommentCount,
+               };
+            });
+         }
          console.error("Error deleting comment:", error);
          addToast({
             type: "error",
@@ -392,22 +457,40 @@ function ThreadDetailPage() {
    }
 
    async function handleSaveCommentEdit(commentId) {
-      if (!editingCommentText.trim()) return;
+      const trimmedComment = editingCommentText.trim();
+      if (!trimmedComment) return;
+
+      const previousComments = comments;
+      setComments((prev) =>
+         prev.map((comment) =>
+            comment.id === commentId ? { ...comment, comment_text: trimmedComment } : comment,
+         ),
+      );
+      setEditingCommentId(null);
+      setEditingCommentText("");
+
       try {
-         await authFetch(apiUrl(`comments/${commentId}/`), {
+         const updatedComment = await authFetch(apiUrl(`comments/${commentId}/`), {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ comment_text: editingCommentText }),
+            body: JSON.stringify({ comment_text: trimmedComment }),
          });
+
+         setComments((prev) =>
+            prev.map((comment) =>
+               comment.id === commentId ? { ...comment, ...updatedComment } : comment,
+            ),
+         );
+
          addToast({
             type: "success",
             message: "Comment updated successfully",
             duration: 2000,
          });
-         await refreshThreadData();
-         setEditingCommentId(null);
-         setEditingCommentText("");
       } catch (error) {
+         setComments(previousComments);
+         setEditingCommentId(commentId);
+         setEditingCommentText(trimmedComment);
          console.error("Error editing comment:", error);
          addToast({
             type: "error",
