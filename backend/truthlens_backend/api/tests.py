@@ -1,9 +1,13 @@
 from django.contrib.auth.models import User
+from django.core.cache import cache
+from django.test import override_settings
 from django.urls import reverse
+from unittest.mock import patch
 from rest_framework import status
 from rest_framework.test import APITestCase, APIClient
 
-from .models import Claim, EvidenceSubmission, Thread, ThreadComment, UserProfile
+from .models import Claim, ClaimCheckHistory, EvidenceSubmission, Thread, ThreadComment, UserProfile
+from .throttles import FactCheckRateThrottle
 
 
 class ThreadEvidenceCommentAuthorizationTests(APITestCase):
@@ -563,3 +567,239 @@ class ModeratorEvidenceVerificationTests(APITestCase):
         self.evidence.refresh_from_db()
         self.assertEqual(self.evidence.verified_by, moderator2)
         self.assertEqual(self.evidence.moderator_notes, "Second mod")
+
+
+class OptionalFactCheckAuthTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="detector",
+            email="detector@test.com",
+            password="pass1234",
+        )
+        UserProfile.objects.create(user=self.user, trust_score=50.0)
+
+        self.auth_client = APIClient()
+        self.auth_client.force_authenticate(user=self.user)
+
+    @patch("api.views.text_fact_check_process.delay")
+    @patch("api.views.find_matching_claim")
+    @patch("api.views.compute_fingerprint")
+    def test_verify_text_allows_guest_without_history_or_points(
+        self,
+        mock_compute_fingerprint,
+        mock_find_matching_claim,
+        mock_delay,
+    ):
+        mock_compute_fingerprint.return_value = None
+        mock_find_matching_claim.return_value = None
+        mock_delay.return_value = None
+
+        res = self.client.post(
+            reverse("verify_text"),
+            {"text": "Guest fact-check request."},
+            format="json",
+        )
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(ClaimCheckHistory.objects.count(), 0)
+
+    @patch("api.views.text_fact_check_process.delay")
+    @patch("api.views.find_matching_claim")
+    @patch("api.views.compute_fingerprint")
+    def test_verify_text_records_history_and_points_for_authenticated_user(
+        self,
+        mock_compute_fingerprint,
+        mock_find_matching_claim,
+        mock_delay,
+    ):
+        mock_compute_fingerprint.return_value = None
+        mock_find_matching_claim.return_value = None
+        mock_delay.return_value = None
+
+        initial_points = self.user.profile.fact_check_points
+
+        res = self.auth_client.post(
+            reverse("verify_text"),
+            {"text": "Authenticated fact-check request."},
+            format="json",
+        )
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        claim_id = res.json()["claim_id"]
+
+        self.user.profile.refresh_from_db()
+        self.assertEqual(self.user.profile.fact_check_points, initial_points + 1)
+        self.assertTrue(
+            ClaimCheckHistory.objects.filter(user=self.user, claim_id=claim_id).exists()
+        )
+
+
+class FactCheckThrottleTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self._original_rates = FactCheckRateThrottle.THROTTLE_RATES
+        FactCheckRateThrottle.THROTTLE_RATES = {
+            **(self._original_rates or {}),
+            "fact_check": "3/minute",
+        }
+
+    def tearDown(self):
+        FactCheckRateThrottle.THROTTLE_RATES = self._original_rates
+        cache.clear()
+
+    def _assert_endpoint_throttled(self, url, payload):
+        first = self.client.post(url, payload, format="json")
+        second = self.client.post(url, payload, format="json")
+        third = self.client.post(url, payload, format="json")
+        fourth = self.client.post(url, payload, format="json")
+
+        self.assertEqual(first.status_code, status.HTTP_200_OK)
+        self.assertEqual(second.status_code, status.HTTP_200_OK)
+        self.assertEqual(third.status_code, status.HTTP_200_OK)
+        self.assertEqual(fourth.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    @patch("api.views.text_fact_check_process.delay")
+    @patch("api.views.find_matching_claim")
+    @patch("api.views.compute_fingerprint")
+    def test_verify_text_endpoint_is_rate_limited(
+        self,
+        mock_compute_fingerprint,
+        mock_find_matching_claim,
+        mock_delay,
+    ):
+        mock_compute_fingerprint.return_value = None
+        mock_find_matching_claim.return_value = None
+        mock_delay.return_value = None
+        self._assert_endpoint_throttled(
+            reverse("verify_text"),
+            {"text": "Claim text for throttling test."},
+        )
+
+    @patch("api.views.url_fact_check_process.delay")
+    @patch("api.views.check_url_threat_reputation")
+    @patch("api.views.validate_public_url")
+    def test_verify_url_endpoint_is_rate_limited(
+        self,
+        mock_validate_public_url,
+        mock_check_url_threat_reputation,
+        mock_delay,
+    ):
+        mock_validate_public_url.return_value = ("https://example.com/safe", None)
+        mock_check_url_threat_reputation.return_value = {"status": "SAFE"}
+        mock_delay.return_value = None
+
+        self._assert_endpoint_throttled(
+            reverse("verify_url"),
+            {"url": "https://example.com/source"},
+        )
+
+    @patch("api.views.snippet_fact_check_process.delay")
+    @patch("api.views.upload_image_to_database")
+    @patch("api.views.process_image")
+    def test_analyze_snippet_endpoint_is_rate_limited(
+        self,
+        mock_process_image,
+        mock_upload_image_to_database,
+        mock_delay,
+    ):
+        mock_process_image.return_value = ("imagehash", None)
+        mock_upload_image_to_database.return_value = "https://example.com/media.png"
+        mock_delay.return_value = None
+
+        self._assert_endpoint_throttled(
+            reverse("analyze_snippet"),
+            {"image_data": "data:image/png;base64,AAA"},
+        )
+
+
+@override_settings(
+    CORS_ALLOW_ALL_ORIGINS=False,
+    CORS_ALLOWED_ORIGINS=[
+        "http://localhost:5173",
+        "chrome-extension://akdengbmiapbfmlcbogjbeafcbbanpgp",
+    ],
+)
+class CorsPolicyTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self._original_rates = FactCheckRateThrottle.THROTTLE_RATES
+        FactCheckRateThrottle.THROTTLE_RATES = {
+            **(self._original_rates or {}),
+            "fact_check": "100/minute",
+        }
+
+    def tearDown(self):
+        FactCheckRateThrottle.THROTTLE_RATES = self._original_rates
+        cache.clear()
+
+    def test_preflight_allows_extension_origin_for_analyze(self):
+        origin = "chrome-extension://akdengbmiapbfmlcbogjbeafcbbanpgp"
+        res = self.client.options(
+            reverse("analyze_snippet"),
+            HTTP_ORIGIN=origin,
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD="POST",
+            HTTP_ACCESS_CONTROL_REQUEST_HEADERS="content-type",
+        )
+
+        self.assertIn(res.status_code, [status.HTTP_200_OK, status.HTTP_204_NO_CONTENT])
+        self.assertEqual(res.headers.get("Access-Control-Allow-Origin"), origin)
+
+    def test_preflight_blocks_disallowed_web_origin_for_analyze(self):
+        disallowed_origin = "https://www.facebook.com"
+        res = self.client.options(
+            reverse("analyze_snippet"),
+            HTTP_ORIGIN=disallowed_origin,
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD="POST",
+            HTTP_ACCESS_CONTROL_REQUEST_HEADERS="content-type",
+        )
+
+        self.assertIn(res.status_code, [status.HTTP_200_OK, status.HTTP_204_NO_CONTENT])
+        self.assertIsNone(res.headers.get("Access-Control-Allow-Origin"))
+
+    @patch("api.views.text_fact_check_process.delay")
+    @patch("api.views.find_matching_claim")
+    @patch("api.views.compute_fingerprint")
+    def test_post_allows_extension_origin_for_verify_text(
+        self,
+        mock_compute_fingerprint,
+        mock_find_matching_claim,
+        mock_delay,
+    ):
+        mock_compute_fingerprint.return_value = None
+        mock_find_matching_claim.return_value = None
+        mock_delay.return_value = None
+
+        origin = "chrome-extension://akdengbmiapbfmlcbogjbeafcbbanpgp"
+        res = self.client.post(
+            reverse("verify_text"),
+            {"text": "Origin header CORS validation."},
+            format="json",
+            HTTP_ORIGIN=origin,
+        )
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.headers.get("Access-Control-Allow-Origin"), origin)
+
+    @patch("api.views.text_fact_check_process.delay")
+    @patch("api.views.find_matching_claim")
+    @patch("api.views.compute_fingerprint")
+    def test_post_blocks_disallowed_web_origin_for_verify_text(
+        self,
+        mock_compute_fingerprint,
+        mock_find_matching_claim,
+        mock_delay,
+    ):
+        mock_compute_fingerprint.return_value = None
+        mock_find_matching_claim.return_value = None
+        mock_delay.return_value = None
+
+        disallowed_origin = "https://www.facebook.com"
+        res = self.client.post(
+            reverse("verify_text"),
+            {"text": "Disallowed origin validation."},
+            format="json",
+            HTTP_ORIGIN=disallowed_origin,
+        )
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIsNone(res.headers.get("Access-Control-Allow-Origin"))
