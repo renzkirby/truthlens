@@ -14,6 +14,7 @@ import VerifyPage from "./Pages/VerifyPage.jsx";
 import ModerationPage from "./Pages/ModerationPage.jsx";
 import VerifyEmailPage from "./Pages/VerifyEmailPage.jsx";
 import Toast from "./components/Toast";
+import UserHub from "./Pages/UserHub.jsx";
 
 function App() {
    return (
@@ -83,6 +84,10 @@ function App() {
                   <Route
                      path="/user/:username"
                      element={<UserProfile />} 
+                  />
+                  <Route
+                     path="/user-hub"
+                     element={<UserHub />} 
                   />
                </Route>
             </Routes>

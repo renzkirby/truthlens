@@ -8,7 +8,7 @@
  *   buildApiUrl("threads/") => "http://localhost:8000/api/threads/"
  *   buildApiUrl("moderation/threads", threadId, "resolve") => "http://localhost:8000/api/moderation/threads/{id}/resolve/"
  */
-
+import axios from 'axios';
 import { API_BASE_URL, API_ENDPOINTS } from "./constants";
 
 /**
@@ -42,3 +42,23 @@ export function useEndpoint(endpoint, ...params) {
    }
    return buildApiUrl(path);
 }
+
+// Fetch Personal User Hub Data
+export const getUserHubData = async () => {
+    const response = await axios.get(`${API_BASE_URL}/dashboards/hub/`, {
+        headers: {
+            Authorization: `Bearer ${localStorage.getItem('access')}`
+        }
+    });
+    return response.data;
+};
+
+// Toggle Save/Bookmark for a Claim
+export const toggleSaveClaim = async (claimId) => {
+    const response = await axios.post(`${API_BASE_URL}/claims/${claimId}/toggle-save/`, {}, {
+        headers: {
+            Authorization: `Bearer ${localStorage.getItem('access')}`
+        }
+    });
+    return response.data;
+};

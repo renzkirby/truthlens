@@ -14,6 +14,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import NotFound
 from rest_framework.pagination import CursorPagination
+from rest_framework.views import APIView
 from datetime import timedelta
 from django.shortcuts import get_object_or_404
 import json
@@ -1073,3 +1074,120 @@ def update_profile(request):
     # Return the updated user data
     serializer = UserWithTrustBreakdownSerializer(request.user, context={"request": request})
     return Response(serializer.data, status=200)
+
+
+class ModeratorDashboardView(APIView):
+    permission_classes = [IsAuthenticated, IsModerator]
+
+    def get(self, request):
+        # 1. The Action Queue
+        pending_verdicts = Thread.objects.filter(status=Thread.Status.PENDING, moderator_verdict__isnull=True).count()
+        unverified_evidence = EvidenceSubmission.objects.filter(evidence_status="UNVERIFIED").count()
+        safety_flags = ThreadFlag.objects.count()
+
+        # 2. System Analytics
+        total_claims = Claim.objects.count()
+        
+        # This returns a list of dicts: [{'final_verdict': 'FACT', 'total': 15}, ...]
+        verdict_distribution = list(Claim.objects.values('final_verdict').annotate(total=Count('id')))
+
+        # AI vs Moderator Agreement (Claims where AI and Final match)
+        moderated_claims = Claim.objects.filter(final_verdict__isnull=False)
+        total_moderated = moderated_claims.count()
+        agreed_claims = moderated_claims.filter(ai_verdict=F('final_verdict')).count()
+        agreement_rate = round((agreed_claims / total_moderated * 100), 1) if total_moderated > 0 else 0
+
+        # 3. Community Health (Top 5 Contributors)
+        top_contributors = list(
+            UserProfile.objects.order_by('-trust_score')
+            .values('user__username', 'trust_score', 'role')[:5]
+        )
+
+        return Response({
+            "action_queue": {
+                "pending_verdicts": pending_verdicts,
+                "unverified_evidence": unverified_evidence,
+                "safety_flags": safety_flags,
+            },
+            "system_analytics": {
+                "total_claims": total_claims,
+                "verdict_distribution": verdict_distribution,
+                "ai_agreement_rate": agreement_rate,
+            },
+            "community_health": {
+                "top_contributors": top_contributors,
+            }
+        })
+
+
+class UserHubView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        profile = user.profile
+
+        # 1. Reputation & Progression
+        score = profile.trust_score
+        rank = "Novice Verifier"
+        next_milestone = 50
+        
+        if score >= 150:
+            rank = "Veteran Analyst"
+            next_milestone = "Max Rank"
+        elif score >= 50:
+            rank = "Trusted Analyst"
+            next_milestone = 150 - score
+
+        # 2. Personal Impact Metrics
+        total_scans = Claim.objects.filter(threads__author=user).distinct().count()
+        evidence_submitted = EvidenceSubmission.objects.filter(contributor=user).count()
+        votes_cast = Vote.objects.filter(voter=user).count()
+        
+        # Impact Ripple: How many votes did other people give to THIS user's evidence?
+        impact_ripple = Vote.objects.filter(evidence__contributor=user).count()
+
+        # 3. The Fact-Check Library (Saved Receipts)
+        # Using your existing ClaimSerializer to format the saved claims
+        saved_claims = profile.saved_claims.all().order_by('-last_updated')
+        serialized_saved = ClaimSerializer(saved_claims, many=True).data
+
+        return Response({
+            "user_info": {
+                "username": user.username,
+                "avatar_url": profile.avatar_url if hasattr(profile, 'avatar_url') and profile.avatar_url else None,
+            },
+            "reputation": {
+                "trust_score": score,
+                "current_rank": rank,
+                "points_to_next_rank": next_milestone,
+            },
+            "impact": {
+                "total_scans": total_scans,
+                "community_contributions": evidence_submitted + votes_cast,
+                "impact_ripple": impact_ripple,
+            },
+            "library": {
+                "saved_receipts": serialized_saved
+            }
+        })
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def toggle_save_claim(request, claim_id):
+    """Allows a user to bookmark or un-bookmark a claim for their Personal Hub."""
+    try:
+        claim = Claim.objects.get(id=claim_id)
+    except Claim.DoesNotExist:
+        return Response({"error": "Claim not found."}, status=404)
+        
+    profile = request.user.profile
+    
+    if profile.saved_claims.filter(id=claim.id).exists():
+        profile.saved_claims.remove(claim)
+        is_saved = False
+    else:
+        profile.saved_claims.add(claim)
+        is_saved = True
+        
+    return Response({"is_saved": is_saved}, status=200)

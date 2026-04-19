@@ -30,6 +30,11 @@ urlpatterns = [
     path('moderation/verdict-queue/', views.verdict_queue),
     path('moderation/threads/<uuid:thread_id>/resolve/', views.moderation_resolve_thread),
     path('moderation/threads/<uuid:thread_id>/safety-action/', views.moderation_resolve_safety_thread),
+
+    # DashBoard URLs
+    path("dashboards/moderator/", views.ModeratorDashboardView.as_view(), name="moderator_dashboard"),
+    path("dashboards/hub/", views.UserHubView.as_view(), name="user_hub"),
+    path("claims/<uuid:claim_id>/toggle-save/", views.toggle_save_claim, name="toggle_save_claim"),
 ]
 
 router = DefaultRouter()

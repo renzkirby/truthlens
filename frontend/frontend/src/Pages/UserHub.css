@@ -1,0 +1,185 @@
+.hub-wrapper {
+    background-color: #f1f5f9;
+    min-height: 100vh;
+    padding: 32px 24px 64px;
+    font-family: 'Inter', sans-serif;
+}
+
+.hub-container {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+/* --- Profile Header --- */
+.profile-card {
+    background: #ffffff;
+    border-radius: 10px;
+    padding: 20px 24px;
+    border: 1.5px solid #e5e7eb;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.avatar-circle {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: #ddd6fe;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.profile-info {
+    flex: 1;
+}
+
+.profile-username {
+    font-size: 18px;
+    font-weight: 900;
+    color: #111827;
+    letter-spacing: -0.01em;
+}
+
+.profile-meta {
+    font-size: 12px;
+    color: #6b7280;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.profile-bio {
+    font-size: 11px;
+    color: #374151;
+    margin-top: 4px;
+}
+
+.profile-stats {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+
+.stat-block {
+    text-align: center;
+}
+
+.stat-val {
+    font-size: 18px;
+    font-weight: 900;
+    color: #111827;
+}
+
+.stat-lbl {
+    font-size: 9px;
+    color: #6b7280;
+    letter-spacing: 0.06em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    text-transform: uppercase;
+    font-weight: 700;
+}
+
+/* --- Section Labels --- */
+.section-label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    color: #4f46e5;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-left: 3px solid #4f46e5;
+    padding-left: 8px;
+    margin-bottom: 12px;
+}
+
+/* --- Tables & Cards --- */
+.data-panel {
+    background: #ffffff;
+    border-radius: 10px;
+    border: 1.5px solid #e5e7eb;
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table th {
+    background: #f9fafb;
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 10px;
+    font-weight: 800;
+    color: #6b7280;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border-bottom: 1.5px solid #e5e7eb;
+}
+
+.data-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid #f3f4f6;
+    font-size: 12px;
+    color: #374151;
+    vertical-align: middle;
+}
+
+.data-table tr:last-child td {
+    border-bottom: none;
+}
+
+.icon-box {
+    width: 32px;
+    height: 32px;
+    background: #f3f4f6;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* --- Contributions Grid --- */
+.contributions-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.contribution-card {
+    background: #ffffff;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px 14px;
+}
+
+/* --- Badges & Buttons --- */
+.action-btn {
+    font-size: 10px;
+    color: #4f46e5;
+    background: #eff6ff;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    text-decoration: none;
+}
+
+.action-btn:hover {
+    background: #e0e7ff;
+}
