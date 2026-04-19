@@ -5,9 +5,10 @@ from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from django.utils import timezone
 from django.db import IntegrityError, transaction
-from rest_framework.decorators import api_view, permission_classes, action
+from django.db.models import Q
+from rest_framework.decorators import api_view, permission_classes, action, throttle_classes
 from rest_framework import status, viewsets
-from rest_framework.permissions import IsAuthenticated, BasePermission, SAFE_METHODS
+from rest_framework.permissions import IsAuthenticated, BasePermission, SAFE_METHODS, AllowAny
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -31,6 +32,7 @@ from .tasks import (
 )
 from .models import (
     Claim,
+    ClaimCheckHistory,
     Thread,
     UserProfile,
     EvidenceSubmission,
@@ -40,6 +42,7 @@ from .models import (
     Vote,
 )
 from .trust_service import recompute_user_trust_score
+from .throttles import FactCheckRateThrottle
 from .serializers import (
     RegisterSerializer,
     UserSerializer,
@@ -117,9 +120,30 @@ class IsNotModerator(BasePermission):
             return False
         return request.user.profile.role != UserProfile.Role.MODERATOR
 
+
+def _authenticated_user_or_none(request):
+    user = getattr(request, "user", None)
+    if user and user.is_authenticated:
+        return user
+    return None
+
+
+def _record_authenticated_claim_check(user, claim):
+    if not user:
+        return
+
+    ClaimCheckHistory.objects.create(user=user, claim=claim)
+
+    profile = getattr(user, "profile", None)
+    if profile:
+        profile.fact_check_points += 1
+        profile.save(update_fields=["fact_check_points"])
+
 # Create your views here.
 @csrf_exempt
 @api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([FactCheckRateThrottle])
 def receive_snippet(request):
     parsed_data = json.loads(request.body)
     base64_string = parsed_data.get("image_data")
@@ -136,9 +160,12 @@ def receive_snippet(request):
 
     # ── Claim Deduplication Pre-Check ──
     fingerprint = compute_fingerprint("IMAGE", image_hash)
+    authenticated_user = _authenticated_user_or_none(request)
+
     if fingerprint:
         matched_claim = find_matching_claim(fingerprint, "IMAGE")
         if matched_claim and matched_claim.final_verdict:
+            _record_authenticated_claim_check(authenticated_user, matched_claim)
             # A moderator has already resolved this claim — return cached verdict
             match_result = get_match_result(matched_claim)
             return JsonResponse(
@@ -159,6 +186,7 @@ def receive_snippet(request):
         verdict=None,
         verified_via=Claim.VerificationSource.PENDING,
     )
+    _record_authenticated_claim_check(authenticated_user, claim)
     claim_id = claim.id  # Get the ID of the saved claim
 
     snippet_fact_check_process.delay(image_hash, str(claim_id), check_deepfake)
@@ -222,6 +250,8 @@ def claim_polling_endpoint(request, claim_id):
 
 @csrf_exempt
 @api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([FactCheckRateThrottle])
 def verify_url(request):
     # gets the data from fronted ('yung URL)
     url = request.data.get("url")
@@ -242,9 +272,12 @@ def verify_url(request):
 
     # ── Claim Deduplication Pre-Check ──
     fingerprint = compute_fingerprint("URL", safe_url)
+    authenticated_user = _authenticated_user_or_none(request)
+
     if fingerprint:
         matched_claim = find_matching_claim(fingerprint, "URL")
         if matched_claim and matched_claim.final_verdict:
+            _record_authenticated_claim_check(authenticated_user, matched_claim)
             match_result = get_match_result(matched_claim)
             return JsonResponse(
                 {"claim_id": str(matched_claim.id), "url_safety": url_safety, "cached": True, "match": match_result},
@@ -258,6 +291,7 @@ def verify_url(request):
         verdict=None,
         verified_via=Claim.VerificationSource.PENDING,
     )
+    _record_authenticated_claim_check(authenticated_user, claim)
     claim_id = claim.id
     
     url_fact_check_process.delay(safe_url, claim_id)
@@ -308,7 +342,7 @@ def get_current_user(request):
 @permission_classes([IsAuthenticated])
 def my_claims(request):
     claims = Claim.objects.filter(
-        threads__author=request.user 
+        Q(threads__author=request.user) | Q(check_history__user=request.user)
     ).distinct().order_by("-last_updated")
     serializer = ClaimSerializer(claims, many=True)
     return Response(serializer.data)
@@ -869,6 +903,8 @@ def test_deepfake(request):
 
 @csrf_exempt
 @api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([FactCheckRateThrottle])
 def verify_text(request):
     """Endpoint for pure text fact-checking."""
     text_content = request.data.get("text")
@@ -882,8 +918,10 @@ def verify_text(request):
     fingerprint = compute_fingerprint("TEXT", text_content)
     # Even if fingerprint is None or exact match fails, we want semantic fallback!
     matched_claim = find_matching_claim(fingerprint, "TEXT", context_text=text_content)
+    authenticated_user = _authenticated_user_or_none(request)
     
     if matched_claim and matched_claim.final_verdict:
+        _record_authenticated_claim_check(authenticated_user, matched_claim)
         match_result = get_match_result(matched_claim)
         return JsonResponse(
             {"claim_id": str(matched_claim.id), "cached": True, "match": match_result},
@@ -899,6 +937,7 @@ def verify_text(request):
         verdict=None,
         verified_via=Claim.VerificationSource.PENDING,
     )
+    _record_authenticated_claim_check(authenticated_user, claim)
     claim_id = claim.id
     
     # Send the raw text to the Celery worker
