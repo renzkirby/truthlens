@@ -460,7 +460,9 @@
                         return (
                            <div
                               key={thread.id}
-                              className="post-card">
+                              className="post-card"
+                              onClick={() => handleThreadClick(thread.id)}
+                              style={{ cursor: "pointer" }}>
                               {/* Card Header */}
                               <div className="card-header">
                                  <div
@@ -689,7 +691,10 @@
                               <div className="card-footer">
                                  <button
                                     className="action-item"
-                                    onClick={() => handleThreadClick(thread.id, "comments")}>
+                                    onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleThreadClick(thread.id, "comments");
+                                       }}>   
                                     <Icons name="message-square" />
                                     Comment
                                     <span className="count-pill">{thread.comment_count}</span>
@@ -697,14 +702,20 @@
 
                                  <button
                                     className="action-item primary-action"
-                                    onClick={() => handleThreadClick(thread.id, "evidence")}>
+                                    onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleThreadClick(thread.id, "evidence");
+                                       }}>
                                     <Icons name="circle-plus" />
                                     Add Evidence
                                  </button>
 
                                  <button
                                     className="action-item"
-                                    onClick={() => handleThreadClick(thread.id, "evidence")}>
+                                    onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleThreadClick(thread.id, "evidence");
+                                       }}>      
                                     <Icons name="paperclip" />
                                     Evidence
                                     <span className="count-pill">{thread.evidence_count}</span>
