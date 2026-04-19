@@ -34,6 +34,11 @@ DEBUG = os.getenv('DEBUG', 'False') == 'True'
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
 
 
+def _split_csv_env(name, default=""):
+    raw_value = os.getenv(name, default)
+    return [value.strip() for value in raw_value.split(",") if value.strip()]
+
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -55,6 +60,9 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    'DEFAULT_THROTTLE_RATES': {
+        'fact_check': os.getenv('DRF_FACT_CHECK_THROTTLE_RATE', '10/minute'),
+    },
 }
 
 MIDDLEWARE = [
@@ -170,19 +178,35 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = False
 
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:5173",  # extension port
-    "http://localhost:5174",  # frontend port
+cors_allowed_origins = _split_csv_env(
+    "CORS_ALLOWED_ORIGINS",
+    "http://localhost:5173,http://localhost:5174",
+)
+allowed_extension_ids = [
+    extension_id
+    for extension_id in _split_csv_env("CORS_ALLOWED_EXTENSION_IDS")
+    if len(extension_id) == 32
 ]
+CORS_ALLOWED_ORIGINS = list(
+    dict.fromkeys(
+        cors_allowed_origins
+        + [f"chrome-extension://{extension_id}" for extension_id in allowed_extension_ids]
+    )
+)
+
+CSRF_TRUSTED_ORIGINS = _split_csv_env(
+    "CSRF_TRUSTED_ORIGINS",
+    "http://localhost:5173,http://localhost:5174",
+)
 
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
 }
 

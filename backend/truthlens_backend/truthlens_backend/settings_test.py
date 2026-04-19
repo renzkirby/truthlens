@@ -8,6 +8,12 @@ DATABASES = {
     }
 }
 
+# API migrations include PostgreSQL/pgvector-specific operations that are not valid on SQLite.
+# For test runs, let Django build API tables directly from models.
+MIGRATION_MODULES = {
+    "api": None,
+}
+
 # Speed up test suite.
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.MD5PasswordHasher",
