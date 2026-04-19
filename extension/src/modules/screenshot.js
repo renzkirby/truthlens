@@ -1,7 +1,7 @@
 import { state } from "./state.js";
 import { cleanup } from "./overlay.js";
 import { sendImageToServer } from "./api.js";
-import { displayLoadingCard } from "./ui.jsx";
+import { displayLoadingCard, removeLoadingCard, displayErrorCard } from "./ui.jsx";
 
 export function captureScreenshot(coords) {
    console.log("Requesting screenshot with coords:", coords);
@@ -56,20 +56,25 @@ function cropAndSave(fullScreenshot, coords) {
 
       // helper function to finalize payload and send to server, called after fetching deepfake toggle state
       const finalizePayload = (isDeepfakeCheckEnabled) => {
-         const payload = { 
+         const payload = {
             image_data: croppedScreenshot,
-            check_deepfake: isDeepfakeCheckEnabled
+            check_deepfake: isDeepfakeCheckEnabled,
          };
-         
-         sendImageToServer(payload);
+
+         sendImageToServer(payload).catch((error) => {
+            console.error("Failed to start snippet verification:", error);
+            removeLoadingCard();
+            displayErrorCard("Failed to send image to server. Please try again later.");
+         });
+
          state.isAnalyzing = true;
          displayLoadingCard();
          cleanup(); // This ensures the crosshair ALWAYS resets!
       };
 
-      // Fetch the Deepfake toggle state 
+      // Fetch the Deepfake toggle state
       if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-         chrome.storage.local.get(["checkDeepfake"], function(result) {
+         chrome.storage.local.get(["checkDeepfake"], function (result) {
             finalizePayload(result.checkDeepfake || false);
          });
       } else {

@@ -82,24 +82,33 @@ function LoginPage() {
     */
    const handleSubmit = async () => {
       setIsSigningIn(true);
+      setError(null);
       const loginEndpoint = useEndpoint("LOGIN");
-      const response = await fetch(loginEndpoint, {
-         method: "POST",
-         headers: { "Content-Type": "application/json" },
-         body: JSON.stringify({
-            username: formValues.username,
-            password: formValues.password,
-            remember_me: formValues.remember_me,
-         }),
-      });
 
-      const data = await response.json();
-      if (response.ok) {
-         login(data.access, data.refresh);
-         setJustLoggedIn(true); // Flag that we're waiting for user data to load
-      } else {
+      try {
+         const response = await fetch(loginEndpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+               username: formValues.username,
+               password: formValues.password,
+               remember_me: formValues.remember_me,
+            }),
+         });
+
+         const data = await response.json().catch(() => ({}));
+
+         if (response.ok && data?.access && data?.refresh) {
+            login(data.access, data.refresh);
+            setJustLoggedIn(true); // Flag that we're waiting for user data to load
+            return;
+         }
+
+         setError(data?.detail || "Invalid credentials. Please try again.");
+      } catch (err) {
+         setError("Unable to sign in right now. Please try again.");
+      } finally {
          setIsSigningIn(false);
-         setError(data.detail || "Something went wrong");
       }
    };
 

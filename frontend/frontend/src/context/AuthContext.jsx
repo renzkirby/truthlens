@@ -1,18 +1,30 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+import axios from "axios";
 import { API_BASE_URL } from "../utils/constants";
 
 const AuthContext = createContext(null);
+const API_ROOT_URL = API_BASE_URL.replace(/\/api\/?$/, "");
+const TOKEN_REFRESH_URL = `${API_ROOT_URL}/api/token/refresh/`;
 
 export function AuthProvider({ children }) {
    const [token, setToken] = useState(localStorage.getItem("access") || null);
    const [user, setUser] = useState(null);
    const [loading, setLoading] = useState(!!localStorage.getItem("access")); // Loading if we have a saved token
+   const apiClientRef = useRef(
+      axios.create({
+         timeout: 30000,
+      }),
+   );
 
    const login = (access, refresh) => {
-      localStorage.setItem("access", access);
-      localStorage.setItem("refresh", refresh);
-      setToken(access);
-      fetchUser(access);
+      if (access) {
+         localStorage.setItem("access", access);
+         setToken(access);
+         fetchUser(access);
+      }
+      if (refresh) {
+         localStorage.setItem("refresh", refresh);
+      }
    };
 
    const logout = () => {
@@ -23,60 +35,140 @@ export function AuthProvider({ children }) {
       setLoading(false);
    };
 
-   const authFetch = async (url, options = {}, accessToken = null) => {
-      const currentToken = accessToken || token;
+   useEffect(() => {
+      const apiClient = apiClientRef.current;
+      let isRefreshing = false;
+      let pendingRequests = [];
 
-      const response = await fetch(url, {
-         method: options.method,
-         headers: {
-            ...options.headers,
-            Authorization: `Bearer ${currentToken}`,
-         },
-         body: options.body,
+      const requestInterceptor = apiClient.interceptors.request.use((config) => {
+         const accessToken = localStorage.getItem("access");
+         config.headers = config.headers || {};
+
+         if (accessToken && !config.headers.Authorization) {
+            config.headers.Authorization = `Bearer ${accessToken}`;
+         }
+
+         return config;
       });
 
-      let data = null;
-      if (response.status !== 204) {
-         const contentType = response.headers.get("content-type") || "";
-         if (contentType.includes("application/json")) {
-            data = await response.json();
-         } else {
-            const text = await response.text();
-            data = text ? { detail: text } : null;
-         }
-      }
+      const responseInterceptor = apiClient.interceptors.response.use(
+         (response) => response,
+         async (error) => {
+            const originalRequest = error?.config;
+            const statusCode = error?.response?.status;
+            const requestUrl = originalRequest?.url || "";
 
-      if (response.status == 401) {
-         const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh/`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ refresh: localStorage.getItem("refresh") }),
+            if (!originalRequest || statusCode !== 401) {
+               return Promise.reject(error);
+            }
+
+            if (
+               requestUrl.includes("/api/token/refresh/") ||
+               requestUrl.includes("/auth/refresh/") ||
+               originalRequest._retry
+            ) {
+               logout();
+               return Promise.reject(error);
+            }
+
+            const refreshToken = localStorage.getItem("refresh");
+            if (!refreshToken) {
+               logout();
+               return Promise.reject(error);
+            }
+
+            originalRequest._retry = true;
+
+            if (isRefreshing) {
+               return new Promise((resolve, reject) => {
+                  pendingRequests.push({ resolve, reject });
+               })
+                  .then((newAccessToken) => {
+                     originalRequest.headers = originalRequest.headers || {};
+                     originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+                     return apiClient(originalRequest);
+                  })
+                  .catch((refreshError) => Promise.reject(refreshError));
+            }
+
+            isRefreshing = true;
+
+            try {
+               const refreshResponse = await axios.post(
+                  TOKEN_REFRESH_URL,
+                  { refresh: refreshToken },
+                  { headers: { "Content-Type": "application/json" } },
+               );
+
+               const newAccessToken = refreshResponse?.data?.access;
+               const nextRefreshToken = refreshResponse?.data?.refresh || refreshToken;
+
+               if (!newAccessToken) {
+                  throw new Error("Session refresh failed");
+               }
+
+               localStorage.setItem("access", newAccessToken);
+               localStorage.setItem("refresh", nextRefreshToken);
+               setToken(newAccessToken);
+
+               pendingRequests.forEach(({ resolve }) => resolve(newAccessToken));
+               pendingRequests = [];
+
+               originalRequest.headers = originalRequest.headers || {};
+               originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+               return apiClient(originalRequest);
+            } catch (refreshError) {
+               pendingRequests.forEach(({ reject }) => reject(refreshError));
+               pendingRequests = [];
+               logout();
+               return Promise.reject(refreshError);
+            } finally {
+               isRefreshing = false;
+            }
+         },
+      );
+
+      return () => {
+         apiClient.interceptors.request.eject(requestInterceptor);
+         apiClient.interceptors.response.eject(responseInterceptor);
+      };
+   }, []);
+
+   const authFetch = async (url, options = {}, accessToken = null) => {
+      try {
+         const headers = {
+            ...(options.headers || {}),
+         };
+
+         if (accessToken) {
+            headers.Authorization = `Bearer ${accessToken}`;
+         }
+
+         const response = await apiClientRef.current.request({
+            url,
+            method: options.method || "GET",
+            headers,
+            data: options.body,
          });
 
-         const refreshToken = await refreshResponse.json();
-
-         if (refreshResponse.ok) {
-            login(refreshToken.access, localStorage.getItem("refresh"));
-            return authFetch(url, options, refreshToken.access);
-         } else {
-            logout();
-            throw new Error("Session expired");
-         }
+         return response.status === 204 ? null : response.data;
+      } catch (error) {
+         const responseData = error?.response?.data;
+         const detailMessage =
+            (typeof responseData === "object" && responseData?.detail) ||
+            (typeof responseData === "string" ? responseData : null);
+         throw new Error(detailMessage || error.message || "Request failed");
       }
-
-      if (!response.ok) {
-         throw new Error(data?.detail || "Request failed");
-      }
-
-      return data;
    };
 
    const fetchUser = async (accessToken) => {
       try {
-         const response = await fetch(`${API_BASE_URL}/auth/me/`, {
-            headers: { Authorization: `Bearer ${accessToken}` },
+         const response = await apiClientRef.current.get(`${API_BASE_URL}/auth/me/`, {
+            headers: {
+               Authorization: `Bearer ${accessToken}`,
+            },
          });
-         const data = await response.json();
+         const data = response.data;
          const normalizedTrustScore = Number(
             data?.trust_breakdown?.trust_score ?? data?.trust_score ?? 0,
          );

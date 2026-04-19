@@ -28,6 +28,17 @@
         "service_worker": "src/background.js",
         "type": "module"
     },
+    "web_accessible_resources": [
+        {
+            "resources": ["auth-bridge.js"],
+            "matches": [
+                "http://localhost:5174/*",
+                "http://127.0.0.1:5174/*",
+                "https://truthlens.app/*",
+                "https://www.truthlens.app/*"
+            ]
+        }
+    ],
     "content_scripts": [
         {
             "matches": ["<all_urls>"],

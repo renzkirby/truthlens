@@ -1,68 +1,65 @@
 import { state } from "./state.js";
-import { displayResultCard, removeLoadingCard, displayErrorCard, successCard, displayCachedResultCard } from "./ui.jsx";
+import { buildAuthHeaders, clearAuthSession } from "./auth.js";
 
-// Sending snipped image to backend
-export async function sendImageToServer(image) {
-   const response = await fetch(`${state.API_BASE_URL}/analyze/`, {
-      method: "POST",
-      headers: {
-         "content-type": "application/json",
-      },
-      body: JSON.stringify(image),
+async function fetchWithAuthFallback(url, options = {}) {
+   const baseHeaders = options.headers || {};
+   const headersWithAuth = await buildAuthHeaders(baseHeaders);
+
+   let response = await fetch(url, {
+      ...options,
+      headers: headersWithAuth,
    });
 
-   if (!response.ok) {
-      console.error("Failed to send image to server:", response.statusText);
-      removeLoadingCard();
-      displayErrorCard("Failed to send image to server. Please try again later.");
-      return;
+   if (response.status === 401 && headersWithAuth.Authorization) {
+      await clearAuthSession();
+      response = await fetch(url, {
+         ...options,
+         headers: baseHeaders,
+      });
    }
 
-   const data = await response.json();
-   const claim_id = data.claim_id;
-   console.log("Claim ID received from server:", claim_id);
+   return response;
+}
 
-   // ── Cached verdict shortcut ──
-   // If the backend found a resolved match, display it immediately (no polling needed)
-   if (data.cached && data.match) {
-      console.log("Cache hit! Displaying resolved verdict from community.");
-      setTimeout(() => {
-         removeLoadingCard();
-      }, 1000);
-      successCard("Previously verified claim found!");
-      displayCachedResultCard(data.match);
-      return;
-   }
+// Send snipped image payload to the background service worker.
+// The background script owns cross-origin network calls to avoid page-origin CORS issues.
+export async function sendImageToServer(image) {
+   return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(
+         {
+            type: "VERIFY_SNIPPET",
+            payload: image,
+         },
+         (response) => {
+            if (chrome.runtime.lastError) {
+               reject(
+                  new Error(
+                     chrome.runtime.lastError.message || "Failed to contact extension worker.",
+                  ),
+               );
+               return;
+            }
 
-   // Added polling for continuous claim calling until result is given
-   let pollCount = 0;
-   const maxPolls = 50;
+            if (!response?.accepted) {
+               reject(new Error(response?.error || "Snippet verification request was rejected."));
+               return;
+            }
 
-   const pollInterval = setInterval(async () => {
-      pollCount++;
-      if (pollCount > maxPolls) {
-         clearInterval(pollInterval);
-         console.error("Polling timed out");
-         removeLoadingCard();
-         displayErrorCard("Failed to get claim result. Please try again later.");
-         return;
-      }
-      const claim = await fetchClaimResult(claim_id);
-      if (claim && claim.verdict !== "PENDING") {
-         clearInterval(pollInterval);
-         setTimeout(() => {
-            removeLoadingCard();
-         }, 2000);
-         successCard("Analysis complete!");
-         displayResultCard(claim);
-      }
-   }, 3000);
+            resolve(response);
+         },
+      );
+   });
 }
 
 // Getting claim result
 export async function fetchClaimResult(claim_id) {
    try {
-      const response = await fetch(`${state.API_BASE_URL}/claims/${claim_id}/status`);
+      const response = await fetchWithAuthFallback(
+         `${state.API_BASE_URL}/claims/${claim_id}/status`,
+      );
+      if (!response.ok) {
+         throw new Error(`Status ${response.status}`);
+      }
       const data = await response.json();
       console.log("Polled claim status:", data);
       return data;
@@ -89,7 +86,10 @@ export async function fetchClaimResult(claim_id) {
 export async function checkClaimMatch(fingerprint, claimType) {
    try {
       const params = new URLSearchParams({ fingerprint, claim_type: claimType });
-      const response = await fetch(`${state.API_BASE_URL}/claims/match/?${params}`);
+      const response = await fetchWithAuthFallback(`${state.API_BASE_URL}/claims/match/?${params}`);
+      if (!response.ok) {
+         throw new Error(`Status ${response.status}`);
+      }
       const data = await response.json();
       console.log("Claim match check:", data);
       return data.match || null;
