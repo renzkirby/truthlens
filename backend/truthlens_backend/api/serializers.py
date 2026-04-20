@@ -28,6 +28,7 @@ class UserSerializer(serializers.ModelSerializer):
     )
     date_joined = serializers.DateTimeField(read_only=True)
     role = serializers.CharField(source="profile.role", read_only=True)
+    organization_name = serializers.CharField(source="profile.organization_name", read_only=True)
     followers_count = serializers.SerializerMethodField()
     following_count = serializers.SerializerMethodField()
     is_following = serializers.SerializerMethodField()
@@ -58,11 +59,37 @@ class UserSerializer(serializers.ModelSerializer):
             "is_email_verified",
             "date_joined",
             "role",
+            "organization_name",
             "followers_count", 
             "following_count", 
             "is_following",
             "avatar_url", 
             "bio",
+        ]
+
+
+class PublicUserSearchSerializer(serializers.ModelSerializer):
+    trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
+    role = serializers.CharField(source="profile.role", read_only=True)
+    organization_name = serializers.CharField(source="profile.organization_name", read_only=True)
+    avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
+    bio = serializers.CharField(source="profile.bio", read_only=True)
+    followers_count = serializers.SerializerMethodField()
+
+    def get_followers_count(self, obj):
+        return obj.profile.followers.count()
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "trust_score",
+            "role",
+            "organization_name",
+            "avatar_url",
+            "bio",
+            "followers_count",
         ]
 
 
@@ -86,7 +113,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     role = serializers.CharField(read_only=True)
     class Meta:
         model = UserProfile
-        fields = ["id", "user", "trust_score", "bio", "is_email_verified", "role"]
+        fields = ["id", "user", "trust_score", "bio", "is_email_verified", "role", "organization_name"]
         read_only_fields = ["id", "user", "trust_score", "is_email_verified", "role"]
 
 

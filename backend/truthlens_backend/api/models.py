@@ -24,11 +24,12 @@ def _claim_vector_indexes():
 class UserProfile(models.Model):
     class Role(models.TextChoices):
         USER = "USER", "User"
-        MODERATOR = "MODERATOR", "Moderator"
+        MOD = "MOD", "Moderator"
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.USER)
+    organization_name = models.CharField(max_length=255, blank=True, null=True)
     trust_score = models.FloatField(default=50.0)
     fact_check_points = models.PositiveIntegerField(default=0)
     bio = models.TextField(blank=True, null=True)
