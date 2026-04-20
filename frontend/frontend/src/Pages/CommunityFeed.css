@@ -40,7 +40,7 @@ body {
 /* Filter Bar */
 .filter-bar {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
 }
 
@@ -48,6 +48,20 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.feed-search-summary {
+  font-size: 0.86rem;
+  color: var(--text-muted);
+  padding: 0 4px;
+}
+
+.no-threads-text {
+  text-align: center;
+  font-size: 1rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  padding: 12px 4px;
 }
 
 .filter-label {
@@ -569,36 +583,48 @@ body {
 /* ***************************************************************************** */
 /* ── AI Analysis Bar  ── */
 .ai-analysis-bar {
-   display: flex;
-   flex-direction: column;
-   align-items: stretch;
-   gap: 8px;
-   padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 12px 16px;
 }
 
 .ai-analysis-top-row {
-   display: flex;
-   justify-content: space-between;
-   align-items: center;
-   width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
 }
 
 .ai-analysis-context {
-   font-size: 13px;
-   line-height: 1.5;
-   opacity: 0.9;
-   margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0.9;
+  margin-top: 4px;
 }
 
 .context-label {
-   font-weight: 700;
+  font-weight: 700;
 }
 
 .mixed-evidence-pill {
-   margin-left: 4px;
-   background-color: #fef3c7;
-   padding: 2px 6px;
-   border-radius: 3px;
-   font-size: 11px;
-   color: #92400e;
+  margin-left: 4px;
+  background-color: #fef3c7;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  color: #92400e;
+}
+
+@media (max-width: 900px) {
+  .filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .filter-left {
+    flex-wrap: wrap;
+  }
 }
