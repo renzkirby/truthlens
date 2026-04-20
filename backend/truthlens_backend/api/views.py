@@ -238,12 +238,23 @@ def claim_polling_endpoint(request, claim_id):
         effective_verdict = claim.final_verdict or ai_verdict
         active_thread = claim.threads.exclude(status="REJECTED").order_by("-created_at").first()
         moderator_notes = None
-        if claim.final_verdict:
-            resolved_thread = claim.threads.filter(
-                moderator_verdict__isnull=False
-            ).order_by("-moderated_at").first()
-            if resolved_thread:
-                moderator_notes = resolved_thread.moderator_notes
+        sources = []
+
+        if active_thread:
+            verified_evidence = active_thread.evidence_submissions.filter(evidence_status="VERIFIED")[:3]
+            sources = [ev.evidence_url for ev in verified_evidence if getattr(ev, 'evidence_url', None)]
+
+            if claim.final_verdict:
+                resolved_thread = claim.threads.filter(
+                    moderator_verdict__isnull=False
+                ).order_by("-moderated_at").first()
+                if resolved_thread:
+                    moderator_notes = resolved_thread.moderator_notes
+
+        if not sources and claim.ai_sources:
+            sources.extend(claim.ai_sources)
+        elif not sources and claim.top_verdict_source:
+            sources.append(claim.top_verdict_source)
 
         return JsonResponse(
             {
@@ -255,6 +266,7 @@ def claim_polling_endpoint(request, claim_id):
                 "confidence_score": claim.consensus_score,
                 "source_type": claim.source_type,
                 "source_url": claim.top_verdict_source,
+                "sources": sources,
                 "is_ai_generated": claim.is_ai_generated,
                 "thread_id": str(active_thread.id) if active_thread else None,
                 "has_community_verdict": bool(claim.final_verdict),

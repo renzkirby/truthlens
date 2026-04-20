@@ -7,7 +7,7 @@ const sparklesIconSVG = renderToString(React.createElement(Sparkles, { size: 14 
 const shieldCheckSVG = renderToString(React.createElement(ShieldCheck, { size: 14 }));
 
 export function displayResultCard(claim) {
-   const { id, verdict, summary, confidence_score, source_type, source_url, is_ai_generated, has_community_verdict, thread_id, final_verdict, ai_verdict, score_context } = claim;
+   const { id, verdict, summary, confidence_score, source_type, source_url, sources, is_ai_generated, has_community_verdict, thread_id, final_verdict, ai_verdict, score_context } = claim;
 
    // Use community verdict if available, otherwise AI verdict
    const displayVerdict = final_verdict || verdict;
@@ -57,6 +57,23 @@ export function displayResultCard(claim) {
    const card = document.createElement("div");
    card.id = "truthlens-result-card";
    card.className = "truthlens-card";
+   let sourcesHTML = "";
+   const evidenceList = sources && sources.length > 0 ? sources : (source_url ? [source_url] : []);
+   
+   if (displayVerdict !== "OUT_OF_SCOPE" && evidenceList.length > 0) {
+      sourcesHTML = `
+         <div style="margin-top: 12px; font-size: 11px;">
+            <strong style="color: #374151; display: block; margin-bottom: 4px;">Sources:</strong>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+               ${evidenceList.map(src => `
+                  <a href="${src}" target="_blank" style="color: #4f46e5; text-decoration: none; background: #f9fafb; padding: 4px 8px; border-radius: 4px; border: 1px solid #e5e7eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                     "${src}"
+                  </a>
+               `).join('')}
+            </div>
+         </div>
+      `;
+   }
 
    card.innerHTML = `
       <div class="truthlens-header">
@@ -84,13 +101,17 @@ export function displayResultCard(claim) {
       </div>
       <br>
       ` : ''}
+
+      ${sourcesHTML}
+
       ${thread_id
          ? `<a href='http://localhost:5174/thread/detail/${thread_id}' target='_blank' class='truthlens-source-link' style='display: block; text-align: center; background: #f3f4f6; padding: 8px; border-radius: 6px; text-decoration: none; color: #4f46e5; font-weight: 600; margin-top: 12px; border: 1px solid #e5e7eb;'>View Community Discussion</a>`
          : (displayVerdict === "UNVERIFIED" || confidence_score < 50)
-            ? `<a href='http://localhost:5174/thread/create?claim_id=${id}' target='_blank' class='truthlens-source-link' style='display: block; text-align: center; background: #eff6ff; padding: 8px; border-radius: 6px; text-decoration: none; color: var(--brand-primary, #4f46e5); font-weight: 600; margin-top: 12px; border: 1px dashed #bfdbfe;'>[+] Ask the community</a>` : displayVerdict === "OUT_OF_SCOPE"
-               ? ""
-               : `<a href="${source_url}" target="_blank" class="truthlens-source-link">View Source</a>`
+            ? `<a href='http://localhost:5174/thread/create?claim_id=${id}' target='_blank' class='truthlens-source-link' style='display: block; text-align: center; background: #eff6ff; padding: 8px; border-radius: 6px; text-decoration: none; color: var(--brand-primary, #4f46e5); font-weight: 600; margin-top: 12px; border: 1px dashed #bfdbfe;'>[+] Ask the community</a>` 
+            : ""
       }
+
+
       <div class="truthlens-footer">Source Type: ${has_community_verdict ? 'Community Moderation' : source_type}</div>
    `;
 
@@ -223,7 +244,7 @@ export function successCard(message) {
  * Shows a distinctive "Community Verified" treatment vs the standard AI result.
  */
 export function displayCachedResultCard(match) {
-   const { verdict, final_verdict, summary, confidence_score, thread_id, moderator_notes, claim_id, source_type, is_ai_generated, score_context } = match;
+   const { verdict, final_verdict, summary, confidence_score, thread_id, moderator_notes, claim_id, source_type, is_ai_generated, score_context, sources, source_url } = match;
    const displayVerdict = final_verdict || verdict;
 
    let badgeColor = "#6b7280";
@@ -254,6 +275,24 @@ export function displayCachedResultCard(match) {
          <span class="truthlens-banner-icon">${shieldCheckSVG}</span>
          COMMUNITY VERIFIED
       </div>`;
+
+   let sourcesHTML = "";
+   const evidenceList = sources && sources.length > 0 ? sources : (source_url ? [source_url] : []);
+
+   if (displayVerdict !== "OUT_OF_SCOPE" && evidenceList.length > 0) {
+      sourcesHTML = `
+         <div style="margin-top: 12px; font-size: 11px;">
+            <strong style="color: #374151; display: block; margin-bottom: 4px;">Sources:</strong>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+               ${evidenceList.map(src => `
+                  <a href="${src}" target="_blank" style="color: #4f46e5; text-decoration: none; background: #f9fafb; padding: 4px 8px; border-radius: 4px; border: 1px solid #e5e7eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                     "${src}"
+                  </a>
+               `).join('')}
+            </div>
+         </div>
+      `;
+   }
 
    const card = document.createElement("div");
    card.id = "truthlens-result-card";
@@ -288,6 +327,8 @@ export function displayCachedResultCard(match) {
          </div>
          ` : ''}
       ` : ''}
+
+      ${sourcesHTML}
 
       ${thread_id
          ? `<a href='http://localhost:5174/thread/detail/${thread_id}' target='_blank' class='truthlens-source-link'>View Community Discussion</a>`

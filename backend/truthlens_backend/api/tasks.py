@@ -224,13 +224,14 @@ def execute_core_text_pipeline(raw_text, claim_id):
                         gfc_eval_started_at,
                         verdict=ai_verdict.get("verdict"),
                     )
-                    source_url = (
-                        gfc_claims[0]
-                        .get("claimReview", [{}])[0]
-                        .get("url", "")
-                    )
+                    source_urls = []
+                    for c in gfc_claims[:3]:
+                        review_url = c.get("claimReview", [{}])[0].get("url", "")
+                        if review_url:
+                            source_urls.append(review_url)
+
                     save_started_at = time.perf_counter()
-                    _save_claim(claim_id, ai_verdict, "Official Fact Check", cleaned_claim, source_url)
+                    _save_claim(claim_id, ai_verdict, "Official Fact Check", cleaned_claim, source_urls)
                     _log_stage(claim_id, "save_claim", save_started_at, source_type="Official Fact Check")
                     outcome = "completed_gfc"
                     return
@@ -273,13 +274,10 @@ def execute_core_text_pipeline(raw_text, claim_id):
                 verdict=ai_verdict.get("verdict"),
             )
             
-            # EXTRACT URL DIRECTLY FROM AI DECISION
-            source_url = ai_verdict.get("source_url")
-            if source_url == "null" or not source_url:
-                source_url = ""
+            source_urls = [res.get("url") for res in tavily_results[:3] if res.get("url")]
 
             save_started_at = time.perf_counter()
-            _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_claim, source_url)
+            _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_claim, source_urls)
             _log_stage(claim_id, "save_claim", save_started_at, source_type="Live Web Search")
             outcome = "completed_tavily"
 
@@ -290,7 +288,7 @@ def execute_core_text_pipeline(raw_text, claim_id):
                 "verdict": "UNVERIFIED",
                 "summary": "Could not retrieve relevant information to verify the claim.",
                 "confidence_score": 0,
-            }, "Live Web Search", cleaned_claim, "")
+            }, "Live Web Search", cleaned_claim, [])
             outcome = "completed_tavily_fallback_unverified"
 
     # This catches catastrophic errors (like Groq going down completely)
@@ -427,10 +425,14 @@ def url_fact_check_process(url, claim_id):
                     verdict=ai_verdict.get("verdict"),
                 )
 
-                evidence_url = gfc_claims[0].get("claimReview", [{}])[0].get("url", "")
+                source_urls = []
+                for c in gfc_claims[:3]:
+                    review_url = c.get("claimReview", [{}])[0].get("url", "")
+                    if review_url:
+                        source_urls.append(review_url)
 
                 save_started_at = time.perf_counter()
-                _save_claim(claim_id, ai_verdict, "Official Fact Check", cleaned_text, evidence_url)
+                _save_claim(claim_id, ai_verdict, "Official Fact Check", cleaned_text, source_urls)
                 _log_stage(claim_id, "save_claim", save_started_at, source_type="Official Fact Check")
                 outcome = "completed_gfc"
                 _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
@@ -475,13 +477,10 @@ def url_fact_check_process(url, claim_id):
             verdict=ai_verdict.get("verdict"),
         )
         
-        # EXTRACT URL DIRECTLY FROM AI DECISION
-        source_url = ai_verdict.get("source_url")
-        if source_url == "null" or not source_url:
-            source_url = ""
+        source_urls = [res.get("url") for res in tavily_results[:3] if res.get("url")]
 
         save_started_at = time.perf_counter()
-        _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_text, source_url)
+        _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_text, source_urls)
         _log_stage(claim_id, "save_claim", save_started_at, source_type="Live Web Search")
         outcome = "completed_tavily"
 
@@ -492,15 +491,22 @@ def url_fact_check_process(url, claim_id):
             "verdict": "UNVERIFIED",
             "summary": "Could not retrieve relevant information to verify the claim.",
             "confidence_score": 0,
-        }, "Live Web Search", cleaned_text, url)
+        }, "Live Web Search", cleaned_text, [])
         outcome = "completed_tavily_fallback_unverified"
     finally:
         _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
 
 
-def _save_claim(claim_id, verdict, source_type, context_text, source_url=""):
+def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
     """Save AI analysis output to the Claim record without setting final moderator verdict."""
     from .claim_matching import compute_fingerprint
+
+    if source_urls is None:
+        source_urls = []
+    elif isinstance(source_urls, str):
+        source_urls = [source_urls]
+
+    top_url = source_urls[0] if source_urls else (verdict.get("source_url") or "")
 
     try:
         claim = Claim.objects.get(id=claim_id)
@@ -517,8 +523,9 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_url=""):
         claim.consensus_score = confidence
         claim.source_type = source_type
         claim.context_text = context_text
-        claim.source_link = source_url or None
-        claim.top_verdict_source = source_url or None
+        claim.source_link = top_url or None
+        claim.top_verdict_source = top_url or None
+        claim.ai_sources = source_urls
         claim.verified_via = Claim.VerificationSource.AI_EXTENSION
 
         # Compute fingerprint if not already set (e.g., text claims where

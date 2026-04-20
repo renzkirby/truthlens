@@ -79,6 +79,7 @@ class Claim(models.Model):
 
     source_link = models.URLField(max_length=500, blank=True, null=True)
     top_verdict_source = models.URLField(max_length=500, blank=True, null=True)
+    ai_sources = models.JSONField(default=list, blank=True, null=True)
 
     last_updated = models.DateTimeField(auto_now=True)
     is_ai_generated = models.BooleanField(default=False)
