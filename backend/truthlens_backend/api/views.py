@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from django.utils import timezone
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Q, Count, F
 from rest_framework.decorators import api_view, permission_classes, action, throttle_classes
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated, BasePermission, SAFE_METHODS, AllowAny
@@ -47,6 +47,7 @@ from .throttles import FactCheckRateThrottle
 from .serializers import (
     RegisterSerializer,
     UserSerializer,
+    PublicUserSearchSerializer,
     CurrentUserSerializer,
     UserProfileSerializer,
     ClaimSerializer,
@@ -111,15 +112,23 @@ class IsVoterOrReadOnly(BasePermission):
             return True
         return obj.voter == request.user
 
+
+def _has_moderator_role(user):
+    profile = getattr(user, "profile", None)
+    if not profile:
+        return False
+    # Backward-compatible during migration from MODERATOR -> MOD.
+    return profile.role in {UserProfile.Role.MOD, "MODERATOR"}
+
 class IsModerator(BasePermission):
     def has_permission(self, request, view):
-        return (request.user.is_authenticated and request.user.profile.role == UserProfile.Role.MODERATOR)
+        return request.user.is_authenticated and _has_moderator_role(request.user)
 
 class IsNotModerator(BasePermission):
     def has_permission(self, request, view):
         if not request.user.is_authenticated:
             return False
-        return request.user.profile.role != UserProfile.Role.MODERATOR
+        return not _has_moderator_role(request.user)
 
 
 def _authenticated_user_or_none(request):
@@ -651,6 +660,18 @@ class ThreadViewSet(viewsets.ModelViewSet):
             .order_by("-created_at")
         )
 
+        search_query = self.request.query_params.get("search", "").strip()[:120]
+        if search_query:
+            queryset = queryset.filter(
+                Q(caption__icontains=search_query)
+                | Q(author__username__icontains=search_query)
+                | Q(claim__context_text__icontains=search_query)
+                | Q(claim__ai_summary__icontains=search_query)
+                | Q(claim__source_link__icontains=search_query)
+                | Q(claim__verdict__icontains=search_query)
+                | Q(claim__final_verdict__icontains=search_query)
+            )
+
         claim_id = self.request.query_params.get("claim_id")
         if claim_id:
             queryset = queryset.filter(claim_id=claim_id)
@@ -819,7 +840,7 @@ class ThreadFlagViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
-        if self.request.user.profile.role == UserProfile.Role.MODERATOR:
+        if _has_moderator_role(self.request.user):
             return ThreadFlag.objects.select_related("thread", "flagged_by").order_by("-flagged_at")
         return ThreadFlag.objects.filter(flagged_by=self.request.user).select_related(
             "thread", "flagged_by"
@@ -981,6 +1002,32 @@ def claim_match(request):
 # for user view
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+def search_users(request):
+    """Return lightweight public user cards for global search."""
+    query = (request.query_params.get("search") or "").strip()
+    if not query:
+        return Response([], status=200)
+
+    try:
+        limit = int(request.query_params.get("limit", 6))
+    except (TypeError, ValueError):
+        limit = 6
+
+    limit = max(1, min(limit, 20))
+
+    users = (
+        User.objects.select_related("profile")
+        .filter(Q(username__icontains=query) | Q(profile__bio__icontains=query))
+        .exclude(id=request.user.id)
+        .order_by("username")[:limit]
+    )
+
+    serializer = PublicUserSearchSerializer(users, many=True, context={"request": request})
+    return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_public_user_profile(request, username):
     """Fetch public profile data for any user by their username."""
     # Look up the user, return 404 if they don't exist
@@ -1001,6 +1048,33 @@ def public_user_claims(request, username):
     
     serializer = ClaimSerializer(claims, many=True)
     return Response(serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def moderator_transparency_stats(request, username):
+    """Return moderator activity metrics for institutional transparency cards."""
+    target_user = get_object_or_404(User.objects.select_related("profile"), username=username)
+
+    if not _has_moderator_role(target_user):
+        return Response({"detail": "This user is not a moderator."}, status=400)
+
+    resolved_threads = Thread.objects.filter(
+        moderated_by=target_user,
+        moderator_verdict__isnull=False,
+    )
+
+    stats = {
+        "total_claims_resolved": resolved_threads.count(),
+        "fact_verdicts_issued": resolved_threads.filter(moderator_verdict="FACT").count(),
+        "fake_verdicts_issued": resolved_threads.filter(moderator_verdict="FAKE").count(),
+        "pending_moderator_review": Thread.objects.filter(
+            status=Thread.Status.PENDING,
+            moderator_verdict__isnull=True,
+        ).count(),
+    }
+
+    return Response(stats, status=200)
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
