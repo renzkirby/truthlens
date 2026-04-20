@@ -98,3 +98,13 @@ export async function checkClaimMatch(fingerprint, claimType) {
       return null;
    }
 }
+
+export async function sendDeepfakeToServer(payload) {
+   return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ type: "VERIFY_DEEPFAKE", payload }, (response) => {
+         if (chrome.runtime.lastError) return reject(new Error("Worker error"));
+         if (!response?.accepted) return reject(new Error(response?.error));
+         resolve(response);
+      });
+   });
+}

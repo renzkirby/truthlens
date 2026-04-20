@@ -6,6 +6,7 @@ import NavigationBar from "./components/NavigationBar";
 import FileUpload from "./pages/FileUpload";
 import SnippingTool from "./pages/SnippingTool";
 import UrlUpload from "./pages/UrlUpload";
+import DetectDeepfake from "./pages/DetectDeepfake";
 import { AUTH_STORAGE_KEYS, getAuthSession } from "./modules/auth.js";
 import { state } from "./modules/state.js";
 
@@ -272,22 +273,24 @@ function App() {
 
    const handleSnipClick = async () => {
       setIsSnipping(true);
-      if (typeof chrome === "undefined" || !chrome.tabs) {
-         console.error("Chrome Extension API not found.");
-         setIsSnipping(false);
-         return;
-      }
+      if (typeof chrome === "undefined" || !chrome.tabs) return setIsSnipping(false);
       try {
          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-         chrome.tabs.sendMessage(tab.id, { type: "ACTIVATE_SNIPPING" }, (response) => {
-            if (chrome.runtime.lastError) {
-               setIsSnipping(false);
-               return;
-            }
+         chrome.tabs.sendMessage(tab.id, { type: "ACTIVATE_SNIPPING", intent: "factcheck" }, () => {
+            if (chrome.runtime.lastError) setIsSnipping(false);
          });
-      } catch (error) {
-         setIsSnipping(false);
-      }
+      } catch (error) { setIsSnipping(false); }
+   };
+
+   const handleDeepfakeSnipClick = async () => {
+      setIsSnipping(true);
+      if (typeof chrome === "undefined" || !chrome.tabs) return setIsSnipping(false);
+      try {
+         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+         chrome.tabs.sendMessage(tab.id, { type: "ACTIVATE_SNIPPING", intent: "deepfake" }, () => {
+            if (chrome.runtime.lastError) setIsSnipping(false);
+         });
+      } catch (error) { setIsSnipping(false); }
    };
 
    const renderContent = () => {
@@ -297,8 +300,13 @@ function App() {
                <SnippingTool
                   handleSnipClick={handleSnipClick}
                   isSnipping={isSnipping}
-                  checkDeepfake={checkDeepfake}
-                  onToggleDeepfake={handleToggleDeepfake}
+               />
+            );
+         case "detect-deepfake":
+            return (
+               <DetectDeepfake
+                  handleDeepfakeSnipClick={handleDeepfakeSnipClick}
+                  isSnipping={isSnipping}
                />
             );
          case "file-upload":

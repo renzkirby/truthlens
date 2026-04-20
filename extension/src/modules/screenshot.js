@@ -56,20 +56,30 @@ function cropAndSave(fullScreenshot, coords) {
 
       // helper function to finalize payload and send to server, called after fetching deepfake toggle state
       const finalizePayload = (isDeepfakeCheckEnabled) => {
-         const payload = {
-            image_data: croppedScreenshot,
-            check_deepfake: isDeepfakeCheckEnabled,
-         };
+         const payload = { image_data: croppedScreenshot };
 
-         sendImageToServer(payload).catch((error) => {
-            console.error("Failed to start snippet verification:", error);
-            removeLoadingCard();
-            displayErrorCard("Failed to send image to server. Please try again later.");
-         });
-
-         state.isAnalyzing = true;
-         displayLoadingCard();
-         cleanup(); // This ensures the crosshair ALWAYS resets!
+            if (state.snipIntent === "deepfake") {
+               state.isAnalyzing = true;
+               // Pass a custom message to the loading card
+               displayLoadingCard("Running forensic AI analysis..."); 
+               
+               // Import this new function dynamically to avoid circular dependencies
+               import("./api.js").then(({ sendDeepfakeToServer }) => {
+                  sendDeepfakeToServer(payload).catch((error) => {
+                     removeLoadingCard();
+                     displayErrorCard("Failed to analyze image forensics.");
+                  });
+               });
+            } else {
+               state.isAnalyzing = true;
+               displayLoadingCard();
+               payload.check_deepfake = false; // We default to false now
+               sendImageToServer(payload).catch((error) => {
+                  removeLoadingCard();
+                  displayErrorCard("Failed to send image to server.");
+               });
+            }
+            cleanup();
       };
 
       // Fetch the Deepfake toggle state

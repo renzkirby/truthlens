@@ -104,7 +104,11 @@ export function displayResultCard(claim) {
    });
 }
 
-export function displayLoadingCard() {
+export function displayLoadingCard(customMsg) {
+   const msg = typeof customMsg === 'string' 
+      ? customMsg 
+      : (state.isAnalyzing ? "Analyzing the image, please wait..." : "Analyzing Done");
+
    const card = document.createElement("div");
    card.id = "truthlens-loading-card";
    card.className = "truthlens-card";
@@ -114,11 +118,53 @@ export function displayLoadingCard() {
       </div>
       <div class="truthlens-loading">
          <div class="truthlens-spinner"></div>
-         <div class='truthlens-loading-text'>${state.isAnalyzing ? "Analyzing the image, please wait..." : "Analyzing Done"}</div>
+         <div class='truthlens-loading-text'>${msg}</div>
       </div>
    `;
    document.body.appendChild(card);
    setTimeout(() => card.classList.add("show"), 100);
+}
+
+export function displayDeepfakeResultCard(data) {
+   const { ai_probability, is_fake } = data;
+   const percentage = Math.round(ai_probability * 100);
+   const badgeColor = is_fake ? "#e02424" : "#0e9f6e";
+   const verdictText = is_fake ? "AI-GENERATED" : "AUTHENTIC / HUMAN";
+
+   const card = document.createElement("div");
+   card.id = "truthlens-result-card";
+   card.className = "truthlens-card";
+   
+   card.innerHTML = `
+      <div class="truthlens-header">
+      
+         <strong class="truthlens-title" style="color: #7c3aed;">TruthLens</strong>
+         <button id="truthlens-close-btn" class="truthlens-close-btn">&times;</button>
+      </div>
+      
+      <div class="truthlens-verdict-text">
+         Analysis: <span class="truthlens-verdict" style="background-color: ${badgeColor};">${verdictText}</span>
+      </div>
+      
+      <div class="truthlens-summary-box">
+         <div style="font-size: 14px; line-height: 1.4;">
+            Our neural network indicates a <strong>${percentage}%</strong> probability that this image was generated or heavily manipulated by AI models like Midjourney or Stable Diffusion.
+         </div>
+      </div>
+      
+      <div class="truthlens-confidence-bar">
+         <div class="truthlens-confidence-fill" style="width: ${percentage}%; background-color: ${badgeColor};"></div>
+      </div>
+   `;
+   
+   document.body.appendChild(card);
+   void card.offsetWidth;
+   setTimeout(() => card.classList.add("show"), 100);
+
+   document.getElementById("truthlens-close-btn").addEventListener("click", () => {
+      card.classList.remove("show");
+      setTimeout(() => card.remove(), 300);
+   });
 }
 
 export function removeLoadingCard() {

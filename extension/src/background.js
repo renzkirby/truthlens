@@ -460,6 +460,30 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       return true;
    }
 
+   if (request.type === "VERIFY_DEEPFAKE") {
+      const tabId = request.tabId ?? sender?.tab?.id;
+      const payload = request.payload;
+
+      if (!Number.isInteger(tabId)) {
+         sendResponse({ accepted: false, error: "No active tab" });
+         return false;
+      }
+      sendResponse({ accepted: true });
+
+      (async () => {
+         try {
+            const res = await postJsonWithAuthFallback("test-deepfake/", payload);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data?.error || "Deepfake check failed");
+
+            sendTabMessage(tabId, { type: "DISPLAY_DEEPFAKE_RESULT", data });
+         } catch (err) {
+            sendTabMessage(tabId, { type: "DISPLAY_SNIPPET_ERROR", message: err.message });
+         }
+      })();
+      return true;
+   }
+
    if (request.type === "VERIFY_URL") {
       const { url, tabId } = request;
 

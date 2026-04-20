@@ -147,7 +147,16 @@ initializeAuthBridge();
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
    if (request.type === "ACTIVATE_SNIPPING") {
       console.log("Snipping mode activated!");
+      state.snipIntent = request.intent || "factcheck";
       activateSnippingMode();
+      sendResponse({ success: true });
+   }
+
+   if (request.type === "DISPLAY_DEEPFAKE_RESULT") {
+      import("./modules/ui.jsx").then(({ displayDeepfakeResultCard, removeLoadingCard }) => {
+         removeLoadingCard();
+         setTimeout(() => displayDeepfakeResultCard(request.data), 100);
+      });
       sendResponse({ success: true });
    }
 
