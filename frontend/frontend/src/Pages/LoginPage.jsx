@@ -52,7 +52,8 @@ function LoginPage() {
    useEffect(() => {
       if (justLoggedIn && user && !loading) {
          setJustLoggedIn(false);
-         const destination = from || (user.role === "MODERATOR" ? "/moderation" : "/dashboard");
+         const isModerator = user.role === "MOD" || user.role === "MODERATOR";
+         const destination = from || (isModerator ? "/moderation" : "/dashboard");
          navigate(destination, { replace: true });
       }
    }, [user, loading, justLoggedIn, from, navigate]);

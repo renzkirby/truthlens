@@ -203,7 +203,7 @@ function ThreadDetailPage() {
 
    const { authFetch, user } = useAuth();
    const { addToast } = useNotification();
-   const isModerator = user?.role === "MODERATOR";
+   const isModerator = user?.role === "MOD" || user?.role === "MODERATOR";
    const { threadId } = useParams();
    const navigate = useNavigate();
    const apiUrl = (path) =>
@@ -238,8 +238,14 @@ function ThreadDetailPage() {
 
    useEffect(() => {
       const tabFromQuery = searchParams.get("tab");
-      const normalizedTab = tabFromQuery === "evidence" ? "evidence" : "comments";
+      const openEvidenceFormFromQuery = searchParams.get("openForm") === "evidence";
+      const normalizedTab =
+         tabFromQuery === "evidence" || openEvidenceFormFromQuery ? "evidence" : "comments";
       setCurrentSection(normalizedTab);
+
+      if (openEvidenceFormFromQuery) {
+         setShowForm(true);
+      }
 
       if (!loading && tabFromQuery && tabsSectionRef.current && !didAutoScrollRef.current) {
          const prefersReducedMotion =
@@ -1263,7 +1269,9 @@ function ThreadDetailPage() {
                                  <p className="tdp-empty">No comments yet. Be the first!</p>
                               )}
                               {sortedComments.map((comment, i) => {
-                                 const isMod = comment.commenter?.role === "MODERATOR";
+                                 const isMod =
+                                    comment.commenter?.role === "MOD" ||
+                                    comment.commenter?.role === "MODERATOR";
                                  const username = comment.commenter?.username || "Unknown";
                                  const isOwner = comment.commenter?.id === user?.id;
                                  const commentDateTime = comment.commented_at

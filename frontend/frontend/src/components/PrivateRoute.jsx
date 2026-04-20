@@ -4,6 +4,8 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 function PrivateRoute({ requiredRole, children }) {
    const { token, user, loading } = useAuth();
    const location = useLocation();
+   const normalizedUserRole = user?.role === "MODERATOR" ? "MOD" : user?.role;
+   const normalizedRequiredRole = requiredRole === "MODERATOR" ? "MOD" : requiredRole;
 
    // Not authenticated - redirect to login
    if (!token) {
@@ -54,7 +56,7 @@ function PrivateRoute({ requiredRole, children }) {
    }
 
    // Has required role
-   if (requiredRole && user?.role !== requiredRole) {
+   if (normalizedRequiredRole && normalizedUserRole !== normalizedRequiredRole) {
       return (
          <Navigate
             to="/dashboard"
