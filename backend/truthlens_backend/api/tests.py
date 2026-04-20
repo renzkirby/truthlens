@@ -251,7 +251,7 @@ class ModeratorEvidenceVerificationTests(APITestCase):
         self.moderator_profile = UserProfile.objects.create(
             user=self.moderator,
             trust_score=95.0,
-            role=UserProfile.Role.MODERATOR
+            role=UserProfile.Role.MOD
         )
         
         # Create claim and thread
@@ -550,7 +550,7 @@ class ModeratorEvidenceVerificationTests(APITestCase):
         )
         UserProfile.objects.create(
             user=moderator2,
-            role=UserProfile.Role.MODERATOR
+            role=UserProfile.Role.MOD
         )
         moderator2_client = APIClient()
         moderator2_client.force_authenticate(user=moderator2)
