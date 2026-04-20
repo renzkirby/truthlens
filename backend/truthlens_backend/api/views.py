@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from django.utils import timezone
 from django.db import IntegrityError, transaction
-from django.db.models import Q, Count, F
+from django.db.models import Q, Count, F, Max
 from rest_framework.decorators import api_view, permission_classes, action, throttle_classes
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated, BasePermission, SAFE_METHODS, AllowAny
@@ -20,6 +20,7 @@ from django.shortcuts import get_object_or_404
 import json
 import secrets
 import base64
+import uuid
 from .services import detect_ai_image
 from .services import process_image, upload_image_to_database
 from .services import validate_public_url, check_url_threat_reputation
@@ -48,12 +49,17 @@ from .serializers import (
     RegisterSerializer,
     UserSerializer,
     PublicUserSearchSerializer,
+    PublicIdentityProfileSerializer,
     CurrentUserSerializer,
     UserProfileSerializer,
     ClaimSerializer,
     ThreadSerializer,
     ThreadCommentSerializer,
     EvidenceSubmissionSerializer,
+    PublicUserThreadSerializer,
+    PublicUserEvidenceSerializer,
+    PublicUserCommentSerializer,
+    PublicModeratorVerdictSerializer,
     ThreadDetailSerializer,
     VoteSerializer,
     ThreadFlagSerializer,
@@ -351,11 +357,80 @@ def get_current_user(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_claims(request):
-    claims = Claim.objects.filter(
-        Q(threads__author=request.user) | Q(check_history__user=request.user)
-    ).distinct().order_by("-last_updated")
+    claims = (
+        Claim.objects.filter(check_history__user=request.user)
+        .annotate(last_checked_at=Max("check_history__checked_at"))
+        .order_by("-last_checked_at", "-last_updated")
+    )
     serializer = ClaimSerializer(claims, many=True)
     return Response(serializer.data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def sync_guest_scan(request):
+    """Persist one extension guest scan to the authenticated user's private history."""
+    scan = request.data.get("scan")
+    if not isinstance(scan, dict):
+        return Response({"detail": "scan payload is required."}, status=400)
+
+    # If the scan already references a known claim, just link it to this user history.
+    raw_claim_id = scan.get("claim_id")
+    if raw_claim_id:
+        try:
+            claim_uuid = uuid.UUID(str(raw_claim_id))
+            existing_claim = Claim.objects.filter(id=claim_uuid).first()
+        except (ValueError, TypeError, AttributeError):
+            existing_claim = None
+
+        if existing_claim:
+            _record_authenticated_claim_check(request.user, existing_claim)
+            return Response({"id": str(existing_claim.id), "mode": "linked"}, status=200)
+
+    scan_type = str(scan.get("scan_type") or "SCAN").upper()
+    verdict = str(scan.get("verdict") or "UNVERIFIED").upper()
+    summary = str(scan.get("summary") or "").strip()
+    source_type = str(scan.get("source_type") or "Extension Guest Sync").strip()[:50]
+    source_url = str(scan.get("source_url") or "").strip()
+    scanned_at = str(scan.get("scanned_at") or "").strip()
+
+    allowed_verdicts = {"FACT", "FAKE", "MISLEADING", "SATIRE", "UNVERIFIED", "OUT_OF_SCOPE"}
+    if verdict not in allowed_verdicts:
+        verdict = "UNVERIFIED"
+
+    try:
+        consensus_score = float(scan.get("confidence_score", 0))
+    except (TypeError, ValueError):
+        consensus_score = 0.0
+    consensus_score = max(0.0, min(consensus_score, 100.0))
+
+    normalized_source_url = (
+        source_url if source_url.startswith("http://") or source_url.startswith("https://") else None
+    )
+
+    claim_type = Claim.ClaimType.URL if scan_type == "URL" else Claim.ClaimType.IMAGE
+    context_text = (
+        f"Synced from extension guest scan ({scan_type}) at {scanned_at}"
+        if scanned_at
+        else f"Synced from extension guest scan ({scan_type})"
+    )
+
+    claim = Claim.objects.create(
+        claim_type=claim_type,
+        url_link=normalized_source_url if claim_type == Claim.ClaimType.URL else None,
+        ai_summary=summary or "Synced from extension guest scan.",
+        ai_verdict=verdict,
+        verdict=verdict,
+        consensus_score=consensus_score,
+        context_text=context_text,
+        source_type=source_type,
+        source_link=normalized_source_url,
+        top_verdict_source=normalized_source_url,
+        verified_via=Claim.VerificationSource.AI_EXTENSION,
+    )
+
+    _record_authenticated_claim_check(request.user, claim)
+    return Response({"id": str(claim.id), "mode": "created"}, status=201)
 
 @api_view(["POST"])
 def login_user(request):
@@ -1027,24 +1102,101 @@ def search_users(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def get_public_user_profile(request, username):
-    """Fetch public profile data for any user by their username."""
-    # Look up the user, return 404 if they don't exist
-    target_user = get_object_or_404(User, username=username)
-    
-    # We can reuse your existing serializer that includes the trust breakdown!
-    serializer = UserWithTrustBreakdownSerializer(target_user, context={"request": request})
+    """Fetch read-only public identity fields for a user profile."""
+    target_user = get_object_or_404(User.objects.select_related("profile"), username=username)
+
+    serializer = PublicIdentityProfileSerializer(target_user, context={"request": request})
     return Response(serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def public_user_threads(request, username):
+    """Fetch public threads initiated by a specific user."""
+    target_user = get_object_or_404(User.objects.select_related("profile"), username=username)
+
+    threads = (
+        Thread.objects.filter(author=target_user)
+        .prefetch_related("evidence_submissions", "comments")
+        .order_by("-created_at")
+    )
+
+    serializer = PublicUserThreadSerializer(threads, many=True, context={"request": request})
+    return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def public_user_evidence(request, username):
+    """Fetch public evidence and comments submitted by a specific user."""
+    target_user = get_object_or_404(User.objects.select_related("profile"), username=username)
+
+    evidence_items = list(
+        EvidenceSubmission.objects.filter(contributor=target_user)
+        .select_related("thread")
+        .order_by("-submitted_at")
+    )
+    comment_items = list(
+        ThreadComment.objects.filter(commenter=target_user)
+        .select_related("thread")
+        .order_by("-commented_at")
+    )
+
+    merged_activity = []
+    for item in evidence_items:
+        merged_activity.append((item.submitted_at, "EVIDENCE", item))
+    for item in comment_items:
+        merged_activity.append((item.commented_at, "COMMENT", item))
+
+    merged_activity.sort(key=lambda row: row[0], reverse=True)
+
+    payload = []
+    for _, activity_type, item in merged_activity:
+        if activity_type == "EVIDENCE":
+            payload.append(PublicUserEvidenceSerializer(item, context={"request": request}).data)
+        else:
+            payload.append(PublicUserCommentSerializer(item, context={"request": request}).data)
+
+    return Response(payload, status=200)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def public_user_verdicts(request, username):
+    """Fetch public moderator verdict activity for a specific moderator user."""
+    target_user = get_object_or_404(User.objects.select_related("profile"), username=username)
+
+    if not _has_moderator_role(target_user):
+        return Response([], status=200)
+
+    verdict_threads = (
+        Thread.objects.filter(
+            moderated_by=target_user,
+            moderator_verdict__isnull=False,
+            status=Thread.Status.CLOSED,
+        )
+        .order_by("-moderated_at", "-created_at")
+    )
+
+    serializer = PublicModeratorVerdictSerializer(
+        verdict_threads,
+        many=True,
+        context={"request": request},
+    )
+    return Response(serializer.data, status=200)
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def public_user_claims(request, username):
     """Fetch public claims submitted by a specific user."""
     target_user = get_object_or_404(User, username=username)
-    claims = Claim.objects.filter(
-        threads__author=target_user
-    ).distinct().order_by("-last_updated")
+    claims = (
+        Claim.objects.filter(check_history__user=target_user)
+        .annotate(last_checked_at=Max("check_history__checked_at"))
+        .order_by("-last_checked_at", "-last_updated")
+    )
     
     serializer = ClaimSerializer(claims, many=True)
     return Response(serializer.data)
@@ -1150,48 +1302,26 @@ def update_profile(request):
     return Response(serializer.data, status=200)
 
 
-class ModeratorDashboardView(APIView):
-    permission_classes = [IsAuthenticated, IsModerator]
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsModerator])
+def moderation_stats_view(request):
+    """
+    Returns system-wide aggregates for the Moderation Page.
+    """
+    from django.db.models import Q
+    flagged_threads = Thread.objects.filter(flags__isnull=False).distinct().count()
+    closed_threads = Thread.objects.filter(status=Thread.Status.CLOSED).count()
+    open_threads = Thread.objects.filter(Q(status=Thread.Status.OPEN) | Q(status=Thread.Status.PENDING)).count()
+    pending_verdicts = Thread.objects.filter(moderator_verdict__isnull=True).count()
+    total_claims = Claim.objects.count()
 
-    def get(self, request):
-        # 1. The Action Queue
-        pending_verdicts = Thread.objects.filter(status=Thread.Status.PENDING, moderator_verdict__isnull=True).count()
-        unverified_evidence = EvidenceSubmission.objects.filter(evidence_status="UNVERIFIED").count()
-        safety_flags = ThreadFlag.objects.count()
-
-        # 2. System Analytics
-        total_claims = Claim.objects.count()
-        
-        # This returns a list of dicts: [{'final_verdict': 'FACT', 'total': 15}, ...]
-        verdict_distribution = list(Claim.objects.values('final_verdict').annotate(total=Count('id')))
-
-        # AI vs Moderator Agreement (Claims where AI and Final match)
-        moderated_claims = Claim.objects.filter(final_verdict__isnull=False)
-        total_moderated = moderated_claims.count()
-        agreed_claims = moderated_claims.filter(ai_verdict=F('final_verdict')).count()
-        agreement_rate = round((agreed_claims / total_moderated * 100), 1) if total_moderated > 0 else 0
-
-        # 3. Community Health (Top 5 Contributors)
-        top_contributors = list(
-            UserProfile.objects.order_by('-trust_score')
-            .values('user__username', 'trust_score', 'role')[:5]
-        )
-
-        return Response({
-            "action_queue": {
-                "pending_verdicts": pending_verdicts,
-                "unverified_evidence": unverified_evidence,
-                "safety_flags": safety_flags,
-            },
-            "system_analytics": {
-                "total_claims": total_claims,
-                "verdict_distribution": verdict_distribution,
-                "ai_agreement_rate": agreement_rate,
-            },
-            "community_health": {
-                "top_contributors": top_contributors,
-            }
-        })
+    return Response({
+        "flagged_threads": flagged_threads,
+        "closed_threads": closed_threads,
+        "open_threads": open_threads,
+        "pending_verdicts": pending_verdicts,
+        "total_claims": total_claims
+    })
 
 
 class UserHubView(APIView):
@@ -1214,7 +1344,12 @@ class UserHubView(APIView):
             next_milestone = 150 - score
 
         # 2. Personal Impact Metrics
-        total_scans = Claim.objects.filter(threads__author=user).distinct().count()
+        my_scans = (
+            Claim.objects.filter(check_history__user=user)
+            .annotate(last_checked_at=Max("check_history__checked_at"))
+            .order_by("-last_checked_at", "-last_updated")
+        )
+        total_scans = my_scans.count()
         evidence_submitted = EvidenceSubmission.objects.filter(contributor=user).count()
         votes_cast = Vote.objects.filter(voter=user).count()
         
@@ -1222,9 +1357,8 @@ class UserHubView(APIView):
         impact_ripple = Vote.objects.filter(evidence__contributor=user).count()
 
         # 3. The Fact-Check Library (Saved Receipts)
-        # Using your existing ClaimSerializer to format the saved claims
-        saved_claims = profile.saved_claims.all().order_by('-last_updated')
-        serialized_saved = ClaimSerializer(saved_claims, many=True).data
+        # Using your existing ClaimSerializer to format their private extension scans
+        serialized_saved = ClaimSerializer(my_scans, many=True).data
 
         return Response({
             "user_info": {

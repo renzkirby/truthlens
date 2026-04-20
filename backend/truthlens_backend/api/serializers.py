@@ -4,6 +4,131 @@ from .models import Claim, Thread, UserProfile, EvidenceSubmission, Vote, Thread
 from .services import validate_public_url, check_url_threat_reputation
 from .trust_service import calculate_trust_components
 
+
+class PublicIdentityProfileSerializer(serializers.ModelSerializer):
+    trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
+    role = serializers.CharField(source="profile.role", read_only=True)
+    organization_name = serializers.CharField(source="profile.organization_name", read_only=True)
+    avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
+    bio = serializers.CharField(source="profile.bio", read_only=True)
+    followers_count = serializers.SerializerMethodField()
+    following_count = serializers.SerializerMethodField()
+    is_following = serializers.SerializerMethodField()
+
+    def get_followers_count(self, obj):
+        return obj.profile.followers.count()
+
+    def get_following_count(self, obj):
+        return obj.following_profiles.count()
+
+    def get_is_following(self, obj):
+        request = self.context.get("request")
+        if request and request.user and request.user.is_authenticated:
+            return obj.profile.followers.filter(id=request.user.id).exists()
+        return False
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "trust_score",
+            "role",
+            "organization_name",
+            "avatar_url",
+            "bio",
+            "date_joined",
+            "followers_count",
+            "following_count",
+            "is_following",
+        ]
+
+
+class PublicUserThreadSerializer(serializers.ModelSerializer):
+    claim_id = serializers.UUIDField(read_only=True)
+    evidence_count = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
+
+    def get_evidence_count(self, obj):
+        return obj.evidence_submissions.count()
+
+    def get_comment_count(self, obj):
+        return obj.comments.count()
+
+    class Meta:
+        model = Thread
+        fields = [
+            "id",
+            "claim_id",
+            "caption",
+            "status",
+            "escalation_reason",
+            "created_at",
+            "evidence_count",
+            "comment_count",
+        ]
+
+
+class PublicThreadSummarySerializer(serializers.ModelSerializer):
+    claim_id = serializers.UUIDField(read_only=True)
+
+    class Meta:
+        model = Thread
+        fields = ["id", "claim_id", "caption", "status", "created_at"]
+
+
+class PublicUserEvidenceSerializer(serializers.ModelSerializer):
+    activity_type = serializers.CharField(default="EVIDENCE", read_only=True)
+    activity_at = serializers.DateTimeField(source="submitted_at", read_only=True)
+    thread = PublicThreadSummarySerializer(read_only=True)
+
+    class Meta:
+        model = EvidenceSubmission
+        fields = [
+            "id",
+            "activity_type",
+            "activity_at",
+            "evidence_caption",
+            "evidence_url",
+            "evidence_type",
+            "evidence_verdict",
+            "evidence_status",
+            "thread",
+        ]
+
+
+class PublicUserCommentSerializer(serializers.ModelSerializer):
+    activity_type = serializers.CharField(default="COMMENT", read_only=True)
+    activity_at = serializers.DateTimeField(source="commented_at", read_only=True)
+    thread = PublicThreadSummarySerializer(read_only=True)
+
+    class Meta:
+        model = ThreadComment
+        fields = [
+            "id",
+            "activity_type",
+            "activity_at",
+            "comment_text",
+            "thread",
+        ]
+
+
+class PublicModeratorVerdictSerializer(serializers.ModelSerializer):
+    thread_id = serializers.UUIDField(source="id", read_only=True)
+    claim_id = serializers.UUIDField(read_only=True)
+
+    class Meta:
+        model = Thread
+        fields = [
+            "thread_id",
+            "claim_id",
+            "caption",
+            "status",
+            "moderator_verdict",
+            "moderator_notes",
+            "moderated_at",
+        ]
+
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
 

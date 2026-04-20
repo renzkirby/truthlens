@@ -17,8 +17,12 @@ urlpatterns = [
     path('auth/register/', views.register_user),
     path('auth/me/', views.get_current_user),
     path('auth/profile/update/', views.update_profile),
+    path('auth/guest-scan-sync/', views.sync_guest_scan),
     path('users/search/', views.search_users),
     path('users/<str:username>/', views.get_public_user_profile),
+    path('users/<str:username>/threads/', views.public_user_threads),
+    path('users/<str:username>/evidence/', views.public_user_evidence),
+    path('users/<str:username>/verdicts/', views.public_user_verdicts),
     path('users/<str:username>/follow/', views.toggle_follow_user),
     path('users/<str:username>/followers/', views.get_user_followers), 
     path('users/<str:username>/following/', views.get_user_following),
@@ -34,8 +38,8 @@ urlpatterns = [
     path('moderation/threads/<uuid:thread_id>/safety-action/', views.moderation_resolve_safety_thread),
 
     # DashBoard URLs
-    path("dashboards/moderator/", views.ModeratorDashboardView.as_view(), name="moderator_dashboard"),
-    path("dashboards/hub/", views.UserHubView.as_view(), name="user_hub"),
+    path("moderation/stats/", views.moderation_stats_view, name="moderation_stats"),
+    path("users/me/dashboard/", views.UserHubView.as_view(), name="user_hub"),
     path("claims/<uuid:claim_id>/toggle-save/", views.toggle_save_claim, name="toggle_save_claim"),
 ]
 
