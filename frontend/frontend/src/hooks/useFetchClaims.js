@@ -14,7 +14,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { useEndpoint } from "../utils/api";
+import { buildApiUrl, useEndpoint } from "../utils/api";
 
 /**
  * Hook to fetch claims from the API.
@@ -40,9 +40,25 @@ function useFetchClaims(authFetch, claimType = "claims") {
 
    // ── Determine endpoint based on claimType ──
    const getEndpointUrl = () => {
-      if (claimType === "my-claims") {
+      const normalizedClaimType = String(claimType || "").trim();
+
+      if (
+         normalizedClaimType === "my-claims" ||
+         normalizedClaimType === "auth/my-claims" ||
+         normalizedClaimType === "auth/my-claims/"
+      ) {
          return useEndpoint("MY_CLAIMS");
       }
+
+      if (normalizedClaimType === "claims" || normalizedClaimType === "claims/") {
+         return useEndpoint("CLAIMS");
+      }
+
+      // Allow callers to pass a custom relative API path such as users/:username/claims/.
+      if (normalizedClaimType) {
+         return buildApiUrl(normalizedClaimType);
+      }
+
       return useEndpoint("CLAIMS");
    };
 

@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
-import { getUserHubData } from "../utils/api";
+﻿import React, { useState, useEffect, useMemo } from "react";
+import { useAuth } from "../context/AuthContext";
 import "./UserHub.css";
-import Icons from "../components/Icons";
+import Icons from "../components/Icons.jsx";
+import NavigationBar from "../components/NavigationBar.jsx";
 
 const VerdictBadge = ({ verdict }) => {
     const map = {
@@ -16,210 +17,190 @@ const VerdictBadge = ({ verdict }) => {
     const s = map[normalized] || map.UNVERIFIED;
 
     return (
-        <span style={{
-            background: s.bg, color: s.text, border: `1.5px solid ${s.border}`,
-            borderRadius: 6, padding: "3px 9px", fontSize: 11, fontWeight: 700,
-            letterSpacing: "0.03em", display: "inline-flex", alignItems: "center", gap: 5
-        }}>
-            <Icons name={s.Icon} size={11} strokeWidth={2.5} />
+        <span className="hub-verdict-badge" style={{ background: s.bg, color: s.text, borderColor: s.border }}>
+            <Icons name={s.Icon} size={12} strokeWidth={2.5} />
             {s.label}
         </span>
     );
 };
 
 const TrustGauge = ({ score }) => {
-    const color = score >= 80 ? "#0e9f6e" : score >= 50 ? "#d97706" : "#e02424";
+    const color = score >= 80 ? "#10b981" : score >= 50 ? "#f59e0b" : "#ef4444";
+    const dashArray = `${(score / 100) * 163.4} 163.4`;
+    
     return (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-            <svg width={64} height={64} viewBox="0 0 64 64">
-                <circle cx={32} cy={32} r={26} fill="none" stroke="#e5e7eb" strokeWidth={6} />
+        <div className="hub-gauge-wrapper">
+            <svg width={80} height={80} viewBox="0 0 64 64">
+                <circle cx={32} cy={32} r={26} fill="none" stroke="#e2e8f0" strokeWidth={6} />
                 <circle cx={32} cy={32} r={26} fill="none" stroke={color} strokeWidth={6}
-                    strokeDasharray={`${(score / 100) * 163.4} 163.4`}
+                    strokeDasharray={dashArray}
                     strokeLinecap="round" transform="rotate(-90 32 32)" />
-                <text x={32} y={37} textAnchor="middle" fontSize={13} fontWeight={800} fill={color}>
-                    {score}
+                <text x={32} y={38} textAnchor="middle" fontSize={16} fontWeight={800} fill={color}>
+                    {Math.round(score)}
                 </text>
             </svg>
-            <span style={{ fontSize: 10, color: "#6b7280", fontWeight: 600, letterSpacing: "0.06em" }}>
-                TRUST SCORE
-            </span>
+            <span className="hub-gauge-label">TRUST SCORE</span>
         </div>
     );
 };
 
-const Avatar = ({ iconName, bg, color, size, imgUrl }) => (
-    <div style={{
-        width: size, height: size, borderRadius: "50%", background: bg,
-        display: "flex", alignItems: "center", justifyContent: "center", 
-        flexShrink: 0, overflow: "hidden"
-    }}>
-        {imgUrl ? (
-            <img 
-                src={imgUrl} 
-                alt="Profile" 
-                style={{ width: "100%", height: "100%", objectFit: "cover" }} 
-            />
-        ) : (
-            <Icons name={iconName} size={size * 0.44} color={color} strokeWidth={2} />
-        )}
-    </div>
-);
-
-// --- Main Page ---
-const UserHub = () => {
+export default function UserHub() {
+    const { authFetch } = useAuth();
     const [hubData, setHubData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [searchQuery, setSearchQuery] = useState("");
+
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+    const apiUrl = (path) => `${API_BASE_URL.replace(/\/$/, "")}/${path}`;
 
     useEffect(() => {
         const loadDashboard = async () => {
             try {
-                const data = await getUserHubData();
+                setLoading(true);
+                const data = await authFetch(apiUrl("users/me/dashboard/"), { method: "GET" });
                 setHubData(data);
             } catch (err) {
-                setError("Failed to load your hub data. Please try again.");
+                setError("Failed to load your personal hub data.");
             } finally {
                 setLoading(false);
             }
         };
         loadDashboard();
-    }, []);
+    }, [authFetch]);
 
-    if (loading) return <div className="hub-wrapper"><p style={{textAlign: "center", color: "#6b7280"}}>Loading Dashboard...</p></div>;
-    if (error) return <div className="hub-wrapper"><p style={{textAlign: "center", color: "#e02424"}}>{error}</p></div>;
+    const filteredLibrary = useMemo(() => {
+        if (!hubData?.library?.saved_receipts) return [];
+        let receipts = hubData.library.saved_receipts;
+        if (searchQuery) {
+            const lower = searchQuery.toLowerCase();
+            receipts = receipts.filter(r => 
+                (r.ai_summary && r.ai_summary.toLowerCase().includes(lower)) ||
+                (r.final_verdict && r.final_verdict.toLowerCase().includes(lower)) ||
+                (r.ai_verdict && r.ai_verdict.toLowerCase().includes(lower))
+            );
+        }
+        return receipts;
+    }, [hubData?.library?.saved_receipts, searchQuery]);
 
-    const { reputation, impact, library } = hubData;
+    if (loading) return <div className="hub-wrapper loading"><p>Loading personal dashboard...</p></div>;
+    if (error) return <div className="hub-wrapper error"><p>{error}</p></div>;
+
+    const { user_info, reputation, impact } = hubData;
+
+    // Handle Publish Stub
+    const handlePublish = (e) => {
+        e.preventDefault();
+        alert("Publish to Community feature is coming soon!");
+    };
 
     return (
-        <div className="hub-wrapper">
-            <div className="hub-container">
-                
-                {/* Profile Header */}
-                <div className="profile-card">
-                    <div className="avatar-circle" style={{ background: "transparent" }}>
-                        <Avatar 
-                            imgUrl={hubData.user_info.avatar_url} 
-                            iconName="user-circle" 
-                            size={64} 
-                            bg="#ddd6fe" 
-                            color="#7c3aed" 
-                        />
-                    </div>
-                    <div className="profile-info">
-                        <div className="profile-username">@{hubData.user_info.username}</div>
-                        <div className="profile-meta">
-                            <Icons name="badge-check" size={12} color="#0e9f6e" />
-                            {reputation.current_rank}
+        <div className="hub-page-layout">
+            <NavigationBar />
+            <div className="hub-wrapper">
+                <main className="hub-container">
+                    <header className="hub-header">
+                        <div className="hub-header-left">
+                            <h1 className="hub-title">My Hub</h1>
+                            <p className="hub-subtitle">Manage your progression and fact-check library.</p>
                         </div>
-                        <div className="profile-bio">
-                            Points to next rank: <strong>{reputation.points_to_next_rank}</strong>
-                        </div>
-                    </div>
-                    
-                    <div className="profile-stats">
-                        <TrustGauge score={reputation.trust_score || 0} />
-                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                            <div className="stat-block">
-                                <div className="stat-val">{impact.total_scans || 0}</div>
-                                <div className="stat-lbl"><Icons name="scan-line" size={8} /> SCANS</div>
-                            </div>
-                            <div className="stat-block">
-                                <div className="stat-val">{impact.impact_ripple || 0}</div>
-                                <div className="stat-lbl"><Icons name="thumbs-up" size={8} /> VOTES</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                    </header>
 
-                {/* Scans Table */}
-                <div className="section-label">My Saved Receipts</div>
-                <div className="data-panel">
-                    <table className="data-table">
-                        <thead>
-                            <tr>
-                                <th></th>
-                                <th>Claim Excerpt</th>
-                                <th>AI Verdict</th>
-                                <th>Date</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {library.saved_receipts && library.saved_receipts.length > 0 ? (
-                                library.saved_receipts.map((claim, i) => (
-                                    <tr key={i}>
-                                        <td>
-                                            <div className="icon-box">
-                                                {claim.claim_type === 'IMAGE' ? (
-                                                    <Icons name="image" size={15} color="#6b7280" />
-                                                ) : (
-                                                    <Icons name="globe" size={15} color="#6b7280" />
-                                                )}
+                    {/* Reputation & Progression Row */}
+                    <div className="hub-rep-row box-panel">
+                        <div className="hub-rep-gauge">
+                            <TrustGauge score={reputation?.trust_score || 0} />
+                        </div>
+                        <div className="hub-rep-info">
+                            <h2 className="hub-rank-title">{reputation.current_rank}</h2>
+                            <p className="hub-rank-sub">Next Milestone: <strong>{reputation.points_to_next_rank}</strong> pt needed</p>
+                            <div className="hub-progress-bar">
+                                <div 
+                                    className="hub-progress-fill" 
+                                    style={{ width: `${Math.min(((reputation.trust_score % 50) / 50) * 100, 100)}%` }}
+                                ></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Impact Metrics Row */}
+                    <div className="hub-impact-grid">
+                        <div className="hub-stat-card box-panel">
+                            <Icons name="scan-line" size={24} color="#6366f1" />
+                            <div className="stat-meta">
+                                <div className="stat-val">{impact.total_scans || 0}</div>
+                                <div className="stat-lbl">Total Scans</div>
+                            </div>
+                        </div>
+                        <div className="hub-stat-card box-panel">
+                            <Icons name="message-square" size={24} color="#3b82f6" />
+                            <div className="stat-meta">
+                                <div className="stat-val">{impact.community_contributions || 0}</div>
+                                <div className="stat-lbl">Contributions & Votes</div>
+                            </div>
+                        </div>
+                        <div className="hub-stat-card box-panel">
+                            <Icons name="activity" size={24} color="#10b981" />
+                            <div className="stat-meta">
+                                <div className="stat-val">{impact.impact_ripple || 0}</div>
+                                <div className="stat-lbl">Impact Ripple</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Private Fact-Check Library */}
+                    <div className="hub-library box-panel">
+                        <div className="library-header">
+                            <h3 className="section-title">Private Fact-Check Library</h3>
+                            <div className="library-search">
+                                <Icons name="search" size={16} color="#64748b" />
+                                <input 
+                                    type="text" 
+                                    placeholder="Search receipts..." 
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="library-list">
+                            {filteredLibrary.length > 0 ? (
+                                filteredLibrary.map((claim, idx) => (
+                                    <div key={idx} className="library-item">
+                                        <div className="li-main">
+                                            <div className="li-icon">
+                                                <Icons name={claim.claim_type === 'IMAGE' ? "image" : "globe"} size={20} color="#64748b" />
                                             </div>
-                                        </td>
-                                        <td style={{ maxWidth: 200 }}>
-                                            {claim.ai_summary || "No summary available."}
-                                        </td>
-                                        <td>
+                                            <div className="li-content">
+                                                <p className="li-excerpt">{claim.ai_summary || "No summary available."}</p>
+                                                <div className="li-meta">
+                                                    <span>{new Date(claim.last_updated).toLocaleDateString()}</span>
+                                                    {claim.source_link && (
+                                                        <a href={claim.source_link} target="_blank" rel="noreferrer">
+                                                            Source Link
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="li-actions">
                                             <VerdictBadge verdict={claim.final_verdict || claim.ai_verdict} />
-                                        </td>
-                                        <td style={{ fontSize: 11, color: "#6b7280" }}>
-                                            {new Date(claim.last_updated).toLocaleDateString()}
-                                        </td>
-                                        <td>
-                                            <div style={{ display: "flex", gap: 6 }}>
-                                                <button className="action-btn">
-                                                    <Icons name="eye" size={10} color="#4f46e5" /> View
-                                                </button>
-                                                {claim.source_link && (
-                                                    <a href={claim.source_link} target="_blank" rel="noreferrer" className="action-btn" style={{ background: "#f3f4f6", color: "#6b7280" }}>
-                                                        <Icons name="external-link" size={10} color="#6b7280" /> Source
-                                                    </a>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
+                                            <button className="hub-btn-publish" onClick={handlePublish}>
+                                                <Icons name="share-2" size={14} /> Publish
+                                            </button>
+                                        </div>
+                                    </div>
                                 ))
                             ) : (
-                                <tr>
-                                    <td colSpan="5" style={{ textAlign: "center", padding: "20px", color: "#6b7280" }}>
-                                        No saved receipts found. Bookmark a claim to see it here!
-                                    </td>
-                                </tr>
+                                <div className="library-empty">
+                                    <Icons name="inbox" size={32} color="#cbd5e1" />
+                                    <p>No saved receipts found. Scans you save privately will appear here.</p>
+                                </div>
                             )}
-                        </tbody>
-                    </table>
-                </div>
-
-                {/* Contributions Grid */}
-                <div className="section-label">My Contributions</div>
-                <div className="contributions-grid">
-                    <div className="contribution-card">
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                            <span style={{ fontSize: 9, fontWeight: 800, color: "#4f46e5", letterSpacing: "0.08em", display: "flex", alignItems: "center", gap: 4 }}>
-                                <Icons name="message-circle" size={9} color="#4f46e5" /> THREADS STARTED
-                            </span>
-                        </div>
-                        <div style={{ fontSize: 16, fontWeight: 900, color: "#111827" }}>
-                            {impact.total_scans || 0}
                         </div>
                     </div>
-                    
-                    <div className="contribution-card">
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                            <span style={{ fontSize: 9, fontWeight: 800, color: "#4f46e5", letterSpacing: "0.08em", display: "flex", alignItems: "center", gap: 4 }}>
-                                <Icons name="paperclip" size={9} color="#4f46e5" /> EVIDENCE & VOTES
-                            </span>
-                        </div>
-                        <div style={{ fontSize: 16, fontWeight: 900, color: "#111827" }}>
-                            {impact.community_contributions || 0}
-                        </div>
-                    </div>
-                </div>
-
+                </main>
             </div>
         </div>
     );
-};
-
-export default UserHub;
+}

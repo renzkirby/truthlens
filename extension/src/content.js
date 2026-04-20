@@ -7,6 +7,70 @@ console.log("TruthLens content script loaded");
 const BRIDGE_EVENT_SOURCE = "TRUTHLENS_WEB_AUTH_BRIDGE";
 const EXTENSION_EVENT_SOURCE = "TRUTHLENS_EXTENSION";
 const BRIDGE_SCRIPT_ID = "truthlens-auth-bridge-script";
+const TOKEN_SYNC_POLL_MS = 3000;
+
+let lastSyncedTokenFingerprint = null;
+
+function normalizeTokenPayload(payload = {}) {
+   const access =
+      typeof payload.access === "string" && payload.access.trim() ? payload.access.trim() : null;
+   const refresh =
+      typeof payload.refresh === "string" && payload.refresh.trim() ? payload.refresh.trim() : null;
+
+   return { access, refresh };
+}
+
+function getTokenFingerprint(tokens) {
+   return `${tokens?.access || ""}::${tokens?.refresh || ""}`;
+}
+
+function syncTokensToWorker(tokens, reason = "unknown") {
+   const normalizedTokens = normalizeTokenPayload(tokens);
+   const fingerprint = getTokenFingerprint(normalizedTokens);
+   if (fingerprint === lastSyncedTokenFingerprint) {
+      return;
+   }
+
+   lastSyncedTokenFingerprint = fingerprint;
+
+   chrome.runtime.sendMessage(
+      {
+         type: "SYNC_AUTH_TOKEN",
+         payload: {
+            ...normalizedTokens,
+            reason,
+         },
+      },
+      (response) => {
+         if (chrome.runtime.lastError) {
+            console.warn("Auth bridge sync failed:", chrome.runtime.lastError.message);
+            return;
+         }
+
+         if (!response?.accepted) {
+            console.warn(
+               "Auth bridge sync rejected by worker:",
+               response?.error || "Unknown error",
+            );
+         }
+      },
+   );
+}
+
+function readTokensFromPageStorage() {
+   try {
+      return normalizeTokenPayload({
+         access: window.localStorage.getItem("access"),
+         refresh: window.localStorage.getItem("refresh"),
+      });
+   } catch (_error) {
+      return { access: null, refresh: null };
+   }
+}
+
+function syncTokensDirectlyFromStorage(reason) {
+   syncTokensToWorker(readTokensFromPageStorage(), reason);
+}
 
 function isBridgeTargetPage() {
    return state.WEB_APP_ORIGINS.includes(window.location.origin);
@@ -50,25 +114,7 @@ function handleBridgeMessage(event) {
       return;
    }
 
-   chrome.runtime.sendMessage(
-      {
-         type: "SYNC_AUTH_TOKEN",
-         payload: data.payload,
-      },
-      (response) => {
-         if (chrome.runtime.lastError) {
-            console.warn("Auth bridge sync failed:", chrome.runtime.lastError.message);
-            return;
-         }
-
-         if (!response?.accepted) {
-            console.warn(
-               "Auth bridge sync rejected by worker:",
-               response?.error || "Unknown error",
-            );
-         }
-      },
-   );
+   syncTokensToWorker(data.payload, "page_bridge");
 }
 
 function initializeAuthBridge() {
@@ -81,13 +127,19 @@ function initializeAuthBridge() {
 
    window.setTimeout(() => {
       requestTokenSyncFromPageBridge();
+      syncTokensDirectlyFromStorage("storage_initial");
    }, 250);
 
    document.addEventListener("visibilitychange", () => {
       if (!document.hidden) {
          requestTokenSyncFromPageBridge();
+         syncTokensDirectlyFromStorage("storage_visibility");
       }
    });
+
+   window.setInterval(() => {
+      syncTokensDirectlyFromStorage("storage_poll");
+   }, TOKEN_SYNC_POLL_MS);
 }
 
 initializeAuthBridge();

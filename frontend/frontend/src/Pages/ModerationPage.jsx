@@ -31,6 +31,8 @@ function ModerationPage() {
    const [verdictError, setVerdictError] = useState(null);
    const [claimsError, setClaimsError] = useState(null);
 
+   const [modStats, setModStats] = useState(null);
+
    const [safetyStatusFilter, setSafetyStatusFilter] = useState("ALL");
    const [safetySearch, setSafetySearch] = useState("");
    const [verdictReviewedFilter, setVerdictReviewedFilter] = useState("all");
@@ -89,10 +91,20 @@ function ModerationPage() {
       }
    };
 
+   const loadStats = async () => {
+      try {
+         const data = await authFetch(apiUrl("moderation/stats/"), { method: "GET" });
+         setModStats(data);
+      } catch (error) {
+         console.error("Failed to load moderation stats", error);
+      }
+   };
+
    useEffect(() => {
       loadSafetyQueue();
       loadVerdictQueue();
       loadClaims();
+      loadStats();
    }, []);
 
    const handleOpenThread = (threadId) => {
@@ -237,12 +249,10 @@ function ModerationPage() {
          .slice(0, 8);
    }, [claims]);
 
-   const openThreads = verdictThreads.filter(
-      (item) => item.status === "OPEN" || !item.status,
-   ).length;
-   const closedThreads = verdictThreads.filter((item) => item.status === "CLOSED").length;
-   const flaggedThreads = safetyThreads.length;
-   const pendingVerdicts = verdictThreads.filter((item) => !item.moderator_verdict).length;
+   const openThreads = modStats?.open_threads || 0;
+   const closedThreads = modStats?.closed_threads || 0;
+   const flaggedThreads = modStats?.flagged_threads || 0;
+   const pendingVerdicts = modStats?.pending_verdicts || 0;
 
    // ── Render ───────────────────────────────────────────────────────────────
    return (

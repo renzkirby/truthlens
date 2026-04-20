@@ -90,10 +90,12 @@ import {
    Pencil,
    UserPlus,
    UserMinus,
-   Calendar
+   Calendar,
+   Inbox,
 } from "lucide-react";
 
 const ICON_MAP = {
+   inbox: Inbox,
    pencil: Pencil,
    "share-2": Share2,
    loader: Loader,
@@ -183,7 +185,7 @@ const ICON_MAP = {
    clock: Clock,
    circle: Circle,
    calendar: Calendar,
-   "user-plus": UserPlus,   
+   "user-plus": UserPlus,
    "user-minus": UserMinus,
 };
 

@@ -86,16 +86,6 @@
   object-fit: cover;
 }
 
-/* Action Button Row (Edit/Follow) */
-.profile-action-row {
-  display: flex;
-  justify-content: flex-end;
-  /* Pushes button to the right */
-  height: 48px;
-  /* Matches the vertical space taken by the overlapping avatar */
-  margin-bottom: 12px;
-}
-
 /* ── Updated Identity Text & Bio ── */
 .profile-identity {
   display: flex;
@@ -140,34 +130,68 @@
   white-space: pre-wrap;
 }
 
-/* ── Updated Action Row & Edit Button ── */
 .profile-action-row {
   display: flex;
   justify-content: flex-end;
   align-items: flex-start;
-  /* Aligns button to the top */
   height: 60px;
-  /* Gives the overlapping avatar room to breathe */
   padding-top: 12px;
-  /* Pushes button down slightly from banner */
 }
 
 .action-btn {
-  padding: 6px 16px;
-  border-radius: 999px;
-  /* Creates the perfect pill shape */
+  min-height: 36px;
+  padding: 0 20px;
+  border-radius: 9999px;
   border: 1px solid #d1d5db;
   background-color: transparent;
   font-weight: 700;
-  font-size: 14px;
-  color: var(--text-main, #111827);
+  font-size: 15px;
+  color: #0f172a;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .action-btn:hover {
+  background-color: rgba(15, 23, 42, 0.05);
+}
+
+.action-btn:active {
+  transform: scale(0.97);
+}
+
+.action-btn-edit {
+  border-color: #cfd9de;
+  background: white;
+  color: #0f172a;
+}
+
+.action-btn-edit:hover {
   background-color: #e5e7eb;
-  /* Soft gray on hover */
+}
+
+.action-btn-follow {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #ffffff;
+}
+
+.action-btn-follow:hover {
+  background: #1e293b;
+}
+
+.action-btn-follow.following {
+  background: transparent;
+  border-color: #cfd9de;
+  color: #0f172a;
+}
+
+.action-btn-follow.following:hover {
+  border-color: #fca5a5;
+  background: rgba(254, 242, 242, 0.8);
+  color: #dc2626;
 }
 
 /* Meta Data (Location, Join Date) */
@@ -196,22 +220,27 @@
 
 .follow-stats {
   display: flex;
-  gap: 20px;
+  gap: 24px;
   font-size: 15px;
-  color: var(--text-muted);
+  color: #536471;
+  margin-top: 6px;
 }
 
 .follow-stats span {
   cursor: pointer;
-  transition: opacity 0.2s;
+  display: inline-flex;
+  gap: 4px;
+  transition: all 0.2s ease;
 }
 
 .follow-stats span:hover {
-  opacity: 0.8;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  color: #0f172a;
 }
 
 .follow-stats strong {
-  color: var(--text-main);
+  color: #0f172a;
   font-weight: 700;
 }
 
@@ -635,12 +664,83 @@
   min-height: 100px;
 }
 
+.tab-summary-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.tab-summary-copy {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.tab-summary-count {
+  margin: 0;
+  font-size: 12px;
+  color: #334155;
+  font-weight: 700;
+}
+
 .empty-msg {
   font-size: 14px;
   color: var(--text-muted);
   text-align: center;
   padding: 40px 0;
   margin: 0;
+}
+
+.profile-skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.profile-skeleton-card {
+  background: #f9fafb;
+  border-radius: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.profile-skeleton-line {
+  display: block;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: profileActivityShimmer 1.25s ease-in-out infinite;
+}
+
+.profile-skeleton-line.short {
+  width: 28%;
+}
+
+.profile-skeleton-line.long {
+  width: 85%;
+}
+
+@keyframes profileActivityShimmer {
+  0% {
+    background-position: 180% 0;
+  }
+
+  100% {
+    background-position: -20% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-skeleton-line {
+    animation: none;
+    background: #e5e7eb;
+  }
 }
 
 /* ── Claims List ── */
@@ -704,6 +804,11 @@
   margin: 0;
 }
 
+.claim-meta-summary {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .claim-source-link {
   font-size: 13px;
   color: var(--primary-blue);
@@ -712,9 +817,69 @@
   width: fit-content;
 }
 
+.claim-source-button {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
 .claim-source-link:hover {
   color: var(--primary-hover);
   text-decoration: underline;
+}
+
+.activity-pagination-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.activity-pagination-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.activity-pagination-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.activity-load-more-btn {
+  border: 1px solid var(--border-color);
+  background: #ffffff;
+  color: #1f2937;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.activity-load-more-btn:hover {
+  border-color: var(--primary-blue);
+  color: var(--primary-blue);
+}
+
+.activity-show-less-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 0.2s, background-color 0.2s;
+}
+
+.activity-show-less-btn:hover {
+  color: #334155;
+  background: #f1f5f9;
 }
 
 /* ── Settings ── */

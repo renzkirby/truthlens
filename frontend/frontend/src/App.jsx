@@ -61,7 +61,7 @@ function App() {
                   />
                   <Route
                      path="/dashboard"
-                     element={<Dashboard />}
+                     element={<UserHub />}
                   />
                   <Route
                      path="/verify"
@@ -86,10 +86,6 @@ function App() {
                   <Route
                      path="/user/:username"
                      element={<UserProfile />}
-                  />
-                  <Route
-                     path="/user-hub"
-                     element={<UserHub />}
                   />
                   <Route
                      path="/settings"

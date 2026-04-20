@@ -15,7 +15,7 @@
  *   - Centralized constants
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import NavigationBar from "../components/NavigationBar.jsx";
@@ -23,7 +23,6 @@ import NavigationBar from "../components/NavigationBar.jsx";
 // ── Utilities & Hooks ──
 import { getEffectiveVerdict } from "../utils/verdict";
 import { VERDICT_CONFIG, API_BASE_URL } from "../utils/constants";
-import { useFetchClaims } from "../hooks";
 import Icons from "../components/Icons.jsx";
 
 // ── Styles ──
@@ -75,6 +74,41 @@ function timeAgo(dateStr) {
    return `${Math.floor(days / 30)}mo ago`;
 }
 
+const TAB_PAGE_SIZE = 6;
+const TAB_SKELETON_COUNT = 3;
+
+function getTabDescription(activeTab, isOwnProfile) {
+   if (activeTab === "threads") {
+      return isOwnProfile
+         ? "Threads you started for community verification."
+         : "Threads initiated by this user.";
+   }
+   if (activeTab === "evidence") {
+      return isOwnProfile
+         ? "Evidence and comments you contributed across threads."
+         : "Evidence and comments contributed by this user.";
+   }
+   return isOwnProfile
+      ? "Official moderation verdicts you have issued."
+      : "Official moderation verdicts issued by this moderator.";
+}
+
+function getEmptyTabMessage(activeTab, isOwnProfile) {
+   if (activeTab === "threads") {
+      return isOwnProfile
+         ? "You have not opened any community threads yet."
+         : "This user has not opened any community threads yet.";
+   }
+   if (activeTab === "evidence") {
+      return isOwnProfile
+         ? "You have not submitted evidence or comments yet."
+         : "This user has not submitted evidence or comments yet.";
+   }
+   return isOwnProfile
+      ? "You have not issued any moderator verdicts yet."
+      : "No moderator verdicts have been published yet.";
+}
+
 /**
  * UserProfile Component
  * Shows user identity, reputation, and contribution history
@@ -84,9 +118,24 @@ function UserProfile() {
    const navigate = useNavigate();
    const { user: authUser, authFetch, refreshUser } = useAuth();
 
-   const [activeTab, setActiveTab] = useState("scans");
+   const [activeTab, setActiveTab] = useState("threads");
    const [publicUser, setPublicUser] = useState(null);
    const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+   const [activityLoading, setActivityLoading] = useState(false);
+   const [activityError, setActivityError] = useState(null);
+   const [threadActivity, setThreadActivity] = useState([]);
+   const [evidenceActivity, setEvidenceActivity] = useState([]);
+   const [verdictActivity, setVerdictActivity] = useState([]);
+   const [loadedActivityTabs, setLoadedActivityTabs] = useState({
+      threads: false,
+      evidence: false,
+      verdicts: false,
+   });
+   const [visibleCounts, setVisibleCounts] = useState({
+      threads: TAB_PAGE_SIZE,
+      evidence: TAB_PAGE_SIZE,
+      verdicts: TAB_PAGE_SIZE,
+   });
 
    // Determine if we are viewing our own profile or someone else's
    const isOwnProfile = !username || username === authUser?.username;
@@ -95,10 +144,26 @@ function UserProfile() {
    const isModeratorProfile = isModeratorRole(displayUser?.role);
    const organizationName = displayUser?.organization_name?.trim() || "Institution not listed";
 
-   // Dynamic Claims URL depending on whose profile we are viewing
-   const claimsEndpoint = isOwnProfile ? "auth/my-claims/" : `users/${username}/claims/`;
+   const activeTabItems = useMemo(() => {
+      if (activeTab === "threads") return threadActivity;
+      if (activeTab === "evidence") return evidenceActivity;
+      return verdictActivity;
+   }, [activeTab, evidenceActivity, threadActivity, verdictActivity]);
 
-   const { claims, loading: claimsLoading } = useFetchClaims(authFetch, claimsEndpoint);
+   const currentTabLoading = activityLoading;
+   const currentTabError = activityError;
+   const currentTabDescription = getTabDescription(activeTab, isOwnProfile);
+   const currentTabEmptyMessage = getEmptyTabMessage(activeTab, isOwnProfile);
+
+   const visibleTabItems = useMemo(() => {
+      const visibleCount = visibleCounts[activeTab] ?? TAB_PAGE_SIZE;
+      return activeTabItems.slice(0, visibleCount);
+   }, [activeTab, activeTabItems, visibleCounts]);
+
+   const currentVisibleCount = visibleCounts[activeTab] ?? TAB_PAGE_SIZE;
+   const hasMoreTabItems = activeTabItems.length > currentVisibleCount;
+   const canShowLessTabItems =
+      currentVisibleCount > TAB_PAGE_SIZE && activeTabItems.length > TAB_PAGE_SIZE;
    const [moderatorStats, setModeratorStats] = useState(null);
    const [isLoadingModeratorStats, setIsLoadingModeratorStats] = useState(false);
    const [moderatorStatsError, setModeratorStatsError] = useState(false);
@@ -212,6 +277,112 @@ function UserProfile() {
       }
    }, [username, isOwnProfile]);
 
+   useEffect(() => {
+      setActiveTab("threads");
+      setActivityError(null);
+      setActivityLoading(false);
+      setThreadActivity([]);
+      setEvidenceActivity([]);
+      setVerdictActivity([]);
+      setLoadedActivityTabs({
+         threads: false,
+         evidence: false,
+         verdicts: false,
+      });
+      setVisibleCounts({
+         threads: TAB_PAGE_SIZE,
+         evidence: TAB_PAGE_SIZE,
+         verdicts: TAB_PAGE_SIZE,
+      });
+   }, [displayUsername, isOwnProfile]);
+
+   useEffect(() => {
+      if (!displayUsername) {
+         return;
+      }
+
+      if (activeTab === "verdicts" && !isModeratorProfile) {
+         setActiveTab("threads");
+         return;
+      }
+
+      if (loadedActivityTabs[activeTab]) {
+         return;
+      }
+
+      const endpointMap = {
+         threads: `${API_BASE_URL}/users/${displayUsername}/threads/`,
+         evidence: `${API_BASE_URL}/users/${displayUsername}/evidence/`,
+         verdicts: `${API_BASE_URL}/users/${displayUsername}/verdicts/`,
+      };
+
+      let isCancelled = false;
+      setActivityLoading(true);
+      setActivityError(null);
+
+      authFetch(endpointMap[activeTab], { method: "GET" })
+         .then((data) => {
+            if (isCancelled) {
+               return;
+            }
+
+            const normalized = Array.isArray(data)
+               ? data
+               : Array.isArray(data?.results)
+                 ? data.results
+                 : [];
+
+            if (activeTab === "threads") {
+               setThreadActivity(normalized);
+            } else if (activeTab === "evidence") {
+               setEvidenceActivity(normalized);
+            } else {
+               setVerdictActivity(normalized);
+            }
+
+            setLoadedActivityTabs((prev) => ({
+               ...prev,
+               [activeTab]: true,
+            }));
+         })
+         .catch((err) => {
+            if (isCancelled) {
+               return;
+            }
+            setActivityError(err?.message || "Failed to load profile activity.");
+         })
+         .finally(() => {
+            if (!isCancelled) {
+               setActivityLoading(false);
+            }
+         });
+
+      return () => {
+         isCancelled = true;
+      };
+   }, [
+      activeTab,
+      authFetch,
+      displayUsername,
+      isModeratorProfile,
+      loadedActivityTabs,
+      isOwnProfile,
+   ]);
+
+   const handleLoadMore = () => {
+      setVisibleCounts((prev) => ({
+         ...prev,
+         [activeTab]: (prev[activeTab] ?? TAB_PAGE_SIZE) + TAB_PAGE_SIZE,
+      }));
+   };
+
+   const handleShowLess = () => {
+      setVisibleCounts((prev) => ({
+         ...prev,
+         [activeTab]: TAB_PAGE_SIZE,
+      }));
+   };
+
    if (isLoadingProfile) {
       return (
          <div className="profile-layout">
@@ -235,11 +406,6 @@ function UserProfile() {
    }
 
    // ── Compute Profile Stats ──
-   const totalScans = claims.length;
-   const fakesStopped = claims.filter((c) => getEffectiveVerdict(c) === "FAKE").length;
-   const verifiedClaims = claims.filter((c) => getEffectiveVerdict(c) === "FACT").length;
-   const accuracyRate =
-      totalScans > 0 ? Math.round(((fakesStopped + verifiedClaims) / totalScans) * 100) : 0;
    const moderatorStatsSnapshot = moderatorStats || {
       total_claims_resolved: 0,
       fact_verdicts_issued: 0,
@@ -386,13 +552,15 @@ function UserProfile() {
                   <div className="profile-action-row">
                      {isOwnProfile ? (
                         <button
-                           className="action-btn" /* <--- CHANGED THIS CLASS */
+                           type="button"
+                           className="action-btn action-btn-edit"
                            onClick={openEditModal}>
-                           Edit profile
+                           Edit Profile
                         </button>
                      ) : displayUser ? (
                         <button
-                           className={`action-btn ${isFollowing ? "following" : ""}`}
+                           type="button"
+                           className={`action-btn action-btn-follow ${isFollowing ? "following" : ""}`}
                            onClick={handleFollowToggle}>
                            {isFollowing ? "Following" : "Follow"}
                         </button>
@@ -469,7 +637,9 @@ function UserProfile() {
                <div className="box-panel">
                   <h2 className="section-title">Reputation Dashboard</h2>
                   <div className="stats-grid">
-                     <div className="stat-card">
+                     <div
+                        className="stat-card"
+                        style={{ gridColumn: "1 / -1" }}>
                         <p className="stat-label">Trust Score</p>
                         <p className="stat-value">{displayTrustScore.toFixed(1)}</p>
                         <div className="trust-bar-track">
@@ -482,24 +652,6 @@ function UserProfile() {
                            />
                         </div>
                         <p className="stat-sublabel">{trustLevel.label} Level</p>
-                     </div>
-
-                     <div className="stat-card">
-                        <p className="stat-label">Accuracy Rate</p>
-                        <p className="stat-value">{accuracyRate}%</p>
-                        <p className="stat-sublabel">of verdicts confirmed</p>
-                     </div>
-
-                     <div className="stat-card">
-                        <p className="stat-label">Fake News Stopped</p>
-                        <p className="stat-value">{fakesStopped}</p>
-                        <p className="stat-sublabel">FAKE verdicts found</p>
-                     </div>
-
-                     <div className="stat-card">
-                        <p className="stat-label">Total Scans</p>
-                        <p className="stat-value">{totalScans}</p>
-                        <p className="stat-sublabel">claims analyzed</p>
                      </div>
                   </div>
 
@@ -589,58 +741,195 @@ function UserProfile() {
             <div className="box-panel">
                <div className="tabs-row">
                   <button
-                     className={`tab-btn ${activeTab === "scans" ? "active" : ""}`}
-                     onClick={() => setActiveTab("scans")}>
-                     {isOwnProfile ? "My Personal Scans" : `${displayUser?.username}'s Scans`}
+                     className={`tab-btn ${activeTab === "threads" ? "active" : ""}`}
+                     onClick={() => setActiveTab("threads")}>
+                     {isOwnProfile ? "My Threads" : "Threads"}
                   </button>
+                  <button
+                     className={`tab-btn ${activeTab === "evidence" ? "active" : ""}`}
+                     onClick={() => setActiveTab("evidence")}>
+                     {isOwnProfile ? "My Evidence" : "Evidence"}
+                  </button>
+                  {isModeratorProfile && (
+                     <button
+                        className={`tab-btn ${activeTab === "verdicts" ? "active" : ""}`}
+                        onClick={() => setActiveTab("verdicts")}>
+                        {isOwnProfile ? "My Verdicts" : "Verdicts"}
+                     </button>
+                  )}
                </div>
 
-               {activeTab === "scans" && (
-                  <div className="tab-content">
-                     {claimsLoading ? (
-                        <p className="empty-msg">Loading scans...</p>
-                     ) : claims.length === 0 ? (
-                        <p className="empty-msg">No scans yet.</p>
-                     ) : (
+               <div className="tab-summary-row">
+                  <p className="tab-summary-copy">{currentTabDescription}</p>
+                  {!currentTabLoading && !currentTabError && activeTabItems.length > 0 && (
+                     <span className="tab-summary-count">
+                        Showing {visibleTabItems.length} of {activeTabItems.length}
+                     </span>
+                  )}
+               </div>
+
+               <div className="tab-content">
+                  {currentTabLoading ? (
+                     <div
+                        className="profile-skeleton-list"
+                        aria-hidden="true">
+                        {Array.from({ length: TAB_SKELETON_COUNT }).map((_, index) => (
+                           <div
+                              className="profile-skeleton-card"
+                              key={`activity-skeleton-${index}`}>
+                              <span className="profile-skeleton-line short" />
+                              <span className="profile-skeleton-line" />
+                              <span className="profile-skeleton-line long" />
+                           </div>
+                        ))}
+                     </div>
+                  ) : currentTabError ? (
+                     <p className="empty-msg">{currentTabError}</p>
+                  ) : activeTabItems.length === 0 ? (
+                     <p className="empty-msg">{currentTabEmptyMessage}</p>
+                  ) : (
+                     <>
                         <div className="claims-list">
-                           {claims.map((claim) => {
-                              const verdict =
-                                 VERDICT_CONFIG[getEffectiveVerdict(claim)] ||
-                                 VERDICT_CONFIG.PENDING;
-                              return (
+                           {activeTab === "threads" &&
+                              visibleTabItems.map((thread) => (
                                  <div
                                     className="claim-card"
-                                    key={claim.id}>
+                                    key={thread.id}>
                                     <div className="claim-top">
-                                       <span
-                                          className="claim-verdict-badge"
-                                          style={{ backgroundColor: verdict.color }}>
-                                          {verdict.label}
+                                       <span className="claim-type-pill">
+                                          {thread.status || "OPEN"}
                                        </span>
-                                       <span className="claim-type-pill">{claim.claim_type}</span>
                                        <span className="claim-time">
-                                          {timeAgo(claim.last_updated)}
+                                          {timeAgo(thread.created_at)}
                                        </span>
                                     </div>
                                     <p className="claim-summary">
-                                       {claim.ai_summary || "No summary available."}
+                                       {thread.caption || "Thread started without a caption."}
                                     </p>
-                                    {claim.source_link && (
-                                       <a
-                                          href={claim.source_link}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="claim-source-link">
-                                          View Source →
-                                       </a>
+                                    <p className="claim-summary claim-meta-summary">
+                                       Claim ID: {thread.claim_id} | {thread.evidence_count}{" "}
+                                       evidence | {thread.comment_count} comments
+                                    </p>
+                                    <button
+                                       type="button"
+                                       className="claim-source-link claim-source-button"
+                                       onClick={() => navigate(`/thread/detail/${thread.id}`)}>
+                                       Open Thread →
+                                    </button>
+                                 </div>
+                              ))}
+
+                           {activeTab === "evidence" &&
+                              visibleTabItems.map((item) => (
+                                 <div
+                                    className="claim-card"
+                                    key={`${item.activity_type}-${item.id}`}>
+                                    <div className="claim-top">
+                                       <span className="claim-type-pill">{item.activity_type}</span>
+                                       <span className="claim-time">
+                                          {timeAgo(item.activity_at)}
+                                       </span>
+                                    </div>
+
+                                    {item.activity_type === "COMMENT" ? (
+                                       <>
+                                          <p className="claim-summary">
+                                             {item.comment_text || "Comment submitted."}
+                                          </p>
+                                          <p className="claim-summary claim-meta-summary">
+                                             On thread:{" "}
+                                             {item.thread?.caption || item.thread?.id || "Unknown"}
+                                          </p>
+                                       </>
+                                    ) : (
+                                       <>
+                                          <p className="claim-summary">
+                                             {item.evidence_caption || "Evidence submitted."}
+                                          </p>
+                                          <p className="claim-summary claim-meta-summary">
+                                             Type: {item.evidence_type || "Unspecified"} | Status:{" "}
+                                             {item.evidence_status || "UNVERIFIED"}
+                                          </p>
+                                          {item.evidence_url && (
+                                             <a
+                                                href={item.evidence_url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="claim-source-link">
+                                                View cited source →
+                                             </a>
+                                          )}
+                                       </>
                                     )}
                                  </div>
-                              );
-                           })}
+                              ))}
+
+                           {activeTab === "verdicts" &&
+                              visibleTabItems.map((entry) => {
+                                 const verdict =
+                                    VERDICT_CONFIG[entry.moderator_verdict] ||
+                                    VERDICT_CONFIG.UNVERIFIED;
+
+                                 return (
+                                    <div
+                                       className="claim-card"
+                                       key={entry.thread_id}>
+                                       <div className="claim-top">
+                                          <span
+                                             className="claim-verdict-badge"
+                                             style={{
+                                                backgroundColor: verdict.bg,
+                                                color: verdict.color,
+                                                border: `1px solid ${verdict.border}`,
+                                             }}>
+                                             {entry.moderator_verdict || "UNVERIFIED"}
+                                          </span>
+                                          <span className="claim-time">
+                                             {timeAgo(entry.moderated_at)}
+                                          </span>
+                                       </div>
+                                       <p className="claim-summary">
+                                          {entry.caption || "Moderator-reviewed thread."}
+                                       </p>
+                                       <p className="claim-summary claim-meta-summary">
+                                          Claim ID: {entry.claim_id}
+                                       </p>
+                                       {entry.moderator_notes && (
+                                          <p className="claim-summary claim-meta-summary">
+                                             Notes: {entry.moderator_notes}
+                                          </p>
+                                       )}
+                                    </div>
+                                 );
+                              })}
                         </div>
-                     )}
-                  </div>
-               )}
+
+                        <div className="activity-pagination-row">
+                           <span className="activity-pagination-meta">
+                              Showing {visibleTabItems.length} of {activeTabItems.length}
+                           </span>
+                           <div className="activity-pagination-actions">
+                              {canShowLessTabItems && (
+                                 <button
+                                    type="button"
+                                    className="activity-show-less-btn"
+                                    onClick={handleShowLess}>
+                                    Show Less
+                                 </button>
+                              )}
+                              {hasMoreTabItems && (
+                                 <button
+                                    type="button"
+                                    className="activity-load-more-btn"
+                                    onClick={handleLoadMore}>
+                                    Load More
+                                 </button>
+                              )}
+                           </div>
+                        </div>
+                     </>
+                  )}
+               </div>
             </div>
 
             {/* Account Settings - ONLY SHOW IF VIEWING OWN PROFILE */}

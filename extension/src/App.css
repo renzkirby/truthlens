@@ -58,6 +58,240 @@ body {
   min-height: 200px;
 }
 
+.guest-mode-panel {
+  margin: 0 16px 14px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid #fcd34d;
+  background: linear-gradient(180deg, #fffbeb 0%, #fff7ed 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.guest-mode-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.guest-mode-badge {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+
+.guest-mode-cap {
+  font-size: 10px;
+  font-weight: 700;
+  color: #9a3412;
+}
+
+.guest-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.guest-history-item {
+  background: #ffffff;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.guest-history-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.guest-history-item-type {
+  font-size: 10px;
+  font-weight: 700;
+  color: #7c2d12;
+  letter-spacing: 0.04em;
+}
+
+.guest-history-verdict {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.guest-history-verdict.fact {
+  background: var(--verdict-fact-bg);
+  color: var(--verdict-fact-text);
+}
+
+.guest-history-verdict.fake {
+  background: var(--verdict-fake-bg);
+  color: var(--verdict-fake-text);
+}
+
+.guest-history-verdict.misleading {
+  background: var(--verdict-misleading-bg);
+  color: var(--verdict-misleading-text);
+}
+
+.guest-history-verdict.satire {
+  background: var(--verdict-satire-bg);
+  color: var(--verdict-satire-text);
+}
+
+.guest-history-verdict.unverified {
+  background: var(--verdict-unverified-bg);
+  color: var(--verdict-unverified-text);
+}
+
+.guest-history-summary {
+  margin: 0;
+  font-size: 11px;
+  color: #4b5563;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.guest-history-meta {
+  font-size: 10px;
+  color: #6b7280;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.guest-history-empty {
+  margin: 0;
+  font-size: 11px;
+  color: #92400e;
+  background: #fff7ed;
+  border: 1px dashed #f59e0b;
+  border-radius: 8px;
+  padding: 8px 10px;
+  line-height: 1.35;
+}
+
+.guest-upsell-cta {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.guest-upsell-cta p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #7c2d12;
+  font-weight: 600;
+}
+
+.guest-upsell-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.guest-upsell-link {
+  flex: 1;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  border-radius: 8px;
+  padding: 7px 8px;
+}
+
+.guest-upsell-link.login {
+  background: var(--brand-primary);
+  color: #ffffff;
+}
+
+.guest-upsell-link.login:hover {
+  background: var(--brand-primary-hover);
+}
+
+.guest-upsell-link.register {
+  background: #ffffff;
+  color: #7c2d12;
+  border: 1px solid #f59e0b;
+}
+
+.guest-upsell-link.register:hover {
+  background: #fff7ed;
+}
+
+.guest-sync-status {
+  margin: 0 16px 12px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.guest-sync-status strong {
+  font-size: 11px;
+}
+
+.guest-sync-status-headline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.guest-sync-dismiss-btn {
+  border: none;
+  background: transparent;
+  color: currentColor;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  opacity: 0.8;
+}
+
+.guest-sync-dismiss-btn:hover {
+  opacity: 1;
+}
+
+.guest-sync-status.success {
+  background: #ecfdf5;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.guest-sync-status.error {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
 .app-footer {
   display: flex;
   justify-content: space-between;
@@ -81,4 +315,13 @@ body {
   color: var(--brand-primary);
   font-weight: 700;
   text-decoration: none;
+}
+
+.footer-link-button {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  font-family: inherit;
 }
