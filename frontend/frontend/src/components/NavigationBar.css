@@ -113,6 +113,12 @@
     border: 1px solid;
 }
 
+.trust-score-mod {
+    border-color: #93c5fd;
+    background: #dbeafe;
+    color: #1e3a8a;
+}
+
 .link {
     text-decoration: none;
 }
@@ -265,21 +271,231 @@
     background: var(--verdict-fake-bg);
 }
 
+.navbar-search {
+    position: relative;
+    min-width: 300px;
+}
+
 .search-box {
     display: flex;
     align-items: center;
     gap: 8px;
     background-color: var(--bg-subtle);
     border: 1px solid var(--border-default);
-    padding: 8px 16px;
+    padding: 8px 12px;
     border-radius: 20px;
 }
 
 .search-box input {
+    flex: 1;
+    min-width: 0;
     border: none;
     background: transparent;
     outline: none;
     font-size: 0.85rem;
     color: var(--text-main);
-    width: 150px;
+}
+
+.search-clear-btn {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.search-clear-btn:hover {
+    color: var(--text-main);
+}
+
+.search-results-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    width: min(430px, 90vw);
+    max-height: 420px;
+    overflow-y: auto;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
+    z-index: 260;
+}
+
+.search-results-state {
+    padding: 14px 16px;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.search-section {
+    padding: 8px;
+}
+
+.search-section+.search-section {
+    border-top: 1px solid var(--border-light);
+}
+
+.search-section-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    padding: 2px 8px 8px;
+}
+
+.search-result-item {
+    width: 100%;
+    border: none;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    border-radius: 10px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.search-result-item:hover {
+    background: var(--bg-subtle);
+}
+
+.search-user-avatar,
+.search-thread-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-default);
+    background: var(--bg-subtle);
+    color: var(--text-muted);
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.search-user-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.search-thread-icon {
+    border-radius: 10px;
+}
+
+.search-result-copy {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 2px;
+    flex: 1;
+}
+
+.search-result-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.search-result-subtitle {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.search-trust-pill {
+    border: 1px solid #86efac;
+    color: #166534;
+    background: #dcfce7;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.search-trust-pill.mod {
+    border-color: #93c5fd;
+    color: #1e3a8a;
+    background: #dbeafe;
+}
+
+.search-view-all-btn {
+    width: 100%;
+    border: none;
+    border-top: 1px solid var(--border-light);
+    background: transparent;
+    color: var(--brand-primary);
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-align: left;
+    padding: 11px 14px;
+    cursor: pointer;
+}
+
+.search-view-all-btn:hover {
+    background: var(--bg-subtle);
+}
+
+.search-spinner {
+    animation: navSearchSpin 0.9s linear infinite;
+}
+
+@keyframes navSearchSpin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (max-width: 1200px) {
+    .navbar-search {
+        min-width: 240px;
+    }
+}
+
+@media (max-width: 900px) {
+    .top-navbar {
+        padding: 0 12px;
+    }
+
+    .nav-left {
+        gap: 16px;
+    }
+
+    .nav-tabs {
+        gap: 14px;
+    }
+
+    .navbar-search {
+        min-width: 180px;
+    }
+}
+
+@media (max-width: 760px) {
+    .nav-tabs {
+        display: none;
+    }
+
+    .navbar-search {
+        width: clamp(170px, 48vw, 220px);
+        min-width: 0;
+    }
 }

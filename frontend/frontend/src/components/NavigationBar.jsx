@@ -5,6 +5,7 @@ import Icons from "./Icons.jsx";
 import "./NavigationBar.css";
 import NotificationPopup from "./NotificationPopup.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
+import { buildApiUrl, useEndpoint } from "../utils/api";
 
 /**
  *
@@ -13,23 +14,38 @@ import { useAuth } from "../context/AuthContext.jsx";
  */
 
 const getDashboardPath = (user) => {
-   if (user?.role === "MODERATOR") {
+   if (user?.role === "MOD" || user?.role === "MODERATOR") {
       return "/moderation";
    }
    return "/dashboard";
 };
 
+const isModeratorRole = (role) => role === "MOD" || role === "MODERATOR";
+
 function NavigationBar() {
-   const { user, logout } = useAuth();
+   const { user, logout, authFetch } = useAuth();
    const [isOpen, setIsOpen] = useState(false);
+   const [searchInput, setSearchInput] = useState("");
+   const [debouncedSearch, setDebouncedSearch] = useState("");
+   const [searchOpen, setSearchOpen] = useState(false);
+   const [searchLoading, setSearchLoading] = useState(false);
+   const [searchUsers, setSearchUsers] = useState([]);
+   const [searchThreads, setSearchThreads] = useState([]);
    const dropdownRef = useRef(null);
+   const searchContainerRef = useRef(null);
+   const searchRequestIdRef = useRef(0);
    const location = useLocation();
    const navigate = useNavigate();
+   const threadsEndpoint = useEndpoint("THREADS");
+   const usersSearchEndpoint = buildApiUrl("users/search/");
 
    useEffect(() => {
       function handleClickOutside(e) {
          if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
             setIsOpen(false);
+         }
+         if (searchContainerRef.current && !searchContainerRef.current.contains(e.target)) {
+            setSearchOpen(false);
          }
       }
       document.addEventListener("mousedown", handleClickOutside);
@@ -38,7 +54,10 @@ function NavigationBar() {
 
    useEffect(() => {
       function handleEscape(e) {
-         if (e.key === "Escape") setIsOpen(false);
+         if (e.key === "Escape") {
+            setIsOpen(false);
+            setSearchOpen(false);
+         }
       }
       document.addEventListener("keydown", handleEscape);
       return () => document.removeEventListener("keydown", handleEscape);
@@ -46,15 +65,136 @@ function NavigationBar() {
 
    useEffect(() => {
       setIsOpen(false);
+      setSearchOpen(false);
    }, [location.pathname]);
+
+   useEffect(() => {
+      const timeoutId = window.setTimeout(() => {
+         setDebouncedSearch(searchInput.trim());
+      }, 250);
+
+      return () => window.clearTimeout(timeoutId);
+   }, [searchInput]);
+
+   useEffect(() => {
+      const query = debouncedSearch;
+      if (!query) {
+         setSearchLoading(false);
+         setSearchUsers([]);
+         setSearchThreads([]);
+         return;
+      }
+
+      const requestId = searchRequestIdRef.current + 1;
+      searchRequestIdRef.current = requestId;
+      setSearchLoading(true);
+      setSearchOpen(true);
+
+      const encodedQuery = encodeURIComponent(query);
+      const threadSearchUrl = `${threadsEndpoint}?search=${encodedQuery}`;
+      const userSearchUrl = `${usersSearchEndpoint}?search=${encodedQuery}&limit=6`;
+
+      Promise.all([
+         authFetch(threadSearchUrl, { method: "GET" }),
+         authFetch(userSearchUrl, { method: "GET" }),
+      ])
+         .then(([threadData, userData]) => {
+            if (requestId !== searchRequestIdRef.current) return;
+
+            const nextThreads = Array.isArray(threadData?.results)
+               ? threadData.results
+               : Array.isArray(threadData)
+                 ? threadData
+                 : [];
+            const nextUsers = Array.isArray(userData?.results)
+               ? userData.results
+               : Array.isArray(userData)
+                 ? userData
+                 : [];
+
+            setSearchThreads(nextThreads.slice(0, 6));
+            setSearchUsers(nextUsers.slice(0, 6));
+         })
+         .catch(() => {
+            if (requestId !== searchRequestIdRef.current) return;
+            setSearchThreads([]);
+            setSearchUsers([]);
+         })
+         .finally(() => {
+            if (requestId === searchRequestIdRef.current) {
+               setSearchLoading(false);
+            }
+         });
+   }, [authFetch, debouncedSearch, threadsEndpoint, usersSearchEndpoint]);
 
    function trustColor(score) {
       if (score >= 75) return "#0e9f6e";
       if (score >= 45) return "#d97706";
       return "#e02424";
    }
+
+   const handleSearchSubmit = (e) => {
+      e.preventDefault();
+      const query = searchInput.trim();
+      if (!query) return;
+      setSearchOpen(false);
+      navigate(`/community?q=${encodeURIComponent(query)}`);
+   };
+
+   const handleClearSearch = () => {
+      setSearchInput("");
+      setDebouncedSearch("");
+      setSearchOpen(false);
+      setSearchUsers([]);
+      setSearchThreads([]);
+   };
+
+   const handleUserResultClick = (username) => {
+      setSearchOpen(false);
+      navigate(`/user/${username}`);
+   };
+
+   const handleThreadResultClick = (threadId) => {
+      setSearchOpen(false);
+      navigate(`/thread/detail/${threadId}`);
+   };
+
+   const handleViewAllResults = () => {
+      const query = (debouncedSearch || searchInput).trim();
+      if (!query) return;
+      setSearchOpen(false);
+      navigate(`/community?q=${encodeURIComponent(query)}`);
+   };
+
+   const getThreadTitle = (thread) => {
+      const caption = thread?.caption?.trim();
+      if (caption) return caption;
+      const claimText = thread?.claim?.context_text?.trim();
+      if (claimText) return claimText;
+      return "Untitled thread";
+   };
+
+   const getThreadSubtitle = (thread) => {
+      const authorName = thread?.author?.username
+         ? `@${thread.author.username}`
+         : "Community thread";
+      const verdict =
+         thread?.claim?.effective_verdict ||
+         thread?.claim?.final_verdict ||
+         thread?.claim?.verdict ||
+         thread?.claim?.ai_verdict ||
+         "UNVERIFIED";
+      return `${authorName} · ${verdict}`;
+   };
+
+   const shouldShowSearchDropdown = searchOpen && searchInput.trim().length > 0;
+   const totalSearchResults = searchUsers.length + searchThreads.length;
+   const isModeratorUser = isModeratorRole(user?.role);
    const displayTrustScore = Number(user?.trust_breakdown?.trust_score ?? user?.trust_score ?? 0);
    const color = trustColor(displayTrustScore);
+   const profileScorePillStyle = isModeratorUser
+      ? undefined
+      : { color, borderColor: `${color}99`, background: `${color}75` };
 
    return (
       <nav className="top-navbar">
@@ -86,7 +226,7 @@ function NavigationBar() {
                   className="link">
                   <div
                      className={`nav-tab ${location.pathname === getDashboardPath(user) ? "active" : ""}`}>
-                     <Icons name={user?.role === "MODERATOR" ? "shield" : "dashboard"} />
+                     <Icons name={isModeratorUser ? "shield" : "dashboard"} />
                      Dashboard
                   </div>
                </Link> */}
@@ -102,15 +242,145 @@ function NavigationBar() {
          </div>
 
          <div className="nav-right">
-            <div className="search-box">
-               <Icons
-                  name="search"
-                  color="gray"
-               />
-               <input
-                  type="text"
-                  placeholder="Search claims..."
-               />
+            <div
+               className="navbar-search"
+               ref={searchContainerRef}>
+               <form
+                  className="search-box"
+                  onSubmit={handleSearchSubmit}>
+                  <Icons
+                     name="search"
+                     color="gray"
+                  />
+                  <input
+                     type="text"
+                     placeholder="Search people and claims..."
+                     value={searchInput}
+                     onFocus={() => {
+                        if (searchInput.trim()) {
+                           setSearchOpen(true);
+                        }
+                     }}
+                     onChange={(e) => setSearchInput(e.target.value)}
+                     aria-label="Global search"
+                  />
+                  {searchInput && (
+                     <button
+                        type="button"
+                        className="search-clear-btn"
+                        onClick={handleClearSearch}
+                        aria-label="Clear search">
+                        <Icons
+                           name="x"
+                           size={14}
+                        />
+                     </button>
+                  )}
+               </form>
+
+               {shouldShowSearchDropdown && (
+                  <div
+                     className="search-results-dropdown"
+                     role="listbox"
+                     aria-label="Global search results">
+                     {searchLoading ? (
+                        <div className="search-results-state">
+                           <Icons
+                              name="loader"
+                              size={14}
+                              className="search-spinner"
+                           />
+                           Searching TruthLens...
+                        </div>
+                     ) : (
+                        <>
+                           {totalSearchResults === 0 && (
+                              <div className="search-results-state">
+                                 No results found for "{debouncedSearch}".
+                              </div>
+                           )}
+
+                           {searchUsers.length > 0 && (
+                              <div className="search-section">
+                                 <div className="search-section-title">People</div>
+                                 {searchUsers.map((searchUser) => (
+                                    <button
+                                       key={searchUser.id}
+                                       type="button"
+                                       className="search-result-item user-result"
+                                       onClick={() => handleUserResultClick(searchUser.username)}>
+                                       <div className="search-user-avatar">
+                                          {searchUser.avatar_url ? (
+                                             <img
+                                                src={searchUser.avatar_url}
+                                                alt={`${searchUser.username}'s avatar`}
+                                             />
+                                          ) : (
+                                             <Icons
+                                                name="user"
+                                                size={14}
+                                             />
+                                          )}
+                                       </div>
+                                       <div className="search-result-copy">
+                                          <span className="search-result-title">
+                                             @{searchUser.username}
+                                          </span>
+                                          <span className="search-result-subtitle">
+                                             {searchUser.bio || "TruthLens member"}
+                                          </span>
+                                       </div>
+                                       <span
+                                          className={`search-trust-pill ${isModeratorRole(searchUser.role) ? "mod" : ""}`}>
+                                          {isModeratorRole(searchUser.role)
+                                             ? "MOD"
+                                             : Number(searchUser.trust_score || 0).toFixed(1)}
+                                       </span>
+                                    </button>
+                                 ))}
+                              </div>
+                           )}
+
+                           {searchThreads.length > 0 && (
+                              <div className="search-section">
+                                 <div className="search-section-title">Threads</div>
+                                 {searchThreads.map((thread) => (
+                                    <button
+                                       key={thread.id}
+                                       type="button"
+                                       className="search-result-item thread-result"
+                                       onClick={() => handleThreadResultClick(thread.id)}>
+                                       <div className="search-thread-icon">
+                                          <Icons
+                                             name="file-text"
+                                             size={14}
+                                          />
+                                       </div>
+                                       <div className="search-result-copy">
+                                          <span className="search-result-title">
+                                             {getThreadTitle(thread)}
+                                          </span>
+                                          <span className="search-result-subtitle">
+                                             {getThreadSubtitle(thread)}
+                                          </span>
+                                       </div>
+                                    </button>
+                                 ))}
+                              </div>
+                           )}
+
+                           {totalSearchResults > 0 && (
+                              <button
+                                 type="button"
+                                 className="search-view-all-btn"
+                                 onClick={handleViewAllResults}>
+                                 View all results for "{debouncedSearch}"
+                              </button>
+                           )}
+                        </>
+                     )}
+                  </div>
+               )}
             </div>
             <NotificationPopup />
 
@@ -123,17 +393,13 @@ function NavigationBar() {
                   aria-haspopup="menu"
                   aria-expanded={isOpen}>
                   <div className="user-icon-sm">
-                     {user?.role === "MODERATOR" ? (
-                        <Icons name="shield-user" />
-                     ) : (
-                        <Icons name="user" />
-                     )}
+                     {isModeratorUser ? <Icons name="shield-user" /> : <Icons name="user" />}
                   </div>
                   <span className="username">@{user?.username}</span>
                   <span
-                     className="trust-score"
-                     style={{ color, borderColor: `${color}99`, background: `${color}75` }}>
-                     {displayTrustScore.toFixed(1)}
+                     className={`trust-score ${isModeratorUser ? "trust-score-mod" : ""}`}
+                     style={profileScorePillStyle}>
+                     {isModeratorUser ? "MOD" : displayTrustScore.toFixed(1)}
                   </span>
                   <span className={`chevron ${isOpen ? "rotated" : ""}`}>
                      <Icons
@@ -173,7 +439,7 @@ function NavigationBar() {
                            <button
                               className="dropdown-item"
                               onClick={() => setIsOpen(false)}>
-                              <Icons name={user?.role === "MODERATOR" ? "shield" : "dashboard"} />
+                              <Icons name={isModeratorUser ? "shield" : "dashboard"} />
                               Dashboard
                            </button>
                         </Link>
