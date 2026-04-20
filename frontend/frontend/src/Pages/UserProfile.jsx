@@ -26,7 +26,6 @@ import { VERDICT_CONFIG, API_BASE_URL } from "../utils/constants";
 import { useFetchClaims } from "../hooks";
 import Icons from "../components/Icons.jsx";
 
-
 // ── Styles ──
 import "./UserProfile.css";
 
@@ -40,6 +39,10 @@ function getTrustLevel(score) {
    if (score >= 60) return { label: "Trusted", color: "#3b82f6" };
    if (score >= 40) return { label: "Contributor", color: "#f97316" };
    return { label: "Newcomer", color: "var(--text-muted)" };
+}
+
+function isModeratorRole(role) {
+   return role === "MOD" || role === "MODERATOR";
 }
 
 /**
@@ -88,11 +91,16 @@ function UserProfile() {
    // Determine if we are viewing our own profile or someone else's
    const isOwnProfile = !username || username === authUser?.username;
    const displayUser = isOwnProfile ? authUser : publicUser;
+   const displayUsername = displayUser?.username;
+   const isModeratorProfile = isModeratorRole(displayUser?.role);
+   const organizationName = displayUser?.organization_name?.trim() || "Institution not listed";
 
    // Dynamic Claims URL depending on whose profile we are viewing
    const claimsEndpoint = isOwnProfile ? "auth/my-claims/" : `users/${username}/claims/`;
 
    const { claims, loading: claimsLoading } = useFetchClaims(authFetch, claimsEndpoint);
+   const [moderatorStats, setModeratorStats] = useState(null);
+   const [isLoadingModeratorStats, setIsLoadingModeratorStats] = useState(false);
 
    // ── Follow System State ──
    const [isFollowing, setIsFollowing] = useState(false);
@@ -108,13 +116,42 @@ function UserProfile() {
       }
    }, [displayUser]);
 
-   
+   useEffect(() => {
+      if (!displayUsername || !isModeratorProfile) {
+         setModeratorStats(null);
+         setIsLoadingModeratorStats(false);
+         return;
+      }
+
+      let isCancelled = false;
+      setIsLoadingModeratorStats(true);
+
+      authFetch(`${API_BASE_URL}/users/${displayUsername}/moderation-stats/`, { method: "GET" })
+         .then((data) => {
+            if (isCancelled) return;
+            setModeratorStats(data || null);
+         })
+         .catch(() => {
+            if (isCancelled) return;
+            setModeratorStats(null);
+         })
+         .finally(() => {
+            if (!isCancelled) {
+               setIsLoadingModeratorStats(false);
+            }
+         });
+
+      return () => {
+         isCancelled = true;
+      };
+   }, [authFetch, displayUsername, isModeratorProfile]);
+
    // Handle follow button click
    const handleFollowToggle = async () => {
       try {
          // Updated to use the dynamic API_BASE_URL!
          const response = await authFetch(`${API_BASE_URL}/users/${displayUser.username}/follow/`, {
-            method: "POST"
+            method: "POST",
          });
          // Instantly update the UI with the backend's response
          setIsFollowing(response.is_following);
@@ -127,7 +164,7 @@ function UserProfile() {
    const [modalType, setModalType] = useState(null); // 'followers' or 'following'
    const [modalData, setModalData] = useState([]);
    const [isModalLoading, setIsModalLoading] = useState(false);
-   
+
    // ── Edit Profile State ──
    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
    const [editBio, setEditBio] = useState("");
@@ -138,10 +175,13 @@ function UserProfile() {
       setModalType(type);
       setIsModalLoading(true);
       try {
-         const response = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/users/${displayUser.username}/${type}/`, {
-            method: "GET"
-         });
-         
+         const response = await authFetch(
+            `${import.meta.env.VITE_API_BASE_URL}/users/${displayUser.username}/${type}/`,
+            {
+               method: "GET",
+            },
+         );
+
          const data = response?.data || response?.results || response || [];
          setModalData(Array.isArray(data) ? data : []);
       } catch (err) {
@@ -189,17 +229,42 @@ function UserProfile() {
       );
    }
 
-
    // ── Compute Profile Stats ──
    const totalScans = claims.length;
    const fakesStopped = claims.filter((c) => getEffectiveVerdict(c) === "FAKE").length;
    const verifiedClaims = claims.filter((c) => getEffectiveVerdict(c) === "FACT").length;
    const accuracyRate =
       totalScans > 0 ? Math.round(((fakesStopped + verifiedClaims) / totalScans) * 100) : 0;
+   const fallbackModeratorStats = {
+      total_claims_resolved: claims.filter((c) => Boolean(c?.final_verdict)).length,
+      fact_verdicts_issued: claims.filter((c) => c?.final_verdict === "FACT").length,
+      fake_verdicts_issued: claims.filter((c) => c?.final_verdict === "FAKE").length,
+      pending_moderator_review: claims.filter((c) => !c?.final_verdict).length,
+   };
+   const effectiveModeratorStats = moderatorStats || fallbackModeratorStats;
 
    const trustBreakdown = displayUser?.trust_breakdown || {};
    const displayTrustScore = Number(trustBreakdown.trust_score ?? displayUser?.trust_score ?? 0);
    const trustLevel = getTrustLevel(displayTrustScore);
+
+   const transparencyStats = [
+      {
+         label: "Total Claims Resolved",
+         value: Number(effectiveModeratorStats.total_claims_resolved ?? 0),
+      },
+      {
+         label: "FACT Verdicts Issued",
+         value: Number(effectiveModeratorStats.fact_verdicts_issued ?? 0),
+      },
+      {
+         label: "FAKE Verdicts Issued",
+         value: Number(effectiveModeratorStats.fake_verdicts_issued ?? 0),
+      },
+      {
+         label: "Pending Moderator Review",
+         value: Number(effectiveModeratorStats.pending_moderator_review ?? 0),
+      },
+   ];
 
    const breakdownRows = [
       {
@@ -269,9 +334,9 @@ function UserProfile() {
          const response = await authFetch(`${API_BASE_URL}/auth/profile/update/`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
          });
-         
+
          setIsEditModalOpen(false);
          refreshUser?.(); // Force context to update with new data
       } catch (err) {
@@ -288,23 +353,24 @@ function UserProfile() {
          <main className="profile-container">
             {/* ── User Identity Header (X-Style Layout) ── */}
             <div className="profile-header-container">
-               
                {/* 1. Cover Banner */}
                <div className="profile-cover-banner">
                   {displayUser?.cover_photo_url && (
-                     <img src={displayUser.cover_photo_url} alt="Cover" />
+                     <img
+                        src={displayUser.cover_photo_url}
+                        alt="Cover"
+                     />
                   )}
                </div>
 
                <div className="profile-header-body">
-                  
                   {/* 2. Overlapping Avatar */}
                   <div className="profile-avatar-wrapper">
                      <div className="profile-avatar">
                         {displayUser?.avatar_url ? (
-                           <img 
-                              src={displayUser.avatar_url} 
-                              alt={`${displayUser.username}'s avatar`} 
+                           <img
+                              src={displayUser.avatar_url}
+                              alt={`${displayUser.username}'s avatar`}
                            />
                         ) : (
                            displayUser?.username?.[0]?.toUpperCase() || "?"
@@ -315,17 +381,15 @@ function UserProfile() {
                   {/* 3. Action Buttons (Right Aligned) */}
                   <div className="profile-action-row">
                      {isOwnProfile ? (
-                        <button 
+                        <button
                            className="action-btn" /* <--- CHANGED THIS CLASS */
-                           onClick={openEditModal}
-                        >
+                           onClick={openEditModal}>
                            Edit profile
                         </button>
                      ) : displayUser ? (
-                        <button 
+                        <button
                            className={`action-btn ${isFollowing ? "following" : ""}`}
-                           onClick={handleFollowToggle}
-                        >
+                           onClick={handleFollowToggle}>
                            {isFollowing ? "Following" : "Follow"}
                         </button>
                      ) : null}
@@ -333,116 +397,178 @@ function UserProfile() {
 
                   {/* 4. Identity & Bio */}
                   <div className="profile-identity">
-                     <h1 className="profile-username">{displayUser?.username || "—"}</h1>
-                     <p className="profile-handle">@{displayUser?.username?.toLowerCase() || "—"}</p>
+                     <div className="profile-title-row">
+                        <h1 className="profile-username">{displayUser?.username || "—"}</h1>
+                        {isModeratorProfile ? (
+                           <span className="official-moderator-badge">
+                              <Icons
+                                 name="shield-user"
+                                 size={14}
+                              />
+                              Official Moderator
+                           </span>
+                        ) : (
+                           <span
+                              className="trust-level-badge"
+                              style={{ backgroundColor: trustLevel.color }}>
+                              {trustLevel.label}
+                           </span>
+                        )}
+                     </div>
+
+                     <p className="profile-handle">
+                        @{displayUser?.username?.toLowerCase() || "—"}
+                     </p>
+
+                     {isModeratorProfile && (
+                        <div className="profile-organization-row">
+                           <p className="organization-name">{organizationName}</p>
+                           <span className="institutional-trust-chip">
+                              <Icons
+                                 name="shield-user"
+                                 size={12}
+                              />
+                              Institutional Trust
+                           </span>
+                        </div>
+                     )}
                   </div>
 
-                  {displayUser?.bio && (
-                     <p className="user-bio">{displayUser.bio}</p>
-                  )}
+                  {displayUser?.bio && <p className="user-bio">{displayUser.bio}</p>}
 
                   {/* 5. Meta Info (Join Date, Trust Badge) */}
                   <div className="profile-meta-row">
-                     {/* You could add location/website here later! */}
                      <div className="meta-item">
-                        <span className="trust-level-badge" style={{ backgroundColor: trustLevel.color }}>
-                           {trustLevel.label}
-                        </span>
-                     </div>
-                     <div className="meta-item">
-                        <Icons name="calendar" size={16} />
+                        <Icons
+                           name="calendar"
+                           size={16}
+                        />
                         Joined {formatDate(displayUser?.date_joined)}
                      </div>
                   </div>
 
                   {/* 6. Follower Stats */}
                   <div className="follow-stats">
-                     <span onClick={() => openFollowModal('following')}>
+                     <span onClick={() => openFollowModal("following")}>
                         <strong>{followingCount}</strong> Following
                      </span>
-                     <span onClick={() => openFollowModal('followers')}>
+                     <span onClick={() => openFollowModal("followers")}>
                         <strong>{followersCount}</strong> Followers
                      </span>
                   </div>
-
                </div>
             </div>
             {/* ── End Header ── */}
 
             {/* ── Reputation Dashboard ── */}
-            <div className="box-panel">
-               <h2 className="section-title">Reputation Dashboard</h2>
-               <div className="stats-grid">
-                  <div className="stat-card">
-                     <p className="stat-label">Trust Score</p>
-                     <p className="stat-value">{displayTrustScore.toFixed(1)}</p>
-                     <div className="trust-bar-track">
-                        <div
-                           className="trust-bar-fill"
-                           style={{
-                              width: `${Math.min(displayTrustScore, 100)}%`,
-                              backgroundColor: trustLevel.color,
-                           }}
-                        />
-                     </div>
-                     <p className="stat-sublabel">{trustLevel.label} Level</p>
-                  </div>
-
-                  <div className="stat-card">
-                     <p className="stat-label">Accuracy Rate</p>
-                     <p className="stat-value">{accuracyRate}%</p>
-                     <p className="stat-sublabel">of verdicts confirmed</p>
-                  </div>
-
-                  <div className="stat-card">
-                     <p className="stat-label">Fake News Stopped</p>
-                     <p className="stat-value">{fakesStopped}</p>
-                     <p className="stat-sublabel">FAKE verdicts found</p>
-                  </div>
-
-                  <div className="stat-card">
-                     <p className="stat-label">Total Scans</p>
-                     <p className="stat-value">{totalScans}</p>
-                     <p className="stat-sublabel">claims analyzed</p>
-                  </div>
-               </div>
-
-               <div className="trust-breakdown-card">
-                  <div className="trust-breakdown-header">
-                     <h3 className="trust-breakdown-title">Trust Score Breakdown</h3>
-                     <span className="trust-breakdown-formula">T = B + C + V + t - P</span>
-                  </div>
-                  <div className="trust-breakdown-list">
-                     {breakdownRows.map((row) => {
-                        const width = Math.max(0, Math.min(100, Number(row.share || 0)));
-                        return (
+            {!isModeratorProfile && (
+               <div className="box-panel">
+                  <h2 className="section-title">Reputation Dashboard</h2>
+                  <div className="stats-grid">
+                     <div className="stat-card">
+                        <p className="stat-label">Trust Score</p>
+                        <p className="stat-value">{displayTrustScore.toFixed(1)}</p>
+                        <div className="trust-bar-track">
                            <div
-                              className="trust-breakdown-row"
-                              key={row.label}>
-                              <div className="trust-breakdown-row-top">
-                                 <span className="trust-breakdown-row-label">{row.label}</span>
-                                 <span
-                                    className="trust-breakdown-row-value"
-                                    style={{ color: row.color }}>
-                                    {width.toFixed(1)}%
-                                 </span>
+                              className="trust-bar-fill"
+                              style={{
+                                 width: `${Math.min(displayTrustScore, 100)}%`,
+                                 backgroundColor: trustLevel.color,
+                              }}
+                           />
+                        </div>
+                        <p className="stat-sublabel">{trustLevel.label} Level</p>
+                     </div>
+
+                     <div className="stat-card">
+                        <p className="stat-label">Accuracy Rate</p>
+                        <p className="stat-value">{accuracyRate}%</p>
+                        <p className="stat-sublabel">of verdicts confirmed</p>
+                     </div>
+
+                     <div className="stat-card">
+                        <p className="stat-label">Fake News Stopped</p>
+                        <p className="stat-value">{fakesStopped}</p>
+                        <p className="stat-sublabel">FAKE verdicts found</p>
+                     </div>
+
+                     <div className="stat-card">
+                        <p className="stat-label">Total Scans</p>
+                        <p className="stat-value">{totalScans}</p>
+                        <p className="stat-sublabel">claims analyzed</p>
+                     </div>
+                  </div>
+
+                  <div className="trust-breakdown-card">
+                     <div className="trust-breakdown-header">
+                        <h3 className="trust-breakdown-title">Trust Score Breakdown</h3>
+                        <span className="trust-breakdown-formula">T = B + C + V + t - P</span>
+                     </div>
+                     <div className="trust-breakdown-list">
+                        {breakdownRows.map((row) => {
+                           const width = Math.max(0, Math.min(100, Number(row.share || 0)));
+                           return (
+                              <div
+                                 className="trust-breakdown-row"
+                                 key={row.label}>
+                                 <div className="trust-breakdown-row-top">
+                                    <span className="trust-breakdown-row-label">{row.label}</span>
+                                    <span
+                                       className="trust-breakdown-row-value"
+                                       style={{ color: row.color }}>
+                                       {width.toFixed(1)}%
+                                    </span>
+                                 </div>
+                                 <div className="trust-breakdown-track">
+                                    <div
+                                       className="trust-breakdown-fill"
+                                       style={{ width: `${width}%`, backgroundColor: row.color }}
+                                    />
+                                 </div>
+                                 <p className="trust-breakdown-impact">
+                                    Impact: {row.label === "Conduct Penalties" ? "-" : "+"}
+                                    {Math.abs(Number(row.value || 0)).toFixed(1)} pts
+                                 </p>
                               </div>
-                              <div className="trust-breakdown-track">
-                                 <div
-                                    className="trust-breakdown-fill"
-                                    style={{ width: `${width}%`, backgroundColor: row.color }}
-                                 />
-                              </div>
-                              <p className="trust-breakdown-impact">
-                                 Impact: {row.label === "Conduct Penalties" ? "-" : "+"}
-                                 {Math.abs(Number(row.value || 0)).toFixed(1)} pts
-                              </p>
-                           </div>
-                        );
-                     })}
+                           );
+                        })}
+                     </div>
                   </div>
                </div>
-            </div>
+            )}
+
+            {isModeratorProfile && (
+               <div className="box-panel">
+                  <h2 className="section-title">Institutional Trust Profile</h2>
+
+                  <div className="moderator-profile-summary">
+                     <p className="moderator-summary-title">Official Moderator</p>
+                     <p className="moderator-summary-desc">
+                        Affiliated with {organizationName}. This profile uses institutional trust
+                        verification instead of gamified scoring.
+                     </p>
+                  </div>
+
+                  <div className="moderator-transparency-grid">
+                     {transparencyStats.map((stat) => (
+                        <div
+                           key={stat.label}
+                           className="moderator-transparency-card">
+                           <p className="moderator-transparency-label">{stat.label}</p>
+                           <p className="moderator-transparency-value">
+                              {isLoadingModeratorStats ? "..." : stat.value}
+                           </p>
+                        </div>
+                     ))}
+                  </div>
+
+                  <p className="moderator-transparency-note">
+                     {isLoadingModeratorStats
+                        ? "Syncing moderator activity records..."
+                        : "Transparency stats are shown for public accountability and may update as moderation records are finalized."}
+                  </p>
+               </div>
+            )}
 
             {/* ── Activity History & Claims ── */}
             <div className="box-panel">
@@ -516,37 +642,59 @@ function UserProfile() {
 
             {/* ── FOLLOW MODAL ── */}
             {modalType && (
-               <div className="modal-overlay" onClick={() => setModalType(null)}>
-                  <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+               <div
+                  className="modal-overlay"
+                  onClick={() => setModalType(null)}>
+                  <div
+                     className="modal-content"
+                     onClick={(e) => e.stopPropagation()}>
                      <div className="modal-header">
                         <h3 style={{ margin: 0, fontSize: "18px" }}>
-                           {modalType === 'followers' ? 'Followers' : 'Following'}
+                           {modalType === "followers" ? "Followers" : "Following"}
                         </h3>
-                        <button className="close-modal-btn" onClick={() => setModalType(null)}>
-                           <Icons name="x" size={20} />
+                        <button
+                           className="close-modal-btn"
+                           onClick={() => setModalType(null)}>
+                           <Icons
+                              name="x"
+                              size={20}
+                           />
                         </button>
                      </div>
-                     
+
                      <div className="modal-user-list">
                         {isModalLoading ? (
-                           <p className="empty-msg" style={{ padding: "20px" }}>Loading...</p>
+                           <p
+                              className="empty-msg"
+                              style={{ padding: "20px" }}>
+                              Loading...
+                           </p>
                         ) : modalData.length === 0 ? (
-                           <p className="empty-msg" style={{ padding: "20px" }}>No {modalType} found.</p>
+                           <p
+                              className="empty-msg"
+                              style={{ padding: "20px" }}>
+                              No {modalType} found.
+                           </p>
                         ) : (
                            modalData.map((u) => (
-                              <div 
-                                 key={u.id} 
+                              <div
+                                 key={u.id}
                                  className="modal-user-item"
                                  onClick={() => {
                                     setModalType(null); // Close modal
                                     navigate(`/user/${u.username}`); // <--- FAST REACT NAVIGATION!
-                                 }}
-                              >
+                                 }}>
                                  {/* Added safe chaining to prevent crashes */}
-                                 <div className="modal-user-avatar">{u?.username?.[0]?.toUpperCase() || "?"}</div>
+                                 <div className="modal-user-avatar">
+                                    {u?.username?.[0]?.toUpperCase() || "?"}
+                                 </div>
                                  <div className="modal-user-info">
                                     <strong>{u?.username || "Unknown"}</strong>
-                                    <span>{getTrustLevel(u?.trust_score || 0).label}</span>
+                                    <span>
+                                       {isModeratorRole(u?.role)
+                                          ? "Official Moderator"
+                                          : getTrustLevel(u?.trust_score || 0).label}
+                                    </span>
                                  </div>
                               </div>
                            ))
@@ -557,51 +705,98 @@ function UserProfile() {
             )}
             {/* ── EDIT PROFILE MODAL ── */}
             {isEditModalOpen && (
-               <div className="modal-overlay" onClick={() => setIsEditModalOpen(false)}>
-                  <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ padding: "24px" }}>
-                     <div className="modal-header" style={{ padding: "0 0 16px 0", marginBottom: "16px" }}>
+               <div
+                  className="modal-overlay"
+                  onClick={() => setIsEditModalOpen(false)}>
+                  <div
+                     className="modal-content"
+                     onClick={(e) => e.stopPropagation()}
+                     style={{ padding: "24px" }}>
+                     <div
+                        className="modal-header"
+                        style={{ padding: "0 0 16px 0", marginBottom: "16px" }}>
                         <h3 style={{ margin: 0, fontSize: "18px" }}>Edit Profile</h3>
-                        <button className="close-modal-btn" onClick={() => setIsEditModalOpen(false)}>
-                           <Icons name="x" size={20} />
+                        <button
+                           className="close-modal-btn"
+                           onClick={() => setIsEditModalOpen(false)}>
+                           <Icons
+                              name="x"
+                              size={20}
+                           />
                         </button>
                      </div>
-                     
+
                      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                         {/* Avatar Upload */}
                         <div>
-                           <label style={{ display: "block", marginBottom: "8px", fontWeight: "600", fontSize: "14px" }}>Profile Picture</label>
+                           <label
+                              style={{
+                                 display: "block",
+                                 marginBottom: "8px",
+                                 fontWeight: "600",
+                                 fontSize: "14px",
+                              }}>
+                              Profile Picture
+                           </label>
                            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                              <div className="profile-avatar" style={{ width: "60px", height: "60px", overflow: "hidden" }}>
+                              <div
+                                 className="profile-avatar"
+                                 style={{ width: "60px", height: "60px", overflow: "hidden" }}>
                                  {editAvatarBase64 ? (
-                                    <img src={editAvatarBase64} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                    <img
+                                       src={editAvatarBase64}
+                                       style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                    />
                                  ) : displayUser?.avatar_url ? (
-                                    <img src={displayUser.avatar_url} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                    <img
+                                       src={displayUser.avatar_url}
+                                       style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                    />
                                  ) : (
                                     displayUser?.username?.[0]?.toUpperCase()
                                  )}
                               </div>
-                              <input type="file" accept="image/*" onChange={handleImageUpload} style={{ fontSize: "14px" }} />
+                              <input
+                                 type="file"
+                                 accept="image/*"
+                                 onChange={handleImageUpload}
+                                 style={{ fontSize: "14px" }}
+                              />
                            </div>
                         </div>
 
                         {/* Bio Textarea */}
                         <div>
-                           <label style={{ display: "block", marginBottom: "8px", fontWeight: "600", fontSize: "14px" }}>Bio</label>
-                           <textarea 
-                              value={editBio} 
+                           <label
+                              style={{
+                                 display: "block",
+                                 marginBottom: "8px",
+                                 fontWeight: "600",
+                                 fontSize: "14px",
+                              }}>
+                              Bio
+                           </label>
+                           <textarea
+                              value={editBio}
                               onChange={(e) => setEditBio(e.target.value)}
                               placeholder="Tell the community about yourself..."
-                              style={{ width: "100%", padding: "8px", borderRadius: "8px", border: "1px solid #d1d5db", minHeight: "80px", resize: "vertical" }}
+                              style={{
+                                 width: "100%",
+                                 padding: "8px",
+                                 borderRadius: "8px",
+                                 border: "1px solid #d1d5db",
+                                 minHeight: "80px",
+                                 resize: "vertical",
+                              }}
                            />
                         </div>
 
                         {/* Save Button */}
-                        <button 
-                           onClick={handleSaveProfile} 
+                        <button
+                           onClick={handleSaveProfile}
                            disabled={isSavingProfile}
-                           className="follow-btn following" 
-                           style={{ width: "100%", marginTop: "8px" }}
-                        >
+                           className="follow-btn following"
+                           style={{ width: "100%", marginTop: "8px" }}>
                            {isSavingProfile ? "Saving..." : "Save Changes"}
                         </button>
                      </div>
