@@ -487,6 +487,21 @@
     .navbar-search {
         min-width: 180px;
     }
+
+    .user-profile-pill {
+        gap: 6px;
+        padding: 7px 10px;
+    }
+
+    .trust-score {
+        font-size: 0.72rem;
+        padding: 2px 7px;
+    }
+
+    .search-trust-pill {
+        font-size: 0.68rem;
+        padding: 2px 7px;
+    }
 }
 
 @media (max-width: 760px) {
@@ -497,5 +512,10 @@
     .navbar-search {
         width: clamp(170px, 48vw, 220px);
         min-width: 0;
+    }
+
+    .trust-score {
+        font-size: 0.66rem;
+        padding: 2px 6px;
     }
 }

@@ -101,6 +101,7 @@ function UserProfile() {
    const { claims, loading: claimsLoading } = useFetchClaims(authFetch, claimsEndpoint);
    const [moderatorStats, setModeratorStats] = useState(null);
    const [isLoadingModeratorStats, setIsLoadingModeratorStats] = useState(false);
+   const [moderatorStatsError, setModeratorStatsError] = useState(false);
 
    // ── Follow System State ──
    const [isFollowing, setIsFollowing] = useState(false);
@@ -120,20 +121,24 @@ function UserProfile() {
       if (!displayUsername || !isModeratorProfile) {
          setModeratorStats(null);
          setIsLoadingModeratorStats(false);
+         setModeratorStatsError(false);
          return;
       }
 
       let isCancelled = false;
       setIsLoadingModeratorStats(true);
+      setModeratorStatsError(false);
 
       authFetch(`${API_BASE_URL}/users/${displayUsername}/moderation-stats/`, { method: "GET" })
          .then((data) => {
             if (isCancelled) return;
             setModeratorStats(data || null);
+            setModeratorStatsError(false);
          })
          .catch(() => {
             if (isCancelled) return;
             setModeratorStats(null);
+            setModeratorStatsError(true);
          })
          .finally(() => {
             if (!isCancelled) {
@@ -235,13 +240,12 @@ function UserProfile() {
    const verifiedClaims = claims.filter((c) => getEffectiveVerdict(c) === "FACT").length;
    const accuracyRate =
       totalScans > 0 ? Math.round(((fakesStopped + verifiedClaims) / totalScans) * 100) : 0;
-   const fallbackModeratorStats = {
-      total_claims_resolved: claims.filter((c) => Boolean(c?.final_verdict)).length,
-      fact_verdicts_issued: claims.filter((c) => c?.final_verdict === "FACT").length,
-      fake_verdicts_issued: claims.filter((c) => c?.final_verdict === "FAKE").length,
-      pending_moderator_review: claims.filter((c) => !c?.final_verdict).length,
+   const moderatorStatsSnapshot = moderatorStats || {
+      total_claims_resolved: 0,
+      fact_verdicts_issued: 0,
+      fake_verdicts_issued: 0,
+      pending_moderator_review: 0,
    };
-   const effectiveModeratorStats = moderatorStats || fallbackModeratorStats;
 
    const trustBreakdown = displayUser?.trust_breakdown || {};
    const displayTrustScore = Number(trustBreakdown.trust_score ?? displayUser?.trust_score ?? 0);
@@ -250,19 +254,19 @@ function UserProfile() {
    const transparencyStats = [
       {
          label: "Total Claims Resolved",
-         value: Number(effectiveModeratorStats.total_claims_resolved ?? 0),
+         value: Number(moderatorStatsSnapshot.total_claims_resolved ?? 0),
       },
       {
          label: "FACT Verdicts Issued",
-         value: Number(effectiveModeratorStats.fact_verdicts_issued ?? 0),
+         value: Number(moderatorStatsSnapshot.fact_verdicts_issued ?? 0),
       },
       {
          label: "FAKE Verdicts Issued",
-         value: Number(effectiveModeratorStats.fake_verdicts_issued ?? 0),
+         value: Number(moderatorStatsSnapshot.fake_verdicts_issued ?? 0),
       },
       {
          label: "Pending Moderator Review",
-         value: Number(effectiveModeratorStats.pending_moderator_review ?? 0),
+         value: Number(moderatorStatsSnapshot.pending_moderator_review ?? 0),
       },
    ];
 
@@ -556,7 +560,16 @@ function UserProfile() {
                            className="moderator-transparency-card">
                            <p className="moderator-transparency-label">{stat.label}</p>
                            <p className="moderator-transparency-value">
-                              {isLoadingModeratorStats ? "..." : stat.value}
+                              {isLoadingModeratorStats ? (
+                                 <span
+                                    className="moderator-transparency-skeleton"
+                                    aria-hidden="true"
+                                 />
+                              ) : moderatorStatsError ? (
+                                 "--"
+                              ) : (
+                                 stat.value
+                              )}
                            </p>
                         </div>
                      ))}
@@ -565,7 +578,9 @@ function UserProfile() {
                   <p className="moderator-transparency-note">
                      {isLoadingModeratorStats
                         ? "Syncing moderator activity records..."
-                        : "Transparency stats are shown for public accountability and may update as moderation records are finalized."}
+                        : moderatorStatsError
+                          ? "Transparency stats are temporarily unavailable. Please try again shortly."
+                          : "Transparency stats are shown for public accountability and may update as moderation records are finalized."}
                   </p>
                </div>
             )}

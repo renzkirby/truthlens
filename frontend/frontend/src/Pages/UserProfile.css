@@ -100,7 +100,7 @@
 .profile-identity {
   display: flex;
   flex-direction: column;
-  gap: 0px;
+  gap: 4px;
 }
 
 .profile-title-row {
@@ -122,7 +122,7 @@
 .profile-handle {
   font-size: 15px;
   color: var(--text-muted, #6b7280);
-  margin: 0 0 12px 0;
+  margin: 0 0 8px 0;
 }
 
 .profile-organization-row {
@@ -225,6 +225,7 @@
   color: #fff;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .official-moderator-badge {
@@ -240,6 +241,7 @@
   border-radius: 999px;
   padding: 4px 10px;
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .organization-name {
@@ -262,6 +264,7 @@
   border: 1px solid #bfdbfe;
   letter-spacing: 0.45px;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 /* ── Modal Styles ── */
@@ -564,6 +567,33 @@
   line-height: 1.1;
 }
 
+.moderator-transparency-skeleton {
+  display: inline-block;
+  width: clamp(64px, 55%, 92px);
+  height: 24px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: moderatorStatShimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes moderatorStatShimmer {
+  0% {
+    background-position: 180% 0;
+  }
+
+  100% {
+    background-position: -20% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .moderator-transparency-skeleton {
+    animation: none;
+    background: #e5e7eb;
+  }
+}
+
 .moderator-transparency-note {
   margin: 12px 0 0;
   font-size: 12px;
@@ -780,4 +810,85 @@
 
 .toggle-switch input:checked+.toggle-slider::before {
   transform: translateX(20px);
+}
+
+@media (max-width: 900px) {
+  .profile-header-body {
+    padding: 14px;
+  }
+
+  .profile-title-row {
+    gap: 8px;
+  }
+
+  .profile-username {
+    font-size: 19px;
+  }
+
+  .profile-handle {
+    margin-bottom: 6px;
+  }
+
+  .official-moderator-badge {
+    font-size: 11px;
+    padding: 4px 9px;
+  }
+
+  .organization-name {
+    font-size: 14px;
+  }
+
+  .institutional-trust-chip {
+    font-size: 9px;
+    letter-spacing: 0.35px;
+    padding: 4px 9px;
+  }
+
+  .profile-meta-row {
+    margin-top: 8px;
+  }
+
+  .follow-stats {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 560px) {
+  .profile-avatar-wrapper {
+    top: -52px;
+    left: 14px;
+    width: 96px;
+    height: 96px;
+  }
+
+  .profile-action-row {
+    height: 50px;
+    padding-top: 8px;
+    margin-bottom: 8px;
+  }
+
+  .profile-title-row {
+    gap: 6px;
+  }
+
+  .profile-username {
+    font-size: 17px;
+  }
+
+  .profile-handle {
+    font-size: 14px;
+  }
+
+  .official-moderator-badge {
+    font-size: 10px;
+    gap: 5px;
+    padding: 3px 8px;
+  }
+
+  .institutional-trust-chip {
+    font-size: 9px;
+    gap: 5px;
+    padding: 3px 8px;
+  }
 }
