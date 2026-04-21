@@ -80,6 +80,12 @@ class StandardCursorPagination(CursorPagination):
     cursor_query_param = 'cursor'
     template = None  # Disable HTML template
 
+    def get_ordering(self, request, queryset, view):
+        sort_order = request.query_params.get('sort', 'newest')
+        if sort_order == 'oldest':
+            return ('created_at',)
+        return ('-created_at',)
+
 ALLOWED_MODERATION_TRANSITIONS = {
     "PENDING": {"OPEN", "CLOSED", "REJECTED"},
     "OPEN": {"CLOSED", "REJECTED"},
@@ -421,7 +427,13 @@ def sync_guest_scan(request):
         source_url if source_url.startswith("http://") or source_url.startswith("https://") else None
     )
 
-    claim_type = Claim.ClaimType.URL if scan_type == "URL" else Claim.ClaimType.IMAGE
+    if scan_type == "URL":
+        claim_type = Claim.ClaimType.URL
+    elif scan_type == "TEXT":
+        claim_type = Claim.ClaimType.TEXT
+    else:
+        claim_type = Claim.ClaimType.IMAGE
+        
     context_text = (
         f"Synced from extension guest scan ({scan_type}) at {scanned_at}"
         if scanned_at
@@ -742,10 +754,14 @@ class ThreadViewSet(viewsets.ModelViewSet):
     pagination_class = StandardCursorPagination
 
     def get_queryset(self):
+        # Dynamic sorting based on parameter
+        sort_order = self.request.query_params.get("sort", "newest")
+        order_field = "created_at" if sort_order == "oldest" else "-created_at"
+        
         queryset = (
             Thread.objects.exclude(status=Thread.Status.REJECTED)
             .select_related("claim", "author", "author__profile")
-            .order_by("-created_at")
+            .order_by(order_field)
         )
 
         search_query = self.request.query_params.get("search", "").strip()[:120]
@@ -1040,9 +1056,10 @@ def verify_text(request):
 
     # TEMP HACK: Save as URL so we don't have to run migrations yet.
     # We set url_link to a short string so it doesn't crash the 500-character database limit!
+    # Proper Implementation: Save as TEXT and store the content in context_text
     claim = Claim.objects.create(
-        claim_type=Claim.ClaimType.URL, 
-        url_link="Text Claim Input",
+        claim_type=Claim.ClaimType.TEXT, 
+        context_text=text_content,
         claim_fingerprint=fingerprint,
         verdict=None,
         verified_via=Claim.VerificationSource.PENDING,

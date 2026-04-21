@@ -117,11 +117,11 @@ def _normalize_supabase_pooler_port(database_url):
     return database_url.replace(".pooler.supabase.com:5432", ".pooler.supabase.com:6543")
 
 
-selected_db_url = os.environ.get("SUPABASE_DATABASE_URL")
-if not selected_db_url:
-    primary_env = "SUPABASE_DEVELOPMENT_DB_URL" if DEBUG else "SUPABASE_PRODUCTION_DB_URL"
-    fallback_env = "SUPABASE_PRODUCTION_DB_URL" if DEBUG else "SUPABASE_DEVELOPMENT_DB_URL"
-    selected_db_url = os.environ.get(primary_env) or os.environ.get(fallback_env)
+selected_db_url = os.environ.get("SUPABASE_DEVELOPMENT_DB_URL")
+# if not selected_db_url:
+#     primary_env = "SUPABASE_DEVELOPMENT_DB_URL" if DEBUG else "SUPABASE_PRODUCTION_DB_URL"
+#     fallback_env = "SUPABASE_PRODUCTION_DB_URL" if DEBUG else "SUPABASE_DEVELOPMENT_DB_URL"
+#     selected_db_url = os.environ.get(primary_env) or os.environ.get(fallback_env)
 
 selected_db_url = _normalize_supabase_pooler_port(selected_db_url)
 if not selected_db_url:

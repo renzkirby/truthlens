@@ -50,6 +50,7 @@ class Claim(models.Model):
         PENDING = "PENDING", "Pending"
 
     class ClaimType(models.TextChoices):
+        TEXT = "TEXT", "Text"
         IMAGE = "IMAGE", "Image"
         VIDEO = "VIDEO", "Video"
         URL = "URL", "URL"
@@ -57,7 +58,7 @@ class Claim(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
-    claim_type = models.CharField(max_length=20, choices=ClaimType.choices)
+    claim_type = models.CharField(max_length=20, choices=ClaimType.choices, default=ClaimType.TEXT)
     media_url = models.CharField(max_length=500, blank=True, null=True)
     image = models.ImageField(upload_to='claims/images/', null=True, blank=True)
     media_hash = models.CharField(max_length=64, blank=True, null=True)
