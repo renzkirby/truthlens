@@ -1,0 +1,136 @@
+/* CropStudio.css */
+.crop-studio {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100vw;
+    height: 100vh;
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+    position: relative;
+    background-color: rgba(0, 0, 0, 0.4);
+    /* Lighter backdrop to let the frozen screen look natural */
+    cursor: default;
+}
+
+.crop-studio-header {
+    position: absolute;
+    top: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    background: rgba(15, 15, 15, 0.9);
+    padding: 12px 28px;
+    border-radius: 50px;
+    z-index: 10;
+    color: white;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.crop-studio-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: white;
+    letter-spacing: 0.5px;
+}
+
+.crop-studio-header p {
+    margin: 4px 0 0;
+    font-size: 0.85rem;
+    color: #ccc;
+}
+
+.crop-studio-editor {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.ReactCrop {
+    width: 100vw;
+    height: 100vh;
+}
+
+.crop-studio-img {
+    width: 100vw;
+    height: 100vh;
+    object-fit: cover;
+    pointer-events: none;
+}
+
+.crop-studio-actions {
+    position: absolute;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    z-index: 10;
+    background: rgba(15, 15, 15, 0.9);
+    padding: 14px 24px;
+    border-radius: 50px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.crop-btn {
+    padding: 10px 24px;
+    border: 1px solid transparent;
+    border-radius: 50px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    min-width: 110px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.crop-btn:active {
+    transform: scale(0.95);
+}
+
+.crop-btn.cancel {
+    background-color: transparent;
+    color: #ddd;
+    border-color: #666;
+}
+
+.crop-btn.cancel:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: white;
+    border-color: #999;
+    transform: translateY(-2px);
+}
+
+.crop-btn.confirm {
+    background-color: #ffffff;
+    color: #000000;
+    box-shadow: 0 4px 15px rgba(255, 255, 255, 0.2);
+}
+
+.crop-btn.confirm:hover {
+    background-color: #f0f0f0;
+    box-shadow: 0 6px 20px rgba(255, 255, 255, 0.3);
+    transform: translateY(-2px);
+}
+
+.crop-studio-loading {
+    font-size: 1.2rem;
+    color: white;
+    font-weight: bold;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 10px;
+    backdrop-filter: blur(5px);
+}

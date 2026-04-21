@@ -279,7 +279,11 @@ function App() {
          chrome.tabs.sendMessage(tab.id, { type: "ACTIVATE_SNIPPING", intent: "factcheck" }, () => {
             if (chrome.runtime.lastError) setIsSnipping(false);
          });
-      } catch (error) { setIsSnipping(false); }
+         // Close the extension popup so we can see the CropStudio on the page
+         window.close();
+      } catch (error) {
+         setIsSnipping(false);
+      }
    };
 
    const handleDeepfakeSnipClick = async () => {
@@ -290,7 +294,11 @@ function App() {
          chrome.tabs.sendMessage(tab.id, { type: "ACTIVATE_SNIPPING", intent: "deepfake" }, () => {
             if (chrome.runtime.lastError) setIsSnipping(false);
          });
-      } catch (error) { setIsSnipping(false); }
+         // Close the extension popup so we can see the CropStudio on the page
+         window.close();
+      } catch (error) {
+         setIsSnipping(false);
+      }
    };
 
    const renderContent = () => {
