@@ -61,12 +61,11 @@ export default function CropStudio({ imageSrc, onConfirm, onCancel }) {
             {imageSrc ? (
                <ReactCrop
                   crop={crop}
-                  onChange={(c) => setCrop(c)}>
+                  onChange={(pixelCrop, percentCrop) => setCrop(percentCrop)}>
                   <img
                      ref={imgRef}
                      src={imageSrc}
                      onLoad={(e) => {
-                        const { width, height } = e.currentTarget;
                         setCrop({
                            unit: "%",
                            width: 50,

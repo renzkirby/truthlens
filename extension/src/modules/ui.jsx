@@ -66,11 +66,15 @@ export function displayResultCard(claim) {
          <div style="margin-top: 12px; font-size: 11px;">
             <strong style="color: #374151; display: block; margin-bottom: 4px;">Sources:</strong>
             <div style="display: flex; flex-direction: column; gap: 4px;">
-               ${evidenceList.map(src => `
-                  <a href="${src}" target="_blank" style="color: #4f46e5; text-decoration: none; background: #f9fafb; padding: 4px 8px; border-radius: 4px; border: 1px solid #e5e7eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                     "${src}"
+               ${evidenceList.map(src => {
+                  // Handle both the old string format and the new rich object format
+                  const urlStr = typeof src === 'string' ? src : src.url;
+                  return `
+                  <a href="${urlStr}" target="_blank" style="color: #4f46e5; text-decoration: none; background: #f9fafb; padding: 4px 8px; border-radius: 4px; border: 1px solid #e5e7eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                     ${urlStr}
                   </a>
-               `).join('')}
+                  `;
+               }).join('')}
             </div>
          </div>
       `;
@@ -293,11 +297,15 @@ export function displayCachedResultCard(match) {
          <div style="margin-top: 12px; font-size: 11px;">
             <strong style="color: #374151; display: block; margin-bottom: 4px;">Sources:</strong>
             <div style="display: flex; flex-direction: column; gap: 4px;">
-               ${evidenceList.map(src => `
-                  <a href="${src}" target="_blank" style="color: #4f46e5; text-decoration: none; background: #f9fafb; padding: 4px 8px; border-radius: 4px; border: 1px solid #e5e7eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                     "${src}"
+               ${evidenceList.map(src => {
+                  // Handle both the old string format and the new rich object format
+                  const urlStr = typeof src === 'string' ? src : src.url;
+                  return `
+                  <a href="${urlStr}" target="_blank" style="color: #4f46e5; text-decoration: none; background: #f9fafb; padding: 4px 8px; border-radius: 4px; border: 1px solid #e5e7eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                     ${urlStr}
                   </a>
-               `).join('')}
+                  `;
+               }).join('')}
             </div>
          </div>
       `;
