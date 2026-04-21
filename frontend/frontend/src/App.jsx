@@ -17,6 +17,7 @@ import Toast from "./components/Toast";
 import UserHub from "./Pages/UserHub.jsx";
 import NotificationPage from "./Pages/NotificationPage.jsx";
 import SettingsPage from "./Pages/SettingsPage.jsx";
+import DeepAnalysisPage from "./Pages/DeepAnalysisPage.jsx";
 
 function App() {
    return (
@@ -78,6 +79,10 @@ function App() {
                   <Route
                      path="/thread/detail/:threadId"
                      element={<ThreadDetailPage />}
+                  />
+                  <Route
+                     path="/analysis/:claimId"
+                     element={<DeepAnalysisPage />}
                   />
                   <Route
                      path="/verify-email"

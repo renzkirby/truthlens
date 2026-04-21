@@ -8,6 +8,7 @@ const shieldCheckSVG = renderToString(React.createElement(ShieldCheck, { size: 1
 
 export function displayResultCard(claim) {
    const { id, verdict, summary, confidence_score, source_type, source_url, sources, is_ai_generated, has_community_verdict, thread_id, final_verdict, ai_verdict, score_context } = claim;
+   const deepAnalysisUrl = `http://localhost:5174/analysis/${id}`;
 
    // Use community verdict if available, otherwise AI verdict
    const displayVerdict = final_verdict || verdict;
@@ -104,15 +105,23 @@ export function displayResultCard(claim) {
 
       ${sourcesHTML}
 
-      ${thread_id
-         ? `<a href='http://localhost:5174/thread/detail/${thread_id}' target='_blank' class='truthlens-source-link' style='display: block; text-align: center; background: #f3f4f6; padding: 8px; border-radius: 6px; text-decoration: none; color: #4f46e5; font-weight: 600; margin-top: 12px; border: 1px solid #e5e7eb;'>View Community Discussion</a>`
-         : (displayVerdict === "UNVERIFIED" || confidence_score < 50)
-            ? `<a href='http://localhost:5174/thread/create?claim_id=${id}' target='_blank' class='truthlens-source-link' style='display: block; text-align: center; background: #eff6ff; padding: 8px; border-radius: 6px; text-decoration: none; color: var(--brand-primary, #4f46e5); font-weight: 600; margin-top: 12px; border: 1px dashed #bfdbfe;'>[+] Ask the community</a>` 
-            : ""
-      }
+      <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 8px;">
+         <a href="${deepAnalysisUrl}" target="_blank" style="display: flex; justify-content: center; align-items: center; gap: 6px; background: #4f46e5; color: #fff; padding: 10px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 13px; transition: all 0.2s;">
+            View Full AI Report →
+         </a>
+
+         ${thread_id
+            ? `<a href='http://localhost:5174/thread/detail/${thread_id}' target='_blank' style='display: block; text-align: center; background: #f3f4f6; padding: 8px; border-radius: 6px; text-decoration: none; color: #4f46e5; font-weight: 600; border: 1px solid #e5e7eb;'>View Community Discussion</a>`
+            : (displayVerdict === "UNVERIFIED" || confidence_score < 50)
+               ? `<a href='http://localhost:5174/thread/create?claim_id=${id}' target='_blank' style='display: block; text-align: center; background: #eff6ff; padding: 8px; border-radius: 6px; text-decoration: none; color: #4f46e5; font-weight: 600; border: 1px dashed #bfdbfe;'>Ask the community</a>` 
+               : ""
+         }
+      </div>
 
 
       <div class="truthlens-footer">Source Type: ${has_community_verdict ? 'Community Moderation' : source_type}</div>
+
+      
    `;
 
    document.body.appendChild(card);
