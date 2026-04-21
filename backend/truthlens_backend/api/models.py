@@ -65,6 +65,7 @@ class Claim(models.Model):
     context_text = models.TextField(blank=True, null=True)
 
     ai_summary = models.TextField(blank=True, null=True)
+    ai_reasoning = models.TextField(blank=True, null=True)
     ai_verdict = models.CharField(max_length=20, blank=True, null=True)
     final_verdict = models.CharField(max_length=20, blank=True, null=True)
     verdict = models.CharField(max_length=20, blank=True, null=True)

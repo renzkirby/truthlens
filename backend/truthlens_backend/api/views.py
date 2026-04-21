@@ -66,6 +66,7 @@ from .serializers import (
     ModerationDecisionSerializer,
     ClaimMatchSerializer,
     UserWithTrustBreakdownSerializer,
+    ClaimDeepAnalysisSerializer
 )
 
 # ── Pagination Configuration ──
@@ -1411,3 +1412,10 @@ def toggle_save_claim(request, claim_id):
         is_saved = True
         
     return Response({"is_saved": is_saved}, status=200)
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_claim_analysis(request, claim_id):
+    claim = get_object_or_404(Claim, id=claim_id)
+    serializer = ClaimDeepAnalysisSerializer(claim, context={"request": request})
+    return Response(serializer.data)

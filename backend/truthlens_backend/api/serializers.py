@@ -299,6 +299,15 @@ class ClaimSerializer(serializers.ModelSerializer):
             "is_ai_generated"
         ]
 
+class ClaimDeepAnalysisSerializer(ClaimSerializer):
+    class Meta(ClaimSerializer.Meta):
+        fields = ClaimSerializer.Meta.fields + [
+            "ai_reasoning",
+            "ai_sources",
+            "context_text",
+            "url_link",
+            "claim_fingerprint"
+        ]
 
 class ThreadSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)

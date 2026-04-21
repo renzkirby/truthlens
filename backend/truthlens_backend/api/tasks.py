@@ -273,8 +273,15 @@ def execute_core_text_pipeline(raw_text, claim_id):
                 tavily_eval_started_at,
                 verdict=ai_verdict.get("verdict"),
             )
-            
-            source_urls = [res.get("url") for res in tavily_results[:3] if res.get("url")]
+
+            source_urls = [
+                {
+                    "url": res.get("url"),
+                    "title": res.get("title", "External Source"),
+                    "snippet": res.get("content", "")[:250] + "..." # Grab the first 250 characters
+                }
+                for res in tavily_results[:3] if res.get("url")
+            ]
 
             save_started_at = time.perf_counter()
             _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_claim, source_urls)
@@ -477,7 +484,14 @@ def url_fact_check_process(url, claim_id):
             verdict=ai_verdict.get("verdict"),
         )
         
-        source_urls = [res.get("url") for res in tavily_results[:3] if res.get("url")]
+        source_urls = [
+            {
+                "url": res.get("url"),
+                "title": res.get("title", "External Source"),
+                "snippet": res.get("content", "")[:250] + "..." 
+            }
+            for res in tavily_results[:3] if res.get("url")
+        ]
 
         save_started_at = time.perf_counter()
         _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_text, source_urls)
@@ -515,6 +529,7 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
         # Keep final_verdict reserved for moderator or verified-evidence consensus decisions.
         claim.verdict = ai_verdict_value
         claim.ai_summary = verdict.get("summary")
+        claim.ai_reasoning = verdict.get("reasoning")
         claim.score_context = verdict.get("score_context")
         
         confidence = verdict.get("confidence_score", 0)
