@@ -92,9 +92,17 @@ import {
    UserMinus,
    Calendar,
    Inbox,
+   Cpu,
+   BrainCircuit,
+   ArrowUp,
+   ArrowDown,
 } from "lucide-react";
 
 const ICON_MAP = {
+   "arrow-up": ArrowUp,
+   "arrow-down": ArrowDown,
+   "brain-circuit": BrainCircuit,
+   cpu: Cpu,
    inbox: Inbox,
    pencil: Pencil,
    "share-2": Share2,

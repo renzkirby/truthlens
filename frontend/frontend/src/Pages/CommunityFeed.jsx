@@ -18,7 +18,7 @@
 
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useNotification } from "../context/NotificationContext";
 import NavigationBar from "../components/NavigationBar.jsx";
 import Icons from "../components/Icons.jsx";
@@ -48,6 +48,14 @@ const FEED_FILTERS = {
    NEEDS_EVIDENCE: "NEEDS_EVIDENCE",
 };
 
+const CATEGORIES = {
+   ALL: "ALL",
+   TEXT: "TEXT",
+   IMAGE: "IMAGE",
+   FILE: "FILE",
+   URL: "URL",
+};
+
 /**
  * CommunityFeed Component
  * Shows browsable feed of community-escalated claims with infinite scroll
@@ -58,6 +66,7 @@ function CommunityFeed() {
    const { authFetch, user } = useAuth();
    const { addToast } = useNotification();
    const threadsEndpoint = useEndpoint("THREADS");
+   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
 
    // ── Infinite Scroll State ──
    const [threads, setThreads] = useState([]);
@@ -66,6 +75,8 @@ function CommunityFeed() {
    const [error, setError] = useState(null);
    const [currentCursor, setCurrentCursor] = useState(null);
    const [activeFilter, setActiveFilter] = useState(FEED_FILTERS.TRENDING);
+   const [activeCategoryFilter, setActiveCategoryFilter] = useState(CATEGORIES.ALL);
+   const [sortOrder, setSortOrder] = useState("newest");
    const observerTarget = useRef(null);
    const requestedPagesRef = useRef(new Set());
    const activeSearchTerm = (searchParams.get("q") || "").trim();
@@ -106,11 +117,15 @@ function CommunityFeed() {
       setOpenMenuThreadId((prev) => (prev === threadId ? null : threadId));
    };
 
-   // Close thread action menu when clicking outside
+   // Close menus when clicking outside
    useEffect(() => {
       const handleClickOutside = (event) => {
          if (!event.target.closest(".thread-actions-menu-wrap")) {
             setOpenMenuThreadId(null);
+         }
+         // NEW: Close sort menu
+         if (!event.target.closest(".sort-dropdown-container")) {
+            setIsSortMenuOpen(false);
          }
       };
 
@@ -305,20 +320,28 @@ function CommunityFeed() {
       return !isModeratorVerified(thread) && verifiedEvidenceCount > 0;
    };
 
-   const filteredThreads = threads.filter((thread) => {
-      if (activeFilter === FEED_FILTERS.VERIFIED) {
-         return isModeratorVerified(thread);
-      }
-      if (activeFilter === FEED_FILTERS.NEEDS_EVIDENCE) {
-         return !isModeratorVerified(thread);
-      }
-      return true;
-   });
+   const filteredThreads = useMemo(() => {
+      return threads.filter((thread) => {
+         // 1. Status Filter
+         if (activeFilter === FEED_FILTERS.VERIFIED) {
+            if (!isModeratorVerified(thread)) return false;
+         } else if (activeFilter === FEED_FILTERS.NEEDS_EVIDENCE) {
+            if (isModeratorVerified(thread)) return false;
+         }
+
+         // 2. Category Filter
+         if (activeCategoryFilter !== CATEGORIES.ALL) {
+            if (thread.claim?.claim_type !== activeCategoryFilter) return false;
+         }
+
+         return true;
+      });
+   }, [threads, activeFilter, activeCategoryFilter]);
 
    // ── Fetch threads with pagination ──
    const fetchThreadsPage = useCallback(
       async (pageUrl = null) => {
-         const pageKey = pageUrl || `FIRST:${activeSearchTerm || "ALL"}`;
+         const pageKey = pageUrl || `FIRST:${sortOrder}:${activeSearchTerm || "ALL"}`;
          if (requestedPagesRef.current.has(pageKey)) return;
 
          try {
@@ -328,10 +351,12 @@ function CommunityFeed() {
 
             // DRF cursor pagination already returns the full next URL.
             let url = pageUrl || threadsEndpoint;
-            if (!pageUrl && activeSearchTerm) {
-               const searchParams = new URLSearchParams({
-                  search: activeSearchTerm,
-               });
+            if (!pageUrl) {
+               const searchParams = new URLSearchParams();
+               if (activeSearchTerm) {
+                  searchParams.set("search", activeSearchTerm);
+               }
+               searchParams.set("sort", sortOrder);
                url = `${threadsEndpoint}?${searchParams.toString()}`;
             }
 
@@ -362,7 +387,7 @@ function CommunityFeed() {
             setLoading(false);
          }
       },
-      [authFetch, addToast, threadsEndpoint, activeSearchTerm],
+      [authFetch, addToast, threadsEndpoint, activeSearchTerm, sortOrder],
    );
 
    // ── Initial load / search refresh ──
@@ -372,7 +397,7 @@ function CommunityFeed() {
       setCurrentCursor(null);
       setHasMore(true);
       fetchThreadsPage(null);
-   }, [fetchThreadsPage]);
+   }, [fetchThreadsPage, sortOrder]);
 
    // ── Infinite scroll: Intersection Observer ──
    useEffect(() => {
@@ -419,6 +444,51 @@ function CommunityFeed() {
          <NavigationBar />
 
          <main className="feed-container">
+            {/* ── Category Filter Pills ── */}
+            <div className="category-pills">
+               <button
+                  className={`category-pill ${activeCategoryFilter === CATEGORIES.ALL ? "active" : ""}`}
+                  onClick={() => setActiveCategoryFilter(CATEGORIES.ALL)}>
+                  All Categories
+               </button>
+               <button
+                  className={`category-pill ${activeCategoryFilter === CATEGORIES.TEXT ? "active" : ""}`}
+                  onClick={() => setActiveCategoryFilter(CATEGORIES.TEXT)}>
+                  <Icons
+                     name="file-text"
+                     size={14}
+                  />{" "}
+                  Text
+               </button>
+               <button
+                  className={`category-pill ${activeCategoryFilter === CATEGORIES.IMAGE ? "active" : ""}`}
+                  onClick={() => setActiveCategoryFilter(CATEGORIES.IMAGE)}>
+                  <Icons
+                     name="image"
+                     size={14}
+                  />{" "}
+                  Images
+               </button>
+               <button
+                  className={`category-pill ${activeCategoryFilter === CATEGORIES.FILE ? "active" : ""}`}
+                  onClick={() => setActiveCategoryFilter(CATEGORIES.FILE)}>
+                  <Icons
+                     name="paperclip"
+                     size={14}
+                  />{" "}
+                  Files
+               </button>
+               <button
+                  className={`category-pill ${activeCategoryFilter === CATEGORIES.URL ? "active" : ""}`}
+                  onClick={() => setActiveCategoryFilter(CATEGORIES.URL)}>
+                  <Icons
+                     name="link"
+                     size={14}
+                  />{" "}
+                  Links
+               </button>
+            </div>
+
             {/* ── Filter Bar ── */}
             <div className="filter-bar box-panel">
                <div className="filter-left">
@@ -441,6 +511,56 @@ function CommunityFeed() {
                      <Icons name="search" />
                      Needs Evidence
                   </button>
+               </div>
+
+               <div className="filter-right">
+                  <span className="filter-label">Sort:</span>
+
+                  <div className="sort-dropdown-container">
+                     <button
+                        className="sort-trigger-btn"
+                        onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}>
+                        <Icons
+                           name={sortOrder === "newest" ? "arrow-down" : "arrow-up"}
+                           size={14}
+                        />
+                        {sortOrder === "newest" ? "Newest First" : "Oldest First"}
+                        <Icons
+                           name="chevron-down"
+                           size={14}
+                           color="var(--text-muted)"
+                        />
+                     </button>
+
+                     {isSortMenuOpen && (
+                        <div className="sort-menu">
+                           <button
+                              className={`sort-menu-item ${sortOrder === "newest" ? "active" : ""}`}
+                              onClick={() => {
+                                 setSortOrder("newest");
+                                 setIsSortMenuOpen(false);
+                              }}>
+                              <Icons
+                                 name="arrow-down"
+                                 size={14}
+                              />
+                              Newest First
+                           </button>
+                           <button
+                              className={`sort-menu-item ${sortOrder === "oldest" ? "active" : ""}`}
+                              onClick={() => {
+                                 setSortOrder("oldest");
+                                 setIsSortMenuOpen(false);
+                              }}>
+                              <Icons
+                                 name="arrow-up"
+                                 size={14}
+                              />
+                              Oldest First
+                           </button>
+                        </div>
+                     )}
+                  </div>
                </div>
             </div>
 
@@ -542,6 +662,77 @@ function CommunityFeed() {
                                  </div>
                               </div>
                               <div className="header-actions">
+                                 {thread.claim?.claim_type && (
+                                    <div
+                                       className="media-type-badge box-panel-mini"
+                                       style={{
+                                          padding: "6px 10px",
+                                          display: "flex",
+                                          gap: "6px",
+                                          alignItems: "center",
+                                          borderRadius: "6px",
+                                          backgroundColor: "var(--bg-subtle)",
+                                          border: "1px solid var(--border-default)",
+                                          fontSize: "0.8rem",
+                                          color: "var(--text-muted)",
+                                          fontWeight: "600",
+                                       }}>
+                                       {thread.claim.claim_type === CATEGORIES.TEXT && (
+                                          <>
+                                             <Icons
+                                                name="file-text"
+                                                size={14}
+                                             />{" "}
+                                             Text
+                                          </>
+                                       )}
+                                       {thread.claim.claim_type === CATEGORIES.IMAGE && (
+                                          <>
+                                             <Icons
+                                                name="image"
+                                                size={14}
+                                             />{" "}
+                                             Image
+                                          </>
+                                       )}
+                                       {thread.claim.claim_type === CATEGORIES.FILE && (
+                                          <>
+                                             <Icons
+                                                name="paperclip"
+                                                size={14}
+                                             />{" "}
+                                             File
+                                          </>
+                                       )}
+                                       {thread.claim.claim_type === CATEGORIES.URL && (
+                                          <>
+                                             <Icons
+                                                name="link"
+                                                size={14}
+                                             />{" "}
+                                             Link
+                                          </>
+                                       )}
+                                       {thread.claim.claim_type === "VIDEO" && (
+                                          <>
+                                             <Icons
+                                                name="play"
+                                                size={14}
+                                             />{" "}
+                                             Video
+                                          </>
+                                       )}
+                                       {!Object.values(CATEGORIES).includes(
+                                          thread.claim.claim_type,
+                                       ) &&
+                                          thread.claim.claim_type !== "VIDEO" && (
+                                             <>
+                                                {thread.claim.claim_type.charAt(0) +
+                                                   thread.claim.claim_type.slice(1).toLowerCase()}
+                                             </>
+                                          )}
+                                    </div>
+                                 )}
                                  <div className={`status-badge badge-${verdictClass}`}>
                                     {verdictClass === "fake" && <Icons name="x-circle" />}
                                     {verdictClass === "fact" && <Icons name="check-circle" />}
@@ -668,6 +859,29 @@ function CommunityFeed() {
                                  />
                               </div>
                            )}
+
+                           {/* URL Source Link Block */}
+                           {thread.claim.claim_type === CATEGORIES.URL &&
+                              thread.claim.source_link && (
+                                 <a
+                                    href={thread.claim.source_link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="url-preview-card"
+                                    onClick={(e) => e.stopPropagation()}>
+                                    <div className="media-icon">
+                                       <Icons
+                                          name="external-link"
+                                          size={20}
+                                       />
+                                    </div>
+                                    <span
+                                       className="media-source"
+                                       title={thread.claim.source_link}>
+                                       {thread.claim.source_link}
+                                    </span>
+                                 </a>
+                              )}
 
                            {/* ── AI Analysis Bar or Moderator Verdict (NOW WITH CONTEXT INSIDE) ── */}
                            <div className={`ai-analysis-bar bar-${verdictClass}`}>
