@@ -71,9 +71,8 @@ body {
 }
 
 .category-pill.active {
-  background-color: var(--text-main);
+  background-color: var(--brand-primary);
   color: var(--bg-surface);
-  border-color: var(--text-main);
 }
 
 /* Filter Bar */

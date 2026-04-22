@@ -307,6 +307,17 @@
     font-weight: 800;
     flex-shrink: 0;
     line-height: 1;
+    cursor: pointer;
+}
+
+.tdp-author-profile-pic {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
 }
 
 .tdp-post-author {
@@ -318,6 +329,7 @@
     font-weight: 700;
     color: #111827;
     display: block;
+    cursor: pointer;
 }
 
 .tdp-author-meta {

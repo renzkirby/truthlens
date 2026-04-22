@@ -779,28 +779,32 @@ function ThreadDetailPage() {
                <div className="tdp-breadcrumb-left">
                   <button
                      className="tdp-back-btn"
-                     onClick={() => navigate("/community")}>
+                     onClick={() => navigate(-1)}>
                      <Icons
-                        name="globe"
-                        size={13}
-                        color="#4f46e5"
+                        name="arrow-left"
+                        size={14}
                      />
-                     <span>Community Feed</span>
+                     Community Feed
                   </button>
-                  <Icons
-                     name="arrow-right"
-                     size={13}
-                     color="#d1d5db"
-                  />
-                  <span className="tdp-breadcrumb-thread">Thread #{threadId}</span>
+
                   <span className="tdp-breadcrumb-dot">·</span>
+
+                  <span className="tdp-breadcrumb-thread">
+                     Thread #{thread.display_id ? thread.display_id : thread.id.substring(0, 6)}
+                  </span>
+
+                  <span className="tdp-breadcrumb-dot">·</span>
+
                   <span className="tdp-breadcrumb-time">
-                     Flagged {thread.created_at || thread.posted_at || "recently"} by{" "}
-                     <strong>
-                        {thread.flagged_by?.username ||
-                           thread.original_poster?.username ||
-                           "a user"}
-                     </strong>
+                     Started{" "}
+                     {new Date(thread.created_at).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                     })}{" "}
+                     by <strong>@{thread.author?.username || "unknown"}</strong>
                   </span>
                </div>
                <div className="tdp-breadcrumb-right">
@@ -999,16 +1003,51 @@ function ThreadDetailPage() {
                   {/* Post card */}
                   <div className="tdp-post-card">
                      <div className="tdp-post-header">
-                        <UserAvatar
-                           username={thread.author?.username || thread.flagged_by?.username || ""}
-                           size={38}
-                        />
+                        <div
+                           className="tdp-author-profile-pic"
+                           style={{ overflow: "hidden" }}
+                           onClick={(e) => {
+                              e.stopPropagation(); // Prevents triggering the thread card click
+                              navigate(`/user/${thread.author.username}`);
+                           }}>
+                           {thread.author.avatar_url ? (
+                              <img
+                                 src={thread.author.avatar_url}
+                                 alt={`${thread.author.username}'s avatar`}
+                                 style={{
+                                    width: "100%",
+                                    height: "100%",
+                                    objectFit: "cover",
+                                 }}
+                              />
+                           ) : (
+                              <UserAvatar
+                                 username={
+                                    thread.author?.username || thread.flagged_by?.username || ""
+                                 }
+                                 size={38}
+                              />
+                           )}
+                        </div>
                         <div className="tdp-post-author">
-                           <span className="tdp-author-name">
+                           <span
+                              className="tdp-author-name"
+                              onClick={(e) => {
+                                 e.stopPropagation(); // Prevents triggering the thread card click
+                                 navigate(`/user/${thread.author.username}`);
+                              }}>
                               {thread.author?.username || thread.flagged_by?.username}
                            </span>
                            <div className="tdp-author-meta">
-                              <span>{thread.created_at || thread.posted_at || ""}</span>
+                              <span>
+                                 {new Date(thread.created_at).toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                    hour: "numeric",
+                                    minute: "2-digit",
+                                 })}{" "}
+                              </span>
                               <span className="tdp-via-badge">
                                  <Icons
                                     name="search"
