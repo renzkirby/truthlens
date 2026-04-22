@@ -100,7 +100,6 @@ import {
 } from "lucide-react";
 
 const ICON_MAP = {
-   "brain-circuit": BrainCircuit,
    "arrow-up": ArrowUp,
    "arrow-down": ArrowDown,
    "arrow-up-right": ArrowUpRight,
