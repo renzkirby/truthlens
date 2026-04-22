@@ -11,6 +11,7 @@ urlpatterns = [
     path("verify-text/", views.verify_text, name="verify_text"),
     path("claims/match/", views.claim_match, name="claim_match"),
     path("claims/<uuid:claim_id>/analysis/", views.get_claim_analysis, name="claim_analysis"),
+    path("verify-pdf/", views.verify_pdf, name="verify_pdf"),
     
     #Auth urls
     path('auth/login/', views.login_user),

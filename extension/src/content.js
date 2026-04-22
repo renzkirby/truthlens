@@ -163,7 +163,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
    if (request.type === "DISPLAY_URL_LOADING") {
       import("./modules/ui.jsx").then(({ displayLoadingCard }) => {
          state.isAnalyzing = true;
-         displayLoadingCard();
+         displayLoadingCard(request.customMsg);
       });
       sendResponse({ success: true });
    }

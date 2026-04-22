@@ -6,7 +6,7 @@
 .tdp-page {
     background: #ffffff;
     min-height: 100vh;
-    font-family: 'DM Sans', 'Segoe UI', sans-serif;
+    font-family:  'Inter', sans-serif;
 }
 
 /* ── Loading / Error states ─────────────────────────────────────────────────── */
@@ -776,7 +776,7 @@
     padding: 10px 12px;
     font-size: 11px;
     color: #374151;
-    font-family: inherit;
+    font-family:  'Inter', sans-serif;
     resize: vertical;
     outline: none;
     box-sizing: border-box;
@@ -934,7 +934,7 @@
     padding: 10px 18px;
     font-size: 12px;
     color: #374151;
-    font-family: inherit;
+    font-family:  'Inter', sans-serif;
     outline: none;
 }
 
@@ -1105,7 +1105,7 @@
     padding: 9px 11px;
     font-size: 12px;
     color: #334155;
-    font-family: inherit;
+    font-family:  'Inter', sans-serif;
     line-height: 1.55;
     resize: vertical;
     box-sizing: border-box;
