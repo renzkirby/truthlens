@@ -341,6 +341,7 @@ class ThreadSerializer(serializers.ModelSerializer):
         model = Thread
         fields = [
             "id",
+            "display_id",
             "claim",
             "claim_id",
             "author",
@@ -358,6 +359,7 @@ class ThreadSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
+            "display_id",
             "claim",
             "author",
             "status",
@@ -559,6 +561,7 @@ class ThreadDetailSerializer(serializers.ModelSerializer):
         model = Thread
         fields = [
             "id",
+            "display_id",
             "claim",
             "claim_id",
             "author",

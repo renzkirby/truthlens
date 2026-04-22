@@ -161,6 +161,7 @@ class Thread(models.Model):
         OTHER = "OTHER", "Other"
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    display_id = models.PositiveIntegerField(unique=True, editable=False, null=True)
     claim = models.ForeignKey(Claim, on_delete=models.CASCADE, related_name="threads")
     author = models.ForeignKey(
         "auth.User", on_delete=models.CASCADE, related_name="authored_threads"
