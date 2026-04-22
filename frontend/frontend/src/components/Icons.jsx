@@ -100,6 +100,7 @@ import {
 } from "lucide-react";
 
 const ICON_MAP = {
+   "brain-circuit": BrainCircuit,
    "arrow-up": ArrowUp,
    "arrow-down": ArrowDown,
    "arrow-up-right": ArrowUpRight,
@@ -192,6 +193,7 @@ const ICON_MAP = {
    send: Send,
    "arrow-left": ArrowLeft,
    "user-check": UserCheck,
+
    clock: Clock,
    circle: Circle,
    calendar: Calendar,

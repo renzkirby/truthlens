@@ -111,7 +111,7 @@ export function displayResultCard(claim) {
 
       <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 8px;">
          <a href="${deepAnalysisUrl}" target="_blank" style="display: flex; justify-content: center; align-items: center; gap: 6px; background: #4f46e5; color: #fff; padding: 10px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 13px; transition: all 0.2s;">
-            View Full AI Report →
+            View Full Report →
          </a>
 
          ${thread_id

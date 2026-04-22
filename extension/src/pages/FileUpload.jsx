@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { UploadCloud } from "lucide-react";
 import { displayLoadingCard, displayResultCard, displayErrorCard, removeLoadingCard } from "../modules/ui.jsx";
 import { state } from "../modules/state.js";
+import "./FileUpload.css";
 
 function FileUpload() {
    const [file, setFile] = useState(null);
@@ -79,12 +80,29 @@ function FileUpload() {
             <h3 style={{ margin: "0 0 10px 0", color: "#374151" }}>Upload Document</h3>
             <p style={{ fontSize: "12px", color: "#6b7280", marginBottom: "15px" }}>Currently supporting .txt and .pdf files</p>
             
+            {/* 1. The Hidden Input */}
             <input 
+               id="truthlens-file-upload"
                type="file" 
                accept=".txt,.pdf"
                onChange={handleFileChange} 
-               style={{ display: "block", margin: "0 auto", fontSize: "12px" }}
+               className="hidden-input"
             />
+
+            {/* 2. The Custom Button that triggers the hidden input */}
+            <label htmlFor="truthlens-file-upload" className="custom-browse-btn">
+               {file ? "Change File" : "Browse Files"}
+            </label>
+
+            {/* 3. The File Name Display */}
+            {file && (
+               <div className="selected-file-display">
+                  <FileText size={14} color="#4f46e5" />
+                  <span className="file-name-text">
+                     {file.name}
+                  </span>
+               </div>
+            )}
          </div>
 
          <button
