@@ -21,6 +21,8 @@ import json
 import secrets
 import base64
 import uuid
+import io
+import PyPDF2
 from .services import detect_ai_image
 from .services import process_image, upload_image_to_database
 from .services import validate_public_url, check_url_threat_reputation
@@ -1419,3 +1421,70 @@ def get_claim_analysis(request, claim_id):
     claim = get_object_or_404(Claim, id=claim_id)
     serializer = ClaimDeepAnalysisSerializer(claim, context={"request": request})
     return Response(serializer.data)
+
+@csrf_exempt
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([FactCheckRateThrottle])
+def verify_pdf(request):
+    base64_string = request.data.get("pdf_data")
+    
+    if not base64_string:
+        return Response({"error": "No PDF data provided"}, status=400)
+
+    if "," in base64_string:
+        base64_string = base64_string.split(",")[1]
+
+    try:
+        # Decode base64 to raw bytes
+        pdf_bytes = base64.b64decode(base64_string)
+        pdf_file = io.BytesIO(pdf_bytes)
+        
+        # Extract text
+        reader = PyPDF2.PdfReader(pdf_file)
+        extracted_text = ""
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                extracted_text += page_text + "\n"
+                
+        # Limit text to 5000 characters to protect your Groq/Llama-3 context window
+        extracted_text = extracted_text.strip()[:5000]
+
+        if not extracted_text:
+            return Response({"error": "Could not extract text. If this is a scanned image PDF, OCR is required."}, status=400)
+
+        # ── Claim Deduplication Pre-Check ──
+        fingerprint = compute_fingerprint("TEXT", extracted_text)
+        matched_claim = find_matching_claim(fingerprint, "TEXT", context_text=extracted_text)
+        authenticated_user = _authenticated_user_or_none(request)
+        
+        if matched_claim and matched_claim.final_verdict:
+            _record_authenticated_claim_check(authenticated_user, matched_claim)
+            match_result = get_match_result(matched_claim)
+            return JsonResponse(
+                {"claim_id": str(matched_claim.id), "cached": True, "match": match_result},
+                status=200,
+            )
+
+        # Save as FILE claim type
+        claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.FILE,
+            url_link="PDF Document Input",
+            claim_fingerprint=fingerprint,
+            verdict=None,
+            verified_via=Claim.VerificationSource.PENDING,
+        )
+        _record_authenticated_claim_check(authenticated_user, claim)
+        claim_id = claim.id
+        
+        # Send the extracted text to your existing Celery worker
+        text_fact_check_process.delay(extracted_text, claim_id)
+        
+        return JsonResponse(
+            {"claim_id": str(claim_id), "cached": False},
+            status=200,
+        )
+        
+    except Exception as e:
+        return Response({"error": f"Failed to process PDF: {str(e)}"}, status=500)
