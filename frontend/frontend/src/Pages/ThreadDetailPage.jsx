@@ -1515,13 +1515,40 @@ function ThreadDetailPage() {
                   <div className="tdp-sidebar-card">
                      <div className="tdp-sidebar-card-label">POSTED BY</div>
                      <div className="tdp-posted-by-row">
-                        <UserAvatar
-                           username={thread.author?.username || ""}
-                           size={44}
-                        />
+                        <div
+                           className="tdp-author-profile-pic"
+                           style={{ overflow: "hidden" }}
+                           onClick={(e) => {
+                              e.stopPropagation(); // Prevents triggering the thread card click
+                              navigate(`/user/${thread.author.username}`);
+                           }}>
+                           {thread.author.avatar_url ? (
+                              <img
+                                 src={thread.author.avatar_url}
+                                 alt={`${thread.author.username}'s avatar`}
+                                 style={{
+                                    width: "100%",
+                                    height: "100%",
+                                    objectFit: "cover",
+                                 }}
+                              />
+                           ) : (
+                              <UserAvatar
+                                 username={
+                                    thread.author?.username || thread.flagged_by?.username || ""
+                                 }
+                                 size={38}
+                              />
+                           )}
+                        </div>
                         <div className="tdp-posted-by-info">
-                           <div className="tdp-posted-by-name">
-                              {thread.author?.username || "Unknown"}
+                           <div
+                              className="tdp-posted-by-name"
+                              onClick={(e) => {
+                                 e.stopPropagation(); // Prevents triggering the thread card click
+                                 navigate(`/user/${thread.author.username}`);
+                              }}>
+                              @{thread.author?.username || "Unknown"}
                            </div>
                            {thread.author?.trust_score >= 80 && (
                               <div className="tdp-trusted-label">
