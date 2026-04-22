@@ -96,11 +96,13 @@ import {
    BrainCircuit,
    ArrowUp,
    ArrowDown,
+   ArrowUpRight,
 } from "lucide-react";
 
 const ICON_MAP = {
    "arrow-up": ArrowUp,
    "arrow-down": ArrowDown,
+   "arrow-up-right": ArrowUpRight,
    "brain-circuit": BrainCircuit,
    cpu: Cpu,
    inbox: Inbox,
