@@ -23,6 +23,7 @@ import base64
 import uuid
 import io
 import PyPDF2
+import docx
 from .services import detect_ai_image
 from .services import process_image, upload_image_to_database
 from .services import validate_public_url, check_url_threat_reputation
@@ -1443,27 +1444,39 @@ def get_claim_analysis(request, claim_id):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @throttle_classes([FactCheckRateThrottle])
-def verify_pdf(request):
-    base64_string = request.data.get("pdf_data")
+def verify_file(request):
+    base64_string = request.data.get("file_data")
+    file_name = request.data.get("file_name", "")
     
     if not base64_string:
-        return Response({"error": "No PDF data provided"}, status=400)
+        return Response({"error": "No document data provided"}, status=400)
 
     if "," in base64_string:
         base64_string = base64_string.split(",")[1]
 
     try:
         # Decode base64 to raw bytes
-        pdf_bytes = base64.b64decode(base64_string)
-        pdf_file = io.BytesIO(pdf_bytes)
-        
-        # Extract text
-        reader = PyPDF2.PdfReader(pdf_file)
+        file_bytes = base64.b64decode(base64_string)
+        file_obj = io.BytesIO(file_bytes)
         extracted_text = ""
-        for page in reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                extracted_text += page_text + "\n"
+        
+        # Extract text based on file extension
+        if file_name.lower().endswith(".pdf"):
+            reader = PyPDF2.PdfReader(file_obj)
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    extracted_text += page_text + "\n"
+                    
+        elif file_name.lower().endswith(".docx") and docx:
+            doc = docx.Document(file_obj)
+            extracted_text = "\n".join([para.text for para in doc.paragraphs])
+            
+        elif file_name.lower().endswith(".txt"):
+            extracted_text = file_bytes.decode('utf-8')
+            
+        else:
+            return Response({"error": "Unsupported file format. Please use PDF, DOCX, or TXT."}, status=400)
                 
         # Limit text to 5000 characters to protect your Groq/Llama-3 context window
         extracted_text = extracted_text.strip()[:5000]
@@ -1487,7 +1500,7 @@ def verify_pdf(request):
         # Save as FILE claim type
         claim = Claim.objects.create(
             claim_type=Claim.ClaimType.FILE,
-            url_link="PDF Document Input",
+            url_link=f"Document Input: {file_name}",
             claim_fingerprint=fingerprint,
             verdict=None,
             verified_via=Claim.VerificationSource.PENDING,
@@ -1504,4 +1517,4 @@ def verify_pdf(request):
         )
         
     except Exception as e:
-        return Response({"error": f"Failed to process PDF: {str(e)}"}, status=500)
+        return Response({"error": f"Failed to process document: {str(e)}"}, status=500)

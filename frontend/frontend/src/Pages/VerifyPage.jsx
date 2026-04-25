@@ -169,6 +169,8 @@ function VerifyPage() {
    const [loading, setLoading] = useState(false);
    const [result, setResult] = useState(null);
    const [error, setError] = useState(null);
+   const [docFile, setDocFile] = useState(null);
+   const docFileInputRef = useRef(null);
 
    const pollForResult = (claimId) => {
       let pollCount = 0;
@@ -270,6 +272,58 @@ function VerifyPage() {
          setLoading(false);
       }
    };
+
+   // ── File upload handlers ───────────────────────────────────────────────
+   const handleDocFileSelect = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      setDocFile(file);
+      setResult(null);
+      setError(null);
+   };
+
+   const handleDocDrop = (e) => {
+      e.preventDefault();
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      setDocFile(file);
+      setResult(null);
+      setError(null);
+   };
+
+   const handleFileVerify = async () => {
+      if (!docFile) return;
+      setLoading(true);
+      setResult(null);
+      setError(null);
+
+      try {
+         // Convert document to base64
+         const base64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(docFile);
+         });
+
+         // NOTE: We will need to build this endpoint in Django later to parse the PDF/DOCX!
+         const data = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/verify-file/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+               file_data: base64,
+               file_name: docFile.name,
+               file_type: docFile.type 
+            }),
+         });
+         
+         pollForResult(data.claim_id);
+      } catch (err) {
+         setError("Failed to submit document. Please try again.");
+         setLoading(false);
+      }
+   };
+
    // ── AI-GENERATED IMAGE DETECTION handler ────────────────────────────────────────────────────
    const handleDeepfakeTest = async () => {
       if (!image) return;
@@ -334,6 +388,8 @@ function VerifyPage() {
       setUrl("");
       setImage(null);
       setImagePreview(null);
+      setText("");
+      setDocFile(null);
    };
 
    return (
@@ -385,6 +441,12 @@ function VerifyPage() {
                      size={15}
                   />
                   Verify Text
+               </button>
+               <button
+                  className={`verify-tab-btn ${activeTab === "file" ? "active" : ""}`}
+                  onClick={() => handleTabSwitch("file")}>
+                  <Icons name="file" size={15} />
+                  Verify File
                </button>
                <button
                   className={`verify-tab-btn ${activeTab === "deepfake" ? "active" : ""}`}
@@ -651,6 +713,79 @@ function VerifyPage() {
                      </p>
                   </div>
                )}
+
+               {/* ── File Tab ── */}
+               {activeTab === "file" && (
+                  <div className="verify-panel box-panel">
+                     <label className="panel-label">
+                        <Icons name="file" size={14} />
+                        Upload a document to verify
+                     </label>
+
+                     <div
+                        className={`drop-zone ${docFile ? "has-image" : ""}`}
+                        onClick={() => !docFile && docFileInputRef.current?.click()}
+                        onDrop={handleDocDrop}
+                        onDragOver={(e) => e.preventDefault()}>
+                        {docFile ? (
+                           <div className="image-preview-wrapper">
+                              <div className="file-preview-box">
+                                 <Icons name="file-text" size={32} color="#4f46e5" />
+                                 <p className="file-name">{docFile.name}</p>
+                                 <p className="file-size">{(docFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                              </div>
+                              <button
+                                 className="remove-image-btn"
+                                 onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDocFile(null);
+                                    setResult(null);
+                                 }}>
+                                 <Icons name="x" size={14} /> Remove
+                              </button>
+                           </div>
+                        ) : (
+                           <div className="drop-zone-content">
+                              <Icons name="upload" size={32} color="#9ca3af" />
+                              <p className="drop-zone-text">
+                                 Drag and drop a document here, or <span className="drop-zone-link">browse</span>
+                              </p>
+                              <p className="drop-zone-hint">PDF & TXT format supported</p>
+                           </div>
+                        )}
+                     </div>
+
+                     {/* Hidden file input */}
+                     <input
+                        ref={docFileInputRef}
+                        type="file"
+                        accept=".pdf,.docx,.txt"
+                        className="hidden-file-input"
+                        onChange={handleDocFileSelect}
+                     />
+
+                     <button
+                        className="verify-submit-btn full-width"
+                        onClick={handleFileVerify}
+                        disabled={loading || !docFile}>
+                        {loading ? (
+                           <>
+                              <div className="btn-spinner" />
+                              Analyzing document...
+                           </>
+                        ) : (
+                           <>
+                              <Icons name="scan-line" size={15} />
+                              Verify Document
+                           </>
+                        )}
+                     </button>
+                     <p className="panel-hint">
+                        Our AI will extract text from the document and cross-reference its claims.
+                     </p>
+                  </div>
+               )}
+
                {/* Deepfake Tab */}
                {activeTab === "deepfake" && (
                   <div className="verify-panel box-panel">
