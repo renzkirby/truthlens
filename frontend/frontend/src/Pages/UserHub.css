@@ -1,4 +1,4 @@
-﻿/* UserHub.css */
+/* UserHub.css */
 /* 1. Layout & Structure */
 .hub-page-layout {
     min-height: 100vh;
@@ -301,4 +301,96 @@
     min-height: 50vh;
     color: #64748b;
     font-weight: 500;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+    .hub-wrapper {
+        padding-top: 24px;
+        padding-bottom: 80px;
+    }
+
+    .hub-container {
+        padding: 0 16px;
+        gap: 18px;
+    }
+
+    .hub-title {
+        font-size: 20px;
+    }
+
+    .hub-rep-row {
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .hub-gauge-wrapper {
+        align-self: center;
+    }
+
+    .library-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .library-search {
+        max-width: 100%;
+    }
+
+    .library-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .li-content {
+        max-width: 100%;
+    }
+
+    .li-actions {
+        flex-direction: row;
+        align-self: stretch;
+    }
+
+    .hub-btn-publish {
+        min-height: 44px;
+    }
+
+    .box-panel {
+        padding: 18px;
+        border-radius: 0;
+        border-left: none;
+        border-right: none;
+        margin-left: -16px;
+        margin-right: -16px;
+        width: auto;
+    }
+}
+
+@media (max-width: 480px) {
+    .hub-wrapper {
+        padding-top: 16px;
+        padding-bottom: 76px;
+    }
+
+    .hub-container {
+        padding: 0 12px;
+    }
+
+    .hub-title {
+        font-size: 18px;
+    }
+
+    .hub-stat-card {
+        padding: 14px;
+    }
+
+    .stat-val {
+        font-size: 18px;
+    }
+
+    .box-panel {
+        padding: 14px;
+    }
 }

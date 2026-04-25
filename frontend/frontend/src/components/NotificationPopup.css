@@ -214,3 +214,15 @@
 .notif-see-all-link:hover {
     text-decoration: underline;
 }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+    .notif-popup {
+        width: min(360px, calc(100vw - 32px));
+        right: -60px;
+    }
+
+    .notif-item {
+        min-height: 44px;
+    }
+}

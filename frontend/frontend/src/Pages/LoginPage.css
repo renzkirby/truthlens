@@ -369,3 +369,54 @@
     transform: rotate(360deg);
   }
 }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .login-left {
+    display: none;
+  }
+
+  .login-layout {
+    min-height: 100vh;
+  }
+
+  .login-right {
+    flex: 1;
+    padding: 32px 20px;
+  }
+
+  .form-container {
+    max-width: 100%;
+  }
+
+  .form-title {
+    font-size: 1.5rem;
+  }
+
+  .show-password-btn {
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-right {
+    padding: 24px 16px;
+  }
+
+  .form-title {
+    font-size: 1.35rem;
+  }
+
+  .submit-btn {
+    font-size: 0.95rem;
+    padding: 13px;
+  }
+
+  .social-login {
+    flex-direction: column;
+  }
+}

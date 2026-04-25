@@ -2041,10 +2041,18 @@
 }
 
 /* ── Responsive ─────────────────────────────────────────────────────────────── */
+
+/* ── Dialog safety (Rule 4) ── */
+.tdp-dialog {
+    max-height: 85vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
 @media (max-width: 900px) {
     .tdp-body {
         grid-template-columns: 1fr;
-        padding: 24px 20px 60px;
+        padding: 24px 20px 80px;
     }
 
     .tdp-sidebar {
@@ -2079,9 +2087,40 @@
     .tdp-evidence-verdicts {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
+
+    /* Tab bar swipe pattern */
+    .tdp-tab-bar {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .tdp-tab-bar::-webkit-scrollbar {
+        display: none;
+    }
+
+    .tdp-tab {
+        flex-shrink: 0;
+        min-width: fit-content;
+        min-height: 44px;
+    }
+
+    /* Touch targets */
+    .tdp-comment-submit {
+        width: 44px;
+        height: 44px;
+    }
+
+    .tdp-vote-btn {
+        min-height: 44px;
+        min-width: 44px;
+    }
 }
 
 @media (max-width: 600px) {
+    .tdp-body {
+        padding: 20px 16px 76px;
+    }
+
     .tdp-form-row {
         grid-template-columns: 1fr;
     }
@@ -2103,6 +2142,7 @@
     .tdp-source-link-url {
         white-space: normal;
         word-break: break-word;
+        font-size: 14px;
     }
 
     .tdp-source-link-path {
@@ -2152,5 +2192,26 @@
     .tdp-evidence-header-actions {
         flex-wrap: wrap;
         justify-content: flex-end;
+    }
+
+    .tdp-claim-text {
+        font-size: 16px;
+    }
+
+    .tdp-hero {
+        padding: 20px 16px;
+    }
+
+    .tdp-breadcrumb {
+        padding: 10px 16px;
+    }
+
+    .tdp-dialog-actions {
+        flex-direction: column-reverse;
+    }
+
+    .tdp-dialog-btn {
+        width: 100%;
+        text-align: center;
     }
 }

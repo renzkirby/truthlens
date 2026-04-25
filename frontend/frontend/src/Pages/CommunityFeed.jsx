@@ -661,87 +661,66 @@ function CommunityFeed() {
                                     </div>
                                  </div>
                               </div>
+                              
                               <div className="header-actions">
-                                 {thread.claim?.claim_type && (
-                                    <div
-                                       className="media-type-badge box-panel-mini"
-                                       style={{
-                                          padding: "6px 10px",
-                                          display: "flex",
-                                          gap: "6px",
-                                          alignItems: "center",
-                                          borderRadius: "6px",
-                                          backgroundColor: "var(--bg-subtle)",
-                                          border: "1px solid var(--border-default)",
-                                          fontSize: "0.8rem",
-                                          color: "var(--text-muted)",
-                                          fontWeight: "600",
-                                       }}>
-                                       {thread.claim.claim_type === CATEGORIES.TEXT && (
-                                          <>
-                                             <Icons
-                                                name="file-text"
-                                                size={14}
-                                             />{" "}
-                                             Text
-                                          </>
-                                       )}
-                                       {thread.claim.claim_type === CATEGORIES.IMAGE && (
-                                          <>
-                                             <Icons
-                                                name="image"
-                                                size={14}
-                                             />{" "}
-                                             Image
-                                          </>
-                                       )}
-                                       {thread.claim.claim_type === CATEGORIES.FILE && (
-                                          <>
-                                             <Icons
-                                                name="paperclip"
-                                                size={14}
-                                             />{" "}
-                                             File
-                                          </>
-                                       )}
-                                       {thread.claim.claim_type === CATEGORIES.URL && (
-                                          <>
-                                             <Icons
-                                                name="link"
-                                                size={14}
-                                             />{" "}
-                                             Link
-                                          </>
-                                       )}
-                                       {thread.claim.claim_type === "VIDEO" && (
-                                          <>
-                                             <Icons
-                                                name="play"
-                                                size={14}
-                                             />{" "}
-                                             Video
-                                          </>
-                                       )}
-                                       {!Object.values(CATEGORIES).includes(
-                                          thread.claim.claim_type,
-                                       ) &&
-                                          thread.claim.claim_type !== "VIDEO" && (
+                                 <div className="header-badges-inline">
+                                    {thread.claim?.claim_type && (
+                                       <div
+                                          className="media-type-badge box-panel-mini"
+                                          style={{
+                                             padding: "4px 8px",
+                                             display: "flex",
+                                             gap: "4px",
+                                             alignItems: "center",
+                                             borderRadius: "6px",
+                                             backgroundColor: "var(--bg-subtle)",
+                                             border: "1px solid var(--border-default)",
+                                             fontSize: "0.75rem",
+                                             color: "var(--text-muted)",
+                                             fontWeight: "600",
+                                          }}>
+                                          {thread.claim.claim_type === CATEGORIES.TEXT && (
                                              <>
-                                                {thread.claim.claim_type.charAt(0) +
-                                                   thread.claim.claim_type.slice(1).toLowerCase()}
+                                                <Icons name="file-text" size={12} /> Text
                                              </>
                                           )}
-                                    </div>
-                                 )}
-                                 <div className={`status-badge badge-${verdictClass}`}>
-                                    {verdictClass === "fake" && <Icons name="x-circle" />}
-                                    {verdictClass === "fact" && <Icons name="check-circle" />}
-                                    {verdictClass === "satire" && <Icons name="wand" />}
-                                    {verdictClass === "misleading" && (
-                                       <Icons name="alert-triangle" />
+                                          {thread.claim.claim_type === CATEGORIES.IMAGE && (
+                                             <>
+                                                <Icons name="image" size={12} /> Image
+                                             </>
+                                          )}
+                                          {thread.claim.claim_type === CATEGORIES.FILE && (
+                                             <>
+                                                <Icons name="paperclip" size={12} /> File
+                                             </>
+                                          )}
+                                          {thread.claim.claim_type === CATEGORIES.URL && (
+                                             <>
+                                                <Icons name="link" size={12} /> Link
+                                             </>
+                                          )}
+                                          {thread.claim.claim_type === "VIDEO" && (
+                                             <>
+                                                <Icons name="play" size={12} /> Video
+                                             </>
+                                          )}
+                                          {!Object.values(CATEGORIES).includes(thread.claim.claim_type) &&
+                                             thread.claim.claim_type !== "VIDEO" && (
+                                                <>
+                                                   {thread.claim.claim_type.charAt(0) +
+                                                      thread.claim.claim_type.slice(1).toLowerCase()}
+                                                </>
+                                             )}
+                                       </div>
                                     )}
-                                    {verdictClass === "unverified" && <Icons name="help-circle" />}
-                                    {verdict}
+                                    <div className={`status-badge badge-${verdictClass}`} style={{ padding: "4px 8px", fontSize: "0.75rem" }}>
+                                       {verdictClass === "fake" && <Icons name="x-circle" size={12} />}
+                                       {verdictClass === "fact" && <Icons name="check-circle" size={12} />}
+                                       {verdictClass === "satire" && <Icons name="wand" size={12} />}
+                                       {verdictClass === "misleading" && <Icons name="alert-triangle" size={12} />}
+                                       {verdictClass === "unverified" && <Icons name="help-circle" size={12} />}
+                                       {verdict}
+                                    </div>
                                  </div>
 
                                  <div className="thread-actions-menu-wrap">
@@ -757,7 +736,7 @@ function CommunityFeed() {
                                     </button>
 
                                     {openMenuThreadId === thread.id && (
-                                       <div className="thread-owner-menu">
+                                       <div className="thread-owner-menu top-right">
                                           {isThreadOwner(thread) ? (
                                              <>
                                                 <button
@@ -797,13 +776,13 @@ function CommunityFeed() {
                                                       : "Report Thread"}
                                                 </button>
                                                 <button
-                                                   className="thread-owner-menu-item"
-                                                   onClick={(e) => shareThread(e, thread)}
-                                                   disabled={sharingThreadId === thread.id}>
-                                                   <Icons name="share-2" />
-                                                   {sharingThreadId === thread.id
-                                                      ? "Sharing..."
-                                                      : "Share"}
+                                                    className="thread-owner-menu-item"
+                                                    onClick={(e) => shareThread(e, thread)}
+                                                    disabled={sharingThreadId === thread.id}>
+                                                    <Icons name="share-2" />
+                                                    {sharingThreadId === thread.id
+                                                        ? "Sharing..."
+                                                        : "Share"}
                                                 </button>
                                              </>
                                           )}

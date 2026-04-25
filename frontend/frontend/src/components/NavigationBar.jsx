@@ -25,6 +25,7 @@ const isModeratorRole = (role) => role === "MOD" || role === "MODERATOR";
 function NavigationBar() {
    const { user, logout, authFetch } = useAuth();
    const [isOpen, setIsOpen] = useState(false);
+   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
    const [searchInput, setSearchInput] = useState("");
    const [debouncedSearch, setDebouncedSearch] = useState("");
    const [searchOpen, setSearchOpen] = useState(false);
@@ -57,6 +58,7 @@ function NavigationBar() {
          if (e.key === "Escape") {
             setIsOpen(false);
             setSearchOpen(false);
+            setMobileSearchOpen(false);
          }
       }
       document.addEventListener("keydown", handleEscape);
@@ -66,6 +68,7 @@ function NavigationBar() {
    useEffect(() => {
       setIsOpen(false);
       setSearchOpen(false);
+      setMobileSearchOpen(false);
    }, [location.pathname]);
 
    useEffect(() => {
@@ -196,7 +199,7 @@ function NavigationBar() {
       ? undefined
       : { color, borderColor: `${color}99`, background: `${color}75` };
 
-   return (
+   return (<>
       <nav className="top-navbar">
          <div className="nav-left">
             <div className="logo-section">
@@ -477,8 +480,153 @@ function NavigationBar() {
                )}
             </div>
          </div>
+
+         {/* ── Mobile Search Overlay ── */}
+         {mobileSearchOpen && (
+            <div className="mobile-search-overlay">
+               <div className="mobile-search-header">
+                  <form
+                     className="mobile-search-form"
+                     onSubmit={(e) => {
+                        e.preventDefault();
+                        const q = searchInput.trim();
+                        if (!q) return;
+                        setMobileSearchOpen(false);
+                        navigate(`/community?q=${encodeURIComponent(q)}`);
+                     }}>
+                     <Icons name="search" size={18} color="#6b7280" />
+                     <input
+                        type="text"
+                        className="mobile-search-input"
+                        placeholder="Search people and claims..."
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        autoFocus
+                        aria-label="Mobile search"
+                     />
+                     {searchInput && (
+                        <button
+                           type="button"
+                           className="search-clear-btn"
+                           onClick={handleClearSearch}>
+                           <Icons name="x" size={16} />
+                        </button>
+                     )}
+                  </form>
+                  <button
+                     className="mobile-search-cancel"
+                     onClick={() => {
+                        setMobileSearchOpen(false);
+                        handleClearSearch();
+                     }}>
+                     Cancel
+                  </button>
+               </div>
+
+               <div className="mobile-search-results">
+                  {searchLoading ? (
+                     <div className="search-results-state">
+                        <Icons name="loader" size={14} className="search-spinner" />
+                        Searching TruthLens...
+                     </div>
+                  ) : (
+                     <>
+                        {debouncedSearch && searchUsers.length === 0 && searchThreads.length === 0 && (
+                           <div className="search-results-state">
+                              No results found for "{debouncedSearch}".
+                           </div>
+                        )}
+
+                        {searchUsers.length > 0 && (
+                           <div className="search-section">
+                              <div className="search-section-title">People</div>
+                              {searchUsers.map((su) => (
+                                 <button
+                                    key={su.id}
+                                    type="button"
+                                    className="search-result-item"
+                                    onClick={() => {
+                                       setMobileSearchOpen(false);
+                                       handleUserResultClick(su.username);
+                                    }}>
+                                    <div className="search-user-avatar">
+                                       {su.avatar_url ? (
+                                          <img src={su.avatar_url} alt={`${su.username}'s avatar`} />
+                                       ) : (
+                                          <Icons name="user" size={14} />
+                                       )}
+                                    </div>
+                                    <div className="search-result-copy">
+                                       <span className="search-result-title">@{su.username}</span>
+                                       <span className="search-result-subtitle">{su.bio || "TruthLens member"}</span>
+                                    </div>
+                                    <span className={`search-trust-pill ${isModeratorRole(su.role) ? "mod" : ""}`}>
+                                       {isModeratorRole(su.role) ? "MOD" : Number(su.trust_score || 0).toFixed(1)}
+                                    </span>
+                                 </button>
+                              ))}
+                           </div>
+                        )}
+
+                        {searchThreads.length > 0 && (
+                           <div className="search-section">
+                              <div className="search-section-title">Threads</div>
+                              {searchThreads.map((thread) => (
+                                 <button
+                                    key={thread.id}
+                                    type="button"
+                                    className="search-result-item"
+                                    onClick={() => {
+                                       setMobileSearchOpen(false);
+                                       handleThreadResultClick(thread.id);
+                                    }}>
+                                    <div className="search-thread-icon">
+                                       <Icons name="file-text" size={14} />
+                                    </div>
+                                    <div className="search-result-copy">
+                                       <span className="search-result-title">{getThreadTitle(thread)}</span>
+                                       <span className="search-result-subtitle">{getThreadSubtitle(thread)}</span>
+                                    </div>
+                                 </button>
+                              ))}
+                           </div>
+                        )}
+                     </>
+                  )}
+               </div>
+            </div>
+         )}
       </nav>
-   );
+
+      {/* ── Mobile Bottom Tab Bar ── */}
+      <nav className="mobile-bottom-bar" aria-label="Mobile navigation">
+         <Link to="/community" className={`bottom-tab ${location.pathname === "/community" ? "active" : ""}`}>
+            <Icons name="home" size={22} />
+            <span>Feed</span>
+         </Link>
+         <button
+            className={`bottom-tab ${mobileSearchOpen ? "active" : ""}`}
+            onClick={() => setMobileSearchOpen(true)}>
+            <Icons name="search" size={22} />
+            <span>Search</span>
+         </button>
+         <Link to="/verify" className={`bottom-tab bottom-tab-center ${location.pathname === "/verify" ? "active" : ""}`}>
+            <div className="bottom-tab-center-icon">
+               <Icons name="scan-line" size={24} color="#fff" />
+            </div>
+            <span>Verify</span>
+         </Link>
+         <Link to="/notifications" className={`bottom-tab ${location.pathname === "/notifications" ? "active" : ""}`}>
+            <Icons name="bell" size={22} />
+            <span>Alerts</span>
+         </Link>
+         <Link to="/profile" className={`bottom-tab ${location.pathname === "/profile" ? "active" : ""}`}>
+            <Icons name="user" size={22} />
+            <span>Me</span>
+         </Link>
+      </nav>
+   </>);
+
 }
 
 export default NavigationBar;

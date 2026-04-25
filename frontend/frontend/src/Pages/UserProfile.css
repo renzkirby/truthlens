@@ -1019,6 +1019,122 @@
   }
 }
 
+/* Base styles for Mobile Profile Navigation - hidden on Desktop */
+.mobile-profile-nav {
+  display: none;
+}
+
+.mobile-nav-pill {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+  cursor: pointer;
+  transition: all 0.2s;
+  justify-content: flex-start;
+}
+
+.mobile-nav-pill:active {
+  background: var(--bg-subtle, #f3f4f6);
+  transform: scale(0.98);
+}
+
+.mobile-nav-pill.danger {
+  color: #dc2626;
+}
+
+@media (max-width: 768px) {
+  .mobile-profile-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border-color, #e5e7eb);
+  }
+
+  .profile-container {
+    padding: 24px 16px 80px;
+  }
+
+  /* Make main cards edge-to-edge on mobile */
+  .profile-header-container,
+  .claim-card,
+  .trust-breakdown-card,
+  .moderator-profile-summary,
+  .box-panel {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    margin-left: -16px;
+    margin-right: -16px;
+    width: auto;
+  }
+
+  /* Tab swipe pattern */
+  .tabs-row {
+    display: flex;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 0;
+  }
+
+  .tabs-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+    min-height: 44px;
+    padding: 10px 16px;
+  }
+
+  /* Stats grid 2-col */
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Modal safety */
+  .modal-content {
+    max-height: 85vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* Settings stacking */
+  .settings-grid {
+    flex-direction: column;
+  }
+
+  .settings-btn {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  /* Moderator grid */
+  .moderator-transparency-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Text scaling */
+  .profile-username {
+    font-size: 17px;
+  }
+
+  .stat-value {
+    font-size: 24px;
+  }
+}
+
 @media (max-width: 560px) {
   .profile-avatar-wrapper {
     top: -52px;

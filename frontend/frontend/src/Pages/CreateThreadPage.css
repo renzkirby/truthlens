@@ -385,6 +385,47 @@
    }
 
    .create-thread-container {
-      padding: 24px 16px 60px;
+      padding: 24px 16px 80px;
+   }
+
+   .create-thread-title {
+      font-size: 18px;
+   }
+
+   .escalation-option-btn {
+      min-height: 44px;
+      padding: 14px 16px;
+   }
+
+   .box-panel {
+      border-radius: 0;
+      border-left: none;
+      border-right: none;
+      margin-left: -16px;
+      margin-right: -16px;
+      width: auto;
+   }
+}
+
+@media (max-width: 480px) {
+   .create-thread-container {
+      padding: 20px 12px 76px;
+   }
+
+   .create-thread-topbar {
+      padding: 10px 16px;
+   }
+
+   .create-thread-title {
+      font-size: 16px;
+   }
+
+   .box-panel {
+      padding: 16px;
+   }
+
+   .submit-thread-btn {
+      font-size: 14px;
+      padding: 13px;
    }
 }

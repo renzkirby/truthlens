@@ -363,6 +363,7 @@
     .mod-action-link {
         flex: 1;
         justify-content: center;
+        min-height: 44px;
     }
 
     .mod-evidence-wrapper {

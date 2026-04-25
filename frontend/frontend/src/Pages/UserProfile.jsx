@@ -116,7 +116,7 @@ function getEmptyTabMessage(activeTab, isOwnProfile) {
 function UserProfile() {
    const { username } = useParams(); // Get username from URL if it exists
    const navigate = useNavigate();
-   const { user: authUser, authFetch, refreshUser } = useAuth();
+   const { user: authUser, authFetch, refreshUser, logout } = useAuth();
 
    const [activeTab, setActiveTab] = useState("threads");
    const [publicUser, setPublicUser] = useState(null);
@@ -628,6 +628,7 @@ function UserProfile() {
                         <strong>{followersCount}</strong> Followers
                      </span>
                   </div>
+
                </div>
             </div>
             {/* ── End Header ── */}
@@ -932,17 +933,7 @@ function UserProfile() {
                </div>
             </div>
 
-            {/* Account Settings - ONLY SHOW IF VIEWING OWN PROFILE */}
-            {isOwnProfile && (
-               <div className="box-panel">
-                  <h2 className="section-title">Account Settings</h2>
-                  <div className="settings-grid">
-                     <button className="settings-btn">Change Password</button>
-                     <button className="settings-btn">Change Email</button>
-                     <button className="settings-btn danger">Delete Account</button>
-                  </div>
-               </div>
-            )}
+            {/* Account Settings removed, migrated to Settings */}
 
             {/* ── FOLLOW MODAL ── */}
             {modalType && (
@@ -1105,6 +1096,30 @@ function UserProfile() {
                         </button>
                      </div>
                   </div>
+               </div>
+            )}
+
+            {/* 7. Mobile-Only Profile Actions (Since top-nav is hidden on mobile) */}
+            {isOwnProfile && (
+               <div className="mobile-profile-nav">
+                  <button 
+                     className="mobile-nav-pill"
+                     onClick={() => navigate(isModeratorRole(authUser?.role) ? "/moderation" : "/dashboard")}>
+                     <Icons name={isModeratorRole(authUser?.role) ? "shield" : "dashboard"} size={16} /> Dashboard
+                  </button>
+                  <button 
+                     className="mobile-nav-pill"
+                     onClick={() => navigate("/settings")}>
+                     <Icons name="settings" size={16} /> Settings
+                  </button>
+                  <button 
+                     className="mobile-nav-pill danger"
+                     onClick={() => {
+                        logout();
+                        navigate("/login");
+                     }}>
+                     <Icons name="logout" size={16} /> Log Out
+                  </button>
                </div>
             )}
          </main>

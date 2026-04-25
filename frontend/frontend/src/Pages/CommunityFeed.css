@@ -193,10 +193,17 @@ body {
 
 /* Header */
 .card-header {
+  padding: 20px 24px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 24px;
+  border-bottom: 2px solid var(--bg-subtle);
+}
+
+.header-badges-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .post-author-info {
@@ -240,7 +247,7 @@ body {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 .status-badge {
@@ -293,10 +300,15 @@ body {
 
 /* Claim & Media */
 .card-claim {
-  padding: 0 24px 20px;
-  font-size: 1rem;
-  color: var(--text-body);
+  padding: 0 24px;
+  font-size: 1.05rem;
   line-height: 1.5;
+  color: var(--text-base);
+  margin-top: 16px;
+  margin-bottom: 16px;
+  cursor: pointer;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 .card-media {
@@ -766,4 +778,211 @@ body {
 .sort-menu-item.active {
   color: var(--brand-primary);
   background: var(--bg-subtle);
+}
+
+/* ── Category pill fix (Rule 3) ── */
+.category-pill {
+  flex-shrink: 0;
+}
+
+/* ── Modal safety (Rule 4) ── */
+.feed-modal {
+  max-height: 85vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  /* Edge-to-edge feed */
+  .feed-container {
+    padding: 0 0 80px; /* remove side padding */
+    gap: 0; /* use borders or margins on children instead */
+  }
+
+  .box-panel {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  /* Separate cards visually since gap is 0 */
+  .post-card {
+    margin-bottom: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    border-radius: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+  }
+
+  /* Filter Bar - Horizontal Swipe */
+  .filter-bar {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 8px;
+  }
+  
+  .filter-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .filter-left, .filter-right {
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+  }
+
+  .filter-btn {
+    min-height: 44px;
+    padding: 8px 14px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Padding inside category pills container */
+  .category-pills {
+    padding: 16px;
+    margin-bottom: 0;
+  }
+
+  /* Card inner spacing */
+  .card-header {
+    padding: 16px;
+  }
+
+  .header-actions {
+    gap: 8px;
+  }
+
+  .header-badges-inline {
+    gap: 6px;
+  }
+
+  .media-type-badge {
+    padding: 4px 8px !important;
+    font-size: 0.75rem !important;
+  }
+
+  .card-claim {
+    padding: 0 16px;
+    margin-bottom: 12px; /* move bottom padding to margin to fix line-clamp leak */
+    font-size: 1rem;
+    line-height: 1.5;
+    /* Truncate long captions */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    overflow: hidden;
+  }
+
+  /* Edge-to-edge media */
+  .card-media {
+    margin-left: -16px;
+    margin-right: -16px;
+    width: calc(100% + 32px);
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  .card-footer {
+    padding: 12px 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .action-item {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 4px 10px;
+  }
+
+  .more-btn {
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .input-bar {
+    flex-wrap: wrap;
+  }
+
+  .snip-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Streamlined AI Analysis */
+  .ai-analysis-bar {
+    margin: 12px 16px;
+    border-radius: 8px;
+    padding: 12px;
+  }
+
+  .ai-analysis-context {
+    /* Truncate long context */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+    font-size: 0.85rem;
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
+  .url-preview-card {
+    margin: 12px 16px;
+  }
+
+  .feed-modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .feed-modal-btn {
+    width: 100%;
+    text-align: center;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .feed-container {
+    padding: 0 0 76px;
+  }
+
+  .card-header {
+    padding: 14px 16px;
+  }
+
+  .card-claim {
+    padding: 0 16px 12px;
+    font-size: 0.95rem;
+  }
+
+  .card-footer {
+    padding: 12px 16px;
+  }
+
+  .status-badge {
+    font-size: 0.72rem;
+    padding: 5px 10px;
+  }
+
+  .category-pill {
+    font-size: 0.82rem;
+    padding: 8px 16px;
+  }
+
+  .ai-analysis-bar {
+    margin: 12px 16px;
+  }
+
+  .url-preview-card {
+    margin: 12px 16px;
+  }
 }

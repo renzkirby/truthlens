@@ -572,4 +572,14 @@
         margin-left: 0;
         margin-top: 6px;
     }
+
+    .tdp-vote-btn {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    .tdp-owner-action {
+        min-height: 44px;
+        padding: 8px 14px;
+    }
 }
