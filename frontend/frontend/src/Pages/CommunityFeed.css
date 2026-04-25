@@ -970,47 +970,83 @@ body {
 
 /* =========================================================
    Small Mobile Fixes (< 480px) 
-   Fixes cramped headers and wrapping text on narrow phones
    ========================================================= */
 @media (max-width: 480px) {
 
-  /* 1. Header Fix: Allow the header elements to wrap gracefully */
+  /* 1. Force Single Line Header */
   .card-header {
-    flex-wrap: wrap;
-    /* Let badges drop to a new line if needed */
-    gap: 12px;
+    flex-wrap: nowrap !important;
+    /* Prevents wrapping */
+    padding: 12px 14px;
+    gap: 8px;
+    /* Tighter gap between left and right sides */
   }
 
-  /* Stop the "via TruthLens" link from wrapping awkwardly */
-  .author-time {
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-
-  /* 2. AI Bar Fix: Push the button to its own row so "80%" fits */
-  .ai-analysis-top-row {
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-
-  .needs-evidence-btn {
-    width: 100%;
-    /* Makes the button span the full width below the text */
-    text-align: center;
-    justify-content: center;
-    margin-top: 4px;
-  }
-
-  /* 3. Footer Fix: Evenly space the action buttons */
-  .card-footer {
-    justify-content: space-between;
-    /* Pushes items to the edges */
+  /* 2. Make the author info flexible so text can truncate */
+  .post-author-info {
+    flex: 1;
+    min-width: 0;
+    /* CRITICAL: This allows the flex container to shrink past its text width */
     gap: 8px;
   }
 
-  /* Slightly shrink the text so all 3 buttons fit perfectly */
+  /* Shrink Avatar to save horizontal space */
+  .author-avatar {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+  }
+
+  /* 3. Force Truncation on Name and Time */
+  .author-name {
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+  }
+
+  .author-time {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+    /* Drops flexbox here so ellipsis works cleanly */
+  }
+
+  /* 4. Protect and shrink the right-side badges */
+  .header-actions {
+    flex-shrink: 0;
+    /* Never squish the badges or menu button */
+    gap: 6px;
+  }
+
+  .status-badge {
+    padding: 4px 8px;
+    font-size: 0.65rem;
+    /* Slightly smaller text for the badge */
+  }
+
+  .more-btn {
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0;
+  }
+
+  .card-footer {
+    padding: 12px 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
   .action-item {
-    font-size: 0.8rem;
-    padding: 6px 8px;
+    min-height: 22px;
+    min-width: 22px;
+    padding: 4px 10px;
+    font-size: smaller;
+  }
+
+  .action-item.primary-action {
+    display: none;
   }
 }
