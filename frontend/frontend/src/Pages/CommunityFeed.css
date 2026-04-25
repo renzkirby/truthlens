@@ -968,39 +968,49 @@ body {
   }
 }
 
+/* =========================================================
+   Small Mobile Fixes (< 480px) 
+   Fixes cramped headers and wrapping text on narrow phones
+   ========================================================= */
 @media (max-width: 480px) {
-  .feed-container {
-    padding: 0 0 76px;
-  }
 
+  /* 1. Header Fix: Allow the header elements to wrap gracefully */
   .card-header {
-    padding: 14px 16px;
+    flex-wrap: wrap;
+    /* Let badges drop to a new line if needed */
+    gap: 12px;
   }
 
-  .card-claim {
-    padding: 0 16px 12px;
-    font-size: 0.95rem;
+  /* Stop the "via TruthLens" link from wrapping awkwardly */
+  .author-time {
+    flex-wrap: wrap;
+    gap: 4px;
   }
 
+  /* 2. AI Bar Fix: Push the button to its own row so "80%" fits */
+  .ai-analysis-top-row {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .needs-evidence-btn {
+    width: 100%;
+    /* Makes the button span the full width below the text */
+    text-align: center;
+    justify-content: center;
+    margin-top: 4px;
+  }
+
+  /* 3. Footer Fix: Evenly space the action buttons */
   .card-footer {
-    padding: 12px 16px;
+    justify-content: space-between;
+    /* Pushes items to the edges */
+    gap: 8px;
   }
 
-  .status-badge {
-    font-size: 0.72rem;
-    padding: 5px 10px;
-  }
-
-  .category-pill {
-    font-size: 0.82rem;
-    padding: 8px 16px;
-  }
-
-  .ai-analysis-bar {
-    margin: 12px 16px;
-  }
-
-  .url-preview-card {
-    margin: 12px 16px;
+  /* Slightly shrink the text so all 3 buttons fit perfectly */
+  .action-item {
+    font-size: 0.8rem;
+    padding: 6px 8px;
   }
 }

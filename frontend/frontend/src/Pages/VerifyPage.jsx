@@ -120,7 +120,7 @@ function VerifyPage() {
    const [url, setUrl] = useState("");
    const [image, setImage] = useState(null);
    const [imagePreview, setImagePreview] = useState(null);
-   const [text, setText] = useState(""); 
+   const [text, setText] = useState("");
    const [loading, setLoading] = useState(false);
    const [result, setResult] = useState(null);
    const [error, setError] = useState(null);
@@ -140,7 +140,9 @@ function VerifyPage() {
          }
 
          try {
-            const data = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/claims/${claimId}/status`);
+            const data = await authFetch(
+               `${import.meta.env.VITE_API_BASE_URL}/claims/${claimId}/status`,
+            );
 
             if (data.verdict !== "PENDING") {
                clearInterval(interval);
@@ -239,16 +241,16 @@ function VerifyPage() {
 
       try {
          const response = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/test-deepfake/`, {
-               method: "POST",
-               headers: { "Content-Type": "application/json" },
-               body: JSON.stringify({ image_data: base64 }),
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image_data: base64 }),
          });
-         
+
          // Custom simple result for the sandbox
          setResult({
-               isDeepfakeTest: true,
-               score: (response.ai_probability * 100).toFixed(1),
-               verdict: response.is_fake ? "AI GENERATED" : "REAL IMAGE"
+            isDeepfakeTest: true,
+            score: (response.ai_probability * 100).toFixed(1),
+            verdict: response.is_fake ? "AI GENERATED" : "REAL IMAGE",
          });
       } catch (err) {
          setError("Deepfake test failed.");
@@ -289,8 +291,6 @@ function VerifyPage() {
       setImagePreview(null);
    };
 
-
-
    return (
       <div className="verify-layout">
          <NavigationBar />
@@ -301,7 +301,7 @@ function VerifyPage() {
                   <Icons
                      name="scan-line"
                      size={22}
-                     color="var( --text-body)"
+                     color="#fff"
                   />
                </div>
                <div>
@@ -341,11 +341,17 @@ function VerifyPage() {
                   />
                   Verify Text
                </button>
-               <button 
+               <button
                   className={`verify-tab-btn ${activeTab === "deepfake" ? "active" : ""}`}
-                  onClick={() => { setActiveTab("deepfake"); setResult(null); setError(null); }}
-               >
-                  <Icons name="sparkles" size={16} />
+                  onClick={() => {
+                     setActiveTab("deepfake");
+                     setResult(null);
+                     setError(null);
+                  }}>
+                  <Icons
+                     name="sparkles"
+                     size={16}
+                  />
                   Deepfake Test
                </button>
             </div>
@@ -386,14 +392,19 @@ function VerifyPage() {
                   <div className="result-card box-panel">
                      <div className="result-verdict-row">
                         <span className="result-label">Deepfake Analysis:</span>
-                        <span 
-                           className="result-badge" 
-                           style={{ 
-                              backgroundColor: result.verdict === "AI GENERATED" ? "var(--fake-bg, #fee2e2)" : "var(--fact-bg, #dcfce7)",
-                              color: result.verdict === "AI GENERATED" ? "var(--fake-text, #991b1b)" : "var(--fact-text, #166534)",
-                              border: `1px solid ${result.verdict === "AI GENERATED" ? "var(--fake-border, #f87171)" : "var(--fact-border, #86efac)"}`
-                           }}
-                        >
+                        <span
+                           className="result-badge"
+                           style={{
+                              backgroundColor:
+                                 result.verdict === "AI GENERATED"
+                                    ? "var(--fake-bg, #fee2e2)"
+                                    : "var(--fact-bg, #dcfce7)",
+                              color:
+                                 result.verdict === "AI GENERATED"
+                                    ? "var(--fake-text, #991b1b)"
+                                    : "var(--fact-text, #166534)",
+                              border: `1px solid ${result.verdict === "AI GENERATED" ? "var(--fake-border, #f87171)" : "var(--fact-border, #86efac)"}`,
+                           }}>
                            {result.verdict}
                         </span>
                      </div>
@@ -401,12 +412,13 @@ function VerifyPage() {
                      <div className="result-summary-box">
                         <p className="result-summary-title">AI Confidence Score</p>
                         <p className="result-summary-text">
-                           The forensic model is <strong>{result.score}%</strong> confident that this image was generated or manipulated by AI.
+                           The forensic model is <strong>{result.score}%</strong> confident that
+                           this image was generated or manipulated by AI.
                         </p>
                      </div>
                   </div>
                )}
-               
+
                {/* ── URL Tab ── */}
                {activeTab === "url" && (
                   <div className="verify-panel box-panel">
@@ -551,7 +563,7 @@ function VerifyPage() {
                         />
                         Paste a claim, quote, or social media post
                      </label>
-                     
+
                      <textarea
                         className="url-input"
                         placeholder="e.g., 'The government just announced a nationwide lockdown starting tomorrow...'"
@@ -559,13 +571,13 @@ function VerifyPage() {
                         onChange={(e) => setText(e.target.value)}
                         disabled={loading}
                         rows={5}
-                        style={{ 
-                           resize: "vertical", 
-                           height: "auto", 
+                        style={{
+                           resize: "vertical",
+                           height: "auto",
                            minHeight: "100px",
                            padding: "12px",
                            marginBottom: "15px",
-                           width: "100%"
+                           width: "100%",
                         }}
                      />
 
@@ -589,7 +601,8 @@ function VerifyPage() {
                         )}
                      </button>
                      <p className="panel-hint">
-                        Our AI will extract the core claim, cross-reference it with live news, and evaluate its factual accuracy.
+                        Our AI will extract the core claim, cross-reference it with live news, and
+                        evaluate its factual accuracy.
                      </p>
                   </div>
                )}
@@ -676,12 +689,11 @@ function VerifyPage() {
                         )}
                      </button>
                      <p className="panel-hint">
-                        Our AI model will analyze the image for digital fabrication or AI generation.
+                        Our AI model will analyze the image for digital fabrication or AI
+                        generation.
                      </p>
                   </div>
                )}
-               
-               
             </div>
          </main>
       </div>
