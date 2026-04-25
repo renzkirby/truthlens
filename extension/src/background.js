@@ -545,14 +545,16 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       return true;
    }
 
-   if (request.type === "VERIFY_FILE_TEXT" || request.type === "VERIFY_FILE_PDF") {
+   if (request.type === "VERIFY_FILE") {
       const tabId = request.tabId ?? sender?.tab?.id; // <--- Grabs the tabId we passed from the popup
       const payload = request.payload;
-      const endpoint = request.type === "VERIFY_FILE_PDF" ? "verify-pdf/" : "verify-text/";
+      const endpoint= "verify-file/";
 
       sendResponse({ accepted: true, success: true });
+(async () => {
+         // Also adding guest scan caching support so file scans save to the local library!
+         const shouldCacheGuestScan = await shouldUseGuestCaching();
 
-      (async () => {
          try {
             const res = await postJsonWithAuthFallback(endpoint, payload);
             const data = await res.json().catch(() => ({}));
@@ -567,7 +569,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                tabId: tabId, 
                successType: "DISPLAY_SNIPPET_RESULT", 
                timeoutMessage: "DISPLAY_SNIPPET_ERROR",
-               onResolved: null,
+               onResolved: shouldCacheGuestScan ? (claim) => appendGuestScan(claim, "FILE") : null,
                maxPolls: 40, 
                pollEveryMs: 3000,
             });
@@ -582,4 +584,4 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 
       return true;
    }
-});
+});   

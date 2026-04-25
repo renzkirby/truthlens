@@ -194,6 +194,28 @@
   color: #dc2626;
 }
 
+.hub-btn-report {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 6px;
+    background-color: #f8fafc;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid #cbd5e1;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.hub-btn-report:hover {
+    background-color: #e2e8f0;
+    color: #0f172a;
+    border-color: #94a3b8;
+}
+
 /* Meta Data (Location, Join Date) */
 .profile-meta-row {
   display: flex;
@@ -1133,6 +1155,17 @@
   .stat-value {
     font-size: 24px;
   }
+  .li-actions > div {
+        justify-content: flex-start !important;
+        width: 100%;
+    }
+    
+    .hub-btn-report,
+    .hub-btn-publish {
+        flex: 1;
+        justify-content: center;
+        min-height: 44px;
+    }
 }
 
 @media (max-width: 480px) {

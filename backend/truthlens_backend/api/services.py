@@ -671,7 +671,7 @@ def upload_image_to_database(base64_string):
 # AI DEEPFAKE/AI GENERATED IMAGE PIPELINE
 def detect_ai_image(image_bytes):
     """Sends image to Hugging Face's inference API to detect AI generation."""
-    API_URL = "https://router.huggingface.co/hf-inference/models/umm-maybe/AI-image-detector"
+    API_URL = "https://router.huggingface.co/hf-inference/models/dima806/deepfake_vs_real_image_detection"
     headers = {
             "Authorization": f"Bearer {os.environ.get('HUGGINGFACE_API_KEY')}",
             "Content-Type": "application/octet-stream"
@@ -703,3 +703,37 @@ def detect_ai_image(image_bytes):
     except Exception as e:
         print(f"Detection Error: {str(e)}")
         return 0.0
+
+def generate_deepfake_explanation(base64_string):
+    """Uses Groq Vision to write an explanation of AI artifacts in the image."""
+    try:
+        # Initialize Groq client (ensure GROQ_API_KEY is in your environment)
+        client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+        
+        # Ensure the base64 string has the correct data URI prefix for Groq
+        image_url = f"data:image/jpeg;base64,{base64_string}"
+
+        chat_completion = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an expert digital forensics AI. The user will provide an image that has already been mathematically flagged as AI-generated. Write a concise, 2-sentence summary describing what is in the photo, and pointing out 1 or 2 common AI artifacts visible in the image (e.g., anatomical errors, lighting inconsistencies, blurry background details). Keep it brief and objective."
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Analyze this AI-generated image and explain the artifacts."},
+                        {"type": "image_url", "image_url": {"url": image_url}}
+                    ]
+                }
+            ],
+            model="llama-3.2-11b-vision-preview", # Groq's vision model
+            temperature=0.3,
+            max_tokens=150
+        )
+        
+        return chat_completion.choices[0].message.content
+        
+    except Exception as e:
+        print(f"Vision AI Error: {str(e)}")
+        return "Our forensic model detected strong indicators of digital manipulation or AI generation, but a detailed visual summary could not be generated."
