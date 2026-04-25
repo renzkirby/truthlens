@@ -350,6 +350,7 @@ function VerifyPage() {
             isDeepfakeTest: true,
             score: (response.ai_probability * 100).toFixed(1),
             verdict: response.is_fake ? "AI GENERATED" : "REAL IMAGE",
+            summary: response.summary
          });
       } catch (err) {
          setError("Deepfake test failed.");
@@ -517,11 +518,14 @@ function VerifyPage() {
                      </div>
 
                      <div className="result-summary-box">
-                        <p className="result-summary-title">AI Confidence Score</p>
-                        <p className="result-summary-text">
+                        <p className="result-summary-title">AI Forensic Analysis</p>
+                        <p className="result-summary-text" style={{ marginBottom: "8px" }}>
                            The forensic model is <strong>{result.score}%</strong> confident that
                            this image was generated or manipulated by AI.
                         </p>
+                        <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "8px", fontSize: "13px", color: "#4b5563" }}>
+                           <strong>Explanation:</strong> {result.summary}
+                        </div>
                      </div>
                   </div>
                )}

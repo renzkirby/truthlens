@@ -181,8 +181,11 @@ export function displayDeepfakeResultCard(data) {
       </div>
       
       <div class="truthlens-summary-box">
-         <div style="font-size: 14px; line-height: 1.4;">
-            Our neural network indicates a <strong>${percentage}%</strong> probability that this image was generated or heavily manipulated by AI models like Midjourney or Stable Diffusion.
+         <div style="font-size: 14px; line-height: 1.4; margin-bottom: 8px;">
+            Our neural network indicates a <strong>${percentage}%</strong> probability that this image is AI-generated.
+         </div>
+         <div style="font-size: 13px; line-height: 1.4; color: #4b5563; border-top: 1px solid #e5e7eb; padding-top: 8px;">
+            <strong>AI Explanation:</strong> ${summary || "No detailed explanation available."}
          </div>
       </div>
       

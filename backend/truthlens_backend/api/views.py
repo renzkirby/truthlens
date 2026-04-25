@@ -17,6 +17,7 @@ from rest_framework.pagination import CursorPagination
 from rest_framework.views import APIView
 from datetime import timedelta
 from django.shortcuts import get_object_or_404
+from PIL import Image
 import json
 import secrets
 import base64
@@ -24,9 +25,14 @@ import uuid
 import io
 import PyPDF2
 import docx
-from .services import detect_ai_image
-from .services import process_image, upload_image_to_database
-from .services import validate_public_url, check_url_threat_reputation
+from .services import (
+    detect_ai_image, 
+    generate_deepfake_explanation,
+    process_image, 
+    upload_image_to_database,
+    validate_public_url, 
+    check_url_threat_reputation,
+)
 from .claim_matching import compute_fingerprint, find_matching_claim, get_match_result
 from .tasks import (
     snippet_fact_check_process,
@@ -1010,25 +1016,61 @@ class VoteViewSet(viewsets.ModelViewSet):
 @csrf_exempt
 @api_view(["POST"])
 def test_deepfake(request):
-    """Temporary endpoint to test AI image detection."""
-    parsed_data = json.loads(request.body)
-    base64_string = parsed_data.get("image_data")
+    """Endpoint to test AI image detection with image standardization."""
+    try:
+        parsed_data = json.loads(request.body)
+        base64_string = parsed_data.get("image_data")
 
-    if not base64_string:
-        return JsonResponse({"error": "No image data provided"}, status=400)
+        if not base64_string:
+            return JsonResponse({"error": "No image data provided"}, status=400)
 
-    if "," in base64_string:
-        base64_string = base64_string.split(",")[1]
+        if "," in base64_string:
+            base64_string = base64_string.split(",")[1]
 
-    image_bytes = base64.b64decode(base64_string)
-    
-    # Call the API directly (No Celery needed for this quick test)
-    ai_probability = detect_ai_image(image_bytes)
-    
-    return JsonResponse({
-        "ai_probability": ai_probability,
-        "is_fake": ai_probability > 0.65
-    }, status=200)
+        # 1. Decode the raw bytes safely
+        raw_image_bytes = base64.b64decode(base64_string)
+        
+        # 2. Standardize and optimize the image using Pillow
+        img = Image.open(io.BytesIO(raw_image_bytes))
+        
+        # Strip alpha channels (transparency) which confuse AI models
+        if img.mode in ('RGBA', 'P'):
+            img = img.convert('RGB')
+            
+        # Resize down if the image is massive (keeps API fast and under limits)
+        img.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
+        
+        # Save to a new buffer as a clean JPEG
+        output_buffer = io.BytesIO()
+        img.save(output_buffer, format="JPEG", quality=90)
+        optimized_image_bytes = output_buffer.getvalue()
+
+        # 3. Send the clean, optimized bytes to your model
+        ai_probability = detect_ai_image(optimized_image_bytes)
+        
+        # You can adjust this 0.65 threshold based on testing your new model!
+        is_fake = ai_probability > 0.65
+
+        # 4. Generate the dynamic explanation!
+        summary_text = ""
+        if is_fake:
+            # Pass the base64 string (ensure it's string format, not bytes, for Groq)
+            base64_for_groq = base64.b64encode(optimized_image_bytes).decode('utf-8')
+            summary_text = generate_deepfake_explanation(base64_for_groq)
+        else:
+            summary_text = "No significant indicators of AI generation were detected. The image appears to possess natural digital noise and structural consistency."
+
+        return JsonResponse({
+            "ai_probability": ai_probability,
+            "is_fake": is_fake,
+            "summary": summary_text # <-- Pass this back to React!
+        }, status=200)
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON payload"}, status=400)
+    except Exception as e:
+        print(f"Deepfake view error: {str(e)}")
+        return JsonResponse({"error": "Failed to process image format."}, status=400)
 
 @csrf_exempt
 @api_view(["POST"])
