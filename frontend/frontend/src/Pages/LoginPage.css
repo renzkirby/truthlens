@@ -3,6 +3,7 @@
 .login-layout {
   display: flex;
   min-height: 100vh;
+  min-height: 100svh;
   font-family: 'Inter', sans-serif;
   background-color: var(--white, #ffffff);
 }
@@ -64,8 +65,8 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   padding: 15px 20px;
   border-radius: 12px;
-  width: fit-content;
-  min-width: 300px;
+  width: min(100%, 360px);
+  min-width: 0;
   backdrop-filter: blur(10px);
 }
 
@@ -108,22 +109,22 @@
 }
 
 .circle-1 {
-  width: 500px;
-  height: 500px;
+  width: clamp(260px, 42vw, 500px);
+  height: clamp(260px, 42vw, 500px);
   top: -150px;
   right: -150px;
 }
 
 .circle-2 {
-  width: 300px;
-  height: 300px;
+  width: clamp(180px, 24vw, 300px);
+  height: clamp(180px, 24vw, 300px);
   bottom: 20%;
   right: 10%;
 }
 
 .circle-3 {
-  width: 200px;
-  height: 200px;
+  width: clamp(140px, 17vw, 200px);
+  height: clamp(140px, 17vw, 200px);
   bottom: -50px;
   left: -50px;
 }

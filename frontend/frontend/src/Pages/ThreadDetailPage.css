@@ -202,7 +202,8 @@
     border: 1.5px solid #e5e7eb;
     border-radius: 14px;
     padding: 24px;
-    min-width: 260px;
+    min-width: 0;
+    width: min(300px, 100%);
     max-width: 300px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.07);
     flex-shrink: 0;
@@ -270,7 +271,7 @@
     margin: 0 auto;
     padding: 32px 40px 80px;
     display: grid;
-    grid-template-columns: 1fr 340px;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
     gap: 32px;
     align-items: start;
 }
@@ -2049,7 +2050,7 @@
     overscroll-behavior: contain;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
     .tdp-body {
         grid-template-columns: 1fr;
         padding: 24px 20px 80px;
@@ -2116,7 +2117,7 @@
     }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 768px) {
     .tdp-body {
         padding: 20px 16px 76px;
     }

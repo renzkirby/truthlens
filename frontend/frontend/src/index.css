@@ -1,0 +1,60 @@
+* {
+    box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+    width: 100%;
+    min-height: 100%;
+}
+
+html,
+body {
+    overflow-x: hidden;
+    width: 100%;
+    position: relative;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
+}
+
+body {
+    margin: 0;
+    text-rendering: optimizeLegibility;
+}
+
+img,
+svg,
+video,
+canvas {
+    max-width: 100%;
+    height: auto;
+}
+
+button,
+input,
+textarea,
+select {
+    font: inherit;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    line-height: 1.2;
+}
+
+@media (max-width: 768px) {
+    h1 {
+        font-size: clamp(1.5rem, 5.2vw, 2rem);
+    }
+
+    h2 {
+        font-size: clamp(1.3rem, 4.4vw, 1.65rem);
+    }
+}

@@ -22,8 +22,9 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     animation: slideInRight 0.3s ease-out;
     pointer-events: auto;
-    max-width: 400px;
-    min-width: 300px;
+    width: min(420px, calc(100vw - 32px));
+    max-width: 420px;
+    min-width: 0;
 }
 
 @keyframes slideInRight {
@@ -108,7 +109,9 @@
 /* Toast close button */
 .toast-close {
     flex-shrink: 0;
-    padding: 4px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
     background: none;
     border: none;
     cursor: pointer;
@@ -126,6 +129,19 @@
 }
 
 /* Responsive */
+@media (max-width: 768px) {
+    .toast-container {
+        right: 12px;
+        left: 12px;
+        bottom: 76px;
+    }
+
+    .toast {
+        width: 100%;
+        max-width: none;
+    }
+}
+
 @media (max-width: 480px) {
     .toast-container {
         bottom: 16px;

@@ -273,7 +273,7 @@
 
 .navbar-search {
     position: relative;
-    min-width: 300px;
+    min-width: 220px;
 }
 
 .search-box {
@@ -465,13 +465,7 @@
     }
 }
 
-@media (max-width: 1200px) {
-    .navbar-search {
-        min-width: 240px;
-    }
-}
-
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
     .top-navbar {
         padding: 0 12px;
     }
@@ -485,7 +479,7 @@
     }
 
     .navbar-search {
-        min-width: 180px;
+        min-width: 220px;
     }
 
     .user-profile-pill {
@@ -510,6 +504,7 @@
 }
 
 @media (max-width: 768px) {
+
     /* ── Hide desktop-only elements from top navbar ── */
     .nav-tabs {
         display: none;
@@ -625,8 +620,15 @@
     }
 
     @keyframes mobileSearchFadeIn {
-        from { opacity: 0; transform: translateY(8px); }
-        to   { opacity: 1; transform: translateY(0); }
+        from {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
 
     .mobile-search-header {

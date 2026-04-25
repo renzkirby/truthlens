@@ -35,19 +35,28 @@
     top: calc(100% + 8px);
     right: 0;
     width: 360px;
+    max-height: 85vh;
     background: var(--bg-surface);
     border: 1px solid var(--border-default);
     border-radius: 12px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08);
     z-index: 200;
     overflow: hidden;
+    overscroll-behavior: contain;
     animation: dropdownFadeIn 0.12s ease;
 }
 
 /* Reuse the fade-in animation from NavigationBar.css */
 @keyframes dropdownFadeIn {
-    from { opacity: 0; transform: translateY(-4px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* ── Header ── */
@@ -86,7 +95,8 @@
     color: var(--brand-primary);
     cursor: pointer;
     font-family: 'Inter', sans-serif;
-    padding: 0;
+    min-height: 44px;
+    padding: 0 8px;
     transition: opacity 0.15s;
 }
 
@@ -101,7 +111,7 @@
 
 /* ── Notification list ── */
 .notif-list {
-    max-height: 380px;
+    max-height: min(52vh, 380px);
     overflow-y: auto;
 }
 
@@ -111,6 +121,7 @@
     align-items: flex-start;
     gap: 12px;
     padding: 12px 16px;
+    min-height: 44px;
     border-bottom: 1px solid var(--border-light);
     cursor: pointer;
     transition: background 0.1s;
@@ -209,6 +220,9 @@
     font-weight: 600;
     color: var(--brand-primary);
     text-decoration: none;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
 }
 
 .notif-see-all-link:hover {
@@ -218,11 +232,18 @@
 /* ── Responsive ── */
 @media (max-width: 768px) {
     .notif-popup {
-        width: min(360px, calc(100vw - 32px));
-        right: -60px;
+        width: min(380px, calc(100vw - 16px));
+        right: 0;
     }
 
     .notif-item {
         min-height: 44px;
+    }
+}
+
+@media (max-width: 480px) {
+    .notif-popup {
+        width: calc(100vw - 12px);
+        right: -4px;
     }
 }

@@ -701,7 +701,7 @@ body {
   color: #92400e;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
   .filter-bar {
     flex-direction: column;
     align-items: stretch;
@@ -794,10 +794,13 @@ body {
 
 /* ── Responsive ── */
 @media (max-width: 768px) {
+
   /* Edge-to-edge feed */
   .feed-container {
-    padding: 0 0 80px; /* remove side padding */
-    gap: 0; /* use borders or margins on children instead */
+    padding: 0 0 80px;
+    /* remove side padding */
+    gap: 0;
+    /* use borders or margins on children instead */
   }
 
   .box-panel {
@@ -815,29 +818,41 @@ body {
     border-right: 0 !important;
   }
 
-  /* Filter Bar - Horizontal Swipe */
+  /* Filter & Sort Bar - Stacked Mobile Layout */
   .filter-bar {
-    flex-direction: row;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    margin-bottom: 8px;
+    overflow: visible;
+    /* Remove the full-bar scroll */
+  }
+
+  /* Make ONLY the filter buttons swipeable */
+  .filter-left {
     flex-wrap: nowrap;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
-    margin-bottom: 8px;
+    padding-bottom: 4px;
+    /* Space for hidden scrollbar */
+    gap: 8px;
   }
-  
-  .filter-bar::-webkit-scrollbar {
+
+  .filter-left::-webkit-scrollbar {
     display: none;
   }
 
-  .filter-left, .filter-right {
+  .filter-btn {
     flex-shrink: 0;
-    flex-wrap: nowrap;
+    /* Prevents buttons from squishing */
   }
 
-  .filter-btn {
-    min-height: 44px;
-    padding: 8px 14px;
-    white-space: nowrap;
-    flex-shrink: 0;
+  /* Spread the Sort label and dropdown across the bottom row */
+  .filter-right {
+    /* justify-content: space-between; */
+    width: 100%;
+    border-top: 1px solid var(--border-light);
+    padding-top: 12px;
   }
 
   /* Padding inside category pills container */
@@ -866,7 +881,8 @@ body {
 
   .card-claim {
     padding: 0 16px;
-    margin-bottom: 12px; /* move bottom padding to margin to fix line-clamp leak */
+    margin-bottom: 12px;
+    /* move bottom padding to margin to fix line-clamp leak */
     font-size: 1rem;
     line-height: 1.5;
     /* Truncate long captions */
