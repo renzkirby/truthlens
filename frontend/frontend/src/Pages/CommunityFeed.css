@@ -834,6 +834,7 @@ body {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     padding-bottom: 4px;
+    padding-left: 8px;
     /* Space for hidden scrollbar */
     gap: 8px;
   }
@@ -850,6 +851,7 @@ body {
   /* Spread the Sort label and dropdown across the bottom row */
   .filter-right {
     /* justify-content: space-between; */
+    padding-left: 8px;
     width: 100%;
     border-top: 1px solid var(--border-light);
     padding-top: 12px;
