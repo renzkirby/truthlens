@@ -43,6 +43,10 @@ const ResultCard = ({ result, onEscalate }) => {
 
    const showEscalate = result.verdict === "UNVERIFIED" || result.confidence_score < 50;
 
+   const evidenceList = result.sources && result.sources.length > 0 
+      ? result.sources 
+      : (result.source_url ? [result.source_url] : []);
+
    return (
       <div className="result-card">
          <div className="result-verdict-row">
@@ -54,8 +58,22 @@ const ResultCard = ({ result, onEscalate }) => {
             </span>
          </div>
 
+         {/* ── Banners ── */}
+         {result.has_community_verdict && (
+            <div className="result-banner community-verified">
+               <Icons name="shield-check" size={14} /> COMMUNITY VERIFIED
+            </div>
+         )}
+         {result.is_ai_generated && (
+            <div className="result-banner ai-warning">
+               <Icons name="sparkles" size={14} /> AI-GENERATED MEDIA DETECTED
+            </div>
+         )}
+
          <div className="result-summary-box">
-            <p className="result-summary-title">AI Summary</p>
+            <p className="result-summary-title">
+               {result.has_community_verdict ? 'Community Verdict Summary' : 'AI Summary'}
+            </p>
             <p className="result-summary-text">{result.summary}</p>
          </div>
 
@@ -72,40 +90,67 @@ const ResultCard = ({ result, onEscalate }) => {
             />
          </div>
 
-         <div className="result-footer">
+         {/* ── Score Context ── */}
+         {result.score_context && (
+            <div className="result-score-context">
+               <strong>Context:</strong> {result.score_context}
+            </div>
+         )}
+
+         {/* ── Multiple Sources List ── */}
+         {result.verdict !== "OUT_OF_SCOPE" && evidenceList.length > 0 && (
+            <div className="result-sources-section">
+               <strong className="result-sources-title">Sources:</strong>
+               <div className="result-sources-list">
+                  {evidenceList.map((src, index) => {
+                     const urlStr = typeof src === 'string' ? src : src.url;
+                     return (
+                        <a key={index} href={urlStr} target="_blank" rel="noopener noreferrer" className="result-source-item">
+                           "{urlStr}"
+                        </a>
+                     );
+                  })}
+               </div>
+            </div>
+         )}
+
+
+         <div className="result-footer" style={{ marginTop: '8px' }}>
             <span className="result-source-type">
-               <Icons
-                  name="info"
-                  size={13}
-               />
-               {result.source_type}
+               <Icons name="info" size={13} />
+               Source Type: {result.has_community_verdict ? 'Community Moderation' : result.source_type}
             </span>
-            {result.source_url && !showEscalate && (
-               <a
-                  href={result.source_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="result-source-link">
-                  <Icons
-                     name="external-link"
-                     size={13}
-                  />{" "}
-                  View Source
-               </a>
-            )}
          </div>
 
-         {showEscalate && result.id && (
-            <button
-               className="escalate-btn"
-               onClick={onEscalate}>
-               <Icons
-                  name="flag"
-                  size={14}
-               />
-               Ask the Community
-            </button>
-         )}
+         {/* ── Call to Action Buttons ── */}
+         <div className="result-action-buttons">
+            <a 
+               href={`/analysis/${result.id}`} 
+               target="_blank" 
+               rel="noopener noreferrer" 
+               className="view-report-btn"
+            >
+               View Full Report →
+            </a>
+
+            {result.thread_id ? (
+               <a 
+                  href={`/thread/detail/${result.thread_id}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="view-thread-btn"
+               >
+                  View Community Discussion
+               </a>
+            ) : showEscalate && result.id ? (
+               <button
+                  className="escalate-btn"
+                  onClick={onEscalate}>
+                  <Icons name="flag" size={14} />
+                  Ask the Community
+               </button>
+            ) : null}
+         </div>
       </div>
    );
 };
@@ -321,7 +366,7 @@ function VerifyPage() {
                      name="link"
                      size={15}
                   />
-                  Verify URL
+                  Analyze URL
                </button>
                <button
                   className={`verify-tab-btn ${activeTab === "image" ? "active" : ""}`}
@@ -352,7 +397,7 @@ function VerifyPage() {
                      name="sparkles"
                      size={16}
                   />
-                  Deepfake Test
+                  Detect Deepfake
                </button>
             </div>
 

@@ -464,6 +464,123 @@
    background: #fef3c7;
 }
 
+/* ── Banners ── */
+.result-banner {
+   display: flex;
+   align-items: center;
+   gap: 6px;
+   padding: 8px 12px;
+   border-radius: 6px;
+   font-size: 11px;
+   font-weight: 800;
+   letter-spacing: 0.5px;
+}
+
+.result-banner.ai-warning {
+   background-color: #f3e8ff;
+   color: #6b21a8;
+   border: 1px solid #d8b4fe;
+}
+
+.result-banner.community-verified {
+   background-color: #dcfce7;
+   color: #166534;
+   border: 1px solid #86efac;
+}
+
+/* ── Score Context ── */
+.result-score-context {
+   font-size: 12px;
+   color: var(--text-muted);
+   margin-top: 4px;
+   line-height: 1.3;
+}
+
+.result-score-context strong {
+   color: var(--text-main);
+}
+
+/* ── Sources List ── */
+.result-sources-section {
+   margin-top: 12px;
+   font-size: 11px;
+}
+
+.result-sources-title {
+   color: #374151;
+   display: block;
+   margin-bottom: 6px;
+}
+
+.result-sources-list {
+   display: flex;
+   flex-direction: column;
+   gap: 6px;
+}
+
+.result-source-item {
+   color: #4f46e5;
+   text-decoration: none;
+   background: #f9fafb;
+   padding: 6px 10px;
+   border-radius: 6px;
+   border: 1px solid #e5e7eb;
+   overflow: hidden;
+   text-overflow: ellipsis;
+   white-space: nowrap;
+   transition: background 0.2s, border-color 0.2s;
+}
+
+.result-source-item:hover {
+   background: #eef2ff;
+   border-color: #c7d2fe;
+}
+
+/* ── CTA Buttons ── */
+.result-action-buttons {
+   display: flex;
+   flex-direction: column;
+   gap: 8px;
+   margin-top: 8px;
+}
+
+.view-report-btn {
+   display: flex;
+   justify-content: center;
+   align-items: center;
+   gap: 6px;
+   background: #4f46e5;
+   color: #fff;
+   padding: 12px;
+   border-radius: 10px;
+   text-decoration: none;
+   font-weight: 700;
+   font-size: 14px;
+   transition: background 0.15s;
+}
+
+.view-report-btn:hover {
+   background: #4338ca;
+}
+
+.view-thread-btn {
+   display: block;
+   text-align: center;
+   background: #f3f4f6;
+   padding: 12px;
+   border-radius: 10px;
+   text-decoration: none;
+   color: #4f46e5;
+   font-weight: 700;
+   font-size: 14px;
+   border: 1px solid #e5e7eb;
+   transition: background 0.15s;
+}
+
+.view-thread-btn:hover {
+   background: #e5e7eb;
+}
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
    .verify-container {
