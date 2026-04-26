@@ -846,7 +846,7 @@ function ThreadDetailPage() {
                <div className="tdp-breadcrumb-left">
                   <button
                      className="tdp-back-btn"
-                     onClick={() => navigate(-1)}>
+                     onClick={() => navigate("/community")}>
                      <Icons
                         name="arrow-left"
                         size={14}
@@ -990,7 +990,7 @@ function ThreadDetailPage() {
                            )}
                         </>
                      ) : thread.claim?.verified_evidence_count > 0 &&
-                       !thread.claim?.moderator_verdict_info ? (
+                        !thread.claim?.moderator_verdict_info ? (
                         // REFINEMENT #7: Pending Consensus - Evidence Under Review
                         <>
                            <div style={{ marginBottom: "12px" }}>
@@ -1114,14 +1114,6 @@ function ThreadDetailPage() {
                                     hour: "numeric",
                                     minute: "2-digit",
                                  })}{" "}
-                              </span>
-                              <span className="tdp-via-badge">
-                                 <Icons
-                                    name="search"
-                                    size={9}
-                                    color="#4f46e5"
-                                 />
-                                 via TruthLens
                               </span>
                            </div>
                         </div>
@@ -1383,8 +1375,8 @@ function ThreadDetailPage() {
                                  const commentDateTime = comment.commented_at
                                     ? new Date(comment.commented_at).toLocaleString()
                                     : comment.created_at
-                                      ? new Date(comment.created_at).toLocaleString()
-                                      : comment.timestamp || "";
+                                       ? new Date(comment.created_at).toLocaleString()
+                                       : comment.timestamp || "";
                                  return (
                                     <div
                                        key={comment.id || i}

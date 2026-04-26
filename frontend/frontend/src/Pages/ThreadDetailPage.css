@@ -2110,11 +2110,6 @@
         width: 44px;
         height: 44px;
     }
-
-    .tdp-vote-btn {
-        min-height: 44px;
-        min-width: 44px;
-    }
 }
 
 @media (max-width: 768px) {
@@ -2128,71 +2123,6 @@
 
     .tdp-poster-stats {
         grid-template-columns: 1fr 1fr 1fr;
-    }
-
-    .tdp-source-link.prominent {
-        grid-template-columns: 1fr;
-        grid-template-areas:
-            "kicker"
-            "url"
-            "path"
-            "cta";
-        padding-right: 10px;
-    }
-
-    .tdp-source-link-url {
-        white-space: normal;
-        word-break: break-word;
-        font-size: 14px;
-    }
-
-    .tdp-source-link-path {
-        white-space: normal;
-        word-break: break-word;
-    }
-
-    .tdp-evidence-headline {
-        font-size: 14px;
-    }
-
-    .tdp-evidence-news-meta {
-        flex-wrap: wrap;
-        gap: 6px;
-    }
-
-    .tdp-evidence-votes {
-        flex-wrap: wrap;
-    }
-
-    .tdp-weighted-score {
-        margin-left: 0;
-    }
-
-    .tdp-evidence-verdicts {
-        grid-template-columns: 1fr;
-    }
-
-    .tdp-evidence-verdict {
-        justify-content: flex-start;
-    }
-
-    .tdp-inline-edit-row {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .tdp-inline-edit-select {
-        width: 100%;
-    }
-
-    .tdp-inline-edit-actions {
-        justify-content: flex-start;
-        flex-wrap: wrap;
-    }
-
-    .tdp-evidence-header-actions {
-        flex-wrap: wrap;
-        justify-content: flex-end;
     }
 
     .tdp-claim-text {
@@ -2214,5 +2144,241 @@
     .tdp-dialog-btn {
         width: 100%;
         text-align: center;
+    }
+
+    /* ── COMMENTS – compact action row (Reddit/Discord-style) ── */
+    .tdp-comment-header {
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+
+    .tdp-comment-time {
+        margin-left: 0;
+        flex-basis: 100%;
+        font-size: 10px;
+    }
+
+    .tdp-comment-actions {
+        gap: 4px;
+        margin-top: 4px;
+        flex-wrap: wrap;
+    }
+
+    .tdp-comment-like,
+    .tdp-comment-reply {
+        font-size: 11px;
+        padding: 4px 6px;
+    }
+
+    /* Comment owner actions: flat text buttons instead of floating pills */
+    .tdp-comment-actions .tdp-owner-action {
+        border: none;
+        background: none;
+        border-radius: 0;
+        padding: 4px 6px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #6b7280;
+        min-height: auto;
+    }
+
+    .tdp-comment-actions .tdp-owner-action:hover {
+        color: #374151;
+        background: none;
+    }
+
+    .tdp-comment-actions .tdp-owner-action.danger {
+        color: #dc2626;
+        background: none;
+        border: none;
+    }
+
+    .tdp-comment-actions .tdp-owner-action.danger:hover {
+        color: #b91c1c;
+        background: none;
+    }
+
+    .tdp-tab-content {
+        padding: 16px 12px;
+    }
+
+    /* ── EVIDENCE BOARD – horizontal compact layout ── */
+    .tdp-evidence-card {
+        padding: 14px 12px 12px;
+        border-radius: 12px;
+    }
+
+    .tdp-evidence-card-header {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .tdp-evidence-contributor {
+        min-width: 0;
+        flex: 1;
+    }
+
+    /* Owner actions: row of compact text buttons at header right */
+    .tdp-evidence-header-actions {
+        flex-wrap: nowrap;
+        gap: 4px;
+        margin-left: auto;
+        flex-shrink: 0;
+    }
+
+    .tdp-evidence-header-actions .tdp-owner-action {
+        padding: 4px 8px;
+        font-size: 10px;
+        min-height: auto;
+        border-radius: 6px;
+    }
+
+    .tdp-top-badge {
+        padding: 2px 6px;
+        font-size: 9px;
+    }
+
+    .tdp-evidence-headline {
+        font-size: 14px;
+    }
+
+    /* Source link: single-column stack */
+    .tdp-source-link.prominent {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "kicker"
+            "url"
+            "path"
+            "cta";
+        padding: 10px 10px 10px 12px;
+        gap: 3px 0;
+    }
+
+    .tdp-source-link-url {
+        white-space: normal;
+        word-break: break-word;
+        font-size: 14px;
+    }
+
+    .tdp-source-link-path {
+        white-space: normal;
+        word-break: break-word;
+    }
+
+    .tdp-source-link-cta {
+        margin-top: 6px;
+    }
+
+    /* Meta chips row */
+    .tdp-evidence-news-meta {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .tdp-meta-dot {
+        display: none;
+    }
+
+    /* ── VOTES ROW – horizontal compact bar (like Reddit mobile) ── */
+    .tdp-evidence-votes {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        padding-top: 10px;
+    }
+
+    .tdp-vote-btn {
+        min-height: 36px;
+        min-width: 36px;
+        padding: 4px 10px;
+        font-size: 12px;
+    }
+
+    .tdp-weighted-score {
+        margin-left: 0;
+        font-size: 10px;
+    }
+
+    .tdp-evidence-status {
+        margin-left: 0;
+        font-size: 10px;
+        padding: 3px 8px;
+    }
+
+    .tdp-vote-policy-hint {
+        margin-left: 0;
+        width: 100%;
+        font-size: 10px;
+        color: #9ca3af;
+        line-height: 1.4;
+    }
+
+    /* Moderation section inside evidence card */
+    .tdp-evidence-moderation {
+        padding: 10px;
+    }
+
+    .tdp-mod-actions {
+        flex-direction: row;
+    }
+
+    .tdp-mod-btn {
+        flex: 1;
+        justify-content: center;
+        padding: 10px 8px;
+        font-size: 12px;
+    }
+
+    /* Evidence verdicts grid */
+    .tdp-evidence-verdicts {
+        grid-template-columns: 1fr;
+    }
+
+    .tdp-evidence-verdict {
+        justify-content: flex-start;
+    }
+
+    /* Evidence sort row */
+    .tdp-evidence-sort-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+
+    /* Inline edit */
+    .tdp-inline-edit-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .tdp-inline-edit-select {
+        width: 100%;
+    }
+
+    .tdp-inline-edit-actions {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+
+    /* Verified evidence info section */
+    .tdp-evidence-verified-info {
+        padding: 10px;
+    }
+
+    .tdp-verification-details {
+        font-size: 12px;
+    }
+
+    .tdp-verified-by,
+    .tdp-verified-at {
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+
+    .tdp-label {
+        min-width: auto;
     }
 }

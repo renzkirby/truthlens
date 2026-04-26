@@ -209,7 +209,7 @@ function NavigationBar() {
                   style={{ height: "40px", width: "auto" }}
                />
                <Link
-                  to="/landing-page"
+                  to="/community"
                   className="link">
                   <span className="logo-text">TruthLens</span>
                </Link>

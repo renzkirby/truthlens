@@ -550,18 +550,25 @@
     }
 
     .tdp-evidence-card-header {
-        flex-direction: column;
+        flex-direction: row;
+        align-items: center;
     }
 
     .tdp-evidence-header-actions {
-        width: 100%;
-        justify-content: flex-end;
+        flex-direction: row;
+        gap: 4px;
     }
 
-    .tdp-evidence-votes,
+    /* Keep votes horizontal like Reddit mobile */
+    .tdp-evidence-votes {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
     .tdp-evidence-moderation {
         flex-direction: column;
-        align-items: flex-start;
+        align-items: stretch;
     }
 
     .tdp-source-link {
@@ -574,12 +581,12 @@
     }
 
     .tdp-vote-btn {
-        min-height: 44px;
-        min-width: 44px;
+        min-height: 36px;
+        min-width: 36px;
     }
 
     .tdp-owner-action {
-        min-height: 44px;
-        padding: 8px 14px;
+        min-height: auto;
+        padding: 4px 8px;
     }
 }
