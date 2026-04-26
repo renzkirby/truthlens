@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 import "./UserHub.css";
 import Icons from "../components/Icons.jsx";
@@ -92,6 +92,72 @@ const TrustGauge = ({ score }) => {
    );
 };
 
+const UserHubSkeleton = () => {
+   return (
+      <div className="hub-page-layout">
+         <NavigationBar />
+         <div className="hub-wrapper">
+            <main className="hub-container">
+               <header className="hub-header">
+                  <div className="hub-header-left" style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                     <div className="skeleton-box" style={{ width: "150px", height: "32px", borderRadius: "8px" }}></div>
+                     <div className="skeleton-box" style={{ width: "300px", height: "16px" }}></div>
+                  </div>
+               </header>
+
+               <div className="hub-rep-row box-panel" style={{ display: "flex", gap: "24px", alignItems: "center" }}>
+                  <div className="skeleton-box" style={{ width: "80px", height: "80px", borderRadius: "50%" }}></div>
+                  <div className="hub-rep-info" style={{ flex: 1, display: "flex", flexDirection: "column", gap: "12px" }}>
+                     <div className="skeleton-box" style={{ width: "200px", height: "24px" }}></div>
+                     <div className="skeleton-box" style={{ width: "150px", height: "14px" }}></div>
+                     <div className="skeleton-box" style={{ width: "100%", height: "12px", borderRadius: "6px" }}></div>
+                  </div>
+               </div>
+
+               <div className="hub-impact-grid">
+                  {[1, 2, 3].map(i => (
+                     <div key={i} className="hub-stat-card box-panel" style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                        <div className="skeleton-box" style={{ width: "40px", height: "40px", borderRadius: "12px" }}></div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                           <div className="skeleton-box" style={{ width: "60px", height: "24px" }}></div>
+                           <div className="skeleton-box" style={{ width: "100px", height: "14px" }}></div>
+                        </div>
+                     </div>
+                  ))}
+               </div>
+
+               <div className="hub-library box-panel">
+                  <div className="library-header" style={{ display: "flex", justifyContent: "space-between", marginBottom: "20px" }}>
+                     <div className="skeleton-box" style={{ width: "200px", height: "24px" }}></div>
+                     <div className="skeleton-box" style={{ width: "150px", height: "36px", borderRadius: "20px" }}></div>
+                  </div>
+                  <div className="library-list">
+                     {[1, 2, 3].map(i => (
+                        <div key={i} className="library-item" style={{ display: "flex", justifyContent: "space-between", padding: "16px", borderBottom: "1px solid var(--border-subtle)" }}>
+                           <div style={{ display: "flex", gap: "16px", flex: 1 }}>
+                              <div className="skeleton-box" style={{ width: "40px", height: "40px", borderRadius: "8px" }}></div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "8px", flex: 1 }}>
+                                 <div className="skeleton-box" style={{ width: "80%", height: "16px" }}></div>
+                                 <div className="skeleton-box" style={{ width: "120px", height: "14px" }}></div>
+                              </div>
+                           </div>
+                           <div style={{ display: "flex", flexDirection: "column", gap: "12px", alignItems: "flex-end" }}>
+                              <div className="skeleton-box" style={{ width: "80px", height: "24px", borderRadius: "12px" }}></div>
+                              <div style={{ display: "flex", gap: "8px" }}>
+                                 <div className="skeleton-box" style={{ width: "100px", height: "30px", borderRadius: "6px" }}></div>
+                                 <div className="skeleton-box" style={{ width: "100px", height: "30px", borderRadius: "6px" }}></div>
+                              </div>
+                           </div>
+                        </div>
+                     ))}
+                  </div>
+               </div>
+            </main>
+         </div>
+      </div>
+   );
+};
+
 export default function UserHub() {
    const { authFetch } = useAuth();
    const [hubData, setHubData] = useState(null);
@@ -132,12 +198,7 @@ export default function UserHub() {
       return receipts;
    }, [hubData?.library?.saved_receipts, searchQuery]);
 
-   if (loading)
-      return (
-         <div className="hub-wrapper loading">
-            <p>Loading personal dashboard...</p>
-         </div>
-      );
+   if (loading) return <UserHubSkeleton />;
    if (error)
       return (
          <div className="hub-wrapper error">

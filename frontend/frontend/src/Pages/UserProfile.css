@@ -623,26 +623,6 @@
   width: clamp(64px, 55%, 92px);
   height: 24px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
-  background-size: 200% 100%;
-  animation: moderatorStatShimmer 1.4s ease-in-out infinite;
-}
-
-@keyframes moderatorStatShimmer {
-  0% {
-    background-position: 180% 0;
-  }
-
-  100% {
-    background-position: -20% 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .moderator-transparency-skeleton {
-    animation: none;
-    background: #e5e7eb;
-  }
 }
 
 .moderator-transparency-note {
@@ -735,9 +715,6 @@
   display: block;
   height: 10px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
-  background-size: 200% 100%;
-  animation: profileActivityShimmer 1.25s ease-in-out infinite;
 }
 
 .profile-skeleton-line.short {
@@ -746,23 +723,6 @@
 
 .profile-skeleton-line.long {
   width: 85%;
-}
-
-@keyframes profileActivityShimmer {
-  0% {
-    background-position: 180% 0;
-  }
-
-  100% {
-    background-position: -20% 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .profile-skeleton-line {
-    animation: none;
-    background: #e5e7eb;
-  }
 }
 
 /* ── Claims List ── */

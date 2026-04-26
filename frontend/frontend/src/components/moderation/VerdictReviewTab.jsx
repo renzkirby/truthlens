@@ -5,6 +5,7 @@ import StatusBadge from "./StatusBadge";
 import { timeAgo } from "./moderationUtils";
 import { getAiVerdict } from "../../utils/verdict";
 import ModeratorDecisionPanel from "./ModeratorDecisionPanel";
+import { ModTableSkeleton } from "./SafetyReviewTab";
 
 const STATUS_OPTIONS = ["OPEN", "CLOSED", "REJECTED"];
 
@@ -98,7 +99,7 @@ function VerdictReviewTab({
                </h2>
             </div>
 
-            {loading && <p className="mod-empty">Loading verdict queue...</p>}
+            {loading && <ModTableSkeleton type="verdict" />}
             {error && <p className="mod-error">{error}</p>}
             {!loading && !error && filteredThreads.length === 0 && (
                <p className="mod-empty">No threads in this adjudication filter.</p>

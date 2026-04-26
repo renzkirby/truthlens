@@ -715,7 +715,7 @@ function UserProfile() {
                            <p className="moderator-transparency-value">
                               {isLoadingModeratorStats ? (
                                  <span
-                                    className="moderator-transparency-skeleton"
+                                    className="moderator-transparency-skeleton skeleton-box"
                                     aria-hidden="true"
                                  />
                               ) : moderatorStatsError ? (
@@ -778,9 +778,9 @@ function UserProfile() {
                            <div
                               className="profile-skeleton-card"
                               key={`activity-skeleton-${index}`}>
-                              <span className="profile-skeleton-line short" />
-                              <span className="profile-skeleton-line" />
-                              <span className="profile-skeleton-line long" />
+                              <span className="profile-skeleton-line short skeleton-box" />
+                              <span className="profile-skeleton-line skeleton-box" />
+                              <span className="profile-skeleton-line long skeleton-box" />
                            </div>
                         ))}
                      </div>

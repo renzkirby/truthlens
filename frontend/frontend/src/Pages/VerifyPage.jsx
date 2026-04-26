@@ -29,6 +29,40 @@ import { VERDICT_CONFIG } from "../utils/constants";
 // ── Styles ──
 import "./VerifyPage.css";
 
+const ResultSkeleton = () => {
+   return (
+      <div className="result-card" style={{ background: "var(--bg-surface)" }}>
+         <div className="result-verdict-row" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <div className="skeleton-box" style={{ width: "120px", height: "16px" }}></div>
+            <div className="skeleton-box" style={{ width: "100px", height: "24px", borderRadius: "12px" }}></div>
+         </div>
+         
+         <div className="result-summary-box" style={{ marginTop: "16px" }}>
+            <div className="skeleton-box" style={{ width: "150px", height: "16px", marginBottom: "12px" }}></div>
+            <div className="skeleton-box" style={{ width: "100%", height: "14px", marginBottom: "8px" }}></div>
+            <div className="skeleton-box" style={{ width: "100%", height: "14px", marginBottom: "8px" }}></div>
+            <div className="skeleton-box" style={{ width: "80%", height: "14px" }}></div>
+         </div>
+
+         <div style={{ marginTop: "24px" }}>
+            <div className="skeleton-box" style={{ width: "150px", height: "16px", marginBottom: "8px" }}></div>
+            <div className="skeleton-box" style={{ width: "100%", height: "8px", borderRadius: "4px" }}></div>
+         </div>
+
+         <div style={{ marginTop: "24px", display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div className="skeleton-box" style={{ width: "100px", height: "16px" }}></div>
+            <div className="skeleton-box" style={{ width: "100%", height: "14px" }}></div>
+            <div className="skeleton-box" style={{ width: "80%", height: "14px" }}></div>
+         </div>
+
+         <div className="result-action-buttons" style={{ marginTop: "24px", display: "flex", gap: "12px" }}>
+            <div className="skeleton-box" style={{ width: "150px", height: "36px", borderRadius: "8px" }}></div>
+            <div className="skeleton-box" style={{ width: "180px", height: "36px", borderRadius: "8px" }}></div>
+         </div>
+      </div>
+   );
+};
+
 // ── Result Card Component ──
 // Displays AI analysis result with verdict badge, confidence, and CTA buttons
 const ResultCard = ({ result, onEscalate }) => {
@@ -466,17 +500,7 @@ function VerifyPage() {
 
             <div className="verify-body">
                {/* Loading State */}
-               {loading && (
-                  <div className="verify-loading box-panel">
-                     <div className="loading-spinner" />
-                     <div>
-                        <p className="loading-title">Analyzing your content...</p>
-                        <p className="loading-subtitle">
-                           This usually takes 10–30 seconds. Please wait.
-                        </p>
-                     </div>
-                  </div>
-               )}
+               {loading && <ResultSkeleton />}
                {/* Error State */}
                {error && (
                   <div className="verify-error">

@@ -34,6 +34,39 @@ import "./Dashboard.css";
  * Dashboard Component
  * Shows user overview with metrics, recent activity, trending claims
  */
+const WidgetListSkeleton = () => (
+   <div className="widget-list">
+      {[1, 2, 3].map(i => (
+         <div key={i} className="widget-item">
+            <div className="widget-item-top">
+               <div className="skeleton-box" style={{ width: "80px", height: "20px", borderRadius: "12px" }}></div>
+               <div className="skeleton-box" style={{ width: "60px", height: "14px" }}></div>
+            </div>
+            <div className="skeleton-box" style={{ width: "100%", height: "14px", marginTop: "8px" }}></div>
+            <div className="skeleton-box" style={{ width: "80%", height: "14px", marginTop: "4px" }}></div>
+         </div>
+      ))}
+   </div>
+);
+
+const TrendingListSkeleton = () => (
+   <div className="trending-list">
+      {[1, 2, 3].map(i => (
+         <div key={i} className="trending-item">
+            <div className="trending-left" style={{ flex: 1 }}>
+               <div className="skeleton-box" style={{ width: "80px", height: "20px", borderRadius: "12px" }}></div>
+               <div className="skeleton-box" style={{ width: "100%", height: "14px", marginTop: "8px" }}></div>
+               <div className="skeleton-box" style={{ width: "70%", height: "14px", marginTop: "4px" }}></div>
+            </div>
+            <div className="trending-right" style={{ display: "flex", flexDirection: "column", gap: "6px", alignItems: "flex-end", minWidth: "120px" }}>
+               <div className="skeleton-box" style={{ width: "100px", height: "14px" }}></div>
+               <div className="skeleton-box" style={{ width: "60px", height: "12px" }}></div>
+            </div>
+         </div>
+      ))}
+   </div>
+);
+
 function Dashboard() {
    const { user, authFetch, refreshUser } = useAuth();
    const navigate = useNavigate();
@@ -115,19 +148,19 @@ function Dashboard() {
             <div className="stats-row">
                <div className="quick-stat-card">
                   <p className="qs-label">Total Scans</p>
-                  <p className="qs-value">{totalScans}</p>
+                  {loading ? <div className="skeleton-box" style={{ width: "40px", height: "32px", margin: "0 auto" }}></div> : <p className="qs-value">{totalScans}</p>}
                </div>
                <div className="quick-stat-card">
                   <p className="qs-label">Fake News Stopped</p>
-                  <p className="qs-value fake">{fakesStopped}</p>
+                  {loading ? <div className="skeleton-box" style={{ width: "40px", height: "32px", margin: "0 auto" }}></div> : <p className="qs-value fake">{fakesStopped}</p>}
                </div>
                <div className="quick-stat-card">
                   <p className="qs-label">Community Threads</p>
-                  <p className="qs-value">{threads.length}</p>
+                  {loading ? <div className="skeleton-box" style={{ width: "40px", height: "32px", margin: "0 auto" }}></div> : <p className="qs-value">{threads.length}</p>}
                </div>
                <div className="quick-stat-card">
                   <p className="qs-label">Needs Your Vote</p>
-                  <p className="qs-value warn">{needsVote.length}</p>
+                  {loading ? <div className="skeleton-box" style={{ width: "40px", height: "32px", margin: "0 auto" }}></div> : <p className="qs-value warn">{needsVote.length}</p>}
                </div>
             </div>
 
@@ -141,7 +174,7 @@ function Dashboard() {
                         <Icons name="list-checks" /> Needs Your Vote
                      </h2>
                      {loading ? (
-                        <p className="empty-msg">Loading...</p>
+                        <WidgetListSkeleton />
                      ) : needsVote.length === 0 ? (
                         <p className="empty-msg">No unverified claims right now.</p>
                      ) : (
@@ -174,7 +207,7 @@ function Dashboard() {
                         <Icons name="scan-line" /> My Recent Scans
                      </h2>
                      {loading ? (
-                        <p className="empty-msg">Loading...</p>
+                        <WidgetListSkeleton />
                      ) : recentScans.length === 0 ? (
                         <p className="empty-msg">No scans yet.</p>
                      ) : (
@@ -212,7 +245,11 @@ function Dashboard() {
                   <h2 className="widget-title">
                      <Icons name="pie-chart" /> Your Verdict Breakdown
                   </h2>
-                  {claims.length === 0 ? (
+                  {loading ? (
+                     <div style={{ height: "280px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <div className="skeleton-box" style={{ width: "160px", height: "160px", borderRadius: "50%" }}></div>
+                     </div>
+                  ) : claims.length === 0 ? (
                      <p className="empty-msg">No data yet. Start scanning claims!</p>
                   ) : (
                      <ResponsiveContainer
@@ -248,7 +285,7 @@ function Dashboard() {
                   <Icons name="trending-up" /> Trending in the Community
                </h2>
                {loading ? (
-                  <p className="empty-msg">Loading...</p>
+                  <TrendingListSkeleton />
                ) : trendingThreads.length === 0 ? (
                   <p className="empty-msg">No threads yet.</p>
                ) : (

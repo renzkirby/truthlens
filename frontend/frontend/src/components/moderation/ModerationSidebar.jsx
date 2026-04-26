@@ -3,7 +3,25 @@ import VerdictBadge from "./VerdictBadge";
 import { timeAgo } from "./moderationUtils";
 import { getAiVerdict } from "../../utils/verdict";
 
-function ModerationSidebar({ recentClaims }) {
+const ModSidebarSkeleton = () => (
+   <div className="mod-recent-list">
+      {[1, 2, 3].map(i => (
+         <div key={i} className="mod-recent-item">
+            <div className="mod-recent-top">
+               <div className="skeleton-box" style={{ width: "80px", height: "20px", borderRadius: "12px" }}></div>
+               <div className="skeleton-box" style={{ width: "60px", height: "14px" }}></div>
+            </div>
+            <div className="skeleton-box" style={{ width: "100%", height: "14px", marginTop: "8px" }}></div>
+            <div className="skeleton-box" style={{ width: "80%", height: "14px", marginTop: "4px" }}></div>
+            <div className="mod-recent-confidence" style={{ marginTop: "12px" }}>
+               <div className="skeleton-box" style={{ width: "100%", height: "6px", borderRadius: "3px" }}></div>
+            </div>
+         </div>
+      ))}
+   </div>
+);
+
+function ModerationSidebar({ recentClaims, loading }) {
    return (
       <div className="mod-sidebar">
          <div className="box-panel">
@@ -14,11 +32,14 @@ function ModerationSidebar({ recentClaims }) {
                />
                Recent AI Verdicts
             </h2>
-            <div className="mod-recent-list">
-               {recentClaims.length === 0 ? (
-                  <p className="mod-empty">No claims yet.</p>
-               ) : (
-                  recentClaims.map((claim) => (
+            {loading ? (
+               <ModSidebarSkeleton />
+            ) : (
+               <div className="mod-recent-list">
+                  {recentClaims.length === 0 ? (
+                     <p className="mod-empty">No claims yet.</p>
+                  ) : (
+                     recentClaims.map((claim) => (
                      <div
                         key={claim.id}
                         className="mod-recent-item">
@@ -51,9 +72,10 @@ function ModerationSidebar({ recentClaims }) {
                            </div>
                         )}
                      </div>
-                  ))
-               )}
-            </div>
+                     ))
+                  )}
+               </div>
+            )}
          </div>
 
          <div className="box-panel mod-notes-card">

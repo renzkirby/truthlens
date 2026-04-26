@@ -75,3 +75,27 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/* ── Global Skeleton Loading System ── */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 180% 0;
+  }
+  100% {
+    background-position: -20% 0;
+  }
+}
+
+.skeleton-box {
+  background: linear-gradient(90deg, var(--border-default) 25%, var(--bg-subtle) 50%, var(--border-default) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  border-radius: 8px; /* Default radius, can be overridden */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-box {
+    animation: none;
+    background: var(--border-default);
+  }
+}

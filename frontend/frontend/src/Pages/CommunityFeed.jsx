@@ -48,6 +48,54 @@ const FEED_FILTERS = {
    NEEDS_EVIDENCE: "NEEDS_EVIDENCE",
 };
 
+const FeedSkeleton = () => {
+   return (
+      <div className="posts-list">
+         {[1, 2, 3].map((i) => (
+            <div key={i} className="post-card">
+               <div className="card-header">
+                  <div className="post-author-info">
+                     <div className="author-avatar skeleton-box" style={{ borderRadius: "50%" }}></div>
+                     <div className="author-meta" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <div className="skeleton-box" style={{ width: "120px", height: "14px" }}></div>
+                        <div className="skeleton-box" style={{ width: "80px", height: "12px" }}></div>
+                     </div>
+                  </div>
+                  <div className="header-actions">
+                     <div className="skeleton-box" style={{ width: "80px", height: "24px", borderRadius: "20px" }}></div>
+                  </div>
+               </div>
+               
+               <div className="card-claim" style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "16px", marginBottom: "16px" }}>
+                  <div className="skeleton-box" style={{ width: "100%", height: "14px" }}></div>
+                  <div className="skeleton-box" style={{ width: "90%", height: "14px" }}></div>
+                  <div className="skeleton-box" style={{ width: "60%", height: "14px" }}></div>
+               </div>
+               
+               <div className="ai-analysis-bar bar-unverified" style={{ marginTop: "16px", background: "var(--bg-subtle)", border: "1px solid var(--border-default)" }}>
+                  <div className="ai-analysis-top-row">
+                     <div className="ai-info" style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1 }}>
+                        <div className="skeleton-box" style={{ width: "80px", height: "24px", borderRadius: "12px" }}></div>
+                        <div className="skeleton-box" style={{ width: "140px", height: "14px" }}></div>
+                     </div>
+                     <div className="skeleton-box" style={{ width: "100px", height: "30px", borderRadius: "8px" }}></div>
+                  </div>
+                  <div className="ai-analysis-context" style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "12px" }}>
+                     <div className="skeleton-box" style={{ width: "100%", height: "12px" }}></div>
+                     <div className="skeleton-box" style={{ width: "80%", height: "12px" }}></div>
+                  </div>
+               </div>
+               
+               <div className="card-footer" style={{ marginTop: "16px", borderTop: "none", display: "flex", gap: "16px", padding: "0" }}>
+                  <div className="skeleton-box" style={{ width: "60px", height: "20px" }}></div>
+                  <div className="skeleton-box" style={{ width: "80px", height: "20px" }}></div>
+               </div>
+            </div>
+         ))}
+      </div>
+   );
+};
+
 const CATEGORIES = {
    ALL: "ALL",
    TEXT: "TEXT",
@@ -572,30 +620,14 @@ function CommunityFeed() {
             )}
 
             {/* ── Loading & Error States ── */}
-            {threads.length === 0 && loading && (
-               <div
-                  style={{
-                     padding: "40px 20px",
-                     textAlign: "center",
-                     display: "flex",
-                     flexDirection: "column",
-                     alignItems: "center",
-                     gap: "12px",
-                     color: "#9ca3af",
-                  }}>
-                  <Icons
-                     name="loader"
-                     size={24}
-                  />
-                  <p style={{ margin: 0 }}>Loading threads...</p>
-               </div>
-            )}
+            {threads.length === 0 && loading && <FeedSkeleton />}
             {error && <p style={{ color: "red", padding: "20px" }}>{error}</p>}
 
             {/* ── Threads List ── */}
             {/* Empty state or thread cards */}
-            <div className="posts-list">
-               {filteredThreads.length === 0 && !loading ? (
+            {!loading && (
+               <div className="posts-list">
+                  {filteredThreads.length === 0 ? (
                   <h2 className="no-threads-text">
                      {activeSearchTerm
                         ? `No threads found for "${activeSearchTerm}".`
@@ -1009,6 +1041,7 @@ function CommunityFeed() {
                   </div>
                )}
             </div>
+            )}
 
             {deleteDialog.open && (
                <div

@@ -163,6 +163,81 @@ function UserAvatar({ username = "", isMod = false, size = 36 }) {
       </div>
    );
 }
+
+const ThreadDetailSkeleton = () => {
+   return (
+      <div className="thread-layout">
+         <NavigationBar />
+         <div className="tdp-page">
+            <div className="tdp-breadcrumb" style={{ borderBottomColor: "var(--border-default)" }}>
+               <div className="tdp-breadcrumb-left" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <div className="skeleton-box" style={{ width: "120px", height: "16px" }}></div>
+                  <span className="tdp-breadcrumb-dot">·</span>
+                  <div className="skeleton-box" style={{ width: "100px", height: "16px" }}></div>
+                  <span className="tdp-breadcrumb-dot">·</span>
+                  <div className="skeleton-box" style={{ width: "200px", height: "16px" }}></div>
+               </div>
+               <div className="tdp-breadcrumb-right">
+                  <div className="skeleton-box" style={{ width: "80px", height: "24px", borderRadius: "12px" }}></div>
+               </div>
+            </div>
+
+            <div className="tdp-hero" style={{ background: "var(--bg-surface)", borderBottomColor: "var(--border-default)" }}>
+               <div className="tdp-hero-inner">
+                  <div className="tdp-hero-left" style={{ display: "flex", flexDirection: "column", gap: "12px", width: "100%" }}>
+                     <div className="skeleton-box" style={{ width: "200px", height: "14px" }}></div>
+                     <div className="skeleton-box" style={{ width: "100%", height: "28px", marginTop: "8px" }}></div>
+                     <div className="skeleton-box" style={{ width: "80%", height: "28px" }}></div>
+                     <div className="tdp-claim-meta" style={{ marginTop: "16px", display: "flex", gap: "16px" }}>
+                        <div className="skeleton-box" style={{ width: "150px", height: "14px" }}></div>
+                        <div className="skeleton-box" style={{ width: "100px", height: "14px" }}></div>
+                        <div className="skeleton-box" style={{ width: "160px", height: "14px" }}></div>
+                     </div>
+                  </div>
+                  <div className="tdp-verdict-card" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                     <div className="skeleton-box" style={{ width: "100px", height: "28px", borderRadius: "20px" }}></div>
+                     <div className="skeleton-box" style={{ width: "100%", height: "14px", marginTop: "8px" }}></div>
+                     <div className="skeleton-box" style={{ width: "90%", height: "14px" }}></div>
+                     <div style={{ display: "flex", justifyContent: "space-between", marginTop: "16px" }}>
+                        <div className="skeleton-box" style={{ width: "120px", height: "14px" }}></div>
+                        <div className="skeleton-box" style={{ width: "40px", height: "14px" }}></div>
+                     </div>
+                  </div>
+               </div>
+            </div>
+
+            <div className="tdp-body">
+               <div className="tdp-main">
+                  <div className="tdp-post-card">
+                     <div className="tdp-post-header">
+                        <div className="author-avatar skeleton-box" style={{ width: "38px", height: "38px", borderRadius: "50%" }}></div>
+                        <div className="tdp-post-author" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                           <div className="skeleton-box" style={{ width: "120px", height: "16px" }}></div>
+                           <div className="skeleton-box" style={{ width: "160px", height: "12px" }}></div>
+                        </div>
+                        <div className="tdp-post-actions">
+                           <div className="skeleton-box" style={{ width: "100px", height: "24px", borderRadius: "12px" }}></div>
+                        </div>
+                     </div>
+                     <div className="tdp-snip-placeholder skeleton-box" style={{ height: "300px", width: "100%", borderRadius: "12px", border: "none" }}></div>
+                  </div>
+                  <div className="tdp-tabs-section" style={{ marginTop: "24px" }}>
+                     <div className="tdp-tab-bar" style={{ display: "flex", gap: "16px", borderBottom: "2px solid var(--border-default)", paddingBottom: "12px" }}>
+                        <div className="skeleton-box" style={{ width: "100px", height: "24px" }}></div>
+                        <div className="skeleton-box" style={{ width: "100px", height: "24px" }}></div>
+                     </div>
+                     <div style={{ marginTop: "24px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                        <div className="skeleton-box" style={{ width: "100%", height: "120px", borderRadius: "12px" }}></div>
+                        <div className="skeleton-box" style={{ width: "100%", height: "120px", borderRadius: "12px" }}></div>
+                     </div>
+                  </div>
+               </div>
+            </div>
+         </div>
+      </div>
+   );
+};
+
 function ThreadDetailPage() {
    const [searchParams, setSearchParams] = useSearchParams();
    const initialTab = searchParams.get("tab") === "evidence" ? "evidence" : "comments";
@@ -739,15 +814,7 @@ function ThreadDetailPage() {
    const authorTrustBreakdown = thread?.author?.trust_breakdown || {};
 
    if (loading) {
-      return (
-         <>
-            <NavigationBar />
-            <div className="tdp-loading">
-               <div className="tdp-spinner" />
-               <p>Loading thread…</p>
-            </div>
-         </>
-      );
+      return <ThreadDetailSkeleton />;
    }
 
    if (error || !thread) {

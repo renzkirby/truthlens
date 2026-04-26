@@ -404,7 +404,7 @@ function ModerationPage() {
                   )}
                </div>
 
-               <ModerationSidebar recentClaims={claimsLoading || claimsError ? [] : recentClaims} />
+               <ModerationSidebar loading={claimsLoading} recentClaims={claimsLoading || claimsError ? [] : recentClaims} />
             </div>
 
             {safetyActionDialog.open && (

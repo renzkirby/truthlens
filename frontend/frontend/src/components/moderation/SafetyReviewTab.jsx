@@ -5,6 +5,56 @@ import StatusBadge from "./StatusBadge";
 import { timeAgo } from "./moderationUtils";
 import { getAiVerdict } from "../../utils/verdict";
 
+export const ModTableSkeleton = ({ type = "safety" }) => (
+   <div className="mod-table">
+      <div className={`mod-table-row mod-table-head mod-table-row-${type}`}>
+         {type === "safety" ? (
+            <>
+               <span>Claim</span>
+               <span>AI Verdict</span>
+               <span>Reports</span>
+               <span>Author</span>
+               <span>Status</span>
+               <span>Action</span>
+            </>
+         ) : (
+            <>
+               <span>Claim</span>
+               <span>Current Status</span>
+               <span>Verified Evidence</span>
+               <span>Pending Verdict</span>
+               <span>Action</span>
+            </>
+         )}
+      </div>
+      {[1, 2, 3].map(i => (
+         <div key={i} className={`mod-table-row mod-table-data mod-table-row-${type}`}>
+            <div className="mod-claim-cell">
+               <div className="skeleton-box" style={{ width: "100%", height: "14px", marginBottom: "8px" }}></div>
+               <div className="skeleton-box" style={{ width: "60%", height: "14px" }}></div>
+            </div>
+            {type === "safety" && (
+               <div><div className="skeleton-box" style={{ width: "80px", height: "24px", borderRadius: "12px" }}></div></div>
+            )}
+            <div className="mod-report-cell">
+               <div className="skeleton-box" style={{ width: "40px", height: "24px", borderRadius: "8px" }}></div>
+            </div>
+            <div className="mod-author-cell">
+               <div className="skeleton-box" style={{ width: "100px", height: "14px", marginBottom: "4px" }}></div>
+               <div className="skeleton-box" style={{ width: "60px", height: "12px" }}></div>
+            </div>
+            <div><div className="skeleton-box" style={{ width: "60px", height: "24px", borderRadius: "12px" }}></div></div>
+            <div className="mod-actions-cell" style={{ display: "flex", gap: "8px" }}>
+               <div className="skeleton-box" style={{ width: "28px", height: "28px", borderRadius: "6px" }}></div>
+               <div className="skeleton-box" style={{ width: "28px", height: "28px", borderRadius: "6px" }}></div>
+               <div className="skeleton-box" style={{ width: "28px", height: "28px", borderRadius: "6px" }}></div>
+               <div className="skeleton-box" style={{ width: "28px", height: "28px", borderRadius: "6px" }}></div>
+            </div>
+         </div>
+      ))}
+   </div>
+);
+
 function SafetyReviewTab({
    threads,
    loading,
@@ -79,7 +129,7 @@ function SafetyReviewTab({
                </h2>
             </div>
 
-            {loading && <p className="mod-empty">Loading safety queue...</p>}
+            {loading && <ModTableSkeleton type="safety" />}
             {error && <p className="mod-error">{error}</p>}
             {!loading && !error && filteredThreads.length === 0 && (
                <p className="mod-empty">No flagged threads for this filter.</p>

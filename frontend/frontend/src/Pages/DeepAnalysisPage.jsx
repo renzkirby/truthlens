@@ -7,6 +7,66 @@ import { getEffectiveVerdict } from "../utils/verdict";
 import { VERDICT_META } from "../utils/constants";
 import "./ThreadDetailPage.css";
 
+const DeepAnalysisSkeleton = () => {
+   return (
+      <div className="thread-layout">
+         <NavigationBar />
+         <div className="tdp-page">
+            <div className="tdp-breadcrumb" style={{ borderBottomColor: "var(--border-default)" }}>
+               <div className="tdp-breadcrumb-left" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <div className="skeleton-box" style={{ width: "100px", height: "16px" }}></div>
+                  <div className="skeleton-box" style={{ width: "120px", height: "16px" }}></div>
+                  <span className="tdp-breadcrumb-dot">·</span>
+                  <div className="skeleton-box" style={{ width: "150px", height: "16px" }}></div>
+               </div>
+            </div>
+
+            <div className="tdp-hero" style={{ background: "var(--bg-surface)", borderBottomColor: "var(--border-default)" }}>
+               <div className="tdp-hero-inner">
+                  <div className="tdp-hero-left" style={{ display: "flex", flexDirection: "column", gap: "12px", width: "100%" }}>
+                     <div className="skeleton-box" style={{ width: "200px", height: "14px" }}></div>
+                     <div className="skeleton-box" style={{ width: "100%", height: "28px", marginTop: "8px" }}></div>
+                     <div className="skeleton-box" style={{ width: "80%", height: "28px" }}></div>
+                  </div>
+                  <div className="tdp-verdict-card" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                     <div className="skeleton-box" style={{ width: "100px", height: "28px", borderRadius: "20px" }}></div>
+                     <div className="skeleton-box" style={{ width: "100%", height: "14px", marginTop: "8px" }}></div>
+                     <div className="skeleton-box" style={{ width: "90%", height: "14px" }}></div>
+                     <div style={{ display: "flex", justifyContent: "space-between", marginTop: "16px" }}>
+                        <div className="skeleton-box" style={{ width: "120px", height: "14px" }}></div>
+                        <div className="skeleton-box" style={{ width: "40px", height: "14px" }}></div>
+                     </div>
+                  </div>
+               </div>
+            </div>
+
+            <div className="tdp-body">
+               <div className="tdp-main">
+                  <div className="tdp-post-card">
+                     <div className="tdp-post-header" style={{ padding: "16px 20px" }}>
+                        <div className="skeleton-box" style={{ width: "200px", height: "20px" }}></div>
+                     </div>
+                     <div style={{ padding: "20px" }}>
+                        <div className="skeleton-box" style={{ width: "100%", height: "120px", borderRadius: "8px" }}></div>
+                     </div>
+                  </div>
+               </div>
+               <aside className="tdp-sidebar">
+                  <div className="tdp-sidebar-card">
+                     <div className="skeleton-box" style={{ width: "150px", height: "14px", marginBottom: "16px" }}></div>
+                     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                        {[1, 2].map(i => (
+                           <div key={i} className="skeleton-box" style={{ width: "100%", height: "100px", borderRadius: "10px" }}></div>
+                        ))}
+                     </div>
+                  </div>
+               </aside>
+            </div>
+         </div>
+      </div>
+   );
+};
+
 function DeepAnalysisPage() {
    const { claimId } = useParams();
    const navigate = useNavigate();
@@ -36,15 +96,7 @@ function DeepAnalysisPage() {
    }, [claimId]);
 
    if (loading) {
-      return (
-         <div className="thread-layout">
-            <NavigationBar />
-            <div className="tdp-loading">
-               <div className="tdp-spinner" />
-               <p>Compiling Forensic Analysis…</p>
-            </div>
-         </div>
-      );
+      return <DeepAnalysisSkeleton />;
    }
 
    if (error || !claimData) {

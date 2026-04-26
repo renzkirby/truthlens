@@ -29,6 +29,71 @@ import { useEndpoint } from "../utils/api";
 // ── Styles ──
 import "./CreateThreadPage.css";
 
+const CreateThreadSkeleton = () => {
+   return (
+      <div className="create-thread-body">
+         <div className="create-thread-form-col">
+            <div className="form-section box-panel">
+               <div className="skeleton-box" style={{ width: "150px", height: "20px", marginBottom: "8px" }}></div>
+               <div className="skeleton-box" style={{ width: "80%", height: "14px", marginBottom: "16px" }}></div>
+               <div className="skeleton-box" style={{ width: "100%", height: "100px", borderRadius: "8px" }}></div>
+            </div>
+
+            <div className="form-section box-panel">
+               <div className="skeleton-box" style={{ width: "200px", height: "20px", marginBottom: "8px" }}></div>
+               <div className="skeleton-box" style={{ width: "70%", height: "14px", marginBottom: "16px" }}></div>
+               <div className="flag-options">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                     <div key={i} className="skeleton-box" style={{ width: "100%", height: "60px", borderRadius: "12px", marginBottom: "8px" }}></div>
+                  ))}
+               </div>
+            </div>
+
+            <div className="skeleton-box" style={{ width: "100%", height: "45px", borderRadius: "8px" }}></div>
+         </div>
+
+         <div className="create-thread-sidebar">
+            <div className="box-panel ai-analysis-card">
+               <div className="skeleton-box" style={{ width: "100px", height: "12px", marginBottom: "16px" }}></div>
+               
+               <div className="ai-verdict-row">
+                  <div className="skeleton-box" style={{ width: "60px", height: "14px" }}></div>
+                  <div className="skeleton-box" style={{ width: "80px", height: "16px" }}></div>
+               </div>
+
+               <div className="ai-verdict-row" style={{ marginTop: "12px", marginBottom: "8px" }}>
+                  <div className="skeleton-box" style={{ width: "100px", height: "14px" }}></div>
+                  <div className="skeleton-box" style={{ width: "40px", height: "16px" }}></div>
+               </div>
+               
+               <div className="ai-confidence-bar-track">
+                  <div className="skeleton-box" style={{ width: "100%", height: "100%", borderRadius: "4px" }}></div>
+               </div>
+
+               <div className="ai-summary-box" style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "16px" }}>
+                  <div className="skeleton-box" style={{ width: "80px", height: "14px" }}></div>
+                  <div className="skeleton-box" style={{ width: "100%", height: "14px", marginTop: "4px" }}></div>
+                  <div className="skeleton-box" style={{ width: "90%", height: "14px" }}></div>
+                  <div className="skeleton-box" style={{ width: "40%", height: "14px" }}></div>
+               </div>
+
+               <div className="ai-source-row" style={{ marginTop: "16px" }}>
+                  <div className="skeleton-box" style={{ width: "80px", height: "14px" }}></div>
+                  <div className="skeleton-box" style={{ width: "60px", height: "14px" }}></div>
+               </div>
+            </div>
+
+            <div className="box-panel info-card" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+               <div className="skeleton-box" style={{ width: "120px", height: "14px" }}></div>
+               <div className="skeleton-box" style={{ width: "100%", height: "14px", marginTop: "8px" }}></div>
+               <div className="skeleton-box" style={{ width: "90%", height: "14px" }}></div>
+               <div className="skeleton-box" style={{ width: "80%", height: "14px" }}></div>
+            </div>
+         </div>
+      </div>
+   );
+};
+
 function CreateThreadPage() {
    const [loading, setLoading] = useState(true);
    const [submitting, setSubmitting] = useState(false);
@@ -196,7 +261,7 @@ function CreateThreadPage() {
                </div>
             </div>
 
-            {loading && <p className="create-thread-loading">Loading claim data...</p>}
+            {loading && <CreateThreadSkeleton />}
             {error && (
                <div className="create-thread-error">
                   <Icons
