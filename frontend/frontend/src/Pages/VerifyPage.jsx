@@ -540,7 +540,7 @@ function VerifyPage() {
                            {result.verdict}
                         </span>
                      </div>
-
+    
                      <div className="result-summary-box">
                         <p className="result-summary-title">AI Forensic Analysis</p>
                         <p className="result-summary-text" style={{ marginBottom: "8px" }}>
