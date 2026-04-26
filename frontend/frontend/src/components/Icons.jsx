@@ -22,6 +22,7 @@ import {
    HelpCircle,
    MoreHorizontal,
    Shield,
+   File,
    FileText,
    Image,
    Star,
@@ -100,6 +101,7 @@ import {
 } from "lucide-react";
 
 const ICON_MAP = {
+   file: File,
    "arrow-up": ArrowUp,
    "arrow-down": ArrowDown,
    "arrow-up-right": ArrowUpRight,

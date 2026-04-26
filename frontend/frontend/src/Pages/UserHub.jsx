@@ -276,15 +276,27 @@ export default function UserHub() {
                               </div>
                               <div className="li-actions">
                                  <VerdictBadge verdict={claim.final_verdict || claim.ai_verdict} />
-                                 <button
-                                    className="hub-btn-publish"
-                                    onClick={handlePublish}>
-                                    <Icons
-                                       name="arrow-up-right"
-                                       size={14}
-                                    />{" "}
-                                    Escalate
-                                 </button>
+                                 
+                                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                                    <a
+                                       href={`/analysis/${claim.id}`}
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       className="hub-btn-report"
+                                    >
+                                       <Icons name="file-text" size={14} /> View Full Report
+                                    </a>
+                                    
+                                    <button
+                                       className="hub-btn-publish"
+                                       onClick={handlePublish}>
+                                       <Icons
+                                          name="arrow-up-right"
+                                          size={14}
+                                       />{" "}
+                                       Escalate
+                                    </button>
+                                 </div>
                               </div>
                            </div>
                         ))

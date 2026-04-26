@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { UploadCloud } from "lucide-react";
+import { UploadCloud, FileText } from "lucide-react";
 import { displayLoadingCard, displayResultCard, displayErrorCard, removeLoadingCard } from "../modules/ui.jsx";
 import { state } from "../modules/state.js";
 import "./FileUpload.css";
@@ -10,7 +10,11 @@ function FileUpload() {
 
    const handleFileChange = (e) => {
       const selectedFile = e.target.files[0];
-      if (selectedFile && (selectedFile.type === "text/plain" || selectedFile.type === "application/pdf")) {
+      if (selectedFile && (
+         selectedFile.type === "text/plain" || 
+         selectedFile.type === "application/pdf" || 
+         selectedFile.name.toLowerCase().endsWith(".docx")
+      )){
          setFile(selectedFile);
       } else {
          alert("Please upload a valid .txt or .pdf file.");
@@ -22,17 +26,14 @@ function FileUpload() {
 
       setIsAnalyzing(true);
 
-      // 1. Get the active tab
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-      // 2. SAFETY CHECK: Prevent silent failures on restricted pages
       if (!tab || tab.url.startsWith("chrome://") || tab.url.startsWith("edge://") || tab.url.startsWith("about:")) {
          alert("TruthLens cannot display results on Chrome system pages or blank tabs. Please open a normal website and try again!");
          setIsAnalyzing(false);
          return;
       }
 
-      // 3. Tell the content.js in the active tab to show the loading spinner
       chrome.tabs.sendMessage(tab.id, { 
          type: "DISPLAY_URL_LOADING",
          customMsg: "Extracting text and analyzing claims..." 
@@ -42,16 +43,16 @@ function FileUpload() {
       
       reader.onload = (event) => {
          const fileData = event.target.result; 
-         const isPDF = file.type === "application/pdf";
          
-         const messageType = isPDF ? "VERIFY_FILE_PDF" : "VERIFY_FILE_TEXT";
-         const payloadKey = isPDF ? "pdf_data" : "text";
-
          chrome.runtime.sendMessage(
             {
-               type: messageType,
+               type: "VERIFY_FILE", 
                tabId: tab.id, 
-               payload: { [payloadKey]: fileData },
+               payload: { 
+                  file_data: fileData,
+                  file_name: file.name,
+                  file_type: file.type
+               },
             },
             (response) => {
                if (chrome.runtime.lastError || !response?.success) {
@@ -60,17 +61,13 @@ function FileUpload() {
                      message: "Failed to analyze the file. Please try again." 
                   });
                }
-               // Close the popup so the user can watch the loading card on the main page
                window.close(); 
             }
          );
       };
  
-      if (file.type === "application/pdf") {
-         reader.readAsDataURL(file); 
-      } else {
-         reader.readAsText(file); 
-      }
+      // ALWAYS READ AS BASE64
+      reader.readAsDataURL(file); 
    };
 
    return (

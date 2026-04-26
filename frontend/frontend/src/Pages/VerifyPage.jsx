@@ -43,6 +43,10 @@ const ResultCard = ({ result, onEscalate }) => {
 
    const showEscalate = result.verdict === "UNVERIFIED" || result.confidence_score < 50;
 
+   const evidenceList = result.sources && result.sources.length > 0 
+      ? result.sources 
+      : (result.source_url ? [result.source_url] : []);
+
    return (
       <div className="result-card">
          <div className="result-verdict-row">
@@ -54,8 +58,22 @@ const ResultCard = ({ result, onEscalate }) => {
             </span>
          </div>
 
+         {/* ── Banners ── */}
+         {result.has_community_verdict && (
+            <div className="result-banner community-verified">
+               <Icons name="shield-check" size={14} /> COMMUNITY VERIFIED
+            </div>
+         )}
+         {result.is_ai_generated && (
+            <div className="result-banner ai-warning">
+               <Icons name="sparkles" size={14} /> AI-GENERATED MEDIA DETECTED
+            </div>
+         )}
+
          <div className="result-summary-box">
-            <p className="result-summary-title">AI Summary</p>
+            <p className="result-summary-title">
+               {result.has_community_verdict ? 'Community Verdict Summary' : 'AI Summary'}
+            </p>
             <p className="result-summary-text">{result.summary}</p>
          </div>
 
@@ -72,40 +90,67 @@ const ResultCard = ({ result, onEscalate }) => {
             />
          </div>
 
-         <div className="result-footer">
+         {/* ── Score Context ── */}
+         {result.score_context && (
+            <div className="result-score-context">
+               <strong>Context:</strong> {result.score_context}
+            </div>
+         )}
+
+         {/* ── Multiple Sources List ── */}
+         {result.verdict !== "OUT_OF_SCOPE" && evidenceList.length > 0 && (
+            <div className="result-sources-section">
+               <strong className="result-sources-title">Sources:</strong>
+               <div className="result-sources-list">
+                  {evidenceList.map((src, index) => {
+                     const urlStr = typeof src === 'string' ? src : src.url;
+                     return (
+                        <a key={index} href={urlStr} target="_blank" rel="noopener noreferrer" className="result-source-item">
+                           "{urlStr}"
+                        </a>
+                     );
+                  })}
+               </div>
+            </div>
+         )}
+
+
+         <div className="result-footer" style={{ marginTop: '8px' }}>
             <span className="result-source-type">
-               <Icons
-                  name="info"
-                  size={13}
-               />
-               {result.source_type}
+               <Icons name="info" size={13} />
+               Source Type: {result.has_community_verdict ? 'Community Moderation' : result.source_type}
             </span>
-            {result.source_url && !showEscalate && (
-               <a
-                  href={result.source_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="result-source-link">
-                  <Icons
-                     name="external-link"
-                     size={13}
-                  />{" "}
-                  View Source
-               </a>
-            )}
          </div>
 
-         {showEscalate && result.id && (
-            <button
-               className="escalate-btn"
-               onClick={onEscalate}>
-               <Icons
-                  name="flag"
-                  size={14}
-               />
-               Ask the Community
-            </button>
-         )}
+         {/* ── Call to Action Buttons ── */}
+         <div className="result-action-buttons">
+            <a 
+               href={`/analysis/${result.id}`} 
+               target="_blank" 
+               rel="noopener noreferrer" 
+               className="view-report-btn"
+            >
+               View Full Report →
+            </a>
+
+            {result.thread_id ? (
+               <a 
+                  href={`/thread/detail/${result.thread_id}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="view-thread-btn"
+               >
+                  View Community Discussion
+               </a>
+            ) : showEscalate && result.id ? (
+               <button
+                  className="escalate-btn"
+                  onClick={onEscalate}>
+                  <Icons name="flag" size={14} />
+                  Ask the Community
+               </button>
+            ) : null}
+         </div>
       </div>
    );
 };
@@ -124,6 +169,8 @@ function VerifyPage() {
    const [loading, setLoading] = useState(false);
    const [result, setResult] = useState(null);
    const [error, setError] = useState(null);
+   const [docFile, setDocFile] = useState(null);
+   const docFileInputRef = useRef(null);
 
    const pollForResult = (claimId) => {
       let pollCount = 0;
@@ -225,6 +272,58 @@ function VerifyPage() {
          setLoading(false);
       }
    };
+
+   // ── File upload handlers ───────────────────────────────────────────────
+   const handleDocFileSelect = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      setDocFile(file);
+      setResult(null);
+      setError(null);
+   };
+
+   const handleDocDrop = (e) => {
+      e.preventDefault();
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      setDocFile(file);
+      setResult(null);
+      setError(null);
+   };
+
+   const handleFileVerify = async () => {
+      if (!docFile) return;
+      setLoading(true);
+      setResult(null);
+      setError(null);
+
+      try {
+         // Convert document to base64
+         const base64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(docFile);
+         });
+
+         // NOTE: We will need to build this endpoint in Django later to parse the PDF/DOCX!
+         const data = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/verify-file/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+               file_data: base64,
+               file_name: docFile.name,
+               file_type: docFile.type 
+            }),
+         });
+         
+         pollForResult(data.claim_id);
+      } catch (err) {
+         setError("Failed to submit document. Please try again.");
+         setLoading(false);
+      }
+   };
+
    // ── AI-GENERATED IMAGE DETECTION handler ────────────────────────────────────────────────────
    const handleDeepfakeTest = async () => {
       if (!image) return;
@@ -251,6 +350,7 @@ function VerifyPage() {
             isDeepfakeTest: true,
             score: (response.ai_probability * 100).toFixed(1),
             verdict: response.is_fake ? "AI GENERATED" : "REAL IMAGE",
+            summary: response.summary
          });
       } catch (err) {
          setError("Deepfake test failed.");
@@ -289,6 +389,8 @@ function VerifyPage() {
       setUrl("");
       setImage(null);
       setImagePreview(null);
+      setText("");
+      setDocFile(null);
    };
 
    return (
@@ -321,7 +423,7 @@ function VerifyPage() {
                      name="link"
                      size={15}
                   />
-                  Verify URL
+                  Analyze URL
                </button>
                <button
                   className={`verify-tab-btn ${activeTab === "image" ? "active" : ""}`}
@@ -342,6 +444,12 @@ function VerifyPage() {
                   Verify Text
                </button>
                <button
+                  className={`verify-tab-btn ${activeTab === "file" ? "active" : ""}`}
+                  onClick={() => handleTabSwitch("file")}>
+                  <Icons name="file" size={15} />
+                  Verify File
+               </button>
+               <button
                   className={`verify-tab-btn ${activeTab === "deepfake" ? "active" : ""}`}
                   onClick={() => {
                      setActiveTab("deepfake");
@@ -352,7 +460,7 @@ function VerifyPage() {
                      name="sparkles"
                      size={16}
                   />
-                  Deepfake Test
+                  Detect Deepfake
                </button>
             </div>
 
@@ -410,11 +518,14 @@ function VerifyPage() {
                      </div>
 
                      <div className="result-summary-box">
-                        <p className="result-summary-title">AI Confidence Score</p>
-                        <p className="result-summary-text">
+                        <p className="result-summary-title">AI Forensic Analysis</p>
+                        <p className="result-summary-text" style={{ marginBottom: "8px" }}>
                            The forensic model is <strong>{result.score}%</strong> confident that
                            this image was generated or manipulated by AI.
                         </p>
+                        <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "8px", fontSize: "13px", color: "#4b5563" }}>
+                           <strong>Explanation:</strong> {result.summary}
+                        </div>
                      </div>
                   </div>
                )}
@@ -606,6 +717,79 @@ function VerifyPage() {
                      </p>
                   </div>
                )}
+
+               {/* ── File Tab ── */}
+               {activeTab === "file" && (
+                  <div className="verify-panel box-panel">
+                     <label className="panel-label">
+                        <Icons name="file" size={14} />
+                        Upload a document to verify
+                     </label>
+
+                     <div
+                        className={`drop-zone ${docFile ? "has-image" : ""}`}
+                        onClick={() => !docFile && docFileInputRef.current?.click()}
+                        onDrop={handleDocDrop}
+                        onDragOver={(e) => e.preventDefault()}>
+                        {docFile ? (
+                           <div className="image-preview-wrapper">
+                              <div className="file-preview-box">
+                                 <Icons name="file-text" size={32} color="#4f46e5" />
+                                 <p className="file-name">{docFile.name}</p>
+                                 <p className="file-size">{(docFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                              </div>
+                              <button
+                                 className="remove-image-btn"
+                                 onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDocFile(null);
+                                    setResult(null);
+                                 }}>
+                                 <Icons name="x" size={14} /> Remove
+                              </button>
+                           </div>
+                        ) : (
+                           <div className="drop-zone-content">
+                              <Icons name="upload" size={32} color="#9ca3af" />
+                              <p className="drop-zone-text">
+                                 Drag and drop a document here, or <span className="drop-zone-link">browse</span>
+                              </p>
+                              <p className="drop-zone-hint">PDF & TXT format supported</p>
+                           </div>
+                        )}
+                     </div>
+
+                     {/* Hidden file input */}
+                     <input
+                        ref={docFileInputRef}
+                        type="file"
+                        accept=".pdf,.docx,.txt"
+                        className="hidden-file-input"
+                        onChange={handleDocFileSelect}
+                     />
+
+                     <button
+                        className="verify-submit-btn full-width"
+                        onClick={handleFileVerify}
+                        disabled={loading || !docFile}>
+                        {loading ? (
+                           <>
+                              <div className="btn-spinner" />
+                              Analyzing document...
+                           </>
+                        ) : (
+                           <>
+                              <Icons name="scan-line" size={15} />
+                              Verify Document
+                           </>
+                        )}
+                     </button>
+                     <p className="panel-hint">
+                        Our AI will extract text from the document and cross-reference its claims.
+                     </p>
+                  </div>
+               )}
+
                {/* Deepfake Tab */}
                {activeTab === "deepfake" && (
                   <div className="verify-panel box-panel">
