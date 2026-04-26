@@ -65,13 +65,13 @@ const FeedSkeleton = () => {
                      <div className="skeleton-box" style={{ width: "80px", height: "24px", borderRadius: "20px" }}></div>
                   </div>
                </div>
-               
+
                <div className="card-claim" style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "16px", marginBottom: "16px" }}>
                   <div className="skeleton-box" style={{ width: "100%", height: "14px" }}></div>
                   <div className="skeleton-box" style={{ width: "90%", height: "14px" }}></div>
                   <div className="skeleton-box" style={{ width: "60%", height: "14px" }}></div>
                </div>
-               
+
                <div className="ai-analysis-bar bar-unverified" style={{ marginTop: "16px", background: "var(--bg-subtle)", border: "1px solid var(--border-default)" }}>
                   <div className="ai-analysis-top-row">
                      <div className="ai-info" style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1 }}>
@@ -85,7 +85,7 @@ const FeedSkeleton = () => {
                      <div className="skeleton-box" style={{ width: "80%", height: "12px" }}></div>
                   </div>
                </div>
-               
+
                <div className="card-footer" style={{ marginTop: "16px", borderTop: "none", display: "flex", gap: "16px", padding: "0" }}>
                   <div className="skeleton-box" style={{ width: "60px", height: "20px" }}></div>
                   <div className="skeleton-box" style={{ width: "80px", height: "20px" }}></div>
@@ -628,419 +628,414 @@ function CommunityFeed() {
             {!loading && (
                <div className="posts-list">
                   {filteredThreads.length === 0 ? (
-                  <h2 className="no-threads-text">
-                     {activeSearchTerm
-                        ? `No threads found for "${activeSearchTerm}".`
-                        : threads.length === 0
-                          ? "No threads yet. Be the first to escalate a claim."
-                          : "No threads match this filter yet."}
-                  </h2>
-               ) : (
-                  filteredThreads.map((thread) => {
-                     const verdict = getEffectiveVerdict(thread.claim);
-                     const verdictClass = verdict?.toLowerCase();
-                     const hasModeratorVerdict = isModeratorVerified(thread);
-                     const pendingConsensus = isPendingConsensus(thread);
-                     const pendingEvidenceCount = thread.claim?.verified_evidence_count ?? 0;
-                     const actionText = pendingConsensus ? "Pending" : getActionText(verdict);
+                     <h2 className="no-threads-text">
+                        {activeSearchTerm
+                           ? `No threads found for "${activeSearchTerm}".`
+                           : threads.length === 0
+                              ? "No threads yet. Be the first to escalate a claim."
+                              : "No threads match this filter yet."}
+                     </h2>
+                  ) : (
+                     filteredThreads.map((thread) => {
+                        const verdict = getEffectiveVerdict(thread.claim);
+                        const verdictClass = verdict?.toLowerCase();
+                        const hasModeratorVerdict = isModeratorVerified(thread);
+                        const pendingConsensus = isPendingConsensus(thread);
+                        const pendingEvidenceCount = thread.claim?.verified_evidence_count ?? 0;
+                        const actionText = pendingConsensus ? "Pending" : getActionText(verdict);
 
-                     return (
-                        <div
-                           key={thread.id}
-                           className="post-card"
-                           onClick={() => handleThreadClick(thread.id)}
-                           style={{ cursor: "pointer" }}>
-                           {/* Card Header */}
-                           <div className="card-header">
-                              <div
-                                 className="post-author-info"
-                                 style={{ cursor: "pointer" }}
-                                 onClick={(e) => {
-                                    e.stopPropagation(); // Prevents triggering the thread card click
-                                    navigate(`/user/${thread.author.username}`);
-                                 }}>
+                        return (
+                           <div
+                              key={thread.id}
+                              className="post-card">
+                              {/* Card Header */}
+                              <div className="card-header">
                                  <div
-                                    className="author-avatar"
-                                    style={{ overflow: "hidden" }}>
-                                    {thread.author.avatar_url ? (
-                                       <img
-                                          src={thread.author.avatar_url}
-                                          alt={`${thread.author.username}'s avatar`}
-                                          style={{
-                                             width: "100%",
-                                             height: "100%",
-                                             objectFit: "cover",
-                                          }}
-                                       />
-                                    ) : (
-                                       <Icons
-                                          name="user"
-                                          size={20}
-                                       />
-                                    )}
-                                 </div>
-                                 <div className="author-meta">
-                                    <span className="author-name">@{thread.author.username}</span>
-                                    <div className="author-time">
-                                       {timeAgo(thread.created_at)} ·{" "}
-                                       <span className="via-link">
-                                          <Icons
-                                             name="search"
-                                             size={10}
+                                    className="post-author-info"
+                                    style={{ cursor: "pointer" }}
+                                    onClick={(e) => {
+                                       e.stopPropagation(); // Prevents triggering the thread card click
+                                       navigate(`/user/${thread.author.username}`);
+                                    }}>
+                                    <div
+                                       className="author-avatar"
+                                       style={{ overflow: "hidden" }}>
+                                       {thread.author.avatar_url ? (
+                                          <img
+                                             src={thread.author.avatar_url}
+                                             alt={`${thread.author.username}'s avatar`}
+                                             style={{
+                                                width: "100%",
+                                                height: "100%",
+                                                objectFit: "cover",
+                                             }}
                                           />
-                                          via TruthLens
-                                       </span>
+                                       ) : (
+                                          <Icons
+                                             name="user"
+                                             size={20}
+                                          />
+                                       )}
+                                    </div>
+                                    <div className="author-meta">
+                                       <span className="author-name">@{thread.author.username}</span>
+                                       <div className="author-time">
+                                          {timeAgo(thread.created_at)}
+                                       </div>
                                     </div>
                                  </div>
-                              </div>
-                              
-                              <div className="header-actions">
-                                 <div className="header-badges-inline">
-                                    {thread.claim?.claim_type && (
-                                       <div
-                                          className="media-type-badge box-panel-mini"
-                                          style={{
-                                             padding: "4px 8px",
-                                             display: "flex",
-                                             gap: "4px",
-                                             alignItems: "center",
-                                             borderRadius: "6px",
-                                             backgroundColor: "var(--bg-subtle)",
-                                             border: "1px solid var(--border-default)",
-                                             fontSize: "0.75rem",
-                                             color: "var(--text-muted)",
-                                             fontWeight: "600",
-                                          }}>
-                                          {thread.claim.claim_type === CATEGORIES.TEXT && (
-                                             <>
-                                                <Icons name="file-text" size={12} /> Text
-                                             </>
-                                          )}
-                                          {thread.claim.claim_type === CATEGORIES.IMAGE && (
-                                             <>
-                                                <Icons name="image" size={12} /> Image
-                                             </>
-                                          )}
-                                          {thread.claim.claim_type === CATEGORIES.FILE && (
-                                             <>
-                                                <Icons name="paperclip" size={12} /> File
-                                             </>
-                                          )}
-                                          {thread.claim.claim_type === CATEGORIES.URL && (
-                                             <>
-                                                <Icons name="link" size={12} /> Link
-                                             </>
-                                          )}
-                                          {thread.claim.claim_type === "VIDEO" && (
-                                             <>
-                                                <Icons name="play" size={12} /> Video
-                                             </>
-                                          )}
-                                          {!Object.values(CATEGORIES).includes(thread.claim.claim_type) &&
-                                             thread.claim.claim_type !== "VIDEO" && (
+
+                                 <div className="header-actions">
+                                    <div className="header-badges-inline">
+                                       {thread.claim?.claim_type && (
+                                          <div
+                                             className="media-type-badge box-panel-mini"
+                                             style={{
+                                                padding: "4px 8px",
+                                                display: "flex",
+                                                gap: "4px",
+                                                alignItems: "center",
+                                                borderRadius: "6px",
+                                                backgroundColor: "var(--bg-subtle)",
+                                                border: "1px solid var(--border-default)",
+                                                fontSize: "0.75rem",
+                                                color: "var(--text-muted)",
+                                                fontWeight: "600",
+                                             }}>
+                                             {thread.claim.claim_type === CATEGORIES.TEXT && (
                                                 <>
-                                                   {thread.claim.claim_type.charAt(0) +
-                                                      thread.claim.claim_type.slice(1).toLowerCase()}
+                                                   <Icons name="file-text" size={12} /> Text
                                                 </>
                                              )}
-                                       </div>
-                                    )}
-                                    <div className={`status-badge badge-${verdictClass}`} style={{ padding: "4px 8px", fontSize: "0.75rem" }}>
-                                       {verdictClass === "fake" && <Icons name="x-circle" size={12} />}
-                                       {verdictClass === "fact" && <Icons name="check-circle" size={12} />}
-                                       {verdictClass === "satire" && <Icons name="wand" size={12} />}
-                                       {verdictClass === "misleading" && <Icons name="alert-triangle" size={12} />}
-                                       {verdictClass === "unverified" && <Icons name="help-circle" size={12} />}
-                                       {verdict}
-                                    </div>
-                                 </div>
-
-                                 <div className="thread-actions-menu-wrap">
-                                    <button
-                                       className="more-btn"
-                                       onClick={(e) => toggleThreadMenu(e, thread.id)}
-                                       aria-haspopup="menu"
-                                       aria-expanded={openMenuThreadId === thread.id}>
-                                       <Icons
-                                          name="more-horizontal"
-                                          size={20}
-                                       />
-                                    </button>
-
-                                    {openMenuThreadId === thread.id && (
-                                       <div className="thread-owner-menu top-right">
-                                          {isThreadOwner(thread) ? (
-                                             <>
-                                                <button
-                                                   className="thread-owner-menu-item"
-                                                   onClick={(e) => startEditThread(e, thread)}>
-                                                   <Icons name="pencil" />
-                                                   Edit Thread
-                                                </button>
-                                                <button
-                                                   className="thread-owner-menu-item"
-                                                   onClick={(e) => shareThread(e, thread)}
-                                                   disabled={sharingThreadId === thread.id}>
-                                                   <Icons name="share-2" />
-                                                   {sharingThreadId === thread.id
-                                                      ? "Sharing..."
-                                                      : "Share"}
-                                                </button>
-                                                <button
-                                                   className="thread-owner-menu-item danger"
-                                                   onClick={(e) => openDeleteDialog(e, thread)}
-                                                   disabled={deletingThreadId === thread.id}>
-                                                   <Icons name="trash" />
-                                                   {deletingThreadId === thread.id
-                                                      ? "Deleting..."
-                                                      : "Delete Thread"}
-                                                </button>
-                                             </>
-                                          ) : (
-                                             <>
-                                                <button
-                                                   className="thread-owner-menu-item"
-                                                   onClick={(e) => openReportDialog(e, thread)}
-                                                   disabled={reportingThreadId === thread.id}>
-                                                   <Icons name="flag" />
-                                                   {reportingThreadId === thread.id
-                                                      ? "Reporting..."
-                                                      : "Report Thread"}
-                                                </button>
-                                                <button
-                                                    className="thread-owner-menu-item"
-                                                    onClick={(e) => shareThread(e, thread)}
-                                                    disabled={sharingThreadId === thread.id}>
-                                                    <Icons name="share-2" />
-                                                    {sharingThreadId === thread.id
-                                                        ? "Sharing..."
-                                                        : "Share"}
-                                                </button>
-                                             </>
-                                          )}
-                                       </div>
-                                    )}
-                                 </div>
-                              </div>
-                           </div>
-
-                           {/* Card Claim Text */}
-                           <div className="card-claim">
-                              {editingThreadId === thread.id ? (
-                                 <div
-                                    className="thread-edit-wrap"
-                                    onClick={(e) => e.stopPropagation()}>
-                                    <textarea
-                                       className="thread-edit-input"
-                                       value={editingCaption}
-                                       onChange={(e) => setEditingCaption(e.target.value)}
-                                       rows={3}
-                                    />
-                                    <div className="thread-edit-actions">
-                                       <button
-                                          className="action-item primary-action"
-                                          onClick={(e) => saveEditThread(e, thread.id)}
-                                          disabled={savingThreadId === thread.id}>
-                                          {savingThreadId === thread.id ? "Saving..." : "Save"}
-                                       </button>
-                                       <button
-                                          className="action-item"
-                                          onClick={cancelEditThread}>
-                                          Cancel
-                                       </button>
-                                    </div>
-                                 </div>
-                              ) : (
-                                 thread.caption
-                              )}
-                           </div>
-
-                           {/* Card Media */}
-                           {thread.claim.media_url && (
-                              <div
-                                 className="card-media"
-                                 onClick={() => {
-                                    handleThreadClick(thread.id);
-                                 }}
-                                 style={{ height: "auto" }}>
-                                 <img
-                                    src={thread.claim.media_url}
-                                    alt="Snipped claim"
-                                    className="card-media-image"
-                                 />
-                              </div>
-                           )}
-
-                           {/* URL Source Link Block */}
-                           {thread.claim.claim_type === CATEGORIES.URL &&
-                              thread.claim.source_link && (
-                                 <a
-                                    href={thread.claim.source_link}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="url-preview-card"
-                                    onClick={(e) => e.stopPropagation()}>
-                                    <div className="media-icon">
-                                       <Icons
-                                          name="external-link"
-                                          size={20}
-                                       />
-                                    </div>
-                                    <span
-                                       className="media-source"
-                                       title={thread.claim.source_link}>
-                                       {thread.claim.source_link}
-                                    </span>
-                                 </a>
-                              )}
-
-                           {/* ── AI Analysis Bar or Moderator Verdict (NOW WITH CONTEXT INSIDE) ── */}
-                           <div className={`ai-analysis-bar bar-${verdictClass}`}>
-                              {/* TOP ROW: Verdict Info & Button */}
-                              <div className="ai-analysis-top-row">
-                                 {hasModeratorVerdict ? (
-                                    // Show Moderator Verdict
-                                    <div className="ai-info">
-                                       <div
-                                          className={`status-badge solid badge-${thread.claim.moderator_verdict_info.verdict.toLowerCase()}`}>
-                                          <Icons name="check-circle" />
-                                          {thread.claim.moderator_verdict_info.verdict ===
-                                          "MISLEADING"
-                                             ? "Mixed"
-                                             : "Verified"}
-                                       </div>
-                                       <span className="ai-confidence-text">
-                                          Final Verdict:{" "}
-                                          <strong>
-                                             {thread.claim.moderator_verdict_info.verdict}
-                                          </strong>{" "}
-                                          (
-                                          {
-                                             thread.claim.moderator_verdict_info
-                                                .verified_evidence_count
-                                          }{" "}
-                                          evidence)
-                                          {thread.claim.moderator_verdict_info.verdict ===
-                                             "MISLEADING" && (
-                                             <span className="mixed-evidence-pill">
-                                                Mixed evidence
-                                             </span>
-                                          )}
-                                       </span>
-                                    </div>
-                                 ) : pendingConsensus ? (
-                                    // Show pending state
-                                    <div className="ai-info">
-                                       <div className="status-badge solid badge-unverified">
-                                          <Icons name="clock" />
-                                          Verdict Pending
-                                       </div>
-                                       <span className="ai-confidence-text">
-                                          <strong>{pendingEvidenceCount}</strong> verified evidence
-                                          under review
-                                       </span>
-                                    </div>
-                                 ) : (
-                                    // Show AI Verdict (fallback)
-                                    <div className="ai-info">
-                                       <div className={`status-badge solid badge-${verdictClass}`}>
-                                          {verdictClass === "misleading" && (
-                                             <Icons name="alert-triangle" />
-                                          )}
-                                          {verdictClass === "unverified" && (
-                                             <Icons name="help-circle" />
-                                          )}
+                                             {thread.claim.claim_type === CATEGORIES.IMAGE && (
+                                                <>
+                                                   <Icons name="image" size={12} /> Image
+                                                </>
+                                             )}
+                                             {thread.claim.claim_type === CATEGORIES.FILE && (
+                                                <>
+                                                   <Icons name="paperclip" size={12} /> File
+                                                </>
+                                             )}
+                                             {thread.claim.claim_type === CATEGORIES.URL && (
+                                                <>
+                                                   <Icons name="link" size={12} /> Link
+                                                </>
+                                             )}
+                                             {thread.claim.claim_type === "VIDEO" && (
+                                                <>
+                                                   <Icons name="play" size={12} /> Video
+                                                </>
+                                             )}
+                                             {!Object.values(CATEGORIES).includes(thread.claim.claim_type) &&
+                                                thread.claim.claim_type !== "VIDEO" && (
+                                                   <>
+                                                      {thread.claim.claim_type.charAt(0) +
+                                                         thread.claim.claim_type.slice(1).toLowerCase()}
+                                                   </>
+                                                )}
+                                          </div>
+                                       )}
+                                       <div className={`status-badge badge-${verdictClass}`} style={{ padding: "4px 8px", fontSize: "0.75rem" }}>
+                                          {verdictClass === "fake" && <Icons name="x-circle" size={12} />}
+                                          {verdictClass === "fact" && <Icons name="check-circle" size={12} />}
+                                          {verdictClass === "satire" && <Icons name="wand" size={12} />}
+                                          {verdictClass === "misleading" && <Icons name="alert-triangle" size={12} />}
+                                          {verdictClass === "unverified" && <Icons name="help-circle" size={12} />}
                                           {verdict}
                                        </div>
-                                       <span className="ai-confidence-text">
-                                          AI Confidence:{" "}
-                                          <strong>{thread.claim.consensus_score}%</strong>
-                                       </span>
+                                    </div>
+
+                                    <div className="thread-actions-menu-wrap">
+                                       <button
+                                          className="more-btn"
+                                          onClick={(e) => toggleThreadMenu(e, thread.id)}
+                                          aria-haspopup="menu"
+                                          aria-expanded={openMenuThreadId === thread.id}>
+                                          <Icons
+                                             name="more-horizontal"
+                                             size={20}
+                                          />
+                                       </button>
+
+                                       {openMenuThreadId === thread.id && (
+                                          <div className="thread-owner-menu top-right">
+                                             {isThreadOwner(thread) ? (
+                                                <>
+                                                   <button
+                                                      className="thread-owner-menu-item"
+                                                      onClick={(e) => startEditThread(e, thread)}>
+                                                      <Icons name="pencil" />
+                                                      Edit Thread
+                                                   </button>
+                                                   <button
+                                                      className="thread-owner-menu-item"
+                                                      onClick={(e) => shareThread(e, thread)}
+                                                      disabled={sharingThreadId === thread.id}>
+                                                      <Icons name="share-2" />
+                                                      {sharingThreadId === thread.id
+                                                         ? "Sharing..."
+                                                         : "Share"}
+                                                   </button>
+                                                   <button
+                                                      className="thread-owner-menu-item danger"
+                                                      onClick={(e) => openDeleteDialog(e, thread)}
+                                                      disabled={deletingThreadId === thread.id}>
+                                                      <Icons name="trash" />
+                                                      {deletingThreadId === thread.id
+                                                         ? "Deleting..."
+                                                         : "Delete Thread"}
+                                                   </button>
+                                                </>
+                                             ) : (
+                                                <>
+                                                   <button
+                                                      className="thread-owner-menu-item"
+                                                      onClick={(e) => openReportDialog(e, thread)}
+                                                      disabled={reportingThreadId === thread.id}>
+                                                      <Icons name="flag" />
+                                                      {reportingThreadId === thread.id
+                                                         ? "Reporting..."
+                                                         : "Report Thread"}
+                                                   </button>
+                                                   <button
+                                                      className="thread-owner-menu-item"
+                                                      onClick={(e) => shareThread(e, thread)}
+                                                      disabled={sharingThreadId === thread.id}>
+                                                      <Icons name="share-2" />
+                                                      {sharingThreadId === thread.id
+                                                         ? "Sharing..."
+                                                         : "Share"}
+                                                   </button>
+                                                </>
+                                             )}
+                                          </div>
+                                       )}
+                                    </div>
+                                 </div>
+                              </div>
+
+                              <div className="card-claim-wrap"
+                                 onClick={() => handleThreadClick(thread.id)}
+                                 style={{ cursor: "pointer" }}>
+                                 {/* Card Claim Text */}
+                                 <div className="card-claim">
+                                    {editingThreadId === thread.id ? (
+                                       <div
+                                          className="thread-edit-wrap"
+                                          onClick={(e) => e.stopPropagation()}>
+                                          <textarea
+                                             className="thread-edit-input"
+                                             value={editingCaption}
+                                             onChange={(e) => setEditingCaption(e.target.value)}
+                                             rows={3}
+                                          />
+                                          <div className="thread-edit-actions">
+                                             <button
+                                                className="action-item primary-action"
+                                                onClick={(e) => saveEditThread(e, thread.id)}
+                                                disabled={savingThreadId === thread.id}>
+                                                {savingThreadId === thread.id ? "Saving..." : "Save"}
+                                             </button>
+                                             <button
+                                                className="action-item"
+                                                onClick={cancelEditThread}>
+                                                Cancel
+                                             </button>
+                                          </div>
+                                       </div>
+                                    ) : (
+                                       thread.caption
+                                    )}
+                                 </div>
+
+                                 {/* Card Media */}
+                                 {thread.claim.media_url && (
+                                    <div
+                                       className="card-media"
+                                       onClick={() => {
+                                          handleThreadClick(thread.id);
+                                       }}
+                                       style={{ height: "auto" }}>
+                                       <img
+                                          src={thread.claim.media_url}
+                                          alt="Snipped claim"
+                                          className="card-media-image"
+                                       />
                                     </div>
                                  )}
 
-                                 <button className="needs-evidence-btn">{actionText}</button>
+                                 {/* URL Source Link Block */}
+                                 {thread.claim.claim_type === CATEGORIES.URL &&
+                                    thread.claim.source_link && (
+                                       <a
+                                          href={thread.claim.source_link}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="url-preview-card"
+                                          onClick={(e) => e.stopPropagation()}>
+                                          <div className="media-icon">
+                                             <Icons
+                                                name="external-link"
+                                                size={20}
+                                             />
+                                          </div>
+                                          <span
+                                             className="media-source"
+                                             title={thread.claim.source_link}>
+                                             {thread.claim.source_link}
+                                          </span>
+                                       </a>
+                                    )}
                               </div>
 
-                              {/* BOTTOM ROW: Context / Reasoning Text */}
-                              <div className="ai-analysis-context">
-                                 <strong className="context-label">Context: </strong>
-                                 {hasModeratorVerdict
-                                    ? thread.claim.moderator_verdict_info?.notes ||
-                                      thread.claim.ai_summary ||
-                                      "No additional context provided by moderators."
-                                    : pendingConsensus
-                                      ? `${pendingEvidenceCount} verified evidence submissions are currently under review by moderators to form a final consensus.`
-                                      : thread.claim.ai_summary || "No AI summary available."}
+                              {/* ── AI Analysis Bar or Moderator Verdict (NOW WITH CONTEXT INSIDE) ── */}
+                              <div className={`ai-analysis-bar bar-${verdictClass}`}>
+                                 {/* TOP ROW: Verdict Info & Button */}
+                                 <div className="ai-analysis-top-row">
+                                    {hasModeratorVerdict ? (
+                                       // Show Moderator Verdict
+                                       <div className="ai-info">
+                                          <div
+                                             className={`status-badge solid badge-${thread.claim.moderator_verdict_info.verdict.toLowerCase()}`}>
+                                             <Icons name="check-circle" />
+                                             {thread.claim.moderator_verdict_info.verdict ===
+                                                "MISLEADING"
+                                                ? "Mixed"
+                                                : "Verified"}
+                                          </div>
+                                          <span className="ai-confidence-text">
+                                             Final Verdict:{" "}
+                                             <strong>
+                                                {thread.claim.moderator_verdict_info.verdict}
+                                             </strong>{" "}
+                                             (
+                                             {
+                                                thread.claim.moderator_verdict_info
+                                                   .verified_evidence_count
+                                             }{" "}
+                                             evidence)
+                                             {thread.claim.moderator_verdict_info.verdict ===
+                                                "MISLEADING" && (
+                                                   <span className="mixed-evidence-pill">
+                                                      Mixed evidence
+                                                   </span>
+                                                )}
+                                          </span>
+                                       </div>
+                                    ) : pendingConsensus ? (
+                                       // Show pending state
+                                       <div className="ai-info">
+                                          <div className="status-badge solid badge-unverified">
+                                             <Icons name="clock" />
+                                             Verdict Pending
+                                          </div>
+                                          <span className="ai-confidence-text">
+                                             <strong>{pendingEvidenceCount}</strong> verified evidence
+                                             under review
+                                          </span>
+                                       </div>
+                                    ) : (
+                                       // Show AI Verdict (fallback)
+                                       <div className="ai-info">
+                                          <div className={`status-badge solid badge-${verdictClass}`}>
+                                             {verdictClass === "misleading" && (
+                                                <Icons name="alert-triangle" />
+                                             )}
+                                             {verdictClass === "unverified" && (
+                                                <Icons name="help-circle" />
+                                             )}
+                                             {verdict}
+                                          </div>
+                                          <span className="ai-confidence-text">
+                                             AI Confidence:{" "}
+                                             <strong>{thread.claim.consensus_score}%</strong>
+                                          </span>
+                                       </div>
+                                    )}
+
+                                    <button className="needs-evidence-btn">{actionText}</button>
+                                 </div>
+
+                                 {/* BOTTOM ROW: Context / Reasoning Text */}
+                                 <div className="ai-analysis-context">
+                                    <strong className="context-label">Context: </strong>
+                                    {hasModeratorVerdict
+                                       ? thread.claim.moderator_verdict_info?.notes ||
+                                       thread.claim.ai_summary ||
+                                       "No additional context provided by moderators."
+                                       : pendingConsensus
+                                          ? `${pendingEvidenceCount} verified evidence submissions are currently under review by moderators to form a final consensus.`
+                                          : thread.claim.ai_summary || "No AI summary available."}
+                                 </div>
+                              </div>
+
+                              {/* Card Footer actions */}
+                              <div className="card-footer">
+                                 <button
+                                    className="action-item"
+                                    onClick={(e) => {
+                                       e.stopPropagation();
+                                       handleThreadClick(thread.id, "comments");
+                                    }}>
+                                    <Icons name="message-square" />
+                                    Comment
+                                    <span className="count-pill">{thread.comment_count}</span>
+                                 </button>
+
+                                 <button
+                                    className="action-item primary-action"
+                                    onClick={(e) => {
+                                       e.stopPropagation();
+                                       handleThreadClick(thread.id, "evidence", {
+                                          openEvidenceForm: true,
+                                       });
+                                    }}>
+                                    <Icons name="circle-plus" />
+                                    Add Evidence
+                                 </button>
+
+                                 <button
+                                    className="action-item"
+                                    onClick={(e) => {
+                                       e.stopPropagation();
+                                       handleThreadClick(thread.id, "evidence");
+                                    }}>
+                                    <Icons name="paperclip" />
+                                    Evidence
+                                    <span className="count-pill">{thread.evidence_count}</span>
+                                 </button>
                               </div>
                            </div>
+                        );
+                     })
+                  )}
 
-                           {/* Card Footer actions */}
-                           <div className="card-footer">
-                              <button
-                                 className="action-item"
-                                 onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleThreadClick(thread.id, "comments");
-                                 }}>
-                                 <Icons name="message-square" />
-                                 Comment
-                                 <span className="count-pill">{thread.comment_count}</span>
-                              </button>
+                  {/* Infinite Scroll Observer Target */}
+                  {hasMore && (
+                     <div
+                        ref={observerTarget}
+                        style={{
+                           padding: "20px",
+                           textAlign: "center",
+                           color: "#9ca3af",
+                        }}>
+                        {!loading && hasMore && <p>Scroll to load more</p>}
+                     </div>
+                  )}
 
-                              <button
-                                 className="action-item primary-action"
-                                 onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleThreadClick(thread.id, "evidence", {
-                                       openEvidenceForm: true,
-                                    });
-                                 }}>
-                                 <Icons name="circle-plus" />
-                                 Add Evidence
-                              </button>
-
-                              <button
-                                 className="action-item"
-                                 onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleThreadClick(thread.id, "evidence");
-                                 }}>
-                                 <Icons name="paperclip" />
-                                 Evidence
-                                 <span className="count-pill">{thread.evidence_count}</span>
-                              </button>
-                           </div>
-                        </div>
-                     );
-                  })
-               )}
-
-               {/* Infinite Scroll Observer Target */}
-               {hasMore && (
-                  <div
-                     ref={observerTarget}
-                     style={{
-                        padding: "20px",
-                        textAlign: "center",
-                        color: "#9ca3af",
-                     }}>
-                     {!loading && hasMore && <p>Scroll to load more</p>}
-                  </div>
-               )}
-
-               {!hasMore && threads.length > 0 && (
-                  <div
-                     style={{
-                        padding: "20px",
-                        textAlign: "center",
-                        color: "#9ca3af",
-                        fontSize: "14px",
-                     }}>
-                     No more threads to load
-                  </div>
-               )}
-            </div>
+                  {!hasMore && threads.length > 0 && (
+                     <div
+                        style={{
+                           padding: "20px",
+                           textAlign: "center",
+                           color: "#9ca3af",
+                           fontSize: "14px",
+                        }}>
+                        No more threads to load
+                     </div>
+                  )}
+               </div>
             )}
 
             {deleteDialog.open && (
