@@ -59,10 +59,10 @@ class Claim(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     claim_type = models.CharField(max_length=20, choices=ClaimType.choices, default=ClaimType.TEXT)
-    media_url = models.CharField(max_length=500, blank=True, null=True)
+    media_url = models.CharField(max_length=2000, blank=True, null=True)
     image = models.ImageField(upload_to='claims/images/', null=True, blank=True)
     media_hash = models.CharField(max_length=64, blank=True, null=True)
-    url_link = models.URLField(max_length=500, blank=True, null=True)
+    url_link = models.URLField(max_length=2000, blank=True, null=True)
     context_text = models.TextField(blank=True, null=True)
 
     ai_summary = models.TextField(blank=True, null=True)
@@ -79,8 +79,8 @@ class Claim(models.Model):
         default=VerificationSource.PENDING,
     )
 
-    source_link = models.URLField(max_length=500, blank=True, null=True)
-    top_verdict_source = models.URLField(max_length=500, blank=True, null=True)
+    source_link = models.URLField(max_length=2000, blank=True, null=True)
+    top_verdict_source = models.URLField(max_length=2000, blank=True, null=True)
     ai_sources = models.JSONField(default=list, blank=True, null=True)
 
     last_updated = models.DateTimeField(auto_now=True)

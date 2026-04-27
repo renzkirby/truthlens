@@ -160,7 +160,7 @@ export function displayLoadingCard(customMsg) {
 }
 
 export function displayDeepfakeResultCard(data) {
-   const { ai_probability, is_fake } = data;
+   const { ai_probability, is_fake, summary } = data;
    const percentage = Math.round(ai_probability * 100);
    const badgeColor = is_fake ? "#e02424" : "#0e9f6e";
    const verdictText = is_fake ? "AI-GENERATED" : "AUTHENTIC / HUMAN";
