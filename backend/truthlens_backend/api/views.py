@@ -77,6 +77,15 @@ from .serializers import (
     UserWithTrustBreakdownSerializer,
     ClaimDeepAnalysisSerializer
 )
+from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
+from allauth.socialaccount.providers.oauth2.client import OAuth2Client
+from dj_rest_auth.registration.views import SocialLoginView
+
+#GoogleLogin
+class GoogleLogin(SocialLoginView):
+    adapter_class = GoogleOAuth2Adapter
+    client_class = OAuth2Client
+    callback_url = "http://localhost:5174" #TODO: update to production URL in env vars
 
 # ── Pagination Configuration ──
 class StandardCursorPagination(CursorPagination):

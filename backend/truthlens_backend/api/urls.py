@@ -43,6 +43,9 @@ urlpatterns = [
     path("moderation/stats/", views.moderation_stats_view, name="moderation_stats"),
     path("users/me/dashboard/", views.UserHubView.as_view(), name="user_hub"),
     path("claims/<uuid:claim_id>/toggle-save/", views.toggle_save_claim, name="toggle_save_claim"),
+    
+    #GoogleLogin URL
+    path('auth/google/', views.GoogleLogin.as_view(), name='google_login'),
 ]
 
 router = DefaultRouter()

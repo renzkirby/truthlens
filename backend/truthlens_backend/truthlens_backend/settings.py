@@ -50,7 +50,15 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.postgres",
     "rest_framework",
+    "rest_framework.authtoken",
     "rest_framework_simplejwt",
+    'dj_rest_auth',
+    'django.contrib.sites',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
+    'dj_rest_auth.registration',
     "corsheaders",
     "pgvector",
     "api",
@@ -74,6 +82,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    'allauth.account.middleware.AccountMiddleware',
 ]
 
 ROOT_URLCONF = "truthlens_backend.urls"
@@ -211,7 +220,8 @@ SIMPLE_JWT = {
 }
 
 AUTHENTICATION_BACKENDS = [
-    'api.backends.EmailOrUsernameBackend'
+    'api.backends.EmailOrUsernameBackend',
+    'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
 MEDIA_URL = '/media/'
@@ -227,3 +237,25 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend' #Testing
 # EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
 # EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
 # DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL')
+
+#Authentication and Google OAuth settings
+SITE_ID = 1
+REST_USE_JWT = True
+ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
+SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        "APP": {
+            'client_id': os.environ.get('GOOGLE_OAUTH_CLIENT_ID'),
+            'client_secret': os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET'),
+            'key': ''
+        },
+        'SCOPE': [
+            'profile',
+            'email',
+        ],
+        'AUTH_PARAMS': {
+            'access_type': 'online',
+        }
+    }
+}
