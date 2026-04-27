@@ -85,7 +85,7 @@ from dj_rest_auth.registration.views import SocialLoginView
 class GoogleLogin(SocialLoginView):
     adapter_class = GoogleOAuth2Adapter
     client_class = OAuth2Client
-    callback_url = "http://localhost:5174" #TODO: update to production URL in env vars
+    callback_url = "https://truthlens-dev.vercel.app/" #TODO: update to production URL in env vars
 
 # ── Pagination Configuration ──
 class StandardCursorPagination(CursorPagination):
