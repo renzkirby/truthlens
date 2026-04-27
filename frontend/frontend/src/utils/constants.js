@@ -91,6 +91,7 @@ export const API_ENDPOINTS = {
    REGISTER: "auth/register/",
    PROFILE: "auth/profile/",
    MY_CLAIMS: "auth/my-claims/",
+   GOOGLE_LOGIN: "auth/google/",
 
    // Claims & Threads
    CLAIMS: "claims/",

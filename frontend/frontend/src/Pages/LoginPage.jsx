@@ -22,6 +22,7 @@ import { useAuth } from "../context/AuthContext";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import LogoImage from "../assets/truthlens_logo.png";
 import Icons from "../components/Icons.jsx";
+import { useGoogleLogin } from "@react-oauth/google";
 
 // ── Utilities & Constants ──
 import { useEndpoint } from "../utils/api";
@@ -36,7 +37,8 @@ function LoginPage() {
    const [showPassword, setShowPassword] = useState(false);
    const [isSigningIn, setIsSigningIn] = useState(false);
    const [justLoggedIn, setJustLoggedIn] = useState(false);
-
+   const loginEndpoint = useEndpoint("LOGIN");
+   const googleLoginEndpoint = useEndpoint("GOOGLE_LOGIN");
    const from = location.state?.from
       ? location.state.from.pathname + location.state.from.search
       : null;
@@ -84,7 +86,6 @@ function LoginPage() {
    const handleSubmit = async () => {
       setIsSigningIn(true);
       setError(null);
-      const loginEndpoint = useEndpoint("LOGIN");
 
       try {
          const response = await fetch(loginEndpoint, {
@@ -112,6 +113,46 @@ function LoginPage() {
          setIsSigningIn(false);
       }
    };
+
+   // ── Google OAuth Hook ──
+   const loginWithGoogle = useGoogleLogin({
+      onSuccess: async (tokenResponse) => {
+         // console.log("Google Access Token:", tokenResponse.access_token);
+         setIsSigningIn(true);
+         setError(null);
+
+         try {
+            const response = await fetch(googleLoginEndpoint, {
+               method: "POST",
+               headers: { "Content-Type": "application/json" },
+               body: JSON.stringify({
+                  access_token: tokenResponse.access_token,
+               }),
+            });
+
+            const data = await response.json().catch(() => ({}));
+
+            // console.log("Django Authentication Response:", data);
+
+            if (response.ok && data?.access) {
+               // If refresh is empty or undefined, it just passes null/undefined to AuthContext
+               login(data.access, data.refresh);
+               setJustLoggedIn(true);
+               return;
+            }
+
+            setError(data?.detail || "Unable to sign in with Google right now. Please try again.");
+         } catch (err) {
+            setError("Unable to sign in with Google right now. Please try again.");
+         } finally {
+            setIsSigningIn(false);
+         }
+      },
+      onError: () => {
+         setError("Google sign-in failed. Please try again.");
+         console.error("Google Sign-In Error");
+      },
+   });
 
    return (
       <>
@@ -316,14 +357,15 @@ function LoginPage() {
                   <div className="social-login">
                      <button
                         type="button"
-                        className="social-btn">
+                        className="social-btn"
+                        onClick={() => loginWithGoogle()}>
                         <span className="social-icon">G</span> Google
                      </button>
-                     <button
+                     {/* <button
                         type="button"
                         className="social-btn">
                         <span className="social-icon">f</span> Facebook
-                     </button>
+                     </button> */}
                   </div>
                </div>
             </div>
