@@ -240,8 +240,16 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend' #Testing
 
 #Authentication and Google OAuth settings
 SITE_ID = 1
-REST_USE_JWT = True
-ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
+REST_AUTH = {
+    'USE_JWT': True,
+}
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_USERNAME_REQUIRED = False
+ACCOUNT_AUTHENTICATION_METHOD = 'username_email'
+
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
+SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
+SOCIALACCOUNT_AUTO_SIGNUP = True
 SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
 SOCIALACCOUNT_PROVIDERS = {
     'google': {
