@@ -671,7 +671,7 @@ def upload_image_to_database(base64_string):
 # AI DEEPFAKE/AI GENERATED IMAGE PIPELINE
 def detect_ai_image(image_bytes):
     """Sends image to Hugging Face's inference API to detect AI generation."""
-    API_URL = "https://router.huggingface.co/hf-inference/models/dima806/deepfake_vs_real_image_detection"
+    API_URL = "https://router.huggingface.co/hf-inference/models/umm-maybe/AI-image-detector"
     headers = {
             "Authorization": f"Bearer {os.environ.get('HUGGINGFACE_API_KEY')}",
             "Content-Type": "application/octet-stream"
