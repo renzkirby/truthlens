@@ -98,9 +98,11 @@ import {
    ArrowUp,
    ArrowDown,
    ArrowUpRight,
+   ShieldCheck,
 } from "lucide-react";
 
 const ICON_MAP = {
+   "shield-check": ShieldCheck,
    file: File,
    "arrow-up": ArrowUp,
    "arrow-down": ArrowDown,
