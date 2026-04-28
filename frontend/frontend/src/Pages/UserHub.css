@@ -201,9 +201,10 @@
 }
 
 .library-item {
+    position: relative;
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     padding: 16px;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
@@ -215,6 +216,13 @@
     background: #f1f5f9;
 }
 
+.li-verdict-top-right {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: auto;
+    /* Push buttons down if there's height differences */
+}
+
 .li-main {
     display: flex;
     align-items: flex-start;
@@ -223,6 +231,11 @@
 
 .li-icon {
     margin-top: 4px;
+    flex-shrink: 0;
+}
+
+.li-icon-svg {
+    flex-shrink: 0;
 }
 
 .li-content {
@@ -245,6 +258,7 @@
     color: #64748b;
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 12px;
 }
 
@@ -259,25 +273,55 @@
     flex-direction: column;
     align-items: flex-end;
     gap: 12px;
+    min-height: 100%;
 }
 
-.hub-btn-publish {
+.hub-btns-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.hub-btn-icon {
+    flex-shrink: 0;
+}
+
+.hub-btn-publish,
+.hub-btn-report {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     padding: 8px 16px;
     border-radius: 6px;
-    background-color: #3b82f6;
-    color: white;
     font-size: 13px;
     font-weight: 600;
     border: none;
     cursor: pointer;
     transition: opacity 0.2s ease;
+    white-space: nowrap;
+    /* Prevent button text from wrapping */
+}
+
+.hub-btn-publish {
+    background-color: #3b82f6;
+    color: white;
 }
 
 .hub-btn-publish:hover {
     opacity: 0.85;
+}
+
+.hub-btn-report {
+    background-color: #f8fafc;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    text-decoration: none;
+}
+
+.hub-btn-report:hover {
+    background-color: #e2e8f0;
+    color: #0f172a;
 }
 
 .hub-verdict-badge {
@@ -291,6 +335,10 @@
     gap: 6px;
     border-width: 1px;
     border-style: solid;
+}
+
+.hub-verdict-badge svg {
+    flex-shrink: 0;
 }
 
 .hub-wrapper.loading,
@@ -341,20 +389,48 @@
     .library-item {
         flex-direction: column;
         align-items: flex-start;
-        gap: 12px;
+        /* Create a 56px "safe zone" at the top so text NEVER touches the badge */
+        padding: 56px 16px 16px 16px;
+        position: relative;
+        gap: 16px;
+    }
+
+    .li-verdict-top-right {
+        position: absolute;
+        top: 16px;
+        right: -16px;
+        /* Anchor it to the right edge */
+        left: auto;
+        /* Ensure the left anchor is removed */
+        margin: 0;
+    }
+
+    .li-main {
+        width: 100%;
     }
 
     .li-content {
         max-width: 100%;
+        padding-right: 0;
     }
 
     .li-actions {
-        flex-direction: row;
-        align-self: stretch;
+        width: 100%;
+        margin-top: 0;
     }
 
+    .hub-btns-row {
+        width: 100%;
+        display: flex;
+        gap: 8px;
+    }
+
+    .hub-btn-report,
     .hub-btn-publish {
-        min-height: 44px;
+        flex: 1;
+        padding: 10px 12px;
+        /* Make buttons slightly taller for mobile tapping */
+        justify-content: center;
     }
 
     .box-panel {
