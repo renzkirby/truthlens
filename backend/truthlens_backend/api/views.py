@@ -1053,19 +1053,22 @@ def test_deepfake(request):
         output_buffer = io.BytesIO()
         img.save(output_buffer, format="JPEG", quality=90)
         optimized_image_bytes = output_buffer.getvalue()
-
-        # 3. Send the clean, optimized bytes to your model
-        ai_probability = detect_ai_image(optimized_image_bytes)
+    # 3. Send the clean, optimized bytes to your model
+        ai_data = detect_ai_image(optimized_image_bytes)
         
-        # You can adjust this 0.65 threshold based on testing your new model!
+        if not ai_data:
+            return JsonResponse({"error": "Detection API unavailable."}, status=503)
+            
+        ai_probability = ai_data["score"]
+        fake_category = ai_data["category"]
         is_fake = ai_probability > 0.65
 
         # 4. Generate the dynamic explanation!
         summary_text = ""
         if is_fake:
-            # Pass the base64 string (ensure it's string format, not bytes, for Groq)
             base64_for_groq = base64.b64encode(optimized_image_bytes).decode('utf-8')
-            summary_text = generate_deepfake_explanation(base64_for_groq)
+            # Pass the category into the Groq function
+            summary_text = generate_deepfake_explanation(base64_for_groq, fake_category)
         else:
             summary_text = "No significant indicators of AI generation were detected. The image appears to possess natural digital noise and structural consistency."
 
