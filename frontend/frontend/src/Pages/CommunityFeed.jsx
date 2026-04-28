@@ -52,43 +52,106 @@ const FeedSkeleton = () => {
    return (
       <div className="posts-list">
          {[1, 2, 3].map((i) => (
-            <div key={i} className="post-card">
+            <div
+               key={i}
+               className="post-card">
                <div className="card-header">
                   <div className="post-author-info">
-                     <div className="author-avatar skeleton-box" style={{ borderRadius: "50%" }}></div>
-                     <div className="author-meta" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                        <div className="skeleton-box" style={{ width: "120px", height: "14px" }}></div>
-                        <div className="skeleton-box" style={{ width: "80px", height: "12px" }}></div>
+                     <div
+                        className="author-avatar skeleton-box"
+                        style={{ borderRadius: "50%" }}></div>
+                     <div
+                        className="author-meta"
+                        style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <div
+                           className="skeleton-box"
+                           style={{ width: "120px", height: "14px" }}></div>
+                        <div
+                           className="skeleton-box"
+                           style={{ width: "80px", height: "12px" }}></div>
                      </div>
                   </div>
                   <div className="header-actions">
-                     <div className="skeleton-box" style={{ width: "80px", height: "24px", borderRadius: "20px" }}></div>
+                     <div
+                        className="skeleton-box"
+                        style={{ width: "80px", height: "24px", borderRadius: "20px" }}></div>
                   </div>
                </div>
 
-               <div className="card-claim" style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "16px", marginBottom: "16px" }}>
-                  <div className="skeleton-box" style={{ width: "100%", height: "14px" }}></div>
-                  <div className="skeleton-box" style={{ width: "90%", height: "14px" }}></div>
-                  <div className="skeleton-box" style={{ width: "60%", height: "14px" }}></div>
+               <div
+                  className="card-claim"
+                  style={{
+                     display: "flex",
+                     flexDirection: "column",
+                     gap: "8px",
+                     marginTop: "16px",
+                     marginBottom: "16px",
+                  }}>
+                  <div
+                     className="skeleton-box"
+                     style={{ width: "100%", height: "14px" }}></div>
+                  <div
+                     className="skeleton-box"
+                     style={{ width: "90%", height: "14px" }}></div>
+                  <div
+                     className="skeleton-box"
+                     style={{ width: "60%", height: "14px" }}></div>
                </div>
 
-               <div className="ai-analysis-bar bar-unverified" style={{ marginTop: "16px", background: "var(--bg-subtle)", border: "1px solid var(--border-default)" }}>
+               <div
+                  className="ai-analysis-bar bar-unverified"
+                  style={{
+                     marginTop: "16px",
+                     background: "var(--bg-subtle)",
+                     border: "1px solid var(--border-default)",
+                  }}>
                   <div className="ai-analysis-top-row">
-                     <div className="ai-info" style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1 }}>
-                        <div className="skeleton-box" style={{ width: "80px", height: "24px", borderRadius: "12px" }}></div>
-                        <div className="skeleton-box" style={{ width: "140px", height: "14px" }}></div>
+                     <div
+                        className="ai-info"
+                        style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1 }}>
+                        <div
+                           className="skeleton-box"
+                           style={{ width: "80px", height: "24px", borderRadius: "12px" }}></div>
+                        <div
+                           className="skeleton-box"
+                           style={{ width: "140px", height: "14px" }}></div>
                      </div>
-                     <div className="skeleton-box" style={{ width: "100px", height: "30px", borderRadius: "8px" }}></div>
+                     <div
+                        className="skeleton-box"
+                        style={{ width: "100px", height: "30px", borderRadius: "8px" }}></div>
                   </div>
-                  <div className="ai-analysis-context" style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "12px" }}>
-                     <div className="skeleton-box" style={{ width: "100%", height: "12px" }}></div>
-                     <div className="skeleton-box" style={{ width: "80%", height: "12px" }}></div>
+                  <div
+                     className="ai-analysis-context"
+                     style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "6px",
+                        marginTop: "12px",
+                     }}>
+                     <div
+                        className="skeleton-box"
+                        style={{ width: "100%", height: "12px" }}></div>
+                     <div
+                        className="skeleton-box"
+                        style={{ width: "80%", height: "12px" }}></div>
                   </div>
                </div>
 
-               <div className="card-footer" style={{ marginTop: "16px", borderTop: "none", display: "flex", gap: "16px", padding: "0" }}>
-                  <div className="skeleton-box" style={{ width: "60px", height: "20px" }}></div>
-                  <div className="skeleton-box" style={{ width: "80px", height: "20px" }}></div>
+               <div
+                  className="card-footer"
+                  style={{
+                     marginTop: "16px",
+                     borderTop: "none",
+                     display: "flex",
+                     gap: "16px",
+                     padding: "0",
+                  }}>
+                  <div
+                     className="skeleton-box"
+                     style={{ width: "60px", height: "20px" }}></div>
+                  <div
+                     className="skeleton-box"
+                     style={{ width: "80px", height: "20px" }}></div>
                </div>
             </div>
          ))}
@@ -632,8 +695,8 @@ function CommunityFeed() {
                         {activeSearchTerm
                            ? `No threads found for "${activeSearchTerm}".`
                            : threads.length === 0
-                              ? "No threads yet. Be the first to escalate a claim."
-                              : "No threads match this filter yet."}
+                             ? "No threads yet. Be the first to escalate a claim."
+                             : "No threads match this filter yet."}
                      </h2>
                   ) : (
                      filteredThreads.map((thread) => {
@@ -678,7 +741,9 @@ function CommunityFeed() {
                                        )}
                                     </div>
                                     <div className="author-meta">
-                                       <span className="author-name">@{thread.author.username}</span>
+                                       <span className="author-name">
+                                          @{thread.author.username}
+                                       </span>
                                        <div className="author-time">
                                           {timeAgo(thread.created_at)}
                                        </div>
@@ -704,45 +769,143 @@ function CommunityFeed() {
                                              }}>
                                              {thread.claim.claim_type === CATEGORIES.TEXT && (
                                                 <>
-                                                   <Icons name="file-text" size={12} /> Text
+                                                   <Icons
+                                                      name="file-text"
+                                                      size={12}
+                                                   />{" "}
+                                                   Text
                                                 </>
                                              )}
                                              {thread.claim.claim_type === CATEGORIES.IMAGE && (
                                                 <>
-                                                   <Icons name="image" size={12} /> Image
+                                                   <Icons
+                                                      name="image"
+                                                      size={12}
+                                                   />{" "}
+                                                   Image
                                                 </>
                                              )}
                                              {thread.claim.claim_type === CATEGORIES.FILE && (
                                                 <>
-                                                   <Icons name="paperclip" size={12} /> File
+                                                   <Icons
+                                                      name="paperclip"
+                                                      size={12}
+                                                   />{" "}
+                                                   File
                                                 </>
                                              )}
                                              {thread.claim.claim_type === CATEGORIES.URL && (
                                                 <>
-                                                   <Icons name="link" size={12} /> Link
+                                                   <Icons
+                                                      name="link"
+                                                      size={12}
+                                                   />{" "}
+                                                   Link
                                                 </>
                                              )}
                                              {thread.claim.claim_type === "VIDEO" && (
                                                 <>
-                                                   <Icons name="play" size={12} /> Video
+                                                   <Icons
+                                                      name="play"
+                                                      size={12}
+                                                   />{" "}
+                                                   Video
                                                 </>
                                              )}
-                                             {!Object.values(CATEGORIES).includes(thread.claim.claim_type) &&
+                                             {!Object.values(CATEGORIES).includes(
+                                                thread.claim.claim_type,
+                                             ) &&
                                                 thread.claim.claim_type !== "VIDEO" && (
                                                    <>
                                                       {thread.claim.claim_type.charAt(0) +
-                                                         thread.claim.claim_type.slice(1).toLowerCase()}
+                                                         thread.claim.claim_type
+                                                            .slice(1)
+                                                            .toLowerCase()}
                                                    </>
                                                 )}
                                           </div>
                                        )}
-                                       <div className={`status-badge badge-${verdictClass}`} style={{ padding: "4px 8px", fontSize: "0.75rem" }}>
-                                          {verdictClass === "fake" && <Icons name="x-circle" size={12} />}
-                                          {verdictClass === "fact" && <Icons name="check-circle" size={12} />}
-                                          {verdictClass === "satire" && <Icons name="wand" size={12} />}
-                                          {verdictClass === "misleading" && <Icons name="alert-triangle" size={12} />}
-                                          {verdictClass === "unverified" && <Icons name="help-circle" size={12} />}
-                                          {verdict}
+                                       <div
+                                          className={`status-badge badge-${verdictClass}`}
+                                          style={{
+                                             padding: "4px 8px",
+                                             display: "flex",
+                                             gap: "4px",
+                                             alignItems: "center",
+                                             borderRadius: "6px",
+                                             fontSize: "0.75rem",
+                                          }}>
+                                          {hasModeratorVerdict ? (
+                                             <span
+                                                style={{
+                                                   display: "flex",
+                                                   alignItems: "center",
+                                                   gap: "4px",
+                                                   opacity: 0.85,
+                                                   marginRight: "2px",
+                                                }}>
+                                                <Icons
+                                                   name="shield-check"
+                                                   size={12}
+                                                />{" "}
+                                                Mod:
+                                             </span>
+                                          ) : (
+                                             <span
+                                                style={{
+                                                   display: "flex",
+                                                   alignItems: "center",
+                                                   gap: "4px",
+                                                   opacity: 0.85,
+                                                   marginRight: "2px",
+                                                }}>
+                                                <Icons
+                                                   name="cpu"
+                                                   size={12}
+                                                />{" "}
+                                                AI:
+                                             </span>
+                                          )}
+
+                                          <span
+                                             style={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: "4px",
+                                                fontWeight: "600",
+                                             }}>
+                                             {verdictClass === "fake" && (
+                                                <Icons
+                                                   name="x-circle"
+                                                   size={12}
+                                                />
+                                             )}
+                                             {verdictClass === "fact" && (
+                                                <Icons
+                                                   name="check-circle"
+                                                   size={12}
+                                                />
+                                             )}
+                                             {verdictClass === "satire" && (
+                                                <Icons
+                                                   name="wand"
+                                                   size={12}
+                                                />
+                                             )}
+                                             {verdictClass === "misleading" && (
+                                                <Icons
+                                                   name="alert-triangle"
+                                                   size={12}
+                                                />
+                                             )}
+                                             {verdictClass === "unverified" && (
+                                                <Icons
+                                                   name="help-circle"
+                                                   size={12}
+                                                />
+                                             )}
+                                             {verdict}
+                                          </span>
                                        </div>
                                     </div>
 
@@ -815,7 +978,8 @@ function CommunityFeed() {
                                  </div>
                               </div>
 
-                              <div className="card-claim-wrap"
+                              <div
+                                 className="card-claim-wrap"
                                  onClick={() => handleThreadClick(thread.id)}
                                  style={{ cursor: "pointer" }}>
                                  {/* Card Claim Text */}
@@ -835,7 +999,9 @@ function CommunityFeed() {
                                                 className="action-item primary-action"
                                                 onClick={(e) => saveEditThread(e, thread.id)}
                                                 disabled={savingThreadId === thread.id}>
-                                                {savingThreadId === thread.id ? "Saving..." : "Save"}
+                                                {savingThreadId === thread.id
+                                                   ? "Saving..."
+                                                   : "Save"}
                                              </button>
                                              <button
                                                 className="action-item"
@@ -896,14 +1062,6 @@ function CommunityFeed() {
                                     {hasModeratorVerdict ? (
                                        // Show Moderator Verdict
                                        <div className="ai-info">
-                                          <div
-                                             className={`status-badge solid badge-${thread.claim.moderator_verdict_info.verdict.toLowerCase()}`}>
-                                             <Icons name="check-circle" />
-                                             {thread.claim.moderator_verdict_info.verdict ===
-                                                "MISLEADING"
-                                                ? "Mixed"
-                                                : "Verified"}
-                                          </div>
                                           <span className="ai-confidence-text">
                                              Final Verdict:{" "}
                                              <strong>
@@ -917,36 +1075,23 @@ function CommunityFeed() {
                                              evidence)
                                              {thread.claim.moderator_verdict_info.verdict ===
                                                 "MISLEADING" && (
-                                                   <span className="mixed-evidence-pill">
-                                                      Mixed evidence
-                                                   </span>
-                                                )}
+                                                <span className="mixed-evidence-pill">
+                                                   Mixed evidence
+                                                </span>
+                                             )}
                                           </span>
                                        </div>
                                     ) : pendingConsensus ? (
                                        // Show pending state
                                        <div className="ai-info">
-                                          <div className="status-badge solid badge-unverified">
-                                             <Icons name="clock" />
-                                             Verdict Pending
-                                          </div>
                                           <span className="ai-confidence-text">
-                                             <strong>{pendingEvidenceCount}</strong> verified evidence
-                                             under review
+                                             <strong>{pendingEvidenceCount}</strong> verified
+                                             evidence under review
                                           </span>
                                        </div>
                                     ) : (
                                        // Show AI Verdict (fallback)
                                        <div className="ai-info">
-                                          <div className={`status-badge solid badge-${verdictClass}`}>
-                                             {verdictClass === "misleading" && (
-                                                <Icons name="alert-triangle" />
-                                             )}
-                                             {verdictClass === "unverified" && (
-                                                <Icons name="help-circle" />
-                                             )}
-                                             {verdict}
-                                          </div>
                                           <span className="ai-confidence-text">
                                              AI Confidence:{" "}
                                              <strong>{thread.claim.consensus_score}%</strong>
@@ -962,11 +1107,11 @@ function CommunityFeed() {
                                     <strong className="context-label">Context: </strong>
                                     {hasModeratorVerdict
                                        ? thread.claim.moderator_verdict_info?.notes ||
-                                       thread.claim.ai_summary ||
-                                       "No additional context provided by moderators."
+                                         thread.claim.ai_summary ||
+                                         "No additional context provided by moderators."
                                        : pendingConsensus
-                                          ? `${pendingEvidenceCount} verified evidence submissions are currently under review by moderators to form a final consensus.`
-                                          : thread.claim.ai_summary || "No AI summary available."}
+                                         ? `${pendingEvidenceCount} verified evidence submissions are currently under review by moderators to form a final consensus.`
+                                         : thread.claim.ai_summary || "No AI summary available."}
                                  </div>
                               </div>
 
