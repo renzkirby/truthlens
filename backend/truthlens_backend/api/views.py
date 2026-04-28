@@ -1359,9 +1359,16 @@ def get_user_following(request, username):
 @api_view(["PATCH"])
 @permission_classes([IsAuthenticated])
 def update_profile(request):
-    """Update user's bio and profile picture."""
-    profile = request.user.profile
+    """Update user's profile info including bio, username, email, and avatar."""
+    user = request.user
+    profile = user.profile
     data = request.data
+    
+    # Update User model fields
+    if "username" in data and data["username"]:
+        user.username = data["username"]
+    if "email" in data and data["email"]:
+        user.email = data["email"]
     
     # Update Bio if provided
     if "bio" in data:
@@ -1379,10 +1386,11 @@ def update_profile(request):
         if avatar_url:
             profile.avatar_url = avatar_url
             
+    user.save()
     profile.save()
     
     # Return the updated user data
-    serializer = UserWithTrustBreakdownSerializer(request.user, context={"request": request})
+    serializer = UserWithTrustBreakdownSerializer(user, context={"request": request})
     return Response(serializer.data, status=200)
 
 
