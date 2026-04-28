@@ -52,23 +52,26 @@
 /* ── Tabs ── */
 .verify-tabs {
    display: flex;
-   gap: 8px;
+   flex-wrap: wrap;
+   /* Ensure they wrap effectively */
+   gap: 6px;
 }
 
 .verify-tab-btn {
    display: flex;
    align-items: center;
-   gap: 7px;
-   padding: 10px 20px;
+   gap: 6px;
+   padding: 8px 14px;
    border: 1.5px solid var(--border-color);
    border-radius: 10px;
    background: #fff;
-   font-size: 12px;
+   font-size: 13px;
    font-weight: 600;
    color: var(--text-muted);
    cursor: pointer;
    font-family: 'Inter', sans-serif;
    transition: all 0.15s;
+   flex-shrink: 0;
 }
 
 .verify-tab-btn.active {
@@ -118,16 +121,16 @@
 /* ── URL input row ── */
 .url-input-row {
    display: flex;
-   gap: 10px;
+   gap: 8px;
 }
 
 .url-input {
    flex: 1;
-   padding: 11px 14px;
+   padding: 10px 14px;
    border: 1px solid var(--border-color);
-   border-radius: 10px;
+   border-radius: 8px;
    background: #f9fafb;
-   font-size: 12px;
+   font-size: 13px;
    color: var(--text-main);
    font-family: 'Inter', sans-serif;
    outline: none;
@@ -148,14 +151,15 @@
 .verify-submit-btn {
    display: flex;
    align-items: center;
-   gap: 7px;
-   padding: 11px 22px;
+   justify-content: center;
+   gap: 6px;
+   padding: 10px 18px;
    background: var(--brand-primary);
    color: var(--text-inverse);
    border: none;
-   border-radius: 10px;
-   font-size: 12px;
-   font-weight: 700;
+   border-radius: 8px;
+   font-size: 13px;
+   font-weight: 600;
    cursor: pointer;
    font-family: 'Inter', sans-serif;
    transition: background 0.2s;
@@ -263,12 +267,13 @@
 .remove-image-btn {
    display: flex;
    align-items: center;
+   justify-content: center;
    gap: 5px;
-   padding: 6px 14px;
+   padding: 6px 12px;
    border: 1px solid var(--border-color);
    border-radius: 8px;
    background: #fff;
-   font-size: 13px;
+   font-size: 12px;
    font-weight: 600;
    color: var(--text-muted);
    cursor: pointer;
@@ -473,14 +478,14 @@
    display: flex;
    align-items: center;
    justify-content: center;
-   gap: 7px;
+   gap: 6px;
    width: 100%;
-   padding: 12px;
+   padding: 10px 16px;
    background: var(--verdict-misleading-bg);
    border: 1.5px solid var(--verdict-misleading-border);
-   border-radius: 10px;
-   font-size: 14px;
-   font-weight: 700;
+   border-radius: 8px;
+   font-size: 13px;
+   font-weight: 600;
    color: var(--verdict-misleading-text);
    cursor: pointer;
    font-family: 'Inter', sans-serif;
@@ -621,9 +626,10 @@
 
    .verify-tabs {
       display: flex;
+      flex-wrap: nowrap;
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
-      gap: 8px;
+      gap: 6px;
       padding-bottom: 4px;
    }
 
@@ -633,7 +639,7 @@
 
    .verify-tab-btn {
       flex-shrink: 0;
-      min-height: 44px;
+      min-height: 40px;
    }
 
    .drop-zone {
@@ -672,8 +678,8 @@
    }
 
    .verify-tab-btn {
-      font-size: 13px;
-      padding: 9px 16px;
+      font-size: 12px;
+      padding: 8px 14px;
    }
 
    .box-panel {

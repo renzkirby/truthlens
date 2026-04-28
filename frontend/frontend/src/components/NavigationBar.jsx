@@ -199,32 +199,34 @@ function NavigationBar() {
       ? undefined
       : { color, borderColor: `${color}99`, background: `${color}75` };
 
-   return (<>
-      <nav className="top-navbar">
-         <div className="nav-left">
-            <div className="logo-section">
-               <img
-                  src={LogoImage}
-                  alt="TruthLens Logo"
-                  style={{ height: "40px", width: "auto" }}
-               />
-               <Link
-                  to="/community"
-                  className="link">
-                  <span className="logo-text">TruthLens</span>
-               </Link>
-            </div>
+   return (
+      <>
+         <nav className="top-navbar">
+            <div className="nav-left">
+               <div className="logo-section">
+                  <img
+                     src={LogoImage}
+                     alt="TruthLens Logo"
+                     style={{ height: "40px", width: "auto" }}
+                  />
+                  <Link
+                     to="/community"
+                     className="link">
+                     <span className="logo-text">TruthLens</span>
+                  </Link>
+               </div>
 
-            <div className="nav-tabs">
-               <Link
-                  to="/community"
-                  className="link">
-                  <div className={`nav-tab ${location.pathname === "/community" ? "active" : ""}`}>
-                     <Icons name="globe" />
-                     Community Feed
-                  </div>
-               </Link>
-               {/* <Link
+               <div className="nav-tabs">
+                  <Link
+                     to="/community"
+                     className="link">
+                     <div
+                        className={`nav-tab ${location.pathname === "/community" ? "active" : ""}`}>
+                        <Icons name="globe" />
+                        Community Feed
+                     </div>
+                  </Link>
+                  {/* <Link
                   to={getDashboardPath(user)}
                   className="link">
                   <div
@@ -233,59 +235,306 @@ function NavigationBar() {
                      Dashboard
                   </div>
                </Link> */}
-               <Link
-                  to="/verify"
-                  className="link">
-                  <div className={`nav-tab ${location.pathname === "/verify" ? "active" : ""}`}>
-                     <Icons name="scan-line" />
-                     Verify
-                  </div>
-               </Link>
+                  <Link
+                     to="/verify"
+                     className="link">
+                     <div className={`nav-tab ${location.pathname === "/verify" ? "active" : ""}`}>
+                        <Icons name="scan-line" />
+                        Verify
+                     </div>
+                  </Link>
+               </div>
             </div>
-         </div>
 
-         <div className="nav-right">
-            <div
-               className="navbar-search"
-               ref={searchContainerRef}>
-               <form
-                  className="search-box"
-                  onSubmit={handleSearchSubmit}>
-                  <Icons
-                     name="search"
-                     color="gray"
-                  />
-                  <input
-                     type="text"
-                     placeholder="Search people and claims..."
-                     value={searchInput}
-                     onFocus={() => {
-                        if (searchInput.trim()) {
-                           setSearchOpen(true);
-                        }
-                     }}
-                     onChange={(e) => setSearchInput(e.target.value)}
-                     aria-label="Global search"
-                  />
-                  {searchInput && (
-                     <button
-                        type="button"
-                        className="search-clear-btn"
-                        onClick={handleClearSearch}
-                        aria-label="Clear search">
-                        <Icons
-                           name="x"
-                           size={14}
-                        />
-                     </button>
+            <div className="nav-right">
+               <div
+                  className="navbar-search"
+                  ref={searchContainerRef}>
+                  <form
+                     className="search-box"
+                     onSubmit={handleSearchSubmit}>
+                     <Icons
+                        name="search"
+                        color="gray"
+                     />
+                     <input
+                        type="text"
+                        placeholder="Search people and claims..."
+                        value={searchInput}
+                        onFocus={() => {
+                           if (searchInput.trim()) {
+                              setSearchOpen(true);
+                           }
+                        }}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        aria-label="Global search"
+                     />
+                     {searchInput && (
+                        <button
+                           type="button"
+                           className="search-clear-btn"
+                           onClick={handleClearSearch}
+                           aria-label="Clear search">
+                           <Icons
+                              name="x"
+                              size={14}
+                           />
+                        </button>
+                     )}
+                  </form>
+
+                  {shouldShowSearchDropdown && (
+                     <div
+                        className="search-results-dropdown"
+                        role="listbox"
+                        aria-label="Global search results">
+                        {searchLoading ? (
+                           <div className="search-results-state">
+                              <Icons
+                                 name="loader"
+                                 size={14}
+                                 className="search-spinner"
+                              />
+                              Searching TruthLens...
+                           </div>
+                        ) : (
+                           <>
+                              {totalSearchResults === 0 && (
+                                 <div className="search-results-state">
+                                    No results found for "{debouncedSearch}".
+                                 </div>
+                              )}
+
+                              {searchUsers.length > 0 && (
+                                 <div className="search-section">
+                                    <div className="search-section-title">People</div>
+                                    {searchUsers.map((searchUser) => (
+                                       <button
+                                          key={searchUser.id}
+                                          type="button"
+                                          className="search-result-item user-result"
+                                          onClick={() =>
+                                             handleUserResultClick(searchUser.username)
+                                          }>
+                                          <div className="search-user-avatar">
+                                             {searchUser.avatar_url ? (
+                                                <img
+                                                   src={searchUser.avatar_url}
+                                                   alt={`${searchUser.username}'s avatar`}
+                                                />
+                                             ) : (
+                                                <Icons
+                                                   name="user"
+                                                   size={14}
+                                                />
+                                             )}
+                                          </div>
+                                          <div className="search-result-copy">
+                                             <span className="search-result-title">
+                                                @{searchUser.username}
+                                             </span>
+                                             <span className="search-result-subtitle">
+                                                {searchUser.bio || "TruthLens member"}
+                                             </span>
+                                          </div>
+                                          <span
+                                             className={`search-trust-pill ${isModeratorRole(searchUser.role) ? "mod" : ""}`}>
+                                             {isModeratorRole(searchUser.role)
+                                                ? "MOD"
+                                                : Number(searchUser.trust_score || 0).toFixed(1)}
+                                          </span>
+                                       </button>
+                                    ))}
+                                 </div>
+                              )}
+
+                              {searchThreads.length > 0 && (
+                                 <div className="search-section">
+                                    <div className="search-section-title">Threads</div>
+                                    {searchThreads.map((thread) => (
+                                       <button
+                                          key={thread.id}
+                                          type="button"
+                                          className="search-result-item thread-result"
+                                          onClick={() => handleThreadResultClick(thread.id)}>
+                                          <div className="search-thread-icon">
+                                             <Icons
+                                                name="file-text"
+                                                size={14}
+                                             />
+                                          </div>
+                                          <div className="search-result-copy">
+                                             <span className="search-result-title">
+                                                {getThreadTitle(thread)}
+                                             </span>
+                                             <span className="search-result-subtitle">
+                                                {getThreadSubtitle(thread)}
+                                             </span>
+                                          </div>
+                                       </button>
+                                    ))}
+                                 </div>
+                              )}
+
+                              {totalSearchResults > 0 && (
+                                 <button
+                                    type="button"
+                                    className="search-view-all-btn"
+                                    onClick={handleViewAllResults}>
+                                    View all results for "{debouncedSearch}"
+                                 </button>
+                              )}
+                           </>
+                        )}
+                     </div>
                   )}
-               </form>
+               </div>
+               <NotificationPopup />
 
-               {shouldShowSearchDropdown && (
-                  <div
-                     className="search-results-dropdown"
-                     role="listbox"
-                     aria-label="Global search results">
+               <div
+                  className="user-menu-container"
+                  ref={dropdownRef}>
+                  <button
+                     className={`user-profile-pill ${isOpen ? "open" : ""}`}
+                     onClick={() => setIsOpen((v) => !v)}
+                     aria-haspopup="menu"
+                     aria-expanded={isOpen}>
+                     <div className="user-icon-sm">
+                        {isModeratorUser ? <Icons name="shield-user" /> : <Icons name="user" />}
+                     </div>
+                     <span className="username">@{user?.username}</span>
+                     <span
+                        className={`trust-score ${isModeratorUser ? "trust-score-mod" : ""}`}
+                        style={profileScorePillStyle}>
+                        {isModeratorUser ? "MOD" : displayTrustScore.toFixed(1)}
+                     </span>
+                     <span className={`chevron ${isOpen ? "rotated" : ""}`}>
+                        <Icons
+                           name="chevron-down"
+                           color="#fff"
+                        />
+                     </span>
+                  </button>
+
+                  {isOpen && (
+                     <div
+                        className="dropdown-menu"
+                        role="menu">
+                        <div className="dropdown-header">
+                           <span className="dropdown-username">@{user?.username}</span>
+                           <span className="dropdown-email">{user?.email}</span>
+                        </div>
+
+                        <div
+                           className="dropdown-section"
+                           role="group">
+                           <Link
+                              to="/profile"
+                              className="link"
+                              role="menuitem">
+                              <button
+                                 className={`dropdown-item ${location.pathname === "/profile" ? "active" : ""}`}
+                                 onClick={() => setIsOpen(false)}>
+                                 <Icons name="user" />
+                                 My Public Profile
+                              </button>
+                           </Link>
+                           <Link
+                              to={getDashboardPath(user)}
+                              className="link"
+                              role="menuitem">
+                              <button
+                                 className="dropdown-item"
+                                 onClick={() => setIsOpen(false)}>
+                                 <Icons name={isModeratorUser ? "shield" : "dashboard"} />
+                                 Dashboard
+                              </button>
+                           </Link>
+                           <Link
+                              to="/settings"
+                              className="link"
+                              role="menuitem">
+                              <button
+                                 className="dropdown-item"
+                                 onClick={() => setIsOpen(false)}>
+                                 <Icons name="settings" />
+                                 Settings
+                              </button>
+                           </Link>
+                        </div>
+
+                        <div className="dropdown-divider" />
+
+                        <div
+                           className="dropdown-section"
+                           role="group">
+                           <button
+                              className="dropdown-item danger"
+                              role="menuitem"
+                              onClick={() => {
+                                 setIsOpen(false);
+                                 logout();
+                                 navigate("/login");
+                              }}>
+                              <Icons name="logout" />
+                              Log Out
+                           </button>
+                        </div>
+                     </div>
+                  )}
+               </div>
+            </div>
+
+            {/* ── Mobile Search Overlay ── */}
+            {mobileSearchOpen && (
+               <div className="mobile-search-overlay">
+                  <div className="mobile-search-header">
+                     <form
+                        className="mobile-search-form"
+                        onSubmit={(e) => {
+                           e.preventDefault();
+                           const q = searchInput.trim();
+                           if (!q) return;
+                           setMobileSearchOpen(false);
+                           navigate(`/community?q=${encodeURIComponent(q)}`);
+                        }}>
+                        <Icons
+                           name="search"
+                           size={18}
+                           color="#6b7280"
+                        />
+                        <input
+                           type="text"
+                           className="mobile-search-input"
+                           placeholder="Search people and claims..."
+                           value={searchInput}
+                           onChange={(e) => setSearchInput(e.target.value)}
+                           autoFocus
+                           aria-label="Mobile search"
+                        />
+                        {searchInput && (
+                           <button
+                              type="button"
+                              className="search-clear-btn"
+                              onClick={handleClearSearch}>
+                              <Icons
+                                 name="x"
+                                 size={16}
+                              />
+                           </button>
+                        )}
+                     </form>
+                     <button
+                        className="mobile-search-cancel"
+                        onClick={() => {
+                           setMobileSearchOpen(false);
+                           handleClearSearch();
+                        }}>
+                        Cancel
+                     </button>
+                  </div>
+
+                  <div className="mobile-search-results">
                      {searchLoading ? (
                         <div className="search-results-state">
                            <Icons
@@ -297,26 +546,31 @@ function NavigationBar() {
                         </div>
                      ) : (
                         <>
-                           {totalSearchResults === 0 && (
-                              <div className="search-results-state">
-                                 No results found for "{debouncedSearch}".
-                              </div>
-                           )}
+                           {debouncedSearch &&
+                              searchUsers.length === 0 &&
+                              searchThreads.length === 0 && (
+                                 <div className="search-results-state">
+                                    No results found for "{debouncedSearch}".
+                                 </div>
+                              )}
 
                            {searchUsers.length > 0 && (
                               <div className="search-section">
                                  <div className="search-section-title">People</div>
-                                 {searchUsers.map((searchUser) => (
+                                 {searchUsers.map((su) => (
                                     <button
-                                       key={searchUser.id}
+                                       key={su.id}
                                        type="button"
-                                       className="search-result-item user-result"
-                                       onClick={() => handleUserResultClick(searchUser.username)}>
+                                       className="search-result-item"
+                                       onClick={() => {
+                                          setMobileSearchOpen(false);
+                                          handleUserResultClick(su.username);
+                                       }}>
                                        <div className="search-user-avatar">
-                                          {searchUser.avatar_url ? (
+                                          {su.avatar_url ? (
                                              <img
-                                                src={searchUser.avatar_url}
-                                                alt={`${searchUser.username}'s avatar`}
+                                                src={su.avatar_url}
+                                                alt={`${su.username}'s avatar`}
                                              />
                                           ) : (
                                              <Icons
@@ -327,17 +581,17 @@ function NavigationBar() {
                                        </div>
                                        <div className="search-result-copy">
                                           <span className="search-result-title">
-                                             @{searchUser.username}
+                                             @{su.username}
                                           </span>
                                           <span className="search-result-subtitle">
-                                             {searchUser.bio || "TruthLens member"}
+                                             {su.bio || "TruthLens member"}
                                           </span>
                                        </div>
                                        <span
-                                          className={`search-trust-pill ${isModeratorRole(searchUser.role) ? "mod" : ""}`}>
-                                          {isModeratorRole(searchUser.role)
+                                          className={`search-trust-pill ${isModeratorRole(su.role) ? "mod" : ""}`}>
+                                          {isModeratorRole(su.role)
                                              ? "MOD"
-                                             : Number(searchUser.trust_score || 0).toFixed(1)}
+                                             : Number(su.trust_score || 0).toFixed(1)}
                                        </span>
                                     </button>
                                  ))}
@@ -351,8 +605,11 @@ function NavigationBar() {
                                     <button
                                        key={thread.id}
                                        type="button"
-                                       className="search-result-item thread-result"
-                                       onClick={() => handleThreadResultClick(thread.id)}>
+                                       className="search-result-item"
+                                       onClick={() => {
+                                          setMobileSearchOpen(false);
+                                          handleThreadResultClick(thread.id);
+                                       }}>
                                        <div className="search-thread-icon">
                                           <Icons
                                              name="file-text"
@@ -371,262 +628,68 @@ function NavigationBar() {
                                  ))}
                               </div>
                            )}
-
-                           {totalSearchResults > 0 && (
-                              <button
-                                 type="button"
-                                 className="search-view-all-btn"
-                                 onClick={handleViewAllResults}>
-                                 View all results for "{debouncedSearch}"
-                              </button>
-                           )}
                         </>
                      )}
                   </div>
-               )}
-            </div>
-            <NotificationPopup />
-
-            <div
-               className="user-menu-container"
-               ref={dropdownRef}>
-               <button
-                  className={`user-profile-pill ${isOpen ? "open" : ""}`}
-                  onClick={() => setIsOpen((v) => !v)}
-                  aria-haspopup="menu"
-                  aria-expanded={isOpen}>
-                  <div className="user-icon-sm">
-                     {isModeratorUser ? <Icons name="shield-user" /> : <Icons name="user" />}
-                  </div>
-                  <span className="username">@{user?.username}</span>
-                  <span
-                     className={`trust-score ${isModeratorUser ? "trust-score-mod" : ""}`}
-                     style={profileScorePillStyle}>
-                     {isModeratorUser ? "MOD" : displayTrustScore.toFixed(1)}
-                  </span>
-                  <span className={`chevron ${isOpen ? "rotated" : ""}`}>
-                     <Icons
-                        name="chevron-down"
-                        color="#fff"
-                     />
-                  </span>
-               </button>
-
-               {isOpen && (
-                  <div
-                     className="dropdown-menu"
-                     role="menu">
-                     <div className="dropdown-header">
-                        <span className="dropdown-username">@{user?.username}</span>
-                        <span className="dropdown-email">{user?.email}</span>
-                     </div>
-
-                     <div
-                        className="dropdown-section"
-                        role="group">
-                        <Link
-                           to="/profile"
-                           className="link"
-                           role="menuitem">
-                           <button
-                              className={`dropdown-item ${location.pathname === "/profile" ? "active" : ""}`}
-                              onClick={() => setIsOpen(false)}>
-                              <Icons name="user" />
-                              My Public Profile
-                           </button>
-                        </Link>
-                        <Link
-                           to={getDashboardPath(user)}
-                           className="link"
-                           role="menuitem">
-                           <button
-                              className="dropdown-item"
-                              onClick={() => setIsOpen(false)}>
-                              <Icons name={isModeratorUser ? "shield" : "dashboard"} />
-                              Dashboard
-                           </button>
-                        </Link>
-                        <Link
-                           to="/settings"
-                           className="link"
-                           role="menuitem">
-                           <button
-                              className="dropdown-item"
-                              onClick={() => setIsOpen(false)}>
-                              <Icons name="settings" />
-                              Settings
-                           </button>
-                        </Link>
-                     </div>
-
-                     <div className="dropdown-divider" />
-
-                     <div
-                        className="dropdown-section"
-                        role="group">
-                        <button
-                           className="dropdown-item danger"
-                           role="menuitem"
-                           onClick={() => {
-                              setIsOpen(false);
-                              logout();
-                              navigate("/login");
-                           }}>
-                           <Icons name="logout" />
-                           Log Out
-                        </button>
-                     </div>
-                  </div>
-               )}
-            </div>
-         </div>
-
-         {/* ── Mobile Search Overlay ── */}
-         {mobileSearchOpen && (
-            <div className="mobile-search-overlay">
-               <div className="mobile-search-header">
-                  <form
-                     className="mobile-search-form"
-                     onSubmit={(e) => {
-                        e.preventDefault();
-                        const q = searchInput.trim();
-                        if (!q) return;
-                        setMobileSearchOpen(false);
-                        navigate(`/community?q=${encodeURIComponent(q)}`);
-                     }}>
-                     <Icons name="search" size={18} color="#6b7280" />
-                     <input
-                        type="text"
-                        className="mobile-search-input"
-                        placeholder="Search people and claims..."
-                        value={searchInput}
-                        onChange={(e) => setSearchInput(e.target.value)}
-                        autoFocus
-                        aria-label="Mobile search"
-                     />
-                     {searchInput && (
-                        <button
-                           type="button"
-                           className="search-clear-btn"
-                           onClick={handleClearSearch}>
-                           <Icons name="x" size={16} />
-                        </button>
-                     )}
-                  </form>
-                  <button
-                     className="mobile-search-cancel"
-                     onClick={() => {
-                        setMobileSearchOpen(false);
-                        handleClearSearch();
-                     }}>
-                     Cancel
-                  </button>
                </div>
+            )}
+         </nav>
 
-               <div className="mobile-search-results">
-                  {searchLoading ? (
-                     <div className="search-results-state">
-                        <Icons name="loader" size={14} className="search-spinner" />
-                        Searching TruthLens...
-                     </div>
-                  ) : (
-                     <>
-                        {debouncedSearch && searchUsers.length === 0 && searchThreads.length === 0 && (
-                           <div className="search-results-state">
-                              No results found for "{debouncedSearch}".
-                           </div>
-                        )}
-
-                        {searchUsers.length > 0 && (
-                           <div className="search-section">
-                              <div className="search-section-title">People</div>
-                              {searchUsers.map((su) => (
-                                 <button
-                                    key={su.id}
-                                    type="button"
-                                    className="search-result-item"
-                                    onClick={() => {
-                                       setMobileSearchOpen(false);
-                                       handleUserResultClick(su.username);
-                                    }}>
-                                    <div className="search-user-avatar">
-                                       {su.avatar_url ? (
-                                          <img src={su.avatar_url} alt={`${su.username}'s avatar`} />
-                                       ) : (
-                                          <Icons name="user" size={14} />
-                                       )}
-                                    </div>
-                                    <div className="search-result-copy">
-                                       <span className="search-result-title">@{su.username}</span>
-                                       <span className="search-result-subtitle">{su.bio || "TruthLens member"}</span>
-                                    </div>
-                                    <span className={`search-trust-pill ${isModeratorRole(su.role) ? "mod" : ""}`}>
-                                       {isModeratorRole(su.role) ? "MOD" : Number(su.trust_score || 0).toFixed(1)}
-                                    </span>
-                                 </button>
-                              ))}
-                           </div>
-                        )}
-
-                        {searchThreads.length > 0 && (
-                           <div className="search-section">
-                              <div className="search-section-title">Threads</div>
-                              {searchThreads.map((thread) => (
-                                 <button
-                                    key={thread.id}
-                                    type="button"
-                                    className="search-result-item"
-                                    onClick={() => {
-                                       setMobileSearchOpen(false);
-                                       handleThreadResultClick(thread.id);
-                                    }}>
-                                    <div className="search-thread-icon">
-                                       <Icons name="file-text" size={14} />
-                                    </div>
-                                    <div className="search-result-copy">
-                                       <span className="search-result-title">{getThreadTitle(thread)}</span>
-                                       <span className="search-result-subtitle">{getThreadSubtitle(thread)}</span>
-                                    </div>
-                                 </button>
-                              ))}
-                           </div>
-                        )}
-                     </>
-                  )}
+         {/* ── Mobile Bottom Tab Bar ── */}
+         <nav
+            className="mobile-bottom-bar"
+            aria-label="Mobile navigation">
+            <Link
+               to="/community"
+               className={`bottom-tab ${location.pathname === "/community" ? "active" : ""}`}>
+               <Icons
+                  name="home"
+                  size={22}
+               />
+               <span>Feed</span>
+            </Link>
+            <button
+               className={`bottom-tab ${mobileSearchOpen ? "active" : ""}`}
+               onClick={() => setMobileSearchOpen(true)}>
+               <Icons
+                  name="search"
+                  size={22}
+               />
+               <span>Search</span>
+            </button>
+            <Link
+               to="/verify"
+               className={`bottom-tab bottom-tab-center ${location.pathname === "/verify" ? "active" : ""}`}>
+               <div className="bottom-tab-center-icon">
+                  <Icons
+                     name="scan-line"
+                     size={24}
+                     color="#fff"
+                  />
                </div>
-            </div>
-         )}
-      </nav>
-
-      {/* ── Mobile Bottom Tab Bar ── */}
-      <nav className="mobile-bottom-bar" aria-label="Mobile navigation">
-         <Link to="/community" className={`bottom-tab ${location.pathname === "/community" ? "active" : ""}`}>
-            <Icons name="home" size={22} />
-            <span>Feed</span>
-         </Link>
-         <button
-            className={`bottom-tab ${mobileSearchOpen ? "active" : ""}`}
-            onClick={() => setMobileSearchOpen(true)}>
-            <Icons name="search" size={22} />
-            <span>Search</span>
-         </button>
-         <Link to="/verify" className={`bottom-tab bottom-tab-center ${location.pathname === "/verify" ? "active" : ""}`}>
-            <div className="bottom-tab-center-icon">
-               <Icons name="scan-line" size={24} color="#fff" />
-            </div>
-            <span>Verify</span>
-         </Link>
-         <Link to="/notifications" className={`bottom-tab ${location.pathname === "/notifications" ? "active" : ""}`}>
-            <Icons name="bell" size={22} />
-            <span>Alerts</span>
-         </Link>
-         <Link to="/profile" className={`bottom-tab ${location.pathname === "/profile" ? "active" : ""}`}>
-            <Icons name="user" size={22} />
-            <span>Me</span>
-         </Link>
-      </nav>
-   </>);
-
+               <span>Verify</span>
+            </Link>
+            <Link
+               to="/notifications"
+               className={`bottom-tab ${location.pathname === "/notifications" ? "active" : ""}`}>
+               <Icons
+                  name="bell"
+                  size={22}
+               />
+               <span>Notifications</span>
+            </Link>
+            <Link
+               to="/profile"
+               className={`bottom-tab ${location.pathname === "/profile" ? "active" : ""}`}>
+               <Icons
+                  name="user"
+                  size={22}
+               />
+               <span>Me</span>
+            </Link>
+         </nav>
+      </>
+   );
 }
 
 export default NavigationBar;
