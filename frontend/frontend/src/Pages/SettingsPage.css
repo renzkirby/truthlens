@@ -254,6 +254,26 @@
   color: var(--text-muted, #6b7280);
 }
 
+/* Input */
+.form-input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color, #d1d5db);
+  background: var(--bg-surface, #ffffff);
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text-main, #111827);
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--brand-primary, #4f46e5);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
 /* Textarea */
 .form-textarea {
   width: 100%;
