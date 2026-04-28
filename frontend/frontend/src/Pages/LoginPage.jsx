@@ -221,7 +221,7 @@ function LoginPage() {
                   </div>
                </div>
 
-               <div className="login-footer-link">WWW.TRUTHLENS.APP</div>
+               <div className="login-footer-link">WWW.TRUTHLENS-DEV.VERCEL.APP</div>
 
                {/* Background Decorative Circles */}
                <div className="bg-circle circle-1"></div>
@@ -320,7 +320,8 @@ function LoginPage() {
 
                      <button
                         type="submit"
-                        className="submit-btn">
+                        className="submit-btn"
+                        disabled={isSigningIn}>
                         {!isSigningIn && (
                            <>
                               SIGN IN{" "}
@@ -358,14 +359,10 @@ function LoginPage() {
                      <button
                         type="button"
                         className="social-btn"
-                        onClick={() => loginWithGoogle()}>
+                        onClick={() => loginWithGoogle()}
+                        disabled={isSigningIn}>
                         <span className="social-icon">G</span> Google
                      </button>
-                     {/* <button
-                        type="button"
-                        className="social-btn">
-                        <span className="social-icon">f</span> Facebook
-                     </button> */}
                   </div>
                </div>
             </div>

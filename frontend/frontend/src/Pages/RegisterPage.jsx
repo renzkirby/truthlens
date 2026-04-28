@@ -22,6 +22,7 @@ import { useAuth } from "../context/AuthContext";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import LogoImage from "../assets/truthlens_logo.png";
 import Icons from "../components/Icons.jsx";
+import { useGoogleLogin } from "@react-oauth/google";
 
 // ── Utilities & Constants ──
 import { useEndpoint } from "../utils/api";
@@ -44,6 +45,45 @@ function RegisterPage() {
       password: "",
    });
 
+   const googleLoginEndpoint = useEndpoint("GOOGLE_LOGIN");
+   const [isSigningIn, setIsSigningIn] = useState(false);
+
+   // ── Google OAuth Hook ──
+   const loginWithGoogle = useGoogleLogin({
+      onSuccess: async (tokenResponse) => {
+         setIsSigningIn(true);
+         setError(null);
+
+         try {
+            const response = await fetch(googleLoginEndpoint, {
+               method: "POST",
+               headers: { "Content-Type": "application/json" },
+               body: JSON.stringify({
+                  access_token: tokenResponse.access_token,
+               }),
+            });
+
+            const data = await response.json().catch(() => ({}));
+
+            if (response.ok && data?.access) {
+               login(data.access, data.refresh);
+               navigate(from, { replace: true });
+               return;
+            }
+
+            setError(data?.detail || "Unable to register with Google right now. Please try again.");
+         } catch (err) {
+            setError("Unable to register with Google right now. Please try again.");
+         } finally {
+            setIsSigningIn(false);
+         }
+      },
+      onError: () => {
+         setError("Google sign-in failed. Please try again.");
+         console.error("Google Sign-In Error");
+      },
+   });
+
    const handleInputChange = (event) => {
       const { name, value } = event.target;
       setFormValues({
@@ -57,23 +97,32 @@ function RegisterPage() {
     * Posts credentials to backend, stores tokens, redirects on success
     */
    const handleSubmit = async () => {
+      setIsSigningIn(true);
+      setError(null);
       const registerEndpoint = useEndpoint("REGISTER");
-      const response = await fetch(registerEndpoint, {
-         method: "POST",
-         headers: { "Content-Type": "application/json" },
-         body: JSON.stringify({
-            username: formValues.username,
-            email: formValues.email,
-            password: formValues.password,
-         }),
-      });
 
-      const data = await response.json();
-      if (response.ok) {
-         login(data.access, data.refresh);
-         navigate(from, { replace: true });
-      } else {
-         setError(data.detail || "Something went wrong");
+      try {
+         const response = await fetch(registerEndpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+               username: formValues.username,
+               email: formValues.email,
+               password: formValues.password,
+            }),
+         });
+
+         const data = await response.json();
+         if (response.ok) {
+            login(data.access, data.refresh);
+            navigate(from, { replace: true });
+         } else {
+            setError(data.detail || "Something went wrong");
+         }
+      } catch (err) {
+         setError("Unable to register right now. Please try again.");
+      } finally {
+         setIsSigningIn(false);
       }
    };
 
@@ -100,8 +149,8 @@ function RegisterPage() {
                      Misinformation.
                   </h1>
                   <p className="hero-subtitle">
-                     Create your account and start earning Trust Score by verifying claims alongside
-                     a global community.
+                     Create your account and start contributing by verifying claims alongside a
+                     global community.
                   </p>
                </div>
 
@@ -144,7 +193,7 @@ function RegisterPage() {
                   </div>
                </div>
 
-               <div className="register-footer-link">WWW.TRUTHLENS.APP</div>
+               <div className="register-footer-link">WWW.TRUTHLENS-DEV.VERCEL.APP</div>
 
                <div className="bg-circle circle-1"></div>
                <div className="bg-circle circle-2"></div>
@@ -245,12 +294,25 @@ function RegisterPage() {
 
                      <button
                         type="submit"
-                        className="submit-btn">
-                        CREATE ACCOUNT{" "}
-                        <Icons
-                           name="arrow-right"
-                           size={18}
-                        />
+                        className="submit-btn"
+                        disabled={isSigningIn}>
+                        {!isSigningIn && (
+                           <>
+                              CREATE ACCOUNT{" "}
+                              <Icons
+                                 name="arrow-right"
+                                 size={18}
+                              />
+                           </>
+                        )}
+                        {isSigningIn && (
+                           <>
+                              <div className="sign-in-loading">
+                                 <span className="sign-in-spinner"></span>
+                                 <p>Creating Account...</p>
+                              </div>
+                           </>
+                        )}
                      </button>
                   </form>
 
@@ -270,13 +332,10 @@ function RegisterPage() {
                   <div className="social-login">
                      <button
                         type="button"
-                        className="social-btn">
+                        className="social-btn"
+                        onClick={() => loginWithGoogle()}
+                        disabled={isSigningIn}>
                         <span className="social-icon">G</span> Google
-                     </button>
-                     <button
-                        type="button"
-                        className="social-btn">
-                        <span className="social-icon">f</span> Facebook
                      </button>
                   </div>
                </div>
