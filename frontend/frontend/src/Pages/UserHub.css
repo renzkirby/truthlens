@@ -367,6 +367,10 @@
         font-size: 20px;
     }
 
+    .hub-rank-title {
+        text-align: center;
+    }
+
     .hub-rep-row {
         flex-direction: column;
         gap: 20px;
