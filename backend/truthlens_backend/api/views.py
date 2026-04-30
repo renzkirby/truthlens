@@ -18,6 +18,7 @@ from rest_framework.views import APIView
 from datetime import timedelta
 from django.shortcuts import get_object_or_404
 from PIL import Image
+from .embedding_service import generate_embedding
 import json
 import secrets
 import base64
@@ -51,6 +52,7 @@ from .models import (
     ThreadFlag,
     FlagResolutionLog,
     Vote,
+    OfficialFactCheck,
 )
 from .trust_service import recompute_user_trust_score
 from .throttles import FactCheckRateThrottle
@@ -608,6 +610,7 @@ def moderation_resolve_thread(request, thread_id):
     moderator_verdict = serializer.validated_data["moderator_verdict"]
     moderator_notes = serializer.validated_data.get("moderator_notes", "")
     next_status = serializer.validated_data.get("status", Thread.Status.CLOSED)
+    canonical_claim = serializer.validated_data.get("canonical_claim", "")
 
     current_status = thread.status or Thread.Status.OPEN
     if next_status not in ALLOWED_MODERATION_TRANSITIONS.get(current_status, set()):
@@ -643,6 +646,30 @@ def moderation_resolve_thread(request, thread_id):
         thread.claim.last_updated = timezone.now()
         thread.claim.save(update_fields=["final_verdict", "verdict", "last_updated"])
 
+        # If the thread is closing, has a real verdict, AND the mod wrote a canonical claim...
+        if next_status == "CLOSED" and moderator_verdict in ["FACT", "FAKE", "MISLEADING", "SATIRE"] and canonical_claim:
+            
+            # 1. Grab all VERIFIED URLs from this specific thread
+            verified_urls = list(
+                thread.evidence_submissions.filter(
+                    evidence_status="VERIFIED"
+                ).exclude(evidence_url="").values_list("evidence_url", flat=True)
+            )
+
+            # 2. Generate the Vector Embedding
+            embedding_vector = generate_embedding(canonical_claim)
+
+            # 3. Save to the Knowledge Vault!
+            OfficialFactCheck.objects.create(
+                canonical_claim=canonical_claim,
+                verdict=moderator_verdict,
+                summary=moderator_notes,
+                sources=verified_urls,
+                embedding=embedding_vector,
+                published_by=request.user,
+                source_thread=thread
+            )
+            
     for contributor_id in contributor_ids:
         recompute_user_trust_score_task.delay(contributor_id)
 

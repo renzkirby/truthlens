@@ -141,6 +141,7 @@ function ModerationPage() {
             "UNVERIFIED",
          status: draft.status || threadStatus,
          moderator_notes: draft.notes ?? thread.moderator_notes ?? "",
+         canonical_claim: draft.canonical_claim || "",
       };
 
       try {
