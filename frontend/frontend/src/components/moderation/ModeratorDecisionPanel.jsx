@@ -11,6 +11,12 @@ function ModeratorDecisionPanel({
    isResolving,
    onClose,
 }) {
+
+   const isMissingRequiredClaim = 
+      decision.status === "CLOSED" && 
+      ["FACT", "FAKE", "MISLEADING", "SATIRE"].includes(decision.verdict) && 
+      (!decision.canonical_claim || decision.canonical_claim.trim() === "");
+
    return (
       <div className="mod-decision-panel">
          <div className="mod-decision-header">
@@ -43,6 +49,21 @@ function ModeratorDecisionPanel({
                </select>
                <p className="mod-decision-hint">
                   This will override the AI verdict and become the final verdict.
+               </p>
+            </div>
+
+            {/* --- NEW SECTION: CANONICAL CLAIM --- */}
+            <div className="mod-decision-section">
+               <label className="mod-decision-label">Official Claim Statement (Vault)</label>
+               <textarea
+                  className="mod-decision-textarea"
+                  rows={2}
+                  value={decision.canonical_claim || ""}
+                  onChange={(e) => onDecisionChange(thread.id, { canonical_claim: e.target.value })}
+                  placeholder="e.g., 'Vice President Sara Duterte stated...'"
+               />
+               <p className="mod-decision-hint" style={{ color: "var(--verdict-misleading-text, #b45309)", fontWeight: "500" }}>
+                  Required if closing thread. Write a clean, third-person version of the rumor. This powers the AI Semantic Search.
                </p>
             </div>
 
@@ -83,7 +104,7 @@ function ModeratorDecisionPanel({
                <button
                   className="mod-decision-resolve-btn"
                   onClick={() => onResolveThread(thread.id)}
-                  disabled={isResolving}>
+                  disabled={isResolving || isMissingRequiredClaim}>
                   <Icons
                      name="check"
                      size={14}

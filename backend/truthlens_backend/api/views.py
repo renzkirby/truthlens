@@ -18,6 +18,7 @@ from rest_framework.views import APIView
 from datetime import timedelta
 from django.shortcuts import get_object_or_404
 from PIL import Image
+from .embedding_service import generate_embedding
 import json
 import secrets
 import base64
@@ -51,6 +52,7 @@ from .models import (
     ThreadFlag,
     FlagResolutionLog,
     Vote,
+    OfficialFactCheck,
 )
 from .trust_service import recompute_user_trust_score
 from .throttles import FactCheckRateThrottle
@@ -608,6 +610,7 @@ def moderation_resolve_thread(request, thread_id):
     moderator_verdict = serializer.validated_data["moderator_verdict"]
     moderator_notes = serializer.validated_data.get("moderator_notes", "")
     next_status = serializer.validated_data.get("status", Thread.Status.CLOSED)
+    canonical_claim = serializer.validated_data.get("canonical_claim", "")
 
     current_status = thread.status or Thread.Status.OPEN
     if next_status not in ALLOWED_MODERATION_TRANSITIONS.get(current_status, set()):
@@ -643,6 +646,30 @@ def moderation_resolve_thread(request, thread_id):
         thread.claim.last_updated = timezone.now()
         thread.claim.save(update_fields=["final_verdict", "verdict", "last_updated"])
 
+        # If the thread is closing, has a real verdict, AND the mod wrote a canonical claim...
+        if next_status == "CLOSED" and moderator_verdict in ["FACT", "FAKE", "MISLEADING", "SATIRE"] and canonical_claim:
+            
+            # 1. Grab all VERIFIED URLs from this specific thread
+            verified_urls = list(
+                thread.evidence_submissions.filter(
+                    evidence_status="VERIFIED"
+                ).exclude(evidence_url="").values_list("evidence_url", flat=True)
+            )
+
+            # 2. Generate the Vector Embedding
+            embedding_vector = generate_embedding(canonical_claim)
+
+            # 3. Save to the Knowledge Vault!
+            OfficialFactCheck.objects.create(
+                canonical_claim=canonical_claim,
+                verdict=moderator_verdict,
+                summary=moderator_notes,
+                sources=verified_urls,
+                embedding=embedding_vector,
+                published_by=request.user,
+                source_thread=thread
+            )
+            
     for contributor_id in contributor_ids:
         recompute_user_trust_score_task.delay(contributor_id)
 
@@ -1053,19 +1080,22 @@ def test_deepfake(request):
         output_buffer = io.BytesIO()
         img.save(output_buffer, format="JPEG", quality=90)
         optimized_image_bytes = output_buffer.getvalue()
-
-        # 3. Send the clean, optimized bytes to your model
-        ai_probability = detect_ai_image(optimized_image_bytes)
+    # 3. Send the clean, optimized bytes to your model
+        ai_data = detect_ai_image(optimized_image_bytes)
         
-        # You can adjust this 0.65 threshold based on testing your new model!
+        if not ai_data:
+            return JsonResponse({"error": "Detection API unavailable."}, status=503)
+            
+        ai_probability = ai_data["score"]
+        fake_category = ai_data["category"]
         is_fake = ai_probability > 0.65
 
         # 4. Generate the dynamic explanation!
         summary_text = ""
         if is_fake:
-            # Pass the base64 string (ensure it's string format, not bytes, for Groq)
             base64_for_groq = base64.b64encode(optimized_image_bytes).decode('utf-8')
-            summary_text = generate_deepfake_explanation(base64_for_groq)
+            # Pass the category into the Groq function
+            summary_text = generate_deepfake_explanation(base64_for_groq, fake_category)
         else:
             summary_text = "No significant indicators of AI generation were detected. The image appears to possess natural digital noise and structural consistency."
 

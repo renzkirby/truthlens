@@ -17,6 +17,7 @@ from .services import (
     evaluate_url_claim_with_gfc,
     evaluate_url_claim_with_tavily,
     detect_ai_image,
+    search_official_vault,
 )
 from .models import Claim, UserProfile
 from .trust_service import recompute_user_trust_score
@@ -183,6 +184,41 @@ def execute_core_text_pipeline(raw_text, claim_id):
         cleaned_claim = cleaned.get("cleaned_claim")
         search_query = cleaned.get("search_query")
         article_stance = cleaned.get("article_stance", "NEUTRAL")
+
+        vault_started_at = time.perf_counter()
+        vault_match = search_official_vault(cleaned_claim)
+
+        if vault_match:
+            logger.info(f"Vault match found for claim {claim_id}!")
+            
+            # We found a highly similar past rumor. Now we ask Gemini to evaluate the NEW claim 
+            # against the VERIFIED vault context to avoid the "Negation Trap".
+            vault_eval_started_at = time.perf_counter()
+            ai_verdict = evaluate_image_claim_with_gfc(
+                cleaned_claim, 
+                {
+                    "claims": [{
+                        "text": vault_match["canonical_claim"],
+                        "claimReview": [{
+                            "textualRating": vault_match["verdict"],
+                            "publisher": {"name": "TruthLens Official Vault"}
+                        }]
+                    }]
+                }, 
+                article_stance
+            )
+            
+            _save_claim(
+                claim_id, 
+                ai_verdict, 
+                "TruthLens Verified Vault", 
+                vault_match["summary"], 
+                vault_match.get("sources", [])
+            )
+            
+            _log_stage(claim_id, "vault_search_success", vault_started_at)
+            outcome = "completed_vault"
+            return
 
         # Try GFC first — return early if relevant result found
         gfc_started_at = time.perf_counter()
@@ -393,6 +429,41 @@ def url_fact_check_process(url, claim_id):
             "confidence_score": 99,
         }, "Satire Detection", cleaned_claim, url)
         outcome = "satire_stance_shortcut"
+        _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
+        return
+
+    vault_started_at = time.perf_counter()
+    vault_match = search_official_vault(cleaned_claim)
+    
+    if vault_match:
+        logger.info(f"Vault match found for URL claim {claim_id}!")
+        
+        # We inject the vault data into the Gemini prompt to avoid the Negation Trap
+        vault_eval_started_at = time.perf_counter()
+        ai_verdict = evaluate_url_claim_with_gfc(
+            cleaned_claim, 
+            {
+                "claims": [{
+                    "text": vault_match["canonical_claim"],
+                    "claimReview": [{
+                        "textualRating": vault_match["verdict"],
+                        "publisher": {"name": "TruthLens Official Vault"}
+                    }]
+                }]
+            }, 
+            article_stance
+        )
+        
+        _save_claim(
+            claim_id, 
+            ai_verdict, 
+            "TruthLens Verified Vault", 
+            vault_match["summary"], 
+            vault_match.get("sources", [])
+        )
+        
+        _log_stage(claim_id, "url_vault_search_success", vault_started_at)
+        outcome = "completed_vault"
         _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
         return
 

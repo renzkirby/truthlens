@@ -526,7 +526,8 @@
    gap: 8px;
 }
 
-.mod-decision-section:nth-child(3) {
+.mod-decision-section:nth-child(3),
+.mod-decision-section:nth-child(4) {
    grid-column: 1 / -1;
 }
 
@@ -579,7 +580,11 @@
 
 .mod-decision-actions {
    display: flex;
-   gap: 8px;
+   gap: 12px; /* Increased slightly for a cleaner look */
+   align-items: flex-start;
+   margin-top: 8px;
+   grid-column: 1 / -1; /* Spans the full width of the grid */
+   justify-content: flex-end; /* Pushes the buttons to the right */
 }
 
 .mod-decision-resolve-btn {
