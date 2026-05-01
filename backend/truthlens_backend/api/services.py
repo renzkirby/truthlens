@@ -668,3 +668,44 @@ def generate_deepfake_explanation(base64_string, fake_category):
     except Exception as e:
         print(f"Vision AI Error: {str(e)}")
         return f"Forensic analysis indicates this is a {fake_category}. However, a detailed visual summary could not be generated at this time."
+
+def search_official_vault(cleaned_claim_text):
+    """Searches the internal OfficialFactCheck vault using Hybrid Search."""
+    from .embedding_service import generate_embedding
+    
+    # 1. Convert the search text into a vector
+    try:
+        query_embedding = generate_embedding(cleaned_claim_text)
+    except Exception as e:
+        print(f"Embedding failed during vault search: {e}")
+        return None
+
+    # 2. Ping the Supabase RPC
+    supabase = create_client(
+        os.environ.get("SUPABASE_URL"),
+        os.environ.get("SUPABASE_SERVICE_KEY"),
+    )
+    
+    try:
+        # We pass the text for BM25, and the vector for Semantic Search
+        response = supabase.rpc(
+            'hybrid_search_fact_checks',
+            {
+                'query_text': cleaned_claim_text,
+                'query_embedding': query_embedding,
+                'match_count': 1  # We only care about the absolute best match
+            }
+        ).execute()
+
+        results = response.data
+        if results and len(results) > 0:
+            top_match = results[0]
+            # RRF (Reciprocal Rank Fusion) scores are usually small decimals (e.g., 0.01 to 0.03).
+            # A score > 0.015 usually indicates a very strong hybrid match.
+            if top_match.get('similarity', 0) > 0.015: 
+                return top_match
+                
+        return None
+    except Exception as e:
+        print(f"Vault search error: {e}")
+        return None

@@ -634,3 +634,9 @@ class ClaimMatchSerializer(serializers.Serializer):
     moderator_notes = serializers.CharField(allow_null=True)
     score_context = serializers.CharField(allow_null=True, required=False)
 
+class ModerationDecisionSerializer(serializers.Serializer):
+    moderator_verdict = serializers.CharField(max_length=20)
+    moderator_notes = serializers.CharField(required=False, allow_blank=True)
+    status = serializers.CharField(max_length=20, required=False)
+    # ADD THIS LINE:
+    canonical_claim = serializers.CharField(required=False, allow_blank=True)

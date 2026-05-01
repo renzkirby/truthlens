@@ -1,6 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.conf import settings
+from django.contrib.postgres.search import SearchVectorField, SearchVector
+from django.contrib.postgres.indexes import GinIndex
 from pgvector.django import VectorField, HnswIndex
 import uuid
 
@@ -323,3 +325,58 @@ class ThreadComment(models.Model):
 
     def __str__(self):
         return f"ThreadComment {self.id} - Thread ID: {self.thread.id} - Commenter: {self.commenter.username}"
+
+class OfficialFactCheck(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # 1. The Core Data (ClaimReview Standard)
+    canonical_claim = models.TextField(
+        help_text="A clean, third-person statement of the rumor (e.g., 'The Pope wore a white puffer jacket.')"
+    )
+    verdict = models.CharField(max_length=20) # FACT, FAKE, MISLEADING, SATIRE
+    summary = models.TextField(help_text="The official explanation approved by a moderator.")
+    sources = models.JSONField(default=list, blank=True, help_text="List of verified URL strings.")
+    
+    # 2. Hybrid Search Fields
+    embedding = VectorField(
+        dimensions=384, null=True, blank=True, 
+        help_text="Sentence transformer embedding for Semantic Search"
+    )
+    search_vector = SearchVectorField(
+        null=True, blank=True, 
+        help_text="PostgreSQL tsvector for BM25 Keyword Search"
+    )
+
+    # 3. Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    published_by = models.ForeignKey(
+        "auth.User", on_delete=models.SET_NULL, null=True, related_name="published_fact_checks"
+    )
+    source_thread = models.ForeignKey(
+        'Thread', on_delete=models.SET_NULL, null=True, blank=True,
+        help_text="Links back to the community thread if auto-published."
+    )
+
+    class Meta:
+        indexes = [
+            HnswIndex(
+                name="official_claim_hnsw_idx",
+                fields=["embedding"],
+                m=16,
+                ef_construction=64,
+                opclasses=["vector_cosine_ops"],
+            ),
+            GinIndex(fields=["search_vector"], name="official_claim_gin_idx"),
+        ]
+
+    def save(self, *args, **kwargs):
+        # Automatically generate the PostgreSQL Search Vector when saving
+        super().save(*args, **kwargs)
+        if self.canonical_claim:
+            # We assign Weight 'A' to the claim, and 'B' to the summary so keywords in the claim rank higher.
+            OfficialFactCheck.objects.filter(pk=self.pk).update(
+                search_vector=SearchVector('canonical_claim', weight='A') + SearchVector('summary', weight='B')
+            )
+
+    def __str__(self):
+        return f"[{self.verdict}] {self.canonical_claim[:50]}..."
