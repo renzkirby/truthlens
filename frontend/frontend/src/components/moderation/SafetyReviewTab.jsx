@@ -27,28 +27,58 @@ export const ModTableSkeleton = ({ type = "safety" }) => (
             </>
          )}
       </div>
-      {[1, 2, 3].map(i => (
-         <div key={i} className={`mod-table-row mod-table-data mod-table-row-${type}`}>
+      {[1, 2, 3].map((i) => (
+         <div
+            key={i}
+            className={`mod-table-row mod-table-data mod-table-row-${type}`}>
             <div className="mod-claim-cell">
-               <div className="skeleton-box" style={{ width: "100%", height: "14px", marginBottom: "8px" }}></div>
-               <div className="skeleton-box" style={{ width: "60%", height: "14px" }}></div>
+               <div
+                  className="skeleton-box"
+                  style={{ width: "100%", height: "14px", marginBottom: "8px" }}></div>
+               <div
+                  className="skeleton-box"
+                  style={{ width: "60%", height: "14px" }}></div>
             </div>
             {type === "safety" && (
-               <div><div className="skeleton-box" style={{ width: "80px", height: "24px", borderRadius: "12px" }}></div></div>
+               <div>
+                  <div
+                     className="skeleton-box"
+                     style={{ width: "80px", height: "24px", borderRadius: "12px" }}></div>
+               </div>
             )}
             <div className="mod-report-cell">
-               <div className="skeleton-box" style={{ width: "40px", height: "24px", borderRadius: "8px" }}></div>
+               <div
+                  className="skeleton-box"
+                  style={{ width: "40px", height: "24px", borderRadius: "8px" }}></div>
             </div>
             <div className="mod-author-cell">
-               <div className="skeleton-box" style={{ width: "100px", height: "14px", marginBottom: "4px" }}></div>
-               <div className="skeleton-box" style={{ width: "60px", height: "12px" }}></div>
+               <div
+                  className="skeleton-box"
+                  style={{ width: "100px", height: "14px", marginBottom: "4px" }}></div>
+               <div
+                  className="skeleton-box"
+                  style={{ width: "60px", height: "12px" }}></div>
             </div>
-            <div><div className="skeleton-box" style={{ width: "60px", height: "24px", borderRadius: "12px" }}></div></div>
-            <div className="mod-actions-cell" style={{ display: "flex", gap: "8px" }}>
-               <div className="skeleton-box" style={{ width: "28px", height: "28px", borderRadius: "6px" }}></div>
-               <div className="skeleton-box" style={{ width: "28px", height: "28px", borderRadius: "6px" }}></div>
-               <div className="skeleton-box" style={{ width: "28px", height: "28px", borderRadius: "6px" }}></div>
-               <div className="skeleton-box" style={{ width: "28px", height: "28px", borderRadius: "6px" }}></div>
+            <div>
+               <div
+                  className="skeleton-box"
+                  style={{ width: "60px", height: "24px", borderRadius: "12px" }}></div>
+            </div>
+            <div
+               className="mod-actions-cell"
+               style={{ display: "flex", gap: "8px" }}>
+               <div
+                  className="skeleton-box"
+                  style={{ width: "28px", height: "28px", borderRadius: "6px" }}></div>
+               <div
+                  className="skeleton-box"
+                  style={{ width: "28px", height: "28px", borderRadius: "6px" }}></div>
+               <div
+                  className="skeleton-box"
+                  style={{ width: "28px", height: "28px", borderRadius: "6px" }}></div>
+               <div
+                  className="skeleton-box"
+                  style={{ width: "28px", height: "28px", borderRadius: "6px" }}></div>
             </div>
          </div>
       ))}
@@ -82,7 +112,7 @@ function SafetyReviewTab({
             thread.claim?.ai_summary?.toLowerCase().includes(query) ||
             thread.caption?.toLowerCase().includes(query) ||
             thread.author?.username?.toLowerCase().includes(query) ||
-            thread.escalation_reason?.toLowerCase().includes(query);
+            thread.reason?.toLowerCase().includes(query);
 
          return matchesStatus && matchesSearch;
       });
@@ -170,6 +200,18 @@ function SafetyReviewTab({
                            <div className="mod-report-cell">
                               <span className="mod-report-count">{thread.flag_count || 0}</span>
                               <span className="mod-report-label">reports</span>
+                              {thread.reason && (
+                                 <span
+                                    className="mod-report-reason"
+                                    style={{
+                                       fontSize: "10px",
+                                       color: "var(--text-muted)",
+                                       display: "block",
+                                       marginTop: "4px",
+                                    }}>
+                                    {thread.reason.replace(/_/g, " ")}
+                                 </span>
+                              )}
                            </div>
 
                            <div className="mod-author-cell">

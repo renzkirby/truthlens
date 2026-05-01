@@ -526,6 +526,8 @@
    gap: 8px;
 }
 
+.mod-decision-section:nth-child(1),
+.mod-decision-section:nth-child(2),
 .mod-decision-section:nth-child(3),
 .mod-decision-section:nth-child(4) {
    grid-column: 1 / -1;
@@ -580,11 +582,14 @@
 
 .mod-decision-actions {
    display: flex;
-   gap: 12px; /* Increased slightly for a cleaner look */
+   gap: 12px;
+   /* Increased slightly for a cleaner look */
    align-items: flex-start;
    margin-top: 8px;
-   grid-column: 1 / -1; /* Spans the full width of the grid */
-   justify-content: flex-end; /* Pushes the buttons to the right */
+   grid-column: 1 / -1;
+   /* Spans the full width of the grid */
+   justify-content: flex-end;
+   /* Pushes the buttons to the right */
 }
 
 .mod-decision-resolve-btn {
@@ -1026,7 +1031,9 @@
       gap: 8px;
    }
 
-   .box-panel, .mod-header, .mod-decision-panel {
+   .box-panel,
+   .mod-header,
+   .mod-decision-panel {
       border-radius: 0;
       border-left: none;
       border-right: none;
@@ -1087,4 +1094,29 @@
    .box-panel {
       padding: 14px;
    }
+}
+
+.mod-modal-overlay {
+   position: fixed;
+   top: 0;
+   left: 0;
+   right: 0;
+   bottom: 0;
+   background: rgba(0, 0, 0, 0.4);
+   backdrop-filter: blur(2px);
+   z-index: 9999;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+}
+
+.mod-modal-content {
+   background: var(--bg-surface);
+   border-radius: 12px;
+   width: 100%;
+   max-width: 500px;
+   max-height: 90vh;
+   overflow-y: auto;
+   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+   border: 1px solid var(--border-color);
 }

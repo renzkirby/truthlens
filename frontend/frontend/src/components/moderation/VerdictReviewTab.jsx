@@ -158,15 +158,21 @@ function VerdictReviewTab({
                               </div>
                               <div className="mod-row-actions">
                                  <button
-                                    className="mod-expand-btn"
+                                    className="mod-btn-primary ms-2"
+                                    style={{
+                                       padding: "6px 12px",
+                                       fontSize: "12px",
+                                       background: "#3b82f6",
+                                       color: "#fff",
+                                       border: "none",
+                                       borderRadius: "6px",
+                                       cursor: "pointer",
+                                       fontWeight: 600,
+                                    }}
                                     onClick={() =>
                                        setExpandedThreadId(isExpanded ? null : thread.id)
-                                    }
-                                    title={isExpanded ? "Collapse" : "Expand to review"}>
-                                    <Icons
-                                       name={isExpanded ? "chevron-up" : "chevron-down"}
-                                       size={16}
-                                    />
+                                    }>
+                                    Resolve
                                  </button>
                                  <button
                                     className="mod-action-btn view"
@@ -181,15 +187,22 @@ function VerdictReviewTab({
                            </div>
 
                            {isExpanded && (
-                              <div className="mod-expanded-panel-wrapper">
-                                 <ModeratorDecisionPanel
-                                    thread={thread}
-                                    decision={decision}
-                                    onDecisionChange={onDecisionChange}
-                                    onResolveThread={onResolveThread}
-                                    isResolving={isResolving}
-                                    onClose={() => setExpandedThreadId(null)}
-                                 />
+                              <div className="mod-modal-overlay">
+                                 <div
+                                    className="mod-modal-content"
+                                    onClick={(e) => e.stopPropagation()}>
+                                    <ModeratorDecisionPanel
+                                       thread={thread}
+                                       decision={decision}
+                                       onDecisionChange={onDecisionChange}
+                                       onResolveThread={(tid) => {
+                                          onResolveThread(tid);
+                                          setExpandedThreadId(null);
+                                       }}
+                                       isResolving={isResolving}
+                                       onClose={() => setExpandedThreadId(null)}
+                                    />
+                                 </div>
                               </div>
                            )}
                         </div>
