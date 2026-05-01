@@ -600,7 +600,9 @@ export default function UserHub() {
                                  </div>
                                  <div className="li-content">
                                     <p className="li-excerpt">
-                                       {claim.ai_summary || "No summary available."}
+                                       {claim.context_text
+                                          ? `"${claim.context_text}"`
+                                          : claim.ai_summary || "No summary available."}
                                     </p>
                                     <div className="li-meta">
                                        <span>
@@ -632,7 +634,7 @@ export default function UserHub() {
                                           size={14}
                                           className="hub-btn-icon"
                                        />{" "}
-                                       View Full Report
+                                       View Analysis Report
                                     </button>
 
                                     <button

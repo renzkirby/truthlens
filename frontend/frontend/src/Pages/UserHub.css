@@ -271,16 +271,20 @@
 .li-actions {
     display: flex;
     flex-direction: column;
+    justify-content: space-between;
     align-items: flex-end;
     gap: 12px;
+    height: auto;
     min-height: 100%;
 }
 
 .hub-btns-row {
     display: flex;
+    flex-direction: row;
     gap: 8px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: flex-end;
+    align-items: center;
 }
 
 .hub-btn-icon {
@@ -291,8 +295,10 @@
 .hub-btn-report {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
-    padding: 8px 16px;
+    height: 36px;
+    padding: 0 16px;
     border-radius: 6px;
     font-size: 13px;
     font-weight: 600;
