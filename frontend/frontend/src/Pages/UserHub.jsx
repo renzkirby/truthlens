@@ -3,6 +3,251 @@ import { useAuth } from "../context/AuthContext";
 import "./UserHub.css";
 import Icons from "../components/Icons.jsx";
 import NavigationBar from "../components/NavigationBar.jsx";
+import { getEffectiveVerdict } from "../utils/verdict";
+import { VERDICT_META } from "../utils/constants";
+
+const AnalysisModal = ({ claimId, onClose }) => {
+   const { authFetch } = useAuth();
+   const [claimData, setClaimData] = useState(null);
+   const [loading, setLoading] = useState(true);
+   const [error, setError] = useState(null);
+
+   const apiUrl = (path) =>
+      `${import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api"}/${path}`;
+
+   useEffect(() => {
+      const fetchAnalysis = async () => {
+         try {
+            const data = await authFetch(apiUrl(`claims/${claimId}/analysis/`), {
+               method: "GET",
+            });
+            setClaimData(data);
+         } catch (err) {
+            console.error("Failed to fetch analysis:", err);
+            setError("Could not load the analysis report.");
+         } finally {
+            setLoading(false);
+         }
+      };
+      fetchAnalysis();
+   }, [claimId, authFetch]);
+
+   if (loading) {
+      return (
+         <div
+            className="hub-modal-overlay"
+            onClick={onClose}>
+            <div
+               className="hub-modal-content"
+               onClick={(e) => e.stopPropagation()}>
+               <div className="hub-modal-loading">
+                  <Icons
+                     name="loader"
+                     size={32}
+                     className="spin"
+                     color="#4f46e5"
+                  />
+                  <p>Loading Analysis Report...</p>
+               </div>
+            </div>
+         </div>
+      );
+   }
+
+   if (error || !claimData) {
+      return (
+         <div
+            className="hub-modal-overlay"
+            onClick={onClose}>
+            <div
+               className="hub-modal-content error"
+               onClick={(e) => e.stopPropagation()}>
+               <Icons
+                  name="alert-triangle"
+                  size={32}
+                  color="#d97706"
+               />
+               <h2>Error</h2>
+               <p>{error || "Analysis not found."}</p>
+               <button
+                  className="hub-modal-close-btn"
+                  onClick={onClose}>
+                  Close
+               </button>
+            </div>
+         </div>
+      );
+   }
+
+   const verdict = (getEffectiveVerdict(claimData) || "UNVERIFIED").toLowerCase();
+   const vm = VERDICT_META[verdict] || VERDICT_META.unverified;
+
+   return (
+      <div
+         className="hub-modal-overlay"
+         onClick={onClose}>
+         <div
+            className="hub-modal-content"
+            onClick={(e) => e.stopPropagation()}>
+            <button
+               className="hub-modal-close-icon"
+               onClick={onClose}>
+               <Icons
+                  name="x"
+                  size={20}
+                  color="#64748b"
+               />
+            </button>
+
+            <div
+               className="hub-modal-header"
+               style={{ background: vm.bg, borderBottomColor: `${vm.color}30` }}>
+               <div
+                  className="hub-modal-claim-label"
+                  style={{ color: vm.color }}>
+                  <Icons
+                     name="cpu"
+                     size={11}
+                     color={vm.color}
+                     strokeWidth={2.5}
+                  />
+                  CLAIM ANALYSIS
+               </div>
+               <h2 className="hub-modal-claim-text">
+                  {claimData.context_text || "No text extracted"}
+               </h2>
+               <div className="hub-modal-verdict">
+                  <span
+                     className="hub-verdict-badge"
+                     style={{ color: vm.color, background: vm.bg, borderColor: vm.border }}>
+                     <Icons
+                        name={vm.icon || "help-circle"}
+                        size={12}
+                        color={vm.color}
+                        strokeWidth={2.5}
+                     />
+                     {vm.label}
+                  </span>
+                  <span className="hub-modal-confidence">
+                     Confidence: {claimData.consensus_score ?? "—"}%
+                  </span>
+               </div>
+               <p className="hub-modal-summary">{claimData.ai_summary}</p>
+            </div>
+
+            <div className="hub-modal-body">
+               <div className="hub-modal-section">
+                  <h3>
+                     <Icons
+                        name="brain-circuit"
+                        size={16}
+                        color="#4f46e5"
+                     />{" "}
+                     Engine Reasoning Setup
+                  </h3>
+                  {claimData.ai_reasoning ? (
+                     <div className="hub-modal-reasoning">{claimData.ai_reasoning}</div>
+                  ) : (
+                     <div className="hub-modal-reasoning empty">
+                        No detailed reasoning payload available.
+                     </div>
+                  )}
+               </div>
+
+               {claimData.media_url && (
+                  <div className="hub-modal-section">
+                     <h3>
+                        <Icons
+                           name="image"
+                           size={16}
+                           color="#4f46e5"
+                        />{" "}
+                        Original Media
+                     </h3>
+                     <div className="hub-modal-media">
+                        <img
+                           src={claimData.media_url}
+                           alt="Analyzed media"
+                        />
+                     </div>
+                  </div>
+               )}
+
+               <div className="hub-modal-section">
+                  <h3>
+                     <Icons
+                        name="globe"
+                        size={16}
+                        color="#4f46e5"
+                     />{" "}
+                     Evidence Sources
+                  </h3>
+                  {claimData.ai_sources && claimData.ai_sources.length > 0 ? (
+                     <div className="hub-modal-sources">
+                        {claimData.ai_sources.map((source, idx) => {
+                           const isLegacyStr = typeof source === "string";
+                           const url = isLegacyStr ? source : source.url;
+                           const title = isLegacyStr ? "External Source" : source.title;
+                           const snippet = isLegacyStr
+                              ? "No summary available for this legacy source."
+                              : source.snippet;
+
+                           let domain = url;
+                           try {
+                              domain = new URL(url).hostname.replace("www.", "");
+                           } catch (e) {}
+
+                           return (
+                              <div
+                                 key={idx}
+                                 className="hub-modal-source-item">
+                                 <div className="source-header">
+                                    <span className="source-index">Source {idx + 1}</span>
+                                    <span className="source-domain">{domain}</span>
+                                 </div>
+                                 <div className="source-body">
+                                    <h4>{title}</h4>
+                                    <p>{snippet}</p>
+                                    <a
+                                       href={url}
+                                       target="_blank"
+                                       rel="noreferrer">
+                                       Read Full Article{" "}
+                                       <Icons
+                                          name="external-link"
+                                          size={12}
+                                       />
+                                    </a>
+                                 </div>
+                              </div>
+                           );
+                        })}
+                     </div>
+                  ) : (
+                     <div className="hub-modal-reasoning empty">
+                        No external web sources logged.
+                     </div>
+                  )}
+               </div>
+            </div>
+
+            <div className="hub-modal-footer">
+               <a
+                  href={`/analysis/${claimId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hub-modal-full-report-btn">
+                  <Icons
+                     name="external-link"
+                     size={16}
+                  />{" "}
+                  Open Full Analysis Page
+               </a>
+            </div>
+         </div>
+      </div>
+   );
+};
 
 const VerdictBadge = ({ verdict }) => {
    const map = {
@@ -249,6 +494,7 @@ export default function UserHub() {
    const [loading, setLoading] = useState(true);
    const [error, setError] = useState(null);
    const [searchQuery, setSearchQuery] = useState("");
+   const [selectedClaimId, setSelectedClaimId] = useState(null);
 
    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
    const apiUrl = (path) => `${API_BASE_URL.replace(/\/$/, "")}/${path}`;
@@ -428,10 +674,8 @@ export default function UserHub() {
                                     />
                                  </div>
                                  <div className="hub-btns-row">
-                                    <a
-                                       href={`/analysis/${claim.id}`}
-                                       target="_blank"
-                                       rel="noopener noreferrer"
+                                    <button
+                                       onClick={() => setSelectedClaimId(claim.id)}
                                        className="hub-btn-report">
                                        <Icons
                                           name="file-text"
@@ -439,7 +683,7 @@ export default function UserHub() {
                                           className="hub-btn-icon"
                                        />{" "}
                                        View Full Report
-                                    </a>
+                                    </button>
 
                                     <button
                                        className="hub-btn-publish"
@@ -471,6 +715,13 @@ export default function UserHub() {
                </div>
             </main>
          </div>
+
+         {selectedClaimId && (
+            <AnalysisModal
+               claimId={selectedClaimId}
+               onClose={() => setSelectedClaimId(null)}
+            />
+         )}
       </div>
    );
 }
