@@ -948,13 +948,6 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
         evidence.moderator_notes = notes
         evidence.save(update_fields=["evidence_status", "verified_by", "verified_at", "moderator_notes"])
         
-        # Auto-compute final verdict for the claim based on verified evidence
-        claim = evidence.thread.claim
-        final_verdict = claim.compute_final_verdict()
-        if final_verdict:
-            claim.final_verdict = final_verdict
-            claim.save(update_fields=["final_verdict"])
-        
         # Persist trust immediately so UI does not show stale overall score after moderation.
         recompute_user_trust_score(evidence.contributor.id)
         # Keep async recompute as a safety net for eventual consistency.
