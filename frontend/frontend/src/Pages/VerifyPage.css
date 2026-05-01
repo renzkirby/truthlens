@@ -16,6 +16,11 @@
    display: flex;
    flex-direction: column;
    gap: 24px;
+   transition: max-width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.verify-container.has-result {
+   max-width: 1100px;
 }
 
 /* ── Header ── */
@@ -89,7 +94,46 @@
 .verify-body {
    display: flex;
    flex-direction: column;
-   gap: 16px;
+   gap: 24px;
+   align-items: flex-start;
+   width: 100%;
+}
+
+.verify-body-left,
+.verify-body-right {
+   width: 100%;
+   display: flex;
+   flex-direction: column;
+   gap: 24px;
+}
+
+@media (min-width: 850px) {
+   .verify-container.has-result .verify-body {
+      flex-direction: row;
+   }
+
+   .verify-container.has-result .verify-body-left {
+      flex: 1;
+      max-width: 50%;
+   }
+
+   .verify-container.has-result .verify-body-right {
+      flex: 1;
+      max-width: 50%;
+   }
+}
+
+.verify-result-animator {
+   animation: slide-in-fade 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+   opacity: 0;
+   transform: translateX(15px);
+}
+
+@keyframes slide-in-fade {
+   to {
+      opacity: 1;
+      transform: translateX(0);
+   }
 }
 
 /* ── Box panel ── */

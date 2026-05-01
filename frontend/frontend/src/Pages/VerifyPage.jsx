@@ -455,7 +455,7 @@ function VerifyPage() {
       <div className="verify-layout">
          <NavigationBar />
 
-         <main className="verify-container">
+         <main className={`verify-container ${result && !loading ? "has-result" : ""}`}>
             <div className="verify-header">
                <div className="verify-header-icon">
                   <Icons
@@ -526,97 +526,190 @@ function VerifyPage() {
             </div>
 
             <div className="verify-body">
-               {/* Loading State */}
-               {loading && <VerifyLoadingState isCompleting={isCompleting} />}
-               {/* Error State */}
-               {error && (
-                  <div className="verify-error">
-                     <Icons
-                        name="alert-triangle"
-                        size={15}
-                     />
-                     {error}
-                  </div>
-               )}
-               {/* ── Standard Fact-Check Result ── */}
-               {result && !result.isDeepfakeTest && !loading && (
-                  <ResultCard
-                     result={result}
-                     onEscalate={() => navigate(`/thread/create?claim_id=${result.id}`)}
-                  />
-               )}
-
-               {/* ── Deepfake Test Custom Result ── */}
-               {result && result.isDeepfakeTest && !loading && (
-                  <div className="result-card box-panel">
-                     <div className="result-verdict-row">
-                        <span className="result-label">Deepfake Analysis:</span>
-                        <span
-                           className="result-badge"
-                           style={{
-                              backgroundColor:
-                                 result.verdict === "AI GENERATED"
-                                    ? "var(--fake-bg, #fee2e2)"
-                                    : "var(--fact-bg, #dcfce7)",
-                              color:
-                                 result.verdict === "AI GENERATED"
-                                    ? "var(--fake-text, #991b1b)"
-                                    : "var(--fact-text, #166534)",
-                              border: `1px solid ${result.verdict === "AI GENERATED" ? "var(--fake-border, #f87171)" : "var(--fact-border, #86efac)"}`,
-                           }}>
-                           {result.verdict}
-                        </span>
-                     </div>
-
-                     <div className="result-summary-box">
-                        <p className="result-summary-title">AI Forensic Analysis</p>
-                        <p
-                           className="result-summary-text"
-                           style={{ marginBottom: "8px" }}>
-                           The forensic model is <strong>{result.score}%</strong> confident that
-                           this image was generated or manipulated by AI.
-                        </p>
-                        <div
-                           style={{
-                              borderTop: "1px solid #e5e7eb",
-                              paddingTop: "8px",
-                              fontSize: "13px",
-                              color: "#4b5563",
-                           }}>
-                           <strong>Explanation:</strong> {result.summary}
-                        </div>
-                     </div>
-                  </div>
-               )}
-
-               {/* ── URL Tab ── */}
-               {activeTab === "url" && (
-                  <div className="verify-panel box-panel">
-                     <label className="panel-label">
+               <div className="verify-body-left">
+                  {/* Loading State */}
+                  {loading && <VerifyLoadingState isCompleting={isCompleting} />}
+                  {/* Error State */}
+                  {error && (
+                     <div className="verify-error">
                         <Icons
-                           name="link"
-                           size={14}
+                           name="alert-triangle"
+                           size={15}
                         />
-                        Paste a news article or social media URL
-                     </label>
-                     <div className="url-input-row">
+                        {error}
+                     </div>
+                  )}
+
+                  {/* ── URL Tab ── */}
+                  {activeTab === "url" && (
+                     <div className="verify-panel box-panel">
+                        <label className="panel-label">
+                           <Icons
+                              name="link"
+                              size={14}
+                           />
+                           Paste a news article or social media URL
+                        </label>
+                        <div className="url-input-row">
+                           <input
+                              type="text"
+                              className="url-input"
+                              placeholder="https://..."
+                              value={url}
+                              onChange={(e) => setUrl(e.target.value)}
+                              onKeyDown={(e) => e.key === "Enter" && handleUrlVerify()}
+                              disabled={loading}
+                           />
+                           <button
+                              className="verify-submit-btn"
+                              onClick={handleUrlVerify}
+                              disabled={loading || !url.trim()}>
+                              {loading ? (
+                                 <>
+                                    <div className="btn-spinner" />
+                                    Verifying...
+                                 </>
+                              ) : (
+                                 <>
+                                    <Icons
+                                       name="search"
+                                       size={15}
+                                    />
+                                    Verify
+                                 </>
+                              )}
+                           </button>
+                        </div>
+                        <p className="panel-hint">
+                           Works best with news articles. Social media posts and paywalled sites may
+                           not load correctly.
+                        </p>
+                     </div>
+                  )}
+
+                  {/* ── Image Tab ── */}
+                  {activeTab === "image" && (
+                     <div className="verify-panel box-panel">
+                        <label className="panel-label">
+                           <Icons
+                              name="image"
+                              size={14}
+                           />
+                           Upload a screenshot or image to verify
+                        </label>
+
+                        <div
+                           className={`drop-zone ${imagePreview ? "has-image" : ""}`}
+                           onClick={() => !imagePreview && fileInputRef.current?.click()}
+                           onDrop={handleDrop}
+                           onDragOver={(e) => e.preventDefault()}>
+                           {imagePreview ? (
+                              <div className="image-preview-wrapper">
+                                 <img
+                                    src={imagePreview}
+                                    alt="Preview"
+                                    className="image-preview"
+                                 />
+                                 <button
+                                    className="remove-image-btn"
+                                    onClick={(e) => {
+                                       e.stopPropagation();
+                                       setImage(null);
+                                       setImagePreview(null);
+                                       setResult(null);
+                                    }}>
+                                    <Icons
+                                       name="x"
+                                       size={14}
+                                    />{" "}
+                                    Remove
+                                 </button>
+                              </div>
+                           ) : (
+                              <div className="drop-zone-content">
+                                 <Icons
+                                    name="upload"
+                                    size={32}
+                                    color="#9ca3af"
+                                 />
+                                 <p className="drop-zone-text">
+                                    Drag and drop an image here, or{" "}
+                                    <span className="drop-zone-link">browse</span>
+                                 </p>
+                                 <p className="drop-zone-hint">PNG, JPG, WEBP supported</p>
+                              </div>
+                           )}
+                        </div>
+
+                        {/* Hidden file input */}
                         <input
-                           type="text"
-                           className="url-input"
-                           placeholder="https://..."
-                           value={url}
-                           onChange={(e) => setUrl(e.target.value)}
-                           onKeyDown={(e) => e.key === "Enter" && handleUrlVerify()}
-                           disabled={loading}
+                           ref={fileInputRef}
+                           type="file"
+                           accept="image/*"
+                           className="hidden-file-input"
+                           onChange={handleImageSelect}
                         />
+
                         <button
-                           className="verify-submit-btn"
-                           onClick={handleUrlVerify}
-                           disabled={loading || !url.trim()}>
+                           className="verify-submit-btn full-width"
+                           onClick={handleImageVerify}
+                           disabled={loading || !image}>
                            {loading ? (
                               <>
                                  <div className="btn-spinner" />
-                                 Verifying...
+                                 Analyzing image...
+                              </>
+                           ) : (
+                              <>
+                                 <Icons
+                                    name="scan-line"
+                                    size={15}
+                                 />
+                                 Verify Image
+                              </>
+                           )}
+                        </button>
+                        <p className="panel-hint">
+                           Our AI will extract text from the image using OCR and verify the claim.
+                        </p>
+                     </div>
+                  )}
+                  {/* Text Tab */}
+                  {activeTab === "text" && (
+                     <div className="verify-panel box-panel">
+                        <label className="panel-label">
+                           <Icons
+                              name="file-text"
+                              size={14}
+                           />
+                           Paste a claim, quote, or social media post
+                        </label>
+
+                        <textarea
+                           className="url-input"
+                           placeholder="e.g., 'The government just announced a nationwide lockdown starting tomorrow...'"
+                           value={text}
+                           onChange={(e) => setText(e.target.value)}
+                           disabled={loading}
+                           rows={5}
+                           style={{
+                              resize: "vertical",
+                              height: "auto",
+                              minHeight: "100px",
+                              padding: "12px",
+                              marginBottom: "15px",
+                              width: "100%",
+                           }}
+                        />
+
+                        <button
+                           className="verify-submit-btn full-width"
+                           onClick={handleTextVerify}
+                           disabled={loading || !text.trim()}>
+                           {loading ? (
+                              <>
+                                 <div className="btn-spinner" />
+                                 Analyzing text...
                               </>
                            ) : (
                               <>
@@ -624,338 +717,254 @@ function VerifyPage() {
                                     name="search"
                                     size={15}
                                  />
-                                 Verify
+                                 Verify Text
                               </>
                            )}
                         </button>
+                        <p className="panel-hint">
+                           Our AI will extract the core claim, cross-reference it with live news,
+                           and evaluate its factual accuracy.
+                        </p>
                      </div>
-                     <p className="panel-hint">
-                        Works best with news articles. Social media posts and paywalled sites may
-                        not load correctly.
-                     </p>
-                  </div>
-               )}
+                  )}
 
-               {/* ── Image Tab ── */}
-               {activeTab === "image" && (
-                  <div className="verify-panel box-panel">
-                     <label className="panel-label">
-                        <Icons
-                           name="image"
-                           size={14}
-                        />
-                        Upload a screenshot or image to verify
-                     </label>
+                  {/* ── File Tab ── */}
+                  {activeTab === "file" && (
+                     <div className="verify-panel box-panel">
+                        <label className="panel-label">
+                           <Icons
+                              name="file"
+                              size={14}
+                           />
+                           Upload a document to verify
+                        </label>
 
-                     <div
-                        className={`drop-zone ${imagePreview ? "has-image" : ""}`}
-                        onClick={() => !imagePreview && fileInputRef.current?.click()}
-                        onDrop={handleDrop}
-                        onDragOver={(e) => e.preventDefault()}>
-                        {imagePreview ? (
-                           <div className="image-preview-wrapper">
-                              <img
-                                 src={imagePreview}
-                                 alt="Preview"
-                                 className="image-preview"
-                              />
-                              <button
-                                 className="remove-image-btn"
-                                 onClick={(e) => {
-                                    e.stopPropagation();
-                                    setImage(null);
-                                    setImagePreview(null);
-                                    setResult(null);
-                                 }}>
-                                 <Icons
-                                    name="x"
-                                    size={14}
-                                 />{" "}
-                                 Remove
-                              </button>
-                           </div>
-                        ) : (
-                           <div className="drop-zone-content">
-                              <Icons
-                                 name="upload"
-                                 size={32}
-                                 color="#9ca3af"
-                              />
-                              <p className="drop-zone-text">
-                                 Drag and drop an image here, or{" "}
-                                 <span className="drop-zone-link">browse</span>
-                              </p>
-                              <p className="drop-zone-hint">PNG, JPG, WEBP supported</p>
-                           </div>
-                        )}
-                     </div>
-
-                     {/* Hidden file input */}
-                     <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        className="hidden-file-input"
-                        onChange={handleImageSelect}
-                     />
-
-                     <button
-                        className="verify-submit-btn full-width"
-                        onClick={handleImageVerify}
-                        disabled={loading || !image}>
-                        {loading ? (
-                           <>
-                              <div className="btn-spinner" />
-                              Analyzing image...
-                           </>
-                        ) : (
-                           <>
-                              <Icons
-                                 name="scan-line"
-                                 size={15}
-                              />
-                              Verify Image
-                           </>
-                        )}
-                     </button>
-                     <p className="panel-hint">
-                        Our AI will extract text from the image using OCR and verify the claim.
-                     </p>
-                  </div>
-               )}
-               {/* Text Tab */}
-               {activeTab === "text" && (
-                  <div className="verify-panel box-panel">
-                     <label className="panel-label">
-                        <Icons
-                           name="file-text"
-                           size={14}
-                        />
-                        Paste a claim, quote, or social media post
-                     </label>
-
-                     <textarea
-                        className="url-input"
-                        placeholder="e.g., 'The government just announced a nationwide lockdown starting tomorrow...'"
-                        value={text}
-                        onChange={(e) => setText(e.target.value)}
-                        disabled={loading}
-                        rows={5}
-                        style={{
-                           resize: "vertical",
-                           height: "auto",
-                           minHeight: "100px",
-                           padding: "12px",
-                           marginBottom: "15px",
-                           width: "100%",
-                        }}
-                     />
-
-                     <button
-                        className="verify-submit-btn full-width"
-                        onClick={handleTextVerify}
-                        disabled={loading || !text.trim()}>
-                        {loading ? (
-                           <>
-                              <div className="btn-spinner" />
-                              Analyzing text...
-                           </>
-                        ) : (
-                           <>
-                              <Icons
-                                 name="search"
-                                 size={15}
-                              />
-                              Verify Text
-                           </>
-                        )}
-                     </button>
-                     <p className="panel-hint">
-                        Our AI will extract the core claim, cross-reference it with live news, and
-                        evaluate its factual accuracy.
-                     </p>
-                  </div>
-               )}
-
-               {/* ── File Tab ── */}
-               {activeTab === "file" && (
-                  <div className="verify-panel box-panel">
-                     <label className="panel-label">
-                        <Icons
-                           name="file"
-                           size={14}
-                        />
-                        Upload a document to verify
-                     </label>
-
-                     <div
-                        className={`drop-zone ${docFile ? "has-image" : ""}`}
-                        onClick={() => !docFile && docFileInputRef.current?.click()}
-                        onDrop={handleDocDrop}
-                        onDragOver={(e) => e.preventDefault()}>
-                        {docFile ? (
-                           <div className="image-preview-wrapper">
-                              <div className="file-preview-box">
-                                 <Icons
-                                    name="file-text"
-                                    size={32}
-                                    color="#4f46e5"
-                                 />
-                                 <p className="file-name">{docFile.name}</p>
-                                 <p className="file-size">
-                                    {(docFile.size / 1024 / 1024).toFixed(2)} MB
-                                 </p>
+                        <div
+                           className={`drop-zone ${docFile ? "has-image" : ""}`}
+                           onClick={() => !docFile && docFileInputRef.current?.click()}
+                           onDrop={handleDocDrop}
+                           onDragOver={(e) => e.preventDefault()}>
+                           {docFile ? (
+                              <div className="image-preview-wrapper">
+                                 <div className="file-preview-box">
+                                    <Icons
+                                       name="file-text"
+                                       size={32}
+                                       color="#4f46e5"
+                                    />
+                                    <p className="file-name">{docFile.name}</p>
+                                    <p className="file-size">
+                                       {(docFile.size / 1024 / 1024).toFixed(2)} MB
+                                    </p>
+                                 </div>
+                                 <button
+                                    className="remove-image-btn"
+                                    onClick={(e) => {
+                                       e.stopPropagation();
+                                       setDocFile(null);
+                                       setResult(null);
+                                    }}>
+                                    <Icons
+                                       name="x"
+                                       size={14}
+                                    />{" "}
+                                    Remove
+                                 </button>
                               </div>
-                              <button
-                                 className="remove-image-btn"
-                                 onClick={(e) => {
-                                    e.stopPropagation();
-                                    setDocFile(null);
-                                    setResult(null);
-                                 }}>
+                           ) : (
+                              <div className="drop-zone-content">
                                  <Icons
-                                    name="x"
-                                    size={14}
-                                 />{" "}
-                                 Remove
-                              </button>
-                           </div>
-                        ) : (
-                           <div className="drop-zone-content">
-                              <Icons
-                                 name="upload"
-                                 size={32}
-                                 color="#9ca3af"
-                              />
-                              <p className="drop-zone-text">
-                                 Drag and drop a document here, or{" "}
-                                 <span className="drop-zone-link">browse</span>
-                              </p>
-                              <p className="drop-zone-hint">PDF & TXT format supported</p>
-                           </div>
-                        )}
-                     </div>
+                                    name="upload"
+                                    size={32}
+                                    color="#9ca3af"
+                                 />
+                                 <p className="drop-zone-text">
+                                    Drag and drop a document here, or{" "}
+                                    <span className="drop-zone-link">browse</span>
+                                 </p>
+                                 <p className="drop-zone-hint">PDF & TXT format supported</p>
+                              </div>
+                           )}
+                        </div>
 
-                     {/* Hidden file input */}
-                     <input
-                        ref={docFileInputRef}
-                        type="file"
-                        accept=".pdf,.docx,.txt"
-                        className="hidden-file-input"
-                        onChange={handleDocFileSelect}
-                     />
-
-                     <button
-                        className="verify-submit-btn full-width"
-                        onClick={handleFileVerify}
-                        disabled={loading || !docFile}>
-                        {loading ? (
-                           <>
-                              <div className="btn-spinner" />
-                              Analyzing document...
-                           </>
-                        ) : (
-                           <>
-                              <Icons
-                                 name="scan-line"
-                                 size={15}
-                              />
-                              Verify Document
-                           </>
-                        )}
-                     </button>
-                     <p className="panel-hint">
-                        Our AI will extract text from the document and cross-reference its claims.
-                     </p>
-                  </div>
-               )}
-
-               {/* Deepfake Tab */}
-               {activeTab === "deepfake" && (
-                  <div className="verify-panel box-panel">
-                     <label className="panel-label">
-                        <Icons
-                           name="sparkles"
-                           size={14}
+                        {/* Hidden file input */}
+                        <input
+                           ref={docFileInputRef}
+                           type="file"
+                           accept=".pdf,.docx,.txt"
+                           className="hidden-file-input"
+                           onChange={handleDocFileSelect}
                         />
-                        Upload a photo for Deepfake detection
-                     </label>
 
-                     <div
-                        className={`drop-zone ${imagePreview ? "has-image" : ""}`}
-                        onClick={() => !imagePreview && fileInputRef.current?.click()}
-                        onDrop={handleDrop}
-                        onDragOver={(e) => e.preventDefault()}>
-                        {imagePreview ? (
-                           <div className="image-preview-wrapper">
-                              <img
-                                 src={imagePreview}
-                                 alt="Preview"
-                                 className="image-preview"
-                              />
-                              <button
-                                 className="remove-image-btn"
-                                 onClick={(e) => {
-                                    e.stopPropagation();
-                                    setImage(null);
-                                    setImagePreview(null);
-                                    setResult(null);
-                                 }}>
+                        <button
+                           className="verify-submit-btn full-width"
+                           onClick={handleFileVerify}
+                           disabled={loading || !docFile}>
+                           {loading ? (
+                              <>
+                                 <div className="btn-spinner" />
+                                 Analyzing document...
+                              </>
+                           ) : (
+                              <>
                                  <Icons
-                                    name="x"
-                                    size={14}
-                                 />{" "}
-                                 Remove
-                              </button>
-                           </div>
-                        ) : (
-                           <div className="drop-zone-content">
-                              <Icons
-                                 name="upload"
-                                 size={32}
-                                 color="#9ca3af"
-                              />
-                              <p className="drop-zone-text">
-                                 Drag and drop an image here, or{" "}
-                                 <span className="drop-zone-link">browse</span>
-                              </p>
-                              <p className="drop-zone-hint">PNG, JPG, WEBP supported</p>
-                           </div>
-                        )}
+                                    name="scan-line"
+                                    size={15}
+                                 />
+                                 Verify Document
+                              </>
+                           )}
+                        </button>
+                        <p className="panel-hint">
+                           Our AI will extract text from the document and cross-reference its
+                           claims.
+                        </p>
                      </div>
+                  )}
 
-                     {/* Hidden file input */}
-                     <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        className="hidden-file-input"
-                        onChange={handleImageSelect}
-                     />
+                  {/* Deepfake Tab */}
+                  {activeTab === "deepfake" && (
+                     <div className="verify-panel box-panel">
+                        <label className="panel-label">
+                           <Icons
+                              name="sparkles"
+                              size={14}
+                           />
+                           Upload a photo for Deepfake detection
+                        </label>
 
-                     <button
-                        className="verify-submit-btn full-width"
-                        onClick={handleDeepfakeTest}
-                        disabled={loading || !image}>
-                        {loading ? (
-                           <>
-                              <div className="btn-spinner" />
-                              Analyzing pixels...
-                           </>
-                        ) : (
-                           <>
-                              <Icons
-                                 name="scan-line"
-                                 size={15}
-                              />
-                              Run Deepfake Test
-                           </>
-                        )}
-                     </button>
-                     <p className="panel-hint">
-                        Our AI model will analyze the image for digital fabrication or AI
-                        generation.
-                     </p>
+                        <div
+                           className={`drop-zone ${imagePreview ? "has-image" : ""}`}
+                           onClick={() => !imagePreview && fileInputRef.current?.click()}
+                           onDrop={handleDrop}
+                           onDragOver={(e) => e.preventDefault()}>
+                           {imagePreview ? (
+                              <div className="image-preview-wrapper">
+                                 <img
+                                    src={imagePreview}
+                                    alt="Preview"
+                                    className="image-preview"
+                                 />
+                                 <button
+                                    className="remove-image-btn"
+                                    onClick={(e) => {
+                                       e.stopPropagation();
+                                       setImage(null);
+                                       setImagePreview(null);
+                                       setResult(null);
+                                    }}>
+                                    <Icons
+                                       name="x"
+                                       size={14}
+                                    />{" "}
+                                    Remove
+                                 </button>
+                              </div>
+                           ) : (
+                              <div className="drop-zone-content">
+                                 <Icons
+                                    name="upload"
+                                    size={32}
+                                    color="#9ca3af"
+                                 />
+                                 <p className="drop-zone-text">
+                                    Drag and drop an image here, or{" "}
+                                    <span className="drop-zone-link">browse</span>
+                                 </p>
+                                 <p className="drop-zone-hint">PNG, JPG, WEBP supported</p>
+                              </div>
+                           )}
+                        </div>
+
+                        {/* Hidden file input */}
+                        <input
+                           ref={fileInputRef}
+                           type="file"
+                           accept="image/*"
+                           className="hidden-file-input"
+                           onChange={handleImageSelect}
+                        />
+
+                        <button
+                           className="verify-submit-btn full-width"
+                           onClick={handleDeepfakeTest}
+                           disabled={loading || !image}>
+                           {loading ? (
+                              <>
+                                 <div className="btn-spinner" />
+                                 Analyzing pixels...
+                              </>
+                           ) : (
+                              <>
+                                 <Icons
+                                    name="scan-line"
+                                    size={15}
+                                 />
+                                 Run Deepfake Test
+                              </>
+                           )}
+                        </button>
+                        <p className="panel-hint">
+                           Our AI model will analyze the image for digital fabrication or AI
+                           generation.
+                        </p>
+                     </div>
+                  )}
+               </div>
+
+               {/* Right side results area */}
+               {result && !loading && (
+                  <div className="verify-body-right verify-result-animator">
+                     {/* ── Standard Fact-Check Result ── */}
+                     {!result.isDeepfakeTest && (
+                        <ResultCard
+                           result={result}
+                           onEscalate={() => navigate(`/thread/create?claim_id=${result.id}`)}
+                        />
+                     )}
+
+                     {/* ── Deepfake Test Custom Result ── */}
+                     {result.isDeepfakeTest && (
+                        <div className="result-card box-panel">
+                           <div className="result-verdict-row">
+                              <span className="result-label">Deepfake Analysis:</span>
+                              <span
+                                 className="result-badge"
+                                 style={{
+                                    backgroundColor:
+                                       result.verdict === "AI GENERATED"
+                                          ? "var(--fake-bg, #fee2e2)"
+                                          : "var(--fact-bg, #dcfce7)",
+                                    color:
+                                       result.verdict === "AI GENERATED"
+                                          ? "var(--fake-text, #991b1b)"
+                                          : "var(--fact-text, #166534)",
+                                    border: `1px solid ${result.verdict === "AI GENERATED" ? "var(--fake-border, #f87171)" : "var(--fact-border, #86efac)"}`,
+                                 }}>
+                                 {result.verdict}
+                              </span>
+                           </div>
+
+                           <div className="result-summary-box">
+                              <p className="result-summary-title">AI Forensic Analysis</p>
+                              <p
+                                 className="result-summary-text"
+                                 style={{ marginBottom: "8px" }}>
+                                 The forensic model is <strong>{result.score}%</strong> confident
+                                 that this image was generated or manipulated by AI.
+                              </p>
+                              <div
+                                 style={{
+                                    borderTop: "1px solid #e5e7eb",
+                                    paddingTop: "8px",
+                                    fontSize: "13px",
+                                    color: "#4b5563",
+                                 }}>
+                                 <strong>Explanation:</strong> {result.summary}
+                              </div>
+                           </div>
+                        </div>
+                     )}
                   </div>
                )}
             </div>
