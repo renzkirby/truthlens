@@ -752,7 +752,7 @@ function CommunityFeed() {
 
                                  <div className="header-actions">
                                     <div className="header-badges-inline">
-                                       {thread.claim?.claim_type && (
+                                       {/* {thread.claim?.claim_type && (
                                           <div
                                              className="media-type-badge box-panel-mini"
                                              style={{
@@ -824,7 +824,7 @@ function CommunityFeed() {
                                                    </>
                                                 )}
                                           </div>
-                                       )}
+                                       )} */}
                                        <div
                                           className={`status-badge badge-${verdictClass}`}
                                           style={{
