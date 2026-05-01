@@ -29,39 +29,30 @@ import { VERDICT_CONFIG } from "../utils/constants";
 // ── Styles ──
 import "./VerifyPage.css";
 
-const ResultSkeleton = () => {
+// ── Loading Indicator Component ──
+const VerifyLoadingState = ({ isCompleting }) => {
    return (
-      <div className="result-card" style={{ background: "var(--bg-surface)" }}>
-         <div className="result-verdict-row" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            <div className="skeleton-box" style={{ width: "120px", height: "16px" }}></div>
-            <div className="skeleton-box" style={{ width: "100px", height: "24px", borderRadius: "12px" }}></div>
-         </div>
-         
-         <div className="result-summary-box" style={{ marginTop: "16px" }}>
-            <div className="skeleton-box" style={{ width: "150px", height: "16px", marginBottom: "12px" }}></div>
-            <div className="skeleton-box" style={{ width: "100%", height: "14px", marginBottom: "8px" }}></div>
-            <div className="skeleton-box" style={{ width: "100%", height: "14px", marginBottom: "8px" }}></div>
-            <div className="skeleton-box" style={{ width: "80%", height: "14px" }}></div>
-         </div>
-
-         <div style={{ marginTop: "24px" }}>
-            <div className="skeleton-box" style={{ width: "150px", height: "16px", marginBottom: "8px" }}></div>
-            <div className="skeleton-box" style={{ width: "100%", height: "8px", borderRadius: "4px" }}></div>
-         </div>
-
-         <div style={{ marginTop: "24px", display: "flex", flexDirection: "column", gap: "12px" }}>
-            <div className="skeleton-box" style={{ width: "100px", height: "16px" }}></div>
-            <div className="skeleton-box" style={{ width: "100%", height: "14px" }}></div>
-            <div className="skeleton-box" style={{ width: "80%", height: "14px" }}></div>
-         </div>
-
-         <div className="result-action-buttons" style={{ marginTop: "24px", display: "flex", gap: "12px" }}>
-            <div className="skeleton-box" style={{ width: "150px", height: "36px", borderRadius: "8px" }}></div>
-            <div className="skeleton-box" style={{ width: "180px", height: "36px", borderRadius: "8px" }}></div>
+      <div className="verify-loading-container">
+         <Icons
+            name="loader"
+            size={32}
+            className="spin"
+            color="#4f46e5"
+         />
+         <p className="verify-loading-text">
+            {isCompleting ? "Finalizing Report..." : "Analyzing your claim..."}
+         </p>
+         <p className="verify-loading-subtext">Please wait. This may take 10-30 seconds.</p>
+         <div className="verify-loading-progress-bar">
+            {/* When completing, it switches to the completing animation that goes to 100% */}
+            <div className={`verify-loading-progress-fill ${isCompleting ? "completing" : ""}`} />
          </div>
       </div>
    );
 };
+
+// ── Optional Loading State Styles ──
+// These will be styled via VerifyPage.css
 
 // ── Result Card Component ──
 // Displays AI analysis result with verdict badge, confidence, and CTA buttons
@@ -77,9 +68,12 @@ const ResultCard = ({ result, onEscalate }) => {
 
    const showEscalate = result.verdict === "UNVERIFIED" || result.confidence_score < 50;
 
-   const evidenceList = result.sources && result.sources.length > 0 
-      ? result.sources 
-      : (result.source_url ? [result.source_url] : []);
+   const evidenceList =
+      result.sources && result.sources.length > 0
+         ? result.sources
+         : result.source_url
+           ? [result.source_url]
+           : [];
 
    return (
       <div className="result-card">
@@ -95,18 +89,26 @@ const ResultCard = ({ result, onEscalate }) => {
          {/* ── Banners ── */}
          {result.has_community_verdict && (
             <div className="result-banner community-verified">
-               <Icons name="shield-check" size={14} /> COMMUNITY VERIFIED
+               <Icons
+                  name="shield-check"
+                  size={14}
+               />{" "}
+               COMMUNITY VERIFIED
             </div>
          )}
          {result.is_ai_generated && (
             <div className="result-banner ai-warning">
-               <Icons name="sparkles" size={14} /> AI-GENERATED MEDIA DETECTED
+               <Icons
+                  name="sparkles"
+                  size={14}
+               />{" "}
+               AI-GENERATED MEDIA DETECTED
             </div>
          )}
 
          <div className="result-summary-box">
             <p className="result-summary-title">
-               {result.has_community_verdict ? 'Community Verdict Summary' : 'AI Summary'}
+               {result.has_community_verdict ? "Community Verdict Summary" : "AI Summary"}
             </p>
             <p className="result-summary-text">{result.summary}</p>
          </div>
@@ -137,9 +139,14 @@ const ResultCard = ({ result, onEscalate }) => {
                <strong className="result-sources-title">Sources:</strong>
                <div className="result-sources-list">
                   {evidenceList.map((src, index) => {
-                     const urlStr = typeof src === 'string' ? src : src.url;
+                     const urlStr = typeof src === "string" ? src : src.url;
                      return (
-                        <a key={index} href={urlStr} target="_blank" rel="noopener noreferrer" className="result-source-item">
+                        <a
+                           key={index}
+                           href={urlStr}
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           className="result-source-item">
                            "{urlStr}"
                         </a>
                      );
@@ -148,39 +155,45 @@ const ResultCard = ({ result, onEscalate }) => {
             </div>
          )}
 
-
-         <div className="result-footer" style={{ marginTop: '8px' }}>
+         <div
+            className="result-footer"
+            style={{ marginTop: "8px" }}>
             <span className="result-source-type">
-               <Icons name="info" size={13} />
-               Source Type: {result.has_community_verdict ? 'Community Moderation' : result.source_type}
+               <Icons
+                  name="info"
+                  size={13}
+               />
+               Source Type:{" "}
+               {result.has_community_verdict ? "Community Moderation" : result.source_type}
             </span>
          </div>
 
          {/* ── Call to Action Buttons ── */}
          <div className="result-action-buttons">
-            <a 
-               href={`/analysis/${result.id}`} 
-               target="_blank" 
-               rel="noopener noreferrer" 
-               className="view-report-btn"
-            >
+            <a
+               href={`/analysis/${result.id}`}
+               target="_blank"
+               rel="noopener noreferrer"
+               className="view-report-btn">
                View Full Report →
             </a>
 
             {result.thread_id ? (
-               <a 
-                  href={`/thread/detail/${result.thread_id}`} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="view-thread-btn"
-               >
+               <a
+                  href={`/thread/detail/${result.thread_id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="view-thread-btn">
                   View Community Discussion
                </a>
             ) : showEscalate && result.id ? (
                <button
                   className="escalate-btn"
                   onClick={onEscalate}>
-                  <Icons name="flag" size={14} />
+                  <Icons
+                     name="flag"
+                     size={14}
+                  />
                   Ask the Community
                </button>
             ) : null}
@@ -201,6 +214,7 @@ function VerifyPage() {
    const [imagePreview, setImagePreview] = useState(null);
    const [text, setText] = useState("");
    const [loading, setLoading] = useState(false);
+   const [isCompleting, setIsCompleting] = useState(false);
    const [result, setResult] = useState(null);
    const [error, setError] = useState(null);
    const [docFile, setDocFile] = useState(null);
@@ -227,13 +241,19 @@ function VerifyPage() {
 
             if (data.verdict !== "PENDING") {
                clearInterval(interval);
-               setResult(data);
-               setLoading(false);
+               setIsCompleting(true);
+               // Give 800ms for the animation to shoot to 100% before removing the loading state
+               setTimeout(() => {
+                  setResult(data);
+                  setLoading(false);
+                  setIsCompleting(false);
+               }, 800);
             }
          } catch (err) {
             clearInterval(interval);
             setError("Failed to retrieve result. Please try again.");
             setLoading(false);
+            setIsCompleting(false);
          }
       }, 3000);
    };
@@ -344,13 +364,13 @@ function VerifyPage() {
          const data = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/verify-file/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
+            body: JSON.stringify({
                file_data: base64,
                file_name: docFile.name,
-               file_type: docFile.type 
+               file_type: docFile.type,
             }),
          });
-         
+
          pollForResult(data.claim_id);
       } catch (err) {
          setError("Failed to submit document. Please try again.");
@@ -379,16 +399,20 @@ function VerifyPage() {
             body: JSON.stringify({ image_data: base64 }),
          });
 
-         // Custom simple result for the sandbox
-         setResult({
-            isDeepfakeTest: true,
-            score: (response.ai_probability * 100).toFixed(1),
-            verdict: response.is_fake ? "AI GENERATED" : "REAL IMAGE",
-            summary: response.summary
-         });
+         setIsCompleting(true);
+         setTimeout(() => {
+            // Custom simple result for the sandbox
+            setResult({
+               isDeepfakeTest: true,
+               score: (response.ai_probability * 100).toFixed(1),
+               verdict: response.is_fake ? "AI GENERATED" : "REAL IMAGE",
+               summary: response.summary,
+            });
+            setLoading(false);
+            setIsCompleting(false);
+         }, 800);
       } catch (err) {
          setError("Deepfake test failed.");
-      } finally {
          setLoading(false);
       }
    };
@@ -480,7 +504,10 @@ function VerifyPage() {
                <button
                   className={`verify-tab-btn ${activeTab === "file" ? "active" : ""}`}
                   onClick={() => handleTabSwitch("file")}>
-                  <Icons name="file" size={15} />
+                  <Icons
+                     name="file"
+                     size={15}
+                  />
                   Verify File
                </button>
                <button
@@ -500,7 +527,7 @@ function VerifyPage() {
 
             <div className="verify-body">
                {/* Loading State */}
-               {loading && <ResultSkeleton />}
+               {loading && <VerifyLoadingState isCompleting={isCompleting} />}
                {/* Error State */}
                {error && (
                   <div className="verify-error">
@@ -540,14 +567,22 @@ function VerifyPage() {
                            {result.verdict}
                         </span>
                      </div>
-    
+
                      <div className="result-summary-box">
                         <p className="result-summary-title">AI Forensic Analysis</p>
-                        <p className="result-summary-text" style={{ marginBottom: "8px" }}>
+                        <p
+                           className="result-summary-text"
+                           style={{ marginBottom: "8px" }}>
                            The forensic model is <strong>{result.score}%</strong> confident that
                            this image was generated or manipulated by AI.
                         </p>
-                        <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "8px", fontSize: "13px", color: "#4b5563" }}>
+                        <div
+                           style={{
+                              borderTop: "1px solid #e5e7eb",
+                              paddingTop: "8px",
+                              fontSize: "13px",
+                              color: "#4b5563",
+                           }}>
                            <strong>Explanation:</strong> {result.summary}
                         </div>
                      </div>
@@ -746,7 +781,10 @@ function VerifyPage() {
                {activeTab === "file" && (
                   <div className="verify-panel box-panel">
                      <label className="panel-label">
-                        <Icons name="file" size={14} />
+                        <Icons
+                           name="file"
+                           size={14}
+                        />
                         Upload a document to verify
                      </label>
 
@@ -758,9 +796,15 @@ function VerifyPage() {
                         {docFile ? (
                            <div className="image-preview-wrapper">
                               <div className="file-preview-box">
-                                 <Icons name="file-text" size={32} color="#4f46e5" />
+                                 <Icons
+                                    name="file-text"
+                                    size={32}
+                                    color="#4f46e5"
+                                 />
                                  <p className="file-name">{docFile.name}</p>
-                                 <p className="file-size">{(docFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                                 <p className="file-size">
+                                    {(docFile.size / 1024 / 1024).toFixed(2)} MB
+                                 </p>
                               </div>
                               <button
                                  className="remove-image-btn"
@@ -769,14 +813,23 @@ function VerifyPage() {
                                     setDocFile(null);
                                     setResult(null);
                                  }}>
-                                 <Icons name="x" size={14} /> Remove
+                                 <Icons
+                                    name="x"
+                                    size={14}
+                                 />{" "}
+                                 Remove
                               </button>
                            </div>
                         ) : (
                            <div className="drop-zone-content">
-                              <Icons name="upload" size={32} color="#9ca3af" />
+                              <Icons
+                                 name="upload"
+                                 size={32}
+                                 color="#9ca3af"
+                              />
                               <p className="drop-zone-text">
-                                 Drag and drop a document here, or <span className="drop-zone-link">browse</span>
+                                 Drag and drop a document here, or{" "}
+                                 <span className="drop-zone-link">browse</span>
                               </p>
                               <p className="drop-zone-hint">PDF & TXT format supported</p>
                            </div>
@@ -803,7 +856,10 @@ function VerifyPage() {
                            </>
                         ) : (
                            <>
-                              <Icons name="scan-line" size={15} />
+                              <Icons
+                                 name="scan-line"
+                                 size={15}
+                              />
                               Verify Document
                            </>
                         )}
