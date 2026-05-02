@@ -108,8 +108,8 @@ function FileUpload() {
             style={{
                width: "100%",
                padding: "10px",
-               backgroundColor: file && !isAnalyzing ? "#4f46e5" : "#9ca3af",
-               color: "white",
+               backgroundColor: file && !isAnalyzing ? "#4f46e5" : "#e5e7eb",
+               color: file && !isAnalyzing ? "white" : "#6b7280",
                border: "none",
                borderRadius: "8px",
                fontWeight: "bold",

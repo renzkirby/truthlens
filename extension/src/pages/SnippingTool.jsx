@@ -13,7 +13,7 @@ function SnippingTool({ handleSnipClick, isSnipping, onToggleDeepfake, checkDeep
                   strokeWidth={2}
                />
             </div>
-            <div className="snip-title">Activate Screen Snip</div>
+            <div className="snip-title">Verify Image</div>
             <div className="snip-subtitle">Draw a box around the claim</div>
          </div>
 
