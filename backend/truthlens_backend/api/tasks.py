@@ -358,19 +358,13 @@ def url_fact_check_process(url, claim_id):
     outcome = "completed"
 
     # Step 1 — Extract and clean text from URL
-    SATIRE_DOMAINS = ["theonion.com", "babylonbee.com", "adobochronicles.com"]
-        
-    logger.info("URL received for claim %s: %s", claim_id, url)
-    logger.info("Satire domain check for claim %s: %s", claim_id, any(domain in url.lower() for domain in SATIRE_DOMAINS))
-
-
-    if any(domain in url.lower() for domain in SATIRE_DOMAINS):
+    if article_stance == "SATIRE":
         _save_claim(claim_id, {
-                "verdict": "SATIRE",
-                "summary": "This content originates from a known satire or parody publication and is not intended to be factual.",
-                "confidence_score": 99,
-            }, "Satire Detection", url, url)
-        outcome = "satire_domain_shortcut"
+            "verdict": "SATIRE",
+            "summary": "This content originates from a known satire publication and is not intended to be factual.",
+            "confidence_score": 99,
+        }, "Satire Detection", cleaned_claim, url)
+        outcome = "satire_stance_shortcut"
         _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
         return
 
