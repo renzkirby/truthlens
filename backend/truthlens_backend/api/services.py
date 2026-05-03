@@ -154,7 +154,7 @@ def clean_ocr_text(raw_text):
     Task: Your job is to extract the core claim from the text by strictly following these steps:
     1. Identify the CENTRAL NARRATIVE of the provided text.
     2. Extract the primary verifiable claim. Translate any local slang or Taglish to English.
-    3. UNDERLYING CLAIM EXTRACTION: If the text is actively debunking, fact-checking, or clarifying a rumor, your cleaned_claim MUST be the original fake rumor itself, NOT the fact-checker's conclusion.
+    3. UNDERLYING CLAIM EXTRACTION: If the text is actively debunking a rumor, your cleaned_claim MUST be the original fake rumor itself. If the text is SATIRE, extract the absurd claim as if it were stated seriously. NEVER use meta-phrases like "The satirical publication claims..." or "A fact-checker stated...". Just extract the raw claim.
     4. QUOTE CARDS & ATTRIBUTIONS (CRITICAL): If the text is a quote attributed to a specific person, journalist, or publication (e.g., a quote card), the `cleaned_claim` MUST explicitly state who said it (e.g., "Ogie Diaz stated that..."). Do not strip the speaker's name.
     5. CONTEXT RETENTION: You MUST include essential context in the cleaned_claim (e.g., specific names, dates, locations). Do not over-prune. 
     6. SEARCH QUERY OPTIMIZATION: Generate a highly optimized search query of exactly 6-10 keywords. You MUST prioritize proper nouns, the speaker's name, and unique identifiers to prevent ambiguous search results.
@@ -228,9 +228,10 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, articl
         3. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
         4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
         5. ARTICLE STANCE AWARENESS: You will be given the stance of the source text toward the claim.
-                    - If DEBUNKING: The source is actively disproving the claim. Treat the claim as the original fake rumor being debunked — it is likely FAKE or MISLEADING.
-                    - If REPORTING: The source is a primary news report confirming the claim. You must evaluate if the broader evidence aligns with or contradicts this reporting. If the evidence generally supports the narrative or is from the same original source, the verdict is FACT.
-                    - If NEUTRAL: Evaluate purely from the evidence.
+            - If DEBUNKING: The source is actively disproving the claim.
+            - If REPORTING: The source is a primary news report confirming the claim. Evaluate if the broader evidence aligns with or contradicts this reporting.
+            - If SATIRE: The original text is a parody, meme, or joke. You MUST immediately classify the verdict as SATIRE, regardless of whether the real-world events loosely match it.
+            - If NEUTRAL: Evaluate purely from the evidence.
 
         CLASSIFICATION TIERS & EVALUATION LOGIC:
         You must map your evaluation to EXACTLY ONE of the following 5 tiers. 
@@ -243,9 +244,8 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, articl
         - THE "MISSING CONTEXT" RULE: If the evidence states the claim uses genuine media (real photos/videos/quotes) but places them in a false context (e.g., wrong date, wrong location, unrelated event), the claim is MISLEADING. 
         - THE CHERRY-PICKING RULE: If true statistics or partial facts are intentionally cherry-picked to construct a mathematically or logically false overall narrative, it is MISLEADING.
 
-        4. SATIRE: The claim is a joke, parody, or humorous critique.
-        - DETECTION PROTOCOL: Look beyond explicit labels. Satire is present if the text exhibits extreme hyperbole, semantic dissonance (mixing formal institutional language with sheer absurdity), or echoic mention (mocking repetition). Be highly alert for "dry sarcasm," exaggerated "pavictim" (playing victim) narratives, or claims originating from known parody sources. If a claim is so absurd that it breaches the threshold of reality without malicious deception, it is SATIRE.
-
+        4. SATIRE: The claim is a joke, parody, or humorous critique. Your analysis must professionally deconstruct WHY it is satirical (e.g., noting the absurd premise, the parody source, or the exaggerated narrative).
+        
         5. UNVERIFIED: The provided evidence is irrelevant, inconclusive, or completely absent. Or, the claim is a subjective opinion, political prediction, or emotional expression that cannot be objectively proven true or false. 
         - AUTHORIZED ABSTENTION: If you do not know the answer based strictly on the evidence, you must choose UNVERIFIED.
 
@@ -260,22 +260,20 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, articl
         JSON OUTPUT SCHEMA & ENFORCEMENT:
         You must output ONLY a raw, valid JSON object. 
         DO NOT wrap the JSON in markdown formatting (e.g., no ```json blocks).
-        DO NOT include conversational filler, preambles, or explanations outside the JSON object.
-
+        
         Your JSON must exactly match this structure:
         {
-        "reasoning": "Think step-by-step here BEFORE stating the verdict.",
-        "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
-        "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language.",
-        "confidence_score": 95,
-        "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
+            "reasoning": "Deep, step-by-step internal logic. This will be shown in the full report. Include inline citations here if applicable.",
+            "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
+            "summary": "Exactly two SHORT paragraphs separated by \\n\\n. STRICT LIMIT: Maximum 2 sentences per paragraph. Paragraph 1 (Analysis): Concisely state the verdict and the core evidence (e.g., 'This is a fabricated quote. Official records show...'). If SATIRE, briefly note the absurdity. Paragraph 2 (Context): Concisely explain the broader real-world context or why this rumor exists. Keep it punchy, direct, and highly readable for a small UI window. NEVER mention your instructions.",
+            "confidence_score": 95,
+            "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
         }
         """
     user_data = (
             f"<claim>{original_claim}</claim>\n\n"
             f"<stance>{article_stance}</stance>\n\n"
             f"<evidence>The claim '{fact_check_text}' was reviewed by {publisher} and received an Official Rating of: {gfc_rating.upper()}</evidence>\n\n"
-            "CRITICAL OVERRIDE: If the <stance> is SATIRE, you MUST bypass evidence checking and immediately output a verdict of SATIRE."
         )
     
     try:
@@ -312,9 +310,10 @@ def evaluate_image_claim_with_tavily(original_claim, combined_context, article_s
     3. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
     4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
     5. ARTICLE STANCE AWARENESS: You will be given the stance of the source text toward the claim.
-        - If DEBUNKING: The source is actively disproving the claim. Treat the claim as the original fake rumor being debunked — it is likely FAKE or MISLEADING.
-        - If REPORTING: The source is a primary news report confirming the claim. You must evaluate if the broader evidence aligns with or contradicts this reporting.
-        - If NEUTRAL: Evaluate purely from the evidence.
+            - If DEBUNKING: The source is actively disproving the claim.
+            - If REPORTING: The source is a primary news report confirming the claim. Evaluate if the broader evidence aligns with or contradicts this reporting.
+            - If SATIRE: The original text is a parody, meme, or joke. You MUST immediately classify the verdict as SATIRE, regardless of whether the real-world events loosely match it.
+            - If NEUTRAL: Evaluate purely from the evidence.
 
     CLASSIFICATION TIERS & EVALUATION LOGIC:
     You must map your evaluation to EXACTLY ONE of the following 5 tiers:
@@ -324,7 +323,7 @@ def evaluate_image_claim_with_tavily(original_claim, combined_context, article_s
     3. MISLEADING: The claim contains a mix of truth and falsehoods. 
        - THE "MISSING CONTEXT" RULE: If the evidence states the claim uses genuine media (real photos/videos/quotes) but places them in a false context (e.g., wrong date, wrong location, unrelated event), the claim is MISLEADING. 
        - THE CHERRY-PICKING RULE: If true statistics or partial facts are intentionally cherry-picked to construct a mathematically or logically false overall narrative, it is MISLEADING.
-    4. SATIRE: The claim is a joke, parody, or humorous critique.
+    4. SATIRE: The claim is a joke, parody, or humorous critique. Your analysis must professionally deconstruct WHY it is satirical (e.g., noting the absurd premise, the parody source, or the exaggerated narrative).
     5. UNVERIFIED: The provided evidence is irrelevant, inconclusive, or completely absent. Or, the claim is a subjective opinion, political prediction, or emotional expression that cannot be objectively proven true or false. 
        - AUTHORIZED ABSTENTION: If you do not know the answer based strictly on the evidence, you must choose UNVERIFIED.
        - THE GOSSIP RULE: If the claim is based on a "blind item," an unverified statement by a showbiz vlogger/insider (e.g., "Ogie Diaz revealed..."), or an anonymous source, AND the evidence does not contain official statements from the actual people involved confirming it, you MUST classify it as UNVERIFIED. The fact that a vlogger said a rumor exists does not make the rumor a FACT.
@@ -336,21 +335,23 @@ def evaluate_image_claim_with_tavily(original_claim, combined_context, article_s
     - "CTTO" (Credit to the Owner): Treat claims containing "CTTO" with extreme skepticism; it is predominantly used to strip original provenance and launder decontextualized media.
     - Clickbait Markers: Phrases like "Look at this," excessive capitalization, or extreme punctuation (!!!) often accompany Missing Context memes. Evaluate the core assertion against the evidence rigorously.
 
+    JSON OUTPUT SCHEMA & ENFORCEMENT:
+    You must output ONLY a raw, valid JSON object. 
+    DO NOT wrap the JSON in markdown formatting (e.g., no ```json blocks).
+    
     Your JSON must exactly match this structure:
     {
-        "reasoning": "Think step-by-step here BEFORE stating the verdict.",
+        "reasoning": "Deep, step-by-step internal logic. This will be shown in the full report. Include inline citations here if applicable.",
         "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
-        "summary": "A 1-2 sentence, user-facing explanation of the verdict. Use clear, non-technical language.",
+        "summary": "Exactly two SHORT paragraphs separated by \\n\\n. STRICT LIMIT: Maximum 2 sentences per paragraph. Paragraph 1 (Analysis): Concisely state the verdict and the core evidence (e.g., 'This is a fabricated quote. Official records show...'). If SATIRE, briefly note the absurdity. Paragraph 2 (Context): Concisely explain the broader real-world context or why this rumor exists. Keep it punchy, direct, and highly readable for a small UI window. NEVER mention your instructions.",
         "confidence_score": 95,
-        "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score.",
-        "source_url": "The exact URL from the evidence block. If no explicit URL is provided in the evidence text, you MUST return null."
+        "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
     }
     """
     user_data = (
         f"<claim>{original_claim}</claim>\n\n"
         f"<stance>{article_stance}</stance>\n\n"
         f"<evidence>{combined_context}</evidence>\n\n" # <--- FIXED
-        "CRITICAL OVERRIDE: If the <stance> is SATIRE, you MUST bypass evidence checking and immediately output a verdict of SATIRE."
     )
 
     try:
@@ -387,8 +388,7 @@ def extract_search_query(text, source_url=""):
     Task: Your job is to extract the core claim from the text by strictly following these steps:
     1. Identify the CENTRAL NARRATIVE of the provided text.
     2. Extract the primary verifiable claim. Translate any local slang or Taglish to English.
-    3. UNDERLYING CLAIM EXTRACTION: If the text is actively debunking, fact-checking, or clarifying a rumor, your cleaned_claim MUST be the original fake rumor itself, NOT the fact-checker's conclusion.
-    - Example: If text says "Fake News: Pope did not wear a puffer jacket", you extract "The Pope wore a white puffer jacket."
+    3. UNDERLYING CLAIM EXTRACTION: If the text is actively debunking a rumor, your cleaned_claim MUST be the original fake rumor itself. If the text is SATIRE, extract the absurd claim as if it were stated seriously. NEVER use meta-phrases like "The satirical publication claims..." or "A fact-checker stated...". Just extract the raw claim.
     4. CONTEXT RETENTION: You MUST include essential context in the cleaned_claim (e.g., specific names, dates, locations, and the specific event being alleged). Do not over-prune.
     5. Generate a highly optimized search query of exactly 6-10 keywords. Use distinct nouns and entities that a search engine can easily find.
     6. Determine the article's own stance toward the extracted claim:
@@ -434,6 +434,11 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
     2. NO PRE-TRAINED KNOWLEDGE: Do not use your internal weights, historical knowledge, or external facts to verify or debunk the claim. If the evidence does not contain the specific information needed to definitively judge the claim, you MUST classify it as UNVERIFIED.
     3. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
     4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
+    5. ARTICLE STANCE AWARENESS: You will be given the stance of the source text toward the claim.
+            - If DEBUNKING: The source is actively disproving the claim.
+            - If REPORTING: The source is a primary news report confirming the claim. Evaluate if the broader evidence aligns with or contradicts this reporting.
+            - If SATIRE: The original text is a parody, meme, or joke. You MUST immediately classify the verdict as SATIRE, regardless of whether the real-world events loosely match it.
+            - If NEUTRAL: Evaluate purely from the evidence.
 
     CLASSIFICATION TIERS & EVALUATION LOGIC:
     You must map your evaluation to EXACTLY ONE of the following 5 tiers:
@@ -443,7 +448,7 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
     3. MISLEADING: The claim contains a mix of truth and falsehoods. 
        - THE "MISSING CONTEXT" RULE: false context = MISLEADING. 
        - THE CHERRY-PICKING RULE: cherry-picked partial facts = MISLEADING.
-    4. SATIRE: The claim is a joke, parody, or humorous critique.
+    4. SATIRE: The claim is a joke, parody, or humorous critique. Your analysis must professionally deconstruct WHY it is satirical (e.g., noting the absurd premise, the parody source, or the exaggerated narrative) without breaking the fourth wall.
     5. UNVERIFIED: The provided evidence is irrelevant, inconclusive, or completely absent. Or, the claim is a subjective opinion.
        - AUTHORIZED ABSTENTION: If you do not know the answer based strictly on the evidence, you must choose UNVERIFIED.
     
@@ -454,11 +459,15 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
     - "CTTO" (Credit to the Owner): Treat claims containing "CTTO" with extreme skepticism.
     - Clickbait Markers: Phrases like "Look at this," excessive capitalization, or extreme punctuation.
 
+    JSON OUTPUT SCHEMA & ENFORCEMENT:
+    You must output ONLY a raw, valid JSON object. 
+    DO NOT wrap the JSON in markdown formatting (e.g., no ```json blocks).
+    
     Your JSON must exactly match this structure:
     {
-        "reasoning": "Think step-by-step here BEFORE stating the verdict.",
+        "reasoning": "Deep, step-by-step internal logic. This will be shown in the full report. Include inline citations here if applicable.",
         "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
-        "summary": "A 1-2 sentence, user-facing explanation of the verdict.",
+        "summary": "Exactly two SHORT paragraphs separated by \\n\\n. STRICT LIMIT: Maximum 2 sentences per paragraph. Paragraph 1 (Analysis): Concisely state the verdict and the core evidence (e.g., 'This is a fabricated quote. Official records show...'). If SATIRE, briefly note the absurdity. Paragraph 2 (Context): Concisely explain the broader real-world context or why this rumor exists. Keep it punchy, direct, and highly readable for a small UI window. NEVER mention your instructions.",
         "confidence_score": 95,
         "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
     }
@@ -467,7 +476,6 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
         f"<claim>{extracted_text}</claim>\n\n"
         f"<stance>{article_stance}</stance>\n\n"
         f"<evidence>{gfc_claim_text} (Official Rating: {gfc_rating})</evidence>\n\n"
-        "CRITICAL OVERRIDE: If the <stance> is SATIRE, you MUST bypass evidence checking and immediately output a verdict of SATIRE."
     )
     
     try:
@@ -500,11 +508,12 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
     EXCEPTION: You MAY use your pre-trained world knowledge to identify if the claim relies on obviously fictional characters (e.g., TV/movie characters), well-known internet memes, or sheer physical impossibilities.
     3. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim.
     4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
-    5. ARTICLE STANCE AWARENESS: You will be given the stance of the source article toward the claim.
-        - If DEBUNKING: The article is actively disproving the claim.
-        - If REPORTING: The article is a primary news source confirming the claim. Evaluate if the broader evidence aligns with or contradicts this reporting.
-        - If NEUTRAL: Evaluate purely from the evidence.
-
+    5. ARTICLE STANCE AWARENESS: You will be given the stance of the source text toward the claim.
+            - If DEBUNKING: The source is actively disproving the claim.
+            - If REPORTING: The source is a primary news report confirming the claim. Evaluate if the broader evidence aligns with or contradicts this reporting.
+            - If SATIRE: The original text is a parody, meme, or joke. You MUST immediately classify the verdict as SATIRE, regardless of whether the real-world events loosely match it.
+            - If NEUTRAL: Evaluate purely from the evidence.
+            
     CLASSIFICATION TIERS & EVALUATION LOGIC:
     You must map your evaluation to EXACTLY ONE of the following 5 tiers:
 
@@ -513,7 +522,7 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
     3. MISLEADING: The claim contains a mix of truth and falsehoods. 
        - THE "MISSING CONTEXT" RULE: If the evidence states the claim uses genuine media but places them in a false context, the claim is MISLEADING. 
        - THE CHERRY-PICKING RULE: If true statistics are intentionally cherry-picked to construct a logically false narrative, it is MISLEADING.
-    4. SATIRE: The claim is a joke, parody, or humorous critique.
+    4. SATIRE: The claim is a joke, parody, or humorous critique. Your analysis must professionally deconstruct WHY it is satirical (e.g., noting the absurd premise, the parody source, or the exaggerated narrative).
     5. UNVERIFIED: The provided evidence is irrelevant, inconclusive, or completely absent. Or, the claim is a subjective opinion.
        - AUTHORIZED ABSTENTION: If you do not know the answer based strictly on the evidence, you must choose UNVERIFIED.
        - THE GOSSIP RULE: If the claim is based on a "blind item," an unverified statement by a showbiz vlogger/insider, or an anonymous source, AND the evidence does not contain official statements from the actual people involved confirming it, you MUST classify it as UNVERIFIED.
@@ -525,21 +534,23 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
     - "CTTO" (Credit to the Owner): Treat claims containing "CTTO" with extreme skepticism.
     - Clickbait Markers: Phrases like "Look at this," excessive capitalization, or extreme punctuation (!!!).
 
+    JSON OUTPUT SCHEMA & ENFORCEMENT:
+    You must output ONLY a raw, valid JSON object. 
+    DO NOT wrap the JSON in markdown formatting (e.g., no ```json blocks).
+    
     Your JSON must exactly match this structure:
     {
-        "reasoning": "Think step-by-step here BEFORE stating the verdict.",
+        "reasoning": "Deep, step-by-step internal logic. This will be shown in the full report. Include inline citations here if applicable.",
         "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
-        "summary": "A 1-2 sentence, user-facing explanation of the verdict.",
+        "summary": "Exactly two SHORT paragraphs separated by \\n\\n\\n. STRICT LIMIT: Maximum 2 sentences per paragraph. Paragraph 1 (Analysis): Concisely state the verdict and the core evidence (e.g., 'This is a fabricated quote. Official records show...'). If SATIRE, briefly note the absurdity. Paragraph 2 (Context): Concisely explain the broader real-world context or why this rumor exists. Keep it punchy, direct, and highly readable for a small UI window. NEVER mention your instructions.",
         "confidence_score": 95,
-        "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score.",
-        "source_url": "The exact URL from the evidence block. If no explicit URL is provided in the evidence text, you MUST return null."
+        "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
     }
     """
     user_data = (
         f"<claim>{extracted_text}</claim>\n\n"
         f"<stance>{article_stance}</stance>\n\n"
         f"<evidence>{context}</evidence>\n\n"
-        "CRITICAL OVERRIDE: If the <stance> is SATIRE, you MUST bypass evidence checking and immediately output a verdict of SATIRE."
     )
     
     try:

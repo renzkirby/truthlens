@@ -1,150 +1,88 @@
 import React from "react";
 import { renderToString } from "react-dom/server";
-import { Sparkles, ShieldCheck } from "lucide-react";
+import { Sparkles, ShieldCheck, Flag, CheckCircle, XCircle, AlertTriangle, HelpCircle, Activity, Search, Users, ExternalLink } from "lucide-react";
 import { state } from "./state.js";
 
-const sparklesIconSVG = renderToString(React.createElement(Sparkles, { size: 14 }));
-const shieldCheckSVG = renderToString(React.createElement(ShieldCheck, { size: 14 }));
+// Pre-render icons
+const iconSparkles = renderToString(React.createElement(Sparkles, { size: 14 }));
+const iconShield = renderToString(React.createElement(ShieldCheck, { size: 16 }));
+const iconFlag = renderToString(React.createElement(Flag, { size: 16 }));
+const iconCheck = renderToString(React.createElement(CheckCircle, { size: 16 }));
+const iconX = renderToString(React.createElement(XCircle, { size: 16 }));
+const iconAlert = renderToString(React.createElement(AlertTriangle, { size: 16 }));
+const iconHelp = renderToString(React.createElement(HelpCircle, { size: 16 }));
+const iconActivity = renderToString(React.createElement(Activity, { size: 12 }));
+const iconSearch = renderToString(React.createElement(Search, { size: 16 }));
+const iconUsers = renderToString(React.createElement(Users, { size: 16 }));
+const iconExternal = renderToString(React.createElement(ExternalLink, { size: 12 }));
+
+// Helper function to get UI properties based on verdict
+function getVerdictUI(verdict) {
+   switch (verdict) {
+      case "FACT": return { color: "#10b981", class: "fact", icon: iconCheck, text: "Fact" };
+      case "FAKE": return { color: "#ef4444", class: "fake", icon: iconX, text: "Fake" };
+      case "MISLEADING": return { color: "#f59e0b", class: "misleading", icon: iconAlert, text: "Misleading" };
+      case "SATIRE": return { color: "#8b5cf6", class: "satire", icon: iconSparkles, text: "Satire" };
+      default: return { color: "#6b7280", class: "unverified", icon: iconHelp, text: "Unverified" };
+   }
+}
 
 export function displayResultCard(claim) {
    const {
-      id,
-      verdict,
-      summary,
-      confidence_score,
-      source_type,
-      source_url,
-      sources,
-      is_ai_generated,
-      has_community_verdict,
-      thread_id,
-      final_verdict,
-      ai_verdict,
-      score_context,
+      id, verdict, summary, confidence_score, thread_id, final_verdict
    } = claim;
    const deepAnalysisUrl = `http://localhost:5174/analysis/${id}`;
 
-   // Use community verdict if available, otherwise AI verdict
    const displayVerdict = final_verdict || verdict;
-   let badgeColor = "#6b7280";
-
-   switch (displayVerdict) {
-      case "FACT":
-         badgeColor = "#0e9f6e";
-         break;
-      case "FAKE":
-         badgeColor = "#e02424";
-         break;
-      case "MISLEADING":
-         badgeColor = "#f97316";
-         break;
-      case "SATIRE":
-         badgeColor = "#8b5cf6";
-         break;
-      case "UNVERIFIED":
-         badgeColor = "#ebdc09";
-         break;
-      case "OUT_OF_SCOPE":
-         badgeColor = "#6b7280";
-         break;
-   }
-
-   let confidence_bar_color = "#6b7280";
-   if (confidence_score < 40) confidence_bar_color = "#e02424";
-   else if (confidence_score >= 40 && confidence_score < 70) confidence_bar_color = "#ebdc09";
-   else if (confidence_score >= 70) confidence_bar_color = "#0e9f6e";
-
-   const aiWarningHTML = is_ai_generated
-      ? `<div class="truthlens-banner truthlens-ai-warning">
-            <span class="truthlens-banner-icon">${sparklesIconSVG}</span>
-            AI-GENERATED MEDIA DETECTED
-         </div>`
-      : "";
-
-   // Community verdict banner
-   const communityBannerHTML = has_community_verdict
-      ? `<div class="truthlens-banner truthlens-community-verified">
-            <span class="truthlens-banner-icon">${shieldCheckSVG}</span>
-            COMMUNITY VERIFIED
-         </div>`
-      : "";
+   const ui = getVerdictUI(displayVerdict);
 
    const card = document.createElement("div");
    card.id = "truthlens-result-card";
-   card.className = "truthlens-card";
-   let sourcesHTML = "";
-   const evidenceList = sources && sources.length > 0 ? sources : source_url ? [source_url] : [];
-
-   if (displayVerdict !== "OUT_OF_SCOPE" && evidenceList.length > 0) {
-      sourcesHTML = `
-         <div style="margin-top: 12px; font-size: 11px;">
-            <strong style="color: #374151; display: block; margin-bottom: 4px;">Sources:</strong>
-            <div style="display: flex; flex-direction: column; gap: 4px;">
-               ${evidenceList
-                  .map((src) => {
-                     // Handle both the old string format and the new rich object format
-                     const urlStr = typeof src === "string" ? src : src.url;
-                     return `
-                  <a href="${urlStr}" target="_blank" style="color: #4f46e5; text-decoration: none; background: #f9fafb; padding: 4px 8px; border-radius: 4px; border: 1px solid #e5e7eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                     ${urlStr}
-                  </a>
-                  `;
-                  })
-                  .join("")}
-            </div>
-         </div>
-      `;
-   }
+   // Apply the color-coded border class to the entire card
+   card.className = `truthlens-card verdict-${ui.class}`;
 
    card.innerHTML = `
       <div class="truthlens-header">
-         <strong class="truthlens-title">TruthLens</strong>
+         <div class="truthlens-title" style="color: ${ui.color};">
+            ${iconFlag} CLAIM FLAGGED
+         </div>
          <button id="truthlens-close-btn" class="truthlens-close-btn">&times;</button>
       </div>
-      <div class="truthlens-verdict-text">
-         This post is <span class="truthlens-verdict" style="background-color: ${badgeColor};">${displayVerdict}</span>
+
+      <div class="truthlens-badge badge-${ui.class}">
+         ${ui.icon} ${ui.text}
       </div>
 
-      ${communityBannerHTML}
-      ${aiWarningHTML}
       <div class="truthlens-summary-box">
-         <div class="truthlens-summary-title">${has_community_verdict ? "Community Verdict Summary" : "AI Summary"}</div>
-         <div style="font-size: 14px; line-height: 1.4;">${summary}</div>
+         <div class="truthlens-summary-title">
+             ${iconSparkles} AI SUMMARY
+         </div>
+         <div class="truthlens-summary-text">${summary || "No summary available."}</div>
       </div>
 
-      <div class="truthlens-confidence-score">Confidence Score: <strong>${confidence_score}%</strong></div>
-      <div class="truthlens-confidence-bar">
-         <div class="truthlens-confidence-fill" style="width: ${confidence_score}%; background-color: ${confidence_bar_color};"></div>
+      <div class="truthlens-confidence-container">
+         <div class="truthlens-confidence-header">
+            <div class="truthlens-confidence-title">
+               ${iconActivity} AI CONFIDENCE
+            </div>
+            <div class="truthlens-confidence-value" style="color: ${ui.color};">${confidence_score || 0}%</div>
+         </div>
+         <div class="truthlens-confidence-bar">
+            <div class="truthlens-confidence-fill" style="width: ${confidence_score || 0}%; background: linear-gradient(90deg, #10b981 0%, ${ui.color} 100%);"></div>
+         </div>
+         <div class="truthlens-score-context">
+            ${confidence_score < 50 ? "Low confidence — human review recommended" : "High confidence based on available data"}
+         </div>
       </div>
-      ${
-         score_context
-            ? `
-      <div class="truthlens-score-context" style="font-size: 12px; color: #6b7280; margin-top: 8px; line-height: 1.3;">
-         <strong>Context:</strong> ${score_context}
-      </div>
-      <br>
-      `
-            : ""
+
+      ${thread_id 
+         ? `<a href='http://localhost:5174/thread/detail/${thread_id}' target='_blank' class='truthlens-primary-btn'>${iconUsers} View Community Discussion</a>`
+         : `<a href='http://localhost:5174/thread/create?claim_id=${id}' target='_blank' class='truthlens-primary-btn'>${iconUsers} Ask the Community?</a>`
       }
 
-      ${sourcesHTML}
-
-      <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 8px;">
-         <a href="${deepAnalysisUrl}" target="_blank" style="display: flex; justify-content: center; align-items: center; gap: 6px; background: #4f46e5; color: #fff; padding: 10px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 13px; transition: all 0.2s;">
-            View Full Report →
-         </a>
-
-         ${
-            thread_id
-               ? `<a href='http://localhost:5174/thread/detail/${thread_id}' target='_blank' style='display: block; text-align: center; background: #f3f4f6; padding: 8px; border-radius: 6px; text-decoration: none; color: #4f46e5; font-weight: 600; border: 1px solid #e5e7eb;'>View Community Discussion</a>`
-               : `<a href='http://localhost:5174/thread/create?claim_id=${id}' target='_blank' style='display: block; text-align: center; background: #eff6ff; padding: 8px; border-radius: 6px; text-decoration: none; color: #4f46e5; font-weight: 600; border: 1px dashed #bfdbfe;'>Ask the community</a>`
-         }
-      </div>
-
-
-      <div class="truthlens-footer">Source Type: ${has_community_verdict ? "Community Moderation" : source_type}</div>
-
-      
+      <a href="${deepAnalysisUrl}" target="_blank" class="truthlens-dashboard-link">
+         View full analysis in dashboard ${iconExternal}
+      </a>
    `;
 
    document.body.appendChild(card);
@@ -158,28 +96,29 @@ export function displayResultCard(claim) {
 }
 
 export function displayLoadingCard(customMsg) {
-   const msg =
-      typeof customMsg === "string"
-         ? customMsg
-         : state.isAnalyzing
-           ? "Analyzing the image, please wait..."
-           : "Analyzing Done";
+   const msg = typeof customMsg === "string" ? customMsg : "Analyzing claim...";
 
    const card = document.createElement("div");
    card.id = "truthlens-loading-card";
    card.className = "truthlens-card";
    card.innerHTML = `
-      <div class="truthlens-header">
-         <strong class="truthlens-title">TruthLens</strong>
+      <button id="truthlens-load-close-btn" class="truthlens-close-btn" style="position: absolute; top: 12px; right: 12px;">&times;</button>
+      <div class="truthlens-spinner"></div>
+      <div class="truthlens-loading-title">${msg}</div>
+      <div class="truthlens-loading-progress-bar">
+         <div class="truthlens-loading-progress-fill"></div>
       </div>
-      <div class="truthlens-loading">
-         <div class="truthlens-spinner"></div>
-         <div class='truthlens-loading-text'>${msg}</div>
+      <div class="truthlens-loading-subtitle">
+         ${iconSearch} Querying fact-check databases
       </div>
    `;
    document.body.appendChild(card);
+   void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
+   
+   document.getElementById("truthlens-load-close-btn").addEventListener("click", removeLoadingCard);
 }
+
 
 export function displayDeepfakeResultCard(data) {
    const { ai_probability, is_fake, summary } = data;

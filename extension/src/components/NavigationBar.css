@@ -1,10 +1,12 @@
 /* NavigationBar.css */
 .extension-navigation-bar {
      border-bottom: 1.5px solid var(--border-default);
+     background: var(--bg-surface);
 }
 
 .extension-nav-links {
      display: flex;
+     justify-content: space-between;
 }
 
 .nav-tab {
