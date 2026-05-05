@@ -34,8 +34,8 @@ import "./UserProfile.css";
  * @returns {object} { label, color }
  */
 function getTrustLevel(score) {
-   if (score >= 90) return { label: "Expert", color: "#22c55e" };
-   if (score >= 75) return { label: "Trusted", color: "#3b82f6" };
+   if (score >= 90) return { label: "Expert Analyst", color: "#22c55e" };
+   if (score >= 75) return { label: "Trusted Analyst", color: "#3b82f6" };
    if (score >= 60) return { label: "Contributor", color: "#f97316" };
    if (score >= 40) return { label: "Newcomer", color: "#4f46e5" };
    if (score < 40) return { label: "At Risk", color: "#dc2626" };
@@ -979,11 +979,28 @@ function UserProfile() {
                                  className="modal-user-item"
                                  onClick={() => {
                                     setModalType(null); // Close modal
-                                    navigate(`/user/${u.username}`); // <--- FAST REACT NAVIGATION!
+                                    navigate(`/user/${u.username}`);
                                  }}>
                                  {/* Added safe chaining to prevent crashes */}
-                                 <div className="modal-user-avatar">
-                                    {u?.username?.[0]?.toUpperCase() || "?"}
+                                 <div
+                                    className="modal-user-avatar"
+                                    style={{ overflow: "hidden" }}>
+                                    {u.avatar_url ? (
+                                       <img
+                                          src={u.avatar_url}
+                                          alt={`${u.username}'s avatar`}
+                                          style={{
+                                             width: "100%",
+                                             height: "100%",
+                                             objectFit: "cover",
+                                          }}
+                                       />
+                                    ) : (
+                                       <Icons
+                                          name="user"
+                                          size={20}
+                                       />
+                                    )}
                                  </div>
                                  <div className="modal-user-info">
                                     <strong>{u?.username || "Unknown"}</strong>
@@ -1038,7 +1055,7 @@ function UserProfile() {
                            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
                               <div
                                  className="profile-avatar"
-                                 style={{ width: "60px", height: "60px", overflow: "hidden" }}>
+                                 style={{ width: "100%", height: "100%", overflow: "hidden" }}>
                                  {editAvatarBase64 ? (
                                     <img
                                        src={editAvatarBase64}

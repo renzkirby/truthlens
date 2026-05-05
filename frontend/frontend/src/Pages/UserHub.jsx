@@ -515,7 +515,8 @@ export default function UserHub() {
                   <div className="hub-rep-info">
                      <h2 className="hub-rank-title">{reputation.current_rank}</h2>
                      <p className="hub-rank-sub">
-                        Next Milestone: <strong>{reputation.points_to_next_rank}</strong> pt needed
+                        Next Milestone: <strong>{reputation.points_to_next_rank}</strong> pt/s
+                        needed
                      </p>
                      <div className="hub-progress-bar">
                         <div
