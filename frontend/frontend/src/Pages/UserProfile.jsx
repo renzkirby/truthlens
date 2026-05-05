@@ -34,9 +34,12 @@ import "./UserProfile.css";
  * @returns {object} { label, color }
  */
 function getTrustLevel(score) {
-   if (score >= 80) return { label: "Expert", color: "#22c55e" };
-   if (score >= 60) return { label: "Trusted", color: "#3b82f6" };
-   if (score >= 40) return { label: "Contributor", color: "#f97316" };
+   if (score >= 90) return { label: "Expert", color: "#22c55e" };
+   if (score >= 75) return { label: "Trusted", color: "#3b82f6" };
+   if (score >= 60) return { label: "Contributor", color: "#f97316" };
+   if (score >= 40) return { label: "Newcomer", color: "#4f46e5" };
+   if (score < 40) return { label: "At Risk", color: "#dc2626" };
+   if (score <= 25) return { label: "Untrusted", color: "#9ca3af" };
    return { label: "Newcomer", color: "var(--text-muted)" };
 }
 
@@ -628,7 +631,6 @@ function UserProfile() {
                         <strong>{followersCount}</strong> Followers
                      </span>
                   </div>
-
                </div>
             </div>
             {/* ── End Header ── */}
@@ -1102,23 +1104,37 @@ function UserProfile() {
             {/* 7. Mobile-Only Profile Actions (Since top-nav is hidden on mobile) */}
             {isOwnProfile && (
                <div className="mobile-profile-nav">
-                  <button 
+                  <button
                      className="mobile-nav-pill"
-                     onClick={() => navigate(isModeratorRole(authUser?.role) ? "/moderation" : "/dashboard")}>
-                     <Icons name={isModeratorRole(authUser?.role) ? "shield" : "dashboard"} size={16} /> Dashboard
+                     onClick={() =>
+                        navigate(isModeratorRole(authUser?.role) ? "/moderation" : "/dashboard")
+                     }>
+                     <Icons
+                        name={isModeratorRole(authUser?.role) ? "shield" : "dashboard"}
+                        size={16}
+                     />{" "}
+                     Dashboard
                   </button>
-                  <button 
+                  <button
                      className="mobile-nav-pill"
                      onClick={() => navigate("/settings")}>
-                     <Icons name="settings" size={16} /> Settings
+                     <Icons
+                        name="settings"
+                        size={16}
+                     />{" "}
+                     Settings
                   </button>
-                  <button 
+                  <button
                      className="mobile-nav-pill danger"
                      onClick={() => {
                         logout();
                         navigate("/login");
                      }}>
-                     <Icons name="logout" size={16} /> Log Out
+                     <Icons
+                        name="logout"
+                        size={16}
+                     />{" "}
+                     Log Out
                   </button>
                </div>
             )}
