@@ -71,8 +71,12 @@ const ResultCard = ({ result, onEscalate }) => {
                : "var(--verdict-fake-border)";
    }
 
-   // Prevent users from escalating non-news/junk claims to the community
-   const showEscalate = (result.verdict === "UNVERIFIED" || result.confidence_score < 50) && result.verdict !== "OUT_OF_SCOPE";
+   // NEW: Allow community action for everything EXCEPT Out of Scope
+   const canAskCommunity = result.verdict !== "OUT_OF_SCOPE";
+   
+   // Check if this is an escalation (AI is confused) or just a discussion (AI is confident)
+   const isEscalation = result.verdict === "UNVERIFIED" || result.confidence_score < 50;
+
 
    const evidenceList =
       result.sources && result.sources.length > 0
@@ -192,15 +196,17 @@ const ResultCard = ({ result, onEscalate }) => {
                   className="view-thread-btn">
                   View Community Discussion
                </a>
-            ) : showEscalate && result.id ? (
+            ) : canAskCommunity && result.id ? (
                <button
                   className="escalate-btn"
-                  onClick={onEscalate}>
+                  onClick={onEscalate}
+                  style={!isEscalation ? { background: '#f3f4f6', borderColor: '#e5e7eb', color: '#4b5563' } : {}}
+               >
                   <Icons
-                     name="flag"
+                     name={isEscalation ? "flag" : "users"}
                      size={14}
                   />
-                  Ask the Community
+                  {isEscalation ? "Ask the Community" : "Discuss / Contest in Community"}
                </button>
             ) : null}
          </div>

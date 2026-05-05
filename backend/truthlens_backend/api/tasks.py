@@ -368,16 +368,6 @@ def url_fact_check_process(url, claim_id):
     outcome = "completed"
 
     # Step 1 — Extract and clean text from URL
-    if article_stance == "SATIRE":
-        _save_claim(claim_id, {
-            "verdict": "SATIRE",
-            "summary": "This content originates from a known satire publication and is not intended to be factual.",
-            "confidence_score": 99,
-        }, "Satire Detection", cleaned_claim, url)
-        outcome = "satire_stance_shortcut"
-        _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
-        return
-
     url_extract_started_at = time.perf_counter()
     try:
         response = requests.post(
@@ -421,7 +411,7 @@ def url_fact_check_process(url, claim_id):
         return
 
     # Step 2 — OUT_OF_SCOPE check
-    if cleaned.get("cleaned_claim") == "OUT_OF_SCOPE":
+    if cleaned_claim == "OUT_OF_SCOPE":
             logger.info("Claim is out of scope. Saving rejection verdict.")
             _save_claim(
                 claim_id,
@@ -432,11 +422,12 @@ def url_fact_check_process(url, claim_id):
                     "score_context": "No verifiable factual claim detected."
                 },
                 "System Filter",
-                raw_text,
+                cleaned_text,
                 []
             )
             outcome = "completed_out_of_scope"
             return
+    
     if article_stance == "SATIRE":
         _save_claim(claim_id, {
             "verdict": "SATIRE",
