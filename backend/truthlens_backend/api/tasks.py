@@ -285,9 +285,18 @@ def execute_core_text_pipeline(raw_text, claim_id):
                 search_depth="advanced",
                 topic="general",
                 include_answer=True,
-                exclude_domains=[
-                    "facebook.com", "twitter.com", "x.com", 
-                    "tiktok.com", "reddit.com", "instagram.com", "youtube.com"
+                include_domains=[
+                    # Philippine News & Fact Checkers
+                    "gmanetwork.com", "rappler.com", "philstar.com", 
+                    "inquirer.net", "news.abs-cbn.com", "manilabulletin.com",
+                    "bworldonline.com", "pna.gov.ph", "verafiles.org",
+                    
+                    # International News & Wires
+                    "reuters.com", "apnews.com", "bbc.com", "cnn.com", 
+                    "aljazeera.com", "nytimes.com", "theguardian.com",
+                    
+                    # Global Fact-Checkers
+                    "snopes.com", "politifact.com", "factcheck.org", "afp.com"
                 ]
             )
             tavily_results = tavily_response.get("results", [])
@@ -299,8 +308,9 @@ def execute_core_text_pipeline(raw_text, claim_id):
             for i, res in enumerate(tavily_results[:3]):
                 results_context += f"Source {i+1}: {res.get('title', 'No Title')}\nURL: {res.get('url', '')}\nContent: {res.get('content', '')}\n\n"
 
-            combined_context = f"Original Source Text:\n{raw_text}\n\nWeb Search Answer:\n{tavily_answer}\n\nTop Search Results:\n{results_context}"
-            
+            # FIXED: Renamed the label to prevent circular reasoning
+            combined_context = f"Text Extracted From Image (Do NOT use this as evidence to prove itself):\n{raw_text}\n\nWeb Search Answer:\n{tavily_answer}\n\nTop Search Results:\n{results_context}"
+
             tavily_eval_started_at = time.perf_counter()
             ai_verdict = evaluate_image_claim_with_tavily(cleaned_claim, combined_context, article_stance)
             _log_stage(
@@ -523,9 +533,10 @@ def url_fact_check_process(url, claim_id):
             search_depth="advanced",
             topic="general",
             include_answer=True,
-            exclude_domains=[
-                    "facebook.com", "twitter.com", "x.com", 
-                    "tiktok.com", "reddit.com", "instagram.com", "youtube.com"
+            include_domains=[
+                    "gmanetwork.com", "rappler.com", "philstar.com", 
+                    "inquirer.net", "news.abs-cbn.com", "manilabulletin.com",
+                    "bworldonline.com", "pna.gov.ph"
                 ]
         )
 
@@ -538,8 +549,8 @@ def url_fact_check_process(url, claim_id):
         for i, res in enumerate(tavily_results[:3]):
             results_context += f"Source {i+1}: {res.get('title', 'No Title')}\nURL: {res.get('url', '')}\nContent: {res.get('content', '')}\n\n"
 
-        combined_context = f"Original Article Content:\n{cleaned_text[:1500]}\n\nWeb Search Answer:\n{tavily_answer}\n\nTop Search Results:\n{results_context}"
-        
+        # FIXED: Renamed the label to prevent circular reasoning
+        combined_context = f"Original URL Content to Verify (Do NOT use this as evidence to prove itself):\n{cleaned_text[:1500]}\n\nWeb Search Answer:\n{tavily_answer}\n\nTop Search Results:\n{results_context}"
         tavily_eval_started_at = time.perf_counter()
         ai_verdict = evaluate_url_claim_with_tavily(cleaned_claim, combined_context, article_stance)
         _log_stage(

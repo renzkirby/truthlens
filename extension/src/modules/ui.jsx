@@ -29,12 +29,67 @@ function getVerdictUI(verdict) {
 
 export function displayResultCard(claim) {
    const {
-      id, verdict, summary, confidence_score, thread_id, final_verdict
+      id, verdict, summary, confidence_score, thread_id, final_verdict, sources, source_url
    } = claim;
    const deepAnalysisUrl = `http://localhost:5174/analysis/${id}`;
 
    const displayVerdict = final_verdict || verdict;
    const ui = getVerdictUI(displayVerdict);
+
+   // 1. Generate Sources HTML
+   let sourcesHTML = "";
+   const evidenceList = sources && sources.length > 0 ? sources : source_url ? [source_url] : [];
+
+   if (displayVerdict !== "OUT_OF_SCOPE" && evidenceList.length > 0) {
+      sourcesHTML = `
+         <div style="margin-top: 12px; margin-bottom: 16px; font-size: 11px;">
+            <strong style="color: #374151; display: block; margin-bottom: 4px;">Sources:</strong>
+            
+            <div style="display: flex; flex-direction: column; gap: 4px; max-height: 110px; overflow-y: auto; padding-right: 4px;">
+               ${evidenceList
+                  .map((src) => {
+                     const urlStr = typeof src === "string" ? src : src.url;
+                     
+                     // NEW: Try to use the article title. If it doesn't exist, extract the clean domain name (e.g., "gmanetwork.com")
+                     let displayTitle = urlStr;
+                     try {
+                         displayTitle = (typeof src === "object" && src.title) 
+                             ? src.title 
+                             : new URL(urlStr).hostname.replace('www.', '');
+                     } catch (e) {
+                         displayTitle = urlStr;
+                     }
+
+                     return `
+                  <a href="${urlStr}" target="_blank" title="${urlStr}" style="color: #4f46e5; text-decoration: none; background: #f9fafb; padding: 6px 10px; border-radius: 6px; border: 1px solid #e5e7eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; font-weight: 600;">
+                     ${displayTitle}
+                  </a>
+                  `;
+                  })
+                  .join("")}
+            </div>
+         </div>
+      `;
+   }
+
+   // 2. Dynamic Button Logic
+   let primaryButtonHTML = "";
+   let secondaryLinkHTML = "";
+
+   const communityLink = thread_id
+       ? `http://localhost:5174/thread/detail/${thread_id}`
+       : `http://localhost:5174/thread/create?claim_id=${id}`;
+   const communityText = thread_id ? "View Community Discussion" : "Ask the Community";
+
+   if (displayVerdict === "UNVERIFIED") {
+       // UNVERIFIED: Primary CTA is asking the community. Secondary is full report.
+       primaryButtonHTML = `<a href='${communityLink}' target='_blank' class='truthlens-primary-btn'>${iconUsers} ${communityText}</a>`;
+       secondaryLinkHTML = `<a href='${deepAnalysisUrl}' target='_blank' class='truthlens-dashboard-link'>View full report ${iconExternal}</a>`;
+   } else {
+       // VERIFIED (Fact/Fake/etc): Primary CTA is the full report. Secondary is community discussion.
+       primaryButtonHTML = `<a href='${deepAnalysisUrl}' target='_blank' class='truthlens-primary-btn'>${iconSearch} View Full Report</a>`;
+       secondaryLinkHTML = `<a href='${communityLink}' target='_blank' class='truthlens-dashboard-link'>${communityText} ${iconExternal}</a>`;
+   }
 
    const card = document.createElement("div");
    card.id = "truthlens-result-card";
@@ -75,14 +130,10 @@ export function displayResultCard(claim) {
          </div>
       </div>
 
-      ${thread_id 
-         ? `<a href='http://localhost:5174/thread/detail/${thread_id}' target='_blank' class='truthlens-primary-btn'>${iconUsers} View Community Discussion</a>`
-         : `<a href='http://localhost:5174/thread/create?claim_id=${id}' target='_blank' class='truthlens-primary-btn'>${iconUsers} Ask the Community?</a>`
-      }
+      ${sourcesHTML}
 
-      <a href="${deepAnalysisUrl}" target="_blank" class="truthlens-dashboard-link">
-         View full analysis in dashboard ${iconExternal}
-      </a>
+      ${primaryButtonHTML}
+      ${secondaryLinkHTML}
    `;
 
    document.body.appendChild(card);
