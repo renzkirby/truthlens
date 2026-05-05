@@ -223,9 +223,6 @@ def clean_ocr_text(raw_text):
             "article_stance": "NEUTRAL"
         }
 
-    print("clean_ocr_text OUTPUT:", response.text)
-    return _parse_llm_json(response.text)
-
 def is_fact_check_relevant(original_text, fact_check_text):
     """Check if a fact check result is relevant to the original claim or article."""
     system_instructions = (
