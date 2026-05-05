@@ -9,7 +9,7 @@
 
 // ── Verdict Options ──
 // Valid verdict values used throughout the app
-export const VERDICT_OPTIONS = ["FACT", "FAKE", "MISLEADING", "SATIRE", "UNVERIFIED"];
+export const VERDICT_OPTIONS = ["FACT", "FAKE", "MISLEADING", "SATIRE", "UNVERIFIED", "OUT_OF_SCOPE", "PENDING"];
 
 // ── Thread Status Options ──
 // Valid thread/moderation lifecycle states
@@ -59,6 +59,14 @@ export const VERDICT_CONFIG = {
       desc: "Insufficient evidence to confirm or deny.",
       icon: "help-circle",
    },
+   OUT_OF_SCOPE: {
+      color: "var(--verdict-outofscope-text)",
+      bg: "var(--verdict-outofscope-bg)",
+      border: "var(--verdict-outofscope-border)",
+      label: "Out of Scope",
+      desc: "This claim is outside the scope of our analysis.",
+      icon: "x-octagon",
+   },
    PENDING: {
       color: "var(--text-muted)",
       bg: "var(--bg-subtle)",
@@ -77,6 +85,7 @@ export const ACTION_TEXT_MAP = {
    MISLEADING: "Verified",
    SATIRE: "Verified",
    UNVERIFIED: "Needs Evidence",
+   OUT_OF_SCOPE: "Rejected",
    PENDING: "Processing",
 };
 
@@ -150,6 +159,7 @@ export const VERDICT_COLORS = {
    MISLEADING: VERDICT_CONFIG.MISLEADING.color,
    SATIRE: VERDICT_CONFIG.SATIRE.color,
    UNVERIFIED: VERDICT_CONFIG.UNVERIFIED.color,
+   OUT_OF_SCOPE: VERDICT_CONFIG.OUT_OF_SCOPE.color,
    PENDING: VERDICT_CONFIG.PENDING.color,
 };
 
@@ -170,6 +180,7 @@ export const VERDICT_META = {
    misleading: VERDICT_CONFIG.MISLEADING,
    satire: VERDICT_CONFIG.SATIRE,
    unverified: VERDICT_CONFIG.UNVERIFIED,
+   out_of_scope: VERDICT_CONFIG.OUT_OF_SCOPE,
    pending: VERDICT_CONFIG.PENDING,
 };
 
@@ -178,38 +189,45 @@ export const VERDICT_META = {
 // Used in ThreadDetailPage for evidence type selection
 export const EVIDENCE_VERDICT_META = {
    FACT: {
-      color: "#0e9f6e",
-      bg: "#ecfdf5",
-      border: "#6ee7b7",
+      color: "var(--verdict-fact-text)",
+      bg: "var(--verdict-fact-bg)",
+      border: "var(--verdict-fact-border)",
       icon: "check-circle",
       label: "Fact",
    },
    FAKE: {
-      color: "#e02424",
-      bg: "#fef2f2",
-      border: "#fca5a5",
+      color: "var(--verdict-fake-text)",
+      bg: "var(--verdict-fake-bg)",
+      border: "var(--verdict-fake-border)",
       icon: "x-circle",
       label: "Fake",
    },
    MISLEADING: {
-      color: "#d97706",
-      bg: "#fffbeb",
-      border: "#fde68a",
+      color: "var(--verdict-misleading-text)",
+      bg: "var(--verdict-misleading-bg)",
+      border: "var(--verdict-misleading-border)",
       icon: "alert-triangle",
       label: "Misleading",
    },
    SATIRE: {
-      color: "#7c3aed",
-      bg: "#f5f3ff",
-      border: "#c4b5fd",
+      color: "var(--verdict-satire-text)",
+      bg: "var(--verdict-satire-bg)",
+      border: "var(--verdict-satire-border)",
       icon: "wand",
       label: "Satire",
    },
    UNVERIFIED: {
-      color: "#6b7280",
-      bg: "#f9fafb",
-      border: "#e5e7eb",
+      color: "var(--verdict-unverified-text)",
+      bg: "var(--verdict-unverified-bg)",
+      border: "var(--verdict-unverified-border)",
       icon: "help-circle",
       label: "Unverified",
+   },
+   OUT_OF_SCOPE: {
+      color: "var(--verdict-outofscope-text)",
+      bg: "var(--verdict-outofscope-bg)",
+      border: "var(--verdict-outofscope-border)",
+      icon: "x-octagon",
+      label: "Out of Scope",
    },
 };

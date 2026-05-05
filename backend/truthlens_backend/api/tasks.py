@@ -421,11 +421,22 @@ def url_fact_check_process(url, claim_id):
         return
 
     # Step 2 — OUT_OF_SCOPE check
-    if not cleaned_claim or cleaned_claim == "OUT_OF_SCOPE":
-        Claim.objects.filter(id=claim_id).delete()
-        outcome = "out_of_scope_deleted"
-        _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
-        return
+    if cleaned.get("cleaned_claim") == "OUT_OF_SCOPE":
+            logger.info("Claim is out of scope. Saving rejection verdict.")
+            _save_claim(
+                claim_id,
+                {
+                    "verdict": "OUT_OF_SCOPE",
+                    "summary": "This content appears to be a personal statement, opinion, greeting, or non-factual text. TruthLens can only verify objective claims, news, and rumors.",
+                    "confidence_score": 0,
+                    "score_context": "No verifiable factual claim detected."
+                },
+                "System Filter",
+                raw_text,
+                []
+            )
+            outcome = "completed_out_of_scope"
+            return
     if article_stance == "SATIRE":
         _save_claim(claim_id, {
             "verdict": "SATIRE",

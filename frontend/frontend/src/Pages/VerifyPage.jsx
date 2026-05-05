@@ -59,14 +59,20 @@ const VerifyLoadingState = ({ isCompleting }) => {
 const ResultCard = ({ result, onEscalate }) => {
    const config = VERDICT_CONFIG[result.verdict] || VERDICT_CONFIG.UNVERIFIED;
 
-   const confidenceColor =
-      result.confidence_score >= 70
-         ? "var(--verdict-fact-border)"
-         : result.confidence_score >= 40
-           ? "var(--verdict-misleading-border)"
-           : "var(--verdict-fake-border)";
+   let confidenceColor;
+   if (result.verdict === "OUT_OF_SCOPE") {
+      confidenceColor = "var(--verdict-outofscope-border)";
+   } else {
+      confidenceColor =
+         result.confidence_score >= 70
+            ? "var(--verdict-fact-border)"
+            : result.confidence_score >= 40
+               ? "var(--verdict-misleading-border)"
+               : "var(--verdict-fake-border)";
+   }
 
-   const showEscalate = result.verdict === "UNVERIFIED" || result.confidence_score < 50;
+   // Prevent users from escalating non-news/junk claims to the community
+   const showEscalate = (result.verdict === "UNVERIFIED" || result.confidence_score < 50) && result.verdict !== "OUT_OF_SCOPE";
 
    const evidenceList =
       result.sources && result.sources.length > 0

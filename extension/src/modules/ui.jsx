@@ -23,7 +23,9 @@ function getVerdictUI(verdict) {
       case "FAKE": return { color: "#ef4444", class: "fake", icon: iconX, text: "Fake" };
       case "MISLEADING": return { color: "#f59e0b", class: "misleading", icon: iconAlert, text: "Misleading" };
       case "SATIRE": return { color: "#8b5cf6", class: "satire", icon: iconSparkles, text: "Satire" };
-      default: return { color: "#6b7280", class: "unverified", icon: iconHelp, text: "Unverified" };
+      case "OUT_OF_SCOPE": return { color: "#9ca3af", class: "out-of-scope", icon: iconHelp, text: "Out of Scope" };
+      case "UNVERIFIED": return { color: "#ebdc09", class: "unverified", icon: iconHelp, text: "Unverified" };
+      default: return { color: "#ebdc09", class: "unverified", icon: iconHelp, text: "Unverified" };
    }
 }
 
@@ -304,6 +306,9 @@ export function displayCachedResultCard(match) {
          break;
       case "UNVERIFIED":
          badgeColor = "#ebdc09";
+         break;
+      case "OUT_OF_SCOPE":
+         badgeColor = "#9ca3af";
          break;
    }
 

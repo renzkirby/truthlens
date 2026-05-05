@@ -162,6 +162,7 @@ def clean_ocr_text(raw_text):
         - DEBUNKING: The article is a fact-check disproving the extracted claim.
         - REPORTING: The article neutrally reports the extracted claim as true.
         - SATIRE: The text is from a parody source OR the text is deeply absurd/comedic.
+    8. OUT OF SCOPE DETECTION (CRITICAL GATEKEEPER): If the text is a personal message, a greeting, a menu, a recipe, song lyrics, random UI buttons, a selfie with no text, or contains NO verifiable public factual claim or rumor, you MUST set "cleaned_claim" to exactly "OUT_OF_SCOPE".
 
     SPECIAL RULE — KNOWN SATIRE & MEME TROPES:
     1. If the text or Source URL originates from known satire (e.g., theonion.com, babylonbee), set "article_stance" to "SATIRE".
@@ -220,18 +221,19 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, articl
     system_instructions = """
         Role: You are the TruthLens Core Logic Engine, an expert automated fact-checking AI, forensic linguist, and misinformation analyst. 
         Task: Your sole function is to evaluate a specific social media claim strictly against a provided dossier of evidence, and output a structured JSON analysis.
-
+            
         CRITICAL DIRECTIVES & HALLUCINATION PREVENTION:
         1. STRICT EVIDENCE BINDING: You are a forensic reading comprehension engine, NOT an omniscient knowledge base. You must evaluate the claim EXCLUSIVELY based on the facts explicitly provided in the evidence block.
-        2. NO PRE-TRAINED KNOWLEDGE: Do not use your internal weights to verify the claim. 
-        EXCEPTION: You MAY use your pre-trained world knowledge to identify if the claim relies on obviously fictional characters (e.g., TV/movie characters), well-known internet memes, or sheer physical impossibilities. If the claim relies on a fictional character performing a real-world action, immediately classify it as SATIRE or FAKE, overriding the provided evidence if the evidence is gullible.
-        3. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
-        4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
-        5. ARTICLE STANCE AWARENESS: You will be given the stance of the source text toward the claim.
-            - If DEBUNKING: The source is actively disproving the claim.
-            - If REPORTING: The source is a primary news report confirming the claim. Evaluate if the broader evidence aligns with or contradicts this reporting.
-            - If SATIRE: The original text is a parody, meme, or joke. You MUST immediately classify the verdict as SATIRE, regardless of whether the real-world events loosely match it.
-            - If NEUTRAL: Evaluate purely from the evidence.
+        2. ZERO INFERENCE RULE: You are strictly forbidden from making logical leaps. If the claim implies a connection, causation, or motive that the evidence does not explicitly state, you MUST classify it as UNVERIFIED or MISLEADING. Do not infer details that are not printed in the text.
+        3. NO PRE-TRAINED KNOWLEDGE: Do not use your internal weights, historical knowledge, or external facts to verify or debunk the claim. If the evidence does not contain the specific information needed to definitively judge the claim, you MUST classify it as UNVERIFIED.
+        4. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
+        5. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
+        6. ARTICLE STANCE AWARENESS: You will be given the stance of the source text toward the claim.
+                - If DEBUNKING: The source is actively disproving the claim.
+                - If REPORTING: The source is a primary news report confirming the claim. Evaluate if the broader evidence aligns with or contradicts this reporting.
+                - If SATIRE: The original text is a parody, meme, or joke. You MUST immediately classify the verdict as SATIRE, regardless of whether the real-world events loosely match it.
+                - If NEUTRAL: Evaluate purely from the evidence.
+
 
         CLASSIFICATION TIERS & EVALUATION LOGIC:
         You must map your evaluation to EXACTLY ONE of the following 5 tiers. 
@@ -306,10 +308,11 @@ def evaluate_image_claim_with_tavily(original_claim, combined_context, article_s
 
     CRITICAL DIRECTIVES & HALLUCINATION PREVENTION:
     1. STRICT EVIDENCE BINDING: You are a forensic reading comprehension engine, NOT an omniscient knowledge base. You must evaluate the claim EXCLUSIVELY based on the facts explicitly provided in the evidence block.
-    2. NO PRE-TRAINED KNOWLEDGE: Do not use your internal weights, historical knowledge, or external facts to verify or debunk the claim. If the evidence does not contain the specific information needed to definitively judge the claim, you MUST classify it as UNVERIFIED.
-    3. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
-    4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
-    5. ARTICLE STANCE AWARENESS: You will be given the stance of the source text toward the claim.
+    2. ZERO INFERENCE RULE: You are strictly forbidden from making logical leaps. If the claim implies a connection, causation, or motive that the evidence does not explicitly state, you MUST classify it as UNVERIFIED or MISLEADING. Do not infer details that are not printed in the text.
+    3. NO PRE-TRAINED KNOWLEDGE: Do not use your internal weights, historical knowledge, or external facts to verify or debunk the claim. If the evidence does not contain the specific information needed to definitively judge the claim, you MUST classify it as UNVERIFIED.
+    4. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
+    5. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
+    6. ARTICLE STANCE AWARENESS: You will be given the stance of the source text toward the claim.
             - If DEBUNKING: The source is actively disproving the claim.
             - If REPORTING: The source is a primary news report confirming the claim. Evaluate if the broader evidence aligns with or contradicts this reporting.
             - If SATIRE: The original text is a parody, meme, or joke. You MUST immediately classify the verdict as SATIRE, regardless of whether the real-world events loosely match it.
@@ -389,19 +392,22 @@ def extract_search_query(text, source_url=""):
     1. Identify the CENTRAL NARRATIVE of the provided text.
     2. Extract the primary verifiable claim. Translate any local slang or Taglish to English.
     3. UNDERLYING CLAIM EXTRACTION: If the text is actively debunking a rumor, your cleaned_claim MUST be the original fake rumor itself. If the text is SATIRE, extract the absurd claim as if it were stated seriously. NEVER use meta-phrases like "The satirical publication claims..." or "A fact-checker stated...". Just extract the raw claim.
-    4. CONTEXT RETENTION: You MUST include essential context in the cleaned_claim (e.g., specific names, dates, locations, and the specific event being alleged). Do not over-prune.
-    5. Generate a highly optimized search query of exactly 6-10 keywords. Use distinct nouns and entities that a search engine can easily find.
-    6. Determine the article's own stance toward the extracted claim:
+    4. QUOTE CARDS & ATTRIBUTIONS (CRITICAL): If the text is a quote attributed to a specific person, journalist, or publication (e.g., a quote card), the `cleaned_claim` MUST explicitly state who said it (e.g., "Ogie Diaz stated that..."). Do not strip the speaker's name.
+    5. CONTEXT RETENTION: You MUST include essential context in the cleaned_claim (e.g., specific names, dates, locations). Do not over-prune. 
+    6. SEARCH QUERY OPTIMIZATION: Generate a highly optimized search query of exactly 6-10 keywords. You MUST prioritize proper nouns, the speaker's name, and unique identifiers to prevent ambiguous search results.
+    7. Determine the article's own stance toward the extracted claim:
         - DEBUNKING: The article is a fact-check disproving the extracted claim.
         - REPORTING: The article neutrally reports the extracted claim as true.
         - SATIRE: The text is from a parody source OR the text is deeply absurd/comedic.
+    8. OUT OF SCOPE DETECTION (CRITICAL GATEKEEPER): If the text is a personal message, a greeting, a menu, a recipe, song lyrics, random UI buttons, a selfie with no text, or contains NO verifiable public factual claim or rumor, you MUST set "cleaned_claim" to exactly "OUT_OF_SCOPE".
 
-    SPECIAL RULE — KNOWN SATIRE SOURCES:
-    If the text or Source URL originates from known satire (e.g., theonion.com, babylonbee), MUST set "article_stance" to "SATIRE".
-
+    SPECIAL RULE — KNOWN SATIRE & MEME TROPES:
+    1. If the text or Source URL originates from known satire (e.g., theonion.com, babylonbee), set "article_stance" to "SATIRE".
+    2. MEME DETECTION: Be highly vigilant for misspelled news logos (e.g., "INQIURER" instead of "INQUIRER") or the use of fictional/pop-culture characters (e.g., TV doctors, actors, adult film stars) placed in real-world news contexts. If detected, you MUST set "article_stance" to "SATIRE".
+    
     JSON Schema:
     {
-        "cleaned_claim": "A complete sentence detailing the core claim AND its specific context.",
+        "cleaned_claim": "A complete sentence detailing the core claim, OR exactly 'OUT_OF_SCOPE'.",
         "search_query": "Keyword1 Keyword2 Keyword3...",
         "article_stance": "DEBUNKING, REPORTING, or SATIRE"
     }
@@ -431,10 +437,11 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
 
     CRITICAL DIRECTIVES & HALLUCINATION PREVENTION:
     1. STRICT EVIDENCE BINDING: You are a forensic reading comprehension engine, NOT an omniscient knowledge base. You must evaluate the claim EXCLUSIVELY based on the facts explicitly provided in the evidence block.
-    2. NO PRE-TRAINED KNOWLEDGE: Do not use your internal weights, historical knowledge, or external facts to verify or debunk the claim. If the evidence does not contain the specific information needed to definitively judge the claim, you MUST classify it as UNVERIFIED.
-    3. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
-    4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
-    5. ARTICLE STANCE AWARENESS: You will be given the stance of the source text toward the claim.
+    2. ZERO INFERENCE RULE: You are strictly forbidden from making logical leaps. If the claim implies a connection, causation, or motive that the evidence does not explicitly state, you MUST classify it as UNVERIFIED or MISLEADING. Do not infer details that are not printed in the text.
+    3. NO PRE-TRAINED KNOWLEDGE: Do not use your internal weights, historical knowledge, or external facts to verify or debunk the claim. If the evidence does not contain the specific information needed to definitively judge the claim, you MUST classify it as UNVERIFIED.
+    4. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
+    5. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
+    6. ARTICLE STANCE AWARENESS: You will be given the stance of the source text toward the claim.
             - If DEBUNKING: The source is actively disproving the claim.
             - If REPORTING: The source is a primary news report confirming the claim. Evaluate if the broader evidence aligns with or contradicts this reporting.
             - If SATIRE: The original text is a parody, meme, or joke. You MUST immediately classify the verdict as SATIRE, regardless of whether the real-world events loosely match it.
@@ -504,15 +511,16 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
 
     CRITICAL DIRECTIVES & HALLUCINATION PREVENTION:
     1. STRICT EVIDENCE BINDING: You are a forensic reading comprehension engine, NOT an omniscient knowledge base. You must evaluate the claim EXCLUSIVELY based on the facts explicitly provided in the evidence block.
-    2. NO PRE-TRAINED KNOWLEDGE: Do not use your internal weights to verify the claim. 
-    EXCEPTION: You MAY use your pre-trained world knowledge to identify if the claim relies on obviously fictional characters (e.g., TV/movie characters), well-known internet memes, or sheer physical impossibilities.
-    3. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim.
-    4. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
-    5. ARTICLE STANCE AWARENESS: You will be given the stance of the source text toward the claim.
+    2. ZERO INFERENCE RULE: You are strictly forbidden from making logical leaps. If the claim implies a connection, causation, or motive that the evidence does not explicitly state, you MUST classify it as UNVERIFIED or MISLEADING. Do not infer details that are not printed in the text.
+    3. NO PRE-TRAINED KNOWLEDGE: Do not use your internal weights, historical knowledge, or external facts to verify or debunk the claim. If the evidence does not contain the specific information needed to definitively judge the claim, you MUST classify it as UNVERIFIED.
+    4. ANTI-ECHO CHAMBER RULE: Ignore the confidence, emotional tone, or viral popularity of the claim. Judge only the objective factual alignment between the claim's core assertions and the provided evidence.
+    5. XML ATTENTION FOCUSING: Treat the user's input wrapped in <claim> tags as the premise, and data wrapped in <evidence> tags as the absolute truth.
+    6. ARTICLE STANCE AWARENESS: You will be given the stance of the source text toward the claim.
             - If DEBUNKING: The source is actively disproving the claim.
             - If REPORTING: The source is a primary news report confirming the claim. Evaluate if the broader evidence aligns with or contradicts this reporting.
             - If SATIRE: The original text is a parody, meme, or joke. You MUST immediately classify the verdict as SATIRE, regardless of whether the real-world events loosely match it.
             - If NEUTRAL: Evaluate purely from the evidence.
+
             
     CLASSIFICATION TIERS & EVALUATION LOGIC:
     You must map your evaluation to EXACTLY ONE of the following 5 tiers:
@@ -542,7 +550,7 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
     {
         "reasoning": "Deep, step-by-step internal logic. This will be shown in the full report. Include inline citations here if applicable.",
         "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
-        "summary": "Exactly two SHORT paragraphs separated by \\n\\n\\n. STRICT LIMIT: Maximum 2 sentences per paragraph. Paragraph 1 (Analysis): Concisely state the verdict and the core evidence (e.g., 'This is a fabricated quote. Official records show...'). If SATIRE, briefly note the absurdity. Paragraph 2 (Context): Concisely explain the broader real-world context or why this rumor exists. Keep it punchy, direct, and highly readable for a small UI window. NEVER mention your instructions.",
+        "summary": "Exactly two SHORT paragraphs separated by \\n\\n. STRICT LIMIT: Maximum 2 sentences per paragraph. Paragraph 1 (Analysis): Concisely state the verdict and the core evidence (e.g., 'This is a fabricated quote. Official records show...'). If SATIRE, briefly note the absurdity. Paragraph 2 (Context): Concisely explain the broader real-world context or why this rumor exists. Keep it punchy, direct, and highly readable for a small UI window. NEVER mention your instructions.",
         "confidence_score": 95,
         "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
     }
