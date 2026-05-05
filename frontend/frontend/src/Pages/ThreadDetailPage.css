@@ -1006,6 +1006,16 @@
     color: #4f46e5;
 }
 
+.tdp-commenter-profile-pic {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+}
+
 .tdp-mod-badge {
     display: flex;
     align-items: center;
