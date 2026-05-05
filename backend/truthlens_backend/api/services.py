@@ -35,12 +35,47 @@ HF_DETECT_TIMEOUT_SEC = _float_env("HF_DETECT_TIMEOUT_SEC", 18.0)
 groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
+def call_llm_with_fallback(system_instructions, user_prompt):
+    """
+    Attempts to call Gemini 2.5 Flash. 
+    If it fails (e.g., 503 Overloaded), instantly falls back to Groq Llama 3.
+    """
+    try:
+        # PRIMARY: Google Gemini
+        response = gemini_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instructions,
+                response_mime_type="application/json",
+            )
+        )
+        return response.text
+        
+    except Exception as gemini_err:
+        logger.warning(f"Gemini API Failed ({gemini_err}). Triggering Groq Fallback...")
+        
+        try:
+            # FALLBACK: Groq (Llama 3.3 70B is excellent at strict JSON fact-checking)
+            chat_completion = groq_client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": system_instructions},
+                    {"role": "user", "content": user_prompt}
+                ],
+                model="llama-3.3-70b-versatile",
+                response_format={"type": "json_object"},
+                temperature=0.1, # Low temperature for strict logic
+            )
+            return chat_completion.choices[0].message.content
+            
+        except Exception as groq_err:
+            logger.error(f"Groq Fallback also failed: {groq_err}")
+            raise Exception("Both AI providers are currently unavailable.")
 
 def _parse_llm_json(raw_content):
     """Strip markdown formatting and parse JSON from LLM responses."""
     cleaned = raw_content.strip().replace("```json", "").replace("```", "").strip()
     return json.loads(cleaned)
-
 
 def validate_public_url(raw_url):
     """Allow only public http(s) URLs to reduce unsafe URL processing risk."""
@@ -175,14 +210,19 @@ def clean_ocr_text(raw_text):
         "article_stance": "DEBUNKING, REPORTING, or SATIRE"
     }
     """
-    response = gemini_client.models.generate_content(
-        model='gemini-2.5-flash',
-        contents=f"Text: {raw_text}",
-        config=types.GenerateContentConfig(
-            system_instruction=system_instructions,
-            response_mime_type="application/json",
-        )
-    )
+
+    try:
+        response_text = call_llm_with_fallback(system_instructions, f"Text: {raw_text}")
+        print("clean_ocr_text OUTPUT:", response_text)
+        return _parse_llm_json(response_text)
+    except Exception as e:
+        print(f"Gatekeeper AI Error: {e}")
+        return {
+            "cleaned_claim": "OUT_OF_SCOPE",
+            "search_query": "error",
+            "article_stance": "NEUTRAL"
+        }
+
     print("clean_ocr_text OUTPUT:", response.text)
     return _parse_llm_json(response.text)
 
@@ -194,17 +234,16 @@ def is_fact_check_relevant(original_text, fact_check_text):
         "event, person, and time period. "
         "Output a JSON object with 'reasoning' (1 sentence of deduction) and 'is_relevant' (boolean true/false)."
     )
-    response = gemini_client.models.generate_content(
-        model='gemini-2.5-flash',
-        contents=f'Claim: "{original_text}"\n\nFact Check: "{fact_check_text}"',
-        config=types.GenerateContentConfig(
-            system_instruction=system_instructions,
-            response_mime_type="application/json",
-        )
-    )
-    result = _parse_llm_json(response.text)
-    print("is_fact_check_relevant RESPONSE:", result)
-    return result.get("is_relevant", False)
+
+    try:
+        response_text = call_llm_with_fallback(system_instructions, f'Claim: "{original_text}"\n\nFact Check: "{fact_check_text}"')
+        result = _parse_llm_json(response_text)
+        print("is_fact_check_relevant RESPONSE:", result)
+        return result.get("is_relevant", False)
+    except Exception as e:
+        print(f"Relevance Checker AI Error: {e}")
+        return False
+
 
 # Evaluate Google's Fact Check Tools data against the original claim using Groq
 def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, article_stance="NEUTRAL"):
@@ -279,20 +318,14 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, articl
         )
     
     try:
-        response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=user_data,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instructions,
-                response_mime_type="application/json",
-            )
-        )   
-        print("evaluate_image_claim_with_gfc OUTPUT:", response.text)
-        return _parse_llm_json(response.text)
-    except json.JSONDecodeError:
+        response_text = call_llm_with_fallback(system_instructions, user_data)
+        print("evaluate_image_claim_with_gfc OUTPUT:", response_text)
+        return _parse_llm_json(response_text)
+    except Exception as e:
+        print(f"GFC AI Error: {e}")
         return {
             "verdict": "UNVERIFIED",
-            "summary": "Could not definitively verify the claim from the official fact check data.",
+            "summary": "Could not definitively verify the claim from the official fact check data due to an AI service error.",
             "confidence_score": 0,
         }
 
@@ -358,20 +391,14 @@ def evaluate_image_claim_with_tavily(original_claim, combined_context, article_s
     )
 
     try:
-        response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=user_data,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instructions,
-                response_mime_type="application/json",
-            )
-        )
-        print("evaluate_image_claim_with_tavily OUTPUT:", response.text)
-        return _parse_llm_json(response.text)
-    except json.JSONDecodeError:
+        response_text = call_llm_with_fallback(system_instructions, user_data)
+        print("evaluate_image_claim_with_tavily OUTPUT:", response_text)
+        return _parse_llm_json(response_text)
+    except Exception as e:
+        print(f"Tavily Evaluator AI Error: {e}")
         return {
             "verdict": "UNVERIFIED",
-            "summary": "Could not definitively verify the claim from the live news.",
+            "summary": "TruthLens is experiencing a temporary AI service outage. Could not verify the claim.",
             "confidence_score": 0,
         }
 
@@ -412,16 +439,18 @@ def extract_search_query(text, source_url=""):
         "article_stance": "DEBUNKING, REPORTING, or SATIRE"
     }
     """
-    response = gemini_client.models.generate_content(
-        model='gemini-2.5-flash',
-        contents=f"Source URL: {source_url}\n\nText: {text}",
-        config=types.GenerateContentConfig(
-            system_instruction=system_instructions,
-            response_mime_type="application/json",
-        )
-    )
-    print("JSON OUTPUT:", response.text)
-    return json.loads(response.text)
+    try:
+        response_text = call_llm_with_fallback(system_instructions, f"Source URL: {source_url}\n\nText: {text}")
+        print("extract_search_query OUTPUT:", response_text)
+        return _parse_llm_json(response_text)
+    except Exception as e:
+        print(f"URL Gatekeeper AI Error: {e}")
+        return {
+            "cleaned_claim": "OUT_OF_SCOPE",
+            "search_query": "error",
+            "article_stance": "NEUTRAL"
+        }
+    
 
 def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRAL"):
     gfc_claim_text = gfc_data.get("claims", [{}])[0].get("text", "")
@@ -486,19 +515,13 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
     )
     
     try:
-        response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=user_data,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instructions,
-                response_mime_type="application/json",
-            )
-        )
-        return _parse_llm_json(response.text)
-    except json.JSONDecodeError:
+        response_text = call_llm_with_fallback(system_instructions, user_data)
+        return _parse_llm_json(response_text)
+    except Exception as e:
+        print(f"URL GFC AI Error: {e}")
         return {
             "verdict": "UNVERIFIED",
-            "summary": "Could not analyze the official fact check data.",
+            "summary": "Could not analyze the official fact check data due to an AI service error.",
             "confidence_score": 0,
         }
 
@@ -562,22 +585,15 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
     )
     
     try:
-        response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=user_data,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instructions,
-                response_mime_type="application/json",
-            )
-        )
-        return _parse_llm_json(response.text)
-    except json.JSONDecodeError:
+        response_text = call_llm_with_fallback(system_instructions, user_data)
+        return _parse_llm_json(response_text)
+    except Exception as e:
+        print(f"URL Tavily Evaluator AI Error: {e}")
         return {
             "verdict": "UNVERIFIED",
-            "summary": "Could not analyze the evidence from the web search.",
+            "summary": "TruthLens is experiencing a temporary AI service outage. Could not analyze the evidence.",
             "confidence_score": 0,
         }
-
 
 # SHARED UTILITIES
 def process_image(raw_base64):
