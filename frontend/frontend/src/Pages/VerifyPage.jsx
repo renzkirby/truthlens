@@ -59,14 +59,24 @@ const VerifyLoadingState = ({ isCompleting }) => {
 const ResultCard = ({ result, onEscalate }) => {
    const config = VERDICT_CONFIG[result.verdict] || VERDICT_CONFIG.UNVERIFIED;
 
-   const confidenceColor =
-      result.confidence_score >= 70
-         ? "var(--verdict-fact-border)"
-         : result.confidence_score >= 40
-           ? "var(--verdict-misleading-border)"
-           : "var(--verdict-fake-border)";
+   let confidenceColor;
+   if (result.verdict === "OUT_OF_SCOPE") {
+      confidenceColor = "var(--verdict-outofscope-border)";
+   } else {
+      confidenceColor =
+         result.confidence_score >= 70
+            ? "var(--verdict-fact-border)"
+            : result.confidence_score >= 40
+               ? "var(--verdict-misleading-border)"
+               : "var(--verdict-fake-border)";
+   }
 
-   const showEscalate = result.verdict === "UNVERIFIED" || result.confidence_score < 50;
+   // NEW: Allow community action for everything EXCEPT Out of Scope
+   const canAskCommunity = result.verdict !== "OUT_OF_SCOPE";
+   
+   // Check if this is an escalation (AI is confused) or just a discussion (AI is confident)
+   const isEscalation = result.verdict === "UNVERIFIED" || result.confidence_score < 50;
+
 
    const evidenceList =
       result.sources && result.sources.length > 0
@@ -186,15 +196,17 @@ const ResultCard = ({ result, onEscalate }) => {
                   className="view-thread-btn">
                   View Community Discussion
                </a>
-            ) : showEscalate && result.id ? (
+            ) : canAskCommunity && result.id ? (
                <button
                   className="escalate-btn"
-                  onClick={onEscalate}>
+                  onClick={onEscalate}
+                  style={!isEscalation ? { background: '#f3f4f6', borderColor: '#e5e7eb', color: '#4b5563' } : {}}
+               >
                   <Icons
-                     name="flag"
+                     name={isEscalation ? "flag" : "users"}
                      size={14}
                   />
-                  Ask the Community
+                  {isEscalation ? "Ask the Community" : "Discuss / Contest in Community"}
                </button>
             ) : null}
          </div>

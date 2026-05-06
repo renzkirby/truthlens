@@ -23,7 +23,9 @@ function getVerdictUI(verdict) {
       case "FAKE": return { color: "#ef4444", class: "fake", icon: iconX, text: "Fake" };
       case "MISLEADING": return { color: "#f59e0b", class: "misleading", icon: iconAlert, text: "Misleading" };
       case "SATIRE": return { color: "#8b5cf6", class: "satire", icon: iconSparkles, text: "Satire" };
-      default: return { color: "#6b7280", class: "unverified", icon: iconHelp, text: "Unverified" };
+      case "OUT_OF_SCOPE": return { color: "#9ca3af", class: "out-of-scope", icon: iconHelp, text: "Out of Scope" };
+      case "UNVERIFIED": return { color: "#ebdc09", class: "unverified", icon: iconHelp, text: "Unverified" };
+      default: return { color: "#ebdc09", class: "unverified", icon: iconHelp, text: "Unverified" };
    }
 }
 
@@ -108,32 +110,34 @@ export function displayResultCard(claim) {
          ${ui.icon} ${ui.text}
       </div>
 
-      <div class="truthlens-summary-box">
-         <div class="truthlens-summary-title">
-             ${iconSparkles} AI SUMMARY
-         </div>
-         <div class="truthlens-summary-text">${summary || "No summary available."}</div>
-      </div>
-
-      <div class="truthlens-confidence-container">
-         <div class="truthlens-confidence-header">
-            <div class="truthlens-confidence-title">
-               ${iconActivity} AI CONFIDENCE
+      <div style="overflow-y: auto; padding-right: 4px; overflow-x: hidden;">
+         <div class="truthlens-summary-box">
+            <div class="truthlens-summary-title">
+               ${iconSparkles} AI SUMMARY
             </div>
-            <div class="truthlens-confidence-value" style="color: ${ui.color};">${confidence_score || 0}%</div>
+            <div class="truthlens-summary-text">${summary || "No summary available."}</div>
          </div>
-         <div class="truthlens-confidence-bar">
-            <div class="truthlens-confidence-fill" style="width: ${confidence_score || 0}%; background: linear-gradient(90deg, #10b981 0%, ${ui.color} 100%);"></div>
+
+         <div class="truthlens-confidence-container">
+            <div class="truthlens-confidence-header">
+               <div class="truthlens-confidence-title">
+                  ${iconActivity} AI CONFIDENCE
+               </div>
+               <div class="truthlens-confidence-value" style="color: ${ui.color};">${confidence_score || 0}%</div>
+            </div>
+            <div class="truthlens-confidence-bar">
+               <div class="truthlens-confidence-fill" style="width: ${confidence_score || 0}%; background: linear-gradient(90deg, #10b981 0%, ${ui.color} 100%);"></div>
+            </div>
+            <div class="truthlens-score-context">
+               ${confidence_score < 50 ? "Low confidence — human review recommended" : "High confidence based on available data"}
+            </div>
          </div>
-         <div class="truthlens-score-context">
-            ${confidence_score < 50 ? "Low confidence — human review recommended" : "High confidence based on available data"}
-         </div>
+
+         ${sourcesHTML}
+
+         ${primaryButtonHTML}
+         ${secondaryLinkHTML}
       </div>
-
-      ${sourcesHTML}
-
-      ${primaryButtonHTML}
-      ${secondaryLinkHTML}
    `;
 
    document.body.appendChild(card);
@@ -188,21 +192,23 @@ export function displayDeepfakeResultCard(data) {
          <button id="truthlens-close-btn" class="truthlens-close-btn">&times;</button>
       </div>
       
-      <div class="truthlens-verdict-text">
-         Analysis: <span class="truthlens-verdict" style="background-color: ${badgeColor};">${verdictText}</span>
-      </div>
-      
-      <div class="truthlens-summary-box">
-         <div style="font-size: 14px; line-height: 1.4; margin-bottom: 8px;">
-            Our neural network indicates a <strong>${percentage}%</strong> probability that this image is AI-generated.
+      <div style="max-height: 380px; overflow-y: auto; padding-right: 4px; overflow-x: hidden;">
+         <div class="truthlens-verdict-text">
+            Analysis: <span class="truthlens-verdict" style="background-color: ${badgeColor};">${verdictText}</span>
          </div>
-         <div style="font-size: 13px; line-height: 1.4; color: #4b5563; border-top: 1px solid #e5e7eb; padding-top: 8px;">
-            <strong>AI Explanation:</strong> ${summary || "No detailed explanation available."}
+         
+         <div class="truthlens-summary-box">
+            <div style="font-size: 14px; line-height: 1.4; margin-bottom: 8px;">
+               Our neural network indicates a <strong>${percentage}%</strong> probability that this image is AI-generated.
+            </div>
+            <div style="font-size: 13px; line-height: 1.4; color: #4b5563; border-top: 1px solid #e5e7eb; padding-top: 8px;">
+               <strong>AI Explanation:</strong> ${summary || "No detailed explanation available."}
+            </div>
          </div>
-      </div>
-      
-      <div class="truthlens-confidence-bar">
-         <div class="truthlens-confidence-fill" style="width: ${percentage}%; background-color: ${badgeColor};"></div>
+         
+         <div class="truthlens-confidence-bar">
+            <div class="truthlens-confidence-fill" style="width: ${percentage}%; background-color: ${badgeColor};"></div>
+         </div>
       </div>
    `;
 
@@ -305,6 +311,9 @@ export function displayCachedResultCard(match) {
       case "UNVERIFIED":
          badgeColor = "#ebdc09";
          break;
+      case "OUT_OF_SCOPE":
+         badgeColor = "#9ca3af";
+         break;
    }
 
    let confidence_bar_color = "#6b7280";
@@ -362,46 +371,48 @@ export function displayCachedResultCard(match) {
          <button id="truthlens-close-btn" class="truthlens-close-btn">&times;</button>
       </div>
 
-      <div class="truthlens-verdict-text">
-         This post is <span class="truthlens-verdict" style="background-color: ${badgeColor};">${displayVerdict}</span>
-      </div>
-
-      ${communityBannerHTML}
-      ${aiWarningHTML}
-
-      <div class="truthlens-summary-box">
-         <div class="truthlens-summary-title">Community Verdict Summary</div>
-         <div style="font-size: 14px; line-height: 1.4;">${displaySummary}</div>
-      </div>
-
-      ${
-         confidence_score !== null
-            ? `
-         <div class="truthlens-confidence-score">Confidence Score: ${confidence_score}</div>
-         <div class="truthlens-confidence-bar">
-            <div class="truthlens-confidence-fill" style="width: ${confidence_score}%; background-color: ${confidence_bar_color};"></div>
+      <div style="overflow-y: auto; padding-right: 4px; overflow-x: hidden;">
+         <div class="truthlens-verdict-text">
+            This post is <span class="truthlens-verdict" style="background-color: ${badgeColor};">${displayVerdict}</span>
          </div>
+
+         ${communityBannerHTML}
+         ${aiWarningHTML}
+
+         <div class="truthlens-summary-box">
+            <div class="truthlens-summary-title">Community Verdict Summary</div>
+            <div style="font-size: 14px; line-height: 1.4;">${displaySummary}</div>
+         </div>
+
          ${
-            score_context
+            confidence_score !== null
                ? `
-         <div class="truthlens-score-context" style="font-size: 12px; color: #6b7280; margin-top: 8px; line-height: 1.3;">
-            <strong>Context:</strong> ${score_context}
-         </div>
+            <div class="truthlens-confidence-score">Confidence Score: ${confidence_score}</div>
+            <div class="truthlens-confidence-bar">
+               <div class="truthlens-confidence-fill" style="width: ${confidence_score}%; background-color: ${confidence_bar_color};"></div>
+            </div>
+            ${
+               score_context
+                  ? `
+            <div class="truthlens-score-context" style="font-size: 12px; color: #6b7280; margin-top: 8px; line-height: 1.3;">
+               <strong>Context:</strong> ${score_context}
+            </div>
+            `
+                  : ""
+            }
          `
                : ""
          }
-      `
-            : ""
-      }
 
-      ${sourcesHTML}
+         ${sourcesHTML}
 
-      ${
-         thread_id
-            ? `<a href='http://localhost:5174/thread/detail/${thread_id}' target='_blank' class='truthlens-source-link'>View Community Discussion</a>`
-            : ""
-      }
-      <div class="truthlens-footer">Source Type: Community Moderation</div>
+         ${
+            thread_id
+               ? `<a href='http://localhost:5174/thread/detail/${thread_id}' target='_blank' class='truthlens-source-link'>View Community Discussion</a>`
+               : ""
+         }
+         <div class="truthlens-footer">Source Type: Community Moderation</div>
+      </div>
    `;
 
    document.body.appendChild(card);

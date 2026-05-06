@@ -47,10 +47,15 @@
   --verdict-misleading-bg: #fef3c7;
   --verdict-misleading-text: #78350f;
 
-  /* Unverified / Out of Scope */
-  --verdict-unverified-border: #6b7280;
-  --verdict-unverified-bg: #f3f4f6;
-  --verdict-unverified-text: #374151;
+  /* Unverified */
+  --verdict-unverified-border: #ebdc09;
+  --verdict-unverified-bg: #fefce8; 
+  --verdict-unverified-text: #854d0e;
+
+  /* Out of Scope */
+  --verdict-outofscope-border: #6b7280;
+  --verdict-outofscope-bg: #f3f4f6;
+  --verdict-outofscope-text: #374151;
 
   /* Satire */
   --verdict-satire-border: #7c3aed;
