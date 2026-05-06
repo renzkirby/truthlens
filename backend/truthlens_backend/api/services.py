@@ -405,7 +405,10 @@ def clean_extracted_text(text):
     text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
     text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
     text = re.sub(r"http\S+", "", text)
-    lines = [line.strip() for line in text.split("\n") if len(line.strip()) > 40]
+    
+    # FIX: Lowered the threshold from 40 to 15 to prevent destroying valid sentences
+    lines = [line.strip() for line in text.split("\n") if len(line.strip()) > 15]
+    
     return "\n".join(lines)[:3000]
 
 def extract_search_query(text, source_url=""):
