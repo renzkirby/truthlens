@@ -368,6 +368,8 @@ def url_fact_check_process(url, claim_id):
     outcome = "completed"
 
     # Step 1 — Extract and clean text from URL
+
+
     url_extract_started_at = time.perf_counter()
     try:
         response = requests.post(
@@ -401,6 +403,16 @@ def url_fact_check_process(url, claim_id):
         cleaned_claim = result.get("cleaned_claim")
         search_query = result.get("search_query")
         article_stance = result.get("article_stance", "NEUTRAL")
+        
+        if article_stance == "SATIRE":
+            _save_claim(claim_id, {
+                "verdict": "SATIRE",
+                "summary": "This content originates from a known satire publication and is not intended to be factual.",
+                "confidence_score": 99,
+            }, "Satire Detection", cleaned_claim, url)
+            outcome = "satire_stance_shortcut"
+            _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
+            return
 
     except Exception as e:
         print(f"URL extraction error: {str(e)}")

@@ -55,7 +55,7 @@ function LoginPage() {
       if (justLoggedIn && user && !loading) {
          setJustLoggedIn(false);
          const isModerator = user.role === "MOD" || user.role === "MODERATOR";
-         const destination = from || (isModerator ? "/moderation" : "/dashboard");
+         const destination = from || (isModerator ? "/moderation" : "/community");
          navigate(destination, { replace: true });
       }
    }, [user, loading, justLoggedIn, from, navigate]);

@@ -1448,15 +1448,28 @@ class UserHubView(APIView):
 
         # 1. Reputation & Progression
         score = profile.trust_score
-        rank = "Novice Verifier"
+        rank = "Newbie"
         next_milestone = 50
         
-        if score >= 150:
-            rank = "Veteran Analyst"
+        if score == 100:
+            rank = "Expert Analyst"
             next_milestone = "Max Rank"
-        elif score >= 50:
+        elif score >= 75:
             rank = "Trusted Analyst"
-            next_milestone = 150 - score
+            next_milestone = 100 - score
+        elif score >= 60:
+            rank = "Contributor"
+            next_milestone = 75 - score
+        elif score >= 40:
+            rank = "Newcomer"
+            next_milestone = 60 - score
+        elif score >= 30:
+            rank = "At Risk"
+            next_milestone = 40 - score
+        elif score <= 25:
+            rank = "Untrusted"
+            next_milestone = 30 - score
+            
 
         # 2. Personal Impact Metrics
         my_scans = (
