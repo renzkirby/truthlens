@@ -13,7 +13,7 @@ import { state } from "./modules/state.js";
 const GUEST_SCANS_STORAGE_KEY = "guest_scans";
 const GUEST_SCANS_CAP = 3;
 const GUEST_SCAN_SYNC_STATUS_STORAGE_KEY = "guest_scan_sync_status";
-const WEB_APP_BASE_URL = state.WEB_APP_ORIGINS?.[0] || "http://localhost:5174";
+const WEB_APP_BASE_URL = state.WEB_APP_ORIGINS?.[0] || "https://truthlens-dev.vercel.app";
 const GUEST_SYNC_STATUS_AUTO_DISMISS_MS = 7000;
 
 function normalizeGuestScans(rawGuestScans) {
