@@ -1,7 +1,21 @@
 import React from "react";
 import { renderToString } from "react-dom/server";
-import { Sparkles, ShieldCheck, Flag, CheckCircle, XCircle, AlertTriangle, HelpCircle, Activity, Search, Users, ExternalLink } from "lucide-react";
+import {
+   Sparkles,
+   ShieldCheck,
+   Flag,
+   CheckCircle,
+   XCircle,
+   AlertTriangle,
+   HelpCircle,
+   Activity,
+   Search,
+   Users,
+   ExternalLink,
+} from "lucide-react";
 import { state } from "./state.js";
+
+const COMMUNITY_PLATFORM_URL = state.WEB_APP_ORIGINS[0];
 
 // Pre-render icons
 const iconSparkles = renderToString(React.createElement(Sparkles, { size: 14 }));
@@ -19,21 +33,27 @@ const iconExternal = renderToString(React.createElement(ExternalLink, { size: 12
 // Helper function to get UI properties based on verdict
 function getVerdictUI(verdict) {
    switch (verdict) {
-      case "FACT": return { color: "#10b981", class: "fact", icon: iconCheck, text: "Fact" };
-      case "FAKE": return { color: "#ef4444", class: "fake", icon: iconX, text: "Fake" };
-      case "MISLEADING": return { color: "#f59e0b", class: "misleading", icon: iconAlert, text: "Misleading" };
-      case "SATIRE": return { color: "#8b5cf6", class: "satire", icon: iconSparkles, text: "Satire" };
-      case "OUT_OF_SCOPE": return { color: "#9ca3af", class: "out-of-scope", icon: iconHelp, text: "Out of Scope" };
-      case "UNVERIFIED": return { color: "#ebdc09", class: "unverified", icon: iconHelp, text: "Unverified" };
-      default: return { color: "#ebdc09", class: "unverified", icon: iconHelp, text: "Unverified" };
+      case "FACT":
+         return { color: "#10b981", class: "fact", icon: iconCheck, text: "Fact" };
+      case "FAKE":
+         return { color: "#ef4444", class: "fake", icon: iconX, text: "Fake" };
+      case "MISLEADING":
+         return { color: "#f59e0b", class: "misleading", icon: iconAlert, text: "Misleading" };
+      case "SATIRE":
+         return { color: "#8b5cf6", class: "satire", icon: iconSparkles, text: "Satire" };
+      case "OUT_OF_SCOPE":
+         return { color: "#9ca3af", class: "out-of-scope", icon: iconHelp, text: "Out of Scope" };
+      case "UNVERIFIED":
+         return { color: "#ebdc09", class: "unverified", icon: iconHelp, text: "Unverified" };
+      default:
+         return { color: "#ebdc09", class: "unverified", icon: iconHelp, text: "Unverified" };
    }
 }
 
 export function displayResultCard(claim) {
-   const {
-      id, verdict, summary, confidence_score, thread_id, final_verdict, sources, source_url
-   } = claim;
-   const deepAnalysisUrl = `http://localhost:5174/analysis/${id}`;
+   const { id, verdict, summary, confidence_score, thread_id, final_verdict, sources, source_url } =
+      claim;
+   const deepAnalysisUrl = `http://${COMMUNITY_PLATFORM_URL}/analysis/${id}`;
 
    const displayVerdict = final_verdict || verdict;
    const ui = getVerdictUI(displayVerdict);
@@ -51,15 +71,16 @@ export function displayResultCard(claim) {
                ${evidenceList
                   .map((src) => {
                      const urlStr = typeof src === "string" ? src : src.url;
-                     
+
                      // NEW: Try to use the article title. If it doesn't exist, extract the clean domain name (e.g., "gmanetwork.com")
                      let displayTitle = urlStr;
                      try {
-                         displayTitle = (typeof src === "object" && src.title) 
-                             ? src.title 
-                             : new URL(urlStr).hostname.replace('www.', '');
+                        displayTitle =
+                           typeof src === "object" && src.title
+                              ? src.title
+                              : new URL(urlStr).hostname.replace("www.", "");
                      } catch (e) {
-                         displayTitle = urlStr;
+                        displayTitle = urlStr;
                      }
 
                      return `
@@ -79,18 +100,18 @@ export function displayResultCard(claim) {
    let secondaryLinkHTML = "";
 
    const communityLink = thread_id
-       ? `http://localhost:5174/thread/detail/${thread_id}`
-       : `http://localhost:5174/thread/create?claim_id=${id}`;
+      ? `http://${COMMUNITY_PLATFORM_URL}/thread/detail/${thread_id}`
+      : `http://${COMMUNITY_PLATFORM_URL}/thread/create?claim_id=${id}`;
    const communityText = thread_id ? "View Community Discussion" : "Ask the Community";
 
    if (displayVerdict === "UNVERIFIED") {
-       // UNVERIFIED: Primary CTA is asking the community. Secondary is full report.
-       primaryButtonHTML = `<a href='${communityLink}' target='_blank' class='truthlens-primary-btn'>${iconUsers} ${communityText}</a>`;
-       secondaryLinkHTML = `<a href='${deepAnalysisUrl}' target='_blank' class='truthlens-dashboard-link'>View full report ${iconExternal}</a>`;
+      // UNVERIFIED: Primary CTA is asking the community. Secondary is full report.
+      primaryButtonHTML = `<a href='${communityLink}' target='_blank' class='truthlens-primary-btn'>${iconUsers} ${communityText}</a>`;
+      secondaryLinkHTML = `<a href='${deepAnalysisUrl}' target='_blank' class='truthlens-dashboard-link'>View full report ${iconExternal}</a>`;
    } else {
-       // VERIFIED (Fact/Fake/etc): Primary CTA is the full report. Secondary is community discussion.
-       primaryButtonHTML = `<a href='${deepAnalysisUrl}' target='_blank' class='truthlens-primary-btn'>${iconSearch} View Full Report</a>`;
-       secondaryLinkHTML = `<a href='${communityLink}' target='_blank' class='truthlens-dashboard-link'>${communityText} ${iconExternal}</a>`;
+      // VERIFIED (Fact/Fake/etc): Primary CTA is the full report. Secondary is community discussion.
+      primaryButtonHTML = `<a href='${deepAnalysisUrl}' target='_blank' class='truthlens-primary-btn'>${iconSearch} View Full Report</a>`;
+      secondaryLinkHTML = `<a href='${communityLink}' target='_blank' class='truthlens-dashboard-link'>${communityText} ${iconExternal}</a>`;
    }
 
    const card = document.createElement("div");
@@ -170,10 +191,9 @@ export function displayLoadingCard(customMsg) {
    document.body.appendChild(card);
    void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
-   
+
    document.getElementById("truthlens-load-close-btn").addEventListener("click", removeLoadingCard);
 }
-
 
 export function displayDeepfakeResultCard(data) {
    const { ai_probability, is_fake, summary } = data;
@@ -408,7 +428,7 @@ export function displayCachedResultCard(match) {
 
          ${
             thread_id
-               ? `<a href='http://localhost:5174/thread/detail/${thread_id}' target='_blank' class='truthlens-source-link'>View Community Discussion</a>`
+               ? `<a href='http://${COMMUNITY_PLATFORM_URL}/thread/detail/${thread_id}' target='_blank' class='truthlens-source-link'>View Community Discussion</a>`
                : ""
          }
          <div class="truthlens-footer">Source Type: Community Moderation</div>
