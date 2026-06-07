@@ -106,6 +106,25 @@
     line-height: 1.6;
     color: #374151;
     white-space: pre-wrap; /* Honors the \n\n paragraph breaks from Gemini! */
+    max-height: 192px; /* Restricts the height to trigger the scroll */
+    overflow-y: auto;  /* Tells the browser to scroll vertically if needed */
+    padding-right: 8px;
+}
+.truthlens-summary-text::-webkit-scrollbar {
+  width: 6px;
+}
+
+.truthlens-summary-text::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.truthlens-summary-text::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 10px;
+}
+
+.truthlens-summary-text::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
 }
 
 /* Confidence Bar exactly like Wireframe */

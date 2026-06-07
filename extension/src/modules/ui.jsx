@@ -53,7 +53,7 @@ function getVerdictUI(verdict) {
 export function displayResultCard(claim) {
    const { id, verdict, summary, confidence_score, thread_id, final_verdict, sources, source_url } =
       claim;
-   const deepAnalysisUrl = `http://${COMMUNITY_PLATFORM_URL}/analysis/${id}`;
+   const deepAnalysisUrl = `${COMMUNITY_PLATFORM_URL}/analysis/${id}`;
 
    const displayVerdict = final_verdict || verdict;
    const ui = getVerdictUI(displayVerdict);
@@ -100,8 +100,8 @@ export function displayResultCard(claim) {
    let secondaryLinkHTML = "";
 
    const communityLink = thread_id
-      ? `http://${COMMUNITY_PLATFORM_URL}/thread/detail/${thread_id}`
-      : `http://${COMMUNITY_PLATFORM_URL}/thread/create?claim_id=${id}`;
+      ? `${COMMUNITY_PLATFORM_URL}/thread/detail/${thread_id}`
+      : `${COMMUNITY_PLATFORM_URL}/thread/create?claim_id=${id}`;
    const communityText = thread_id ? "View Community Discussion" : "Ask the Community";
 
    if (displayVerdict === "UNVERIFIED") {

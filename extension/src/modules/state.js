@@ -1,6 +1,6 @@
 export const state = {
-   API_BASE_URL: "https://truthlens-backend-dev.duckdns.org/api",
-   // API_BASE_URL: "http://localhost:8000/api",
+   // API_BASE_URL: "https://truthlens-backend-dev.duckdns.org/api",
+   API_BASE_URL: "http://localhost:8000/api",
    WEB_APP_ORIGINS: [
       "https://truthlens-dev.vercel.app",
       "http://localhost:5174",
