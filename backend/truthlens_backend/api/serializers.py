@@ -249,7 +249,7 @@ class ClaimSerializer(serializers.ModelSerializer):
     moderator_verdict_info = serializers.SerializerMethodField()
 
     def get_effective_verdict(self, obj):
-        return obj.final_verdict or obj.verdict or obj.ai_verdict
+        return obj.final_verdict or obj.ai_verdict
     
     def get_has_moderator_verdict(self, obj):
         """Check if moderators have set a final verdict on this claim"""
@@ -443,7 +443,7 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
                 "claim": {
                     "id": str(obj.thread.claim.id),
                     "context_text": obj.thread.claim.context_text,
-                    "verdict": obj.thread.claim.verdict,
+                    "verdict": obj.thread.claim.final_verdict or obj.thread.claim.ai_verdict,
                 } if obj.thread.claim else None,
             }
         return None
