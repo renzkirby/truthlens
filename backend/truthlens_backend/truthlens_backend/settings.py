@@ -68,8 +68,14 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle'
+    ],
     'DEFAULT_THROTTLE_RATES': {
-        'fact_check': os.getenv('DRF_FACT_CHECK_THROTTLE_RATE', '10/minute'),
+        'anon': '5/minute',
+        'user': '100/minute',
+        'fact_check': os.getenv('DRF_FACT_CHECK_THROTTLE_RATE', '5/minute'),
     },
 }
 

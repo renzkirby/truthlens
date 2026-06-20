@@ -232,7 +232,7 @@ def receive_snippet(request):
     _record_authenticated_claim_check(authenticated_user, claim)
     claim_id = claim.id  # Get the ID of the saved claim
 
-    snippet_fact_check_process.delay(image_hash, str(claim_id), check_deepfake)
+    snippet_fact_check_process.delay(image_hash, str(claim_id), check_deepfake, base64_string)
 
     return JsonResponse(
         {"claim_id": str(claim_id), "cached": False},
@@ -257,7 +257,7 @@ def claim_polling_endpoint(request, claim_id):
             "source_type": "N/A",
             }, status=200)
 
-    ai_verdict = claim.ai_verdict or claim.verdict
+    ai_verdict = claim.ai_verdict
     if ai_verdict is None:
         return JsonResponse({"verdict": "PENDING"}, status=200)
     else:
@@ -641,10 +641,8 @@ def moderation_resolve_thread(request, thread_id):
 
         # Keep AI verdict immutable and write moderator decision to final verdict.
         thread.claim.final_verdict = moderator_verdict
-        # Backward compatibility for existing consumers still reading claim.verdict.
-        thread.claim.verdict = moderator_verdict
         thread.claim.last_updated = timezone.now()
-        thread.claim.save(update_fields=["final_verdict", "verdict", "last_updated"])
+        thread.claim.save(update_fields=["final_verdict", "last_updated"])
 
         # If the thread is closing, has a real verdict, AND the mod wrote a canonical claim...
         if next_status == "CLOSED" and moderator_verdict in ["FACT", "FAKE", "MISLEADING", "SATIRE"] and canonical_claim:

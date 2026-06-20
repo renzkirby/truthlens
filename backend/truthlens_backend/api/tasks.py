@@ -58,11 +58,9 @@ def _log_stage(claim_id, stage, started_at, **metadata):
 
 # IMAGE PIPELINE
 @shared_task
-def snippet_fact_check_process(image_hash, claim_id, check_deepfake=False):
+def snippet_fact_check_process(image_hash, claim_id, check_deepfake=False, base64_string=None):
     task_started_at = time.perf_counter()
     outcome = "completed"
-
-    # _, image_bytes = process_image(base64_string)
 
     try:
         claim = Claim.objects.get(id=claim_id)
@@ -73,35 +71,52 @@ def snippet_fact_check_process(image_hash, claim_id, check_deepfake=False):
         return
 
     media_fetch_started_at = time.perf_counter()
-    try:
-        logger.info("Downloading image from Supabase: %s", claim.media_url)
-        response = requests.get(claim.media_url, timeout=SUPABASE_MEDIA_FETCH_TIMEOUT_SEC)
-        response.raise_for_status()
-        image_bytes = response.content
-        _log_stage(
-            claim_id,
-            "fetch_media",
-            media_fetch_started_at,
-            status_code=response.status_code,
-            bytes=len(image_bytes),
-        )
-    except requests.RequestException as exc:
-        outcome = "media_fetch_failed"
-        logger.error("Media download failed for claim %s: %s", claim_id, exc)
-        _save_claim(
-            claim_id,
-            {
-                "verdict": "UNVERIFIED",
-                "summary": "Could not retrieve the submitted image for analysis.",
-                "confidence_score": 0,
-            },
-            "System Error",
-            "Image retrieval failed",
-            "",
-        )
-        _log_stage(claim_id, "fetch_media_failed", media_fetch_started_at, error=str(exc)[:120])
-        _log_stage(claim_id, "snippet_task_total", task_started_at, outcome=outcome)
-        return
+    image_bytes = None
+    if base64_string:
+        import base64
+        try:
+            image_bytes = base64.b64decode(base64_string)
+            _log_stage(
+                claim_id,
+                "fetch_media",
+                media_fetch_started_at,
+                status_code=200,
+                bytes=len(image_bytes),
+                source="base64_payload"
+            )
+        except Exception as exc:
+            logger.error("Failed to decode provided base64 string: %s", exc)
+            
+    if not image_bytes:
+        try:
+            logger.info("Downloading image from Supabase: %s", claim.media_url)
+            response = requests.get(claim.media_url, timeout=SUPABASE_MEDIA_FETCH_TIMEOUT_SEC)
+            response.raise_for_status()
+            image_bytes = response.content
+            _log_stage(
+                claim_id,
+                "fetch_media",
+                media_fetch_started_at,
+                status_code=response.status_code,
+                bytes=len(image_bytes),
+            )
+        except requests.RequestException as exc:
+            outcome = "media_fetch_failed"
+            logger.error("Media download failed for claim %s: %s", claim_id, exc)
+            _save_claim(
+                claim_id,
+                {
+                    "verdict": "UNVERIFIED",
+                    "summary": "Could not retrieve the submitted image for analysis.",
+                    "confidence_score": 0,
+                },
+                "System Error",
+                "Image retrieval failed",
+                "",
+            )
+            _log_stage(claim_id, "fetch_media_failed", media_fetch_started_at, error=str(exc)[:120])
+            _log_stage(claim_id, "snippet_task_total", task_started_at, outcome=outcome)
+            return
 
     is_deepfake = False
     ai_prob = 0.0
