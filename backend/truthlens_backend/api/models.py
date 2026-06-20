@@ -16,7 +16,7 @@ def _claim_vector_indexes():
             name="claim_embedding_hnsw_idx",
             fields=["claim_embedding"],
             m=16,
-            ef_construction=64,
+            ef_construction=128,
             opclasses=["vector_cosine_ops"],
         )
     ]
@@ -71,7 +71,6 @@ class Claim(models.Model):
     ai_reasoning = models.TextField(blank=True, null=True)
     ai_verdict = models.CharField(max_length=20, blank=True, null=True)
     final_verdict = models.CharField(max_length=20, blank=True, null=True)
-    verdict = models.CharField(max_length=20, blank=True, null=True)
     consensus_score = models.FloatField(blank=True, null=True)
     score_context = models.CharField(max_length=255, null=True, blank=True)
     source_type = models.CharField(max_length=50, blank=True, null=True)
@@ -101,7 +100,7 @@ class Claim(models.Model):
     )
 
     def __str__(self):
-        return f"Claim {self.id} - Type: {self.claim_type} - Final Verdict: {self.final_verdict or self.verdict}"
+        return f"Claim {self.id} - Type: {self.claim_type} - Final Verdict: {self.final_verdict or self.ai_verdict}"
     
     def compute_final_verdict(self):
         """
@@ -363,7 +362,7 @@ class OfficialFactCheck(models.Model):
                 name="official_claim_hnsw_idx",
                 fields=["embedding"],
                 m=16,
-                ef_construction=64,
+                ef_construction=128,
                 opclasses=["vector_cosine_ops"],
             ),
             GinIndex(fields=["search_vector"], name="official_claim_gin_idx"),
