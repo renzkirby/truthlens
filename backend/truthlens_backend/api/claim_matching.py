@@ -262,7 +262,7 @@ def get_match_result(matched_claim):
     active_thread = threads[0] if threads else None
 
     # Determine the effective verdict
-    effective_verdict = matched_claim.final_verdict or matched_claim.ai_verdict or matched_claim.verdict
+    effective_verdict = matched_claim.final_verdict or matched_claim.ai_verdict
 
     result = {
         "match_type": "no_verdict",
