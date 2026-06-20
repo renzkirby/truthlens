@@ -37,7 +37,7 @@ TruthLens utilizes a **Dual-Pipeline Architecture** to balance speed with deep f
 **Frontend (Web & Extension)**
 
 - React & Vite
-- Tailwind CSS (Custom Semantic Design Tokens)
+- Vanilla CSS
 - Lucide React (Iconography)
 
 **Backend & API**
