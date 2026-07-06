@@ -207,7 +207,7 @@ def receive_snippet(request):
 
     if fingerprint:
         matched_claim = find_matching_claim(fingerprint, "IMAGE")
-        if matched_claim and matched_claim.final_verdict:
+        if matched_claim:
             _record_authenticated_claim_check(authenticated_user, matched_claim)
             # A moderator has already resolved this claim — return cached verdict
             match_result = get_match_result(matched_claim)
@@ -226,7 +226,6 @@ def receive_snippet(request):
         media_hash=image_hash,
         media_url=media_url,
         claim_fingerprint=fingerprint,
-        verdict=None,
         verified_via=Claim.VerificationSource.PENDING,
     )
     _record_authenticated_claim_check(authenticated_user, claim)
@@ -243,6 +242,7 @@ def receive_snippet(request):
 
 @csrf_exempt
 @api_view(["GET"])
+@throttle_classes([])
 def claim_polling_endpoint(request, claim_id):
     if not claim_id:
         return JsonResponse({"error": "Claim ID is required"}, status=400)
@@ -331,7 +331,7 @@ def verify_url(request):
 
     if fingerprint:
         matched_claim = find_matching_claim(fingerprint, "URL")
-        if matched_claim and matched_claim.final_verdict:
+        if matched_claim:
             _record_authenticated_claim_check(authenticated_user, matched_claim)
             match_result = get_match_result(matched_claim)
             return JsonResponse(
@@ -343,7 +343,6 @@ def verify_url(request):
         claim_type=Claim.ClaimType.URL,
         url_link=safe_url,
         claim_fingerprint=fingerprint,
-        verdict=None,
         verified_via=Claim.VerificationSource.PENDING,
     )
     _record_authenticated_claim_check(authenticated_user, claim)
@@ -465,7 +464,6 @@ def sync_guest_scan(request):
         url_link=normalized_source_url if claim_type == Claim.ClaimType.URL else None,
         ai_summary=summary or "Synced from extension guest scan.",
         ai_verdict=verdict,
-        verdict=verdict,
         consensus_score=consensus_score,
         context_text=context_text,
         source_type=source_type,
@@ -1121,7 +1119,7 @@ def verify_text(request):
     matched_claim = find_matching_claim(fingerprint, "TEXT", context_text=text_content)
     authenticated_user = _authenticated_user_or_none(request)
     
-    if matched_claim and matched_claim.final_verdict:
+    if matched_claim:
         _record_authenticated_claim_check(authenticated_user, matched_claim)
         match_result = get_match_result(matched_claim)
         return JsonResponse(
@@ -1136,7 +1134,6 @@ def verify_text(request):
         claim_type=Claim.ClaimType.TEXT, 
         context_text=text_content,
         claim_fingerprint=fingerprint,
-        verdict=None,
         verified_via=Claim.VerificationSource.PENDING,
     )
     _record_authenticated_claim_check(authenticated_user, claim)
@@ -1582,7 +1579,7 @@ def verify_file(request):
         matched_claim = find_matching_claim(fingerprint, "TEXT", context_text=extracted_text)
         authenticated_user = _authenticated_user_or_none(request)
         
-        if matched_claim and matched_claim.final_verdict:
+        if matched_claim:
             _record_authenticated_claim_check(authenticated_user, matched_claim)
             match_result = get_match_result(matched_claim)
             return JsonResponse(
@@ -1595,7 +1592,7 @@ def verify_file(request):
             claim_type=Claim.ClaimType.FILE,
             url_link=f"Document Input: {file_name}",
             claim_fingerprint=fingerprint,
-            verdict=None,
+
             verified_via=Claim.VerificationSource.PENDING,
         )
         _record_authenticated_claim_check(authenticated_user, claim)

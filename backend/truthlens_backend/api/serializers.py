@@ -283,7 +283,6 @@ class ClaimSerializer(serializers.ModelSerializer):
             "ai_verdict",
             "final_verdict",
             "effective_verdict",
-            "verdict",
             "ai_summary",
             "source_type",
             "consensus_score",
