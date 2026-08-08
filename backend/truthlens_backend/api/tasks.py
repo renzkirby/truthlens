@@ -183,6 +183,38 @@ def text_fact_check_process(raw_text, claim_id):
     
 def execute_core_text_pipeline(raw_text, claim_id):
     """The shared brain for both Snippets and pure Text claims."""
+
+# --- 1. SECOND CHANCE TEXT DEDUPLICATION ---
+    from .claim_matching import compute_fingerprint, find_matching_claim
+    
+    text_fingerprint = compute_fingerprint("TEXT", raw_text)
+    matched_claim = find_matching_claim(text_fingerprint, "TEXT", context_text=raw_text)
+
+    if matched_claim and str(matched_claim.id) != str(claim_id):
+        logger.info(f"Second-chance deduplication hit! OCR text matches existing claim {matched_claim.id}")
+        
+        try:
+            current_claim = Claim.objects.get(id=claim_id)
+            # Instantly copy the verdict data from the matched claim to the new one
+            current_claim.verdict = matched_claim.verdict
+            current_claim.ai_verdict = matched_claim.ai_verdict
+            current_claim.final_verdict = matched_claim.final_verdict
+            current_claim.ai_summary = matched_claim.ai_summary
+            current_claim.consensus_score = matched_claim.consensus_score
+            current_claim.source_type = matched_claim.source_type
+            current_claim.source_link = matched_claim.source_link
+            current_claim.top_verdict_source = matched_claim.top_verdict_source
+            current_claim.ai_sources = matched_claim.ai_sources
+            current_claim.is_ai_generated = matched_claim.is_ai_generated
+            current_claim.score_context = "This result was instantly matched from a previously verified claim."
+            current_claim.save()
+        except Claim.DoesNotExist:
+            pass
+        
+        # ABORT the pipeline so we don't waste LLM/Tavily API calls!
+        return
+    # -------------------------------------------
+
     pipeline_started_at = time.perf_counter()
     outcome = "completed"
 

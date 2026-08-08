@@ -18,41 +18,91 @@ import { state } from "./state.js";
 const COMMUNITY_PLATFORM_URL = state.WEB_APP_ORIGINS[0];
 
 // Pre-render icons
-const iconSparkles = renderToString(React.createElement(Sparkles, { size: 14 }));
-const iconShield = renderToString(React.createElement(ShieldCheck, { size: 16 }));
+const iconSparkles = renderToString(
+   React.createElement(Sparkles, { size: 14 }),
+);
+const iconShield = renderToString(
+   React.createElement(ShieldCheck, { size: 16 }),
+);
 const iconFlag = renderToString(React.createElement(Flag, { size: 16 }));
-const iconCheck = renderToString(React.createElement(CheckCircle, { size: 16 }));
+const iconCheck = renderToString(
+   React.createElement(CheckCircle, { size: 16 }),
+);
 const iconX = renderToString(React.createElement(XCircle, { size: 16 }));
-const iconAlert = renderToString(React.createElement(AlertTriangle, { size: 16 }));
+const iconAlert = renderToString(
+   React.createElement(AlertTriangle, { size: 16 }),
+);
 const iconHelp = renderToString(React.createElement(HelpCircle, { size: 16 }));
-const iconActivity = renderToString(React.createElement(Activity, { size: 12 }));
+const iconActivity = renderToString(
+   React.createElement(Activity, { size: 12 }),
+);
 const iconSearch = renderToString(React.createElement(Search, { size: 16 }));
 const iconUsers = renderToString(React.createElement(Users, { size: 16 }));
-const iconExternal = renderToString(React.createElement(ExternalLink, { size: 12 }));
+const iconExternal = renderToString(
+   React.createElement(ExternalLink, { size: 12 }),
+);
 
 // Helper function to get UI properties based on verdict
 function getVerdictUI(verdict) {
    switch (verdict) {
       case "FACT":
-         return { color: "#10b981", class: "fact", icon: iconCheck, text: "Fact" };
+         return {
+            color: "#10b981",
+            class: "fact",
+            icon: iconCheck,
+            text: "Fact",
+         };
       case "FAKE":
          return { color: "#ef4444", class: "fake", icon: iconX, text: "Fake" };
       case "MISLEADING":
-         return { color: "#f59e0b", class: "misleading", icon: iconAlert, text: "Misleading" };
+         return {
+            color: "#f59e0b",
+            class: "misleading",
+            icon: iconAlert,
+            text: "Misleading",
+         };
       case "SATIRE":
-         return { color: "#8b5cf6", class: "satire", icon: iconSparkles, text: "Satire" };
+         return {
+            color: "#8b5cf6",
+            class: "satire",
+            icon: iconSparkles,
+            text: "Satire",
+         };
       case "OUT_OF_SCOPE":
-         return { color: "#9ca3af", class: "out-of-scope", icon: iconHelp, text: "Out of Scope" };
+         return {
+            color: "#9ca3af",
+            class: "out-of-scope",
+            icon: iconHelp,
+            text: "Out of Scope",
+         };
       case "UNVERIFIED":
-         return { color: "#ebdc09", class: "unverified", icon: iconHelp, text: "Unverified" };
+         return {
+            color: "#ebdc09",
+            class: "unverified",
+            icon: iconHelp,
+            text: "Unverified",
+         };
       default:
-         return { color: "#ebdc09", class: "unverified", icon: iconHelp, text: "Unverified" };
+         return {
+            color: "#ebdc09",
+            class: "unverified",
+            icon: iconHelp,
+            text: "Unverified",
+         };
    }
 }
 
 export function displayResultCard(claim) {
-   const { id, verdict, summary, confidence_score, thread_id, final_verdict, sources, source_url } =
-      claim;
+   const {
+      id,
+      verdict,
+      summary,
+      confidence_score,
+      thread_id,
+      final_verdict,
+      sources,
+      source_url,
+   } = claim;
    const deepAnalysisUrl = `${COMMUNITY_PLATFORM_URL}/analysis/${id}`;
 
    const displayVerdict = final_verdict || verdict;
@@ -60,7 +110,8 @@ export function displayResultCard(claim) {
 
    // 1. Generate Sources HTML
    let sourcesHTML = "";
-   const evidenceList = sources && sources.length > 0 ? sources : source_url ? [source_url] : [];
+   const evidenceList =
+      sources && sources.length > 0 ? sources : source_url ? [source_url] : [];
 
    if (displayVerdict !== "OUT_OF_SCOPE" && evidenceList.length > 0) {
       sourcesHTML = `
@@ -102,7 +153,9 @@ export function displayResultCard(claim) {
    const communityLink = thread_id
       ? `${COMMUNITY_PLATFORM_URL}/thread/detail/${thread_id}`
       : `${COMMUNITY_PLATFORM_URL}/thread/create?claim_id=${id}`;
-   const communityText = thread_id ? "View Community Discussion" : "Ask the Community";
+   const communityText = thread_id
+      ? "View Community Discussion"
+      : "Ask the Community";
 
    if (displayVerdict === "UNVERIFIED") {
       // UNVERIFIED: Primary CTA is asking the community. Secondary is full report.
@@ -165,10 +218,12 @@ export function displayResultCard(claim) {
    void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
 
-   document.getElementById("truthlens-close-btn").addEventListener("click", () => {
-      card.classList.remove("show");
-      setTimeout(() => card.remove(), 300);
-   });
+   document
+      .getElementById("truthlens-close-btn")
+      .addEventListener("click", () => {
+         card.classList.remove("show");
+         setTimeout(() => card.remove(), 300);
+      });
 }
 
 export function displayLoadingCard(customMsg) {
@@ -192,7 +247,9 @@ export function displayLoadingCard(customMsg) {
    void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
 
-   document.getElementById("truthlens-load-close-btn").addEventListener("click", removeLoadingCard);
+   document
+      .getElementById("truthlens-load-close-btn")
+      .addEventListener("click", removeLoadingCard);
 }
 
 export function displayDeepfakeResultCard(data) {
@@ -236,10 +293,12 @@ export function displayDeepfakeResultCard(data) {
    void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
 
-   document.getElementById("truthlens-close-btn").addEventListener("click", () => {
-      card.classList.remove("show");
-      setTimeout(() => card.remove(), 300);
-   });
+   document
+      .getElementById("truthlens-close-btn")
+      .addEventListener("click", () => {
+         card.classList.remove("show");
+         setTimeout(() => card.remove(), 300);
+      });
 }
 
 export function removeLoadingCard() {
@@ -338,27 +397,64 @@ export function displayCachedResultCard(match) {
 
    let confidence_bar_color = "#6b7280";
    if (confidence_score < 40) confidence_bar_color = "#e02424";
-   else if (confidence_score >= 40 && confidence_score < 70) confidence_bar_color = "#ebdc09";
+   else if (confidence_score >= 40 && confidence_score < 70)
+      confidence_bar_color = "#ebdc09";
    else if (confidence_score >= 70) confidence_bar_color = "#0e9f6e";
 
    const displaySummary =
-      moderator_notes || summary || "This claim has been reviewed by the community.";
+      moderator_notes ||
+      summary ||
+      "This claim has been reviewed by the community.";
 
    const aiWarningHTML = is_ai_generated
       ? `<div class="truthlens-banner truthlens-ai-warning">
-            <span class="truthlens-banner-icon">${sparklesIconSVG}</span>
+            <span class="truthlens-banner-icon">${iconSparkles}</span>
             AI-GENERATED MEDIA DETECTED
          </div>`
       : "";
 
-   const communityBannerHTML = `
-      <div class="truthlens-banner truthlens-community-verified">
-         <span class="truthlens-banner-icon">${shieldCheckSVG}</span>
-         COMMUNITY VERIFIED
-      </div>`;
+   // 1. Determine the Dynamic Banner based on match_type
+   let customBannerHTML = "";
+   if (match.match_type === "resolved") {
+      customBannerHTML = `
+         <div class="truthlens-banner truthlens-community-verified">
+            <span class="truthlens-banner-icon">${iconShield}</span>
+            COMMUNITY VERIFIED
+         </div>`;
+   } else if (match.match_type === "has_thread") {
+      customBannerHTML = `
+         <div class="truthlens-banner" style="background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;">
+            <span class="truthlens-banner-icon">${iconSearch}</span>
+            COMMUNITY INVESTIGATION ONGOING
+         </div>`;
+   }
+
+   // 2. Determine Dynamic Buttons based on match_type
+   let actionButtonsHTML = "";
+   if (match.match_type === "no_verdict") {
+      const createThreadUrl = `${COMMUNITY_PLATFORM_URL}/thread/create?claim_id=${claim_id}`;
+      actionButtonsHTML = `
+            <div style="margin-top: 16px;">
+                  <p style="font-size: 12px; color: #4b5563; margin-bottom: 8px;">No one has verified this yet.</p>
+                  <a href='${createThreadUrl}' target='_blank' class='truthlens-primary-btn' style="text-align: center; display: block; text-decoration: none;">
+                     Post to Community for Verification
+                  </a>
+            </div>
+         `;
+   } else if (thread_id) {
+      const threadUrl = `${COMMUNITY_PLATFORM_URL}/thread/detail/${thread_id}`;
+      actionButtonsHTML = `
+            <div style="margin-top: 16px;">
+                  <a href='${threadUrl}' target='_blank' class='truthlens-primary-btn' style="text-align: center; display: block; text-decoration: none;">
+                     View Community Discussion
+                  </a>
+            </div>
+         `;
+   }
 
    let sourcesHTML = "";
-   const evidenceList = sources && sources.length > 0 ? sources : source_url ? [source_url] : [];
+   const evidenceList =
+      sources && sources.length > 0 ? sources : source_url ? [source_url] : [];
 
    if (displayVerdict !== "OUT_OF_SCOPE" && evidenceList.length > 0) {
       sourcesHTML = `
@@ -396,7 +492,7 @@ export function displayCachedResultCard(match) {
             This post is <span class="truthlens-verdict" style="background-color: ${badgeColor};">${displayVerdict}</span>
          </div>
 
-         ${communityBannerHTML}
+         ${customBannerHTML}
          ${aiWarningHTML}
 
          <div class="truthlens-summary-box">
@@ -426,11 +522,7 @@ export function displayCachedResultCard(match) {
 
          ${sourcesHTML}
 
-         ${
-            thread_id
-               ? `<a href='http://${COMMUNITY_PLATFORM_URL}/thread/detail/${thread_id}' target='_blank' class='truthlens-source-link'>View Community Discussion</a>`
-               : ""
-         }
+         ${actionButtonsHTML}
          <div class="truthlens-footer">Source Type: Community Moderation</div>
       </div>
    `;
@@ -439,8 +531,10 @@ export function displayCachedResultCard(match) {
    void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
 
-   document.getElementById("truthlens-close-btn").addEventListener("click", () => {
-      card.classList.remove("show");
-      setTimeout(() => card.remove(), 300);
-   });
+   document
+      .getElementById("truthlens-close-btn")
+      .addEventListener("click", () => {
+         card.classList.remove("show");
+         setTimeout(() => card.remove(), 300);
+      });
 }
