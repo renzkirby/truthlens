@@ -647,12 +647,12 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             // Add this inside VERIFY_URL and VERIFY_FILE in background.js
             if (data.cached && data.match) {
                if (shouldCacheGuestScan) {
-                  appendGuestScan(data.match, "URL").catch(console.warn); // change "URL" to "FILE" for the file listener
+                  appendGuestScan(data.match, "FILE").catch(console.warn); // change "URL" to "FILE" for the file listener
                }
 
                // IMPORTANT: Make sure your content.js is listening for these specific message types!
                sendTabMessage(tabId, {
-                  type: "DISPLAY_URL_CACHED_RESULT",
+                  type: "DISPLAY_SNIPPET_CACHED_RESULT",
                   data: data.match,
                });
                return;
