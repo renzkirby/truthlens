@@ -224,8 +224,12 @@ def execute_core_text_pipeline(raw_text, claim_id):
         clean_started_at = time.perf_counter()
         cleaned = clean_ocr_text(raw_text)
         _log_stage(claim_id, "clean_ocr_text", clean_started_at, text_length=len(raw_text or ""))
+        
+        cleaned_claim = cleaned.get("cleaned_claim")
+        search_query = cleaned.get("search_query")
+        article_stance = cleaned.get("article_stance", "NEUTRAL")
 
-        if cleaned.get("cleaned_claim") == "OUT_OF_SCOPE":
+        if cleaned_claim == "OUT_OF_SCOPE":
             _save_claim(
                 claim_id,
                 {
@@ -251,10 +255,6 @@ def execute_core_text_pipeline(raw_text, claim_id):
             outcome = "satire_stance_shortcut"
             _log_stage(claim_id, "core_text_pipeline_total", pipeline_started_at, outcome=outcome)
             return
-
-        cleaned_claim = cleaned.get("cleaned_claim")
-        search_query = cleaned.get("search_query")
-        article_stance = cleaned.get("article_stance", "NEUTRAL")
 
         vault_started_at = time.perf_counter()
         vault_match = search_official_vault(cleaned_claim)
