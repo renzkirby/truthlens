@@ -248,7 +248,7 @@ def get_match_result(matched_claim):
     Format the match result for API response.
 
     Returns a dict with:
-      - match_type: "resolved", "has_thread", or "has_verdict"
+      - match_type: "resolved", "has_thread", or "no_verdict"
       - claim_id: matched claim UUID
       - verdict: the effective verdict
       - summary: AI or moderator summary
@@ -260,39 +260,57 @@ def get_match_result(matched_claim):
 
     threads = list(matched_claim.threads.exclude(status="REJECTED").order_by("-created_at"))
     active_thread = threads[0] if threads else None
+    print(active_thread)
 
-    # Determine the effective verdict
-    effective_verdict = matched_claim.final_verdict or matched_claim.ai_verdict
+    # 1. Determine Sources: Prefer verified community evidence, fallback to full AI sources
+    sources = []
+    if active_thread:
+        verified_ev = active_thread.evidence_submissions.filter(evidence_status="VERIFIED")[:3]
+        sources = [ev.evidence_url for ev in verified_ev if getattr(ev, "evidence_url", None)]
+        
+    if not sources and matched_claim.ai_sources:
+        sources = matched_claim.ai_sources
+    elif not sources and matched_claim.top_verdict_source:
+        sources = [matched_claim.top_verdict_source]
 
-    result = {
-        "match_type": "no_verdict",
-        "claim_id": str(matched_claim.id),
-        "claim_type": matched_claim.claim_type,
-        "verdict": effective_verdict,
-        "ai_verdict": matched_claim.ai_verdict,
-        "final_verdict": matched_claim.final_verdict,
-        "summary": matched_claim.ai_summary,
-        "confidence_score": matched_claim.consensus_score,
-        "source_type": matched_claim.source_type,
-        "source_url": matched_claim.top_verdict_source or matched_claim.source_link,
-        "is_ai_generated": matched_claim.is_ai_generated,
-        "thread_id": str(active_thread.id) if active_thread else None,
-        "thread_status": active_thread.status if active_thread else None,
-        "moderator_notes": None,
-    }
-
+    # 2. Determine match_type
     if matched_claim.final_verdict:
-        result["match_type"] = "resolved"
+        match_type = "resolved"
+    elif active_thread:
+        match_type = "has_thread"
+    else:
+        match_type = "no_verdict"
+
+    # 3. Determine Summary and Moderator Notes
+    summary = matched_claim.ai_summary
+    moderator_notes = None
+
+    if match_type == "resolved":
         # Get moderator notes from the resolved thread
         resolved_thread = matched_claim.threads.filter(
             moderator_verdict__isnull=False
         ).order_by("-moderated_at").first()
+        
         if resolved_thread:
-            result["moderator_notes"] = resolved_thread.moderator_notes
-            result["summary"] = resolved_thread.moderator_notes or matched_claim.ai_summary
-    elif active_thread:
-        result["match_type"] = "has_thread"
-    elif effective_verdict:
-        result["match_type"] = "has_verdict"
+            moderator_notes = resolved_thread.moderator_notes
+            summary = resolved_thread.moderator_notes or matched_claim.ai_summary
 
-    return result
+    # 4. Construct Final Payload
+    print(match_type)
+    return {
+        "match_type": match_type,
+        "claim_id": str(matched_claim.id),
+        "claim_type": matched_claim.claim_type,
+        "verdict": matched_claim.final_verdict or matched_claim.ai_verdict,
+        "ai_verdict": matched_claim.ai_verdict,
+        "final_verdict": matched_claim.final_verdict,
+        "summary": summary,
+        "confidence_score": matched_claim.consensus_score,
+        "source_type": matched_claim.source_type,
+        "source_url": matched_claim.top_verdict_source or matched_claim.source_link,
+        "sources": sources,
+        "is_ai_generated": matched_claim.is_ai_generated,
+        "thread_id": str(active_thread.id) if active_thread else None,
+        "thread_status": active_thread.status if active_thread else None,
+        "moderator_notes": moderator_notes,
+    }
