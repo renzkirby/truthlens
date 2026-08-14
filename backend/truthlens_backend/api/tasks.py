@@ -123,20 +123,19 @@ def snippet_fact_check_process(image_hash, claim_id, check_deepfake=False, base6
 
     # 1. PARALLEL CHECK: Deepfake Detection
     if check_deepfake:
-        deepfake_started_at = time.perf_counter()
-        logger.info("User requested deepfake check. Scanning image...")
-        ai_prob = detect_ai_image(image_bytes)
+        deepfake_result = detect_ai_image(image_bytes)
+        ai_prob = deepfake_result.get("score", 0.0) if deepfake_result else 0.0
+        fake_category = deepfake_result.get("category", "Unknown") if deepfake_result else "Unknown"
         _log_stage(
             claim_id,
             "deepfake_detection",
             deepfake_started_at,
             ai_probability=round(ai_prob, 4),
         )
-        
+
         if ai_prob > 0.65:
             logger.info("Deepfake detected for claim %s with confidence %.4f", claim_id, ai_prob)
             is_deepfake = True
-            # Update the claim flag in the database, but DO NOT STOP.
             Claim.objects.filter(id=claim_id).update(is_ai_generated=True)
     else:
         logger.info("Skipping AI deepfake check based on user preference.")
@@ -151,7 +150,7 @@ def snippet_fact_check_process(image_hash, claim_id, check_deepfake=False, base6
         if is_deepfake:
             ai_verdict = {
                 "verdict": "MISLEADING",
-                "summary": f"This image contains no verifiable text, but forensic analysis indicates with {int(ai_prob * 100)}% confidence that the image itself is AI-generated.",
+                "summary": f"This image contains no verifiable text, but forensic analysis indicates with {int(ai_prob * 100)}% confidence that the image itself is AI-generated ({fake_category}).",
                 "confidence_score": int(ai_prob * 100)
             }
             _save_claim(claim_id, ai_verdict, "AI Deepfake Detector", "AI Generated Image")
@@ -224,8 +223,20 @@ def execute_core_text_pipeline(raw_text, claim_id):
         _log_stage(claim_id, "clean_ocr_text", clean_started_at, text_length=len(raw_text or ""))
 
         if cleaned.get("cleaned_claim") == "OUT_OF_SCOPE":
-            Claim.objects.filter(id=claim_id).delete()
-            outcome = "out_of_scope_deleted"
+            _save_claim(
+                claim_id,
+                {
+                    "verdict": "OUT_OF_SCOPE",
+                    "summary": "This content appears to be a personal statement, opinion, greeting, or non-factual text. TruthLens can only verify objective claims, news, and rumors.",
+                    "confidence_score": 0,
+                    "score_context": "No verifiable factual claim detected."
+                },
+                "System Filter",
+                raw_text,
+                []
+            )
+            outcome = "completed_out_of_scope"
+            _log_stage(claim_id, "core_text_pipeline_total", pipeline_started_at, outcome=outcome)
             return
 
         cleaned_claim = cleaned.get("cleaned_claim")
@@ -321,7 +332,7 @@ def execute_core_text_pipeline(raw_text, claim_id):
 
         except Exception as e:
             _log_stage(claim_id, "gfc_search_failed", gfc_started_at, error=str(e)[:120])
-            print(f"GFC error: {str(e)}")
+            logger.error("GFC error for claim %s: %s", claim_id, e)
 
         # Fallback — Tavily web search
         tavily_started_at = time.perf_counter()
@@ -383,7 +394,7 @@ def execute_core_text_pipeline(raw_text, claim_id):
 
         except Exception as e:
             _log_stage(claim_id, "tavily_search_failed", tavily_started_at, error=str(e)[:120])
-            print(f"Tavily error: {str(e)}")
+            logger.error("Tavily error for claim %s: %s", claim_id, e)
             _save_claim(claim_id, {
                 "verdict": "UNVERIFIED",
                 "summary": "Could not retrieve relevant information to verify the claim.",
@@ -394,7 +405,7 @@ def execute_core_text_pipeline(raw_text, claim_id):
     # This catches catastrophic errors (like Groq going down completely)
     except Exception as e:
         outcome = "fatal_error"
-        print(f"Core Fact Check Error (Fatal): {e}")
+        logger.error("Core Fact Check Fatal Error for claim %s: %s", claim_id, e)
         try:
             claim = Claim.objects.get(id=claim_id)
             claim.verdict = "UNVERIFIED"
@@ -450,19 +461,9 @@ def url_fact_check_process(url, claim_id):
         cleaned_claim = result.get("cleaned_claim")
         search_query = result.get("search_query")
         article_stance = result.get("article_stance", "NEUTRAL")
-        
-        if article_stance == "SATIRE":
-            _save_claim(claim_id, {
-                "verdict": "SATIRE",
-                "summary": "This content originates from a known satire publication and is not intended to be factual.",
-                "confidence_score": 99,
-            }, "Satire Detection", cleaned_claim, url)
-            outcome = "satire_stance_shortcut"
-            _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
-            return
 
     except Exception as e:
-        print(f"URL extraction error: {str(e)}")
+        logger.error("URL extraction error for claim %s: %s", claim_id, e)
         _log_stage(claim_id, "url_extract_failed", url_extract_started_at, error=str(e)[:120])
         Claim.objects.filter(id=claim_id).delete()
         outcome = "url_extraction_failed_deleted"
@@ -583,7 +584,7 @@ def url_fact_check_process(url, claim_id):
 
     except Exception as e:
         _log_stage(claim_id, "url_gfc_failed", gfc_started_at, error=str(e)[:120])
-        print(f"GFC error: {str(e)}")
+        logger.error("GFC error for claim %s: %s", claim_id, e)
 
     # Step 4 — Fallback to Tavily web search
     tavily_search_started_at = time.perf_counter()
@@ -595,9 +596,17 @@ def url_fact_check_process(url, claim_id):
             topic="general",
             include_answer=True,
             include_domains=[
-                    "gmanetwork.com", "rappler.com", "philstar.com", 
-                    "inquirer.net", "news.abs-cbn.com", "manilabulletin.com",
-                    "bworldonline.com", "pna.gov.ph"
+                # Philippine News & Fact Checkers
+                "gmanetwork.com", "rappler.com", "philstar.com",
+                "inquirer.net", "news.abs-cbn.com", "manilabulletin.com",
+                "bworldonline.com", "pna.gov.ph", "verafiles.org",
+
+                # International News & Wires
+                "reuters.com", "apnews.com", "bbc.com", "cnn.com",
+                "aljazeera.com", "nytimes.com", "theguardian.com",
+                
+                # Global Fact-Checkers
+                "snopes.com", "politifact.com", "factcheck.org", "afp.com"
                 ]
         )
 
@@ -637,12 +646,15 @@ def url_fact_check_process(url, claim_id):
 
     except Exception as e:
         _log_stage(claim_id, "url_tavily_failed", tavily_search_started_at, error=str(e)[:120])
-        print(f"Tavily search error: {str(e)}")
-        _save_claim(claim_id, {
-            "verdict": "UNVERIFIED",
-            "summary": "Could not retrieve relevant information to verify the claim.",
-            "confidence_score": 0,
-        }, "Live Web Search", cleaned_text, [])
+        logger.error("Tavily search error for claim %s: %s", claim_id, e)
+        try:
+            _save_claim(claim_id, {
+                "verdict": "UNVERIFIED",
+                "summary": "Could not retrieve relevant information to verify the claim.",
+                "confidence_score": 0,
+            }, "Live Web Search", cleaned_text, [])
+        except Exception as save_err:
+            logger.error("_save_claim also failed for claim %s: %s", claim_id, save_err)
         outcome = "completed_tavily_fallback_unverified"
     finally:
         _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
