@@ -4,6 +4,7 @@ import os
 import logging
 import time
 import requests
+import base64
 from django.contrib.auth.models import User
 from .ocr_service import extract_text_from_image
 from .services import (
@@ -73,7 +74,6 @@ def snippet_fact_check_process(image_hash, claim_id, check_deepfake=False, base6
     media_fetch_started_at = time.perf_counter()
     image_bytes = None
     if base64_string:
-        import base64
         try:
             image_bytes = base64.b64decode(base64_string)
             _log_stage(
@@ -185,13 +185,16 @@ def execute_core_text_pipeline(raw_text, claim_id):
     """The shared brain for both Snippets and pure Text claims."""
 
 # --- 1. SECOND CHANCE TEXT DEDUPLICATION ---
+    
+    pipeline_started_at = time.perf_counter()
+    
     from .claim_matching import compute_fingerprint, find_matching_claim
     
     text_fingerprint = compute_fingerprint("TEXT", raw_text)
     matched_claim = find_matching_claim(text_fingerprint, "TEXT", context_text=raw_text)
 
     if matched_claim and str(matched_claim.id) != str(claim_id):
-        logger.info(f"Second-chance deduplication hit! OCR text matches existing claim {matched_claim.id}")
+        logger.info("Second-chance deduplication hit! OCR text matches existing claim %s ", matched_claim.id)
         
         try:
             current_claim = Claim.objects.get(id=claim_id)
@@ -215,7 +218,6 @@ def execute_core_text_pipeline(raw_text, claim_id):
         return
     # -------------------------------------------
 
-    pipeline_started_at = time.perf_counter()
     outcome = "completed"
 
     try:
@@ -240,6 +242,16 @@ def execute_core_text_pipeline(raw_text, claim_id):
             _log_stage(claim_id, "core_text_pipeline_total", pipeline_started_at, outcome=outcome)
             return
 
+        if article_stance == "SATIRE":
+            _save_claim(claim_id, {
+                "verdict": "SATIRE",
+                "summary": "This content originates from a known satire or parody publication and is not intended to be factual.",
+                "confidence_score": 99,
+            }, "Satire Detection", cleaned_claim, [])
+            outcome = "satire_stance_shortcut"
+            _log_stage(claim_id, "core_text_pipeline_total", pipeline_started_at, outcome=outcome)
+            return
+
         cleaned_claim = cleaned.get("cleaned_claim")
         search_query = cleaned.get("search_query")
         article_stance = cleaned.get("article_stance", "NEUTRAL")
@@ -248,7 +260,7 @@ def execute_core_text_pipeline(raw_text, claim_id):
         vault_match = search_official_vault(cleaned_claim)
 
         if vault_match:
-            logger.info(f"Vault match found for claim {claim_id}!")
+            logger.info("Vault match found for claim %s!", claim_id)
             
             # We found a highly similar past rumor. Now we ask Gemini to evaluate the NEW claim 
             # against the VERIFIED vault context to avoid the "Negation Trap".
@@ -285,7 +297,7 @@ def execute_core_text_pipeline(raw_text, claim_id):
             gfc_response = requests.get(
                 "https://factchecktools.googleapis.com/v1alpha1/claims:search",
                 params={
-                    "query": search_query,
+                    "query": search_query[:200],  
                     "key": os.environ.get("FACT_CHECK_API_KEY"),
                 },
                 timeout=GFC_HTTP_TIMEOUT_SEC,
@@ -356,7 +368,8 @@ def execute_core_text_pipeline(raw_text, claim_id):
                     
                     # Global Fact-Checkers
                     "snopes.com", "politifact.com", "factcheck.org", "afp.com"
-                ]
+                ],
+                request_timeout=DEFAULT_HTTP_TIMEOUT_SEC,
             )
             tavily_results = tavily_response.get("results", [])
             tavily_answer = tavily_response.get("answer", "No additional web context found.")
@@ -367,7 +380,6 @@ def execute_core_text_pipeline(raw_text, claim_id):
             for i, res in enumerate(tavily_results[:3]):
                 results_context += f"Source {i+1}: {res.get('title', 'No Title')}\nURL: {res.get('url', '')}\nContent: {res.get('content', '')}\n\n"
 
-            # FIXED: Renamed the label to prevent circular reasoning
             combined_context = f"Text Extracted From Image (Do NOT use this as evidence to prove itself):\n{raw_text}\n\nWeb Search Answer:\n{tavily_answer}\n\nTop Search Results:\n{results_context}"
 
             tavily_eval_started_at = time.perf_counter()
@@ -504,7 +516,7 @@ def url_fact_check_process(url, claim_id):
     vault_match = search_official_vault(cleaned_claim)
     
     if vault_match:
-        logger.info(f"Vault match found for URL claim {claim_id}!")
+        logger.info("Vault match found for URL claim %s!", claim_id)
         
         # We inject the vault data into the Gemini prompt to avoid the Negation Trap
         vault_eval_started_at = time.perf_counter()
@@ -609,7 +621,8 @@ def url_fact_check_process(url, claim_id):
                 
                 # Global Fact-Checkers
                 "snopes.com", "politifact.com", "factcheck.org", "afp.com"
-                ]
+                ],
+            request_timeout=DEFAULT_HTTP_TIMEOUT_SEC,
         )
 
         tavily_results = search_response.get("results", [])
@@ -671,7 +684,13 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
     elif isinstance(source_urls, str):
         source_urls = [source_urls]
 
-    top_url = source_urls[0] if source_urls else (verdict.get("source_url") or "")
+    first = source_urls[0] if source_urls else None
+    if isinstance(first, dict):
+        top_url = first.get("url", "")
+    elif isinstance(first, str):
+        top_url = first
+    else:
+        top_url = verdict.get("source_url") or ""
 
     try:
         claim = Claim.objects.get(id=claim_id)
