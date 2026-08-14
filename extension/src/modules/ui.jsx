@@ -112,6 +112,8 @@ export function displayResultCard(claim) {
    let sourcesHTML = "";
    const evidenceList =
       sources && sources.length > 0 ? sources : source_url ? [source_url] : [];
+   console.log(sources);
+   console.log(evidenceList);
 
    if (displayVerdict !== "OUT_OF_SCOPE" && evidenceList.length > 0) {
       sourcesHTML = `
@@ -119,28 +121,36 @@ export function displayResultCard(claim) {
             <strong style="color: #374151; display: block; margin-bottom: 4px;">Sources:</strong>
             
             <div style="display: flex; flex-direction: column; gap: 4px; max-height: 110px; overflow-y: auto; padding-right: 4px;">
-               ${evidenceList
-                  .map((src) => {
-                     const urlStr = typeof src === "string" ? src : src.url;
+            ${evidenceList
+               .map((src) => {
+                  const urlStr = typeof src === "string" ? src : src.url;
 
-                     // NEW: Try to use the article title. If it doesn't exist, extract the clean domain name (e.g., "gmanetwork.com")
-                     let displayTitle = urlStr;
+                  // 1. Skip rendering if the URL is empty or a placeholder
+                  if (!urlStr || urlStr === "#") return "";
+
+                  // 2. Safely determine the display title
+                  let displayTitle = urlStr;
+                  if (typeof src === "object" && src.title) {
+                     displayTitle = src.title;
+                  } else if (urlStr.startsWith("http")) {
                      try {
-                        displayTitle =
-                           typeof src === "object" && src.title
-                              ? src.title
-                              : new URL(urlStr).hostname.replace("www.", "");
+                        displayTitle = new URL(urlStr).hostname.replace(
+                           "www.",
+                           "",
+                        );
                      } catch (e) {
                         displayTitle = urlStr;
                      }
+                  }
 
-                     return `
-                  <a href="${urlStr}" target="_blank" title="${urlStr}" style="color: #4f46e5; text-decoration: none; background: #f9fafb; padding: 6px 10px; border-radius: 6px; border: 1px solid #e5e7eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; font-weight: 600;">
-                     ${displayTitle}
-                  </a>
-                  `;
-                  })
-                  .join("")}
+                  // 3. Return the anchor tag
+                  return `
+               <a href="${urlStr}" target="_blank" title="${urlStr}" style="color: #4f46e5; text-decoration: none; background: #f9fafb; padding: 6px 10px; border-radius: 6px; border: 1px solid #e5e7eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; font-weight: 600;">
+                  ${displayTitle}
+               </a>
+               `;
+               })
+               .join("")}
             </div>
          </div>
       `;
@@ -184,7 +194,7 @@ export function displayResultCard(claim) {
          ${ui.icon} ${ui.text}
       </div>
 
-      <div style="overflow-y: auto; padding-right: 4px; overflow-x: hidden;">
+      <div style="overflow-y: hidden; padding-right: 4px; overflow-x: hidden;">
          <div class="truthlens-summary-box">
             <div class="truthlens-summary-title">
                ${iconSparkles} AI SUMMARY
@@ -365,35 +375,14 @@ export function displayCachedResultCard(match) {
       thread_id,
       moderator_notes,
       claim_id,
-      source_type,
       is_ai_generated,
       score_context,
       sources,
       source_url,
    } = match;
-   const displayVerdict = final_verdict || verdict;
 
-   let badgeColor = "#6b7280";
-   switch (displayVerdict) {
-      case "FACT":
-         badgeColor = "#0e9f6e";
-         break;
-      case "FAKE":
-         badgeColor = "#e02424";
-         break;
-      case "MISLEADING":
-         badgeColor = "#f97316";
-         break;
-      case "SATIRE":
-         badgeColor = "#8b5cf6";
-         break;
-      case "UNVERIFIED":
-         badgeColor = "#ebdc09";
-         break;
-      case "OUT_OF_SCOPE":
-         badgeColor = "#9ca3af";
-         break;
-   }
+   const displayVerdict = final_verdict || verdict;
+   const ui = getVerdictUI(displayVerdict);
 
    let confidence_bar_color = "#6b7280";
    if (confidence_score < 40) confidence_bar_color = "#e02424";
@@ -458,23 +447,39 @@ export function displayCachedResultCard(match) {
 
    if (displayVerdict !== "OUT_OF_SCOPE" && evidenceList.length > 0) {
       sourcesHTML = `
-         <div style="margin-top: 12px; font-size: 11px;">
-            <strong style="color: #374151; display: block; margin-bottom: 4px;">Sources:</strong>
-            <div style="display: flex; flex-direction: column; gap: 4px;">
-               ${evidenceList
-                  .map((src) => {
-                     // Handle both the old string format and the new rich object format
-                     const urlStr = typeof src === "string" ? src : src.url;
-                     return `
-                  <a href="${urlStr}" target="_blank" style="color: #4f46e5; text-decoration: none; background: #f9fafb; padding: 4px 8px; border-radius: 4px; border: 1px solid #e5e7eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                     ${urlStr}
-                  </a>
-                  `;
-                  })
-                  .join("")}
+            <div style="margin-top: 12px; margin-bottom: 16px; font-size: 11px;">
+               <strong style="color: #374151; display: block; margin-bottom: 4px;">Sources:</strong>
+               
+               <div style="display: flex; flex-direction: column; gap: 4px; max-height: 110px; overflow-y: auto; padding-right: 4px;">
+                  ${evidenceList
+                     .map((src) => {
+                        const urlStr = typeof src === "string" ? src : src.url;
+
+                        // NEW: Try to use the article title. If it doesn't exist, extract the clean domain name (e.g., "gmanetwork.com")
+                        let displayTitle = urlStr;
+                        try {
+                           displayTitle =
+                              typeof src === "object" && src.title
+                                 ? src.title
+                                 : new URL(urlStr).hostname.replace("www.", "");
+                        } catch (e) {
+                           displayTitle = urlStr;
+                           console.log(
+                              "Error parsing URL for display title:",
+                              e,
+                           );
+                        }
+
+                        return `
+                     <a href="${urlStr}" target="_blank" title="${urlStr}" style="color: #4f46e5; text-decoration: none; background: #f9fafb; padding: 6px 10px; border-radius: 6px; border: 1px solid #e5e7eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; font-weight: 600;">
+                        ${displayTitle}
+                     </a>
+                     `;
+                     })
+                     .join("")}
+               </div>
             </div>
-         </div>
-      `;
+         `;
    }
 
    const card = document.createElement("div");
@@ -489,7 +494,7 @@ export function displayCachedResultCard(match) {
 
       <div style="overflow-y: auto; padding-right: 4px; overflow-x: hidden;">
          <div class="truthlens-verdict-text">
-            This post is <span class="truthlens-verdict" style="background-color: ${badgeColor};">${displayVerdict}</span>
+            This post is <span class="truthlens-badge badge-${ui.class}">${ui.icon} ${ui.text}</span>
          </div>
 
          ${customBannerHTML}
