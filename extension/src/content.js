@@ -206,12 +206,12 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 
    if (request.type === "DISPLAY_SNIPPET_CACHED_RESULT") {
       import("./modules/ui.jsx").then(
-         ({ displayCachedResultCard, removeLoadingCard, successCard }) => {
+         ({ displayResultCard, removeLoadingCard, successCard }) => {
             setTimeout(() => {
                removeLoadingCard();
             }, 1000);
             successCard("Previously verified claim found!");
-            displayCachedResultCard(request.data);
+            displayResultCard(request.data);
          },
       );
       sendResponse({ success: true });
