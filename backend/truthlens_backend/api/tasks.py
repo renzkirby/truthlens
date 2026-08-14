@@ -123,6 +123,7 @@ def snippet_fact_check_process(image_hash, claim_id, check_deepfake=False, base6
 
     # 1. PARALLEL CHECK: Deepfake Detection
     if check_deepfake:
+        deepfake_started_at = time.perf_counter()
         deepfake_result = detect_ai_image(image_bytes)
         ai_prob = deepfake_result.get("score", 0.0) if deepfake_result else 0.0
         fake_category = deepfake_result.get("category", "Unknown") if deepfake_result else "Unknown"
@@ -486,6 +487,7 @@ def url_fact_check_process(url, claim_id):
                 []
             )
             outcome = "completed_out_of_scope"
+            _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
             return
     
     if article_stance == "SATIRE":
@@ -710,16 +712,14 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
                 if embedding:
                     claim.claim_embedding = embedding
             except Exception as e:
-                print(f"Failed to generate embedding during _save_claim: {e}")
+                logger.warning("Failed to generate embedding during _save_claim for claim %s: %s", claim_id, e)
 
         claim.save()
-        print(
-            f"Claim {claim_id} saved — ai_verdict: {claim.ai_verdict}, final_verdict: {claim.final_verdict}, fingerprint: {claim.claim_fingerprint}"
-        )
+        logger.info("Claim %s saved — ai_verdict: %s, final_verdict: %s, fingerprint: %s", claim_id, claim.ai_verdict, claim.final_verdict, claim.claim_fingerprint)
     except Claim.DoesNotExist:
-        print(f"Claim {claim_id} not found — skipping save")
+        logger.warning("Claim %s not found — skipping save", claim_id)
     except Exception as e:
-        print(f"Save failed for claim {claim_id}: {str(e)}")
+        logger.error("Save failed for claim %s: %s", claim_id, e)
         import traceback
         traceback.print_exc()
 
