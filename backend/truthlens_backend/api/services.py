@@ -48,6 +48,7 @@ def call_llm_with_fallback(system_instructions, user_prompt):
             config=types.GenerateContentConfig(
                 system_instruction=system_instructions,
                 response_mime_type="application/json",
+                temperature=0.1,
             )
         )
         return response.text
@@ -108,7 +109,17 @@ def validate_public_url(raw_url):
         # Host is a domain name, which is allowed.
         pass
 
-    sanitized = parsed._replace(fragment="").geturl()
+    from urllib.parse import parse_qs, urlencode
+    TRACKING_PARAMS = {
+        "utm_source", "utm_medium", "utm_campaign", "utm_term",
+        "utm_content", "fbclid", "gclid", "ref", "mc_eid"
+    }
+    cleaned_params = {
+        k: v for k, v in parse_qs(parsed.query).items()
+        if k.lower() not in TRACKING_PARAMS
+    }
+    cleaned_query = urlencode(cleaned_params, doseq=True)
+    sanitized = parsed._replace(fragment="", query=cleaned_query).geturl()
     return sanitized, None
 
 
@@ -671,7 +682,7 @@ def detect_ai_image(image_bytes):
 def generate_deepfake_explanation(base64_string, fake_category):
     """Uses Groq Vision and forensic metadata to write a highly accurate explanation."""
     try:
-        client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+        chat_completion = groq_client.chat.completions.create(api_key=os.environ.get("GROQ_API_KEY"))
         image_url = f"data:image/jpeg;base64,{base64_string}"
 
         # We inject the mathematical category into Groq's prompt for a smarter analysis
