@@ -48,6 +48,7 @@ def call_llm_with_fallback(system_instructions, user_prompt):
             config=types.GenerateContentConfig(
                 system_instruction=system_instructions,
                 response_mime_type="application/json",
+                temperature=0.1,
             )
         )
         return response.text
@@ -108,7 +109,17 @@ def validate_public_url(raw_url):
         # Host is a domain name, which is allowed.
         pass
 
-    sanitized = parsed._replace(fragment="").geturl()
+    from urllib.parse import parse_qs, urlencode
+    TRACKING_PARAMS = {
+        "utm_source", "utm_medium", "utm_campaign", "utm_term",
+        "utm_content", "fbclid", "gclid", "ref", "mc_eid"
+    }
+    cleaned_params = {
+        k: v for k, v in parse_qs(parsed.query).items()
+        if k.lower() not in TRACKING_PARAMS
+    }
+    cleaned_query = urlencode(cleaned_params, doseq=True)
+    sanitized = parsed._replace(fragment="", query=cleaned_query).geturl()
     return sanitized, None
 
 
@@ -213,10 +224,10 @@ def clean_ocr_text(raw_text):
 
     try:
         response_text = call_llm_with_fallback(system_instructions, f"Text: {raw_text}")
-        print("clean_ocr_text OUTPUT:", response_text)
+        logger.debug("clean_ocr_text OUTPUT: %s", response_text)
         return _parse_llm_json(response_text)
     except Exception as e:
-        print(f"Gatekeeper AI Error: {e}")
+        logger.error("Gatekeeper AI Error: %s", e)
         return {
             "cleaned_claim": "OUT_OF_SCOPE",
             "search_query": "error",
@@ -235,10 +246,10 @@ def is_fact_check_relevant(original_text, fact_check_text):
     try:
         response_text = call_llm_with_fallback(system_instructions, f'Claim: "{original_text}"\n\nFact Check: "{fact_check_text}"')
         result = _parse_llm_json(response_text)
-        print("is_fact_check_relevant RESPONSE:", result)
+        logger.debug("is_fact_check_relevant RESPONSE: %s", result)
         return result.get("is_relevant", False)
     except Exception as e:
-        print(f"Relevance Checker AI Error: {e}")
+        logger.error("Relevance Checker AI Error: %s", e)
         return False
 
 
@@ -316,10 +327,10 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, articl
     
     try:
         response_text = call_llm_with_fallback(system_instructions, user_data)
-        print("evaluate_image_claim_with_gfc OUTPUT:", response_text)
+        logger.debug("evaluate_image_claim_with_gfc OUTPUT: %s", response_text)
         return _parse_llm_json(response_text)
     except Exception as e:
-        print(f"GFC AI Error: {e}")
+        logger.error("GFC AI Error: %s", e)
         return {
             "verdict": "UNVERIFIED",
             "summary": "Could not definitively verify the claim from the official fact check data due to an AI service error.",
@@ -330,7 +341,7 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, articl
 def evaluate_image_claim_with_tavily(original_claim, combined_context, article_stance="NEUTRAL"):
     """Evaluate an image claim against Tavily live news results."""
 
-    print("EVIDENCE TEXT:", combined_context)
+    logger.debug("EVIDENCE TEXT: %s", combined_context)
 
     system_instructions = """
     Role: You are the TruthLens Core Logic Engine, an expert automated fact-checking AI, forensic linguist, and misinformation analyst. 
@@ -389,10 +400,10 @@ def evaluate_image_claim_with_tavily(original_claim, combined_context, article_s
 
     try:
         response_text = call_llm_with_fallback(system_instructions, user_data)
-        print("evaluate_image_claim_with_tavily OUTPUT:", response_text)
+        logger.debug("evaluate_image_claim_with_tavily OUTPUT: %s", response_text)
         return _parse_llm_json(response_text)
     except Exception as e:
-        print(f"Tavily Evaluator AI Error: {e}")
+        logger.error("Tavily Evaluator AI Error: %s", e)
         return {
             "verdict": "UNVERIFIED",
             "summary": "TruthLens is experiencing a temporary AI service outage. Could not verify the claim.",
@@ -441,10 +452,10 @@ def extract_search_query(text, source_url=""):
     """
     try:
         response_text = call_llm_with_fallback(system_instructions, f"Source URL: {source_url}\n\nText: {text}")
-        print("extract_search_query OUTPUT:", response_text)
+        logger.debug("extract_search_query OUTPUT: %s", response_text)
         return _parse_llm_json(response_text)
     except Exception as e:
-        print(f"URL Gatekeeper AI Error: {e}")
+        logger.error("extract_search_query AI Error: %s", e)
         return {
             "cleaned_claim": "OUT_OF_SCOPE",
             "search_query": "error",
@@ -518,7 +529,7 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
         response_text = call_llm_with_fallback(system_instructions, user_data)
         return _parse_llm_json(response_text)
     except Exception as e:
-        print(f"URL GFC AI Error: {e}")
+        logger.error("URL GFC AI Error: %s", e)
         return {
             "verdict": "UNVERIFIED",
             "summary": "Could not analyze the official fact check data due to an AI service error.",
@@ -588,7 +599,7 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
         response_text = call_llm_with_fallback(system_instructions, user_data)
         return _parse_llm_json(response_text)
     except Exception as e:
-        print(f"URL Tavily Evaluator AI Error: {e}")
+        logger.error("URL Tavily Evaluator AI Error: %s", e)
         return {
             "verdict": "UNVERIFIED",
             "summary": "TruthLens is experiencing a temporary AI service outage. Could not analyze the evidence.",
@@ -619,8 +630,7 @@ def upload_image_to_database(base64_string):
     )
     
     public_url = supabase.storage.from_("claim-images").get_public_url(file_name)
-    print("PUBLIC URL TYPE:", type(public_url))
-    print("PUBLIC URL VALUE:", public_url)
+    logger.debug("Uploaded image to Supabase. Public URL: %s", public_url)
     return public_url
     
 
@@ -664,14 +674,13 @@ def detect_ai_image(image_bytes):
             "category": fake_category
         }
         
-    except Exception as e:
-        print(f"Sightengine Pipeline Error: {str(e)}")
+    except Exception as e:  
+        logger.error("Sightengine Pipeline Error: %s", e)
         return None
 
 def generate_deepfake_explanation(base64_string, fake_category):
     """Uses Groq Vision and forensic metadata to write a highly accurate explanation."""
     try:
-        client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
         image_url = f"data:image/jpeg;base64,{base64_string}"
 
         # We inject the mathematical category into Groq's prompt for a smarter analysis
@@ -682,7 +691,7 @@ def generate_deepfake_explanation(base64_string, fake_category):
             f"support this conclusion. Keep it objective and highly professional."
         )
 
-        chat_completion = client.chat.completions.create(
+        chat_completion = groq_client.chat.completions.create(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {
@@ -712,7 +721,7 @@ def search_official_vault(cleaned_claim_text):
     try:
         query_embedding = generate_embedding(cleaned_claim_text)
     except Exception as e:
-        print(f"Embedding failed during vault search: {e}")
+        logger.error("Embedding failed during vault search: %s", e)
         return None
 
     # 2. Ping the Supabase RPC
@@ -742,5 +751,5 @@ def search_official_vault(cleaned_claim_text):
                 
         return None
     except Exception as e:
-        print(f"Vault search error: {e}")
+        logger.error("Vault search error: %s", e)
         return None
