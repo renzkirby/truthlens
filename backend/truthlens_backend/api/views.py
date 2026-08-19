@@ -813,7 +813,7 @@ class ThreadViewSet(viewsets.ModelViewSet):
                 | Q(claim__context_text__icontains=search_query)
                 | Q(claim__ai_summary__icontains=search_query)
                 | Q(claim__source_link__icontains=search_query)
-                | Q(claim__verdict__icontains=search_query)
+                | Q(claim__ai_verdict__icontains=search_query)
                 | Q(claim__final_verdict__icontains=search_query)
             )
 
@@ -915,6 +915,7 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
             contributor=self.request.user,
             thread=thread,
             contributor_trust_snapshot=self.request.user.profile.trust_score,
+            evidence_status=EvidenceSubmission.EvidenceStatus.UNVERIFIED,
         )
         
     @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated, IsModerator])
