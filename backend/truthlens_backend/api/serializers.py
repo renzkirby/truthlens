@@ -510,7 +510,6 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
             "evidence_url",
             "evidence_type",
             "evidence_verdict",
-            "evidence_status",
             "contributor_trust_snapshot",
             "submitted_at",
             "verified_by",
@@ -530,6 +529,7 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
             "verified_at",
             "moderator_notes",
             "thread",
+            "evidence_status",
         ]
 
     def validate(self, attrs):
