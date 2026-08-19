@@ -196,7 +196,6 @@ def execute_core_text_pipeline(raw_text, claim_id):
         try:
             current_claim = Claim.objects.get(id=claim_id)
             # Instantly copy the verdict data from the matched claim to the new one
-            current_claim.verdict = matched_claim.verdict
             current_claim.ai_verdict = matched_claim.ai_verdict
             current_claim.final_verdict = matched_claim.final_verdict
             current_claim.ai_summary = matched_claim.ai_summary
@@ -397,7 +396,6 @@ def execute_core_text_pipeline(raw_text, claim_id):
         print(f"Core Fact Check Error (Fatal): {e}")
         try:
             claim = Claim.objects.get(id=claim_id)
-            claim.verdict = "UNVERIFIED"
             claim.ai_verdict = "UNVERIFIED"
             # Keep moderator verdict channel empty until moderator or consensus sets it.
             claim.final_verdict = None
@@ -664,7 +662,6 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
         ai_verdict_value = verdict.get("verdict")
         claim.ai_verdict = ai_verdict_value
         # Keep final_verdict reserved for moderator or verified-evidence consensus decisions.
-        claim.verdict = ai_verdict_value
         claim.ai_summary = verdict.get("summary")
         claim.ai_reasoning = verdict.get("reasoning")
         claim.score_context = verdict.get("score_context")
