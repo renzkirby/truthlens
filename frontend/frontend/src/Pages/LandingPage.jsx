@@ -21,6 +21,9 @@ import {
    MessagesSquare,
    PanelsTopLeft,
    Scale,
+   Target,
+   Eye,
+   UsersRound,
 } from "lucide-react";
 
 const TruthLens = () => {
@@ -697,6 +700,110 @@ const TruthLens = () => {
                         </p>
                      </div>
                   </article>
+               </div>
+            </div>
+         </section>
+
+         {/* About / Mission Section */}
+         <section id="about" className="about-section">
+            <div className="about-container">
+               {/* Mission Content */}
+               <div className="about-content">
+                  <span className="section-label">OUR MISSION</span>
+
+                  <h2 className="about-title">
+                     Better information starts with better questions.
+                  </h2>
+
+                  <p className="about-lead">
+                     TruthLens was created to help people slow down, investigate
+                     questionable content, and make more informed decisions
+                     before believing or sharing what they encounter online.
+                  </p>
+
+                  <p className="about-description">
+                     We believe verification should provide more than a verdict.
+                     People should be able to examine context, supporting
+                     evidence, and different perspectives while understanding
+                     the role AI plays in the analysis.
+                  </p>
+               </div>
+
+               {/* Mission Principles */}
+               <div className="about-principles">
+                  <div className="about-principle">
+                     <div className="about-principle-icon">
+                        <Eye size={24} strokeWidth={1.8} aria-hidden="true" />
+                     </div>
+
+                     <div>
+                        <span className="about-principle-label">QUESTION</span>
+
+                        <h3>Look beyond the first impression</h3>
+
+                        <p>
+                           Suspicious content deserves examination before it
+                           becomes something we accept or pass along.
+                        </p>
+                     </div>
+                  </div>
+
+                  <div className="about-principle">
+                     <div className="about-principle-icon">
+                        <Target
+                           size={24}
+                           strokeWidth={1.8}
+                           aria-hidden="true"
+                        />
+                     </div>
+
+                     <div>
+                        <span className="about-principle-label">
+                           UNDERSTAND
+                        </span>
+
+                        <h3>Context matters</h3>
+
+                        <p>
+                           A useful verification process should help explain
+                           what is known, what is uncertain, and what evidence
+                           supports the result.
+                        </p>
+                     </div>
+                  </div>
+
+                  <div className="about-principle">
+                     <div className="about-principle-icon">
+                        <UsersRound
+                           size={24}
+                           strokeWidth={1.8}
+                           aria-hidden="true"
+                        />
+                     </div>
+
+                     <div>
+                        <span className="about-principle-label">
+                           PARTICIPATE
+                        </span>
+
+                        <h3>Verification is not only automated</h3>
+
+                        <p>
+                           AI can assist the process, while community
+                           participation and human review can provide additional
+                           perspective when needed.
+                        </p>
+                     </div>
+                  </div>
+               </div>
+            </div>
+
+            {/* Mission Statement */}
+            <div className="about-statement">
+               <div className="about-statement-inner">
+                  <span>TruthLens exists to encourage one simple habit:</span>
+
+                  <strong>investigate before you amplify.</strong>
                </div>
             </div>
          </section>
