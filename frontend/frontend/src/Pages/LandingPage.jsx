@@ -3,6 +3,17 @@ import "./LandingPage.css";
 import LogoImage from "../assets/truthlens_logo.png";
 import { Link } from "react-router-dom";
 
+import {
+   Shield,
+   Download,
+   ArrowDown,
+   Image,
+   ScanSearch,
+   Scissors,
+   Search,
+   FileText,
+} from "lucide-react";
+
 const TruthLens = () => {
    const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -17,11 +28,7 @@ const TruthLens = () => {
                   className="navbar-brand"
                   aria-label="TruthLens home"
                >
-                  <img
-                     src="/src/assets/truthlens_logo.png"
-                     alt=""
-                     className="navbar-logo"
-                  />
+                  <img src={LogoImage} alt="" className="navbar-logo" />
 
                   <span className="navbar-brand-name">TruthLens</span>
                </Link>
@@ -105,136 +112,253 @@ const TruthLens = () => {
          {/* Hero Section */}
          <section className="hero-section">
             <div className="hero-container">
+               {/* Hero Content */}
                <div className="hero-content">
                   <div className="hero-badge">
-                     <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                     >
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                     </svg>
+                     <Shield size={15} strokeWidth={2} aria-hidden="true" />
                      AI-POWERED MEDIA LITERACY
                   </div>
+
                   <h1 className="hero-title">
-                     See the Truth <br />
-                     <span className="hero-highlight">Behind the Feed.</span>
+                     Verify what you see.
+                     <span className="hero-highlight">
+                        Understand what you share.
+                     </span>
                   </h1>
+
                   <p className="hero-subtitle">
-                     AI-powered shield against misinformation. Snip any claim,
-                     get an instant verdict, and let 10,000+ fact-checkers
-                     settle the debate.
+                     TruthLens helps you investigate suspicious images, claims,
+                     and online content directly from your browser using
+                     AI-assisted analysis and supporting evidence.
                   </p>
 
-                  <div className="hero-stats">
-                     <div className="stat-item">
-                        <h3>12,040+</h3>
-                        <p>IMAGES VERIFIED</p>
-                     </div>
-                     <div className="stat-item">
-                        <h3>500+</h3>
-                        <p>ACTIVE CONTRIBUTORS</p>
-                     </div>
-                     <div className="stat-item">
-                        <h3>98%</h3>
-                        <p>ACCURACY RATE</p>
-                     </div>
-                     <div className="stat-item">
-                        <h3>10k+</h3>
-                        <p>COMMUNITY MEMBERS</p>
-                     </div>
+                  {/* Primary Actions */}
+                  <div className="hero-buttons">
+                     <a
+                        href="https://chromewebstore.google.com/detail/truthlens/dhkeknpnigghagekhdcpknbggfpbmkgo"
+                        className="download-btn"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                     >
+                        <Download
+                           size={18}
+                           strokeWidth={2}
+                           aria-hidden="true"
+                        />
+                        Add to Chrome
+                     </a>
+
+                     <a href="#how-it-works" className="demo-btn">
+                        <ArrowDown
+                           size={18}
+                           strokeWidth={2}
+                           aria-hidden="true"
+                        />
+                        See how it works
+                     </a>
                   </div>
 
-                  <div className="hero-buttons">
-                     <button className="download-btn">
-                        <svg
-                           width="18"
-                           height="18"
-                           viewBox="0 0 24 24"
-                           fill="none"
-                           stroke="currentColor"
-                           strokeWidth="2"
-                           strokeLinecap="round"
-                           strokeLinejoin="round"
-                        >
-                           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                           <polyline points="7 10 12 15 17 10" />
-                           <line x1="12" y1="15" x2="12" y2="3" />
-                        </svg>
-                        DOWNLOAD FOR CHROME
-                     </button>
-                     <button className="demo-btn">
-                        <svg
-                           width="18"
-                           height="18"
-                           viewBox="0 0 24 24"
-                           fill="none"
-                           stroke="currentColor"
-                           strokeWidth="2"
-                           strokeLinecap="round"
-                           strokeLinejoin="round"
-                        >
-                           <polygon points="5 3 19 12 5 21 5 3" />
-                        </svg>
-                        Watch Demo
-                     </button>
+                  {/* Product Capability Strip */}
+                  <div className="hero-capabilities">
+                     <div className="hero-capability">
+                        <div className="capability-icon">
+                           <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                           >
+                              <rect x="3" y="3" width="18" height="18" rx="2" />
+                              <circle cx="8.5" cy="8.5" r="1.5" />
+                              <polyline points="21 15 16 10 5 21" />
+                           </svg>
+                        </div>
+
+                        <span>Image verification</span>
+                     </div>
+
+                     <div className="hero-capability">
+                        <div className="capability-icon">
+                           <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                           >
+                              <path d="M4 4h6v6H4z" />
+                              <path d="M14 14h6v6h-6z" />
+                              <path d="m14 4 6 6" />
+                              <path d="M20 4v6h-6" />
+                              <path d="m4 20 6-6" />
+                              <path d="M4 14v6h6" />
+                           </svg>
+                        </div>
+
+                        <span>Claim analysis</span>
+                     </div>
+
+                     <div className="hero-capability">
+                        <div className="capability-icon">
+                           <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                           >
+                              <circle cx="12" cy="12" r="9" />
+                              <path d="M12 8v4l3 2" />
+                           </svg>
+                        </div>
+
+                        <span>Evidence-aware results</span>
+                     </div>
                   </div>
                </div>
 
+               {/* Hero Product Visualization */}
                <div className="hero-visual">
-                  <div className="mockup-container">
-                     <div className="mockup-bg-shape shape-1"></div>
-                     <div className="mockup-bg-shape shape-2"></div>
+                  <div className="hero-visual-glow"></div>
 
-                     {/* Foreground Floating Card */}
-                     <div className="floating-card">
-                        <div className="card-header">
-                           <div className="card-logo">
-                              <svg
-                                 width="14"
-                                 height="14"
-                                 viewBox="0 0 24 24"
-                                 fill="none"
-                                 stroke="currentColor"
-                                 strokeWidth="2"
-                              >
-                                 <circle cx="11" cy="11" r="8" />
-                                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                              </svg>
-                              <span>TruthLens</span>
+                  <div className="extension-window">
+                     {/* Extension Header */}
+                     <div className="extension-header">
+                        <div className="extension-brand">
+                           <img
+                              src={LogoImage}
+                              alt=""
+                              className="extension-logo"
+                           />
+
+                           <span>TruthLens</span>
+                        </div>
+
+                        <div className="extension-status">
+                           <span className="status-dot"></span>
+                           Ready
+                        </div>
+                     </div>
+
+                     {/* Extension Content */}
+                     <div className="extension-body">
+                        <div className="extension-intro">
+                           <span className="extension-eyebrow">
+                              VERIFY IMAGE
+                           </span>
+
+                           <h2>Check what you're seeing.</h2>
+
+                           <p>
+                              Select a suspicious image or claim on the page to
+                              start an investigation.
+                           </p>
+                        </div>
+
+                        {/* Snipping Action */}
+                        <div className="verification-card">
+                           <div className="verification-icon">
+                              <Image
+                                 size={26}
+                                 strokeWidth={1.8}
+                                 aria-hidden="true"
+                              />
                            </div>
-                           <div className="card-badge badge-fake">
-                              <svg
-                                 width="12"
-                                 height="12"
-                                 viewBox="0 0 24 24"
-                                 fill="none"
-                                 stroke="currentColor"
-                                 strokeWidth="2"
-                              >
-                                 <circle cx="12" cy="12" r="10" />
-                                 <line x1="15" y1="9" x2="9" y2="15" />
-                                 <line x1="9" y1="9" x2="15" y2="15" />
-                              </svg>
-                              Fake / False
+
+                           <div className="verification-copy">
+                              <strong>Verify Image</strong>
+
+                              <span>Draw a box around the claim</span>
                            </div>
                         </div>
-                        <p className="card-text">
-                           AI detected this photo is from a 2021 flood event,
-                           not 2024.
-                        </p>
-                        <div className="progress-bar">
-                           <div
-                              className="progress-fill"
-                              style={{ width: "94%" }}
-                           ></div>
+
+                        <button
+                           type="button"
+                           className="extension-snip-button"
+                           aria-label="Start snipping"
+                        >
+                           <Scissors
+                              size={17}
+                              strokeWidth={2}
+                              aria-hidden="true"
+                           />
+                           Start Snipping
+                        </button>
+
+                        {/* Other Extension Capabilities */}
+                        <div className="extension-tools">
+                           <div className="extension-tool">
+                              <span className="tool-icon">
+                                 <Search
+                                    size={15}
+                                    strokeWidth={2}
+                                    aria-hidden="true"
+                                 />
+                              </span>
+
+                              <span>Analyze URL</span>
+
+                              <span className="tool-arrow">→</span>
+                           </div>
+
+                           <div className="extension-tool">
+                              <span className="tool-icon">
+                                 <FileText
+                                    size={15}
+                                    strokeWidth={2}
+                                    aria-hidden="true"
+                                 />
+                              </span>
+
+                              <span>Upload File</span>
+
+                              <span className="tool-arrow">→</span>
+                           </div>
+
+                           <div className="extension-tool">
+                              <span className="tool-icon">
+                                 <ScanSearch
+                                    size={15}
+                                    strokeWidth={2}
+                                    aria-hidden="true"
+                                 />
+                              </span>
+
+                              <span>Deepfake Detection</span>
+
+                              <span className="tool-arrow">→</span>
+                           </div>
                         </div>
-                        <p className="card-meta">
-                           94% confidence · 15 community sources
-                        </p>
+                     </div>
+
+                     {/* Extension Footer */}
+                     <div className="extension-footer">
+                        <span>TruthLens browser extension</span>
+
+                        <span>AI-assisted verification</span>
+                     </div>
+                  </div>
+
+                  {/* Decorative Floating Element */}
+                  <div className="hero-floating-note">
+                     <span className="floating-note-icon">✓</span>
+
+                     <div>
+                        <strong>Investigate before you share.</strong>
+                        <span>Evidence first. Decisions second.</span>
                      </div>
                   </div>
                </div>
@@ -242,7 +366,7 @@ const TruthLens = () => {
          </section>
 
          {/* How It Works Section */}
-         <section className="how-it-works">
+         <section id="how-it-works" className="how-it-works">
             <div className="section-header">
                <span className="section-label">HOW IT WORKS</span>
                <h2 className="section-title">Three steps to the truth</h2>
