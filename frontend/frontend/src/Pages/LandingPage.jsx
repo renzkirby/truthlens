@@ -12,6 +12,8 @@ import {
    Scissors,
    Search,
    FileText,
+   Zap,
+   Users,
 } from "lucide-react";
 
 const TruthLens = () => {
@@ -369,85 +371,65 @@ const TruthLens = () => {
          <section id="how-it-works" className="how-it-works">
             <div className="section-header">
                <span className="section-label">HOW IT WORKS</span>
-               <h2 className="section-title">Three steps to the truth</h2>
+
+               <h2 className="section-title">
+                  Three steps to better-informed decisions
+               </h2>
+
+               <p className="section-description">
+                  TruthLens helps you move from suspicious content to clearer
+                  context through a simple verification workflow.
+               </p>
             </div>
 
             <div className="steps-grid">
-               <div className="step-card">
+               {/* Step 1 */}
+               <article className="step-card">
                   <div className="step-icon-wrapper">
-                     <svg
-                        width="32"
-                        height="32"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="white"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                     >
-                        <circle cx="6" cy="6" r="3" />
-                        <circle cx="6" cy="18" r="3" />
-                        <line x1="20" y1="4" x2="8.12" y2="15.88" />
-                        <line x1="14.47" y1="14.48" x2="20" y2="20" />
-                        <line x1="8.12" y1="8.12" x2="12" y2="12" />
-                     </svg>
+                     <Scissors size={28} strokeWidth={1.8} aria-hidden="true" />
                   </div>
-                  <div className="step-number">01 — SNIP</div>
-                  <h3 className="step-title">Snip</h3>
-                  <p className="step-desc">
-                     Select any suspicious claim or image directly from your
-                     feed using our Chrome extension.
-                  </p>
-               </div>
 
-               <div className="step-card">
-                  <div className="step-icon-wrapper">
-                     <svg
-                        width="32"
-                        height="32"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="white"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                     >
-                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                     </svg>
-                  </div>
-                  <div className="step-number">02 — ANALYZE</div>
-                  <h3 className="step-title">Analyze</h3>
-                  <p className="step-desc">
-                     AI cross-references the claim against thousands of verified
-                     sources in under 3 seconds.
-                  </p>
-               </div>
+                  <span className="step-number">01 — SNIP</span>
 
-               <div className="step-card">
-                  <div className="step-icon-wrapper">
-                     <svg
-                        width="32"
-                        height="32"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="white"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                     >
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                        <circle cx="9" cy="7" r="4" />
-                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                     </svg>
-                  </div>
-                  <div className="step-number">03 — RESOLVE</div>
-                  <h3 className="step-title">Resolve</h3>
+                  <h3 className="step-title">Select the content</h3>
+
                   <p className="step-desc">
-                     The community votes on uncertain claims. Your Trust Score
-                     grows with every accurate contribution.
+                     Capture a suspicious image or claim directly from the page
+                     using the TruthLens browser extension.
                   </p>
-               </div>
+               </article>
+
+               {/* Step 2 */}
+               <article className="step-card">
+                  <div className="step-icon-wrapper">
+                     <Zap size={28} strokeWidth={1.8} aria-hidden="true" />
+                  </div>
+
+                  <span className="step-number">02 — ANALYZE</span>
+
+                  <h3 className="step-title">Analyze the evidence</h3>
+
+                  <p className="step-desc">
+                     TruthLens evaluates the submitted content using AI-assisted
+                     analysis and supporting evidence.
+                  </p>
+               </article>
+
+               {/* Step 3 */}
+               <article className="step-card">
+                  <div className="step-icon-wrapper">
+                     <Users size={28} strokeWidth={1.8} aria-hidden="true" />
+                  </div>
+
+                  <span className="step-number">03 — UNDERSTAND</span>
+
+                  <h3 className="step-title">Review the context</h3>
+
+                  <p className="step-desc">
+                     Examine the result, supporting context, and community
+                     activity before deciding what to trust or share.
+                  </p>
+               </article>
             </div>
          </section>
 
