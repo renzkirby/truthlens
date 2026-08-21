@@ -869,41 +869,72 @@ const TruthLens = () => {
 
          {/* Footer */}
          <footer className="footer">
-            <div className="footer-content">
-               <div className="footer-left">
-                  <svg
-                     width="24"
-                     height="24"
-                     viewBox="0 0 24 24"
-                     fill="none"
-                     xmlns="http://www.w3.org/2000/svg"
-                     className="footer-logo"
-                  >
-                     <circle
-                        cx="11"
-                        cy="11"
-                        r="8"
-                        stroke="#ffffff"
-                        strokeWidth="2.5"
-                     />
-                     <line
-                        x1="16.5"
-                        y1="16.5"
-                        x2="21"
-                        y2="21"
-                        stroke="#ffffff"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                     />
-                  </svg>
-                  <span>
-                     © 2025 TruthLens. Fighting misinformation together.
-                  </span>
+            <div className="footer-container">
+               {/* Main Footer */}
+               <div className="footer-main">
+                  {/* Brand */}
+                  <div className="footer-brand">
+                     <Link
+                        to="/landing-page"
+                        className="footer-brand-link"
+                        aria-label="TruthLens home"
+                     >
+                        <img src={LogoImage} alt="" className="footer-logo" />
+
+                        <span className="footer-brand-name">TruthLens</span>
+                     </Link>
+
+                     <p className="footer-description">
+                        AI-assisted verification built to help you investigate
+                        questionable content, examine supporting evidence, and
+                        make better-informed decisions online.
+                     </p>
+                  </div>
+
+                  {/* Navigation */}
+                  <div className="footer-nav">
+                     <div className="footer-nav-group">
+                        <h3>Explore</h3>
+
+                        <a href="#features">Features</a>
+
+                        <a href="#how-it-works">How it works</a>
+
+                        <a href="#trust">Trust & Transparency</a>
+
+                        <a href="#about">About</a>
+                     </div>
+
+                     <div className="footer-nav-group">
+                        <h3>TruthLens</h3>
+
+                        <a
+                           href="https://chromewebstore.google.com/detail/truthlens/dhkeknpnigghagekhdcpknbggfpbmkgo"
+                           target="_blank"
+                           rel="noopener noreferrer"
+                        >
+                           Chrome Extension
+                        </a>
+
+                        <Link to="/community">Community</Link>
+
+                        <Link to="/login">Login</Link>
+
+                        <Link to="/register">Create an account</Link>
+                     </div>
+                  </div>
                </div>
-               <div className="footer-links">
-                  <a href="#privacy">Privacy</a>
-                  <a href="#terms">Terms</a>
-                  <a href="#contact">Contact</a>
+
+               {/* Footer Bottom */}
+               <div className="footer-bottom">
+                  <span>
+                     © {new Date().getFullYear()} TruthLens. Investigate before
+                     you amplify.
+                  </span>
+
+                  <span className="footer-status">
+                     AI-assisted verification • Evidence-aware results
+                  </span>
                </div>
             </div>
          </footer>
