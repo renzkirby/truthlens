@@ -13,8 +13,8 @@
  *   const { claims, loading, error } = useFetchClaims(authFetch, "my-claims");
  */
 
-import { useEffect, useState } from "react";
-import { buildApiUrl, useEndpoint } from "../utils/api";
+import { useEffect, useState, useCallback } from "react";
+import { buildApiUrl, resolveApiEndpoint } from "../utils/api";
 
 /**
  * Hook to fetch claims from the API.
@@ -27,19 +27,19 @@ import { buildApiUrl, useEndpoint } from "../utils/api";
  *   - error: Error message string or null
  *   - refetch: Function to manually trigger a refetch
  */
+const normalizeClaimResponse = (payload) => {
+   if (Array.isArray(payload)) return payload;
+   if (payload && Array.isArray(payload.results)) return payload.results;
+   return [];
+};
+
 function useFetchClaims(authFetch, claimType = "claims") {
    const [claims, setClaims] = useState([]);
    const [loading, setLoading] = useState(true);
    const [error, setError] = useState(null);
 
-   const normalizeClaimResponse = (payload) => {
-      if (Array.isArray(payload)) return payload;
-      if (payload && Array.isArray(payload.results)) return payload.results;
-      return [];
-   };
-
    // ── Determine endpoint based on claimType ──
-   const getEndpointUrl = () => {
+   const getEndpointUrl = useCallback(() => {
       const normalizedClaimType = String(claimType || "").trim();
 
       if (
@@ -47,23 +47,25 @@ function useFetchClaims(authFetch, claimType = "claims") {
          normalizedClaimType === "auth/my-claims" ||
          normalizedClaimType === "auth/my-claims/"
       ) {
-         return useEndpoint("MY_CLAIMS");
+         return resolveApiEndpoint("MY_CLAIMS");
       }
 
-      if (normalizedClaimType === "claims" || normalizedClaimType === "claims/") {
-         return useEndpoint("CLAIMS");
+      if (
+         normalizedClaimType === "claims" ||
+         normalizedClaimType === "claims/"
+      ) {
+         return resolveApiEndpoint("CLAIMS");
       }
 
-      // Allow callers to pass a custom relative API path such as users/:username/claims/.
       if (normalizedClaimType) {
          return buildApiUrl(normalizedClaimType);
       }
 
-      return useEndpoint("CLAIMS");
-   };
+      return resolveApiEndpoint("CLAIMS");
+   }, [claimType]);
 
    // ── Fetch claims from API ──
-   const fetchClaims = async () => {
+   const fetchClaims = useCallback(async () => {
       try {
          setLoading(true);
          setError(null);
@@ -78,14 +80,14 @@ function useFetchClaims(authFetch, claimType = "claims") {
       } finally {
          setLoading(false);
       }
-   };
+   }, [authFetch, claimType, getEndpointUrl]);
 
    // ── Auto-fetch on component mount or endpoint change ──
    useEffect(() => {
       if (authFetch) {
          fetchClaims();
       }
-   }, [authFetch, claimType]);
+   }, [authFetch, fetchClaims]);
 
    // ── Return state + refetch ability ──
    return {

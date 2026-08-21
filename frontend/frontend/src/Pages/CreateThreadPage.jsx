@@ -17,14 +17,14 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import NavigationBar from "../components/NavigationBar";
 import Icons from "../components/Icons.jsx";
 
 // ── Utilities & Constants ──
 import { getAiVerdict } from "../utils/verdict";
 import { VERDICT_CONFIG, VERDICT_OPTIONS, ESCALATION_OPTIONS, VERDICT_COLORS } from "../utils/constants";
-import { useEndpoint } from "../utils/api";
+import { resolveApiEndpoint } from "../utils/api";
 
 // ── Styles ──
 import "./CreateThreadPage.css";
@@ -34,17 +34,47 @@ const CreateThreadSkeleton = () => {
       <div className="create-thread-body">
          <div className="create-thread-form-col">
             <div className="form-section box-panel">
-               <div className="skeleton-box" style={{ width: "150px", height: "20px", marginBottom: "8px" }}></div>
+               <div
+                  className="skeleton-box"
+                  style={{
+                     width: "150px",
+                     height: "20px",
+                     marginBottom: "8px",
+                  }}
+               ></div>
                <div className="skeleton-box" style={{ width: "80%", height: "14px", marginBottom: "16px" }}></div>
-               <div className="skeleton-box" style={{ width: "100%", height: "100px", borderRadius: "8px" }}></div>
+               <div
+                  className="skeleton-box"
+                  style={{
+                     width: "100%",
+                     height: "100px",
+                     borderRadius: "8px",
+                  }}
+               ></div>
             </div>
 
             <div className="form-section box-panel">
-               <div className="skeleton-box" style={{ width: "200px", height: "20px", marginBottom: "8px" }}></div>
+               <div
+                  className="skeleton-box"
+                  style={{
+                     width: "200px",
+                     height: "20px",
+                     marginBottom: "8px",
+                  }}
+               ></div>
                <div className="skeleton-box" style={{ width: "70%", height: "14px", marginBottom: "16px" }}></div>
                <div className="flag-options">
                   {[1, 2, 3, 4, 5].map((i) => (
-                     <div key={i} className="skeleton-box" style={{ width: "100%", height: "60px", borderRadius: "12px", marginBottom: "8px" }}></div>
+                     <div
+                        key={i}
+                        className="skeleton-box"
+                        style={{
+                           width: "100%",
+                           height: "60px",
+                           borderRadius: "12px",
+                           marginBottom: "8px",
+                        }}
+                     ></div>
                   ))}
                </div>
             </div>
@@ -54,8 +84,15 @@ const CreateThreadSkeleton = () => {
 
          <div className="create-thread-sidebar">
             <div className="box-panel ai-analysis-card">
-               <div className="skeleton-box" style={{ width: "100px", height: "12px", marginBottom: "16px" }}></div>
-               
+               <div
+                  className="skeleton-box"
+                  style={{
+                     width: "100px",
+                     height: "12px",
+                     marginBottom: "16px",
+                  }}
+               ></div>
+
                <div className="ai-verdict-row">
                   <div className="skeleton-box" style={{ width: "60px", height: "14px" }}></div>
                   <div className="skeleton-box" style={{ width: "80px", height: "16px" }}></div>
@@ -65,12 +102,27 @@ const CreateThreadSkeleton = () => {
                   <div className="skeleton-box" style={{ width: "100px", height: "14px" }}></div>
                   <div className="skeleton-box" style={{ width: "40px", height: "16px" }}></div>
                </div>
-               
+
                <div className="ai-confidence-bar-track">
-                  <div className="skeleton-box" style={{ width: "100%", height: "100%", borderRadius: "4px" }}></div>
+                  <div
+                     className="skeleton-box"
+                     style={{
+                        width: "100%",
+                        height: "100%",
+                        borderRadius: "4px",
+                     }}
+                  ></div>
                </div>
 
-               <div className="ai-summary-box" style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "16px" }}>
+               <div
+                  className="ai-summary-box"
+                  style={{
+                     display: "flex",
+                     flexDirection: "column",
+                     gap: "8px",
+                     marginTop: "16px",
+                  }}
+               >
                   <div className="skeleton-box" style={{ width: "80px", height: "14px" }}></div>
                   <div className="skeleton-box" style={{ width: "100%", height: "14px", marginTop: "4px" }}></div>
                   <div className="skeleton-box" style={{ width: "90%", height: "14px" }}></div>
@@ -143,7 +195,7 @@ function CreateThreadPage() {
       setSubmitting(true);
       setError(null);
       try {
-         const url = useEndpoint("THREADS");
+         const url = resolveApiEndpoint("THREADS");
          const responseData = await authFetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -179,7 +231,7 @@ function CreateThreadPage() {
       }
       const fetchClaimData = async () => {
          try {
-            const claimUrl = useEndpoint("CLAIMS") + claimId + "/";
+            const claimUrl = resolveApiEndpoint("CLAIMS") + claimId + "/";
             const claimData = await authFetch(claimUrl, {
                method: "GET",
             });
@@ -192,7 +244,7 @@ function CreateThreadPage() {
 
             // Check if this claim already has existing threads (pre-check dedup)
             try {
-               const threadsUrl = useEndpoint("THREADS");
+               const threadsUrl = resolveApiEndpoint("THREADS");
                const threadsData = await authFetch(threadsUrl + `?claim_id=${claimId}`, {
                   method: "GET",
                });
@@ -210,13 +262,14 @@ function CreateThreadPage() {
 
             console.log(claimData);
          } catch (err) {
+            console.error("Failed to fetch claim data:", err);
             setError("Failed loading form");
          } finally {
             setLoading(false);
          }
       };
       fetchClaimData();
-   }, [claimId]);
+   }, [claimId, authFetch]);
 
    const aiVerdict = getAiVerdict(claim);
 
@@ -226,19 +279,11 @@ function CreateThreadPage() {
 
          <div className="create-thread-topbar">
             <div className="breadcrumb">
-               <Link
-                  to="/community"
-                  className="breadcrumb-link">
-                  <Icons
-                     name="globe"
-                     size={14}
-                  />
+               <Link to="/community" className="breadcrumb-link">
+                  <Icons name="globe" size={14} />
                   Community Feed
                </Link>
-               <Icons
-                  name="chevron-right"
-                  size={14}
-               />
+               <Icons name="chevron-right" size={14} />
                <span className="breadcrumb-current">Escalate a Claim</span>
             </div>
          </div>
@@ -246,17 +291,12 @@ function CreateThreadPage() {
          <main className="create-thread-container">
             <div className="create-thread-header">
                <div className="create-thread-icon">
-                  <Icons
-                     name="flag"
-                     size={22}
-                     color="#fff"
-                  />
+                  <Icons name="flag" size={22} color="#fff" />
                </div>
                <div>
                   <h1 className="create-thread-title">Escalate to Community</h1>
                   <p className="create-thread-subtitle">
-                     The AI couldn't verify this claim with confidence. Submit it to the community
-                     for review.
+                     The AI couldn't verify this claim with confidence. Submit it to the community for review.
                   </p>
                </div>
             </div>
@@ -264,32 +304,49 @@ function CreateThreadPage() {
             {loading && <CreateThreadSkeleton />}
             {error && (
                <div className="create-thread-error">
-                  <Icons
-                     name="alert-triangle"
-                     size={15}
-                  />
+                  <Icons name="alert-triangle" size={15} />
                   {error}
                </div>
             )}
 
             {/* Thread Deduplication: Redirect Notice */}
             {existingThread && (
-               <div style={{
-                  backgroundColor: "#ecfdf5",
-                  border: "1.5px solid #0e9f6e",
-                  borderRadius: "12px",
-                  padding: "20px 24px",
-                  marginBottom: "20px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "12px",
-               }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#065f46", fontWeight: 700, fontSize: "14px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                     <Icons name="info" size={16} />
-                     A Community Discussion Already Exists
+               <div
+                  style={{
+                     backgroundColor: "#ecfdf5",
+                     border: "1.5px solid #0e9f6e",
+                     borderRadius: "12px",
+                     padding: "20px 24px",
+                     marginBottom: "20px",
+                     display: "flex",
+                     flexDirection: "column",
+                     gap: "12px",
+                  }}
+               >
+                  <div
+                     style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        color: "#065f46",
+                        fontWeight: 700,
+                        fontSize: "14px",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.5px",
+                     }}
+                  >
+                     <Icons name="info" size={16} />A Community Discussion Already Exists
                   </div>
-                  <p style={{ color: "#065f46", fontSize: "14px", lineHeight: "1.5", margin: 0 }}>
-                     This claim has already been escalated by another user. You can view the existing discussion and contribute evidence there instead of creating a duplicate.
+                  <p
+                     style={{
+                        color: "#065f46",
+                        fontSize: "14px",
+                        lineHeight: "1.5",
+                        margin: 0,
+                     }}
+                  >
+                     This claim has already been escalated by another user. You can view the existing discussion and
+                     contribute evidence there instead of creating a duplicate.
                   </p>
                   <Link
                      to={`/thread/detail/${existingThread}`}
@@ -305,7 +362,8 @@ function CreateThreadPage() {
                         fontSize: "14px",
                         textDecoration: "none",
                         width: "fit-content",
-                     }}>
+                     }}
+                  >
                      <Icons name="arrow-right" size={16} />
                      Go to Existing Thread
                   </Link>
@@ -317,15 +375,11 @@ function CreateThreadPage() {
                   <div className="create-thread-form-col">
                      <div className="form-section box-panel">
                         <label className="form-label">
-                           <Icons
-                              name="file-text"
-                              size={15}
-                           />
+                           <Icons name="file-text" size={15} />
                            Claim Caption
                         </label>
                         <p className="form-hint">
-                           Describe the claim you're escalating. You can edit the AI-generated text
-                           below.
+                           Describe the claim you're escalating. You can edit the AI-generated text below.
                         </p>
                         <textarea
                            name="caption"
@@ -362,27 +416,20 @@ function CreateThreadPage() {
 
                      <div className="form-section box-panel">
                         <label className="form-label">
-                           <Icons
-                              name="alert-triangle"
-                              size={15}
-                           />
+                           <Icons name="alert-triangle" size={15} />
                            Why are you flagging this?
                         </label>
-                        <p className="form-hint">
-                           Select the category that best describes this claim.
-                        </p>
+                        <p className="form-hint">Select the category that best describes this claim.</p>
                         <div className="flag-options">
                            {ESCALATION_OPTIONS.map((opt) => (
                               <button
                                  key={opt.value}
                                  type="button"
                                  className={`escalation-option-btn ${formValues.escalation_reason === opt.value ? "selected" : ""}`}
-                                 onClick={() => handleFlagSelect(opt.value)}>
+                                 onClick={() => handleFlagSelect(opt.value)}
+                              >
                                  <div className="escalation-header">
-                                    <Icons
-                                       name={opt.icon}
-                                       size={15}
-                                    />
+                                    <Icons name={opt.icon} size={15} />
                                     <strong>{opt.label}</strong>
                                  </div>
                                  <span className="escalation-desc">{opt.desc}</span>
@@ -396,15 +443,13 @@ function CreateThreadPage() {
                         onClick={() => {
                            handleSubmit();
                         }}
-                        disabled={submitting || !formValues.escalation_reason}>
+                        disabled={submitting || !formValues.escalation_reason}
+                     >
                         {submitting ? (
                            <>Submitting...</>
                         ) : (
                            <>
-                              <Icons
-                                 name="send"
-                                 size={16}
-                              />
+                              <Icons name="send" size={16} />
                               Submit to Community
                            </>
                         )}
@@ -421,16 +466,15 @@ function CreateThreadPage() {
                               className="ai-verdict-value"
                               style={{
                                  color: VERDICT_COLORS[aiVerdict] || "var(--text-muted)",
-                              }}>
+                              }}
+                           >
                               {aiVerdict || "—"}
                            </span>
                         </div>
 
                         <div className="ai-verdict-row">
                            <span className="ai-analysis-label">Confidence Score</span>
-                           <span className="ai-confidence-value">
-                              {claim.consensus_score ?? "—"}%
-                           </span>
+                           <span className="ai-confidence-value">{claim.consensus_score ?? "—"}%</span>
                         </div>
 
                         {claim.consensus_score !== null && (
@@ -452,9 +496,7 @@ function CreateThreadPage() {
 
                         <div className="ai-summary-box">
                            <span className="ai-analysis-label">AI Summary</span>
-                           <p className="ai-summary-text">
-                              {claim.ai_summary || "No summary available."}
-                           </p>
+                           <p className="ai-summary-text">{claim.ai_summary || "No summary available."}</p>
                         </div>
 
                         <div className="ai-source-row">
@@ -465,15 +507,12 @@ function CreateThreadPage() {
 
                      <div className="box-panel info-card">
                         <p className="sidebar-label">
-                           <Icons
-                              name="info"
-                              size={13}
-                           />
+                           <Icons name="info" size={13} />
                            WHY ESCALATE?
                         </p>
                         <p className="info-text">
-                           When AI confidence is low or a claim is unverified, the community can
-                           weigh in with evidence and votes to reach a final verdict.
+                           When AI confidence is low or a claim is unverified, the community can weigh in with evidence
+                           and votes to reach a final verdict.
                         </p>
                         <p className="info-text">
                            Your Trust Score increases when your escalations are resolved accurately.

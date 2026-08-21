@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Icons from "./Icons.jsx";
 import "./NotificationPopup.css";
 
@@ -72,35 +72,34 @@ import "./NotificationPopup.css";
 // ── Icon map for notification types ──────────────────────────────────────────
 // TODO: Use these when rendering real notifications
 const NOTIF_ICONS = {
-   NEW_EVIDENCE:   "paperclip",
-   NEW_COMMENT:    "message-square",
-   THREAD_CLOSED:  "check-circle",
+   NEW_EVIDENCE: "paperclip",
+   NEW_COMMENT: "message-square",
+   THREAD_CLOSED: "check-circle",
    CLAIM_VERIFIED: "badge-check",
 };
 
 // ── Relative time helper ──────────────────────────────────────────────────────
 function timeAgo(dateStr) {
    if (!dateStr) return "—";
-   const diff  = Date.now() - new Date(dateStr).getTime();
-   const mins  = Math.floor(diff / 60000);
+   const diff = Date.now() - new Date(dateStr).getTime();
+   const mins = Math.floor(diff / 60000);
    const hours = Math.floor(diff / 3600000);
-   const days  = Math.floor(diff / 86400000);
-   if (mins  < 1)  return "Just now";
-   if (mins  < 60) return `${mins}m ago`;
+   const days = Math.floor(diff / 86400000);
+   if (mins < 1) return "Just now";
+   if (mins < 60) return `${mins}m ago`;
    if (hours < 24) return `${hours}h ago`;
-   if (days  < 7)  return `${days}d ago`;
+   if (days < 7) return `${days}d ago`;
    return `${Math.floor(days / 7)}w ago`;
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
 function NotificationPopup() {
-   const [isOpen, setIsOpen]               = useState(false);
-   const [notifications, setNotifications] = useState([]);
+   const [isOpen, setIsOpen] = useState(false);
+   const [notifications] = useState([]);
    // TODO: Replace empty array above with authFetch call to /api/notifications/
 
    const containerRef = useRef(null);
-   const navigate     = useNavigate();
-   const location     = useLocation();
+   const navigate = useNavigate();
 
    // Unread count — drives the badge on the bell icon
    // TODO: This will work automatically once real notifications are fetched
@@ -114,7 +113,8 @@ function NotificationPopup() {
          }
       }
       document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
+      return () =>
+         document.removeEventListener("mousedown", handleClickOutside);
    }, []);
 
    // ── Close popup on Escape key ─────────────────────────────────────────────
@@ -127,9 +127,10 @@ function NotificationPopup() {
    }, []);
 
    // ── Close popup on route change ───────────────────────────────────────────
-   useEffect(() => {
-      setIsOpen(false);
-   }, [location.pathname]);
+   // TODO: Implement this when you have a way to detect route changes
+   // useEffect(() => {
+   //    setIsOpen(false);
+   // }, [location.pathname]);
 
    // ── Mark all as read ──────────────────────────────────────────────────────
    const handleMarkAllRead = async () => {
@@ -156,7 +157,6 @@ function NotificationPopup() {
 
    return (
       <div className="notif-container" ref={containerRef}>
-
          {/* ── Bell button ── */}
          <button
             className={`nav-icon-btn ${isOpen ? "open" : ""}`}
@@ -176,14 +176,19 @@ function NotificationPopup() {
 
          {/* ── Popup panel ── */}
          {isOpen && (
-            <div className="notif-popup" role="dialog" aria-label="Notifications">
-
+            <div
+               className="notif-popup"
+               role="dialog"
+               aria-label="Notifications"
+            >
                {/* Header */}
                <div className="notif-popup-header">
                   <span className="notif-popup-title">
                      Notifications
                      {unreadCount > 0 && (
-                        <span className="notif-header-count">{unreadCount}</span>
+                        <span className="notif-header-count">
+                           {unreadCount}
+                        </span>
                      )}
                   </span>
                   <button
@@ -198,19 +203,19 @@ function NotificationPopup() {
                {/* Notification list */}
                <div className="notif-list">
                   {notifications.length === 0 ? (
-
                      // ── Empty state ───────────────────────────────────────
                      <div className="notif-empty-state">
                         <Icons name="bell-off" size={28} color="#9ca3af" />
-                        <p className="notif-empty-title">No notifications yet</p>
+                        <p className="notif-empty-title">
+                           No notifications yet
+                        </p>
                         <p className="notif-empty-subtitle">
                            You'll be notified when someone comments on your
-                           thread, submits evidence, or your claim gets verified.
+                           thread, submits evidence, or your claim gets
+                           verified.
                         </p>
                      </div>
-
                   ) : (
-
                      // ── Real notification items ───────────────────────────
                      // TODO: This renders when real notifications are fetched.
                      // Each item shows icon, message, timestamp, and unread dot.
@@ -227,7 +232,9 @@ function NotificationPopup() {
                               />
                            </div>
                            <div className="notif-item-body">
-                              <p className="notif-item-message">{notif.message}</p>
+                              <p className="notif-item-message">
+                                 {notif.message}
+                              </p>
                               <span className="notif-item-time">
                                  {timeAgo(notif.created_at)}
                               </span>
@@ -250,7 +257,6 @@ function NotificationPopup() {
                      See all notifications
                   </Link>
                </div>
-
             </div>
          )}
       </div>

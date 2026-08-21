@@ -17,16 +17,16 @@
  */
 
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "../hooks/useAuth";
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { useNotification } from "../context/NotificationContext";
+import { useNotification } from "../hooks/useNotification";
 import NavigationBar from "../components/NavigationBar.jsx";
 import Icons from "../components/Icons.jsx";
 
 // ── Utilities & Hooks ──
 import timeAgo from "../utils/timeAgo";
 import { getEffectiveVerdict } from "../utils/verdict";
-import { buildApiUrl, useEndpoint } from "../utils/api";
+import { buildApiUrl, resolveApiEndpoint } from "../utils/api";
 
 // ── Styles ──
 import "./CommunityFeed.css";
@@ -52,29 +52,31 @@ const FeedSkeleton = () => {
    return (
       <div className="posts-list">
          {[1, 2, 3].map((i) => (
-            <div
-               key={i}
-               className="post-card">
+            <div key={i} className="post-card">
                <div className="card-header">
                   <div className="post-author-info">
-                     <div
-                        className="author-avatar skeleton-box"
-                        style={{ borderRadius: "50%" }}></div>
+                     <div className="author-avatar skeleton-box" style={{ borderRadius: "50%" }}></div>
                      <div
                         className="author-meta"
-                        style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                        <div
-                           className="skeleton-box"
-                           style={{ width: "120px", height: "14px" }}></div>
-                        <div
-                           className="skeleton-box"
-                           style={{ width: "80px", height: "12px" }}></div>
+                        style={{
+                           display: "flex",
+                           flexDirection: "column",
+                           gap: "6px",
+                        }}
+                     >
+                        <div className="skeleton-box" style={{ width: "120px", height: "14px" }}></div>
+                        <div className="skeleton-box" style={{ width: "80px", height: "12px" }}></div>
                      </div>
                   </div>
                   <div className="header-actions">
                      <div
                         className="skeleton-box"
-                        style={{ width: "80px", height: "24px", borderRadius: "20px" }}></div>
+                        style={{
+                           width: "80px",
+                           height: "24px",
+                           borderRadius: "20px",
+                        }}
+                     ></div>
                   </div>
                </div>
 
@@ -86,16 +88,11 @@ const FeedSkeleton = () => {
                      gap: "8px",
                      marginTop: "16px",
                      marginBottom: "16px",
-                  }}>
-                  <div
-                     className="skeleton-box"
-                     style={{ width: "100%", height: "14px" }}></div>
-                  <div
-                     className="skeleton-box"
-                     style={{ width: "90%", height: "14px" }}></div>
-                  <div
-                     className="skeleton-box"
-                     style={{ width: "60%", height: "14px" }}></div>
+                  }}
+               >
+                  <div className="skeleton-box" style={{ width: "100%", height: "14px" }}></div>
+                  <div className="skeleton-box" style={{ width: "90%", height: "14px" }}></div>
+                  <div className="skeleton-box" style={{ width: "60%", height: "14px" }}></div>
                </div>
 
                <div
@@ -104,21 +101,36 @@ const FeedSkeleton = () => {
                      marginTop: "16px",
                      background: "var(--bg-subtle)",
                      border: "1px solid var(--border-default)",
-                  }}>
+                  }}
+               >
                   <div className="ai-analysis-top-row">
                      <div
                         className="ai-info"
-                        style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1 }}>
+                        style={{
+                           display: "flex",
+                           alignItems: "center",
+                           gap: "8px",
+                           flex: 1,
+                        }}
+                     >
                         <div
                            className="skeleton-box"
-                           style={{ width: "80px", height: "24px", borderRadius: "12px" }}></div>
-                        <div
-                           className="skeleton-box"
-                           style={{ width: "140px", height: "14px" }}></div>
+                           style={{
+                              width: "80px",
+                              height: "24px",
+                              borderRadius: "12px",
+                           }}
+                        ></div>
+                        <div className="skeleton-box" style={{ width: "140px", height: "14px" }}></div>
                      </div>
                      <div
                         className="skeleton-box"
-                        style={{ width: "100px", height: "30px", borderRadius: "8px" }}></div>
+                        style={{
+                           width: "100px",
+                           height: "30px",
+                           borderRadius: "8px",
+                        }}
+                     ></div>
                   </div>
                   <div
                      className="ai-analysis-context"
@@ -127,13 +139,10 @@ const FeedSkeleton = () => {
                         flexDirection: "column",
                         gap: "6px",
                         marginTop: "12px",
-                     }}>
-                     <div
-                        className="skeleton-box"
-                        style={{ width: "100%", height: "12px" }}></div>
-                     <div
-                        className="skeleton-box"
-                        style={{ width: "80%", height: "12px" }}></div>
+                     }}
+                  >
+                     <div className="skeleton-box" style={{ width: "100%", height: "12px" }}></div>
+                     <div className="skeleton-box" style={{ width: "80%", height: "12px" }}></div>
                   </div>
                </div>
 
@@ -145,13 +154,10 @@ const FeedSkeleton = () => {
                      display: "flex",
                      gap: "16px",
                      padding: "0",
-                  }}>
-                  <div
-                     className="skeleton-box"
-                     style={{ width: "60px", height: "20px" }}></div>
-                  <div
-                     className="skeleton-box"
-                     style={{ width: "80px", height: "20px" }}></div>
+                  }}
+               >
+                  <div className="skeleton-box" style={{ width: "60px", height: "20px" }}></div>
+                  <div className="skeleton-box" style={{ width: "80px", height: "20px" }}></div>
                </div>
             </div>
          ))}
@@ -176,7 +182,7 @@ function CommunityFeed() {
    const [searchParams] = useSearchParams();
    const { authFetch, user } = useAuth();
    const { addToast } = useNotification();
-   const threadsEndpoint = useEndpoint("THREADS");
+   const threadsEndpoint = resolveApiEndpoint("THREADS");
    const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
 
    // ── Infinite Scroll State ──
@@ -260,7 +266,10 @@ function CommunityFeed() {
    const saveEditThread = async (e, threadId) => {
       e.stopPropagation();
       if (!editingCaption.trim()) {
-         addToast({ type: "warning", message: "Thread caption cannot be empty." });
+         addToast({
+            type: "warning",
+            message: "Thread caption cannot be empty.",
+         });
          return;
       }
 
@@ -273,9 +282,7 @@ function CommunityFeed() {
             body: JSON.stringify({ caption: editingCaption.trim() }),
          });
 
-         setThreads((prev) =>
-            prev.map((thread) => (thread.id === threadId ? { ...thread, ...updated } : thread)),
-         );
+         setThreads((prev) => prev.map((thread) => (thread.id === threadId ? { ...thread, ...updated } : thread)));
          cancelEditThread();
          addToast({ type: "success", message: "Thread updated successfully." });
       } catch (err) {
@@ -387,13 +394,22 @@ function CommunityFeed() {
             addToast({ type: "success", message: "Thread link shared." });
          } else if (navigator.clipboard?.writeText) {
             await navigator.clipboard.writeText(shareUrl);
-            addToast({ type: "success", message: "Thread link copied to clipboard." });
+            addToast({
+               type: "success",
+               message: "Thread link copied to clipboard.",
+            });
          } else {
-            addToast({ type: "warning", message: "Sharing is not supported on this browser." });
+            addToast({
+               type: "warning",
+               message: "Sharing is not supported on this browser.",
+            });
          }
       } catch (err) {
          if (err?.name !== "AbortError") {
-            addToast({ type: "error", message: err?.message || "Failed to share thread." });
+            addToast({
+               type: "error",
+               message: err?.message || "Failed to share thread.",
+            });
          }
       } finally {
          setSharingThreadId(null);
@@ -477,9 +493,7 @@ function CommunityFeed() {
             const newThreads = response.results || response || [];
             setThreads((prev) => {
                const existingIds = new Set(prev.map((thread) => thread.id));
-               const dedupedIncoming = newThreads.filter(
-                  (thread) => thread?.id && !existingIds.has(thread.id),
-               );
+               const dedupedIncoming = newThreads.filter((thread) => thread?.id && !existingIds.has(thread.id));
                return [...prev, ...dedupedIncoming];
             });
 
@@ -559,44 +573,33 @@ function CommunityFeed() {
             <div className="category-pills">
                <button
                   className={`category-pill ${activeCategoryFilter === CATEGORIES.ALL ? "active" : ""}`}
-                  onClick={() => setActiveCategoryFilter(CATEGORIES.ALL)}>
+                  onClick={() => setActiveCategoryFilter(CATEGORIES.ALL)}
+               >
                   All Categories
                </button>
                <button
                   className={`category-pill ${activeCategoryFilter === CATEGORIES.TEXT ? "active" : ""}`}
-                  onClick={() => setActiveCategoryFilter(CATEGORIES.TEXT)}>
-                  <Icons
-                     name="file-text"
-                     size={14}
-                  />{" "}
-                  Text
+                  onClick={() => setActiveCategoryFilter(CATEGORIES.TEXT)}
+               >
+                  <Icons name="file-text" size={14} /> Text
                </button>
                <button
                   className={`category-pill ${activeCategoryFilter === CATEGORIES.IMAGE ? "active" : ""}`}
-                  onClick={() => setActiveCategoryFilter(CATEGORIES.IMAGE)}>
-                  <Icons
-                     name="image"
-                     size={14}
-                  />{" "}
-                  Images
+                  onClick={() => setActiveCategoryFilter(CATEGORIES.IMAGE)}
+               >
+                  <Icons name="image" size={14} /> Images
                </button>
                <button
                   className={`category-pill ${activeCategoryFilter === CATEGORIES.FILE ? "active" : ""}`}
-                  onClick={() => setActiveCategoryFilter(CATEGORIES.FILE)}>
-                  <Icons
-                     name="paperclip"
-                     size={14}
-                  />{" "}
-                  Files
+                  onClick={() => setActiveCategoryFilter(CATEGORIES.FILE)}
+               >
+                  <Icons name="paperclip" size={14} /> Files
                </button>
                <button
                   className={`category-pill ${activeCategoryFilter === CATEGORIES.URL ? "active" : ""}`}
-                  onClick={() => setActiveCategoryFilter(CATEGORIES.URL)}>
-                  <Icons
-                     name="link"
-                     size={14}
-                  />{" "}
-                  Links
+                  onClick={() => setActiveCategoryFilter(CATEGORIES.URL)}
+               >
+                  <Icons name="link" size={14} /> Links
                </button>
             </div>
 
@@ -606,19 +609,22 @@ function CommunityFeed() {
                   <span className="filter-label">Filter:</span>
                   <button
                      className={`filter-btn ${activeFilter === FEED_FILTERS.TRENDING ? "active" : ""}`}
-                     onClick={() => setActiveFilter(FEED_FILTERS.TRENDING)}>
+                     onClick={() => setActiveFilter(FEED_FILTERS.TRENDING)}
+                  >
                      <Icons name="trending-up" />
                      Trending
                   </button>
                   <button
                      className={`filter-btn ${activeFilter === FEED_FILTERS.VERIFIED ? "active" : ""}`}
-                     onClick={() => setActiveFilter(FEED_FILTERS.VERIFIED)}>
+                     onClick={() => setActiveFilter(FEED_FILTERS.VERIFIED)}
+                  >
                      <Icons name="check" />
                      Recently Verified
                   </button>
                   <button
                      className={`filter-btn ${activeFilter === FEED_FILTERS.NEEDS_EVIDENCE ? "active" : ""}`}
-                     onClick={() => setActiveFilter(FEED_FILTERS.NEEDS_EVIDENCE)}>
+                     onClick={() => setActiveFilter(FEED_FILTERS.NEEDS_EVIDENCE)}
+                  >
                      <Icons name="search" />
                      Needs Evidence
                   </button>
@@ -628,19 +634,10 @@ function CommunityFeed() {
                   <span className="filter-label">Sort:</span>
 
                   <div className="sort-dropdown-container">
-                     <button
-                        className="sort-trigger-btn"
-                        onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}>
-                        <Icons
-                           name={sortOrder === "newest" ? "arrow-down" : "arrow-up"}
-                           size={14}
-                        />
+                     <button className="sort-trigger-btn" onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}>
+                        <Icons name={sortOrder === "newest" ? "arrow-down" : "arrow-up"} size={14} />
                         {sortOrder === "newest" ? "Newest First" : "Oldest First"}
-                        <Icons
-                           name="chevron-down"
-                           size={14}
-                           color="var(--text-muted)"
-                        />
+                        <Icons name="chevron-down" size={14} color="var(--text-muted)" />
                      </button>
 
                      {isSortMenuOpen && (
@@ -650,11 +647,9 @@ function CommunityFeed() {
                               onClick={() => {
                                  setSortOrder("newest");
                                  setIsSortMenuOpen(false);
-                              }}>
-                              <Icons
-                                 name="arrow-down"
-                                 size={14}
-                              />
+                              }}
+                           >
+                              <Icons name="arrow-down" size={14} />
                               Newest First
                            </button>
                            <button
@@ -662,11 +657,9 @@ function CommunityFeed() {
                               onClick={() => {
                                  setSortOrder("oldest");
                                  setIsSortMenuOpen(false);
-                              }}>
-                              <Icons
-                                 name="arrow-up"
-                                 size={14}
-                              />
+                              }}
+                           >
+                              <Icons name="arrow-up" size={14} />
                               Oldest First
                            </button>
                         </div>
@@ -677,8 +670,8 @@ function CommunityFeed() {
 
             {activeSearchTerm && (
                <div className="feed-search-summary">
-                  Showing {filteredThreads.length}{" "}
-                  {filteredThreads.length === 1 ? "result" : "results"} for "{activeSearchTerm}"
+                  Showing {filteredThreads.length} {filteredThreads.length === 1 ? "result" : "results"} for "
+                  {activeSearchTerm}"
                </div>
             )}
 
@@ -708,9 +701,7 @@ function CommunityFeed() {
                         const actionText = pendingConsensus ? "Pending" : getActionText(verdict);
 
                         return (
-                           <div
-                              key={thread.id}
-                              className="post-card">
+                           <div key={thread.id} className="post-card">
                               {/* Card Header */}
                               <div className="card-header">
                                  <div
@@ -719,10 +710,9 @@ function CommunityFeed() {
                                     onClick={(e) => {
                                        e.stopPropagation(); // Prevents triggering the thread card click
                                        navigate(`/user/${thread.author.username}`);
-                                    }}>
-                                    <div
-                                       className="author-avatar"
-                                       style={{ overflow: "hidden" }}>
+                                    }}
+                                 >
+                                    <div className="author-avatar" style={{ overflow: "hidden" }}>
                                        {thread.author.avatar_url ? (
                                           <img
                                              src={thread.author.avatar_url}
@@ -734,19 +724,12 @@ function CommunityFeed() {
                                              }}
                                           />
                                        ) : (
-                                          <Icons
-                                             name="user"
-                                             size={20}
-                                          />
+                                          <Icons name="user" size={20} />
                                        )}
                                     </div>
                                     <div className="author-meta">
-                                       <span className="author-name">
-                                          @{thread.author.username}
-                                       </span>
-                                       <div className="author-time">
-                                          {timeAgo(thread.created_at)}
-                                       </div>
+                                       <span className="author-name">@{thread.author.username}</span>
+                                       <div className="author-time">{timeAgo(thread.created_at)}</div>
                                     </div>
                                  </div>
 
@@ -834,7 +817,8 @@ function CommunityFeed() {
                                              alignItems: "center",
                                              borderRadius: "6px",
                                              fontSize: "0.75rem",
-                                          }}>
+                                          }}
+                                       >
                                           {hasModeratorVerdict ? (
                                              <span
                                                 style={{
@@ -843,12 +827,9 @@ function CommunityFeed() {
                                                    gap: "4px",
                                                    opacity: 0.85,
                                                    marginRight: "2px",
-                                                }}>
-                                                <Icons
-                                                   name="shield-check"
-                                                   size={12}
-                                                />{" "}
-                                                Mod:
+                                                }}
+                                             >
+                                                <Icons name="shield-check" size={12} /> Mod:
                                              </span>
                                           ) : (
                                              <span
@@ -858,12 +839,9 @@ function CommunityFeed() {
                                                    gap: "4px",
                                                    opacity: 0.85,
                                                    marginRight: "2px",
-                                                }}>
-                                                <Icons
-                                                   name="cpu"
-                                                   size={12}
-                                                />{" "}
-                                                AI:
+                                                }}
+                                             >
+                                                <Icons name="cpu" size={12} /> AI:
                                              </span>
                                           )}
 
@@ -873,37 +851,15 @@ function CommunityFeed() {
                                                 alignItems: "center",
                                                 gap: "4px",
                                                 fontWeight: "600",
-                                             }}>
-                                             {verdictClass === "fake" && (
-                                                <Icons
-                                                   name="x-circle"
-                                                   size={12}
-                                                />
-                                             )}
-                                             {verdictClass === "fact" && (
-                                                <Icons
-                                                   name="check-circle"
-                                                   size={12}
-                                                />
-                                             )}
-                                             {verdictClass === "satire" && (
-                                                <Icons
-                                                   name="wand"
-                                                   size={12}
-                                                />
-                                             )}
+                                             }}
+                                          >
+                                             {verdictClass === "fake" && <Icons name="x-circle" size={12} />}
+                                             {verdictClass === "fact" && <Icons name="check-circle" size={12} />}
+                                             {verdictClass === "satire" && <Icons name="wand" size={12} />}
                                              {verdictClass === "misleading" && (
-                                                <Icons
-                                                   name="alert-triangle"
-                                                   size={12}
-                                                />
+                                                <Icons name="alert-triangle" size={12} />
                                              )}
-                                             {verdictClass === "unverified" && (
-                                                <Icons
-                                                   name="help-circle"
-                                                   size={12}
-                                                />
-                                             )}
+                                             {verdictClass === "unverified" && <Icons name="help-circle" size={12} />}
                                              {verdict}
                                           </span>
                                        </div>
@@ -914,11 +870,9 @@ function CommunityFeed() {
                                           className="more-btn"
                                           onClick={(e) => toggleThreadMenu(e, thread.id)}
                                           aria-haspopup="menu"
-                                          aria-expanded={openMenuThreadId === thread.id}>
-                                          <Icons
-                                             name="more-horizontal"
-                                             size={20}
-                                          />
+                                          aria-expanded={openMenuThreadId === thread.id}
+                                       >
+                                          <Icons name="more-horizontal" size={20} />
                                        </button>
 
                                        {openMenuThreadId === thread.id && (
@@ -927,27 +881,26 @@ function CommunityFeed() {
                                                 <>
                                                    <button
                                                       className="thread-owner-menu-item"
-                                                      onClick={(e) => startEditThread(e, thread)}>
+                                                      onClick={(e) => startEditThread(e, thread)}
+                                                   >
                                                       <Icons name="pencil" />
                                                       Edit Thread
                                                    </button>
                                                    <button
                                                       className="thread-owner-menu-item"
                                                       onClick={(e) => shareThread(e, thread)}
-                                                      disabled={sharingThreadId === thread.id}>
+                                                      disabled={sharingThreadId === thread.id}
+                                                   >
                                                       <Icons name="share-2" />
-                                                      {sharingThreadId === thread.id
-                                                         ? "Sharing..."
-                                                         : "Share"}
+                                                      {sharingThreadId === thread.id ? "Sharing..." : "Share"}
                                                    </button>
                                                    <button
                                                       className="thread-owner-menu-item danger"
                                                       onClick={(e) => openDeleteDialog(e, thread)}
-                                                      disabled={deletingThreadId === thread.id}>
+                                                      disabled={deletingThreadId === thread.id}
+                                                   >
                                                       <Icons name="trash" />
-                                                      {deletingThreadId === thread.id
-                                                         ? "Deleting..."
-                                                         : "Delete Thread"}
+                                                      {deletingThreadId === thread.id ? "Deleting..." : "Delete Thread"}
                                                    </button>
                                                 </>
                                              ) : (
@@ -955,7 +908,8 @@ function CommunityFeed() {
                                                    <button
                                                       className="thread-owner-menu-item"
                                                       onClick={(e) => openReportDialog(e, thread)}
-                                                      disabled={reportingThreadId === thread.id}>
+                                                      disabled={reportingThreadId === thread.id}
+                                                   >
                                                       <Icons name="flag" />
                                                       {reportingThreadId === thread.id
                                                          ? "Reporting..."
@@ -964,11 +918,10 @@ function CommunityFeed() {
                                                    <button
                                                       className="thread-owner-menu-item"
                                                       onClick={(e) => shareThread(e, thread)}
-                                                      disabled={sharingThreadId === thread.id}>
+                                                      disabled={sharingThreadId === thread.id}
+                                                   >
                                                       <Icons name="share-2" />
-                                                      {sharingThreadId === thread.id
-                                                         ? "Sharing..."
-                                                         : "Share"}
+                                                      {sharingThreadId === thread.id ? "Sharing..." : "Share"}
                                                    </button>
                                                 </>
                                              )}
@@ -981,13 +934,12 @@ function CommunityFeed() {
                               <div
                                  className="card-claim-wrap"
                                  onClick={() => handleThreadClick(thread.id)}
-                                 style={{ cursor: "pointer" }}>
+                                 style={{ cursor: "pointer" }}
+                              >
                                  {/* Card Claim Text */}
                                  <div className="card-claim">
                                     {editingThreadId === thread.id ? (
-                                       <div
-                                          className="thread-edit-wrap"
-                                          onClick={(e) => e.stopPropagation()}>
+                                       <div className="thread-edit-wrap" onClick={(e) => e.stopPropagation()}>
                                           <textarea
                                              className="thread-edit-input"
                                              value={editingCaption}
@@ -998,14 +950,11 @@ function CommunityFeed() {
                                              <button
                                                 className="action-item primary-action"
                                                 onClick={(e) => saveEditThread(e, thread.id)}
-                                                disabled={savingThreadId === thread.id}>
-                                                {savingThreadId === thread.id
-                                                   ? "Saving..."
-                                                   : "Save"}
+                                                disabled={savingThreadId === thread.id}
+                                             >
+                                                {savingThreadId === thread.id ? "Saving..." : "Save"}
                                              </button>
-                                             <button
-                                                className="action-item"
-                                                onClick={cancelEditThread}>
+                                             <button className="action-item" onClick={cancelEditThread}>
                                                 Cancel
                                              </button>
                                           </div>
@@ -1022,7 +971,8 @@ function CommunityFeed() {
                                        onClick={() => {
                                           handleThreadClick(thread.id);
                                        }}
-                                       style={{ height: "auto" }}>
+                                       style={{ height: "auto" }}
+                                    >
                                        <img
                                           src={thread.claim.media_url}
                                           alt="Snipped claim"
@@ -1032,27 +982,22 @@ function CommunityFeed() {
                                  )}
 
                                  {/* URL Source Link Block */}
-                                 {thread.claim.claim_type === CATEGORIES.URL &&
-                                    thread.claim.source_link && (
-                                       <a
-                                          href={thread.claim.source_link}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="url-preview-card"
-                                          onClick={(e) => e.stopPropagation()}>
-                                          <div className="media-icon">
-                                             <Icons
-                                                name="external-link"
-                                                size={20}
-                                             />
-                                          </div>
-                                          <span
-                                             className="media-source"
-                                             title={thread.claim.source_link}>
-                                             {thread.claim.source_link}
-                                          </span>
-                                       </a>
-                                    )}
+                                 {thread.claim.claim_type === CATEGORIES.URL && thread.claim.source_link && (
+                                    <a
+                                       href={thread.claim.source_link}
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       className="url-preview-card"
+                                       onClick={(e) => e.stopPropagation()}
+                                    >
+                                       <div className="media-icon">
+                                          <Icons name="external-link" size={20} />
+                                       </div>
+                                       <span className="media-source" title={thread.claim.source_link}>
+                                          {thread.claim.source_link}
+                                       </span>
+                                    </a>
+                                 )}
                               </div>
 
                               {/* ── AI Analysis Bar or Moderator Verdict (NOW WITH CONTEXT INSIDE) ── */}
@@ -1064,20 +1009,10 @@ function CommunityFeed() {
                                        <div className="ai-info">
                                           <span className="ai-confidence-text">
                                              Final Verdict:{" "}
-                                             <strong>
-                                                {thread.claim.moderator_verdict_info.verdict}
-                                             </strong>{" "}
-                                             (
-                                             {
-                                                thread.claim.moderator_verdict_info
-                                                   .verified_evidence_count
-                                             }{" "}
-                                             evidence)
-                                             {thread.claim.moderator_verdict_info.verdict ===
-                                                "MISLEADING" && (
-                                                <span className="mixed-evidence-pill">
-                                                   Mixed evidence
-                                                </span>
+                                             <strong>{thread.claim.moderator_verdict_info.verdict}</strong> (
+                                             {thread.claim.moderator_verdict_info.verified_evidence_count} evidence)
+                                             {thread.claim.moderator_verdict_info.verdict === "MISLEADING" && (
+                                                <span className="mixed-evidence-pill">Mixed evidence</span>
                                              )}
                                           </span>
                                        </div>
@@ -1085,16 +1020,14 @@ function CommunityFeed() {
                                        // Show pending state
                                        <div className="ai-info">
                                           <span className="ai-confidence-text">
-                                             <strong>{pendingEvidenceCount}</strong> verified
-                                             evidence under review
+                                             <strong>{pendingEvidenceCount}</strong> verified evidence under review
                                           </span>
                                        </div>
                                     ) : (
                                        // Show AI Verdict (fallback)
                                        <div className="ai-info">
                                           <span className="ai-confidence-text">
-                                             AI Confidence:{" "}
-                                             <strong>{thread.claim.consensus_score}%</strong>
+                                             AI Confidence: <strong>{thread.claim.consensus_score}%</strong>
                                           </span>
                                        </div>
                                     )}
@@ -1122,7 +1055,8 @@ function CommunityFeed() {
                                     onClick={(e) => {
                                        e.stopPropagation();
                                        handleThreadClick(thread.id, "comments");
-                                    }}>
+                                    }}
+                                 >
                                     <Icons name="message-square" />
                                     Comment
                                     <span className="count-pill">{thread.comment_count}</span>
@@ -1135,7 +1069,8 @@ function CommunityFeed() {
                                        handleThreadClick(thread.id, "evidence", {
                                           openEvidenceForm: true,
                                        });
-                                    }}>
+                                    }}
+                                 >
                                     <Icons name="circle-plus" />
                                     Add Evidence
                                  </button>
@@ -1145,7 +1080,8 @@ function CommunityFeed() {
                                     onClick={(e) => {
                                        e.stopPropagation();
                                        handleThreadClick(thread.id, "evidence");
-                                    }}>
+                                    }}
+                                 >
                                     <Icons name="paperclip" />
                                     Evidence
                                     <span className="count-pill">{thread.evidence_count}</span>
@@ -1164,7 +1100,8 @@ function CommunityFeed() {
                            padding: "20px",
                            textAlign: "center",
                            color: "#9ca3af",
-                        }}>
+                        }}
+                     >
                         {!loading && hasMore && <p>Scroll to load more</p>}
                      </div>
                   )}
@@ -1176,7 +1113,8 @@ function CommunityFeed() {
                            textAlign: "center",
                            color: "#9ca3af",
                            fontSize: "14px",
-                        }}>
+                        }}
+                     >
                         No more threads to load
                      </div>
                   )}
@@ -1184,12 +1122,8 @@ function CommunityFeed() {
             )}
 
             {deleteDialog.open && (
-               <div
-                  className="feed-modal-overlay"
-                  onClick={closeDeleteDialog}>
-                  <div
-                     className="feed-modal"
-                     onClick={(e) => e.stopPropagation()}>
+               <div className="feed-modal-overlay" onClick={closeDeleteDialog}>
+                  <div className="feed-modal" onClick={(e) => e.stopPropagation()}>
                      <h3 className="feed-modal-title">Delete Thread</h3>
                      <p className="feed-modal-text">
                         This action cannot be undone. Are you sure you want to delete this thread?
@@ -1199,14 +1133,16 @@ function CommunityFeed() {
                            type="button"
                            className="feed-modal-btn secondary"
                            onClick={closeDeleteDialog}
-                           disabled={Boolean(deletingThreadId)}>
+                           disabled={Boolean(deletingThreadId)}
+                        >
                            Cancel
                         </button>
                         <button
                            type="button"
                            className="feed-modal-btn danger"
                            onClick={confirmDeleteThread}
-                           disabled={Boolean(deletingThreadId)}>
+                           disabled={Boolean(deletingThreadId)}
+                        >
                            {deletingThreadId ? "Deleting..." : "Delete"}
                         </button>
                      </div>
@@ -1215,12 +1151,8 @@ function CommunityFeed() {
             )}
 
             {reportDialog.open && (
-               <div
-                  className="feed-modal-overlay"
-                  onClick={closeReportDialog}>
-                  <div
-                     className="feed-modal"
-                     onClick={(e) => e.stopPropagation()}>
+               <div className="feed-modal-overlay" onClick={closeReportDialog}>
+                  <div className="feed-modal" onClick={(e) => e.stopPropagation()}>
                      <div className="feed-modal-policy-chip warning">{reportActionMeta.code}</div>
                      <h3 className="feed-modal-title">{reportActionMeta.title}</h3>
                      <p className="feed-modal-text">{reportActionMeta.description}</p>
@@ -1230,8 +1162,12 @@ function CommunityFeed() {
                            className="feed-modal-select"
                            value={reportDialog.reason}
                            onChange={(e) =>
-                              setReportDialog((prev) => ({ ...prev, reason: e.target.value }))
-                           }>
+                              setReportDialog((prev) => ({
+                                 ...prev,
+                                 reason: e.target.value,
+                              }))
+                           }
+                        >
                            <option value="INAPPROPRIATE">Inappropriate</option>
                            <option value="SPAM">Spam</option>
                            <option value="HARASSMENT">Harassment</option>
@@ -1245,7 +1181,10 @@ function CommunityFeed() {
                            rows={4}
                            value={reportDialog.notes}
                            onChange={(e) =>
-                              setReportDialog((prev) => ({ ...prev, notes: e.target.value }))
+                              setReportDialog((prev) => ({
+                                 ...prev,
+                                 notes: e.target.value,
+                              }))
                            }
                         />
                      </div>
@@ -1254,14 +1193,16 @@ function CommunityFeed() {
                            type="button"
                            className="feed-modal-btn secondary"
                            onClick={closeReportDialog}
-                           disabled={Boolean(reportingThreadId)}>
+                           disabled={Boolean(reportingThreadId)}
+                        >
                            Cancel
                         </button>
                         <button
                            type="button"
                            className="feed-modal-btn warning"
                            onClick={submitReportThread}
-                           disabled={Boolean(reportingThreadId)}>
+                           disabled={Boolean(reportingThreadId)}
+                        >
                            {reportingThreadId ? "Submitting..." : reportActionMeta.cta}
                         </button>
                      </div>

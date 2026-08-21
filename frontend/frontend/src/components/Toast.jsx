@@ -1,6 +1,7 @@
-import { useNotification } from "../context/NotificationContext";
+// src/components/Toast.jsx
+import { useNotification } from "../hooks/useNotification";
 import Icons from "./Icons";
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import "./Toast.css";
 
 function Toast() {
@@ -10,20 +11,22 @@ function Toast() {
    /**
     * Handle toast removal with animation
     */
-   const handleRemoveToast = (id) => {
-      // Mark toast as removing to trigger animation
-      setRemovingToasts((prev) => new Set(prev).add(id));
+   const handleRemoveToast = useCallback(
+      (id) => {
+         setRemovingToasts((prev) => new Set(prev).add(id));
 
-      // Actually remove after animation completes (300ms)
-      setTimeout(() => {
-         removeToast(id);
-         setRemovingToasts((prev) => {
-            const next = new Set(prev);
-            next.delete(id);
-            return next;
-         });
-      }, 300);
-   };
+         setTimeout(() => {
+            removeToast(id);
+
+            setRemovingToasts((prev) => {
+               const next = new Set(prev);
+               next.delete(id);
+               return next;
+            });
+         }, 300);
+      },
+      [removeToast],
+   );
 
    /**
     * Auto-dismiss toasts based on their duration
@@ -44,7 +47,7 @@ function Toast() {
       return () => {
          timers.forEach((timer) => clearTimeout(timer));
       };
-   }, [toasts, removingToasts]);
+   }, [toasts, removingToasts, handleRemoveToast]);
 
    const getIcon = (type) => {
       const iconMap = {
@@ -71,15 +74,10 @@ function Toast() {
          {toasts.map((toast) => (
             <div
                key={toast.id}
-               className={`toast toast-${toast.type} ${
-                  removingToasts.has(toast.id) ? "removing" : ""
-               }`}>
+               className={`toast toast-${toast.type} ${removingToasts.has(toast.id) ? "removing" : ""}`}
+            >
                <div className="toast-icon">
-                  <Icons
-                     name={getIcon(toast.type)}
-                     size={18}
-                     color={getColor(toast.type)}
-                  />
+                  <Icons name={getIcon(toast.type)} size={18} color={getColor(toast.type)} />
                </div>
 
                <div className="toast-content">
@@ -90,12 +88,9 @@ function Toast() {
                <button
                   className="toast-close"
                   onClick={() => handleRemoveToast(toast.id)}
-                  aria-label="Close notification">
-                  <Icons
-                     name="x"
-                     size={16}
-                     color="#6b7280"
-                  />
+                  aria-label="Close notification"
+               >
+                  <Icons name="x" size={16} color="#6b7280" />
                </button>
             </div>
          ))}

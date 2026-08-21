@@ -13,8 +13,8 @@
  *   const { threads, loading, error } = useFetchThreads(authFetch);
  */
 
-import { useEffect, useState } from "react";
-import { useEndpoint } from "../utils/api";
+import { useCallback, useEffect, useState } from "react";
+import { resolveApiEndpoint } from "../utils/api";
 
 /**
  * Hook to fetch all threads from the API.
@@ -26,25 +26,24 @@ import { useEndpoint } from "../utils/api";
  *   - error: Error message string or null
  *   - refetch: Function to manually trigger a refetch
  */
+const normalizeThreadResponse = (payload) => {
+   if (Array.isArray(payload)) return payload;
+   if (payload && Array.isArray(payload.results)) return payload.results;
+   return [];
+};
+
 function useFetchThreads(authFetch) {
    const [threads, setThreads] = useState([]);
    const [loading, setLoading] = useState(true);
    const [error, setError] = useState(null);
 
-   const normalizeThreadResponse = (payload) => {
-      if (Array.isArray(payload)) return payload;
-      if (payload && Array.isArray(payload.results)) return payload.results;
-      return [];
-   };
-
    // ── Fetch threads from API ──
-   const fetchThreads = async () => {
+   const fetchThreads = useCallback(async () => {
       try {
          setLoading(true);
          setError(null);
 
-         // Use centralized endpoint builder
-         const url = useEndpoint("THREADS");
+         const url = resolveApiEndpoint("THREADS");
          const data = await authFetch(url, { method: "GET" });
 
          setThreads(normalizeThreadResponse(data));
@@ -54,14 +53,14 @@ function useFetchThreads(authFetch) {
       } finally {
          setLoading(false);
       }
-   };
+   }, [authFetch]);
 
    // ── Auto-fetch on component mount ──
    useEffect(() => {
       if (authFetch) {
          fetchThreads();
       }
-   }, [authFetch]);
+   }, [authFetch, fetchThreads]);
 
    // ── Return state + refetch ability ──
    return {
