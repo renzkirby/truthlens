@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import NavigationBar from "../components/NavigationBar";
 import Icons from "../components/Icons";
 import "./SettingsPage.css";
@@ -64,28 +64,31 @@ function SettingsPage() {
       setMessage({ text: "", type: "" });
 
       try {
-         const response = await authFetch(
-            `${import.meta.env.VITE_API_BASE_URL}/auth/profile/update/`,
-            {
-               method: "PATCH",
-               headers: {
-                  "Content-Type": "application/json",
-               },
-               body: JSON.stringify(formData),
+         await authFetch(`${import.meta.env.VITE_API_BASE_URL}/auth/profile/update/`, {
+            method: "PATCH",
+            headers: {
+               "Content-Type": "application/json",
             },
-         );
+            body: JSON.stringify(formData),
+         });
 
-         if (!response.ok) {
-            throw new Error(`Failed to update profile: ${response.status}`);
+         setMessage({
+            text: "Profile updated successfully!",
+            type: "success",
+         });
+
+         try {
+            await refreshUser?.();
+         } catch (refreshError) {
+            console.warn("Profile was updated, but refreshing user data failed:", refreshError);
          }
-
-         const updatedUser = await response.json();
-         // Attempt to refresh user data using the context
-         await refreshUser();
-         setMessage({ text: "Profile updated successfully!", type: "success" });
       } catch (error) {
          console.error("Error updating profile:", error);
-         setMessage({ text: "Failed to update profile. Please try again.", type: "error" });
+
+         setMessage({
+            text: "Failed to update profile. Please try again.",
+            type: "error",
+         });
       } finally {
          setIsSaving(false);
       }
@@ -98,9 +101,7 @@ function SettingsPage() {
          <main className="settings-container">
             <div className="settings-header">
                <h1>Settings</h1>
-               <p className="settings-subtitle">
-                  Manage your account preferences and extension behaviour.
-               </p>
+               <p className="settings-subtitle">Manage your account preferences and extension behaviour.</p>
             </div>
 
             <div className="settings-main-wrapper">
@@ -108,29 +109,17 @@ function SettingsPage() {
                   <div className="settings-sidebar-nav">
                      <button
                         className={`settings-tab ${activeTab === "profile" ? "active" : ""}`}
-                        onClick={() => setActiveTab("profile")}>
-                        <Icons
-                           name="user"
-                           size={18}
-                        />
+                        onClick={() => setActiveTab("profile")}
+                     >
+                        <Icons name="user" size={18} />
                         Profile
                      </button>
-                     <button
-                        className="settings-tab"
-                        disabled>
-                        <Icons
-                           name="lock"
-                           size={18}
-                        />
+                     <button className="settings-tab" disabled>
+                        <Icons name="lock" size={18} />
                         Security
                      </button>
-                     <button
-                        className="settings-tab"
-                        disabled>
-                        <Icons
-                           name="bell"
-                           size={18}
-                        />
+                     <button className="settings-tab" disabled>
+                        <Icons name="bell" size={18} />
                         Notifications
                      </button>
                   </div>
@@ -148,7 +137,8 @@ function SettingsPage() {
                               marginBottom: "24px",
                               borderBottom: "1px solid var(--border-color, #e5e7eb)",
                               paddingBottom: "16px",
-                           }}>
+                           }}
+                        >
                            <div
                               style={{
                                  backgroundColor: "#4f46e5",
@@ -156,15 +146,11 @@ function SettingsPage() {
                                  padding: "6px",
                                  display: "flex",
                                  color: "white",
-                              }}>
-                              <Icons
-                                 name="user"
-                                 size={18}
-                              />
+                              }}
+                           >
+                              <Icons name="user" size={18} />
                            </div>
-                           <h2
-                              className="panel-title"
-                              style={{ margin: 0 }}>
+                           <h2 className="panel-title" style={{ margin: 0 }}>
                               Profile
                            </h2>
                         </div>
@@ -173,7 +159,11 @@ function SettingsPage() {
                            <div className="current-avatar">
                               <div
                                  className="avatar-placeholder"
-                                 style={{ backgroundColor: "#e0e7ff", color: "#4f46e5" }}>
+                                 style={{
+                                    backgroundColor: "#e0e7ff",
+                                    color: "#4f46e5",
+                                 }}
+                              >
                                  {previewAvatar ? (
                                     <img
                                        src={previewAvatar}
@@ -205,7 +195,8 @@ function SettingsPage() {
                                     borderColor: "#c7d2fe",
                                     backgroundColor: "#eef2ff",
                                  }}
-                                 onClick={triggerFileInput}>
+                                 onClick={triggerFileInput}
+                              >
                                  Change Avatar
                               </button>
                               <p className="upload-hint">JPG, PNG or GIF - max 2MB</p>
@@ -219,7 +210,8 @@ function SettingsPage() {
                                  textTransform: "uppercase",
                                  fontSize: "12px",
                                  letterSpacing: "0.5px",
-                              }}>
+                              }}
+                           >
                               DISPLAY NAME
                            </label>
                            <input
@@ -239,7 +231,8 @@ function SettingsPage() {
                                  textTransform: "uppercase",
                                  fontSize: "12px",
                                  letterSpacing: "0.5px",
-                              }}>
+                              }}
+                           >
                               EMAIL ADDRESS
                            </label>
                            <input
@@ -259,7 +252,8 @@ function SettingsPage() {
                                  textTransform: "uppercase",
                                  fontSize: "12px",
                                  letterSpacing: "0.5px",
-                              }}>
+                              }}
+                           >
                               BIO
                            </label>
                            <input
@@ -282,11 +276,9 @@ function SettingsPage() {
                               flexDirection: "column",
                               alignItems: "flex-start",
                               gap: "8px",
-                           }}>
-                           <button
-                              className="save-btn"
-                              onClick={handleSaveProfile}
-                              disabled={isSaving}>
+                           }}
+                        >
+                           <button className="save-btn" onClick={handleSaveProfile} disabled={isSaving}>
                               {isSaving ? "Saving..." : "Save Changes"}
                            </button>
                            {message.text && (
@@ -295,7 +287,8 @@ function SettingsPage() {
                                     color: message.type === "error" ? "#ef4444" : "#10b981",
                                     fontSize: "14px",
                                     marginTop: "8px",
-                                 }}>
+                                 }}
+                              >
                                  {message.text}
                               </div>
                            )}
@@ -307,14 +300,10 @@ function SettingsPage() {
                         <p className="panel-desc">Manage your email and password.</p>
 
                         <div className="settings-form-group">
-                           <button
-                              className="settings-btn"
-                              style={{ width: "100%", marginBottom: "12px" }}>
+                           <button className="settings-btn" style={{ width: "100%", marginBottom: "12px" }}>
                               Change Email
                            </button>
-                           <button
-                              className="settings-btn"
-                              style={{ width: "100%" }}>
+                           <button className="settings-btn" style={{ width: "100%" }}>
                               Change Password
                            </button>
                         </div>
@@ -324,19 +313,15 @@ function SettingsPage() {
                   {activeTab !== "profile" && (
                      <div className="settings-panel danger-zone">
                         <h2 className="panel-title danger-title">Danger Zone</h2>
-                        <button
-                           className="settings-btn danger"
-                           style={{ width: "100%", marginBottom: "12px" }}>
+                        <button className="settings-btn danger" style={{ width: "100%", marginBottom: "12px" }}>
                            Delete Account
                         </button>
                         <button
                            className="logout-btn"
                            onClick={logout}
-                           style={{ width: "100%", justifyContent: "center" }}>
-                           <Icons
-                              name="logout"
-                              size={16}
-                           />
+                           style={{ width: "100%", justifyContent: "center" }}
+                        >
+                           <Icons name="logout" size={16} />
                            Log out of TruthLens
                         </button>
                      </div>

@@ -16,7 +16,7 @@
 
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "../hooks/useAuth";
 import NavigationBar from "../components/NavigationBar.jsx";
 import Icons from "../components/Icons.jsx";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
@@ -36,7 +36,7 @@ import "./Dashboard.css";
  */
 const WidgetListSkeleton = () => (
    <div className="widget-list">
-      {[1, 2, 3].map(i => (
+      {[1, 2, 3].map((i) => (
          <div key={i} className="widget-item">
             <div className="widget-item-top">
                <div className="skeleton-box" style={{ width: "80px", height: "20px", borderRadius: "12px" }}></div>
@@ -51,14 +51,23 @@ const WidgetListSkeleton = () => (
 
 const TrendingListSkeleton = () => (
    <div className="trending-list">
-      {[1, 2, 3].map(i => (
+      {[1, 2, 3].map((i) => (
          <div key={i} className="trending-item">
             <div className="trending-left" style={{ flex: 1 }}>
                <div className="skeleton-box" style={{ width: "80px", height: "20px", borderRadius: "12px" }}></div>
                <div className="skeleton-box" style={{ width: "100%", height: "14px", marginTop: "8px" }}></div>
                <div className="skeleton-box" style={{ width: "70%", height: "14px", marginTop: "4px" }}></div>
             </div>
-            <div className="trending-right" style={{ display: "flex", flexDirection: "column", gap: "6px", alignItems: "flex-end", minWidth: "120px" }}>
+            <div
+               className="trending-right"
+               style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                  alignItems: "flex-end",
+                  minWidth: "120px",
+               }}
+            >
                <div className="skeleton-box" style={{ width: "100px", height: "14px" }}></div>
                <div className="skeleton-box" style={{ width: "60px", height: "12px" }}></div>
             </div>
@@ -73,8 +82,7 @@ function Dashboard() {
 
    useEffect(() => {
       refreshUser?.();
-   }, []);
-
+   }, [refreshUser]);
    // ── Data Fetching ──
    // Use custom hooks to eliminate boilerplate fetch logic
    const { threads, loading: threadsLoading } = useFetchThreads(authFetch);
@@ -99,15 +107,11 @@ function Dashboard() {
 
    // ── Widget Data: My Recent Scans ──
    // Show 4 most recent claims (sorted by last_updated)
-   const recentScans = [...claims]
-      .sort((a, b) => new Date(b.last_updated) - new Date(a.last_updated))
-      .slice(0, 4);
+   const recentScans = [...claims].sort((a, b) => new Date(b.last_updated) - new Date(a.last_updated)).slice(0, 4);
 
    // ── Widget Data: Trending Threads ──
    // Show 5 most recent threads (sorted by created_at)
-   const trendingThreads = [...threads]
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      .slice(0, 5);
+   const trendingThreads = [...threads].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
 
    // ── Chart Data: Verdict Breakdown ──
    // Count claims by verdict for pie chart visualization
@@ -133,9 +137,7 @@ function Dashboard() {
                   <h1 className="welcome-title">
                      Welcome back, <span className="welcome-name">@{user?.username}</span>
                   </h1>
-                  <p className="welcome-subtitle">
-                     Here's what's happening in the TruthLens community today.
-                  </p>
+                  <p className="welcome-subtitle">Here's what's happening in the TruthLens community today.</p>
                </div>
                <div className="trust-pill">
                   <span className="trust-pill-label">Trust Score</span>
@@ -148,19 +150,35 @@ function Dashboard() {
             <div className="stats-row">
                <div className="quick-stat-card">
                   <p className="qs-label">Total Scans</p>
-                  {loading ? <div className="skeleton-box" style={{ width: "40px", height: "32px", margin: "0 auto" }}></div> : <p className="qs-value">{totalScans}</p>}
+                  {loading ? (
+                     <div className="skeleton-box" style={{ width: "40px", height: "32px", margin: "0 auto" }}></div>
+                  ) : (
+                     <p className="qs-value">{totalScans}</p>
+                  )}
                </div>
                <div className="quick-stat-card">
                   <p className="qs-label">Fake News Stopped</p>
-                  {loading ? <div className="skeleton-box" style={{ width: "40px", height: "32px", margin: "0 auto" }}></div> : <p className="qs-value fake">{fakesStopped}</p>}
+                  {loading ? (
+                     <div className="skeleton-box" style={{ width: "40px", height: "32px", margin: "0 auto" }}></div>
+                  ) : (
+                     <p className="qs-value fake">{fakesStopped}</p>
+                  )}
                </div>
                <div className="quick-stat-card">
                   <p className="qs-label">Community Threads</p>
-                  {loading ? <div className="skeleton-box" style={{ width: "40px", height: "32px", margin: "0 auto" }}></div> : <p className="qs-value">{threads.length}</p>}
+                  {loading ? (
+                     <div className="skeleton-box" style={{ width: "40px", height: "32px", margin: "0 auto" }}></div>
+                  ) : (
+                     <p className="qs-value">{threads.length}</p>
+                  )}
                </div>
                <div className="quick-stat-card">
                   <p className="qs-label">Needs Your Vote</p>
-                  {loading ? <div className="skeleton-box" style={{ width: "40px", height: "32px", margin: "0 auto" }}></div> : <p className="qs-value warn">{needsVote.length}</p>}
+                  {loading ? (
+                     <div className="skeleton-box" style={{ width: "40px", height: "32px", margin: "0 auto" }}></div>
+                  ) : (
+                     <p className="qs-value warn">{needsVote.length}</p>
+                  )}
                </div>
             </div>
 
@@ -183,17 +201,14 @@ function Dashboard() {
                               <div
                                  key={thread.id}
                                  className="widget-item clickable"
-                                 onClick={() => navigate("/community")}>
+                                 onClick={() => navigate("/community")}
+                              >
                                  <div className="widget-item-top">
                                     <span className="widget-badge unverified">UNVERIFIED</span>
-                                    <span className="widget-time">
-                                       {timeAgo(thread.created_at)}
-                                    </span>
+                                    <span className="widget-time">{timeAgo(thread.created_at)}</span>
                                  </div>
                                  <p className="widget-summary">
-                                    {thread.claim?.ai_summary ||
-                                       thread.caption ||
-                                       "No summary available."}
+                                    {thread.claim?.ai_summary || thread.caption || "No summary available."}
                                  </p>
                               </div>
                            ))}
@@ -216,22 +231,14 @@ function Dashboard() {
                               const verdict = getEffectiveVerdict(claim);
                               const v = VERDICT_CONFIG[verdict] || VERDICT_CONFIG.PENDING;
                               return (
-                                 <div
-                                    key={claim.id}
-                                    className="widget-item">
+                                 <div key={claim.id} className="widget-item">
                                     <div className="widget-item-top">
-                                       <span
-                                          className="widget-badge"
-                                          style={{ backgroundColor: v.color }}>
+                                       <span className="widget-badge" style={{ backgroundColor: v.color }}>
                                           {v.label}
                                        </span>
-                                       <span className="widget-time">
-                                          {timeAgo(claim.last_updated)}
-                                       </span>
+                                       <span className="widget-time">{timeAgo(claim.last_updated)}</span>
                                     </div>
-                                    <p className="widget-summary">
-                                       {claim.ai_summary || "No summary available."}
-                                    </p>
+                                    <p className="widget-summary">{claim.ai_summary || "No summary available."}</p>
                                  </div>
                               );
                            })}
@@ -247,14 +254,15 @@ function Dashboard() {
                   </h2>
                   {loading ? (
                      <div style={{ height: "280px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <div className="skeleton-box" style={{ width: "160px", height: "160px", borderRadius: "50%" }}></div>
+                        <div
+                           className="skeleton-box"
+                           style={{ width: "160px", height: "160px", borderRadius: "50%" }}
+                        ></div>
                      </div>
                   ) : claims.length === 0 ? (
                      <p className="empty-msg">No data yet. Start scanning claims!</p>
                   ) : (
-                     <ResponsiveContainer
-                        width="100%"
-                        height={280}>
+                     <ResponsiveContainer width="100%" height={280}>
                         <PieChart>
                            <Pie
                               data={chartData}
@@ -263,12 +271,10 @@ function Dashboard() {
                               innerRadius={70}
                               outerRadius={110}
                               paddingAngle={3}
-                              dataKey="value">
+                              dataKey="value"
+                           >
                               {chartData.map((entry) => (
-                                 <Cell
-                                    key={entry.name}
-                                    fill={VERDICT_CONFIG[entry.name]?.color || "#9ca3af"}
-                                 />
+                                 <Cell key={entry.name} fill={VERDICT_CONFIG[entry.name]?.color || "#9ca3af"} />
                               ))}
                            </Pie>
                            <Tooltip formatter={(value, name) => [`${value} scans`, name]} />
@@ -297,11 +303,10 @@ function Dashboard() {
                            <div
                               key={thread.id}
                               className="trending-item clickable"
-                              onClick={() => navigate("/community")}>
+                              onClick={() => navigate("/community")}
+                           >
                               <div className="trending-left">
-                                 <span
-                                    className="widget-badge"
-                                    style={{ backgroundColor: v.color }}>
+                                 <span className="widget-badge" style={{ backgroundColor: v.color }}>
                                     {v.label}
                                  </span>
                                  <p className="trending-summary">

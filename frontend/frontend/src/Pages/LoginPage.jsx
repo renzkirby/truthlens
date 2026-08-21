@@ -18,14 +18,14 @@
  */
 
 import { useState, useEffect } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import LogoImage from "../assets/truthlens_logo.png";
 import Icons from "../components/Icons.jsx";
 import { useGoogleLogin } from "@react-oauth/google";
 
 // ── Utilities & Constants ──
-import { useEndpoint } from "../utils/api";
+import { resolveApiEndpoint } from "../utils/api";
 
 // ── Styles ──
 import "./LoginPage.css";
@@ -37,11 +37,9 @@ function LoginPage() {
    const [showPassword, setShowPassword] = useState(false);
    const [isSigningIn, setIsSigningIn] = useState(false);
    const [justLoggedIn, setJustLoggedIn] = useState(false);
-   const loginEndpoint = useEndpoint("LOGIN");
-   const googleLoginEndpoint = useEndpoint("GOOGLE_LOGIN");
-   const from = location.state?.from
-      ? location.state.from.pathname + location.state.from.search
-      : null;
+   const loginEndpoint = resolveApiEndpoint("LOGIN");
+   const googleLoginEndpoint = resolveApiEndpoint("GOOGLE_LOGIN");
+   const from = location.state?.from ? location.state.from.pathname + location.state.from.search : null;
 
    const [error, setError] = useState(null);
    const [formValues, setFormValues] = useState({
@@ -109,6 +107,7 @@ function LoginPage() {
          setError(data?.detail || "Invalid credentials. Please try again.");
       } catch (err) {
          setError("Unable to sign in right now. Please try again.");
+         console.error("Login error:", err);
       } finally {
          setIsSigningIn(false);
       }
@@ -143,6 +142,7 @@ function LoginPage() {
 
             setError(data?.detail || "Unable to sign in with Google right now. Please try again.");
          } catch (err) {
+            console.error("Google Login error:", err);
             setError("Unable to sign in with Google right now. Please try again.");
          } finally {
             setIsSigningIn(false);
@@ -160,11 +160,7 @@ function LoginPage() {
             {/* Left Side: Branding and Stats */}
             <div className="login-left">
                <div className="login-logo">
-                  <img
-                     src={LogoImage}
-                     alt="TruthLens Logo"
-                     style={{ height: "40px", width: "auto" }}
-                  />
+                  <img src={LogoImage} alt="TruthLens Logo" style={{ height: "40px", width: "auto" }} />
                   <span className="logo-text">TruthLens</span>
                </div>
 
@@ -177,18 +173,14 @@ function LoginPage() {
                      the Truth.
                   </h1>
                   <p className="hero-subtitle">
-                     Welcome back. Your community is counting on you to keep the information
-                     ecosystem honest.
+                     Welcome back. Your community is counting on you to keep the information ecosystem honest.
                   </p>
                </div>
 
                <div className="login-stats">
                   <div className="stat-pill">
                      <div className="stat-icon">
-                        <Icons
-                           name="scan-line"
-                           size={20}
-                        />
+                        <Icons name="scan-line" size={20} />
                      </div>
                      <div className="stat-info">
                         <span className="stat-number">128K+</span>
@@ -197,10 +189,7 @@ function LoginPage() {
                   </div>
                   <div className="stat-pill">
                      <div className="stat-icon">
-                        <Icons
-                           name="check-circle"
-                           size={20}
-                        />
+                        <Icons name="check-circle" size={20} />
                      </div>
                      <div className="stat-info">
                         <span className="stat-number">94K+</span>
@@ -209,10 +198,7 @@ function LoginPage() {
                   </div>
                   <div className="stat-pill">
                      <div className="stat-icon">
-                        <Icons
-                           name="users"
-                           size={20}
-                        />
+                        <Icons name="users" size={20} />
                      </div>
                      <div className="stat-info">
                         <span className="stat-number">32K+</span>
@@ -243,25 +229,18 @@ function LoginPage() {
                      onSubmit={(e) => {
                         e.preventDefault();
                         handleSubmit();
-                     }}>
+                     }}
+                  >
                      {error && (
                         <div className="error-message">
-                           <Icons
-                              name="alert-triangle"
-                              size={16}
-                           />{" "}
-                           {error}
+                           <Icons name="alert-triangle" size={16} /> {error}
                         </div>
                      )}
 
                      <div className="input-group">
                         <label>Email Address / Username</label>
                         <div className="input-wrapper">
-                           <Icons
-                              name="mail"
-                              size={18}
-                              className="input-icon"
-                           />
+                           <Icons name="mail" size={18} className="input-icon" />
                            <input
                               type="text"
                               name="username"
@@ -276,11 +255,7 @@ function LoginPage() {
                      <div className="input-group">
                         <label>Password</label>
                         <div className="input-wrapper">
-                           <Icons
-                              name="shield"
-                              size={18}
-                              className="input-icon"
-                           />
+                           <Icons name="shield" size={18} className="input-icon" />
                            <input
                               type={showPassword ? "text" : "password"}
                               name="password"
@@ -292,11 +267,9 @@ function LoginPage() {
                            <button
                               type="button"
                               className="show-password-btn"
-                              onClick={() => setShowPassword(!showPassword)}>
-                              <Icons
-                                 name={showPassword ? "eye-off" : "eye"}
-                                 size={16}
-                              />
+                              onClick={() => setShowPassword(!showPassword)}
+                           >
+                              <Icons name={showPassword ? "eye-off" : "eye"} size={16} />
                               {showPassword ? "Hide" : "Show"}
                            </button>
                         </div>
@@ -304,31 +277,18 @@ function LoginPage() {
 
                      <div className="form-options">
                         <label className="remember-me">
-                           <input
-                              type="checkbox"
-                              checked={formValues.remember_me}
-                              onChange={handleCheckbox}
-                           />
+                           <input type="checkbox" checked={formValues.remember_me} onChange={handleCheckbox} />
                            <span>Remember me</span>
                         </label>
-                        <a
-                           href="#"
-                           className="forgot-password">
+                        <a href="#" className="forgot-password">
                            Forgot Password?
                         </a>
                      </div>
 
-                     <button
-                        type="submit"
-                        className="submit-btn"
-                        disabled={isSigningIn}>
+                     <button type="submit" className="submit-btn" disabled={isSigningIn}>
                         {!isSigningIn && (
                            <>
-                              SIGN IN{" "}
-                              <Icons
-                                 name="arrow-right"
-                                 size={18}
-                              />
+                              SIGN IN <Icons name="arrow-right" size={18} />
                            </>
                         )}
                         {isSigningIn && (
@@ -344,9 +304,7 @@ function LoginPage() {
 
                   <div className="signup-prompt">
                      Don't have an account?{" "}
-                     <Link
-                        to="/register"
-                        state={{ from: location.state?.from }}>
+                     <Link to="/register" state={{ from: location.state?.from }}>
                         Create Account
                      </Link>
                   </div>
@@ -360,7 +318,8 @@ function LoginPage() {
                         type="button"
                         className="social-btn"
                         onClick={() => loginWithGoogle()}
-                        disabled={isSigningIn}>
+                        disabled={isSigningIn}
+                     >
                         <span className="social-icon">G</span> Google
                      </button>
                   </div>

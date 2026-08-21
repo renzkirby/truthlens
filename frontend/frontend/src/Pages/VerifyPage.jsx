@@ -18,7 +18,7 @@
  */
 
 import { useState, useRef } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import NavigationBar from "../components/NavigationBar.jsx";
 import Icons from "../components/Icons.jsx";
@@ -33,15 +33,8 @@ import "./VerifyPage.css";
 const VerifyLoadingState = ({ isCompleting }) => {
    return (
       <div className="verify-loading-container">
-         <Icons
-            name="loader"
-            size={32}
-            className="spin"
-            color="#4f46e5"
-         />
-         <p className="verify-loading-text">
-            {isCompleting ? "Finalizing Report..." : "Analyzing your claim..."}
-         </p>
+         <Icons name="loader" size={32} className="spin" color="#4f46e5" />
+         <p className="verify-loading-text">{isCompleting ? "Finalizing Report..." : "Analyzing your claim..."}</p>
          <p className="verify-loading-subtext">Please wait. This may take 10-30 seconds.</p>
          <div className="verify-loading-progress-bar">
             {/* When completing, it switches to the completing animation that goes to 100% */}
@@ -67,31 +60,24 @@ const ResultCard = ({ result, onEscalate }) => {
          result.confidence_score >= 70
             ? "var(--verdict-fact-border)"
             : result.confidence_score >= 40
-               ? "var(--verdict-misleading-border)"
-               : "var(--verdict-fake-border)";
+              ? "var(--verdict-misleading-border)"
+              : "var(--verdict-fake-border)";
    }
 
    // NEW: Allow community action for everything EXCEPT Out of Scope
    const canAskCommunity = result.verdict !== "OUT_OF_SCOPE";
-   
+
    // Check if this is an escalation (AI is confused) or just a discussion (AI is confident)
    const isEscalation = result.verdict === "UNVERIFIED" || result.confidence_score < 50;
 
-
    const evidenceList =
-      result.sources && result.sources.length > 0
-         ? result.sources
-         : result.source_url
-           ? [result.source_url]
-           : [];
+      result.sources && result.sources.length > 0 ? result.sources : result.source_url ? [result.source_url] : [];
 
    return (
       <div className="result-card">
          <div className="result-verdict-row">
             <span className="result-label">This content is</span>
-            <span
-               className="result-badge"
-               style={{ color: config.color, backgroundColor: config.bg }}>
+            <span className="result-badge" style={{ color: config.color, backgroundColor: config.bg }}>
                {config.label}
             </span>
          </div>
@@ -99,20 +85,12 @@ const ResultCard = ({ result, onEscalate }) => {
          {/* ── Banners ── */}
          {result.has_community_verdict && (
             <div className="result-banner community-verified">
-               <Icons
-                  name="shield-check"
-                  size={14}
-               />{" "}
-               COMMUNITY VERIFIED
+               <Icons name="shield-check" size={14} /> COMMUNITY VERIFIED
             </div>
          )}
          {result.is_ai_generated && (
             <div className="result-banner ai-warning">
-               <Icons
-                  name="sparkles"
-                  size={14}
-               />{" "}
-               AI-GENERATED MEDIA DETECTED
+               <Icons name="sparkles" size={14} /> AI-GENERATED MEDIA DETECTED
             </div>
          )}
 
@@ -156,7 +134,8 @@ const ResultCard = ({ result, onEscalate }) => {
                            href={urlStr}
                            target="_blank"
                            rel="noopener noreferrer"
-                           className="result-source-item">
+                           className="result-source-item"
+                        >
                            "{urlStr}"
                         </a>
                      );
@@ -165,26 +144,16 @@ const ResultCard = ({ result, onEscalate }) => {
             </div>
          )}
 
-         <div
-            className="result-footer"
-            style={{ marginTop: "8px" }}>
+         <div className="result-footer" style={{ marginTop: "8px" }}>
             <span className="result-source-type">
-               <Icons
-                  name="info"
-                  size={13}
-               />
-               Source Type:{" "}
-               {result.has_community_verdict ? "Community Moderation" : result.source_type}
+               <Icons name="info" size={13} />
+               Source Type: {result.has_community_verdict ? "Community Moderation" : result.source_type}
             </span>
          </div>
 
          {/* ── Call to Action Buttons ── */}
          <div className="result-action-buttons">
-            <a
-               href={`/analysis/${result.id}`}
-               target="_blank"
-               rel="noopener noreferrer"
-               className="view-report-btn">
+            <a href={`/analysis/${result.id}`} target="_blank" rel="noopener noreferrer" className="view-report-btn">
                View Full Report →
             </a>
 
@@ -193,19 +162,25 @@ const ResultCard = ({ result, onEscalate }) => {
                   href={`/thread/detail/${result.thread_id}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="view-thread-btn">
+                  className="view-thread-btn"
+               >
                   View Community Discussion
                </a>
             ) : canAskCommunity && result.id ? (
                <button
                   className="escalate-btn"
                   onClick={onEscalate}
-                  style={!isEscalation ? { background: '#f3f4f6', borderColor: '#e5e7eb', color: '#4b5563' } : {}}
+                  style={
+                     !isEscalation
+                        ? {
+                             background: "#f3f4f6",
+                             borderColor: "#e5e7eb",
+                             color: "#4b5563",
+                          }
+                        : {}
+                  }
                >
-                  <Icons
-                     name={isEscalation ? "flag" : "users"}
-                     size={14}
-                  />
+                  <Icons name={isEscalation ? "flag" : "users"} size={14} />
                   {isEscalation ? "Ask the Community" : "Discuss / Contest in Community"}
                </button>
             ) : null}
@@ -247,9 +222,7 @@ function VerifyPage() {
          }
 
          try {
-            const data = await authFetch(
-               `${import.meta.env.VITE_API_BASE_URL}/claims/${claimId}/status`,
-            );
+            const data = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/claims/${claimId}/status`);
 
             if (data.verdict !== "PENDING") {
                clearInterval(interval);
@@ -262,6 +235,7 @@ function VerifyPage() {
                }, 800);
             }
          } catch (err) {
+            console.error("Verification error:", err);
             clearInterval(interval);
             setError("Failed to retrieve result. Please try again.");
             setLoading(false);
@@ -285,6 +259,7 @@ function VerifyPage() {
          });
          pollForResult(data.claim_id);
       } catch (err) {
+         console.error("URL verification error:", err);
          setError("Failed to submit URL. Please try again.");
          setLoading(false);
       }
@@ -334,6 +309,7 @@ function VerifyPage() {
 
          pollForResult(data.claim_id);
       } catch (err) {
+         console.error("Image verification error:", err);
          setError("Failed to submit image. Please try again.");
          setLoading(false);
       }
@@ -385,6 +361,7 @@ function VerifyPage() {
 
          pollForResult(data.claim_id);
       } catch (err) {
+         console.error("File verification error:", err);
          setError("Failed to submit document. Please try again.");
          setLoading(false);
       }
@@ -424,6 +401,7 @@ function VerifyPage() {
             setIsCompleting(false);
          }, 800);
       } catch (err) {
+         console.error("Deepfake test error:", err);
          setError("Deepfake test failed.");
          setLoading(false);
       }
@@ -445,6 +423,7 @@ function VerifyPage() {
          });
          pollForResult(data.claim_id);
       } catch (err) {
+         console.error("Text verification error:", err);
          setError("Failed to submit text. Please try again.");
          setLoading(false);
       }
@@ -470,17 +449,11 @@ function VerifyPage() {
          <main className={`verify-container ${result && !loading ? "has-result" : ""}`}>
             <div className="verify-header">
                <div className="verify-header-icon">
-                  <Icons
-                     name="scan-line"
-                     size={22}
-                     color="#fff"
-                  />
+                  <Icons name="scan-line" size={22} color="#fff" />
                </div>
                <div>
                   <h1 className="verify-title">Verify a Claim</h1>
-                  <p className="verify-subtitle">
-                     Submit a URL or image to check if it contains misinformation.
-                  </p>
+                  <p className="verify-subtitle">Submit a URL or image to check if it contains misinformation.</p>
                </div>
             </div>
 
@@ -488,38 +461,30 @@ function VerifyPage() {
             <div className="verify-tabs">
                <button
                   className={`verify-tab-btn ${activeTab === "url" ? "active" : ""}`}
-                  onClick={() => handleTabSwitch("url")}>
-                  <Icons
-                     name="link"
-                     size={15}
-                  />
+                  onClick={() => handleTabSwitch("url")}
+               >
+                  <Icons name="link" size={15} />
                   Analyze URL
                </button>
                <button
                   className={`verify-tab-btn ${activeTab === "image" ? "active" : ""}`}
-                  onClick={() => handleTabSwitch("image")}>
-                  <Icons
-                     name="image"
-                     size={15}
-                  />
+                  onClick={() => handleTabSwitch("image")}
+               >
+                  <Icons name="image" size={15} />
                   Verify Image
                </button>
                <button
                   className={`verify-tab-btn ${activeTab === "text" ? "active" : ""}`}
-                  onClick={() => handleTabSwitch("text")}>
-                  <Icons
-                     name="file-text"
-                     size={15}
-                  />
+                  onClick={() => handleTabSwitch("text")}
+               >
+                  <Icons name="file-text" size={15} />
                   Verify Text
                </button>
                <button
                   className={`verify-tab-btn ${activeTab === "file" ? "active" : ""}`}
-                  onClick={() => handleTabSwitch("file")}>
-                  <Icons
-                     name="file"
-                     size={15}
-                  />
+                  onClick={() => handleTabSwitch("file")}
+               >
+                  <Icons name="file" size={15} />
                   Verify File
                </button>
                <button
@@ -528,11 +493,9 @@ function VerifyPage() {
                      setActiveTab("deepfake");
                      setResult(null);
                      setError(null);
-                  }}>
-                  <Icons
-                     name="sparkles"
-                     size={16}
-                  />
+                  }}
+               >
+                  <Icons name="sparkles" size={16} />
                   Detect Deepfake
                </button>
             </div>
@@ -544,10 +507,7 @@ function VerifyPage() {
                   {/* Error State */}
                   {error && (
                      <div className="verify-error">
-                        <Icons
-                           name="alert-triangle"
-                           size={15}
-                        />
+                        <Icons name="alert-triangle" size={15} />
                         {error}
                      </div>
                   )}
@@ -556,10 +516,7 @@ function VerifyPage() {
                   {activeTab === "url" && (
                      <div className="verify-panel box-panel">
                         <label className="panel-label">
-                           <Icons
-                              name="link"
-                              size={14}
-                           />
+                           <Icons name="link" size={14} />
                            Paste a news article or social media URL
                         </label>
                         <div className="url-input-row">
@@ -575,7 +532,8 @@ function VerifyPage() {
                            <button
                               className="verify-submit-btn"
                               onClick={handleUrlVerify}
-                              disabled={loading || !url.trim()}>
+                              disabled={loading || !url.trim()}
+                           >
                               {loading ? (
                                  <>
                                     <div className="btn-spinner" />
@@ -583,18 +541,14 @@ function VerifyPage() {
                                  </>
                               ) : (
                                  <>
-                                    <Icons
-                                       name="search"
-                                       size={15}
-                                    />
+                                    <Icons name="search" size={15} />
                                     Verify
                                  </>
                               )}
                            </button>
                         </div>
                         <p className="panel-hint">
-                           Works best with news articles. Social media posts and paywalled sites may
-                           not load correctly.
+                           Works best with news articles. Social media posts and paywalled sites may not load correctly.
                         </p>
                      </div>
                   )}
@@ -603,10 +557,7 @@ function VerifyPage() {
                   {activeTab === "image" && (
                      <div className="verify-panel box-panel">
                         <label className="panel-label">
-                           <Icons
-                              name="image"
-                              size={14}
-                           />
+                           <Icons name="image" size={14} />
                            Upload a screenshot or image to verify
                         </label>
 
@@ -614,14 +565,11 @@ function VerifyPage() {
                            className={`drop-zone ${imagePreview ? "has-image" : ""}`}
                            onClick={() => !imagePreview && fileInputRef.current?.click()}
                            onDrop={handleDrop}
-                           onDragOver={(e) => e.preventDefault()}>
+                           onDragOver={(e) => e.preventDefault()}
+                        >
                            {imagePreview ? (
                               <div className="image-preview-wrapper">
-                                 <img
-                                    src={imagePreview}
-                                    alt="Preview"
-                                    className="image-preview"
-                                 />
+                                 <img src={imagePreview} alt="Preview" className="image-preview" />
                                  <button
                                     className="remove-image-btn"
                                     onClick={(e) => {
@@ -629,24 +577,16 @@ function VerifyPage() {
                                        setImage(null);
                                        setImagePreview(null);
                                        setResult(null);
-                                    }}>
-                                    <Icons
-                                       name="x"
-                                       size={14}
-                                    />{" "}
-                                    Remove
+                                    }}
+                                 >
+                                    <Icons name="x" size={14} /> Remove
                                  </button>
                               </div>
                            ) : (
                               <div className="drop-zone-content">
-                                 <Icons
-                                    name="upload"
-                                    size={32}
-                                    color="#9ca3af"
-                                 />
+                                 <Icons name="upload" size={32} color="#9ca3af" />
                                  <p className="drop-zone-text">
-                                    Drag and drop an image here, or{" "}
-                                    <span className="drop-zone-link">browse</span>
+                                    Drag and drop an image here, or <span className="drop-zone-link">browse</span>
                                  </p>
                                  <p className="drop-zone-hint">PNG, JPG, WEBP supported</p>
                               </div>
@@ -665,7 +605,8 @@ function VerifyPage() {
                         <button
                            className="verify-submit-btn full-width"
                            onClick={handleImageVerify}
-                           disabled={loading || !image}>
+                           disabled={loading || !image}
+                        >
                            {loading ? (
                               <>
                                  <div className="btn-spinner" />
@@ -673,10 +614,7 @@ function VerifyPage() {
                               </>
                            ) : (
                               <>
-                                 <Icons
-                                    name="scan-line"
-                                    size={15}
-                                 />
+                                 <Icons name="scan-line" size={15} />
                                  Verify Image
                               </>
                            )}
@@ -690,10 +628,7 @@ function VerifyPage() {
                   {activeTab === "text" && (
                      <div className="verify-panel box-panel">
                         <label className="panel-label">
-                           <Icons
-                              name="file-text"
-                              size={14}
-                           />
+                           <Icons name="file-text" size={14} />
                            Paste a claim, quote, or social media post
                         </label>
 
@@ -717,7 +652,8 @@ function VerifyPage() {
                         <button
                            className="verify-submit-btn full-width"
                            onClick={handleTextVerify}
-                           disabled={loading || !text.trim()}>
+                           disabled={loading || !text.trim()}
+                        >
                            {loading ? (
                               <>
                                  <div className="btn-spinner" />
@@ -725,17 +661,14 @@ function VerifyPage() {
                               </>
                            ) : (
                               <>
-                                 <Icons
-                                    name="search"
-                                    size={15}
-                                 />
+                                 <Icons name="search" size={15} />
                                  Verify Text
                               </>
                            )}
                         </button>
                         <p className="panel-hint">
-                           Our AI will extract the core claim, cross-reference it with live news,
-                           and evaluate its factual accuracy.
+                           Our AI will extract the core claim, cross-reference it with live news, and evaluate its
+                           factual accuracy.
                         </p>
                      </div>
                   )}
@@ -744,10 +677,7 @@ function VerifyPage() {
                   {activeTab === "file" && (
                      <div className="verify-panel box-panel">
                         <label className="panel-label">
-                           <Icons
-                              name="file"
-                              size={14}
-                           />
+                           <Icons name="file" size={14} />
                            Upload a document to verify
                         </label>
 
@@ -755,19 +685,14 @@ function VerifyPage() {
                            className={`drop-zone ${docFile ? "has-image" : ""}`}
                            onClick={() => !docFile && docFileInputRef.current?.click()}
                            onDrop={handleDocDrop}
-                           onDragOver={(e) => e.preventDefault()}>
+                           onDragOver={(e) => e.preventDefault()}
+                        >
                            {docFile ? (
                               <div className="image-preview-wrapper">
                                  <div className="file-preview-box">
-                                    <Icons
-                                       name="file-text"
-                                       size={32}
-                                       color="#4f46e5"
-                                    />
+                                    <Icons name="file-text" size={32} color="#4f46e5" />
                                     <p className="file-name">{docFile.name}</p>
-                                    <p className="file-size">
-                                       {(docFile.size / 1024 / 1024).toFixed(2)} MB
-                                    </p>
+                                    <p className="file-size">{(docFile.size / 1024 / 1024).toFixed(2)} MB</p>
                                  </div>
                                  <button
                                     className="remove-image-btn"
@@ -775,24 +700,16 @@ function VerifyPage() {
                                        e.stopPropagation();
                                        setDocFile(null);
                                        setResult(null);
-                                    }}>
-                                    <Icons
-                                       name="x"
-                                       size={14}
-                                    />{" "}
-                                    Remove
+                                    }}
+                                 >
+                                    <Icons name="x" size={14} /> Remove
                                  </button>
                               </div>
                            ) : (
                               <div className="drop-zone-content">
-                                 <Icons
-                                    name="upload"
-                                    size={32}
-                                    color="#9ca3af"
-                                 />
+                                 <Icons name="upload" size={32} color="#9ca3af" />
                                  <p className="drop-zone-text">
-                                    Drag and drop a document here, or{" "}
-                                    <span className="drop-zone-link">browse</span>
+                                    Drag and drop a document here, or <span className="drop-zone-link">browse</span>
                                  </p>
                                  <p className="drop-zone-hint">PDF & TXT format supported</p>
                               </div>
@@ -811,7 +728,8 @@ function VerifyPage() {
                         <button
                            className="verify-submit-btn full-width"
                            onClick={handleFileVerify}
-                           disabled={loading || !docFile}>
+                           disabled={loading || !docFile}
+                        >
                            {loading ? (
                               <>
                                  <div className="btn-spinner" />
@@ -819,17 +737,13 @@ function VerifyPage() {
                               </>
                            ) : (
                               <>
-                                 <Icons
-                                    name="scan-line"
-                                    size={15}
-                                 />
+                                 <Icons name="scan-line" size={15} />
                                  Verify Document
                               </>
                            )}
                         </button>
                         <p className="panel-hint">
-                           Our AI will extract text from the document and cross-reference its
-                           claims.
+                           Our AI will extract text from the document and cross-reference its claims.
                         </p>
                      </div>
                   )}
@@ -838,10 +752,7 @@ function VerifyPage() {
                   {activeTab === "deepfake" && (
                      <div className="verify-panel box-panel">
                         <label className="panel-label">
-                           <Icons
-                              name="sparkles"
-                              size={14}
-                           />
+                           <Icons name="sparkles" size={14} />
                            Upload a photo for Deepfake detection
                         </label>
 
@@ -849,14 +760,11 @@ function VerifyPage() {
                            className={`drop-zone ${imagePreview ? "has-image" : ""}`}
                            onClick={() => !imagePreview && fileInputRef.current?.click()}
                            onDrop={handleDrop}
-                           onDragOver={(e) => e.preventDefault()}>
+                           onDragOver={(e) => e.preventDefault()}
+                        >
                            {imagePreview ? (
                               <div className="image-preview-wrapper">
-                                 <img
-                                    src={imagePreview}
-                                    alt="Preview"
-                                    className="image-preview"
-                                 />
+                                 <img src={imagePreview} alt="Preview" className="image-preview" />
                                  <button
                                     className="remove-image-btn"
                                     onClick={(e) => {
@@ -864,24 +772,16 @@ function VerifyPage() {
                                        setImage(null);
                                        setImagePreview(null);
                                        setResult(null);
-                                    }}>
-                                    <Icons
-                                       name="x"
-                                       size={14}
-                                    />{" "}
-                                    Remove
+                                    }}
+                                 >
+                                    <Icons name="x" size={14} /> Remove
                                  </button>
                               </div>
                            ) : (
                               <div className="drop-zone-content">
-                                 <Icons
-                                    name="upload"
-                                    size={32}
-                                    color="#9ca3af"
-                                 />
+                                 <Icons name="upload" size={32} color="#9ca3af" />
                                  <p className="drop-zone-text">
-                                    Drag and drop an image here, or{" "}
-                                    <span className="drop-zone-link">browse</span>
+                                    Drag and drop an image here, or <span className="drop-zone-link">browse</span>
                                  </p>
                                  <p className="drop-zone-hint">PNG, JPG, WEBP supported</p>
                               </div>
@@ -900,7 +800,8 @@ function VerifyPage() {
                         <button
                            className="verify-submit-btn full-width"
                            onClick={handleDeepfakeTest}
-                           disabled={loading || !image}>
+                           disabled={loading || !image}
+                        >
                            {loading ? (
                               <>
                                  <div className="btn-spinner" />
@@ -908,17 +809,13 @@ function VerifyPage() {
                               </>
                            ) : (
                               <>
-                                 <Icons
-                                    name="scan-line"
-                                    size={15}
-                                 />
+                                 <Icons name="scan-line" size={15} />
                                  Run Deepfake Test
                               </>
                            )}
                         </button>
                         <p className="panel-hint">
-                           Our AI model will analyze the image for digital fabrication or AI
-                           generation.
+                           Our AI model will analyze the image for digital fabrication or AI generation.
                         </p>
                      </div>
                   )}
@@ -952,18 +849,17 @@ function VerifyPage() {
                                           ? "var(--fake-text, #991b1b)"
                                           : "var(--fact-text, #166534)",
                                     border: `1px solid ${result.verdict === "AI GENERATED" ? "var(--fake-border, #f87171)" : "var(--fact-border, #86efac)"}`,
-                                 }}>
+                                 }}
+                              >
                                  {result.verdict}
                               </span>
                            </div>
 
                            <div className="result-summary-box">
                               <p className="result-summary-title">AI Forensic Analysis</p>
-                              <p
-                                 className="result-summary-text"
-                                 style={{ marginBottom: "8px" }}>
-                                 The forensic model is <strong>{result.score}%</strong> confident
-                                 that this image was generated or manipulated by AI.
+                              <p className="result-summary-text" style={{ marginBottom: "8px" }}>
+                                 The forensic model is <strong>{result.score}%</strong> confident that this image was
+                                 generated or manipulated by AI.
                               </p>
                               <div
                                  style={{
@@ -971,7 +867,8 @@ function VerifyPage() {
                                     paddingTop: "8px",
                                     fontSize: "13px",
                                     color: "#4b5563",
-                                 }}>
+                                 }}
+                              >
                                  <strong>Explanation:</strong> {result.summary}
                               </div>
                            </div>

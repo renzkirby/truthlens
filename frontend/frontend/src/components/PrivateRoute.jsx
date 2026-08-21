@@ -1,7 +1,7 @@
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 
-function PrivateRoute({ requiredRole, children }) {
+function PrivateRoute({ requiredRole }) {
    const { token, user, loading } = useAuth();
    const location = useLocation();
    const normalizedUserRole = user?.role === "MODERATOR" ? "MOD" : user?.role;
@@ -9,12 +9,7 @@ function PrivateRoute({ requiredRole, children }) {
 
    // Not authenticated - redirect to login
    if (!token) {
-      return (
-         <Navigate
-            to="/login"
-            state={{ from: location }}
-         />
-      );
+      return <Navigate to="/login" state={{ from: location }} />;
    }
 
    // Still loading user data - show loading spinner
@@ -28,11 +23,13 @@ function PrivateRoute({ requiredRole, children }) {
                width: "100vw",
                height: "100vh",
                background: "#f9fafb",
-            }}>
+            }}
+         >
             <div
                style={{
                   textAlign: "center",
-               }}>
+               }}
+            >
                <div
                   style={{
                      width: "40px",
@@ -57,12 +54,7 @@ function PrivateRoute({ requiredRole, children }) {
 
    // Has required role
    if (normalizedRequiredRole && normalizedUserRole !== normalizedRequiredRole) {
-      return (
-         <Navigate
-            to="/dashboard"
-            state={{ from: location }}
-         />
-      );
+      return <Navigate to="/dashboard" state={{ from: location }} />;
    }
 
    return <Outlet />;
