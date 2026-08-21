@@ -24,6 +24,7 @@ import {
    Target,
    Eye,
    UsersRound,
+   ArrowRight,
 } from "lucide-react";
 
 const TruthLens = () => {
@@ -804,6 +805,64 @@ const TruthLens = () => {
                   <span>TruthLens exists to encourage one simple habit:</span>
 
                   <strong>investigate before you amplify.</strong>
+               </div>
+            </div>
+         </section>
+
+         {/* Final CTA Section */}
+         <section className="final-cta">
+            <div className="final-cta-container">
+               <div className="final-cta-content">
+                  <span className="final-cta-label">READY TO INVESTIGATE?</span>
+
+                  <h2 className="final-cta-title">
+                     See something suspicious?
+                     <span>Check it before you share it.</span>
+                  </h2>
+
+                  <p className="final-cta-description">
+                     Add TruthLens to Chrome to start investigating questionable
+                     content directly from your browser, or create an account to
+                     participate in the wider verification community.
+                  </p>
+
+                  <div className="final-cta-actions">
+                     <a
+                        href="https://chromewebstore.google.com/detail/truthlens/dhkeknpnigghagekhdcpknbggfpbmkgo"
+                        className="final-cta-primary"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                     >
+                        <Download
+                           size={18}
+                           strokeWidth={2}
+                           aria-hidden="true"
+                        />
+                        Add to Chrome
+                     </a>
+
+                     <Link to="/register" className="final-cta-secondary">
+                        Create an account
+                        <ArrowRight
+                           size={18}
+                           strokeWidth={2}
+                           aria-hidden="true"
+                        />
+                     </Link>
+                  </div>
+
+                  <div className="final-cta-note">
+                     <ShieldCheck
+                        size={16}
+                        strokeWidth={1.8}
+                        aria-hidden="true"
+                     />
+
+                     <span>
+                        AI-assisted verification with supporting evidence and
+                        human review.
+                     </span>
+                  </div>
                </div>
             </div>
          </section>

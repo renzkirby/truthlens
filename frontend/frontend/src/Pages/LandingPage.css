@@ -2969,6 +2969,320 @@ body {
    }
 }
 
+/* =========================================================
+   FINAL CTA
+   ========================================================= */
+
+.final-cta {
+   position: relative;
+
+   padding: 104px 24px;
+
+   background: var(--bg-surface);
+
+   overflow: hidden;
+}
+
+.final-cta::before {
+   content: "";
+
+   position: absolute;
+
+   width: 480px;
+   height: 480px;
+
+   top: -260px;
+   left: 50%;
+
+   transform: translateX(-50%);
+
+   border-radius: 50%;
+
+   background: rgba(79, 70, 229, 0.08);
+
+   filter: blur(10px);
+
+   pointer-events: none;
+}
+
+.final-cta-container {
+   position: relative;
+
+   z-index: 1;
+
+   width: min(1040px, 100%);
+
+   margin: 0 auto;
+
+   padding: 72px 56px;
+
+   border: 1px solid rgba(79, 70, 229, 0.14);
+
+   border-radius: 24px;
+
+   background: linear-gradient(
+      145deg,
+      rgba(79, 70, 229, 0.055),
+      var(--bg-surface) 55%
+   );
+
+   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.07);
+}
+
+.final-cta-content {
+   width: min(720px, 100%);
+
+   margin: 0 auto;
+
+   text-align: center;
+}
+
+/* =========================================================
+   FINAL CTA TYPOGRAPHY
+   ========================================================= */
+
+.final-cta-label {
+   display: block;
+
+   margin-bottom: 14px;
+
+   color: var(--brand-primary);
+
+   font-size: 0.7rem;
+
+   font-weight: 800;
+
+   letter-spacing: 0.13em;
+}
+
+.final-cta-title {
+   margin: 0;
+
+   color: var(--text-main);
+
+   font-size: clamp(2.25rem, 5vw, 3.45rem);
+
+   font-weight: 800;
+
+   line-height: 1.07;
+
+   letter-spacing: -0.045em;
+}
+
+.final-cta-title span {
+   display: block;
+
+   color: var(--brand-primary);
+}
+
+.final-cta-description {
+   max-width: 650px;
+
+   margin: 22px auto 0;
+
+   color: var(--text-muted);
+
+   font-size: 1rem;
+
+   line-height: 1.7;
+}
+
+/* =========================================================
+   FINAL CTA ACTIONS
+   ========================================================= */
+
+.final-cta-actions {
+   display: flex;
+
+   align-items: center;
+   justify-content: center;
+
+   flex-wrap: wrap;
+
+   gap: 12px;
+
+   margin-top: 32px;
+}
+
+.final-cta-primary,
+.final-cta-secondary {
+   min-height: 46px;
+
+   display: inline-flex;
+
+   align-items: center;
+   justify-content: center;
+
+   gap: 9px;
+
+   padding: 0 20px;
+
+   border-radius: 10px;
+
+   font-size: 0.88rem;
+
+   font-weight: 700;
+
+   text-decoration: none;
+
+   transition:
+      transform 0.2s ease,
+      border-color 0.2s ease,
+      background-color 0.2s ease,
+      box-shadow 0.2s ease;
+}
+
+/* Primary */
+
+.final-cta-primary {
+   border: 1px solid var(--brand-primary);
+
+   color: #ffffff;
+
+   background: var(--brand-primary);
+
+   box-shadow: 0 8px 18px rgba(79, 70, 229, 0.22);
+}
+
+.final-cta-primary:hover {
+   transform: translateY(-2px);
+
+   box-shadow: 0 12px 24px rgba(79, 70, 229, 0.28);
+}
+
+/* Secondary */
+
+.final-cta-secondary {
+   border: 1px solid var(--border-default);
+
+   color: var(--text-main);
+
+   background: var(--bg-surface);
+}
+
+.final-cta-secondary:hover {
+   transform: translateY(-2px);
+
+   border-color: rgba(79, 70, 229, 0.24);
+
+   background: rgba(79, 70, 229, 0.035);
+}
+
+/* =========================================================
+   FINAL CTA NOTE
+   ========================================================= */
+
+.final-cta-note {
+   display: inline-flex;
+
+   align-items: center;
+   justify-content: center;
+
+   gap: 8px;
+
+   margin-top: 24px;
+
+   color: var(--text-muted);
+
+   font-size: 0.75rem;
+
+   line-height: 1.45;
+}
+
+.final-cta-note svg {
+   flex: 0 0 auto;
+
+   color: var(--brand-primary);
+}
+
+/* =========================================================
+   FINAL CTA — TABLET
+   ========================================================= */
+
+@media (max-width: 900px) {
+   .final-cta {
+      padding: 88px 24px;
+   }
+
+   .final-cta-container {
+      padding: 62px 42px;
+   }
+}
+
+/* =========================================================
+   FINAL CTA — MOBILE
+   ========================================================= */
+
+@media (max-width: 600px) {
+   .final-cta {
+      padding: 72px 18px;
+   }
+
+   .final-cta-container {
+      padding: 48px 24px;
+
+      border-radius: 20px;
+   }
+
+   .final-cta-title {
+      font-size: 2.15rem;
+   }
+
+   .final-cta-description {
+      font-size: 0.95rem;
+   }
+
+   .final-cta-actions {
+      flex-direction: column;
+   }
+
+   .final-cta-primary,
+   .final-cta-secondary {
+      width: 100%;
+   }
+
+   .final-cta-note {
+      align-items: flex-start;
+
+      text-align: left;
+   }
+}
+
+/* =========================================================
+   FINAL CTA — SMALL MOBILE
+   ========================================================= */
+
+@media (max-width: 420px) {
+   .final-cta {
+      padding-left: 14px;
+      padding-right: 14px;
+   }
+
+   .final-cta-container {
+      padding: 42px 20px;
+   }
+
+   .final-cta-title {
+      font-size: 1.9rem;
+   }
+}
+
+/* =========================================================
+   FINAL CTA — REDUCED MOTION
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+   .final-cta-primary,
+   .final-cta-secondary {
+      transition: none;
+   }
+
+   .final-cta-primary:hover,
+   .final-cta-secondary:hover {
+      transform: none;
+   }
+}
+
 /* Footer */
 .footer {
    background-color: #25245c;
