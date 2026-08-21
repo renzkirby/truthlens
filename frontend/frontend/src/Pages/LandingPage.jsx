@@ -14,6 +14,10 @@ import {
    FileText,
    Zap,
    Users,
+   BrainCircuit,
+   BookOpenCheck,
+   MessagesSquare,
+   PanelsTopLeft,
 } from "lucide-react";
 
 const TruthLens = () => {
@@ -363,6 +367,142 @@ const TruthLens = () => {
                         <span>Evidence first. Decisions second.</span>
                      </div>
                   </div>
+               </div>
+            </div>
+         </section>
+
+         {/* Features Section */}
+         <section id="features" className="features-section">
+            <div className="features-container">
+               <div className="features-header">
+                  <span className="section-label">FEATURES</span>
+
+                  <h2 className="features-title">
+                     Built to help you question what you see online.
+                  </h2>
+
+                  <p className="features-description">
+                     TruthLens combines AI-assisted analysis, supporting
+                     evidence, community participation, and browser-based tools
+                     to help you investigate questionable content with more
+                     context.
+                  </p>
+               </div>
+
+               <div className="features-grid">
+                  {/* Claim Analysis */}
+                  <article className="feature-card">
+                     <div className="feature-card-header">
+                        <div className="feature-icon">
+                           <BrainCircuit
+                              size={27}
+                              strokeWidth={1.8}
+                              aria-hidden="true"
+                           />
+                        </div>
+
+                        <span className="feature-index">01</span>
+                     </div>
+
+                     <h3 className="feature-title">Claim Analysis</h3>
+
+                     <p className="feature-description">
+                        Investigate suspicious claims, images, URLs, and other
+                        supported content using AI-assisted verification.
+                     </p>
+
+                     <div className="feature-meta">
+                        <span>Images</span>
+                        <span>Claims</span>
+                        <span>URLs</span>
+                     </div>
+                  </article>
+
+                  {/* Evidence */}
+                  <article className="feature-card">
+                     <div className="feature-card-header">
+                        <div className="feature-icon">
+                           <BookOpenCheck
+                              size={27}
+                              strokeWidth={1.8}
+                              aria-hidden="true"
+                           />
+                        </div>
+
+                        <span className="feature-index">02</span>
+                     </div>
+
+                     <h3 className="feature-title">Evidence & Context</h3>
+
+                     <p className="feature-description">
+                        Go beyond a simple verdict by reviewing supporting
+                        sources, explanations, and additional context behind an
+                        analysis.
+                     </p>
+
+                     <div className="feature-meta">
+                        <span>Sources</span>
+                        <span>Context</span>
+                        <span>Evidence</span>
+                     </div>
+                  </article>
+
+                  {/* Community */}
+                  <article className="feature-card">
+                     <div className="feature-card-header">
+                        <div className="feature-icon">
+                           <MessagesSquare
+                              size={27}
+                              strokeWidth={1.8}
+                              aria-hidden="true"
+                           />
+                        </div>
+
+                        <span className="feature-index">03</span>
+                     </div>
+
+                     <h3 className="feature-title">Community Verification</h3>
+
+                     <p className="feature-description">
+                        Participate in investigations, contribute evidence, and
+                        help provide additional context when claims need human
+                        review.
+                     </p>
+
+                     <div className="feature-meta">
+                        <span>Evidence</span>
+                        <span>Discussion</span>
+                        <span>Review</span>
+                     </div>
+                  </article>
+
+                  {/* Extension */}
+                  <article className="feature-card feature-card-highlight">
+                     <div className="feature-card-header">
+                        <div className="feature-icon">
+                           <PanelsTopLeft
+                              size={27}
+                              strokeWidth={1.8}
+                              aria-hidden="true"
+                           />
+                        </div>
+
+                        <span className="feature-index">04</span>
+                     </div>
+
+                     <h3 className="feature-title">Browser Extension</h3>
+
+                     <p className="feature-description">
+                        Start an investigation directly from the content you're
+                        browsing without leaving the page to begin the process.
+                     </p>
+
+                     <div className="feature-meta">
+                        <span>Chrome</span>
+                        <span>Snipping</span>
+                        <span>On-page</span>
+                     </div>
+                  </article>
                </div>
             </div>
          </section>
