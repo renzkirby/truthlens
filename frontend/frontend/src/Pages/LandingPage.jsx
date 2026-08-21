@@ -5,12 +5,14 @@ import { Link } from "react-router-dom";
 
 import {
    Shield,
+   ShieldCheck,
    Download,
    ArrowDown,
    Image,
    ScanSearch,
    Scissors,
    Search,
+   SearchCheck,
    FileText,
    Zap,
    Users,
@@ -18,6 +20,7 @@ import {
    BookOpenCheck,
    MessagesSquare,
    PanelsTopLeft,
+   Scale,
 } from "lucide-react";
 
 const TruthLens = () => {
@@ -573,212 +576,128 @@ const TruthLens = () => {
             </div>
          </section>
 
-         {/* Recent Investigations Section */}
-         <section className="investigations-section">
-            <div className="investigations-header">
-               <div>
-                  <span className="section-label">LIVE FROM THE COMMUNITY</span>
-                  <h2 className="section-title">Recent Investigations</h2>
-               </div>
-               <button className="view-all-btn">View All →</button>
-            </div>
+         {/* Trust & Transparency Section */}
+         <section id="trust" className="trust-section">
+            <div className="trust-container">
+               {/* Section Introduction */}
+               <div className="trust-intro">
+                  <span className="section-label">TRUST & TRANSPARENCY</span>
 
-            <div className="investigations-grid">
-               {/* Card 1 */}
-               <div className="inv-card">
-                  <div className="inv-image border-fake">
-                     <svg
-                        width="24"
-                        height="24"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="#9ca3af"
-                        strokeWidth="2"
-                     >
-                        <rect
-                           x="3"
-                           y="3"
-                           width="18"
-                           height="18"
-                           rx="2"
-                           ry="2"
-                        />
-                        <circle cx="8.5" cy="8.5" r="1.5" />
-                        <polyline points="21 15 16 10 5 21" />
-                     </svg>
-                     <div className="inv-badge badge-fake outline">
-                        <svg
-                           width="12"
-                           height="12"
-                           viewBox="0 0 24 24"
-                           fill="none"
-                           stroke="currentColor"
-                           strokeWidth="2"
-                        >
-                           <circle cx="12" cy="12" r="10" />
-                           <line x1="15" y1="9" x2="9" y2="15" />
-                           <line x1="9" y1="9" x2="15" y2="15" />
-                        </svg>
-                        Fake / False
-                     </div>
-                  </div>
-                  <div className="inv-content">
-                     <h3>Valencia flooding photo</h3>
+                  <h2 className="trust-title">
+                     Trust the process, not just the verdict.
+                  </h2>
+
+                  <p className="trust-description">
+                     TruthLens is designed to give you more than a label.
+                     Analysis is supported by context, evidence, and
+                     opportunities for human review so you can better understand
+                     how a result was reached.
+                  </p>
+
+                  <div className="trust-principle">
+                     <ShieldCheck
+                        size={20}
+                        strokeWidth={1.8}
+                        aria-hidden="true"
+                     />
+
                      <p>
-                        Aerial photo is from 2021 Hurricane Ida, not 2024 Spain
-                        floods.
+                        AI assists the investigation. Evidence and human
+                        judgment provide additional context when a claim needs
+                        closer review.
                      </p>
-                     <div className="ai-confidence">
-                        <svg
-                           width="14"
-                           height="14"
-                           viewBox="0 0 24 24"
-                           fill="none"
-                           stroke="currentColor"
-                           strokeWidth="2"
-                        >
-                           <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                        </svg>
-                        AI Confidence: <strong>94 %</strong>
-                     </div>
                   </div>
                </div>
 
-               {/* Card 2 */}
-               <div className="inv-card">
-                  <div className="inv-image border-misleading">
-                     <svg
-                        width="24"
-                        height="24"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="#9ca3af"
-                        strokeWidth="2"
-                     >
-                        <rect
-                           x="3"
-                           y="3"
-                           width="18"
-                           height="18"
-                           rx="2"
-                           ry="2"
+               {/* Transparency Principles */}
+               <div className="trust-grid">
+                  {/* Evidence */}
+                  <article className="trust-card">
+                     <div className="trust-card-icon">
+                        <SearchCheck
+                           size={25}
+                           strokeWidth={1.8}
+                           aria-hidden="true"
                         />
-                        <circle cx="8.5" cy="8.5" r="1.5" />
-                        <polyline points="21 15 16 10 5 21" />
-                     </svg>
-                     <div className="inv-badge badge-misleading outline">
-                        <svg
-                           width="12"
-                           height="12"
-                           viewBox="0 0 24 24"
-                           fill="none"
-                           stroke="currentColor"
-                           strokeWidth="2"
-                        >
-                           <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                           <line x1="12" y1="9" x2="12" y2="13" />
-                           <line x1="12" y1="17" x2="12.01" y2="17" />
-                        </svg>
-                        Misleading
                      </div>
-                  </div>
-                  <div className="inv-content">
-                     <h3>Mask effectiveness study</h3>
-                     <p>
-                        Study cited has not been peer-reviewed and contradicts
-                        CDC guidelines.
-                     </p>
-                     <div className="ai-confidence">
-                        <svg
-                           width="14"
-                           height="14"
-                           viewBox="0 0 24 24"
-                           fill="none"
-                           stroke="currentColor"
-                           strokeWidth="2"
-                        >
-                           <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                        </svg>
-                        AI Confidence: <strong>62 %</strong>
-                     </div>
-                  </div>
-               </div>
 
-               {/* Card 3 */}
-               <div className="inv-card">
-                  <div className="inv-image border-fact">
-                     <svg
-                        width="24"
-                        height="24"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="#9ca3af"
-                        strokeWidth="2"
-                     >
-                        <rect
-                           x="3"
-                           y="3"
-                           width="18"
-                           height="18"
-                           rx="2"
-                           ry="2"
+                     <div className="trust-card-content">
+                        <span className="trust-card-label">EVIDENCE</span>
+
+                        <h3>Evidence-first results</h3>
+
+                        <p>
+                           Supporting sources and relevant context help you look
+                           beyond the verdict and examine the information behind
+                           it.
+                        </p>
+                     </div>
+                  </article>
+
+                  {/* Explainability */}
+                  <article className="trust-card">
+                     <div className="trust-card-icon">
+                        <BrainCircuit
+                           size={25}
+                           strokeWidth={1.8}
+                           aria-hidden="true"
                         />
-                        <circle cx="8.5" cy="8.5" r="1.5" />
-                        <polyline points="21 15 16 10 5 21" />
-                     </svg>
-                     <div className="inv-badge badge-fact outline">
-                        <svg
-                           width="12"
-                           height="12"
-                           viewBox="0 0 24 24"
-                           fill="none"
-                           stroke="currentColor"
-                           strokeWidth="2"
-                        >
-                           <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                           <polyline points="22 4 12 14.01 9 11.01" />
-                        </svg>
-                        Fact
                      </div>
-                  </div>
-                  <div className="inv-content">
-                     <h3>Unemployment figures</h3>
-                     <p>
-                        BLS data confirms headline claim is accurate within
-                        margin of error.
-                     </p>
-                     <div className="ai-confidence">
-                        <svg
-                           width="14"
-                           height="14"
-                           viewBox="0 0 24 24"
-                           fill="none"
-                           stroke="currentColor"
-                           strokeWidth="2"
-                        >
-                           <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                        </svg>
-                        AI Confidence: <strong>97 %</strong>
-                     </div>
-                  </div>
-               </div>
-            </div>
-         </section>
 
-         {/* Trust Score CTA */}
-         <section className="trust-cta">
-            <div className="trust-content">
-               <div className="trust-circle">
-                  <span className="score-number">82</span>
+                     <div className="trust-card-content">
+                        <span className="trust-card-label">EXPLAINABILITY</span>
+
+                        <h3>Understand the analysis</h3>
+
+                        <p>
+                           TruthLens provides explanations and context so
+                           results are easier to evaluate instead of presenting
+                           a verdict as a black box.
+                        </p>
+                     </div>
+                  </article>
+
+                  {/* Community */}
+                  <article className="trust-card">
+                     <div className="trust-card-icon">
+                        <MessagesSquare
+                           size={25}
+                           strokeWidth={1.8}
+                           aria-hidden="true"
+                        />
+                     </div>
+
+                     <div className="trust-card-content">
+                        <span className="trust-card-label">COMMUNITY</span>
+
+                        <h3>More perspectives when needed</h3>
+
+                        <p>
+                           Users can contribute evidence and discussion when a
+                           claim needs additional context or closer examination.
+                        </p>
+                     </div>
+                  </article>
+
+                  {/* Moderation */}
+                  <article className="trust-card">
+                     <div className="trust-card-icon">
+                        <Scale size={25} strokeWidth={1.8} aria-hidden="true" />
+                     </div>
+
+                     <div className="trust-card-content">
+                        <span className="trust-card-label">OVERSIGHT</span>
+
+                        <h3>Moderator-reviewed resolutions</h3>
+
+                        <p>
+                           Moderation provides an additional review layer for
+                           disputed investigations and verified community
+                           evidence.
+                        </p>
+                     </div>
+                  </article>
                </div>
-               <span className="trust-label">TRUST SCORE</span>
-               <h2>Build Your Trust Score</h2>
-               <p>
-                  Every piece of evidence you submit, every vote you cast — it
-                  all builds your credibility score. Trusted contributors have
-                  more weight in community decisions.
-               </p>
-               <button className="join-btn">Join the Community →</button>
             </div>
          </section>
 
