@@ -99,7 +99,7 @@ function LoginPage() {
          const data = await response.json().catch(() => ({}));
 
          if (response.ok && data?.access && data?.refresh) {
-            login(data.access, data.refresh);
+            login(data.access, data.refresh, formValues.remember_me);
             setJustLoggedIn(true); // Flag that we're waiting for user data to load
             return;
          }
@@ -135,7 +135,7 @@ function LoginPage() {
 
             if (response.ok && data?.access) {
                // If refresh is empty or undefined, it just passes null/undefined to AuthContext
-               login(data.access, data.refresh);
+               login(data.access, data.refresh, true);
                setJustLoggedIn(true);
                return;
             }

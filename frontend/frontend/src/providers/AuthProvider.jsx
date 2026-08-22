@@ -2,34 +2,39 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import AuthContext from "../context/AuthContext";
 import { API_BASE_URL } from "../utils/constants";
+import {
+   getAccessToken,
+   getRefreshToken,
+   storeAuthTokens,
+   updateAuthTokens,
+   clearAuthTokens,
+} from "../utils/authStorage";
 
 const API_ROOT_URL = API_BASE_URL.replace(/\/api\/?$/, "");
 const TOKEN_REFRESH_URL = `${API_ROOT_URL}/api/token/refresh/`;
 
 export function AuthProvider({ children }) {
-   const [token, setToken] = useState(localStorage.getItem("access") || null);
+   const [token, setToken] = useState(getAccessToken() || null);
    const [user, setUser] = useState(null);
-   const [loading, setLoading] = useState(!!localStorage.getItem("access")); // Loading if we have a saved token
+   const [loading, setLoading] = useState(Boolean(getAccessToken()));
    const apiClientRef = useRef(
       axios.create({
          timeout: 30000,
       }),
    );
 
-   const login = (access, refresh) => {
+   const login = (access, refresh, rememberMe = false) => {
+      storeAuthTokens(access, refresh, rememberMe);
+
       if (access) {
-         localStorage.setItem("access", access);
          setToken(access);
          fetchUser(access);
-      }
-      if (refresh) {
-         localStorage.setItem("refresh", refresh);
       }
    };
 
    const logout = () => {
-      localStorage.removeItem("access");
-      localStorage.removeItem("refresh");
+      clearAuthTokens();
+
       setToken(null);
       setUser(null);
       setLoading(false);
@@ -41,7 +46,7 @@ export function AuthProvider({ children }) {
       let pendingRequests = [];
 
       const requestInterceptor = apiClient.interceptors.request.use((config) => {
-         const accessToken = localStorage.getItem("access");
+         const accessToken = getAccessToken();
          config.headers = config.headers || {};
 
          if (accessToken && !config.headers.Authorization) {
@@ -71,7 +76,7 @@ export function AuthProvider({ children }) {
                return Promise.reject(error);
             }
 
-            const refreshToken = localStorage.getItem("refresh");
+            const refreshToken = getRefreshToken();
             if (!refreshToken) {
                logout();
                return Promise.reject(error);
@@ -107,8 +112,7 @@ export function AuthProvider({ children }) {
                   throw new Error("Session refresh failed");
                }
 
-               localStorage.setItem("access", newAccessToken);
-               localStorage.setItem("refresh", nextRefreshToken);
+               updateAuthTokens(newAccessToken, nextRefreshToken);
                setToken(newAccessToken);
 
                pendingRequests.forEach(({ resolve }) => resolve(newAccessToken));
@@ -187,7 +191,7 @@ export function AuthProvider({ children }) {
    };
 
    const refreshUser = useCallback(() => {
-      const activeToken = token || localStorage.getItem("access");
+      const activeToken = token || getAccessToken();
 
       if (!activeToken) {
          return Promise.resolve(null);
@@ -197,7 +201,8 @@ export function AuthProvider({ children }) {
    }, [token]);
 
    useEffect(() => {
-      const savedToken = localStorage.getItem("access");
+      const savedToken = getAccessToken();
+
       if (savedToken) {
          fetchUser(savedToken);
       } else {
