@@ -23,6 +23,7 @@ import { useNavigate, useLocation, Link } from "react-router-dom";
 import Icons from "../components/Icons.jsx";
 import { useGoogleLogin } from "@react-oauth/google";
 import AuthShell from "../components/auth/AuthShell.jsx";
+import { useNotification } from "../hooks/useNotification";
 
 // ── Utilities & Constants ──
 import { resolveApiEndpoint } from "../utils/api";
@@ -47,16 +48,29 @@ function LoginPage() {
       password: "",
       remember_me: false,
    });
+   const { addToast } = useNotification();
 
    // When user data loads after login, redirect to appropriate dashboard
    useEffect(() => {
       if (justLoggedIn && user && !loading) {
          setJustLoggedIn(false);
+
+         addToast({
+            type: "success",
+            title: "Signed in",
+            message: "Welcome back to TruthLens.",
+            duration: 3000,
+         });
+
          const isModerator = user.role === "MOD" || user.role === "MODERATOR";
+
          const destination = from || (isModerator ? "/moderation" : "/community");
-         navigate(destination, { replace: true });
+
+         navigate(destination, {
+            replace: true,
+         });
       }
-   }, [user, loading, justLoggedIn, from, navigate]);
+   }, [user, loading, justLoggedIn, from, navigate, addToast]);
 
    const handleInputChange = (event) => {
       const { name, value } = event.target;
