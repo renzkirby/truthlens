@@ -17,11 +17,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import NavigationBar from "../components/NavigationBar.jsx";
 
 // ── Utilities & Hooks ──
-import { getEffectiveVerdict } from "../utils/verdict";
 import { VERDICT_CONFIG, API_BASE_URL } from "../utils/constants";
 import Icons from "../components/Icons.jsx";
 
@@ -82,9 +81,7 @@ const TAB_SKELETON_COUNT = 3;
 
 function getTabDescription(activeTab, isOwnProfile) {
    if (activeTab === "threads") {
-      return isOwnProfile
-         ? "Threads you started for community verification."
-         : "Threads initiated by this user.";
+      return isOwnProfile ? "Threads you started for community verification." : "Threads initiated by this user.";
    }
    if (activeTab === "evidence") {
       return isOwnProfile
@@ -165,8 +162,7 @@ function UserProfile() {
 
    const currentVisibleCount = visibleCounts[activeTab] ?? TAB_PAGE_SIZE;
    const hasMoreTabItems = activeTabItems.length > currentVisibleCount;
-   const canShowLessTabItems =
-      currentVisibleCount > TAB_PAGE_SIZE && activeTabItems.length > TAB_PAGE_SIZE;
+   const canShowLessTabItems = currentVisibleCount > TAB_PAGE_SIZE && activeTabItems.length > TAB_PAGE_SIZE;
    const [moderatorStats, setModeratorStats] = useState(null);
    const [isLoadingModeratorStats, setIsLoadingModeratorStats] = useState(false);
    const [moderatorStatsError, setModeratorStatsError] = useState(false);
@@ -278,7 +274,9 @@ function UserProfile() {
             .catch((err) => console.error("Failed to load user", err))
             .finally(() => setIsLoadingProfile(false));
       }
-   }, [username, isOwnProfile]);
+   }, [authFetch, refreshUser, username, isOwnProfile]);
+
+   const isActiveTabLoaded = loadedActivityTabs[activeTab];
 
    useEffect(() => {
       setActiveTab("threads");
@@ -309,7 +307,7 @@ function UserProfile() {
          return;
       }
 
-      if (loadedActivityTabs[activeTab]) {
+      if (isActiveTabLoaded) {
          return;
       }
 
@@ -329,11 +327,7 @@ function UserProfile() {
                return;
             }
 
-            const normalized = Array.isArray(data)
-               ? data
-               : Array.isArray(data?.results)
-                 ? data.results
-                 : [];
+            const normalized = Array.isArray(data) ? data : Array.isArray(data?.results) ? data.results : [];
 
             if (activeTab === "threads") {
                setThreadActivity(normalized);
@@ -363,14 +357,7 @@ function UserProfile() {
       return () => {
          isCancelled = true;
       };
-   }, [
-      activeTab,
-      authFetch,
-      displayUsername,
-      isModeratorProfile,
-      loadedActivityTabs,
-      isOwnProfile,
-   ]);
+   }, [activeTab, authFetch, displayUsername, isModeratorProfile, isActiveTabLoaded]);
 
    const handleLoadMore = () => {
       setVisibleCounts((prev) => ({
@@ -504,14 +491,14 @@ function UserProfile() {
             payload.avatar_base64 = editAvatarBase64;
          }
 
-         const response = await authFetch(`${API_BASE_URL}/auth/profile/update/`, {
+         await authFetch(`${API_BASE_URL}/auth/profile/update/`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
          });
 
+         await refreshUser?.();
          setIsEditModalOpen(false);
-         refreshUser?.(); // Force context to update with new data
       } catch (err) {
          console.error("Failed to update profile:", err);
       } finally {
@@ -528,12 +515,7 @@ function UserProfile() {
             <div className="profile-header-container">
                {/* 1. Cover Banner */}
                <div className="profile-cover-banner">
-                  {displayUser?.cover_photo_url && (
-                     <img
-                        src={displayUser.cover_photo_url}
-                        alt="Cover"
-                     />
-                  )}
+                  {displayUser?.cover_photo_url && <img src={displayUser.cover_photo_url} alt="Cover" />}
                </div>
 
                <div className="profile-header-body">
@@ -541,10 +523,7 @@ function UserProfile() {
                   <div className="profile-avatar-wrapper">
                      <div className="profile-avatar">
                         {displayUser?.avatar_url ? (
-                           <img
-                              src={displayUser.avatar_url}
-                              alt={`${displayUser.username}'s avatar`}
-                           />
+                           <img src={displayUser.avatar_url} alt={`${displayUser.username}'s avatar`} />
                         ) : (
                            displayUser?.username?.[0]?.toUpperCase() || "?"
                         )}
@@ -554,17 +533,15 @@ function UserProfile() {
                   {/* 3. Action Buttons (Right Aligned) */}
                   <div className="profile-action-row">
                      {isOwnProfile ? (
-                        <button
-                           type="button"
-                           className="action-btn action-btn-edit"
-                           onClick={openEditModal}>
+                        <button type="button" className="action-btn action-btn-edit" onClick={openEditModal}>
                            Edit Profile
                         </button>
                      ) : displayUser ? (
                         <button
                            type="button"
                            className={`action-btn action-btn-follow ${isFollowing ? "following" : ""}`}
-                           onClick={handleFollowToggle}>
+                           onClick={handleFollowToggle}
+                        >
                            {isFollowing ? "Following" : "Follow"}
                         </button>
                      ) : null}
@@ -576,33 +553,23 @@ function UserProfile() {
                         <h1 className="profile-username">{displayUser?.username || "—"}</h1>
                         {isModeratorProfile ? (
                            <span className="official-moderator-badge">
-                              <Icons
-                                 name="shield-user"
-                                 size={14}
-                              />
+                              <Icons name="shield-user" size={14} />
                               Official Moderator
                            </span>
                         ) : (
-                           <span
-                              className="trust-level-badge"
-                              style={{ backgroundColor: trustLevel.color }}>
+                           <span className="trust-level-badge" style={{ backgroundColor: trustLevel.color }}>
                               {trustLevel.label}
                            </span>
                         )}
                      </div>
 
-                     <p className="profile-handle">
-                        @{displayUser?.username?.toLowerCase() || "—"}
-                     </p>
+                     <p className="profile-handle">@{displayUser?.username?.toLowerCase() || "—"}</p>
 
                      {isModeratorProfile && (
                         <div className="profile-organization-row">
                            <p className="organization-name">{organizationName}</p>
                            <span className="institutional-trust-chip">
-                              <Icons
-                                 name="shield-user"
-                                 size={12}
-                              />
+                              <Icons name="shield-user" size={12} />
                               Institutional Trust
                            </span>
                         </div>
@@ -614,10 +581,7 @@ function UserProfile() {
                   {/* 5. Meta Info (Join Date, Trust Badge) */}
                   <div className="profile-meta-row">
                      <div className="meta-item">
-                        <Icons
-                           name="calendar"
-                           size={16}
-                        />
+                        <Icons name="calendar" size={16} />
                         Joined {formatDate(displayUser?.date_joined)}
                      </div>
                   </div>
@@ -640,9 +604,7 @@ function UserProfile() {
                <div className="box-panel">
                   <h2 className="section-title">Reputation Dashboard</h2>
                   <div className="stats-grid">
-                     <div
-                        className="stat-card"
-                        style={{ gridColumn: "1 / -1" }}>
+                     <div className="stat-card" style={{ gridColumn: "1 / -1" }}>
                         <p className="stat-label">Trust Score</p>
                         <p className="stat-value">{displayTrustScore.toFixed(1)}</p>
                         <div className="trust-bar-track">
@@ -667,14 +629,10 @@ function UserProfile() {
                         {breakdownRows.map((row) => {
                            const width = Math.max(0, Math.min(100, Number(row.share || 0)));
                            return (
-                              <div
-                                 className="trust-breakdown-row"
-                                 key={row.label}>
+                              <div className="trust-breakdown-row" key={row.label}>
                                  <div className="trust-breakdown-row-top">
                                     <span className="trust-breakdown-row-label">{row.label}</span>
-                                    <span
-                                       className="trust-breakdown-row-value"
-                                       style={{ color: row.color }}>
+                                    <span className="trust-breakdown-row-value" style={{ color: row.color }}>
                                        {width.toFixed(1)}%
                                     </span>
                                  </div>
@@ -703,23 +661,18 @@ function UserProfile() {
                   <div className="moderator-profile-summary">
                      <p className="moderator-summary-title">Official Moderator</p>
                      <p className="moderator-summary-desc">
-                        Affiliated with {organizationName}. This profile uses institutional trust
-                        verification instead of gamified scoring.
+                        Affiliated with {organizationName}. This profile uses institutional trust verification instead
+                        of gamified scoring.
                      </p>
                   </div>
 
                   <div className="moderator-transparency-grid">
                      {transparencyStats.map((stat) => (
-                        <div
-                           key={stat.label}
-                           className="moderator-transparency-card">
+                        <div key={stat.label} className="moderator-transparency-card">
                            <p className="moderator-transparency-label">{stat.label}</p>
                            <p className="moderator-transparency-value">
                               {isLoadingModeratorStats ? (
-                                 <span
-                                    className="moderator-transparency-skeleton skeleton-box"
-                                    aria-hidden="true"
-                                 />
+                                 <span className="moderator-transparency-skeleton skeleton-box" aria-hidden="true" />
                               ) : moderatorStatsError ? (
                                  "--"
                               ) : (
@@ -745,18 +698,21 @@ function UserProfile() {
                <div className="tabs-row">
                   <button
                      className={`tab-btn ${activeTab === "threads" ? "active" : ""}`}
-                     onClick={() => setActiveTab("threads")}>
+                     onClick={() => setActiveTab("threads")}
+                  >
                      {isOwnProfile ? "My Threads" : "Threads"}
                   </button>
                   <button
                      className={`tab-btn ${activeTab === "evidence" ? "active" : ""}`}
-                     onClick={() => setActiveTab("evidence")}>
+                     onClick={() => setActiveTab("evidence")}
+                  >
                      {isOwnProfile ? "My Evidence" : "Evidence"}
                   </button>
                   {isModeratorProfile && (
                      <button
                         className={`tab-btn ${activeTab === "verdicts" ? "active" : ""}`}
-                        onClick={() => setActiveTab("verdicts")}>
+                        onClick={() => setActiveTab("verdicts")}
+                     >
                         {isOwnProfile ? "My Verdicts" : "Verdicts"}
                      </button>
                   )}
@@ -773,13 +729,9 @@ function UserProfile() {
 
                <div className="tab-content">
                   {currentTabLoading ? (
-                     <div
-                        className="profile-skeleton-list"
-                        aria-hidden="true">
+                     <div className="profile-skeleton-list" aria-hidden="true">
                         {Array.from({ length: TAB_SKELETON_COUNT }).map((_, index) => (
-                           <div
-                              className="profile-skeleton-card"
-                              key={`activity-skeleton-${index}`}>
+                           <div className="profile-skeleton-card" key={`activity-skeleton-${index}`}>
                               <span className="profile-skeleton-line short skeleton-box" />
                               <span className="profile-skeleton-line skeleton-box" />
                               <span className="profile-skeleton-line long skeleton-box" />
@@ -795,28 +747,23 @@ function UserProfile() {
                         <div className="claims-list">
                            {activeTab === "threads" &&
                               visibleTabItems.map((thread) => (
-                                 <div
-                                    className="claim-card"
-                                    key={thread.id}>
+                                 <div className="claim-card" key={thread.id}>
                                     <div className="claim-top">
-                                       <span className="claim-type-pill">
-                                          {thread.status || "OPEN"}
-                                       </span>
-                                       <span className="claim-time">
-                                          {timeAgo(thread.created_at)}
-                                       </span>
+                                       <span className="claim-type-pill">{thread.status || "OPEN"}</span>
+                                       <span className="claim-time">{timeAgo(thread.created_at)}</span>
                                     </div>
                                     <p className="claim-summary">
                                        {thread.caption || "Thread started without a caption."}
                                     </p>
                                     <p className="claim-summary claim-meta-summary">
-                                       Claim ID: {thread.claim_id} | {thread.evidence_count}{" "}
-                                       evidence | {thread.comment_count} comments
+                                       Claim ID: {thread.claim_id} | {thread.evidence_count} evidence |{" "}
+                                       {thread.comment_count} comments
                                     </p>
                                     <button
                                        type="button"
                                        className="claim-source-link claim-source-button"
-                                       onClick={() => navigate(`/thread/detail/${thread.id}`)}>
+                                       onClick={() => navigate(`/thread/detail/${thread.id}`)}
+                                    >
                                        Open Thread →
                                     </button>
                                  </div>
@@ -824,24 +771,17 @@ function UserProfile() {
 
                            {activeTab === "evidence" &&
                               visibleTabItems.map((item) => (
-                                 <div
-                                    className="claim-card"
-                                    key={`${item.activity_type}-${item.id}`}>
+                                 <div className="claim-card" key={`${item.activity_type}-${item.id}`}>
                                     <div className="claim-top">
                                        <span className="claim-type-pill">{item.activity_type}</span>
-                                       <span className="claim-time">
-                                          {timeAgo(item.activity_at)}
-                                       </span>
+                                       <span className="claim-time">{timeAgo(item.activity_at)}</span>
                                     </div>
 
                                     {item.activity_type === "COMMENT" ? (
                                        <>
-                                          <p className="claim-summary">
-                                             {item.comment_text || "Comment submitted."}
-                                          </p>
+                                          <p className="claim-summary">{item.comment_text || "Comment submitted."}</p>
                                           <p className="claim-summary claim-meta-summary">
-                                             On thread:{" "}
-                                             {item.thread?.caption || item.thread?.id || "Unknown"}
+                                             On thread: {item.thread?.caption || item.thread?.id || "Unknown"}
                                           </p>
                                        </>
                                     ) : (
@@ -858,7 +798,8 @@ function UserProfile() {
                                                 href={item.evidence_url}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="claim-source-link">
+                                                className="claim-source-link"
+                                             >
                                                 View cited source →
                                              </a>
                                           )}
@@ -869,14 +810,10 @@ function UserProfile() {
 
                            {activeTab === "verdicts" &&
                               visibleTabItems.map((entry) => {
-                                 const verdict =
-                                    VERDICT_CONFIG[entry.moderator_verdict] ||
-                                    VERDICT_CONFIG.UNVERIFIED;
+                                 const verdict = VERDICT_CONFIG[entry.moderator_verdict] || VERDICT_CONFIG.UNVERIFIED;
 
                                  return (
-                                    <div
-                                       className="claim-card"
-                                       key={entry.thread_id}>
+                                    <div className="claim-card" key={entry.thread_id}>
                                        <div className="claim-top">
                                           <span
                                              className="claim-verdict-badge"
@@ -884,19 +821,14 @@ function UserProfile() {
                                                 backgroundColor: verdict.bg,
                                                 color: verdict.color,
                                                 border: `1px solid ${verdict.border}`,
-                                             }}>
+                                             }}
+                                          >
                                              {entry.moderator_verdict || "UNVERIFIED"}
                                           </span>
-                                          <span className="claim-time">
-                                             {timeAgo(entry.moderated_at)}
-                                          </span>
+                                          <span className="claim-time">{timeAgo(entry.moderated_at)}</span>
                                        </div>
-                                       <p className="claim-summary">
-                                          {entry.caption || "Moderator-reviewed thread."}
-                                       </p>
-                                       <p className="claim-summary claim-meta-summary">
-                                          Claim ID: {entry.claim_id}
-                                       </p>
+                                       <p className="claim-summary">{entry.caption || "Moderator-reviewed thread."}</p>
+                                       <p className="claim-summary claim-meta-summary">Claim ID: {entry.claim_id}</p>
                                        {entry.moderator_notes && (
                                           <p className="claim-summary claim-meta-summary">
                                              Notes: {entry.moderator_notes}
@@ -913,18 +845,12 @@ function UserProfile() {
                            </span>
                            <div className="activity-pagination-actions">
                               {canShowLessTabItems && (
-                                 <button
-                                    type="button"
-                                    className="activity-show-less-btn"
-                                    onClick={handleShowLess}>
+                                 <button type="button" className="activity-show-less-btn" onClick={handleShowLess}>
                                     Show Less
                                  </button>
                               )}
                               {hasMoreTabItems && (
-                                 <button
-                                    type="button"
-                                    className="activity-load-more-btn"
-                                    onClick={handleLoadMore}>
+                                 <button type="button" className="activity-load-more-btn" onClick={handleLoadMore}>
                                     Load More
                                  </button>
                               )}
@@ -939,37 +865,24 @@ function UserProfile() {
 
             {/* ── FOLLOW MODAL ── */}
             {modalType && (
-               <div
-                  className="modal-overlay"
-                  onClick={() => setModalType(null)}>
-                  <div
-                     className="modal-content"
-                     onClick={(e) => e.stopPropagation()}>
+               <div className="modal-overlay" onClick={() => setModalType(null)}>
+                  <div className="modal-content" onClick={(e) => e.stopPropagation()}>
                      <div className="modal-header">
                         <h3 style={{ margin: 0, fontSize: "18px" }}>
                            {modalType === "followers" ? "Followers" : "Following"}
                         </h3>
-                        <button
-                           className="close-modal-btn"
-                           onClick={() => setModalType(null)}>
-                           <Icons
-                              name="x"
-                              size={20}
-                           />
+                        <button className="close-modal-btn" onClick={() => setModalType(null)}>
+                           <Icons name="x" size={20} />
                         </button>
                      </div>
 
                      <div className="modal-user-list">
                         {isModalLoading ? (
-                           <p
-                              className="empty-msg"
-                              style={{ padding: "20px" }}>
+                           <p className="empty-msg" style={{ padding: "20px" }}>
                               Loading...
                            </p>
                         ) : modalData.length === 0 ? (
-                           <p
-                              className="empty-msg"
-                              style={{ padding: "20px" }}>
+                           <p className="empty-msg" style={{ padding: "20px" }}>
                               No {modalType} found.
                            </p>
                         ) : (
@@ -980,11 +893,10 @@ function UserProfile() {
                                  onClick={() => {
                                     setModalType(null); // Close modal
                                     navigate(`/user/${u.username}`);
-                                 }}>
+                                 }}
+                              >
                                  {/* Added safe chaining to prevent crashes */}
-                                 <div
-                                    className="modal-user-avatar"
-                                    style={{ overflow: "hidden" }}>
+                                 <div className="modal-user-avatar" style={{ overflow: "hidden" }}>
                                     {u.avatar_url ? (
                                        <img
                                           src={u.avatar_url}
@@ -996,10 +908,7 @@ function UserProfile() {
                                           }}
                                        />
                                     ) : (
-                                       <Icons
-                                          name="user"
-                                          size={20}
-                                       />
+                                       <Icons name="user" size={20} />
                                     )}
                                  </div>
                                  <div className="modal-user-info">
@@ -1019,24 +928,12 @@ function UserProfile() {
             )}
             {/* ── EDIT PROFILE MODAL ── */}
             {isEditModalOpen && (
-               <div
-                  className="modal-overlay"
-                  onClick={() => setIsEditModalOpen(false)}>
-                  <div
-                     className="modal-content"
-                     onClick={(e) => e.stopPropagation()}
-                     style={{ padding: "24px" }}>
-                     <div
-                        className="modal-header"
-                        style={{ padding: "0 0 16px 0", marginBottom: "16px" }}>
+               <div className="modal-overlay" onClick={() => setIsEditModalOpen(false)}>
+                  <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ padding: "24px" }}>
+                     <div className="modal-header" style={{ padding: "0 0 16px 0", marginBottom: "16px" }}>
                         <h3 style={{ margin: 0, fontSize: "18px" }}>Edit Profile</h3>
-                        <button
-                           className="close-modal-btn"
-                           onClick={() => setIsEditModalOpen(false)}>
-                           <Icons
-                              name="x"
-                              size={20}
-                           />
+                        <button className="close-modal-btn" onClick={() => setIsEditModalOpen(false)}>
+                           <Icons name="x" size={20} />
                         </button>
                      </div>
 
@@ -1049,13 +946,15 @@ function UserProfile() {
                                  marginBottom: "8px",
                                  fontWeight: "600",
                                  fontSize: "14px",
-                              }}>
+                              }}
+                           >
                               Profile Picture
                            </label>
                            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
                               <div
                                  className="profile-avatar"
-                                 style={{ width: "100%", height: "100%", overflow: "hidden" }}>
+                                 style={{ width: "100%", height: "100%", overflow: "hidden" }}
+                              >
                                  {editAvatarBase64 ? (
                                     <img
                                        src={editAvatarBase64}
@@ -1087,7 +986,8 @@ function UserProfile() {
                                  marginBottom: "8px",
                                  fontWeight: "600",
                                  fontSize: "14px",
-                              }}>
+                              }}
+                           >
                               Bio
                            </label>
                            <textarea
@@ -1110,7 +1010,8 @@ function UserProfile() {
                            onClick={handleSaveProfile}
                            disabled={isSavingProfile}
                            className="follow-btn following"
-                           style={{ width: "100%", marginTop: "8px" }}>
+                           style={{ width: "100%", marginTop: "8px" }}
+                        >
                            {isSavingProfile ? "Saving..." : "Save Changes"}
                         </button>
                      </div>
@@ -1123,35 +1024,21 @@ function UserProfile() {
                <div className="mobile-profile-nav">
                   <button
                      className="mobile-nav-pill"
-                     onClick={() =>
-                        navigate(isModeratorRole(authUser?.role) ? "/moderation" : "/dashboard")
-                     }>
-                     <Icons
-                        name={isModeratorRole(authUser?.role) ? "shield" : "dashboard"}
-                        size={16}
-                     />{" "}
-                     Dashboard
+                     onClick={() => navigate(isModeratorRole(authUser?.role) ? "/moderation" : "/dashboard")}
+                  >
+                     <Icons name={isModeratorRole(authUser?.role) ? "shield" : "dashboard"} size={16} /> Dashboard
                   </button>
-                  <button
-                     className="mobile-nav-pill"
-                     onClick={() => navigate("/settings")}>
-                     <Icons
-                        name="settings"
-                        size={16}
-                     />{" "}
-                     Settings
+                  <button className="mobile-nav-pill" onClick={() => navigate("/settings")}>
+                     <Icons name="settings" size={16} /> Settings
                   </button>
                   <button
                      className="mobile-nav-pill danger"
                      onClick={() => {
                         logout();
                         navigate("/login");
-                     }}>
-                     <Icons
-                        name="logout"
-                        size={16}
-                     />{" "}
-                     Log Out
+                     }}
+                  >
+                     <Icons name="logout" size={16} /> Log Out
                   </button>
                </div>
             )}

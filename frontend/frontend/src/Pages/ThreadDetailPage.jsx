@@ -16,10 +16,10 @@
  *   - Comments tab: Read and participate in discussion
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-import { useNotification } from "../context/NotificationContext";
+import { useAuth } from "../hooks/useAuth";
+import { useNotification } from "../hooks/useNotification";
 import NavigationBar from "../components/NavigationBar";
 import Icons from "../components/Icons";
 import EvidenceCard from "../components/EvidenceCard";
@@ -27,7 +27,6 @@ import EvidenceCard from "../components/EvidenceCard";
 // ── Utilities & Constants ──
 import { getEffectiveVerdict } from "../utils/verdict";
 import { VERDICT_CONFIG, VERDICT_META, EVIDENCE_VERDICT_META } from "../utils/constants";
-import timeAgo from "../utils/timeAgo";
 
 // ── Styles ──
 import "./ThreadDetailPage.css";
@@ -77,13 +76,9 @@ function VerdictBadge({ verdict }) {
             color: meta.color,
             background: meta.bg,
             borderColor: meta.border,
-         }}>
-         <Icons
-            name={meta.icon || "help-circle"}
-            size={12}
-            color={meta.color}
-            strokeWidth={2.5}
-         />
+         }}
+      >
+         <Icons name={meta.icon || "help-circle"} size={12} color={meta.color} strokeWidth={2.5} />
          {meta.label}
       </span>
    );
@@ -99,18 +94,8 @@ function TrustGauge({ score = 0 }) {
    const color = tierColor(score);
    return (
       <div className="trust-gauge-wrap">
-         <svg
-            width="76"
-            height="76"
-            viewBox="0 0 76 76">
-            <circle
-               cx="38"
-               cy="38"
-               r={r}
-               fill="none"
-               stroke="#f3f4f6"
-               strokeWidth="7"
-            />
+         <svg width="76" height="76" viewBox="0 0 76 76">
+            <circle cx="38" cy="38" r={r} fill="none" stroke="#f3f4f6" strokeWidth="7" />
             <circle
                cx="38"
                cy="38"
@@ -122,13 +107,7 @@ function TrustGauge({ score = 0 }) {
                strokeLinecap="round"
                transform="rotate(-90 38 38)"
             />
-            <text
-               x="38"
-               y="43"
-               textAnchor="middle"
-               fontSize="15"
-               fontWeight="900"
-               fill="#111827">
+            <text x="38" y="43" textAnchor="middle" fontSize="15" fontWeight="900" fill="#111827">
                {score}
             </text>
          </svg>
@@ -152,14 +131,9 @@ function UserAvatar({ username = "", isMod = false, size = 36 }) {
             background: style.bg,
             color: style.color,
             fontSize: size * 0.38,
-         }}>
-         {initials || (
-            <Icons
-               name="user-circle"
-               size={size * 0.6}
-               color={style.color}
-            />
-         )}
+         }}
+      >
+         {initials || <Icons name="user-circle" size={size * 0.6} color={style.color} />}
       </div>
    );
 }
@@ -169,28 +143,16 @@ const ThreadDetailSkeleton = () => {
       <div className="thread-layout">
          <NavigationBar />
          <div className="tdp-page">
-            <div
-               className="tdp-breadcrumb"
-               style={{ borderBottomColor: "var(--border-default)" }}>
-               <div
-                  className="tdp-breadcrumb-left"
-                  style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <div
-                     className="skeleton-box"
-                     style={{ width: "120px", height: "16px" }}></div>
+            <div className="tdp-breadcrumb" style={{ borderBottomColor: "var(--border-default)" }}>
+               <div className="tdp-breadcrumb-left" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <div className="skeleton-box" style={{ width: "120px", height: "16px" }}></div>
                   <span className="tdp-breadcrumb-dot">·</span>
-                  <div
-                     className="skeleton-box"
-                     style={{ width: "100px", height: "16px" }}></div>
+                  <div className="skeleton-box" style={{ width: "100px", height: "16px" }}></div>
                   <span className="tdp-breadcrumb-dot">·</span>
-                  <div
-                     className="skeleton-box"
-                     style={{ width: "200px", height: "16px" }}></div>
+                  <div className="skeleton-box" style={{ width: "200px", height: "16px" }}></div>
                </div>
                <div className="tdp-breadcrumb-right">
-                  <div
-                     className="skeleton-box"
-                     style={{ width: "80px", height: "24px", borderRadius: "12px" }}></div>
+                  <div className="skeleton-box" style={{ width: "80px", height: "24px", borderRadius: "12px" }}></div>
                </div>
             </div>
 
@@ -199,7 +161,8 @@ const ThreadDetailSkeleton = () => {
                style={{
                   background: "var(--bg-surface)",
                   borderBottomColor: "var(--border-default)",
-               }}>
+               }}
+            >
                <div className="tdp-hero-inner">
                   <div
                      className="tdp-hero-left"
@@ -208,54 +171,33 @@ const ThreadDetailSkeleton = () => {
                         flexDirection: "column",
                         gap: "12px",
                         width: "100%",
-                     }}>
-                     <div
-                        className="skeleton-box"
-                        style={{ width: "200px", height: "14px" }}></div>
-                     <div
-                        className="skeleton-box"
-                        style={{ width: "100%", height: "28px", marginTop: "8px" }}></div>
-                     <div
-                        className="skeleton-box"
-                        style={{ width: "80%", height: "28px" }}></div>
-                     <div
-                        className="tdp-claim-meta"
-                        style={{ marginTop: "16px", display: "flex", gap: "16px" }}>
-                        <div
-                           className="skeleton-box"
-                           style={{ width: "150px", height: "14px" }}></div>
-                        <div
-                           className="skeleton-box"
-                           style={{ width: "100px", height: "14px" }}></div>
-                        <div
-                           className="skeleton-box"
-                           style={{ width: "160px", height: "14px" }}></div>
+                     }}
+                  >
+                     <div className="skeleton-box" style={{ width: "200px", height: "14px" }}></div>
+                     <div className="skeleton-box" style={{ width: "100%", height: "28px", marginTop: "8px" }}></div>
+                     <div className="skeleton-box" style={{ width: "80%", height: "28px" }}></div>
+                     <div className="tdp-claim-meta" style={{ marginTop: "16px", display: "flex", gap: "16px" }}>
+                        <div className="skeleton-box" style={{ width: "150px", height: "14px" }}></div>
+                        <div className="skeleton-box" style={{ width: "100px", height: "14px" }}></div>
+                        <div className="skeleton-box" style={{ width: "160px", height: "14px" }}></div>
                      </div>
                   </div>
-                  <div
-                     className="tdp-verdict-card"
-                     style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  <div className="tdp-verdict-card" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                      <div
                         className="skeleton-box"
-                        style={{ width: "100px", height: "28px", borderRadius: "20px" }}></div>
-                     <div
-                        className="skeleton-box"
-                        style={{ width: "100%", height: "14px", marginTop: "8px" }}></div>
-                     <div
-                        className="skeleton-box"
-                        style={{ width: "90%", height: "14px" }}></div>
+                        style={{ width: "100px", height: "28px", borderRadius: "20px" }}
+                     ></div>
+                     <div className="skeleton-box" style={{ width: "100%", height: "14px", marginTop: "8px" }}></div>
+                     <div className="skeleton-box" style={{ width: "90%", height: "14px" }}></div>
                      <div
                         style={{
                            display: "flex",
                            justifyContent: "space-between",
                            marginTop: "16px",
-                        }}>
-                        <div
-                           className="skeleton-box"
-                           style={{ width: "120px", height: "14px" }}></div>
-                        <div
-                           className="skeleton-box"
-                           style={{ width: "40px", height: "14px" }}></div>
+                        }}
+                     >
+                        <div className="skeleton-box" style={{ width: "120px", height: "14px" }}></div>
+                        <div className="skeleton-box" style={{ width: "40px", height: "14px" }}></div>
                      </div>
                   </div>
                </div>
@@ -267,16 +209,14 @@ const ThreadDetailSkeleton = () => {
                      <div className="tdp-post-header">
                         <div
                            className="author-avatar skeleton-box"
-                           style={{ width: "38px", height: "38px", borderRadius: "50%" }}></div>
+                           style={{ width: "38px", height: "38px", borderRadius: "50%" }}
+                        ></div>
                         <div
                            className="tdp-post-author"
-                           style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                           <div
-                              className="skeleton-box"
-                              style={{ width: "120px", height: "16px" }}></div>
-                           <div
-                              className="skeleton-box"
-                              style={{ width: "160px", height: "12px" }}></div>
+                           style={{ display: "flex", flexDirection: "column", gap: "6px" }}
+                        >
+                           <div className="skeleton-box" style={{ width: "120px", height: "16px" }}></div>
+                           <div className="skeleton-box" style={{ width: "160px", height: "12px" }}></div>
                         </div>
                         <div className="tdp-post-actions">
                            <div
@@ -285,7 +225,8 @@ const ThreadDetailSkeleton = () => {
                                  width: "100px",
                                  height: "24px",
                                  borderRadius: "12px",
-                              }}></div>
+                              }}
+                           ></div>
                         </div>
                      </div>
                      <div
@@ -295,11 +236,10 @@ const ThreadDetailSkeleton = () => {
                            width: "100%",
                            borderRadius: "12px",
                            border: "none",
-                        }}></div>
+                        }}
+                     ></div>
                   </div>
-                  <div
-                     className="tdp-tabs-section"
-                     style={{ marginTop: "24px" }}>
+                  <div className="tdp-tabs-section" style={{ marginTop: "24px" }}>
                      <div
                         className="tdp-tab-bar"
                         style={{
@@ -307,13 +247,10 @@ const ThreadDetailSkeleton = () => {
                            gap: "16px",
                            borderBottom: "2px solid var(--border-default)",
                            paddingBottom: "12px",
-                        }}>
-                        <div
-                           className="skeleton-box"
-                           style={{ width: "100px", height: "24px" }}></div>
-                        <div
-                           className="skeleton-box"
-                           style={{ width: "100px", height: "24px" }}></div>
+                        }}
+                     >
+                        <div className="skeleton-box" style={{ width: "100px", height: "24px" }}></div>
+                        <div className="skeleton-box" style={{ width: "100px", height: "24px" }}></div>
                      </div>
                      <div
                         style={{
@@ -321,13 +258,16 @@ const ThreadDetailSkeleton = () => {
                            display: "flex",
                            flexDirection: "column",
                            gap: "16px",
-                        }}>
+                        }}
+                     >
                         <div
                            className="skeleton-box"
-                           style={{ width: "100%", height: "120px", borderRadius: "12px" }}></div>
+                           style={{ width: "100%", height: "120px", borderRadius: "12px" }}
+                        ></div>
                         <div
                            className="skeleton-box"
-                           style={{ width: "100%", height: "120px", borderRadius: "12px" }}></div>
+                           style={{ width: "100%", height: "120px", borderRadius: "12px" }}
+                        ></div>
                      </div>
                   </div>
                </div>
@@ -336,6 +276,9 @@ const ThreadDetailSkeleton = () => {
       </div>
    );
 };
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+const apiUrl = (path) => `${API_BASE_URL.replace(/\/$/, "")}/${path}`;
 
 function ThreadDetailPage() {
    const [searchParams, setSearchParams] = useSearchParams();
@@ -380,31 +323,30 @@ function ThreadDetailPage() {
    const isModerator = user?.role === "MOD" || user?.role === "MODERATOR";
    const { threadId } = useParams();
    const navigate = useNavigate();
-   const apiUrl = (path) =>
-      `${import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api"}/${path}`;
 
    // ── Fetch thread data from API ──
-   const refreshThreadData = async () => {
-      const threadData = await authFetch(apiUrl(`threads/${threadId}/`), {
-         method: "GET",
-      });
+   const refreshThreadData = useCallback(async () => {
+      const threadData = await authFetch(apiUrl(`threads/${threadId}/`), { method: "GET" });
+
       setThread(threadData);
       setComments(threadData.comments || []);
       setEvidenceList(threadData.evidence_submissions || []);
-   };
+   }, [authFetch, threadId]);
 
    useEffect(() => {
       const fetchThread = async () => {
          try {
             await refreshThreadData();
          } catch (err) {
+            console.error("Failed to load thread:", err);
             setError("Failed to load thread.");
          } finally {
             setLoading(false);
          }
       };
+
       fetchThread();
-   }, [threadId]);
+   }, [refreshThreadData]);
 
    useEffect(() => {
       didAutoScrollRef.current = false;
@@ -413,8 +355,7 @@ function ThreadDetailPage() {
    useEffect(() => {
       const tabFromQuery = searchParams.get("tab");
       const openEvidenceFormFromQuery = searchParams.get("openForm") === "evidence";
-      const normalizedTab =
-         tabFromQuery === "evidence" || openEvidenceFormFromQuery ? "evidence" : "comments";
+      const normalizedTab = tabFromQuery === "evidence" || openEvidenceFormFromQuery ? "evidence" : "comments";
       setCurrentSection(normalizedTab);
 
       if (openEvidenceFormFromQuery) {
@@ -423,8 +364,7 @@ function ThreadDetailPage() {
 
       if (!loading && tabFromQuery && tabsSectionRef.current && !didAutoScrollRef.current) {
          const prefersReducedMotion =
-            typeof window !== "undefined" &&
-            window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
          tabsSectionRef.current.scrollIntoView({
             behavior: prefersReducedMotion ? "auto" : "smooth",
             block: "start",
@@ -560,9 +500,7 @@ function ThreadDetailPage() {
             body: JSON.stringify({ thread_id: threadId, comment_text: trimmedComment }),
          });
 
-         setComments((prev) =>
-            prev.map((comment) => (comment.id === optimisticId ? createdComment : comment)),
-         );
+         setComments((prev) => prev.map((comment) => (comment.id === optimisticId ? createdComment : comment)));
 
          addToast({
             type: "success",
@@ -642,9 +580,7 @@ function ThreadDetailPage() {
 
       const previousComments = comments;
       setComments((prev) =>
-         prev.map((comment) =>
-            comment.id === commentId ? { ...comment, comment_text: trimmedComment } : comment,
-         ),
+         prev.map((comment) => (comment.id === commentId ? { ...comment, comment_text: trimmedComment } : comment)),
       );
       setEditingCommentId(null);
       setEditingCommentText("");
@@ -657,9 +593,7 @@ function ThreadDetailPage() {
          });
 
          setComments((prev) =>
-            prev.map((comment) =>
-               comment.id === commentId ? { ...comment, ...updatedComment } : comment,
-            ),
+            prev.map((comment) => (comment.id === commentId ? { ...comment, ...updatedComment } : comment)),
          );
 
          addToast({
@@ -830,9 +764,7 @@ function ThreadDetailPage() {
          }
 
          const contributorTrust = Number(item.contributor?.trust_score || 0);
-         const nextWeighted = Number(
-            (nextUpvotes * (contributorTrust / 100) - nextDownvotes * 0.5).toFixed(2),
-         );
+         const nextWeighted = Number((nextUpvotes * (contributorTrust / 100) - nextDownvotes * 0.5).toFixed(2));
 
          return {
             ...item,
@@ -921,11 +853,7 @@ function ThreadDetailPage() {
          <>
             <NavigationBar />
             <div className="tdp-error">
-               <Icons
-                  name="alert-triangle"
-                  size={32}
-                  color="#d97706"
-               />
+               <Icons name="alert-triangle" size={32} color="#d97706" />
                <p>{error || "Thread not found."}</p>
                <button onClick={() => navigate("/community")}>Back to Community Feed</button>
             </div>
@@ -939,17 +867,10 @@ function ThreadDetailPage() {
 
          <div className="tdp-page">
             {/*Breadcrumb bar */}
-            <div
-               className="tdp-breadcrumb"
-               style={{ borderBottomColor: vm.color }}>
+            <div className="tdp-breadcrumb" style={{ borderBottomColor: vm.color }}>
                <div className="tdp-breadcrumb-left">
-                  <button
-                     className="tdp-back-btn"
-                     onClick={() => navigate("/community")}>
-                     <Icons
-                        name="arrow-left"
-                        size={14}
-                     />
+                  <button className="tdp-back-btn" onClick={() => navigate("/community")}>
+                     <Icons name="arrow-left" size={14} />
                      Community Feed
                   </button>
 
@@ -980,49 +901,28 @@ function ThreadDetailPage() {
             </div>
 
             {/*Claim Hero*/}
-            <div
-               className="tdp-hero"
-               style={{ background: vm.bg, borderBottomColor: `${vm.color}30` }}>
+            <div className="tdp-hero" style={{ background: vm.bg, borderBottomColor: `${vm.color}30` }}>
                <div className="tdp-hero-inner">
                   {/* Left: claim text */}
                   <div className="tdp-hero-left">
-                     <div
-                        className="tdp-claim-label"
-                        style={{ color: vm.color }}>
-                        <Icons
-                           name="flag"
-                           size={11}
-                           color={vm.color}
-                           strokeWidth={2.5}
-                        />
+                     <div className="tdp-claim-label" style={{ color: vm.color }}>
+                        <Icons name="flag" size={11} color={vm.color} strokeWidth={2.5} />
                         CLAIM UNDER INVESTIGATION
                      </div>
                      <h1 className="tdp-claim-text">{thread.caption}</h1>
                      <div className="tdp-claim-meta">
                         {thread.source && (
                            <span>
-                              <Icons
-                                 name="globe"
-                                 size={12}
-                                 color="#6b7280"
-                              />
+                              <Icons name="globe" size={12} color="#6b7280" />
                               Sourced from <strong>{thread.source}</strong>
                            </span>
                         )}
                         <span>
-                           <Icons
-                              name="message-circle"
-                              size={12}
-                              color="#6b7280"
-                           />
+                           <Icons name="message-circle" size={12} color="#6b7280" />
                            <strong>{comments.length}</strong> comments
                         </span>
                         <span>
-                           <Icons
-                              name="paperclip"
-                              size={12}
-                              color="#6b7280"
-                           />
+                           <Icons name="paperclip" size={12} color="#6b7280" />
                            <strong>{evidenceList.length}</strong> evidence submissions
                         </span>
                      </div>
@@ -1041,27 +941,21 @@ function ThreadDetailPage() {
                                     color: "#6b7280",
                                     textTransform: "uppercase",
                                     letterSpacing: "0.05em",
-                                 }}>
+                                 }}
+                              >
                                  Final Verdict (Moderator-Verified)
                               </span>
                            </div>
-                           <VerdictBadge
-                              verdict={thread.claim.moderator_verdict_info.verdict.toUpperCase()}
-                           />
+                           <VerdictBadge verdict={thread.claim.moderator_verdict_info.verdict.toUpperCase()} />
                            <p className="tdp-verdict-desc">
-                              {VERDICT_META[
-                                 thread.claim.moderator_verdict_info.verdict.toLowerCase()
-                              ]?.desc || "Moderators have reviewed the evidence."}
+                              {VERDICT_META[thread.claim.moderator_verdict_info.verdict.toLowerCase()]?.desc ||
+                                 "Moderators have reviewed the evidence."}
                            </p>
                            <div className="tdp-evidence-count-row">
                               <span className="tdp-confidence-label">Verified Evidence</span>
-                              <span
-                                 className="tdp-evidence-count-val"
-                                 style={{ color: "#10b981" }}>
+                              <span className="tdp-evidence-count-val" style={{ color: "#10b981" }}>
                                  {thread.claim.moderator_verdict_info.verified_evidence_count} item
-                                 {thread.claim.moderator_verdict_info.verified_evidence_count !== 1
-                                    ? "s"
-                                    : ""}
+                                 {thread.claim.moderator_verdict_info.verified_evidence_count !== 1 ? "s" : ""}
                               </span>
                            </div>
 
@@ -1074,10 +968,9 @@ function ThreadDetailPage() {
                                     backgroundColor: "#fef3c7",
                                     borderRadius: "6px",
                                     fontSize: "12px",
-                                 }}>
-                                 <span style={{ color: "#92400e", fontWeight: "500" }}>
-                                    Mixed Evidence:
-                                 </span>
+                                 }}
+                              >
+                                 <span style={{ color: "#92400e", fontWeight: "500" }}>Mixed Evidence:</span>
                                  <div style={{ marginTop: "6px", color: "#78350f" }}>
                                     <div>Some evidence supports</div>
                                     <div>Some evidence contradicts</div>
@@ -1088,8 +981,7 @@ function ThreadDetailPage() {
                               </div>
                            )}
                         </>
-                     ) : thread.claim?.verified_evidence_count > 0 &&
-                       !thread.claim?.moderator_verdict_info ? (
+                     ) : thread.claim?.verified_evidence_count > 0 && !thread.claim?.moderator_verdict_info ? (
                         // REFINEMENT #7: Pending Consensus - Evidence Under Review
                         <>
                            <div style={{ marginBottom: "12px" }}>
@@ -1100,7 +992,8 @@ function ThreadDetailPage() {
                                     color: "#d97706",
                                     textTransform: "uppercase",
                                     letterSpacing: "0.05em",
-                                 }}>
+                                 }}
+                              >
                                  Verdict Pending
                               </span>
                            </div>
@@ -1108,9 +1001,7 @@ function ThreadDetailPage() {
                            <p className="tdp-verdict-desc">Evidence under review by moderators</p>
                            <div className="tdp-evidence-count-row">
                               <span className="tdp-confidence-label">Evidence Under Review</span>
-                              <span
-                                 className="tdp-evidence-count-val"
-                                 style={{ color: "#d97706" }}>
+                              <span className="tdp-evidence-count-val" style={{ color: "#d97706" }}>
                                  {thread.claim.verified_evidence_count} item
                                  {thread.claim.verified_evidence_count !== 1 ? "s" : ""}
                               </span>
@@ -1121,7 +1012,8 @@ function ThreadDetailPage() {
                                  fontSize: "12px",
                                  color: "#9ca3af",
                                  fontStyle: "italic",
-                              }}>
+                              }}
+                           >
                               Final verdict will be determined once moderators reach consensus
                            </p>
                         </>
@@ -1133,9 +1025,7 @@ function ThreadDetailPage() {
                            <div className="tdp-confidence">
                               <div className="tdp-confidence-row">
                                  <span className="tdp-confidence-label">AI Confidence</span>
-                                 <span
-                                    className="tdp-confidence-value"
-                                    style={{ color: vm.color }}>
+                                 <span className="tdp-confidence-value" style={{ color: vm.color }}>
                                     {thread.claim.consensus_score ?? "—"}%
                                  </span>
                               </div>
@@ -1151,9 +1041,7 @@ function ThreadDetailPage() {
                            </div>
                            <div className="tdp-evidence-count-row">
                               <span className="tdp-confidence-label">Evidence submissions</span>
-                              <span
-                                 className="tdp-evidence-count-val"
-                                 style={{ color: vm.color }}>
+                              <span className="tdp-evidence-count-val" style={{ color: vm.color }}>
                                  {evidenceList.length}
                               </span>
                            </div>
@@ -1175,7 +1063,8 @@ function ThreadDetailPage() {
                            onClick={(e) => {
                               e.stopPropagation(); // Prevents triggering the thread card click
                               navigate(`/user/${thread.author.username}`);
-                           }}>
+                           }}
+                        >
                            {thread.author.avatar_url ? (
                               <img
                                  src={thread.author.avatar_url}
@@ -1188,9 +1077,7 @@ function ThreadDetailPage() {
                               />
                            ) : (
                               <UserAvatar
-                                 username={
-                                    thread.author?.username || thread.flagged_by?.username || ""
-                                 }
+                                 username={thread.author?.username || thread.flagged_by?.username || ""}
                                  size={38}
                               />
                            )}
@@ -1201,7 +1088,8 @@ function ThreadDetailPage() {
                               onClick={(e) => {
                                  e.stopPropagation(); // Prevents triggering the thread card click
                                  navigate(`/user/${thread.author.username}`);
-                              }}>
+                              }}
+                           >
                               {thread.author?.username || thread.flagged_by?.username}
                            </span>
                            <div className="tdp-author-meta">
@@ -1222,35 +1110,22 @@ function ThreadDetailPage() {
                               href={thread.source_url || "#"}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="tdp-icon-btn">
-                              <Icons
-                                 name="external-link"
-                                 size={14}
-                                 color="#6b7280"
-                              />
+                              className="tdp-icon-btn"
+                           >
+                              <Icons name="external-link" size={14} color="#6b7280" />
                            </a>
                         </div>
                      </div>
                      {/* Snipped image placeholder */}
                      <div className="tdp-snip-placeholder">
                         {thread.claim.media_url ? (
-                           <img
-                              src={thread.claim.media_url}
-                              alt="Snipped claim"
-                              className="card-media-image"
-                           />
+                           <img src={thread.claim.media_url} alt="Snipped claim" className="card-media-image" />
                         ) : (
                            <>
                               <div className="tdp-snip-icon-wrap">
-                                 <Icons
-                                    name="globe"
-                                    size={28}
-                                    color="#9ca3af"
-                                 />
+                                 <Icons name="globe" size={28} color="#9ca3af" />
                               </div>
-                              <span className="tdp-snip-label">
-                                 Snipped from {thread.source || "external source"}
-                              </span>
+                              <span className="tdp-snip-label">Snipped from {thread.source || "external source"}</span>
                            </>
                         )}
                      </div>
@@ -1260,28 +1135,17 @@ function ThreadDetailPage() {
                   <div className="tdp-evidence-toggle-wrap">
                      <button
                         className={`tdp-evidence-toggle-btn ${showForm ? "open" : ""}`}
-                        onClick={() => setShowForm((v) => !v)}>
-                        <Icons
-                           name={showForm ? "x" : "paperclip"}
-                           size={15}
-                           color="#fff"
-                           strokeWidth={2.5}
-                        />
+                        onClick={() => setShowForm((v) => !v)}
+                     >
+                        <Icons name={showForm ? "x" : "paperclip"} size={15} color="#fff" strokeWidth={2.5} />
                         {showForm ? "Cancel Evidence Submission" : "Submit Evidence for This Claim"}
                      </button>
 
                      {/* Collapsible form */}
                      {showForm && (
-                        <form
-                           className="tdp-evidence-form"
-                           onSubmit={handleEvidenceSubmit}>
+                        <form className="tdp-evidence-form" onSubmit={handleEvidenceSubmit}>
                            <div className="tdp-evidence-form-title">
-                              <Icons
-                                 name="paperclip"
-                                 size={13}
-                                 color="#4f46e5"
-                                 strokeWidth={2.5}
-                              />
+                              <Icons name="paperclip" size={13} color="#4f46e5" strokeWidth={2.5} />
                               New Evidence Submission
                            </div>
                            <div className="tdp-form-row">
@@ -1290,11 +1154,7 @@ function ThreadDetailPage() {
                                     Source URL <span className="tdp-required">*</span>
                                  </label>
                                  <div className="tdp-input-wrap">
-                                    <Icons
-                                       name="link"
-                                       size={12}
-                                       color="#9ca3af"
-                                    />
+                                    <Icons name="link" size={12} color="#9ca3af" />
                                     <input
                                        type="url"
                                        className="tdp-input"
@@ -1307,20 +1167,16 @@ function ThreadDetailPage() {
                               </div>
                               <div className="tdp-form-group">
                                  <label className="tdp-form-label">Evidence</label>
-                                 <div
-                                    className={`tdp-select-wrap tdp-evidence-type-wrap ${evidenceTypeTone}`}>
+                                 <div className={`tdp-select-wrap tdp-evidence-type-wrap ${evidenceTypeTone}`}>
                                     <select
                                        className="tdp-select tdp-evidence-type-select"
                                        value={evidenceType}
-                                       onChange={(e) => setEvidenceType(e.target.value)}>
-                                       <option value={"CONTRADICTS CLAIM"}>
-                                          Contradicts Claim
-                                       </option>
+                                       onChange={(e) => setEvidenceType(e.target.value)}
+                                    >
+                                       <option value={"CONTRADICTS CLAIM"}>Contradicts Claim</option>
                                        <option value={"SUPPORTS CLAIM"}>Supports Claim</option>
                                        <option value={"PROVIDES CONTEXT"}>Provides Context</option>
-                                       <option value={"SOURCE VERIFICATION"}>
-                                          Source Verification
-                                       </option>
+                                       <option value={"SOURCE VERIFICATION"}>Source Verification</option>
                                     </select>
                                     <Icons
                                        name="chevron-down"
@@ -1340,9 +1196,10 @@ function ThreadDetailPage() {
                                           type="button"
                                           key={key}
                                           className={`tdp-evidence-verdict tdp-evidence-verdict--${key.toLowerCase()} ${evidenceVerdict === key ? "selected" : ""}`}
-                                          onClick={(e) => {
+                                          onClick={() => {
                                              setEvidenceVerdict(key);
-                                          }}>
+                                          }}
+                                       >
                                           <Icons name={meta.icon} />
                                           {meta.label}
                                        </button>
@@ -1365,33 +1222,18 @@ function ThreadDetailPage() {
                            </div>
                            <div className="tdp-form-footer">
                               <span className="tdp-weight-info">
-                                 <Icons
-                                    name="bar-chart"
-                                    size={11}
-                                    color="#6b7280"
-                                 />
-                                 Your weight: <strong className="tdp-weight-val">×{weight}</strong>{" "}
-                                 (Trust Score {trustScore})
+                                 <Icons name="bar-chart" size={11} color="#6b7280" />
+                                 Your weight: <strong className="tdp-weight-val">×{weight}</strong> (Trust Score{" "}
+                                 {trustScore})
                               </span>
                               <div className="tdp-form-btns">
-                                 <button
-                                    type="button"
-                                    className="tdp-btn-cancel"
-                                    onClick={() => setShowForm(false)}>
+                                 <button type="button" className="tdp-btn-cancel" onClick={() => setShowForm(false)}>
                                     Cancel
                                  </button>
-                                 <button
-                                    type="submit"
-                                    className="tdp-btn-submit"
-                                    disabled={submitting}>
+                                 <button type="submit" className="tdp-btn-submit" disabled={submitting}>
                                     {submitting ? "Submitting…" : "Submit"}
                                     {!submitting && (
-                                       <Icons
-                                          name="arrow-right"
-                                          size={13}
-                                          strokeWidth={2.5}
-                                          color="#fff"
-                                       />
+                                       <Icons name="arrow-right" size={13} strokeWidth={2.5} color="#fff" />
                                     )}
                                  </button>
                               </div>
@@ -1401,13 +1243,12 @@ function ThreadDetailPage() {
                   </div>
 
                   {/* Tabs */}
-                  <div
-                     className="tdp-tabs-section"
-                     ref={tabsSectionRef}>
+                  <div className="tdp-tabs-section" ref={tabsSectionRef}>
                      <div className="tdp-tab-bar">
                         <button
                            className={`tdp-tab ${currentSection === "comments" ? "active" : ""}`}
-                           onClick={() => handleSectionChange("comments")}>
+                           onClick={() => handleSectionChange("comments")}
+                        >
                            <Icons
                               name="message-circle"
                               size={13}
@@ -1418,7 +1259,8 @@ function ThreadDetailPage() {
                         </button>
                         <button
                            className={`tdp-tab ${currentSection === "evidence" ? "active" : ""}`}
-                           onClick={() => handleSectionChange("evidence")}>
+                           onClick={() => handleSectionChange("evidence")}
+                        >
                            <Icons
                               name="paperclip"
                               size={13}
@@ -1433,13 +1275,8 @@ function ThreadDetailPage() {
                      {currentSection === "comments" && (
                         <div className="tdp-tab-content">
                            {/* Comment input */}
-                           <form
-                              className="tdp-comment-input-row"
-                              onSubmit={handleCommentSubmit}>
-                              <UserAvatar
-                                 username={user?.username || ""}
-                                 size={34}
-                              />
+                           <form className="tdp-comment-input-row" onSubmit={handleCommentSubmit}>
+                              <UserAvatar username={user?.username || ""} size={34} />
                               <input
                                  type="text"
                                  className="tdp-comment-input"
@@ -1448,14 +1285,8 @@ function ThreadDetailPage() {
                                  onChange={(e) => setNewComment(e.target.value)}
                               />
                               {newComment.trim() && (
-                                 <button
-                                    type="submit"
-                                    className="tdp-comment-submit">
-                                    <Icons
-                                       name="send"
-                                       size={14}
-                                       color="#fff"
-                                    />
+                                 <button type="submit" className="tdp-comment-submit">
+                                    <Icons name="send" size={14} color="#fff" />
                                  </button>
                               )}
                            </form>
@@ -1467,8 +1298,7 @@ function ThreadDetailPage() {
                               )}
                               {sortedComments.map((comment, i) => {
                                  const isMod =
-                                    comment.commenter?.role === "MOD" ||
-                                    comment.commenter?.role === "MODERATOR";
+                                    comment.commenter?.role === "MOD" || comment.commenter?.role === "MODERATOR";
                                  const username = comment.commenter?.username || "Unknown";
                                  const isOwner = comment.commenter?.id === user?.id;
                                  const commentDateTime = comment.commented_at
@@ -1477,16 +1307,15 @@ function ThreadDetailPage() {
                                       ? new Date(comment.created_at).toLocaleString()
                                       : comment.timestamp || "";
                                  return (
-                                    <div
-                                       key={comment.id || i}
-                                       className="tdp-comment-item">
+                                    <div key={comment.id || i} className="tdp-comment-item">
                                        <div
                                           className="tdp-commenter-profile-pic"
                                           style={{ overflow: "hidden" }}
                                           onClick={(e) => {
                                              e.stopPropagation(); // Prevents triggering the thread card click
                                              navigate(`/user/${comment.commenter.username}`);
-                                          }}>
+                                          }}
+                                       >
                                           {comment.commenter.avatar_url ? (
                                              <img
                                                 src={comment.commenter.avatar_url}
@@ -1498,10 +1327,7 @@ function ThreadDetailPage() {
                                                 }}
                                              />
                                           ) : (
-                                             <UserAvatar
-                                                username={comment.commenter?.username || ""}
-                                                size={38}
-                                             />
+                                             <UserAvatar username={comment.commenter?.username || ""} size={38} />
                                           )}
                                        </div>
                                        <div className="tdp-comment-body">
@@ -1510,36 +1336,26 @@ function ThreadDetailPage() {
                                                 <span className="tdp-comment-user">{username}</span>
                                                 {isMod && (
                                                    <span className="tdp-mod-badge">
-                                                      <Icons
-                                                         name="shield"
-                                                         size={8}
-                                                         color="#059669"
-                                                         strokeWidth={2.5}
-                                                      />
+                                                      <Icons name="shield" size={8} color="#059669" strokeWidth={2.5} />
                                                       MOD
                                                    </span>
                                                 )}
-                                                <span className="tdp-comment-time">
-                                                   {commentDateTime}
-                                                </span>
+                                                <span className="tdp-comment-time">{commentDateTime}</span>
                                              </div>
                                              {editingCommentId === comment.id ? (
                                                 <div className="tdp-inline-edit-wrap">
                                                    <textarea
                                                       className="tdp-inline-edit-textarea"
                                                       value={editingCommentText}
-                                                      onChange={(e) =>
-                                                         setEditingCommentText(e.target.value)
-                                                      }
+                                                      onChange={(e) => setEditingCommentText(e.target.value)}
                                                       rows={3}
                                                    />
                                                    <div className="tdp-inline-edit-actions">
                                                       <button
                                                          className="tdp-owner-action save"
                                                          type="button"
-                                                         onClick={() =>
-                                                            handleSaveCommentEdit(comment.id)
-                                                         }>
+                                                         onClick={() => handleSaveCommentEdit(comment.id)}
+                                                      >
                                                          Save
                                                       </button>
                                                       <button
@@ -1548,26 +1364,20 @@ function ThreadDetailPage() {
                                                          onClick={() => {
                                                             setEditingCommentId(null);
                                                             setEditingCommentText("");
-                                                         }}>
+                                                         }}
+                                                      >
                                                          Cancel
                                                       </button>
                                                    </div>
                                                 </div>
                                              ) : (
-                                                <p className="tdp-comment-text">
-                                                   {comment.comment_text}
-                                                </p>
+                                                <p className="tdp-comment-text">{comment.comment_text}</p>
                                              )}
                                           </div>
                                           {editingCommentId !== comment.id && (
                                              <div className="tdp-comment-actions">
                                                 <button className="tdp-comment-like">
-                                                   <Icons
-                                                      name="thumbs-up"
-                                                      size={11}
-                                                      color="#6b7280"
-                                                      strokeWidth={2}
-                                                   />
+                                                   <Icons name="thumbs-up" size={11} color="#6b7280" strokeWidth={2} />
                                                    {comment.likes ?? 0}
                                                 </button>
                                                 <button className="tdp-comment-reply">Reply</button>
@@ -1578,18 +1388,16 @@ function ThreadDetailPage() {
                                                          type="button"
                                                          onClick={() => {
                                                             setEditingCommentId(comment.id);
-                                                            setEditingCommentText(
-                                                               comment.comment_text || "",
-                                                            );
-                                                         }}>
+                                                            setEditingCommentText(comment.comment_text || "");
+                                                         }}
+                                                      >
                                                          Edit
                                                       </button>
                                                       <button
                                                          className="tdp-owner-action danger"
                                                          type="button"
-                                                         onClick={() =>
-                                                            handleDeleteComment(comment.id)
-                                                         }>
+                                                         onClick={() => handleDeleteComment(comment.id)}
+                                                      >
                                                          Delete
                                                       </button>
                                                    </>
@@ -1602,9 +1410,7 @@ function ThreadDetailPage() {
                               })}
                            </div>
 
-                           {comments.length > 5 && (
-                              <button className="tdp-see-more">See More…</button>
-                           )}
+                           {comments.length > 5 && <button className="tdp-see-more">See More…</button>}
                         </div>
                      )}
 
@@ -1613,24 +1419,16 @@ function ThreadDetailPage() {
                         <div className="tdp-tab-content">
                            <div className="tdp-evidence-sort-row">
                               <span>
-                                 <Icons
-                                    name="bar-chart"
-                                    size={12}
-                                    color="#6b7280"
-                                 />
+                                 <Icons name="bar-chart" size={12} color="#6b7280" />
                                  Sorted by weighted trust score
                               </span>
-                              <span className="tdp-formula">
-                                 weighted = (up × trust/100) − (down × 0.5)
-                              </span>
+                              <span className="tdp-formula">weighted = (up × trust/100) − (down × 0.5)</span>
                            </div>
 
                            {evidenceList.length === 0 && (
                               <p className="tdp-empty">
                                  No evidence yet.{" "}
-                                 <button
-                                    className="tdp-empty-link"
-                                    onClick={() => setShowForm(true)}>
+                                 <button className="tdp-empty-link" onClick={() => setShowForm(true)}>
                                     Be the first to submit evidence.
                                  </button>
                               </p>
@@ -1650,22 +1448,19 @@ function ThreadDetailPage() {
                                  votingEvidenceId={votingEvidenceId}
                                  onVerify={async (evidenceId, status, notes) => {
                                     const API_BASE_URL =
-                                       import.meta.env.VITE_API_BASE_URL ||
-                                       "http://localhost:8000/api";
+                                       import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
                                     try {
-                                       await authFetch(
-                                          `${API_BASE_URL}/evidence/${evidenceId}/verify/`,
-                                          {
-                                             method: "PATCH",
-                                             headers: { "Content-Type": "application/json" },
-                                             body: JSON.stringify({
-                                                evidence_status: status,
-                                                moderator_notes: notes,
-                                             }),
-                                          },
-                                       );
+                                       await authFetch(`${API_BASE_URL}/evidence/${evidenceId}/verify/`, {
+                                          method: "PATCH",
+                                          headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({
+                                             evidence_status: status,
+                                             moderator_notes: notes,
+                                          }),
+                                       });
                                        await refreshThreadData();
                                     } catch (error) {
+                                       console.error("Error verifying evidence:", error);
                                        setError("Error verifying evidence");
                                     }
                                  }}
@@ -1678,9 +1473,7 @@ function ThreadDetailPage() {
                               />
                            ))}
 
-                           {evidenceList.length > 5 && (
-                              <button className="tdp-see-more">See More…</button>
-                           )}
+                           {evidenceList.length > 5 && <button className="tdp-see-more">See More…</button>}
                         </div>
                      )}
                   </div>
@@ -1698,7 +1491,8 @@ function ThreadDetailPage() {
                            onClick={(e) => {
                               e.stopPropagation(); // Prevents triggering the thread card click
                               navigate(`/user/${thread.author.username}`);
-                           }}>
+                           }}
+                        >
                            {thread.author.avatar_url ? (
                               <img
                                  src={thread.author.avatar_url}
@@ -1711,9 +1505,7 @@ function ThreadDetailPage() {
                               />
                            ) : (
                               <UserAvatar
-                                 username={
-                                    thread.author?.username || thread.flagged_by?.username || ""
-                                 }
+                                 username={thread.author?.username || thread.flagged_by?.username || ""}
                                  size={38}
                               />
                            )}
@@ -1724,16 +1516,13 @@ function ThreadDetailPage() {
                               onClick={(e) => {
                                  e.stopPropagation(); // Prevents triggering the thread card click
                                  navigate(`/user/${thread.author.username}`);
-                              }}>
+                              }}
+                           >
                               @{thread.author?.username || "Unknown"}
                            </div>
                            {thread.author?.trust_score >= 80 && (
                               <div className="tdp-trusted-label">
-                                 <Icons
-                                    name="badge-check"
-                                    size={11}
-                                    color="#0e9f6e"
-                                 />
+                                 <Icons name="badge-check" size={11} color="#0e9f6e" />
                                  Trusted Contributor
                               </div>
                            )}
@@ -1742,9 +1531,7 @@ function ThreadDetailPage() {
                      </div>
                      <div className="tdp-poster-stats">
                         <div className="tdp-poster-stat">
-                           <span className="tdp-stat-val">
-                              {thread.author?.trust_score?.toFixed(1) || "0.0"}
-                           </span>
+                           <span className="tdp-stat-val">{thread.author?.trust_score?.toFixed(1) || "0.0"}</span>
                            <span className="tdp-stat-lbl">Trust</span>
                         </div>
                         <div className="tdp-poster-stat">
@@ -1797,15 +1584,11 @@ function ThreadDetailPage() {
                            max: 30,
                            color: "#dc2626",
                         },
-                     ].map(({ label, score, share, max, color }) => (
-                        <div
-                           key={label}
-                           className="tdp-trust-row">
+                     ].map(({ label, score, share, color }) => (
+                        <div key={label} className="tdp-trust-row">
                            <div className="tdp-trust-row-header">
                               <span className="tdp-trust-row-label">{label}</span>
-                              <span
-                                 className="tdp-trust-row-val"
-                                 style={{ color }}>
+                              <span className="tdp-trust-row-val" style={{ color }}>
                                  {Number(share || 0).toFixed(1)}%
                               </span>
                            </div>
@@ -1825,10 +1608,8 @@ function ThreadDetailPage() {
                         </div>
                      ))}
                      <div className="tdp-trust-breakdown-meta">
-                        Accuracy:{" "}
-                        {Math.round((authorTrustBreakdown.contribution_accuracy_rate || 0) * 100)}%
-                        | Net votes: {authorTrustBreakdown.net_votes ?? 0} | Months:{" "}
-                        {authorTrustBreakdown.months_active ?? 0}
+                        Accuracy: {Math.round((authorTrustBreakdown.contribution_accuracy_rate || 0) * 100)}% | Net
+                        votes: {authorTrustBreakdown.net_votes ?? 0} | Months: {authorTrustBreakdown.months_active ?? 0}
                      </div>
                   </div>
 
@@ -1839,10 +1620,9 @@ function ThreadDetailPage() {
                         {thread.related_claims.map((rc, i) => (
                            <div
                               key={rc.id || i}
-                              className={`tdp-related-claim ${i < thread.related_claims.length - 1 ? "bordered" : ""}`}>
-                              <VerdictBadge
-                                 verdict={(getEffectiveVerdict(rc) || "UNVERIFIED").toLowerCase()}
-                              />
+                              className={`tdp-related-claim ${i < thread.related_claims.length - 1 ? "bordered" : ""}`}
+                           >
+                              <VerdictBadge verdict={(getEffectiveVerdict(rc) || "UNVERIFIED").toLowerCase()} />
                               <p className="tdp-related-text">{rc.caption}</p>
                            </div>
                         ))}
@@ -1851,25 +1631,12 @@ function ThreadDetailPage() {
 
                   {/* Report / Share */}
                   <div className="tdp-sidebar-actions">
-                     <button
-                        className="tdp-report-btn"
-                        onClick={handleReportThread}
-                        disabled={reporting}>
-                        <Icons
-                           name="flag"
-                           size={13}
-                           color="#e02424"
-                           strokeWidth={2.5}
-                        />
+                     <button className="tdp-report-btn" onClick={handleReportThread} disabled={reporting}>
+                        <Icons name="flag" size={13} color="#e02424" strokeWidth={2.5} />
                         {reporting ? "Reporting..." : "Report"}
                      </button>
                      <button className="tdp-share-btn">
-                        <Icons
-                           name="external-link"
-                           size={13}
-                           color="#6b7280"
-                           strokeWidth={2}
-                        />
+                        <Icons name="external-link" size={13} color="#6b7280" strokeWidth={2} />
                         Share
                      </button>
                   </div>
@@ -1887,15 +1654,11 @@ function ThreadDetailPage() {
                      <button
                         type="button"
                         className="tdp-dialog-btn secondary"
-                        onClick={() =>
-                           setConfirmDialog({ open: false, type: null, targetId: null })
-                        }>
+                        onClick={() => setConfirmDialog({ open: false, type: null, targetId: null })}
+                     >
                         Cancel
                      </button>
-                     <button
-                        type="button"
-                        className="tdp-dialog-btn danger"
-                        onClick={handleConfirmAction}>
+                     <button type="button" className="tdp-dialog-btn danger" onClick={handleConfirmAction}>
                         {confirmActionMeta.cta}
                      </button>
                   </div>
@@ -1914,7 +1677,8 @@ function ThreadDetailPage() {
                      <select
                         className="tdp-dialog-select"
                         value={reportReason}
-                        onChange={(e) => setReportReason(e.target.value)}>
+                        onChange={(e) => setReportReason(e.target.value)}
+                     >
                         <option value="INAPPROPRIATE">Inappropriate</option>
                         <option value="SPAM">Spam</option>
                         <option value="HARASSMENT">Harassment</option>
@@ -1939,14 +1703,16 @@ function ThreadDetailPage() {
                            setReportDialogOpen(false);
                            setReportReason("OTHER");
                            setReportNotes("");
-                        }}>
+                        }}
+                     >
                         Cancel
                      </button>
                      <button
                         type="button"
                         className="tdp-dialog-btn warning"
                         disabled={reporting}
-                        onClick={submitReportThread}>
+                        onClick={submitReportThread}
+                     >
                         {reporting ? "Submitting..." : reportActionMeta.cta}
                      </button>
                   </div>

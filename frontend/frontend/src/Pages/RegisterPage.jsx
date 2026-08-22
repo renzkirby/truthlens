@@ -18,14 +18,14 @@
  */
 
 import { useState } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import LogoImage from "../assets/truthlens_logo.png";
 import Icons from "../components/Icons.jsx";
 import { useGoogleLogin } from "@react-oauth/google";
 
 // ── Utilities & Constants ──
-import { useEndpoint } from "../utils/api";
+import { resolveApiEndpoint } from "../utils/api";
 
 // ── Styles ──
 import "./RegisterPage.css";
@@ -34,9 +34,7 @@ function RegisterPage() {
    const { login } = useAuth();
    const navigate = useNavigate();
    const location = useLocation();
-   const from = location.state?.from
-      ? location.state.from.pathname + location.state.from.search
-      : "/community";
+   const from = location.state?.from ? location.state.from.pathname + location.state.from.search : "/community";
    const [error, setError] = useState(null);
    const [showPassword, setShowPassword] = useState(false);
    const [formValues, setFormValues] = useState({
@@ -45,7 +43,7 @@ function RegisterPage() {
       password: "",
    });
 
-   const googleLoginEndpoint = useEndpoint("GOOGLE_LOGIN");
+   const googleLoginEndpoint = resolveApiEndpoint("GOOGLE_LOGIN");
    const [isSigningIn, setIsSigningIn] = useState(false);
 
    // ── Google OAuth Hook ──
@@ -79,6 +77,7 @@ function RegisterPage() {
 
             setError(data?.detail || "Unable to register with Google right now. Please try again.");
          } catch (err) {
+            console.error("Google Login error:", err);
             setError("Unable to register with Google right now. Please try again.");
          } finally {
             setIsSigningIn(false);
@@ -113,7 +112,7 @@ function RegisterPage() {
    const handleSubmit = async () => {
       setIsSigningIn(true);
       setError(null);
-      const registerEndpoint = useEndpoint("REGISTER");
+      const registerEndpoint = resolveApiEndpoint("REGISTER");
 
       try {
          const response = await fetch(registerEndpoint, {
@@ -134,6 +133,7 @@ function RegisterPage() {
             setError(data.detail || "Something went wrong");
          }
       } catch (err) {
+         console.error("Registration error:", err);
          setError("Unable to register right now. Please try again.");
       } finally {
          setIsSigningIn(false);
@@ -146,11 +146,7 @@ function RegisterPage() {
             {/* Left Side */}
             <div className="register-left">
                <div className="register-logo">
-                  <img
-                     src={LogoImage}
-                     alt="TruthLens Logo"
-                     style={{ height: "40px", width: "auto" }}
-                  />
+                  <img src={LogoImage} alt="TruthLens Logo" style={{ height: "40px", width: "auto" }} />
                   <span className="logo-text">TruthLens</span>
                </div>
 
@@ -163,45 +159,32 @@ function RegisterPage() {
                      Misinformation.
                   </h1>
                   <p className="hero-subtitle">
-                     Create your account and start contributing by verifying claims alongside a
-                     global community.
+                     Create your account and start contributing by verifying claims alongside a global community.
                   </p>
                </div>
 
                <div className="register-features">
                   <div className="feature-item">
                      <div className="feature-icon">
-                        <Icons
-                           name="sparkles"
-                           size={18}
-                        />
+                        <Icons name="sparkles" size={18} />
                      </div>
                      <span>AI-powered claim detection in real time</span>
                   </div>
                   <div className="feature-item">
                      <div className="feature-icon">
-                        <Icons
-                           name="users"
-                           size={18}
-                        />
+                        <Icons name="users" size={18} />
                      </div>
                      <span>Community-driven evidence and voting</span>
                   </div>
                   <div className="feature-item">
                      <div className="feature-icon">
-                        <Icons
-                           name="trophy"
-                           size={18}
-                        />
+                        <Icons name="trophy" size={18} />
                      </div>
                      <span>Earn Trust Score for contributing verified facts</span>
                   </div>
                   <div className="feature-item">
                      <div className="feature-icon">
-                        <Icons
-                           name="globe"
-                           size={18}
-                        />
+                        <Icons name="globe" size={18} />
                      </div>
                      <span>Browser extension for on-the-fly fact checking</span>
                   </div>
@@ -228,25 +211,18 @@ function RegisterPage() {
                      onSubmit={(e) => {
                         e.preventDefault();
                         handleSubmit();
-                     }}>
+                     }}
+                  >
                      {error && (
                         <div className="error-message">
-                           <Icons
-                              name="alert-triangle"
-                              size={16}
-                           />{" "}
-                           {error}
+                           <Icons name="alert-triangle" size={16} /> {error}
                         </div>
                      )}
 
                      <div className="input-group">
                         <label>Username</label>
                         <div className="input-wrapper">
-                           <Icons
-                              name="user"
-                              size={18}
-                              className="input-icon"
-                           />
+                           <Icons name="user" size={18} className="input-icon" />
                            <input
                               type="text"
                               name="username"
@@ -261,11 +237,7 @@ function RegisterPage() {
                      <div className="input-group">
                         <label>Email Address</label>
                         <div className="input-wrapper">
-                           <Icons
-                              name="mail"
-                              size={18}
-                              className="input-icon"
-                           />
+                           <Icons name="mail" size={18} className="input-icon" />
                            <input
                               type="email"
                               name="email"
@@ -280,11 +252,7 @@ function RegisterPage() {
                      <div className="input-group">
                         <label>Password</label>
                         <div className="input-wrapper">
-                           <Icons
-                              name="shield"
-                              size={18}
-                              className="input-icon"
-                           />
+                           <Icons name="shield" size={18} className="input-icon" />
                            <input
                               type={showPassword ? "text" : "password"}
                               name="password"
@@ -296,27 +264,18 @@ function RegisterPage() {
                            <button
                               type="button"
                               className="show-password-btn"
-                              onClick={() => setShowPassword(!showPassword)}>
-                              <Icons
-                                 name="eye"
-                                 size={16}
-                              />
+                              onClick={() => setShowPassword(!showPassword)}
+                           >
+                              <Icons name="eye" size={16} />
                               {showPassword ? "Hide" : "Show"}
                            </button>
                         </div>
                      </div>
 
-                     <button
-                        type="submit"
-                        className="submit-btn"
-                        disabled={isSigningIn}>
+                     <button type="submit" className="submit-btn" disabled={isSigningIn}>
                         {!isSigningIn && (
                            <>
-                              CREATE ACCOUNT{" "}
-                              <Icons
-                                 name="arrow-right"
-                                 size={18}
-                              />
+                              CREATE ACCOUNT <Icons name="arrow-right" size={18} />
                            </>
                         )}
                         {isSigningIn && (
@@ -332,9 +291,7 @@ function RegisterPage() {
 
                   <div className="signin-prompt">
                      Already registered?{" "}
-                     <Link
-                        to="/login"
-                        state={{ from: location.state?.from }}>
+                     <Link to="/login" state={{ from: location.state?.from }}>
                         Sign In
                      </Link>
                   </div>
@@ -348,7 +305,8 @@ function RegisterPage() {
                         type="button"
                         className="social-btn"
                         onClick={() => loginWithGoogle()}
-                        disabled={isSigningIn}>
+                        disabled={isSigningIn}
+                     >
                         <span className="social-icon">G</span> Google
                      </button>
                   </div>

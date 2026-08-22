@@ -12,14 +12,8 @@ const TOKEN_SYNC_POLL_MS = 3000;
 let lastSyncedTokenFingerprint = null;
 
 function normalizeTokenPayload(payload = {}) {
-   const access =
-      typeof payload.access === "string" && payload.access.trim()
-         ? payload.access.trim()
-         : null;
-   const refresh =
-      typeof payload.refresh === "string" && payload.refresh.trim()
-         ? payload.refresh.trim()
-         : null;
+   const access = typeof payload.access === "string" && payload.access.trim() ? payload.access.trim() : null;
+   const refresh = typeof payload.refresh === "string" && payload.refresh.trim() ? payload.refresh.trim() : null;
 
    return { access, refresh };
 }
@@ -47,18 +41,12 @@ function syncTokensToWorker(tokens, reason = "unknown") {
       },
       (response) => {
          if (chrome.runtime.lastError) {
-            console.warn(
-               "Auth bridge sync failed:",
-               chrome.runtime.lastError.message,
-            );
+            console.warn("Auth bridge sync failed:", chrome.runtime.lastError.message);
             return;
          }
 
          if (!response?.accepted) {
-            console.warn(
-               "Auth bridge sync rejected by worker:",
-               response?.error || "Unknown error",
-            );
+            console.warn("Auth bridge sync rejected by worker:", response?.error || "Unknown error");
          }
       },
    );
@@ -67,8 +55,9 @@ function syncTokensToWorker(tokens, reason = "unknown") {
 function readTokensFromPageStorage() {
    try {
       return normalizeTokenPayload({
-         access: window.localStorage.getItem("access"),
-         refresh: window.localStorage.getItem("refresh"),
+         access: window.localStorage.getItem("access") || window.sessionStorage.getItem("access"),
+
+         refresh: window.localStorage.getItem("refresh") || window.sessionStorage.getItem("refresh"),
       });
    } catch (_error) {
       return { access: null, refresh: null };
@@ -117,11 +106,7 @@ function handleBridgeMessage(event) {
    }
 
    const data = event.data;
-   if (
-      !data ||
-      data.source !== BRIDGE_EVENT_SOURCE ||
-      data.type !== "TOKENS_UPDATED"
-   ) {
+   if (!data || data.source !== BRIDGE_EVENT_SOURCE || data.type !== "TOKENS_UPDATED") {
       return;
    }
 
@@ -164,12 +149,10 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
    }
 
    if (request.type === "DISPLAY_DEEPFAKE_RESULT") {
-      import("./modules/ui.jsx").then(
-         ({ displayDeepfakeResultCard, removeLoadingCard }) => {
-            removeLoadingCard();
-            setTimeout(() => displayDeepfakeResultCard(request.data), 100);
-         },
-      );
+      import("./modules/ui.jsx").then(({ displayDeepfakeResultCard, removeLoadingCard }) => {
+         removeLoadingCard();
+         setTimeout(() => displayDeepfakeResultCard(request.data), 100);
+      });
       sendResponse({ success: true });
    }
 
@@ -182,63 +165,51 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
    }
 
    if (request.type === "DISPLAY_URL_RESULT") {
-      import("./modules/ui.jsx").then(
-         ({ displayResultCard, removeLoadingCard }) => {
-            removeLoadingCard();
-            setTimeout(() => displayResultCard(request.data), 2000);
-         },
-      );
+      import("./modules/ui.jsx").then(({ displayResultCard, removeLoadingCard }) => {
+         removeLoadingCard();
+         setTimeout(() => displayResultCard(request.data), 2000);
+      });
       sendResponse({ success: true });
    }
 
    if (request.type === "DISPLAY_SNIPPET_RESULT") {
-      import("./modules/ui.jsx").then(
-         ({ displayResultCard, removeLoadingCard, successCard }) => {
-            setTimeout(() => {
-               removeLoadingCard();
-            }, 2000);
-            successCard("Analysis complete!");
-            displayResultCard(request.data);
-         },
-      );
+      import("./modules/ui.jsx").then(({ displayResultCard, removeLoadingCard, successCard }) => {
+         setTimeout(() => {
+            removeLoadingCard();
+         }, 2000);
+         successCard("Analysis complete!");
+         displayResultCard(request.data);
+      });
       sendResponse({ success: true });
    }
 
    if (request.type === "DISPLAY_SNIPPET_CACHED_RESULT") {
-      import("./modules/ui.jsx").then(
-         ({ displayResultCard, removeLoadingCard, successCard }) => {
-            setTimeout(() => {
-               removeLoadingCard();
-            }, 1000);
-            successCard("Previously verified claim found!");
-            displayResultCard(request.data);
-         },
-      );
+      import("./modules/ui.jsx").then(({ displayResultCard, removeLoadingCard, successCard }) => {
+         setTimeout(() => {
+            removeLoadingCard();
+         }, 1000);
+         successCard("Previously verified claim found!");
+         displayResultCard(request.data);
+      });
       sendResponse({ success: true });
    }
 
    if (request.type === "DISPLAY_URL_CACHED_RESULT") {
-      import("./modules/ui.jsx").then(
-         ({ displayCachedResultCard, removeLoadingCard, successCard }) => {
-            setTimeout(() => {
-               removeLoadingCard();
-            }, 1000);
-            successCard("Previously verified claim found!");
-            displayCachedResultCard(request.data);
-         },
-      );
+      import("./modules/ui.jsx").then(({ displayCachedResultCard, removeLoadingCard, successCard }) => {
+         setTimeout(() => {
+            removeLoadingCard();
+         }, 1000);
+         successCard("Previously verified claim found!");
+         displayCachedResultCard(request.data);
+      });
       sendResponse({ success: true });
    }
 
    if (request.type === "DISPLAY_SNIPPET_ERROR") {
-      import("./modules/ui.jsx").then(
-         ({ removeLoadingCard, displayErrorCard }) => {
-            removeLoadingCard();
-            displayErrorCard(
-               request.message || "Failed to analyze image. Please try again.",
-            );
-         },
-      );
+      import("./modules/ui.jsx").then(({ removeLoadingCard, displayErrorCard }) => {
+         removeLoadingCard();
+         displayErrorCard(request.message || "Failed to analyze image. Please try again.");
+      });
       sendResponse({ success: true });
    }
 });

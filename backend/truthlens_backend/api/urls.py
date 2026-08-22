@@ -33,16 +33,18 @@ urlpatterns = [
     path('auth/my-claims/', views.my_claims),
     path('auth/send-verification/', views.send_verification_email),
     path('auth/verify-email/', views.verify_email),
+    path("auth/password-reset/", views.request_password_reset, name="password_reset"),
+    path("auth/password-reset/confirm/", views.confirm_password_reset, name="password_reset_confirm"),
+
+    # DashBoard URLs
+    path("users/me/dashboard/", views.UserHubView.as_view(), name="user_hub"),
+    path("claims/<uuid:claim_id>/toggle-save/", views.toggle_save_claim, name="toggle_save_claim"),
+    path("moderation/stats/", views.moderation_stats_view, name="moderation_stats"),
     path('moderation/queue/', views.moderation_queue),
     path('moderation/evidence-queue/', views.evidence_moderation_queue),
     path('moderation/verdict-queue/', views.verdict_queue),
     path('moderation/threads/<uuid:thread_id>/resolve/', views.moderation_resolve_thread),
     path('moderation/threads/<uuid:thread_id>/safety-action/', views.moderation_resolve_safety_thread),
-
-    # DashBoard URLs
-    path("moderation/stats/", views.moderation_stats_view, name="moderation_stats"),
-    path("users/me/dashboard/", views.UserHubView.as_view(), name="user_hub"),
-    path("claims/<uuid:claim_id>/toggle-save/", views.toggle_save_claim, name="toggle_save_claim"),
     
     #GoogleLogin URL
     path('auth/google/', views.GoogleLogin.as_view(), name='google_login'),
