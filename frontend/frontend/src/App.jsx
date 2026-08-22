@@ -18,6 +18,7 @@ import UserHub from "./Pages/UserHub.jsx";
 import NotificationPage from "./Pages/NotificationPage.jsx";
 import SettingsPage from "./Pages/SettingsPage.jsx";
 import DeepAnalysisPage from "./Pages/DeepAnalysisPage.jsx";
+import OnboardingPage from "./Pages/OnboardingPage.jsx";
 import ForgotPasswordPage from "./Pages/ForgotPasswordPage.jsx";
 import ResetPasswordPage from "./Pages/ResetPasswordPage.jsx";
 import RootRedirect from "./components/RootRedirect";
@@ -31,6 +32,7 @@ function App() {
                <Route path="/landing-page" element={<LandingPage />} />
                <Route path="/login" element={<LoginPage />} />
                <Route path="/register" element={<RegisterPage />} />
+               <Route path="/onboarding" element={<OnboardingPage />} />
                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                <Route path="/reset-password/:uid/:token" element={<ResetPasswordPage />} />
                <Route path="/" element={<RootRedirect />} />

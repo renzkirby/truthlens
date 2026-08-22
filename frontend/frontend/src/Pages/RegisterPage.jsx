@@ -65,7 +65,13 @@ function RegisterPage() {
 
             if (response.ok && data?.access) {
                login(data.access, data.refresh);
-               navigate(from, { replace: true });
+               // Google login could be new or existing user — check if onboarding was done
+               const hasSeenOnboarding = localStorage.getItem("tl_onboarding_complete");
+               if (!hasSeenOnboarding) {
+                  navigate("/onboarding", { replace: true });
+               } else {
+                  navigate(from, { replace: true });
+               }
                return;
             }
 
@@ -91,6 +97,14 @@ function RegisterPage() {
       });
    };
 
+   const redirectAfterRegister = (isNewAccount = false) => {
+      if (isNewAccount) {
+         navigate("/onboarding", { replace: true });
+      } else {
+         navigate(from, { replace: true });
+      }
+   };
+
    /**
     * Handle form submission and account creation
     * Posts credentials to backend, stores tokens, redirects on success
@@ -114,7 +128,7 @@ function RegisterPage() {
          const data = await response.json();
          if (response.ok) {
             login(data.access, data.refresh);
-            navigate(from, { replace: true });
+            redirectAfterRegister(true);
          } else {
             setError(data.detail || "Something went wrong");
          }
