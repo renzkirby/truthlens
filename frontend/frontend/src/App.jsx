@@ -18,6 +18,7 @@ import UserHub from "./Pages/UserHub.jsx";
 import NotificationPage from "./Pages/NotificationPage.jsx";
 import SettingsPage from "./Pages/SettingsPage.jsx";
 import DeepAnalysisPage from "./Pages/DeepAnalysisPage.jsx";
+import OnboardingPage from "./Pages/OnboardingPage.jsx";
 
 function App() {
    return (
@@ -36,6 +37,10 @@ function App() {
                <Route
                   path="/register"
                   element={<RegisterPage />}
+               />
+               <Route
+                  path="/onboarding"
+                  element={<OnboardingPage />}
                />
                <Route
                   path="/"
