@@ -290,3 +290,7 @@ DEFAULT_FROM_EMAIL = os.getenv(
     "DEFAULT_FROM_EMAIL",
     "TruthLens <onboarding@resend.dev>",
 )
+
+SOCIALACCOUNT_ADAPTER = (
+    "api.adapters.TruthLensSocialAccountAdapter"
+)
