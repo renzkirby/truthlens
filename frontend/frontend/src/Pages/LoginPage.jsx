@@ -20,9 +20,9 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useNavigate, useLocation, Link } from "react-router-dom";
-import LogoImage from "../assets/truthlens_logo.png";
 import Icons from "../components/Icons.jsx";
 import { useGoogleLogin } from "@react-oauth/google";
+import AuthShell from "../components/auth/AuthShell.jsx";
 
 // ── Utilities & Constants ──
 import { resolveApiEndpoint } from "../utils/api";
@@ -156,73 +156,22 @@ function LoginPage() {
 
    return (
       <>
-         <div className="login-layout">
-            {/* Left Side: Branding and Stats */}
-            <div className="login-left">
-               <div className="login-logo">
-                  <img src={LogoImage} alt="TruthLens Logo" style={{ height: "40px", width: "auto" }} />
-                  <span className="logo-text">TruthLens</span>
-               </div>
-
-               <div className="login-hero">
-                  <h1 className="hero-title">
-                     The Internet
-                     <br />
-                     Deserves
-                     <br />
-                     the Truth.
-                  </h1>
-                  <p className="hero-subtitle">
-                     Welcome back. Your community is counting on you to keep the information ecosystem honest.
-                  </p>
-               </div>
-
-               <div className="login-stats">
-                  <div className="stat-pill">
-                     <div className="stat-icon">
-                        <Icons name="scan-line" size={20} />
-                     </div>
-                     <div className="stat-info">
-                        <span className="stat-number">128K+</span>
-                        <span className="stat-label">Claims Analyzed</span>
-                     </div>
-                  </div>
-                  <div className="stat-pill">
-                     <div className="stat-icon">
-                        <Icons name="check-circle" size={20} />
-                     </div>
-                     <div className="stat-info">
-                        <span className="stat-number">94K+</span>
-                        <span className="stat-label">Facts Verified</span>
-                     </div>
-                  </div>
-                  <div className="stat-pill">
-                     <div className="stat-icon">
-                        <Icons name="users" size={20} />
-                     </div>
-                     <div className="stat-info">
-                        <span className="stat-number">32K+</span>
-                        <span className="stat-label">Community Members</span>
-                     </div>
-                  </div>
-               </div>
-
-               <div className="login-footer-link">WWW.TRUTHLENS-DEV.VERCEL.APP</div>
-
-               {/* Background Decorative Circles */}
-               <div className="bg-circle circle-1"></div>
-               <div className="bg-circle circle-2"></div>
-               <div className="bg-circle circle-3"></div>
-            </div>
-
+         <AuthShell
+            eyebrow="TruthLens Community"
+            title="The internet deserves better evidence."
+            description="Sign in to continue investigating claims, contributing evidence, and helping the community reach better conclusions."
+            highlights={[
+               "Review questionable information with AI-assisted analysis",
+               "Contribute evidence to community investigations",
+               "Build trust through meaningful participation",
+            ]}
+         >
             {/* Right Side: Login Form */}
             <div className="login-right">
                <div className="form-container">
                   <div className="form-header">
-                     <p className="greeting-text">Hello! Welcome back.</p>
-                     <h2 className="form-title">
-                        <span>Sign in</span> to your account
-                     </h2>
+                     <p className="greeting-text">Welcome back</p>
+                     <h2 className="form-title">Sign in to your TruthLens account</h2>
                   </div>
 
                   <form
@@ -230,73 +179,99 @@ function LoginPage() {
                         e.preventDefault();
                         handleSubmit();
                      }}
+                     noValidate
                   >
                      {error && (
-                        <div className="error-message">
-                           <Icons name="alert-triangle" size={16} /> {error}
+                        <div className="error-message" role="alert" aria-live="polite">
+                           <Icons name="alert-triangle" size={16} aria-hidden="true" />
+                           <span>{error}</span>
                         </div>
                      )}
 
                      <div className="input-group">
-                        <label>Email Address / Username</label>
+                        <label htmlFor="login-identifier">Username or email</label>
+
                         <div className="input-wrapper">
-                           <Icons name="mail" size={18} className="input-icon" />
+                           <Icons name="mail" size={18} className="input-icon" aria-hidden="true" />
+
                            <input
+                              id="login-identifier"
                               type="text"
                               name="username"
-                              placeholder="you@example.com"
+                              placeholder="Enter your username or email"
                               value={formValues.username}
                               onChange={handleInputChange}
+                              autoComplete="username"
+                              disabled={isSigningIn}
+                              aria-invalid={Boolean(error)}
                               required
                            />
                         </div>
                      </div>
 
                      <div className="input-group">
-                        <label>Password</label>
-                        <div className="input-wrapper">
-                           <Icons name="shield" size={18} className="input-icon" />
-                           <input
-                              type={showPassword ? "text" : "password"}
-                              name="password"
-                              placeholder="••••••••"
-                              value={formValues.password}
-                              onChange={handleInputChange}
-                              required
-                           />
-                           <button
-                              type="button"
-                              className="show-password-btn"
-                              onClick={() => setShowPassword(!showPassword)}
-                           >
-                              <Icons name={showPassword ? "eye-off" : "eye"} size={16} />
-                              {showPassword ? "Hide" : "Show"}
-                           </button>
+                        <div className="input-group password-group">
+                           <label htmlFor="login-password">Password</label>
+
+                           <div className="input-wrapper">
+                              <Icons name="lock" size={18} className="input-icon" aria-hidden="true" />
+
+                              <input
+                                 id="login-password"
+                                 type={showPassword ? "text" : "password"}
+                                 name="password"
+                                 placeholder="Enter your password"
+                                 value={formValues.password}
+                                 onChange={handleInputChange}
+                                 autoComplete="current-password"
+                                 disabled={isSigningIn}
+                                 required
+                              />
+
+                              <button
+                                 type="button"
+                                 className="show-password-btn"
+                                 onClick={() => setShowPassword((current) => !current)}
+                                 aria-label={showPassword ? "Hide password" : "Show password"}
+                                 aria-pressed={showPassword}
+                                 disabled={isSigningIn}
+                              >
+                                 <Icons name={showPassword ? "eye-off" : "eye"} size={16} aria-hidden="true" />
+                                 <span>{showPassword ? "Hide" : "Show"}</span>
+                              </button>
+                           </div>
+
+                           <Link to="/forgot-password" className="forgot-password">
+                              Forgot password?
+                           </Link>
                         </div>
                      </div>
 
                      <div className="form-options">
                         <label className="remember-me">
-                           <input type="checkbox" checked={formValues.remember_me} onChange={handleCheckbox} />
+                           <input
+                              type="checkbox"
+                              checked={formValues.remember_me}
+                              onChange={handleCheckbox}
+                              disabled={isSigningIn}
+                           />
+                           <span className="custom-checkbox" aria-hidden="true">
+                              <Icons name="check" size={13} />
+                           </span>
                            <span>Remember me</span>
                         </label>
-                        <a href="#" className="forgot-password">
-                           Forgot Password?
-                        </a>
                      </div>
 
-                     <button type="submit" className="submit-btn" disabled={isSigningIn}>
-                        {!isSigningIn && (
+                     <button type="submit" className="submit-btn" disabled={isSigningIn} aria-busy={isSigningIn}>
+                        {isSigningIn ? (
+                           <span className="sign-in-loading">
+                              <span className="sign-in-spinner" aria-hidden="true" />
+                              <span>Signing in…</span>
+                           </span>
+                        ) : (
                            <>
-                              SIGN IN <Icons name="arrow-right" size={18} />
-                           </>
-                        )}
-                        {isSigningIn && (
-                           <>
-                              <div className="sign-in-loading">
-                                 <span className="sign-in-spinner"></span>
-                                 <p>Signing In...</p>
-                              </div>
+                              <span>Sign in</span>
+                              <Icons name="arrow-right" size={18} aria-hidden="true" />
                            </>
                         )}
                      </button>
@@ -320,12 +295,16 @@ function LoginPage() {
                         onClick={() => loginWithGoogle()}
                         disabled={isSigningIn}
                      >
-                        <span className="social-icon">G</span> Google
+                        <span className="google-mark" aria-hidden="true">
+                           G
+                        </span>
+
+                        <span>Continue with Google</span>
                      </button>
                   </div>
                </div>
             </div>
-         </div>
+         </AuthShell>
       </>
    );
 }
