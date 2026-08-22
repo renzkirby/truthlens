@@ -76,12 +76,8 @@ REST_FRAMEWORK = {
         'anon': '5/minute',
         'user': '100/minute',
         'fact_check': os.getenv('DRF_FACT_CHECK_THROTTLE_RATE', '5/minute'),
-    },
-    "DEFAULT_THROTTLE_RATES": {
-        "anon": "5/minute",
-        "user": "100/minute",
         "password_reset": "3/hour",
-    },
+    }
 }
 
 MIDDLEWARE = [
