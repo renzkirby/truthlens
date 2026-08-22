@@ -1,20 +1,14 @@
 /**
  * Login Page (Authentication)
- * ══════════════════════════════════════════════════════════════════
- * User authentication interface for existing TruthLens members.
  *
  * Features:
- *   - Email/username and password authentication
- *   - Remember me toggling for persistent sessions
- *   - Show/hide password toggle
- *   - Forgot password link (placeholder)
- *   - Social login options (placeholder)
- *   - Redirect to requested page after login
- *
- * State:
- *   - Form inputs: username, password, remember_me
- *   - UI state: showPassword, isSigningIn
- *   - Error handling for failed logins
+ * - Username/email and password authentication
+ * - Persistent sessions with Remember Me
+ * - Show/hide password toggle
+ * - Password reset flow
+ * - Google OAuth authentication
+ * - Redirect to requested route after login
+ * - Success/error feedback
  */
 
 import { useState, useEffect } from "react";
@@ -217,48 +211,46 @@ function LoginPage() {
                               onChange={handleInputChange}
                               autoComplete="username"
                               disabled={isSigningIn}
-                              aria-invalid={Boolean(error)}
+                              aria-invalid={undefined}
                               required
                            />
                         </div>
                      </div>
 
-                     <div className="input-group">
-                        <div className="input-group password-group">
-                           <label htmlFor="login-password">Password</label>
+                     <div className="input-group password-group">
+                        <label htmlFor="login-password">Password</label>
 
-                           <div className="input-wrapper">
-                              <Icons name="lock" size={18} className="input-icon" aria-hidden="true" />
+                        <div className="input-wrapper">
+                           <Icons name="lock" size={18} className="input-icon" aria-hidden="true" />
 
-                              <input
-                                 id="login-password"
-                                 type={showPassword ? "text" : "password"}
-                                 name="password"
-                                 placeholder="Enter your password"
-                                 value={formValues.password}
-                                 onChange={handleInputChange}
-                                 autoComplete="current-password"
-                                 disabled={isSigningIn}
-                                 required
-                              />
+                           <input
+                              id="login-password"
+                              type={showPassword ? "text" : "password"}
+                              name="password"
+                              placeholder="Enter your password"
+                              value={formValues.password}
+                              onChange={handleInputChange}
+                              autoComplete="current-password"
+                              disabled={isSigningIn}
+                              required
+                           />
 
-                              <button
-                                 type="button"
-                                 className="show-password-btn"
-                                 onClick={() => setShowPassword((current) => !current)}
-                                 aria-label={showPassword ? "Hide password" : "Show password"}
-                                 aria-pressed={showPassword}
-                                 disabled={isSigningIn}
-                              >
-                                 <Icons name={showPassword ? "eye-off" : "eye"} size={16} aria-hidden="true" />
-                                 <span>{showPassword ? "Hide" : "Show"}</span>
-                              </button>
-                           </div>
-
-                           <Link to="/forgot-password" className="forgot-password">
-                              Forgot password?
-                           </Link>
+                           <button
+                              type="button"
+                              className="show-password-btn"
+                              onClick={() => setShowPassword((current) => !current)}
+                              aria-label={showPassword ? "Hide password" : "Show password"}
+                              aria-pressed={showPassword}
+                              disabled={isSigningIn}
+                           >
+                              <Icons name={showPassword ? "eye-off" : "eye"} size={16} aria-hidden="true" />
+                              <span>{showPassword ? "Hide" : "Show"}</span>
+                           </button>
                         </div>
+
+                        <Link to="/forgot-password" className="forgot-password">
+                           Forgot password?
+                        </Link>
                      </div>
 
                      <div className="form-options">
