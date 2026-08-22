@@ -99,9 +99,11 @@ import {
    ArrowDown,
    ArrowUpRight,
    ShieldCheck,
+   MailCheck,
 } from "lucide-react";
 
 const ICON_MAP = {
+   "mail-check": MailCheck,
    "shield-check": ShieldCheck,
    file: File,
    "arrow-up": ArrowUp,
@@ -204,34 +206,13 @@ const ICON_MAP = {
    "user-minus": UserMinus,
 };
 
-export default function Icons({
-   name,
-   size = 16,
-   color = "currentColor",
-   strokeWidth = 2,
-   className,
-   style,
-}) {
+export default function Icons({ name, size = 16, color = "currentColor", strokeWidth = 2, className, style }) {
    const Icon = ICON_MAP[name];
 
    if (!Icon) {
       console.warn(`Icons: unknown icon name "${name}"`);
-      return (
-         <HelpCircle
-            size={size}
-            color="red"
-            strokeWidth={strokeWidth}
-         />
-      );
+      return <HelpCircle size={size} color="red" strokeWidth={strokeWidth} />;
    }
 
-   return (
-      <Icon
-         size={size}
-         color={color}
-         strokeWidth={strokeWidth}
-         className={className}
-         style={style}
-      />
-   );
+   return <Icon size={size} color={color} strokeWidth={strokeWidth} className={className} style={style} />;
 }

@@ -101,6 +101,8 @@ export const API_ENDPOINTS = {
    PROFILE: "auth/profile/",
    MY_CLAIMS: "auth/my-claims/",
    GOOGLE_LOGIN: "auth/google/",
+   PASSWORD_RESET: "auth/password-reset/",
+   PASSWORD_RESET_CONFIRM: "auth/password-reset/confirm/",
 
    // Claims & Threads
    CLAIMS: "claims/",

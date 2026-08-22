@@ -1,5 +1,9 @@
 from rest_framework.throttling import SimpleRateThrottle
+from rest_framework.throttling import AnonRateThrottle
 
+
+class PasswordResetRateThrottle(AnonRateThrottle):
+    scope = "password_reset"
 
 class FactCheckRateThrottle(SimpleRateThrottle):
     scope = "fact_check"

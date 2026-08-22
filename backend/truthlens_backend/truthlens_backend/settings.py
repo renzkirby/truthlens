@@ -77,6 +77,11 @@ REST_FRAMEWORK = {
         'user': '100/minute',
         'fact_check': os.getenv('DRF_FACT_CHECK_THROTTLE_RATE', '5/minute'),
     },
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "5/minute",
+        "user": "100/minute",
+        "password_reset": "3/hour",
+    },
 }
 
 MIDDLEWARE = [
@@ -234,17 +239,6 @@ AUTHENTICATION_BACKENDS = [
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend' #Testing
-
-#Production
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-# EMAIL_HOST = 'smtp.gmail.com'
-# EMAIL_PORT = 587
-# EMAIL_USE_TLS = True
-# EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
-# EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
-# DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL')
-
 #Authentication and Google OAuth settings
 SITE_ID = 1
 REST_AUTH = {
@@ -275,3 +269,24 @@ SOCIALACCOUNT_PROVIDERS = {
         }
     }
 }
+
+#EMAIL CONFIGURATION
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend",
+)
+
+EMAIL_HOST = os.getenv("EMAIL_HOST", "")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+
+EMAIL_USE_TLS = (
+    os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
+)
+
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DEFAULT_FROM_EMAIL",
+    "TruthLens <onboarding@resend.dev>",
+)

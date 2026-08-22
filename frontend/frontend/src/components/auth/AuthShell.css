@@ -207,3 +207,34 @@
       transition-duration: 0.01ms !important;
    }
 }
+
+.form-description {
+   margin: 0.75rem 0 0;
+   color: var(--text-muted, #6b7280);
+   font-size: 0.9rem;
+   line-height: 1.6;
+}
+
+.auth-status {
+   text-align: center;
+}
+
+.auth-status-icon {
+   width: 3rem;
+   height: 3rem;
+   margin: 0 auto 1.25rem;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   border-radius: 50%;
+   color: var(--primary-brand, #4f46e5);
+   background: rgba(79, 70, 229, 0.08);
+}
+
+.auth-status .form-description {
+   margin-bottom: 1.75rem;
+}
+
+.auth-link-button {
+   text-decoration: none;
+}

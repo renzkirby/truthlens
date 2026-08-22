@@ -1,5 +1,13 @@
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes, force_str
+from django.conf import settings
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import JsonResponse
 from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
@@ -26,6 +34,7 @@ import uuid
 import io
 import PyPDF2
 import docx
+import os
 from .services import (
     detect_ai_image, 
     generate_deepfake_explanation,
@@ -55,7 +64,10 @@ from .models import (
     OfficialFactCheck,
 )
 from .trust_service import recompute_user_trust_score
-from .throttles import FactCheckRateThrottle
+from .throttles import (
+    FactCheckRateThrottle,
+    PasswordResetRateThrottle,
+)
 from .serializers import (
     RegisterSerializer,
     UserSerializer,
@@ -1609,3 +1621,138 @@ def verify_file(request):
         
     except Exception as e:
         return Response({"error": f"Failed to process document: {str(e)}"}, status=500)
+
+# Password Reset Request Endpoint
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([PasswordResetRateThrottle])
+def request_password_reset(request):
+    email = str(request.data.get("email", "")).strip().lower()
+
+    generic_message = (
+        "If an account exists for this email, "
+        "password reset instructions have been sent."
+    )
+
+    if not email:
+        return Response(
+            {"detail": "Email is required."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user = User.objects.filter(email__iexact=email).first()
+
+    if user:
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+
+        frontend_url = os.getenv(
+            "FRONTEND_URL",
+            "http://localhost:5173",
+        ).rstrip("/")
+
+        reset_url = f"{frontend_url}/reset-password/{uid}/{token}"
+
+        subject = "Reset your TruthLens password"
+
+        text_body = (
+            "We received a request to reset your TruthLens password.\n\n"
+            f"Reset your password here:\n{reset_url}\n\n"
+            "This link is single-use and will expire.\n\n"
+            "If you did not request this, you can ignore this email."
+        )
+
+        html_body = render_to_string(
+            "emails/password_reset.html",
+            {
+                "reset_url": reset_url,
+            },
+        )
+
+        email_message = EmailMultiAlternatives(
+            subject=subject,
+            body=text_body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[user.email],
+        )
+
+        email_message.attach_alternative(
+            html_body,
+            "text/html",
+        )
+
+        try:
+            email_message.send(fail_silently=False)
+
+        except Exception as error:
+            print(f"Password reset email failed: {error}")
+
+    return Response(
+        {"detail": generic_message},
+        status=status.HTTP_200_OK,
+    )
+
+# Password Reset Confirmation Endpoint
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def confirm_password_reset(request):
+    uid = request.data.get("uid")
+    token = request.data.get("token")
+    new_password = request.data.get("new_password")
+    confirm_password = request.data.get("confirm_password")
+
+    if not all([uid, token, new_password, confirm_password]):
+        return Response(
+            {"detail": "All fields are required."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if new_password != confirm_password:
+        return Response(
+            {"detail": "Passwords do not match."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        user_id = force_str(urlsafe_base64_decode(uid))
+        user = User.objects.get(pk=user_id)
+
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist) as error:
+        print("RESET DEBUG uid decode/user lookup failed:", error)
+
+        return Response(
+            {"detail": "This password reset link is invalid or has expired."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    token_is_valid = default_token_generator.check_token(user, token)
+
+    print("RESET DEBUG token valid:", token_is_valid)
+
+    if not token_is_valid:
+        return Response(
+            {"detail": "This password reset link is invalid or has expired."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not default_token_generator.check_token(user, token):
+        return Response(
+            {"detail": "This password reset link is invalid or has expired."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        validate_password(new_password, user=user)
+    except DjangoValidationError as error:
+        return Response(
+            {"detail": error.messages},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user.set_password(new_password)
+    user.save(update_fields=["password"])
+
+    return Response(
+        {"detail": "Your password has been reset successfully."},
+        status=status.HTTP_200_OK,
+    )
