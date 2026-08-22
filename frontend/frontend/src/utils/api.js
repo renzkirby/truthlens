@@ -10,6 +10,7 @@
  */
 import axios from "axios";
 import { API_BASE_URL, API_ENDPOINTS } from "./constants";
+import { getAccessToken } from "./authStorage";
 
 /**
  * Build full API URL from base and relative path.
@@ -47,7 +48,7 @@ export function resolveApiEndpoint(endpoint, ...params) {
 export const getUserHubData = async () => {
    const response = await axios.get(`${API_BASE_URL}/dashboards/hub/`, {
       headers: {
-         Authorization: `Bearer ${localStorage.getItem("access")}`,
+         Authorization: `Bearer ${getAccessToken()}`,
       },
    });
    return response.data;
@@ -60,7 +61,7 @@ export const toggleSaveClaim = async (claimId) => {
       {},
       {
          headers: {
-            Authorization: `Bearer ${localStorage.getItem("access")}`,
+            Authorization: `Bearer ${getAccessToken()}`,
          },
       },
    );

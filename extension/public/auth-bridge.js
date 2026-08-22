@@ -8,8 +8,9 @@
    window.__truthLensAuthBridgeLoaded = true;
 
    const readTokenSnapshot = () => ({
-      access: window.localStorage.getItem("access") || null,
-      refresh: window.localStorage.getItem("refresh") || null,
+      access: window.localStorage.getItem("access") || window.sessionStorage.getItem("access") || null,
+
+      refresh: window.localStorage.getItem("refresh") || window.sessionStorage.getItem("refresh") || null,
    });
 
    const isSameSnapshot = (a, b) => a?.access === b?.access && a?.refresh === b?.refresh;
