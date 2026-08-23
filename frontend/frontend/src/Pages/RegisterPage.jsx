@@ -35,7 +35,8 @@ function RegisterPage() {
    const navigate = useNavigate();
    const location = useLocation();
    const from = location.state?.from ? location.state.from.pathname + location.state.from.search : "/community";
-   const [error, setError] = useState(null);
+   const [error, setError] = useState("");
+   const [fieldErrors, setFieldErrors] = useState({});
    const [showPassword, setShowPassword] = useState(false);
    const [formValues, setFormValues] = useState({
       username: "",
@@ -89,10 +90,18 @@ function RegisterPage() {
 
    const handleInputChange = (event) => {
       const { name, value } = event.target;
-      setFormValues({
-         ...formValues,
+
+      setFormValues((current) => ({
+         ...current,
          [name]: value,
-      });
+      }));
+
+      setFieldErrors((current) => ({
+         ...current,
+         [name]: "",
+      }));
+
+      setError("");
    };
 
    const redirectAfterRegister = (isNewAccount = false) => {
@@ -109,35 +118,92 @@ function RegisterPage() {
       navigate(from, { replace: true });
    };
 
+   const normalizeRegistrationErrors = (data) => {
+      const fields = {};
+
+      if (!data || typeof data !== "object") {
+         return {
+            form: "Unable to create your account. Please try again.",
+            fields,
+         };
+      }
+
+      if (data.username) {
+         fields.username = Array.isArray(data.username) ? data.username.join(" ") : String(data.username);
+      }
+
+      if (data.email) {
+         fields.email = Array.isArray(data.email) ? data.email.join(" ") : String(data.email);
+      }
+
+      if (data.password) {
+         fields.password = Array.isArray(data.password) ? data.password.join(" ") : String(data.password);
+      }
+
+      return {
+         form:
+            typeof data.detail === "string"
+               ? data.detail
+               : typeof data.non_field_errors?.[0] === "string"
+                 ? data.non_field_errors[0]
+                 : "",
+         fields,
+      };
+   };
    /**
     * Handle form submission and account creation
     * Posts credentials to backend, stores tokens, redirects on success
     */
    const handleSubmit = async () => {
+      if (isSigningIn) return;
+
       setIsSigningIn(true);
-      setError(null);
+      setError("");
+      setFieldErrors({});
+
       const registerEndpoint = resolveApiEndpoint("REGISTER");
 
       try {
          const response = await fetch(registerEndpoint, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+               "Content-Type": "application/json",
+            },
             body: JSON.stringify({
-               username: formValues.username,
-               email: formValues.email,
+               username: formValues.username.trim(),
+               email: formValues.email.trim().toLowerCase(),
                password: formValues.password,
             }),
          });
 
-         const data = await response.json();
-         if (response.ok) {
-            login(data.access, data.refresh);
-            redirectAfterRegister(true);
-         } else {
-            setError(data.detail || "Something went wrong");
+         const data = await response.json().catch(() => ({}));
+
+         if (!response.ok) {
+            console.log("Registration validation response:", data);
+
+            const normalized = normalizeRegistrationErrors(data);
+
+            setFieldErrors(normalized.fields);
+
+            if (normalized.form || Object.keys(normalized.fields).length === 0) {
+               setError(
+                  normalized.form || "Unable to create your account. Please check your information and try again.",
+               );
+            }
+
+            return;
          }
+
+         if (!data?.access || !data?.refresh) {
+            throw new Error("Registration succeeded without authentication tokens.");
+         }
+
+         await login(data.access, data.refresh);
+
+         redirectAfterRegister(true);
       } catch (err) {
          console.error("Registration error:", err);
+
          setError("Unable to register right now. Please try again.");
       } finally {
          setIsSigningIn(false);
@@ -220,62 +286,105 @@ function RegisterPage() {
                      }}
                   >
                      {error && (
-                        <div className="error-message">
-                           <Icons name="alert-triangle" size={16} /> {error}
+                        <div className="error-message" role="alert">
+                           <Icons name="alert-triangle" size={16} />
+                           <span>{error}</span>
                         </div>
                      )}
 
                      <div className="input-group">
-                        <label>Username</label>
+                        <label htmlFor="register-username">Username</label>
+
                         <div className="input-wrapper">
                            <Icons name="user" size={18} className="input-icon" />
+
                            <input
+                              id="register-username"
                               type="text"
                               name="username"
+                              autoComplete="username"
                               placeholder="Choose a unique username..."
                               value={formValues.username}
                               onChange={handleInputChange}
+                              aria-invalid={Boolean(fieldErrors.username)}
+                              aria-describedby={fieldErrors.username ? "register-username-error" : undefined}
                               required
                            />
                         </div>
+
+                        {fieldErrors.username && (
+                           <p id="register-username-error" className="field-error">
+                              {fieldErrors.username}
+                           </p>
+                        )}
                      </div>
 
                      <div className="input-group">
-                        <label>Email Address</label>
+                        <label htmlFor="register-email">Email Address</label>
+
                         <div className="input-wrapper">
                            <Icons name="mail" size={18} className="input-icon" />
+
                            <input
+                              id="register-email"
                               type="email"
                               name="email"
+                              autoComplete="email"
                               placeholder="you@example.com"
                               value={formValues.email}
                               onChange={handleInputChange}
+                              aria-invalid={Boolean(fieldErrors.email)}
+                              aria-describedby={fieldErrors.email ? "register-email-error" : undefined}
+                              disabled={isSigningIn}
                               required
                            />
                         </div>
+
+                        {fieldErrors.email && (
+                           <p id="register-email-error" className="field-error">
+                              {fieldErrors.email}
+                           </p>
+                        )}
                      </div>
 
                      <div className="input-group">
-                        <label>Password</label>
+                        <label htmlFor="register-password">Password</label>
+
                         <div className="input-wrapper">
                            <Icons name="shield" size={18} className="input-icon" />
+
                            <input
+                              id="register-password"
                               type={showPassword ? "text" : "password"}
                               name="password"
+                              autoComplete="new-password"
                               placeholder="••••••••"
                               value={formValues.password}
                               onChange={handleInputChange}
+                              aria-invalid={Boolean(fieldErrors.password)}
+                              aria-describedby={fieldErrors.password ? "register-password-error" : undefined}
+                              disabled={isSigningIn}
                               required
                            />
+
                            <button
                               type="button"
                               className="show-password-btn"
-                              onClick={() => setShowPassword(!showPassword)}
+                              onClick={() => setShowPassword((current) => !current)}
+                              aria-label={showPassword ? "Hide password" : "Show password"}
+                              aria-pressed={showPassword}
+                              disabled={isSigningIn}
                            >
-                              <Icons name="eye" size={16} />
+                              <Icons name={showPassword ? "eye-off" : "eye"} size={16} />
                               {showPassword ? "Hide" : "Show"}
                            </button>
                         </div>
+
+                        {fieldErrors.password && (
+                           <p id="register-password-error" className="field-error">
+                              {fieldErrors.password}
+                           </p>
+                        )}
                      </div>
 
                      <button type="submit" className="submit-btn" disabled={isSigningIn}>

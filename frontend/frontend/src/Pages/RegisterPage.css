@@ -374,3 +374,10 @@
       flex-direction: column;
    }
 }
+
+.field-error {
+   margin: 6px 0 0;
+   font-size: 0.8125rem;
+   line-height: 1.4;
+   color: var(--error-color, #dc2626);
+}
