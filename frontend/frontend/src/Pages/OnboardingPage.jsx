@@ -209,7 +209,7 @@ function StepVisual({ type }) {
                </div>
                <div className="ob-trust-row">
                   <Icons name="trophy" size={13} color="#d97706" />
-                  <span>Your Trust Score increases with every accurate vote</span>
+                  <span>Your contributions help shape your Trust Score</span>
                </div>
             </div>
          </div>
