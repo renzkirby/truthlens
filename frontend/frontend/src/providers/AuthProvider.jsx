@@ -26,10 +26,14 @@ export function AuthProvider({ children }) {
    const login = (access, refresh, rememberMe = false) => {
       storeAuthTokens(access, refresh, rememberMe);
 
-      if (access) {
-         setToken(access);
-         fetchUser(access);
+      if (!access) {
+         setToken(null);
+         return Promise.resolve(null);
       }
+
+      setToken(access);
+
+      return fetchUser(access);
    };
 
    const logout = () => {

@@ -50,13 +50,18 @@ function RegisterPage() {
    // ── Google OAuth Hook ──
    const loginWithGoogle = useGoogleLogin({
       onSuccess: async (tokenResponse) => {
+         if (isSigningIn) return;
+
          setIsSigningIn(true);
-         setError(null);
+         setError("");
+         setFieldErrors({});
 
          try {
             const response = await fetch(googleLoginEndpoint, {
                method: "POST",
-               headers: { "Content-Type": "application/json" },
+               headers: {
+                  "Content-Type": "application/json",
+               },
                body: JSON.stringify({
                   access_token: tokenResponse.access_token,
                }),
@@ -64,27 +69,44 @@ function RegisterPage() {
 
             const data = await response.json().catch(() => ({}));
 
-            if (response.ok && data?.access) {
-               login(data.access, data.refresh);
+            if (!response.ok || !data?.access) {
+               setError(data?.detail || "Unable to continue with Google right now. Please try again.");
+               return;
+            }
+
+            const authenticatedUser = await login(data.access, data.refresh);
+
+            if (!authenticatedUser) {
+               throw new Error("Unable to load the authenticated user.");
+            }
+
+            if (authenticatedUser.has_completed_onboarding === false) {
                navigate("/onboarding", {
                   replace: true,
                   state: {
                      from: location.state?.from,
                   },
                });
+
+               return;
             }
 
-            setError(data?.detail || "Unable to register with Google right now. Please try again.");
+            navigate(from, {
+               replace: true,
+            });
          } catch (err) {
-            console.error("Google Login error:", err);
-            setError("Unable to register with Google right now. Please try again.");
+            console.error("Google registration error:", err);
+
+            setError("Unable to continue with Google right now. Please try again.");
          } finally {
             setIsSigningIn(false);
          }
       },
+
       onError: () => {
-         setError("Google sign-in failed. Please try again.");
          console.error("Google Sign-In Error");
+
+         setError("Google sign-in failed. Please try again.");
       },
    });
 
@@ -209,8 +231,6 @@ function RegisterPage() {
          setIsSigningIn(false);
       }
    };
-
-   console.log("Register received from:", location.state?.from);
 
    return (
       <>
