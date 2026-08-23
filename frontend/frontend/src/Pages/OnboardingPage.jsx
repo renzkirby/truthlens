@@ -1,21 +1,10 @@
 /**
- * OnboardingPage.jsx
- * ══════════════════════════════════════════════════════════════════
- * First-time user onboarding flow for TruthLens.
+ * First-time authenticated-user onboarding flow.
  *
- * Features:
- *   - 5-step guided tour of TruthLens features
- *   - Progress indicator with step dots
- *   - Skip option on every step
- *   - Completion stored in localStorage ("tl_onboarding_complete")
- *   - Redirects to /community on finish or skip
- *
- * Steps:
- *   1. Welcome — what TruthLens is
- *   2. Browser Extension — snipping tool and URL verifier
- *   3. Web Platform — Verify page
- *   4. Community & Trust Score — how contributions work
- *   5. Ready — CTA to get started
+ * - Five-step product introduction
+ * - Account-level completion persisted by the backend
+ * - Can be completed or skipped once
+ * - Preserves the destination that initiated registration
  */
 
 import { useState } from "react";
@@ -34,8 +23,8 @@ const STEPS = [
       accentColor: "var(--brand-primary)",
       accentBg: "#ede9fe",
       title: (username) => `Welcome to TruthLens${username ? `, @${username}` : ""}!`,
-      subtitle: "You've just joined a community dedicated to fighting misinformation — one claim at a time.",
-      body: "TruthLens is an AI-powered fact-checking platform that helps you verify what's real and what's fake before you share it. In the next few steps, we'll show you exactly how it works.",
+      subtitle: "A better way to investigate questionable information.",
+      body: "TruthLens combines AI-assisted analysis with community evidence to help you evaluate claims before deciding what to trust or share. Here's a quick look at the tools available to you.",
       visual: "welcome",
    },
    {
@@ -44,20 +33,20 @@ const STEPS = [
       icon: "puzzle",
       accentColor: "#0e9f6e",
       accentBg: "#d1fae5",
-      title: () => "Verify Anything, Anywhere",
-      subtitle: "The TruthLens Chrome extension lets you fact-check without leaving your feed.",
-      body: "Use the Snipping Tool to draw a box over any suspicious image or post. The extension reads the text, runs it through our AI pipeline, and delivers a verdict — FACT, FAKE, MISLEADING, SATIRE, or UNVERIFIED — directly on the page.",
+      title: () => "Investigate Without Leaving the Page",
+      subtitle: "Use the TruthLens Chrome extension while browsing the web.",
+      body: "Analyze supported pages, URLs, images, and selected content directly from your browser. TruthLens returns an AI-assisted verdict, supporting information, and a confidence indicator when available.",
       visual: "extension",
    },
    {
       id: "web",
-      label: "Web Platform",
+      label: "Analysis",
       icon: "scan-line",
       accentColor: "#7c3aed",
       accentBg: "#ede9fe",
-      title: () => "Verify on the Web Platform",
-      subtitle: "Paste a URL or upload an image directly from your browser.",
-      body: "Head to the Verify page to submit links and images without the extension. Our AI pipeline extracts the claim, cross-references it against live news sources and official fact-check databases, and returns a verdict with a confidence score and source citations.",
+      title: () => "Explore the Full Analysis",
+      subtitle: "Review more context, evidence, and sources behind a result.",
+      body: "TruthLens lets you inspect analyzed claims in more detail, including available evidence, source information, confidence signals, and the reasoning behind the result.",
       visual: "verify",
    },
    {
@@ -66,9 +55,9 @@ const STEPS = [
       icon: "users",
       accentColor: "#d97706",
       accentBg: "#fef3c7",
-      title: () => "Your Voice Matters",
-      subtitle: "When AI isn't sure, the community steps in.",
-      body: "Claims that return UNVERIFIED are escalated to the Community Feed, where contributors like you can submit evidence, vote on its credibility, and help reach a final verdict. Every accurate contribution you make increases your Trust Score — your measure of credibility on the platform.",
+      title: () => "Add Human Evidence",
+      subtitle: "Some claims benefit from more than automated analysis.",
+      body: "Community investigations let contributors discuss claims, submit evidence, and evaluate supporting material. Meaningful participation contributes to your reputation and Trust Score on TruthLens.",
       visual: "community",
    },
    {
@@ -77,9 +66,9 @@ const STEPS = [
       icon: "rocket",
       accentColor: "var(--brand-primary)",
       accentBg: "#ede9fe",
-      title: (username) => `You're all set${username ? `, @${username}` : ""}!`,
-      subtitle: "Start fighting misinformation today.",
-      body: "Explore the Community Feed to see what others are investigating, or head straight to the Verify page to fact-check your first claim. The truth is out there — let's find it together.",
+      title: (username) => `You're ready${username ? `, @${username}` : ""}.`,
+      subtitle: "Start investigating with the tools that brought you here.",
+      body: "You can explore community investigations, review a full analysis, or continue the action you started before creating your account.",
       visual: "ready",
    },
 ];
@@ -152,7 +141,7 @@ function StepVisual({ type }) {
                <div className="ob-result-bar">
                   <div className="ob-result-fill" style={{ width: "89%" }} />
                </div>
-               <span className="ob-result-conf">89% confidence</span>
+               <span className="ob-result-conf">Confidence indicator</span>
             </div>
          </div>
       );
@@ -182,7 +171,7 @@ function StepVisual({ type }) {
                   </p>
                   <div className="ob-verify-source">
                      <Icons name="external-link" size={12} color="#6b7280" />
-                     <span>Source: Reuters Fact Check</span>
+                     <span>Supporting source</span>
                   </div>
                </div>
             </div>
@@ -233,18 +222,20 @@ function StepVisual({ type }) {
             <div className="ob-ready-ring">
                <Icons name="check-circle" size={48} color="#0e9f6e" />
             </div>
-            <div className="ob-stats-row">
-               <div className="ob-stat-chip">
-                  <span className="ob-stat-num">12k+</span>
-                  <span className="ob-stat-label">Claims Verified</span>
+            <div className="ob-ready-actions">
+               <div className="ob-ready-item">
+                  <Icons name="scan-line" size={16} />
+                  <span>Review detailed analysis</span>
                </div>
-               <div className="ob-stat-chip">
-                  <span className="ob-stat-num">500+</span>
-                  <span className="ob-stat-label">Contributors</span>
+
+               <div className="ob-ready-item">
+                  <Icons name="users" size={16} />
+                  <span>Join community investigations</span>
                </div>
-               <div className="ob-stat-chip">
-                  <span className="ob-stat-num">98%</span>
-                  <span className="ob-stat-label">Accuracy</span>
+
+               <div className="ob-ready-item">
+                  <Icons name="puzzle" size={16} />
+                  <span>Use TruthLens while browsing</span>
                </div>
             </div>
          </div>
@@ -345,16 +336,12 @@ export default function OnboardingPage() {
       goToStep(index, index > currentStep ? "forward" : "back");
    };
 
-   console.log("Onboarding received from:", location.state?.from);
-
-   console.log("Onboarding destination:", onboardingDestination);
-
    return (
       <div className="ob-page">
          {/* Skip button — always visible except on last step */}
          {!isLast && (
             <button className="ob-skip-btn" onClick={handleSkip} disabled={isCompleting}>
-               {isCompleting ? "Finishing..." : "Skip for now"}
+               {isCompleting ? "Finishing..." : "Skip introduction"}
             </button>
          )}
 
@@ -403,30 +390,32 @@ export default function OnboardingPage() {
                         backgroundColor: step.accentColor,
                      }}
                   >
-                     {isLast ? (isCompleting ? "Finishing..." : "Go to Community Feed") : "Next"}
+                     {isLast ? (isCompleting ? "Finishing..." : "Continue to TruthLens") : "Next"}
                   </button>
                </div>
 
                {/* Dot indicators */}
-               <div className="ob-dots" role="tablist" aria-label="Onboarding steps">
+               <nav className="ob-dots" aria-label="Onboarding steps">
                   {STEPS.map((s, i) => (
                      <button
                         key={s.id}
-                        role="tab"
-                        aria-selected={i === currentStep}
-                        aria-label={`Step ${i + 1}: ${s.label}`}
-                        className={`ob-dot ${i === currentStep ? "ob-dot--active" : ""} ${i < currentStep ? "ob-dot--done" : ""}`}
+                        type="button"
+                        aria-current={i === currentStep ? "step" : undefined}
+                        aria-label={`Go to step ${i + 1}: ${s.label}`}
+                        className={`ob-dot ${i === currentStep ? "ob-dot--active" : ""} ${
+                           i < currentStep ? "ob-dot--done" : ""
+                        }`}
                         style={
-                           i === currentStep
-                              ? { backgroundColor: step.accentColor }
-                              : i < currentStep
-                                ? { backgroundColor: `${step.accentColor}60` }
-                                : {}
+                           i <= currentStep
+                              ? {
+                                   backgroundColor: s.accentColor,
+                                }
+                              : {}
                         }
                         onClick={() => handleDotClick(i)}
                      />
                   ))}
-               </div>
+               </nav>
             </div>
 
             {/* Right — visual */}

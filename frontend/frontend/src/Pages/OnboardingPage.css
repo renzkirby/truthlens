@@ -249,7 +249,12 @@
    padding: 0;
    transition:
       background 0.2s,
-      width 0.2s;
+      width 0.2s,
+      transform 0.15s;
+}
+
+.ob-dot:hover {
+   transform: scale(1.2);
 }
 
 .ob-dot--active {
@@ -258,7 +263,7 @@
 }
 
 .ob-dot--done {
-   opacity: 0.5;
+   opacity: 1;
 }
 
 /* ── Right Visual Panel ── */
