@@ -51,8 +51,7 @@ function normalizeGuestScanRecord({ verdictPayload, scanType }) {
       return null;
    }
 
-   const verdict =
-      verdictPayload.final_verdict || verdictPayload.verdict || "UNVERIFIED";
+   const verdict = verdictPayload.final_verdict || verdictPayload.verdict || "UNVERIFIED";
    const confidenceScore = Number(verdictPayload.confidence_score ?? 0);
 
    return {
@@ -75,9 +74,7 @@ async function appendGuestScan(verdictPayload, scanType) {
    }
 
    const stored = await storageLocalGet([GUEST_SCANS_STORAGE_KEY]);
-   const existing = Array.isArray(stored[GUEST_SCANS_STORAGE_KEY])
-      ? stored[GUEST_SCANS_STORAGE_KEY]
-      : [];
+   const existing = Array.isArray(stored[GUEST_SCANS_STORAGE_KEY]) ? stored[GUEST_SCANS_STORAGE_KEY] : [];
    const capped = [...existing, nextRecord].slice(-GUEST_SCANS_CAP);
 
    await storageLocalSet({
@@ -126,9 +123,7 @@ async function fetchAuthenticatedUsername() {
 
 async function syncGuestScansWithBackend() {
    const stored = await storageLocalGet([GUEST_SCANS_STORAGE_KEY]);
-   const guestScans = Array.isArray(stored[GUEST_SCANS_STORAGE_KEY])
-      ? stored[GUEST_SCANS_STORAGE_KEY]
-      : [];
+   const guestScans = Array.isArray(stored[GUEST_SCANS_STORAGE_KEY]) ? stored[GUEST_SCANS_STORAGE_KEY] : [];
 
    if (!guestScans.length) {
       return { synced: 0, skipped: true, reason: "no_guest_scans" };
@@ -145,30 +140,21 @@ async function syncGuestScansWithBackend() {
    let remainingScans = [...guestScans];
 
    for (const scan of guestScans) {
-      const response = await fetch(
-         `${state.API_BASE_URL}/${GUEST_SCAN_SYNC_ENDPOINT}`,
-         {
-            method: "POST",
-            headers: headersWithAuth,
-            body: JSON.stringify({ scan }),
-         },
-      );
+      const response = await fetch(`${state.API_BASE_URL}/${GUEST_SCAN_SYNC_ENDPOINT}`, {
+         method: "POST",
+         headers: headersWithAuth,
+         body: JSON.stringify({ scan }),
+      });
 
       const responseData = await response.json().catch(() => ({}));
 
       if (response.status === 401) {
          await clearAuthSession();
-         throw new Error(
-            responseData?.detail || "Authentication expired during guest sync.",
-         );
+         throw new Error(responseData?.detail || "Authentication expired during guest sync.");
       }
 
       if (!response.ok) {
-         throw new Error(
-            responseData?.detail ||
-               responseData?.error ||
-               "Guest scan sync failed.",
-         );
+         throw new Error(responseData?.detail || responseData?.error || "Guest scan sync failed.");
       }
 
       syncedCount += 1;
@@ -283,10 +269,7 @@ function startPollingClaim({
             try {
                await onTimeout(timeoutPayload);
             } catch (cacheError) {
-               console.warn(
-                  "Failed to cache guest timeout verdict:",
-                  cacheError,
-               );
+               console.warn("Failed to cache guest timeout verdict:", cacheError);
             }
          }
 
@@ -325,6 +308,25 @@ function startPollingClaim({
 }
 
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
+   if (request.type === "REQUEST_WEB_AUTH_SESSION") {
+      (async () => {
+         const session = await getAuthSession();
+
+         sendResponse({
+            accepted: true,
+            access: session?.accessToken || null,
+            refresh: session?.refreshToken || null,
+         });
+      })().catch((error) => {
+         sendResponse({
+            accepted: false,
+            error: error?.message || "Failed to restore auth session.",
+         });
+      });
+
+      return true;
+   }
+
    if (request.type === "SYNC_GUEST_SCANS_NOW") {
       (async () => {
          const session = await getAuthSession();
@@ -381,14 +383,8 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
          return false;
       }
 
-      const accessToken =
-         typeof payload.access === "string" && payload.access.trim()
-            ? payload.access
-            : null;
-      const refreshToken =
-         typeof payload.refresh === "string" && payload.refresh.trim()
-            ? payload.refresh
-            : null;
+      const accessToken = typeof payload.access === "string" && payload.access.trim() ? payload.access : null;
+      const refreshToken = typeof payload.refresh === "string" && payload.refresh.trim() ? payload.refresh : null;
 
       (async () => {
          if (!accessToken && !refreshToken) {
@@ -419,20 +415,16 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
    if (request.type === "CAPTURE_SCREENSHOT") {
       console.log("Capturing full tab screenshot");
 
-      chrome.tabs.captureVisibleTab(
-         null,
-         { format: "png" },
-         function (dataUrl) {
-            if (chrome.runtime.lastError) {
-               console.error("Screenshot error:", chrome.runtime.lastError);
-               sendResponse({ error: chrome.runtime.lastError.message });
-               return;
-            }
+      chrome.tabs.captureVisibleTab(null, { format: "png" }, function (dataUrl) {
+         if (chrome.runtime.lastError) {
+            console.error("Screenshot error:", chrome.runtime.lastError);
+            sendResponse({ error: chrome.runtime.lastError.message });
+            return;
+         }
 
-            console.log("Screenshot captured, sending back to popup");
-            sendResponse({ screenshot: dataUrl });
-         },
-      );
+         console.log("Screenshot captured, sending back to popup");
+         sendResponse({ screenshot: dataUrl });
+      });
 
       return true;
    }
@@ -466,18 +458,13 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             const res = await postJsonWithAuthFallback("analyze/", payload);
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-               throw new Error(
-                  data?.detail || data?.error || "Snippet verification failed.",
-               );
+               throw new Error(data?.detail || data?.error || "Snippet verification failed.");
             }
 
             if (data.cached && data.match) {
                if (shouldCacheGuestScan) {
                   appendGuestScan(data.match, "SNIPPET").catch((cacheError) => {
-                     console.warn(
-                        "Failed to cache guest snippet verdict:",
-                        cacheError,
-                     );
+                     console.warn("Failed to cache guest snippet verdict:", cacheError);
                   });
                }
 
@@ -493,9 +480,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                tabId,
                successType: "DISPLAY_SNIPPET_RESULT",
                timeoutMessage: "DISPLAY_SNIPPET_ERROR",
-               onResolved: shouldCacheGuestScan
-                  ? (claim) => appendGuestScan(claim, "SNIPPET")
-                  : null,
+               onResolved: shouldCacheGuestScan ? (claim) => appendGuestScan(claim, "SNIPPET") : null,
                maxPolls: 50,
                pollEveryMs: 3000,
             });
@@ -523,13 +508,9 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 
       (async () => {
          try {
-            const res = await postJsonWithAuthFallback(
-               "test-deepfake/",
-               payload,
-            );
+            const res = await postJsonWithAuthFallback("test-deepfake/", payload);
             const data = await res.json().catch(() => ({}));
-            if (!res.ok)
-               throw new Error(data?.error || "Deepfake check failed");
+            if (!res.ok) throw new Error(data?.error || "Deepfake check failed");
 
             sendTabMessage(tabId, { type: "DISPLAY_DEEPFAKE_RESULT", data });
          } catch (err) {
@@ -585,12 +566,8 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                successType: "DISPLAY_URL_RESULT",
                timeoutMessage: "DISPLAY_URL_RESULT",
                timeoutPayload: timeoutFallback,
-               onResolved: shouldCacheGuestScan
-                  ? (claim) => appendGuestScan(claim, "URL")
-                  : null,
-               onTimeout: shouldCacheGuestScan
-                  ? (timeoutData) => appendGuestScan(timeoutData, "URL")
-                  : null,
+               onResolved: shouldCacheGuestScan ? (claim) => appendGuestScan(claim, "URL") : null,
+               onTimeout: shouldCacheGuestScan ? (timeoutData) => appendGuestScan(timeoutData, "URL") : null,
                maxPolls: 20,
                pollEveryMs: 3000,
             });
@@ -607,10 +584,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 
             if (shouldCacheGuestScan) {
                appendGuestScan(errorFallback, "URL").catch((cacheError) => {
-                  console.warn(
-                     "Failed to cache guest URL fallback verdict:",
-                     cacheError,
-                  );
+                  console.warn("Failed to cache guest URL fallback verdict:", cacheError);
                });
             }
 
@@ -639,9 +613,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             const data = await res.json().catch(() => ({}));
 
             if (!res.ok) {
-               throw new Error(
-                  data?.error || data?.detail || "File verification failed.",
-               );
+               throw new Error(data?.error || data?.detail || "File verification failed.");
             }
 
             // Add this inside VERIFY_URL and VERIFY_FILE in background.js
@@ -664,9 +636,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                tabId: tabId,
                successType: "DISPLAY_SNIPPET_RESULT",
                timeoutMessage: "DISPLAY_SNIPPET_ERROR",
-               onResolved: shouldCacheGuestScan
-                  ? (claim) => appendGuestScan(claim, "FILE")
-                  : null,
+               onResolved: shouldCacheGuestScan ? (claim) => appendGuestScan(claim, "FILE") : null,
                maxPolls: 40,
                pollEveryMs: 3000,
             });
