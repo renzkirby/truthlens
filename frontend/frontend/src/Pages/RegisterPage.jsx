@@ -20,9 +20,9 @@
 import { useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useNavigate, useLocation, Link } from "react-router-dom";
-import LogoImage from "../assets/truthlens_logo.png";
 import Icons from "../components/Icons.jsx";
 import { useGoogleLogin } from "@react-oauth/google";
+import AuthShell from "../components/auth/AuthShell.jsx";
 
 // ── Utilities & Constants ──
 import { resolveApiEndpoint } from "../utils/api";
@@ -233,222 +233,212 @@ function RegisterPage() {
    };
 
    return (
-      <>
-         <div className="register-layout">
-            {/* Left Side */}
-            <div className="register-left">
-               <div className="register-logo">
-                  <img src={LogoImage} alt="TruthLens Logo" style={{ height: "40px", width: "auto" }} />
-                  <span className="logo-text">TruthLens</span>
+      <AuthShell
+         eyebrow="TruthLens Community"
+         title="Build a more credible information space."
+         description="Create your account to investigate questionable claims, contribute evidence, and take part in community verification."
+         highlights={[
+            "Review claims with AI-assisted analysis",
+            "Contribute evidence to community investigations",
+            "Build credibility through meaningful participation",
+         ]}
+      >
+         <div className="register-right">
+            <div className="form-container">
+               <div className="form-header">
+                  <p className="greeting-text">Join TruthLens</p>
+
+                  <h2 className="form-title">Create your account</h2>
+
+                  <p className="form-description">Get started with a free TruthLens account.</p>
                </div>
 
-               <div className="register-hero">
-                  <h1 className="hero-title">
-                     Join the Fight
-                     <br />
-                     Against
-                     <br />
-                     Misinformation.
-                  </h1>
-                  <p className="hero-subtitle">
-                     Create your account and start contributing by verifying claims alongside a global community.
-                  </p>
-               </div>
+               <form
+                  onSubmit={(event) => {
+                     event.preventDefault();
+                     handleSubmit();
+                  }}
+                  noValidate
+               >
+                  {error && (
+                     <div className="error-message" role="alert" aria-live="polite">
+                        <Icons name="alert-triangle" size={16} aria-hidden="true" />
 
-               <div className="register-features">
-                  <div className="feature-item">
-                     <div className="feature-icon">
-                        <Icons name="sparkles" size={18} />
+                        <span>{error}</span>
                      </div>
-                     <span>AI-powered claim detection in real time</span>
-                  </div>
-                  <div className="feature-item">
-                     <div className="feature-icon">
-                        <Icons name="users" size={18} />
+                  )}
+
+                  {/* username */}
+                  <div className="input-group">
+                     <label>Username</label>
+                     <div className="input-wrapper">
+                        <Icons name="user" size={18} className="input-icon" />
+                        <input
+                           id="register-username"
+                           type="text"
+                           name="username"
+                           autoComplete="username"
+                           placeholder="Choose a username"
+                           value={formValues.username}
+                           onChange={handleInputChange}
+                           aria-invalid={Boolean(fieldErrors.username)}
+                           aria-describedby={fieldErrors.username ? "register-username-error" : undefined}
+                           disabled={isSigningIn}
+                           required
+                        />
                      </div>
-                     <span>Community-driven evidence and voting</span>
                   </div>
-                  <div className="feature-item">
-                     <div className="feature-icon">
-                        <Icons name="trophy" size={18} />
+
+                  {/* email */}
+                  <div className="input-group">
+                     <label>Email Address</label>
+                     <div className="input-wrapper">
+                        <Icons name="mail" size={18} className="input-icon" />
+                        <input
+                           id="register-email"
+                           type="email"
+                           name="email"
+                           autoComplete="email"
+                           placeholder="you@example.com"
+                           value={formValues.email}
+                           onChange={handleInputChange}
+                           aria-invalid={Boolean(fieldErrors.email)}
+                           aria-describedby={fieldErrors.email ? "register-email-error" : undefined}
+                           disabled={isSigningIn}
+                           required
+                        />
                      </div>
-                     <span>Earn Trust Score for contributing verified facts</span>
                   </div>
-                  <div className="feature-item">
-                     <div className="feature-icon">
-                        <Icons name="globe" size={18} />
+
+                  {/* password */}
+                  <div className="input-group">
+                     <label>Password</label>
+                     <div className="input-wrapper">
+                        <Icons name="shield" size={18} className="input-icon" />
+                        <input
+                           id="register-password"
+                           type={showPassword ? "text" : "password"}
+                           name="password"
+                           autoComplete="new-password"
+                           placeholder="Create a strong password"
+                           value={formValues.password}
+                           onChange={handleInputChange}
+                           aria-invalid={Boolean(fieldErrors.password)}
+                           aria-describedby={
+                              fieldErrors.password ? "register-password-error" : "register-password-hint"
+                           }
+                           disabled={isSigningIn}
+                           required
+                        />
+                        <button
+                           type="button"
+                           className="show-password-btn"
+                           onClick={() => setShowPassword((current) => !current)}
+                           aria-label={showPassword ? "Hide password" : "Show password"}
+                           aria-pressed={showPassword}
+                           disabled={isSigningIn}
+                        >
+                           <Icons name={showPassword ? "eye-off" : "eye"} size={16} aria-hidden="true" />
+
+                           <span>{showPassword ? "Hide" : "Show"}</span>
+                        </button>
                      </div>
-                     <span>Browser extension for on-the-fly fact checking</span>
-                  </div>
-               </div>
-
-               <div className="register-footer-link">WWW.TRUTHLENS-DEV.VERCEL.APP</div>
-
-               <div className="bg-circle circle-1"></div>
-               <div className="bg-circle circle-2"></div>
-               <div className="bg-circle circle-3"></div>
-            </div>
-
-            {/* Right Side */}
-            <div className="register-right">
-               <div className="form-container">
-                  <div className="form-header">
-                     <p className="greeting-text">Hello! Let's get started.</p>
-                     <h2 className="form-title">
-                        <span>Create</span> your account
-                     </h2>
                   </div>
 
-                  <form
-                     onSubmit={(e) => {
-                        e.preventDefault();
-                        handleSubmit();
+                  {fieldErrors.password ? (
+                     <p id="register-password-error" className="field-error">
+                        {fieldErrors.password}
+                     </p>
+                  ) : (
+                     <p id="register-password-hint" className="field-hint">
+                        Use a password that is difficult to guess and not commonly used.
+                     </p>
+                  )}
+
+                  <button type="submit" className="submit-btn" disabled={isSigningIn} aria-busy={isSigningIn}>
+                     {isSigningIn ? (
+                        <span className="sign-in-loading">
+                           <span className="sign-in-spinner" aria-hidden="true" />
+                           <span>Creating account…</span>
+                        </span>
+                     ) : (
+                        <>
+                           <span>Create account</span>
+
+                           <Icons name="arrow-right" size={18} aria-hidden="true" />
+                        </>
+                     )}
+                  </button>
+               </form>
+
+               <div className="signin-prompt">
+                  Already have an account?{" "}
+                  <Link
+                     to="/login"
+                     state={{
+                        from: location.state?.from,
                      }}
                   >
-                     {error && (
-                        <div className="error-message" role="alert">
-                           <Icons name="alert-triangle" size={16} />
-                           <span>{error}</span>
-                        </div>
-                     )}
-
-                     <div className="input-group">
-                        <label htmlFor="register-username">Username</label>
-
-                        <div className="input-wrapper">
-                           <Icons name="user" size={18} className="input-icon" />
-
-                           <input
-                              id="register-username"
-                              type="text"
-                              name="username"
-                              autoComplete="username"
-                              placeholder="Choose a unique username..."
-                              value={formValues.username}
-                              onChange={handleInputChange}
-                              aria-invalid={Boolean(fieldErrors.username)}
-                              aria-describedby={fieldErrors.username ? "register-username-error" : undefined}
-                              required
-                           />
-                        </div>
-
-                        {fieldErrors.username && (
-                           <p id="register-username-error" className="field-error">
-                              {fieldErrors.username}
-                           </p>
-                        )}
-                     </div>
-
-                     <div className="input-group">
-                        <label htmlFor="register-email">Email Address</label>
-
-                        <div className="input-wrapper">
-                           <Icons name="mail" size={18} className="input-icon" />
-
-                           <input
-                              id="register-email"
-                              type="email"
-                              name="email"
-                              autoComplete="email"
-                              placeholder="you@example.com"
-                              value={formValues.email}
-                              onChange={handleInputChange}
-                              aria-invalid={Boolean(fieldErrors.email)}
-                              aria-describedby={fieldErrors.email ? "register-email-error" : undefined}
-                              disabled={isSigningIn}
-                              required
-                           />
-                        </div>
-
-                        {fieldErrors.email && (
-                           <p id="register-email-error" className="field-error">
-                              {fieldErrors.email}
-                           </p>
-                        )}
-                     </div>
-
-                     <div className="input-group">
-                        <label htmlFor="register-password">Password</label>
-
-                        <div className="input-wrapper">
-                           <Icons name="shield" size={18} className="input-icon" />
-
-                           <input
-                              id="register-password"
-                              type={showPassword ? "text" : "password"}
-                              name="password"
-                              autoComplete="new-password"
-                              placeholder="••••••••"
-                              value={formValues.password}
-                              onChange={handleInputChange}
-                              aria-invalid={Boolean(fieldErrors.password)}
-                              aria-describedby={fieldErrors.password ? "register-password-error" : undefined}
-                              disabled={isSigningIn}
-                              required
-                           />
-
-                           <button
-                              type="button"
-                              className="show-password-btn"
-                              onClick={() => setShowPassword((current) => !current)}
-                              aria-label={showPassword ? "Hide password" : "Show password"}
-                              aria-pressed={showPassword}
-                              disabled={isSigningIn}
-                           >
-                              <Icons name={showPassword ? "eye-off" : "eye"} size={16} />
-                              {showPassword ? "Hide" : "Show"}
-                           </button>
-                        </div>
-
-                        {fieldErrors.password && (
-                           <p id="register-password-error" className="field-error">
-                              {fieldErrors.password}
-                           </p>
-                        )}
-                     </div>
-
-                     <button type="submit" className="submit-btn" disabled={isSigningIn}>
-                        {!isSigningIn && (
-                           <>
-                              CREATE ACCOUNT <Icons name="arrow-right" size={18} />
-                           </>
-                        )}
-                        {isSigningIn && (
-                           <>
-                              <div className="sign-in-loading">
-                                 <span className="sign-in-spinner"></span>
-                                 <p>Creating Account...</p>
-                              </div>
-                           </>
-                        )}
-                     </button>
-                  </form>
-
-                  <div className="signin-prompt">
-                     Already registered?{" "}
-                     <Link to="/login" state={{ from: location.state?.from }}>
-                        Sign In
-                     </Link>
-                  </div>
-
-                  <div className="divider">
-                     <span>OR CONTINUE WITH</span>
-                  </div>
-
-                  <div className="social-login">
-                     <button
-                        type="button"
-                        className="social-btn"
-                        onClick={() => loginWithGoogle()}
-                        disabled={isSigningIn}
-                     >
-                        <span className="social-icon">G</span> Google
-                     </button>
-                  </div>
+                     Sign in
+                  </Link>
                </div>
+
+               <div className="divider">
+                  <span>OR</span>
+               </div>
+
+               <button
+                  type="button"
+                  className="gsi-material-button"
+                  onClick={() => loginWithGoogle()}
+                  disabled={isSigningIn}
+                  aria-label="Continue with Google"
+               >
+                  <div className="gsi-material-button-state" />
+
+                  <div className="gsi-material-button-content-wrapper">
+                     <div className="gsi-material-button-icon">
+                        <svg
+                           version="1.1"
+                           xmlns="http://www.w3.org/2000/svg"
+                           viewBox="0 0 48 48"
+                           aria-hidden="true"
+                           focusable="false"
+                        >
+                           <path
+                              fill="#EA4335"
+                              d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+                           />
+
+                           <path
+                              fill="#4285F4"
+                              d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+                           />
+
+                           <path
+                              fill="#FBBC05"
+                              d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+                           />
+
+                           <path
+                              fill="#34A853"
+                              d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+                           />
+
+                           <path fill="none" d="M0 0h48v48H0z" />
+                        </svg>
+                     </div>
+
+                     <span className="gsi-material-button-contents">Continue with Google</span>
+
+                     <span className="gsi-material-button-hidden-text" aria-hidden="true">
+                        Continue with Google
+                     </span>
+                  </div>
+               </button>
             </div>
          </div>
-      </>
+      </AuthShell>
    );
 }
 
