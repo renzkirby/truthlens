@@ -40,6 +40,7 @@ class UserProfile(models.Model):
     email_verification_token = models.CharField(max_length=64, blank=True, null=True)
     followers = models.ManyToManyField(User, related_name="following_profiles", blank=True)
     saved_claims = models.ManyToManyField('Claim', related_name='saved_by_users', blank=True)
+    has_completed_onboarding = models.BooleanField(default=False)
 
     def __str__(self):
         return f"UserProfile {self.id} - User: {self.user.username} - Trust Score: {self.trust_score}"

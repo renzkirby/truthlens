@@ -56,7 +56,9 @@
    padding: 7px 14px;
    border-radius: 8px;
    cursor: pointer;
-   transition: background 0.15s, color 0.15s;
+   transition:
+      background 0.15s,
+      color 0.15s;
    z-index: 10;
 }
 
@@ -81,7 +83,9 @@
 .ob-card {
    background: var(--bg-surface);
    border-radius: 24px;
-   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.1), 0 2px 8px rgba(0, 0, 0, 0.06);
+   box-shadow:
+      0 8px 40px rgba(0, 0, 0, 0.1),
+      0 2px 8px rgba(0, 0, 0, 0.06);
    border: 1px solid var(--border-default);
    width: 100%;
    max-width: 960px;
@@ -199,7 +203,9 @@
    padding: 11px 22px;
    border-radius: 10px;
    cursor: pointer;
-   transition: opacity 0.15s, transform 0.1s;
+   transition:
+      opacity 0.15s,
+      transform 0.1s;
    border: none;
 }
 
@@ -241,7 +247,9 @@
    border: none;
    cursor: pointer;
    padding: 0;
-   transition: background 0.2s, width 0.2s;
+   transition:
+      background 0.2s,
+      width 0.2s;
 }
 
 .ob-dot--active {
@@ -306,8 +314,12 @@
 }
 
 @keyframes ob-spin-slow {
-   from { transform: rotate(0deg); }
-   to { transform: rotate(360deg); }
+   from {
+      transform: rotate(0deg);
+   }
+   to {
+      transform: rotate(360deg);
+   }
 }
 
 .ob-verdict-chip {
@@ -321,7 +333,7 @@
    gap: 4px;
    letter-spacing: 0.04em;
    white-space: nowrap;
-   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .ob-chip--fact {
@@ -377,7 +389,7 @@
    border-radius: 12px;
    border: 1px solid var(--border-default);
    overflow: hidden;
-   box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
 .ob-browser-bar {
@@ -444,12 +456,31 @@
    border-radius: 4px;
 }
 
-.ob-skeleton--name { height: 8px; width: 80px; }
-.ob-skeleton--time { height: 6px; width: 50px; }
-.ob-skeleton--line { height: 7px; width: 100%; margin-bottom: 5px; }
-.ob-skeleton--short { width: 60%; }
-.ob-skeleton--ev-title { height: 7px; width: 100px; margin-bottom: 3px; }
-.ob-skeleton--ev-sub { height: 6px; width: 70px; }
+.ob-skeleton--name {
+   height: 8px;
+   width: 80px;
+}
+.ob-skeleton--time {
+   height: 6px;
+   width: 50px;
+}
+.ob-skeleton--line {
+   height: 7px;
+   width: 100%;
+   margin-bottom: 5px;
+}
+.ob-skeleton--short {
+   width: 60%;
+}
+.ob-skeleton--ev-title {
+   height: 7px;
+   width: 100px;
+   margin-bottom: 3px;
+}
+.ob-skeleton--ev-sub {
+   height: 6px;
+   width: 70px;
+}
 
 .ob-snip-overlay {
    position: absolute;
@@ -496,7 +527,7 @@
 
 .ob-result-bar {
    height: 4px;
-   background: rgba(255,255,255,0.15);
+   background: rgba(255, 255, 255, 0.15);
    border-radius: 10px;
    overflow: hidden;
 }
@@ -509,7 +540,7 @@
 
 .ob-result-conf {
    font-size: 10px;
-   color: rgba(255,255,255,0.5);
+   color: rgba(255, 255, 255, 0.5);
 }
 
 /* ── Visual: Verify ── */
@@ -523,7 +554,7 @@
    border-radius: 14px;
    border: 1px solid var(--border-default);
    padding: 16px;
-   box-shadow: 0 4px 16px rgba(0,0,0,0.07);
+   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.07);
    display: flex;
    flex-direction: column;
    gap: 10px;
@@ -628,7 +659,7 @@
    border-radius: 14px;
    border: 1px solid var(--border-default);
    padding: 16px;
-   box-shadow: 0 4px 16px rgba(0,0,0,0.07);
+   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.07);
    display: flex;
    flex-direction: column;
    gap: 10px;
@@ -736,8 +767,13 @@
 }
 
 @keyframes ob-pulse {
-   0%, 100% { box-shadow: 0 0 0 12px rgba(14, 159, 110, 0.08); }
-   50% { box-shadow: 0 0 0 20px rgba(14, 159, 110, 0.04); }
+   0%,
+   100% {
+      box-shadow: 0 0 0 12px rgba(14, 159, 110, 0.08);
+   }
+   50% {
+      box-shadow: 0 0 0 20px rgba(14, 159, 110, 0.04);
+   }
 }
 
 .ob-stats-row {
@@ -754,7 +790,7 @@
    border: 1px solid var(--border-default);
    border-radius: 12px;
    padding: 10px 14px;
-   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .ob-stat-num {
@@ -799,9 +835,18 @@
       height: 180px;
    }
 
-   .ob-lens-ring--outer { width: 160px; height: 160px; }
-   .ob-lens-ring--middle { width: 110px; height: 110px; }
-   .ob-lens-core { width: 60px; height: 60px; }
+   .ob-lens-ring--outer {
+      width: 160px;
+      height: 160px;
+   }
+   .ob-lens-ring--middle {
+      width: 110px;
+      height: 110px;
+   }
+   .ob-lens-core {
+      width: 60px;
+      height: 60px;
+   }
 
    .ob-skip-btn {
       top: 16px;
@@ -849,4 +894,11 @@
    .ob-ready-ring {
       animation: none;
    }
+}
+
+.ob-completion-error {
+   margin: 0;
+   font-size: 0.85rem;
+   line-height: 1.5;
+   color: var(--danger, #dc2626);
 }

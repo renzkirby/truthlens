@@ -65,14 +65,12 @@ function RegisterPage() {
 
             if (response.ok && data?.access) {
                login(data.access, data.refresh);
-               // Google login could be new or existing user — check if onboarding was done
-               const hasSeenOnboarding = localStorage.getItem("tl_onboarding_complete");
-               if (!hasSeenOnboarding) {
-                  navigate("/onboarding", { replace: true });
-               } else {
-                  navigate(from, { replace: true });
-               }
-               return;
+               navigate("/onboarding", {
+                  replace: true,
+                  state: {
+                     from: location.state?.from,
+                  },
+               });
             }
 
             setError(data?.detail || "Unable to register with Google right now. Please try again.");
@@ -99,10 +97,16 @@ function RegisterPage() {
 
    const redirectAfterRegister = (isNewAccount = false) => {
       if (isNewAccount) {
-         navigate("/onboarding", { replace: true });
-      } else {
-         navigate(from, { replace: true });
+         navigate("/onboarding", {
+            replace: true,
+            state: {
+               from: location.state?.from,
+            },
+         });
+         return;
       }
+
+      navigate(from, { replace: true });
    };
 
    /**
@@ -139,6 +143,8 @@ function RegisterPage() {
          setIsSigningIn(false);
       }
    };
+
+   console.log("Register received from:", location.state?.from);
 
    return (
       <>

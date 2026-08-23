@@ -150,6 +150,10 @@ class UserSerializer(serializers.ModelSerializer):
     is_email_verified = serializers.BooleanField(
         source="profile.is_email_verified", read_only=True
     )
+    has_completed_onboarding = serializers.BooleanField(
+        source="profile.has_completed_onboarding",
+        read_only=True,
+    )
     date_joined = serializers.DateTimeField(read_only=True)
     role = serializers.CharField(source="profile.role", read_only=True)
     organization_name = serializers.CharField(source="profile.organization_name", read_only=True)
@@ -181,6 +185,7 @@ class UserSerializer(serializers.ModelSerializer):
             "email",
             "trust_score",
             "is_email_verified",
+            "has_completed_onboarding",
             "date_joined",
             "role",
             "organization_name",

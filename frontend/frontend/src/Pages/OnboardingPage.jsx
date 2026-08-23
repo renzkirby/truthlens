@@ -19,10 +19,11 @@
  */
 
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import Icons from "../components/Icons.jsx";
 import "./OnboardingPage.css";
+import { resolveApiEndpoint } from "../utils/api";
 
 // ── Step Definitions ──────────────────────────────────────────────
 const STEPS = [
@@ -33,8 +34,7 @@ const STEPS = [
       accentColor: "var(--brand-primary)",
       accentBg: "#ede9fe",
       title: (username) => `Welcome to TruthLens${username ? `, @${username}` : ""}!`,
-      subtitle:
-         "You've just joined a community dedicated to fighting misinformation — one claim at a time.",
+      subtitle: "You've just joined a community dedicated to fighting misinformation — one claim at a time.",
       body: "TruthLens is an AI-powered fact-checking platform that helps you verify what's real and what's fake before you share it. In the next few steps, we'll show you exactly how it works.",
       visual: "welcome",
    },
@@ -176,9 +176,7 @@ function StepVisual({ type }) {
                   Verify
                </div>
                <div className="ob-verify-result">
-                  <div className="ob-verify-badge ob-verify-badge--misleading">
-                     MISLEADING
-                  </div>
+                  <div className="ob-verify-badge ob-verify-badge--misleading">MISLEADING</div>
                   <p className="ob-verify-summary">
                      The photo is real but was taken in 2019, not during the 2024 event.
                   </p>
@@ -196,12 +194,8 @@ function StepVisual({ type }) {
       return (
          <div className="ob-visual ob-visual--community">
             <div className="ob-thread-card">
-               <div className="ob-thread-badge ob-thread-badge--unverified">
-                  UNVERIFIED
-               </div>
-               <p className="ob-thread-claim">
-                  "Viral photo shows flooding in Cebu — but is it from last week?"
-               </p>
+               <div className="ob-thread-badge ob-thread-badge--unverified">UNVERIFIED</div>
+               <p className="ob-thread-claim">"Viral photo shows flooding in Cebu — but is it from last week?"</p>
                <div className="ob-evidence-row">
                   <div className="ob-evidence-item">
                      <div className="ob-ev-avatar" />
@@ -266,15 +260,57 @@ export default function OnboardingPage() {
    const [exiting, setExiting] = useState(false);
    const [direction, setDirection] = useState("forward");
    const navigate = useNavigate();
-   const { user } = useAuth();
+   const { user, loading, authFetch, refreshUser } = useAuth();
+   const onboardingCompleteEndpoint = resolveApiEndpoint("ONBOARDING_COMPLETE");
+   const [isCompleting, setIsCompleting] = useState(false);
+   const [completionError, setCompletionError] = useState("");
+
+   const location = useLocation();
+
+   const rawDestination = location.state?.from;
+
+   const onboardingDestination =
+      typeof rawDestination === "string"
+         ? rawDestination
+         : rawDestination?.pathname
+           ? `${rawDestination.pathname}${rawDestination.search || ""}${rawDestination.hash || ""}`
+           : "/community";
 
    const step = STEPS[currentStep];
    const isFirst = currentStep === 0;
    const isLast = currentStep === STEPS.length - 1;
 
-   const completeOnboarding = () => {
-      localStorage.setItem("tl_onboarding_complete", "true");
-      navigate("/community", { replace: true });
+   if (loading || !user) {
+      return null;
+   }
+
+   if (user.has_completed_onboarding) {
+      return <Navigate to={onboardingDestination} replace />;
+   }
+
+   const completeOnboarding = async () => {
+      if (isCompleting) return;
+
+      setIsCompleting(true);
+      setCompletionError("");
+
+      try {
+         await authFetch(onboardingCompleteEndpoint, {
+            method: "POST",
+         });
+
+         await refreshUser();
+
+         navigate(onboardingDestination, {
+            replace: true,
+         });
+      } catch (error) {
+         console.error("Failed to complete onboarding:", error);
+
+         setCompletionError("We couldn't finish onboarding right now. Please try again.");
+      } finally {
+         setIsCompleting(false);
+      }
    };
 
    const goToStep = (nextIndex, dir = "forward") => {
@@ -309,13 +345,16 @@ export default function OnboardingPage() {
       goToStep(index, index > currentStep ? "forward" : "back");
    };
 
+   console.log("Onboarding received from:", location.state?.from);
+
+   console.log("Onboarding destination:", onboardingDestination);
+
    return (
       <div className="ob-page">
-
          {/* Skip button — always visible except on last step */}
          {!isLast && (
-            <button className="ob-skip-btn" onClick={handleSkip}>
-               Skip for now
+            <button className="ob-skip-btn" onClick={handleSkip} disabled={isCompleting}>
+               {isCompleting ? "Finishing..." : "Skip for now"}
             </button>
          )}
 
@@ -330,22 +369,22 @@ export default function OnboardingPage() {
          >
             {/* Left — text content */}
             <div className="ob-content">
-
                {/* Icon badge */}
-               <div
-                  className="ob-icon-badge"
-                  style={{ backgroundColor: step.accentBg, color: step.accentColor }}
-               >
+               <div className="ob-icon-badge" style={{ backgroundColor: step.accentBg, color: step.accentColor }}>
                   <Icons name={step.icon} size={22} color={step.accentColor} />
                </div>
 
-               <h1 className="ob-title">
-                  {step.title(user?.username)}
-               </h1>
+               <h1 className="ob-title">{step.title(user?.username)}</h1>
 
                <p className="ob-subtitle">{step.subtitle}</p>
 
                <p className="ob-body">{step.body}</p>
+
+               {completionError && (
+                  <p className="ob-completion-error" role="alert">
+                     {completionError}
+                  </p>
+               )}
 
                {/* Navigation */}
                <div className="ob-nav">
@@ -359,19 +398,12 @@ export default function OnboardingPage() {
                   <button
                      className="ob-btn ob-btn--next"
                      onClick={handleNext}
-                     style={{ backgroundColor: step.accentColor }}
+                     disabled={isCompleting}
+                     style={{
+                        backgroundColor: step.accentColor,
+                     }}
                   >
-                     {isLast ? (
-                        <>
-                           Go to Community Feed
-                           <Icons name="arrow-right" size={16} color="#fff" />
-                        </>
-                     ) : (
-                        <>
-                           Next
-                           <Icons name="arrow-right" size={16} color="#fff" />
-                        </>
-                     )}
+                     {isLast ? (isCompleting ? "Finishing..." : "Go to Community Feed") : "Next"}
                   </button>
                </div>
 

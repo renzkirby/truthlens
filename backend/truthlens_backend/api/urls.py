@@ -35,6 +35,7 @@ urlpatterns = [
     path('auth/verify-email/', views.verify_email),
     path("auth/password-reset/", views.request_password_reset, name="password_reset"),
     path("auth/password-reset/confirm/", views.confirm_password_reset, name="password_reset_confirm"),
+    path("auth/onboarding/complete/", views.complete_onboarding, name="complete_onboarding"),
 
     # DashBoard URLs
     path("users/me/dashboard/", views.UserHubView.as_view(), name="user_hub"),
