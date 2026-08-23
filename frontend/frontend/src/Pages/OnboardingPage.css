@@ -46,14 +46,14 @@
 /* ── Skip & Counter ── */
 .ob-skip-btn {
    position: absolute;
-   top: 24px;
+   top: 22px;
    right: 24px;
    background: none;
    border: 1px solid var(--border-default);
    color: var(--text-muted);
-   font-size: 13px;
+   font-size: 12px;
    font-family: "Inter", sans-serif;
-   padding: 7px 14px;
+   padding: 7px 12px;
    border-radius: 8px;
    cursor: pointer;
    transition:
@@ -69,12 +69,12 @@
 
 .ob-step-counter {
    position: absolute;
-   top: 28px;
+   top: 26px;
    left: 24px;
-   font-size: 12px;
+   font-size: 11px;
    font-weight: 600;
    color: var(--text-muted);
-   letter-spacing: 0.05em;
+   letter-spacing: 0.06em;
    text-transform: uppercase;
    z-index: 10;
 }
@@ -88,10 +88,12 @@
       0 2px 8px rgba(0, 0, 0, 0.06);
    border: 1px solid var(--border-default);
    width: 100%;
-   max-width: 960px;
-   min-height: 520px;
+   max-width: 1000px;
+   min-height: 540px;
    display: grid;
-   grid-template-columns: 1fr 1fr;
+   grid-template-columns:
+      minmax(0, 1.05fr)
+      minmax(0, 0.95fr);
    overflow: hidden;
    position: relative;
    z-index: 1;
@@ -145,11 +147,11 @@
 
 /* ── Left Content Panel ── */
 .ob-content {
-   padding: 52px 48px;
+   padding: 54px 52px;
    display: flex;
    flex-direction: column;
    justify-content: center;
-   gap: 16px;
+   gap: 15px;
 }
 
 .ob-icon-badge {
@@ -190,7 +192,8 @@
    display: flex;
    align-items: center;
    gap: 10px;
-   margin-top: 8px;
+   margin-top: 10px;
+   padding-top: 4px;
 }
 
 .ob-btn {
@@ -207,6 +210,8 @@
       opacity 0.15s,
       transform 0.1s;
    border: none;
+   min-height: 44px;
+   padding: 11px 20px;
 }
 
 .ob-btn:hover {
@@ -220,6 +225,8 @@
 
 .ob-btn--next {
    color: #fff;
+   min-width: 150px;
+   justify-content: center;
 }
 
 .ob-btn--back {
@@ -235,8 +242,10 @@
 /* ── Dot Indicators ── */
 .ob-dots {
    display: flex;
+   align-items: center;
    gap: 8px;
-   margin-top: 4px;
+   margin-top: 2px;
+   min-height: 24px;
 }
 
 .ob-dot {
@@ -244,7 +253,7 @@
    width: 8px;
    height: 8px;
    border-radius: 50%;
-   background: var(--border-default);
+   background: #cbd5e1;
    border: none;
    cursor: pointer;
    padding: 0;
@@ -280,7 +289,7 @@
    display: flex;
    align-items: center;
    justify-content: center;
-   padding: 40px;
+   padding: 44px;
    min-height: 400px;
 }
 
@@ -759,23 +768,75 @@
 
 /* ── Visual: Ready ── */
 .ob-visual--ready {
+   width: 100%;
+   max-width: 340px;
    display: flex;
    flex-direction: column;
    align-items: center;
-   gap: 24px;
+   gap: 28px;
 }
 
 .ob-ready-ring {
-   width: 110px;
-   height: 110px;
+   width: 104px;
+   height: 104px;
    border-radius: 50%;
    background: var(--verdict-fact-bg);
-   border: 2px solid var(--verdict-fact-border);
+   border: 1px solid var(--verdict-fact-border);
    display: flex;
    align-items: center;
    justify-content: center;
-   box-shadow: 0 0 0 12px rgba(14, 159, 110, 0.08);
+   box-shadow:
+      0 0 0 10px rgba(14, 159, 110, 0.06),
+      0 10px 30px rgba(14, 159, 110, 0.08);
    animation: ob-pulse 2s ease-in-out infinite;
+}
+
+.ob-ready-actions {
+   width: 100%;
+   display: flex;
+   flex-direction: column;
+   gap: 10px;
+}
+
+.ob-ready-item {
+   display: flex;
+   align-items: flex-start;
+   gap: 12px;
+   padding: 12px 14px;
+   background: var(--bg-surface);
+   border: 1px solid var(--border-default);
+   border-radius: 12px;
+   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.ob-ready-item-icon {
+   width: 34px;
+   height: 34px;
+   border-radius: 9px;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   flex-shrink: 0;
+   background: #ede9fe;
+   color: var(--brand-primary);
+}
+
+.ob-ready-item > div:last-child {
+   display: flex;
+   flex-direction: column;
+   gap: 3px;
+}
+
+.ob-ready-item strong {
+   font-size: 12px;
+   line-height: 1.35;
+   color: var(--text-main);
+}
+
+.ob-ready-item span {
+   font-size: 10px;
+   line-height: 1.45;
+   color: var(--text-muted);
 }
 
 @keyframes ob-pulse {
@@ -822,72 +883,61 @@
 
 /* ── Responsive ── */
 @media (max-width: 768px) {
+   .ob-page {
+      justify-content: flex-start;
+      padding: 72px 14px 20px;
+      overflow-y: auto;
+   }
+
    .ob-card {
       grid-template-columns: 1fr;
       min-height: unset;
-   }
-
-   .ob-visual-panel {
-      border-left: none;
-      border-top: 1px solid var(--border-light);
-      padding: 28px 24px;
-      min-height: 220px;
+      border-radius: 20px;
    }
 
    .ob-content {
-      padding: 36px 28px 24px;
+      padding: 32px 24px 22px;
    }
 
-   .ob-title {
-      font-size: 22px;
+   .ob-visual-panel {
+      padding: 28px 22px;
+      min-height: 220px;
    }
 
-   .ob-visual--welcome {
-      width: 180px;
-      height: 180px;
-   }
-
-   .ob-lens-ring--outer {
-      width: 160px;
-      height: 160px;
-   }
-   .ob-lens-ring--middle {
-      width: 110px;
-      height: 110px;
-   }
-   .ob-lens-core {
-      width: 60px;
-      height: 60px;
-   }
-
-   .ob-skip-btn {
-      top: 16px;
-      right: 16px;
-   }
-
-   .ob-step-counter {
-      top: 20px;
-      left: 16px;
-   }
-
-   .ob-stats-row {
+   .ob-nav {
       flex-wrap: wrap;
-      justify-content: center;
+   }
+
+   .ob-btn--next {
+      flex: 1;
+   }
+
+   .ob-ready-actions {
+      max-width: 360px;
    }
 }
 
 @media (max-width: 480px) {
-   .ob-content {
-      padding: 28px 20px 20px;
+   .ob-page {
+      padding-left: 10px;
+      padding-right: 10px;
    }
 
-   .ob-title {
-      font-size: 20px;
+   .ob-content {
+      padding: 28px 18px 20px;
+   }
+
+   .ob-nav {
+      gap: 8px;
    }
 
    .ob-btn {
-      padding: 10px 16px;
-      font-size: 13px;
+      min-height: 42px;
+      padding: 10px 14px;
+   }
+
+   .ob-btn--next {
+      min-width: 0;
    }
 }
 

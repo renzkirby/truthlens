@@ -222,20 +222,39 @@ function StepVisual({ type }) {
             <div className="ob-ready-ring">
                <Icons name="check-circle" size={48} color="#0e9f6e" />
             </div>
+
             <div className="ob-ready-actions">
                <div className="ob-ready-item">
-                  <Icons name="scan-line" size={16} />
-                  <span>Review detailed analysis</span>
+                  <div className="ob-ready-item-icon">
+                     <Icons name="scan-line" size={16} />
+                  </div>
+
+                  <div>
+                     <strong>Review detailed analysis</strong>
+                     <span>Inspect sources, reasoning, and confidence signals.</span>
+                  </div>
                </div>
 
                <div className="ob-ready-item">
-                  <Icons name="users" size={16} />
-                  <span>Join community investigations</span>
+                  <div className="ob-ready-item-icon">
+                     <Icons name="users" size={16} />
+                  </div>
+
+                  <div>
+                     <strong>Join investigations</strong>
+                     <span>Contribute evidence and discuss questionable claims.</span>
+                  </div>
                </div>
 
                <div className="ob-ready-item">
-                  <Icons name="puzzle" size={16} />
-                  <span>Use TruthLens while browsing</span>
+                  <div className="ob-ready-item-icon">
+                     <Icons name="puzzle" size={16} />
+                  </div>
+
+                  <div>
+                     <strong>Use TruthLens while browsing</strong>
+                     <span>Continue checking content through the browser extension.</span>
+                  </div>
                </div>
             </div>
          </div>
