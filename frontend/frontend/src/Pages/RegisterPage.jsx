@@ -8,7 +8,7 @@
  *   - Show/hide password toggle
  *   - Account creation with backend validation
  *   - Switch to login if user already has account
- *   - Social login options (placeholder)
+ *   - Google account registration
  *   - Redirect to requested page after registration
  *
  * State:
@@ -270,7 +270,7 @@ function RegisterPage() {
                   <div className="input-group">
                      <label htmlFor="register-username">Username</label>
                      <div className="input-wrapper">
-                        <Icons name="user" size={18} className="input-icon" />
+                        <Icons name="user" size={18} className="input-icon" aria-hidden="true" />
                         <input
                            id="register-username"
                            type="text"
@@ -296,7 +296,7 @@ function RegisterPage() {
                   <div className="input-group">
                      <label htmlFor="register-email">Email Address</label>
                      <div className="input-wrapper">
-                        <Icons name="mail" size={18} className="input-icon" />
+                        <Icons name="mail" size={18} className="input-icon" aria-hidden="true" />
                         <input
                            id="register-email"
                            type="email"
@@ -322,7 +322,7 @@ function RegisterPage() {
                   <div className="input-group">
                      <label htmlFor="register-password">Password</label>
                      <div className="input-wrapper">
-                        <Icons name="shield" size={18} className="input-icon" />
+                        <Icons name="shield" size={18} className="input-icon" aria-hidden="true" />
                         <input
                            id="register-password"
                            type={showPassword ? "text" : "password"}
@@ -352,7 +352,7 @@ function RegisterPage() {
                         </button>
                      </div>
                      {fieldErrors.password ? (
-                        <p id="register-password-error" className="field-error">
+                        <p id="register-password-error" className="field-error" role="alert">
                            {fieldErrors.password}
                         </p>
                      ) : (

@@ -18,7 +18,7 @@
    display: flex;
    align-items: center;
    justify-content: center;
-   padding: 30px;
+   width: 100%;
    background-color: #ffffff;
 }
 
@@ -142,7 +142,6 @@
    align-items: center;
    gap: 8px;
    cursor: pointer;
-   transition: background-color 0.2s;
    font-family: "Inter", sans-serif;
    margin-top: 4px;
    min-height: 46px;
@@ -165,10 +164,6 @@
 .submit-btn:focus-visible {
    outline: 3px solid rgba(79, 70, 229, 0.22);
    outline-offset: 3px;
-}
-
-.submit-btn:hover {
-   background-color: #4338ca;
 }
 
 .signin-prompt {
@@ -219,7 +214,6 @@
 @media (max-width: 768px) {
    .register-right {
       flex: 1;
-      padding: 32px 20px;
    }
 
    .form-container {
@@ -249,8 +243,20 @@
       padding: 13px;
    }
 
-   .social-login {
-      flex-direction: column;
+   .form-header {
+      margin-bottom: 20px;
+   }
+
+   .input-group {
+      margin-bottom: 12px;
+   }
+
+   .divider {
+      margin: 20px 0;
+   }
+
+   .signin-prompt {
+      margin-top: 16px;
    }
 }
 
