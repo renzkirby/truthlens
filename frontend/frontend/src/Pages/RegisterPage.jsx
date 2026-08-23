@@ -201,8 +201,6 @@ function RegisterPage() {
          const data = await response.json().catch(() => ({}));
 
          if (!response.ok) {
-            console.log("Registration validation response:", data);
-
             const normalized = normalizeRegistrationErrors(data);
 
             setFieldErrors(normalized.fields);
@@ -270,7 +268,7 @@ function RegisterPage() {
 
                   {/* username */}
                   <div className="input-group">
-                     <label>Username</label>
+                     <label htmlFor="register-username">Username</label>
                      <div className="input-wrapper">
                         <Icons name="user" size={18} className="input-icon" />
                         <input
@@ -287,11 +285,16 @@ function RegisterPage() {
                            required
                         />
                      </div>
+                     {fieldErrors.username && (
+                        <p id="register-username-error" className="field-error" role="alert">
+                           {fieldErrors.username}
+                        </p>
+                     )}
                   </div>
 
                   {/* email */}
                   <div className="input-group">
-                     <label>Email Address</label>
+                     <label htmlFor="register-email">Email Address</label>
                      <div className="input-wrapper">
                         <Icons name="mail" size={18} className="input-icon" />
                         <input
@@ -308,11 +311,16 @@ function RegisterPage() {
                            required
                         />
                      </div>
+                     {fieldErrors.email && (
+                        <p id="register-email-error" className="field-error" role="alert">
+                           {fieldErrors.email}
+                        </p>
+                     )}
                   </div>
 
                   {/* password */}
                   <div className="input-group">
-                     <label>Password</label>
+                     <label htmlFor="register-password">Password</label>
                      <div className="input-wrapper">
                         <Icons name="shield" size={18} className="input-icon" />
                         <input
@@ -343,17 +351,16 @@ function RegisterPage() {
                            <span>{showPassword ? "Hide" : "Show"}</span>
                         </button>
                      </div>
+                     {fieldErrors.password ? (
+                        <p id="register-password-error" className="field-error">
+                           {fieldErrors.password}
+                        </p>
+                     ) : (
+                        <p id="register-password-hint" className="field-hint">
+                           Use a password that is difficult to guess and not commonly used.
+                        </p>
+                     )}
                   </div>
-
-                  {fieldErrors.password ? (
-                     <p id="register-password-error" className="field-error">
-                        {fieldErrors.password}
-                     </p>
-                  ) : (
-                     <p id="register-password-hint" className="field-hint">
-                        Use a password that is difficult to guess and not commonly used.
-                     </p>
-                  )}
 
                   <button type="submit" className="submit-btn" disabled={isSigningIn} aria-busy={isSigningIn}>
                      {isSigningIn ? (
