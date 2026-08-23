@@ -118,24 +118,26 @@ function initializeAuthBridge() {
       return;
    }
 
-   window.addEventListener("message", handleBridgeMessage);
-   injectAuthBridgeScript();
+   restoreTokensFromWorker(() => {
+      window.addEventListener("message", handleBridgeMessage);
+      injectAuthBridgeScript();
 
-   window.setTimeout(() => {
-      requestTokenSyncFromPageBridge();
-      syncTokensDirectlyFromStorage("storage_initial");
-   }, 250);
-
-   document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) {
+      window.setTimeout(() => {
          requestTokenSyncFromPageBridge();
-         syncTokensDirectlyFromStorage("storage_visibility");
-      }
-   });
+         syncTokensDirectlyFromStorage("storage_initial");
+      }, 250);
 
-   window.setInterval(() => {
-      syncTokensDirectlyFromStorage("storage_poll");
-   }, TOKEN_SYNC_POLL_MS);
+      document.addEventListener("visibilitychange", () => {
+         if (!document.hidden) {
+            requestTokenSyncFromPageBridge();
+            syncTokensDirectlyFromStorage("storage_visibility");
+         }
+      });
+
+      window.setInterval(() => {
+         syncTokensDirectlyFromStorage("storage_poll");
+      }, TOKEN_SYNC_POLL_MS);
+   });
 }
 
 initializeAuthBridge();
@@ -225,4 +227,44 @@ function onKeyDown(e) {
       console.log("Snipping canceled by user");
       cleanupCropStudio();
    }
+}
+
+function restoreTokensFromWorker(onComplete) {
+   chrome.runtime.sendMessage(
+      {
+         type: "REQUEST_WEB_AUTH_SESSION",
+      },
+      (response) => {
+         if (chrome.runtime.lastError) {
+            console.warn("Auth session restore failed:", chrome.runtime.lastError.message);
+
+            onComplete?.();
+            return;
+         }
+
+         if (!response?.accepted) {
+            onComplete?.();
+            return;
+         }
+
+         const access = typeof response.access === "string" && response.access.trim() ? response.access.trim() : null;
+
+         const refresh =
+            typeof response.refresh === "string" && response.refresh.trim() ? response.refresh.trim() : null;
+
+         try {
+            if (!window.localStorage.getItem("access") && !window.sessionStorage.getItem("access") && access) {
+               window.sessionStorage.setItem("access", access);
+            }
+
+            if (!window.localStorage.getItem("refresh") && !window.sessionStorage.getItem("refresh") && refresh) {
+               window.sessionStorage.setItem("refresh", refresh);
+            }
+         } catch (error) {
+            console.warn("Failed to restore TruthLens web session:", error);
+         }
+
+         onComplete?.();
+      },
+   );
 }

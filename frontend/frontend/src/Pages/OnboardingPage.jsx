@@ -1,28 +1,18 @@
 /**
- * OnboardingPage.jsx
- * ══════════════════════════════════════════════════════════════════
- * First-time user onboarding flow for TruthLens.
+ * First-time authenticated-user onboarding flow.
  *
- * Features:
- *   - 5-step guided tour of TruthLens features
- *   - Progress indicator with step dots
- *   - Skip option on every step
- *   - Completion stored in localStorage ("tl_onboarding_complete")
- *   - Redirects to /community on finish or skip
- *
- * Steps:
- *   1. Welcome — what TruthLens is
- *   2. Browser Extension — snipping tool and URL verifier
- *   3. Web Platform — Verify page
- *   4. Community & Trust Score — how contributions work
- *   5. Ready — CTA to get started
+ * - Five-step product introduction
+ * - Account-level completion persisted by the backend
+ * - Can be completed or skipped once
+ * - Preserves the destination that initiated registration
  */
 
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Navigate, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import Icons from "../components/Icons.jsx";
 import "./OnboardingPage.css";
+import { resolveApiEndpoint } from "../utils/api";
 
 // ── Step Definitions ──────────────────────────────────────────────
 const STEPS = [
@@ -33,9 +23,8 @@ const STEPS = [
       accentColor: "var(--brand-primary)",
       accentBg: "#ede9fe",
       title: (username) => `Welcome to TruthLens${username ? `, @${username}` : ""}!`,
-      subtitle:
-         "You've just joined a community dedicated to fighting misinformation — one claim at a time.",
-      body: "TruthLens is an AI-powered fact-checking platform that helps you verify what's real and what's fake before you share it. In the next few steps, we'll show you exactly how it works.",
+      subtitle: "A better way to investigate questionable information.",
+      body: "TruthLens combines AI-assisted analysis with community evidence to help you evaluate claims before deciding what to trust or share. Here's a quick look at the tools available to you.",
       visual: "welcome",
    },
    {
@@ -44,20 +33,20 @@ const STEPS = [
       icon: "puzzle",
       accentColor: "#0e9f6e",
       accentBg: "#d1fae5",
-      title: () => "Verify Anything, Anywhere",
-      subtitle: "The TruthLens Chrome extension lets you fact-check without leaving your feed.",
-      body: "Use the Snipping Tool to draw a box over any suspicious image or post. The extension reads the text, runs it through our AI pipeline, and delivers a verdict — FACT, FAKE, MISLEADING, SATIRE, or UNVERIFIED — directly on the page.",
+      title: () => "Investigate Without Leaving the Page",
+      subtitle: "Use the TruthLens Chrome extension while browsing the web.",
+      body: "Analyze supported pages, URLs, images, and selected content directly from your browser. TruthLens returns an AI-assisted verdict, supporting information, and a confidence indicator when available.",
       visual: "extension",
    },
    {
       id: "web",
-      label: "Web Platform",
+      label: "Analysis",
       icon: "scan-line",
       accentColor: "#7c3aed",
       accentBg: "#ede9fe",
-      title: () => "Verify on the Web Platform",
-      subtitle: "Paste a URL or upload an image directly from your browser.",
-      body: "Head to the Verify page to submit links and images without the extension. Our AI pipeline extracts the claim, cross-references it against live news sources and official fact-check databases, and returns a verdict with a confidence score and source citations.",
+      title: () => "Explore the Full Analysis",
+      subtitle: "Review more context, evidence, and sources behind a result.",
+      body: "TruthLens lets you inspect analyzed claims in more detail, including available evidence, source information, confidence signals, and the reasoning behind the result.",
       visual: "verify",
    },
    {
@@ -66,9 +55,9 @@ const STEPS = [
       icon: "users",
       accentColor: "#d97706",
       accentBg: "#fef3c7",
-      title: () => "Your Voice Matters",
-      subtitle: "When AI isn't sure, the community steps in.",
-      body: "Claims that return UNVERIFIED are escalated to the Community Feed, where contributors like you can submit evidence, vote on its credibility, and help reach a final verdict. Every accurate contribution you make increases your Trust Score — your measure of credibility on the platform.",
+      title: () => "Add Human Evidence",
+      subtitle: "Some claims benefit from more than automated analysis.",
+      body: "Community investigations let contributors discuss claims, submit evidence, and evaluate supporting material. Meaningful participation contributes to your reputation and Trust Score on TruthLens.",
       visual: "community",
    },
    {
@@ -77,9 +66,9 @@ const STEPS = [
       icon: "rocket",
       accentColor: "var(--brand-primary)",
       accentBg: "#ede9fe",
-      title: (username) => `You're all set${username ? `, @${username}` : ""}!`,
-      subtitle: "Start fighting misinformation today.",
-      body: "Explore the Community Feed to see what others are investigating, or head straight to the Verify page to fact-check your first claim. The truth is out there — let's find it together.",
+      title: (username) => `You're ready${username ? `, @${username}` : ""}.`,
+      subtitle: "Start investigating with the tools that brought you here.",
+      body: "You can explore community investigations, review a full analysis, or continue the action you started before creating your account.",
       visual: "ready",
    },
 ];
@@ -152,7 +141,7 @@ function StepVisual({ type }) {
                <div className="ob-result-bar">
                   <div className="ob-result-fill" style={{ width: "89%" }} />
                </div>
-               <span className="ob-result-conf">89% confidence</span>
+               <span className="ob-result-conf">Confidence indicator</span>
             </div>
          </div>
       );
@@ -176,15 +165,13 @@ function StepVisual({ type }) {
                   Verify
                </div>
                <div className="ob-verify-result">
-                  <div className="ob-verify-badge ob-verify-badge--misleading">
-                     MISLEADING
-                  </div>
+                  <div className="ob-verify-badge ob-verify-badge--misleading">MISLEADING</div>
                   <p className="ob-verify-summary">
                      The photo is real but was taken in 2019, not during the 2024 event.
                   </p>
                   <div className="ob-verify-source">
                      <Icons name="external-link" size={12} color="#6b7280" />
-                     <span>Source: Reuters Fact Check</span>
+                     <span>Supporting source</span>
                   </div>
                </div>
             </div>
@@ -196,12 +183,8 @@ function StepVisual({ type }) {
       return (
          <div className="ob-visual ob-visual--community">
             <div className="ob-thread-card">
-               <div className="ob-thread-badge ob-thread-badge--unverified">
-                  UNVERIFIED
-               </div>
-               <p className="ob-thread-claim">
-                  "Viral photo shows flooding in Cebu — but is it from last week?"
-               </p>
+               <div className="ob-thread-badge ob-thread-badge--unverified">UNVERIFIED</div>
+               <p className="ob-thread-claim">"Viral photo shows flooding in Cebu — but is it from last week?"</p>
                <div className="ob-evidence-row">
                   <div className="ob-evidence-item">
                      <div className="ob-ev-avatar" />
@@ -226,7 +209,7 @@ function StepVisual({ type }) {
                </div>
                <div className="ob-trust-row">
                   <Icons name="trophy" size={13} color="#d97706" />
-                  <span>Your Trust Score increases with every accurate vote</span>
+                  <span>Your contributions help shape your Trust Score</span>
                </div>
             </div>
          </div>
@@ -239,18 +222,39 @@ function StepVisual({ type }) {
             <div className="ob-ready-ring">
                <Icons name="check-circle" size={48} color="#0e9f6e" />
             </div>
-            <div className="ob-stats-row">
-               <div className="ob-stat-chip">
-                  <span className="ob-stat-num">12k+</span>
-                  <span className="ob-stat-label">Claims Verified</span>
+
+            <div className="ob-ready-actions">
+               <div className="ob-ready-item">
+                  <div className="ob-ready-item-icon">
+                     <Icons name="scan-line" size={16} />
+                  </div>
+
+                  <div>
+                     <strong>Review detailed analysis</strong>
+                     <span>Inspect sources, reasoning, and confidence signals.</span>
+                  </div>
                </div>
-               <div className="ob-stat-chip">
-                  <span className="ob-stat-num">500+</span>
-                  <span className="ob-stat-label">Contributors</span>
+
+               <div className="ob-ready-item">
+                  <div className="ob-ready-item-icon">
+                     <Icons name="users" size={16} />
+                  </div>
+
+                  <div>
+                     <strong>Join investigations</strong>
+                     <span>Contribute evidence and discuss questionable claims.</span>
+                  </div>
                </div>
-               <div className="ob-stat-chip">
-                  <span className="ob-stat-num">98%</span>
-                  <span className="ob-stat-label">Accuracy</span>
+
+               <div className="ob-ready-item">
+                  <div className="ob-ready-item-icon">
+                     <Icons name="puzzle" size={16} />
+                  </div>
+
+                  <div>
+                     <strong>Use TruthLens while browsing</strong>
+                     <span>Continue checking content through the browser extension.</span>
+                  </div>
                </div>
             </div>
          </div>
@@ -266,61 +270,152 @@ export default function OnboardingPage() {
    const [exiting, setExiting] = useState(false);
    const [direction, setDirection] = useState("forward");
    const navigate = useNavigate();
-   const { user } = useAuth();
+   const { user, loading, authFetch, refreshUser } = useAuth();
+   const onboardingCompleteEndpoint = resolveApiEndpoint("ONBOARDING_COMPLETE");
+   const [isCompleting, setIsCompleting] = useState(false);
+   const [completionError, setCompletionError] = useState("");
+   const [isTransitioning, setIsTransitioning] = useState(false);
+
+   const transitionTimerRef = useRef(null);
+   const titleRef = useRef(null);
+
+   const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+   const location = useLocation();
+
+   const rawDestination = location.state?.from;
+
+   const onboardingDestination =
+      typeof rawDestination === "string"
+         ? rawDestination
+         : rawDestination?.pathname
+           ? `${rawDestination.pathname}${rawDestination.search || ""}${rawDestination.hash || ""}`
+           : "/community";
 
    const step = STEPS[currentStep];
    const isFirst = currentStep === 0;
    const isLast = currentStep === STEPS.length - 1;
 
-   const completeOnboarding = () => {
-      localStorage.setItem("tl_onboarding_complete", "true");
-      navigate("/community", { replace: true });
+   useEffect(() => {
+      return () => {
+         if (transitionTimerRef.current) {
+            clearTimeout(transitionTimerRef.current);
+         }
+      };
+   }, []);
+
+   if (loading || !user) {
+      return null;
+   }
+
+   if (user.has_completed_onboarding) {
+      return <Navigate to={onboardingDestination} replace />;
+   }
+
+   const completeOnboarding = async () => {
+      if (isCompleting) return;
+
+      setIsCompleting(true);
+      setCompletionError("");
+
+      try {
+         await authFetch(onboardingCompleteEndpoint, {
+            method: "POST",
+         });
+
+         await refreshUser();
+
+         navigate(onboardingDestination, {
+            replace: true,
+         });
+      } catch (error) {
+         console.error("Failed to complete onboarding:", error);
+
+         setCompletionError("We couldn't finish onboarding right now. Please try again.");
+      } finally {
+         setIsCompleting(false);
+      }
    };
 
    const goToStep = (nextIndex, dir = "forward") => {
-      setDirection(dir);
-      setExiting(true);
-      setTimeout(() => {
+      if (isTransitioning || nextIndex === currentStep || nextIndex < 0 || nextIndex >= STEPS.length) {
+         return;
+      }
+
+      const completeStepChange = () => {
          setCurrentStep(nextIndex);
          setExiting(false);
-      }, 220);
+         setIsTransitioning(false);
+         transitionTimerRef.current = null;
+
+         requestAnimationFrame(() => {
+            titleRef.current?.focus({
+               preventScroll: true,
+            });
+         });
+      };
+
+      setDirection(dir);
+      setIsTransitioning(true);
+
+      if (prefersReducedMotion) {
+         completeStepChange();
+         return;
+      }
+
+      setExiting(true);
+
+      transitionTimerRef.current = setTimeout(completeStepChange, 220);
    };
 
    const handleNext = () => {
+      if (isTransitioning || isCompleting) {
+         return;
+      }
+
       if (isLast) {
          completeOnboarding();
-      } else {
-         goToStep(currentStep + 1, "forward");
+         return;
       }
+
+      goToStep(currentStep + 1, "forward");
    };
 
    const handleBack = () => {
-      if (!isFirst) {
-         goToStep(currentStep - 1, "back");
+      if (isTransitioning || isCompleting || isFirst) {
+         return;
       }
+
+      goToStep(currentStep - 1, "back");
    };
 
    const handleSkip = () => {
+      if (isTransitioning || isCompleting) {
+         return;
+      }
+
       completeOnboarding();
    };
 
    const handleDotClick = (index) => {
-      if (index === currentStep) return;
+      if (isTransitioning || isCompleting || index === currentStep) {
+         return;
+      }
+
       goToStep(index, index > currentStep ? "forward" : "back");
    };
 
    return (
       <div className="ob-page">
-
          {/* Skip button — always visible except on last step */}
          {!isLast && (
-            <button className="ob-skip-btn" onClick={handleSkip}>
-               Skip for now
+            <button className="ob-skip-btn" onClick={handleSkip} disabled={isTransitioning || isCompleting}>
+               {isCompleting ? "Finishing..." : "Skip introduction"}
             </button>
          )}
 
          {/* Step counter */}
-         <div className="ob-step-counter">
+         <div className="ob-step-counter" aria-live="polite" aria-atomic="true">
             Step {currentStep + 1} of {STEPS.length}
          </div>
 
@@ -330,16 +425,12 @@ export default function OnboardingPage() {
          >
             {/* Left — text content */}
             <div className="ob-content">
-
                {/* Icon badge */}
-               <div
-                  className="ob-icon-badge"
-                  style={{ backgroundColor: step.accentBg, color: step.accentColor }}
-               >
+               <div className="ob-icon-badge" style={{ backgroundColor: step.accentBg, color: step.accentColor }}>
                   <Icons name={step.icon} size={22} color={step.accentColor} />
                </div>
 
-               <h1 className="ob-title">
+               <h1 ref={titleRef} className="ob-title" tabIndex={-1}>
                   {step.title(user?.username)}
                </h1>
 
@@ -347,10 +438,20 @@ export default function OnboardingPage() {
 
                <p className="ob-body">{step.body}</p>
 
+               {completionError && (
+                  <p className="ob-completion-error" role="alert" aria-live="assertive">
+                     {completionError}
+                  </p>
+               )}
+
                {/* Navigation */}
                <div className="ob-nav">
                   {!isFirst && (
-                     <button className="ob-btn ob-btn--back" onClick={handleBack}>
+                     <button
+                        className="ob-btn ob-btn--back"
+                        onClick={handleBack}
+                        disabled={isTransitioning || isCompleting}
+                     >
                         <Icons name="arrow-left" size={16} />
                         Back
                      </button>
@@ -359,42 +460,39 @@ export default function OnboardingPage() {
                   <button
                      className="ob-btn ob-btn--next"
                      onClick={handleNext}
-                     style={{ backgroundColor: step.accentColor }}
+                     disabled={isTransitioning || isCompleting}
+                     aria-busy={isLast && isCompleting}
+                     style={{
+                        backgroundColor: step.accentColor,
+                     }}
                   >
-                     {isLast ? (
-                        <>
-                           Go to Community Feed
-                           <Icons name="arrow-right" size={16} color="#fff" />
-                        </>
-                     ) : (
-                        <>
-                           Next
-                           <Icons name="arrow-right" size={16} color="#fff" />
-                        </>
-                     )}
+                     {isLast ? (isCompleting ? "Finishing..." : "Continue to TruthLens") : "Next"}
                   </button>
                </div>
 
                {/* Dot indicators */}
-               <div className="ob-dots" role="tablist" aria-label="Onboarding steps">
+               <nav className="ob-dots" aria-label="Onboarding steps">
                   {STEPS.map((s, i) => (
                      <button
                         key={s.id}
-                        role="tab"
-                        aria-selected={i === currentStep}
-                        aria-label={`Step ${i + 1}: ${s.label}`}
-                        className={`ob-dot ${i === currentStep ? "ob-dot--active" : ""} ${i < currentStep ? "ob-dot--done" : ""}`}
+                        type="button"
+                        aria-current={i === currentStep ? "step" : undefined}
+                        aria-label={`Go to step ${i + 1}: ${s.label}`}
+                        className={`ob-dot ${i === currentStep ? "ob-dot--active" : ""} ${
+                           i < currentStep ? "ob-dot--done" : ""
+                        }`}
                         style={
-                           i === currentStep
-                              ? { backgroundColor: step.accentColor }
-                              : i < currentStep
-                                ? { backgroundColor: `${step.accentColor}60` }
-                                : {}
+                           i <= currentStep
+                              ? {
+                                   backgroundColor: s.accentColor,
+                                }
+                              : {}
                         }
                         onClick={() => handleDotClick(i)}
+                        disabled={isTransitioning || isCompleting}
                      />
                   ))}
-               </div>
+               </nav>
             </div>
 
             {/* Right — visual */}

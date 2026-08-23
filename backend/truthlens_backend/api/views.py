@@ -1756,3 +1756,21 @@ def confirm_password_reset(request):
         {"detail": "Your password has been reset successfully."},
         status=status.HTTP_200_OK,
     )
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def complete_onboarding(request):
+    profile = request.user.profile
+
+    if not profile.has_completed_onboarding:
+        profile.has_completed_onboarding = True
+        profile.save(
+            update_fields=["has_completed_onboarding"]
+        )
+
+    return Response(
+        {
+            "has_completed_onboarding": True,
+        },
+        status=status.HTTP_200_OK,
+    )

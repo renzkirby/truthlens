@@ -169,13 +169,16 @@
    .auth-form-panel {
       min-height: 100vh;
       min-height: 100svh;
+
       justify-content: flex-start;
-      padding: 1.5rem;
+
+      padding: clamp(2rem, 8vh, 4rem) 1.5rem 2rem;
    }
 
    .auth-mobile-brand {
       display: block;
-      margin-bottom: 3rem;
+      width: min(100%, 28rem);
+      margin: 0 auto 2rem;
    }
 
    .auth-mobile-brand .auth-brand-link {
@@ -183,17 +186,19 @@
    }
 
    .auth-form-container {
-      margin-block: auto;
+      width: min(100%, 28rem);
+      margin-inline: auto;
+      margin-block: 0;
    }
 }
 
 @media (max-width: 480px) {
    .auth-form-panel {
-      padding: 1.25rem;
+      padding: clamp(1.75rem, 6vh, 3rem) 1.25rem 1.5rem;
    }
 
    .auth-mobile-brand {
-      margin-bottom: 2rem;
+      margin-bottom: 1.75rem;
    }
 }
 

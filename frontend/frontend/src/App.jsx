@@ -32,7 +32,6 @@ function App() {
                <Route path="/landing-page" element={<LandingPage />} />
                <Route path="/login" element={<LoginPage />} />
                <Route path="/register" element={<RegisterPage />} />
-               <Route path="/onboarding" element={<OnboardingPage />} />
                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                <Route path="/reset-password/:uid/:token" element={<ResetPasswordPage />} />
                <Route path="/" element={<RootRedirect />} />
@@ -45,6 +44,7 @@ function App() {
 
                {/* Protected Routes - accessible to any authenticated user */}
                <Route element={<PrivateRoute />}>
+                  <Route path="/onboarding" element={<OnboardingPage />} />
                   <Route path="/community" element={<CommunityFeed />} />
                   <Route path="/dashboard" element={<UserHub />} />
                   <Route path="/verify" element={<VerifyPage />} />

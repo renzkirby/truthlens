@@ -1,48 +1,44 @@
 {
-    "manifest_version": 3,
-    "name": "TruthLens",
-    "version": "0.1.0",
-    "description": "AI-driven misinformation detection",
-    "icons": {
-    "16": "truthlens_logo.png",
-    "32": "truthlens_logo.png",
-    "48": "truthlens_logo.png",
-    "128": "truthlens_logo.png"
-    },
-    "action": {
-        "default_popup": "index.html",
-        "default_icon": {
-        "16": "truthlens_logo.png",
-        "32": "truthlens_logo.png",
-        "48": "truthlens_logo.png",
-        "128": "truthlens_logo.png"
-    }
-    },
-    "permissions": [
-        "activeTab",
-        "tabs",
-        "storage"
-    ],
-    "background": { 
-        "service_worker": "src/background.js",
-        "type": "module"
-    },
-    "web_accessible_resources": [
-        {
-            "resources": ["auth-bridge.js"],
-            "matches": [
-                "http://localhost:5174/*",
-                "http://127.0.0.1:5174/*",
-                "https://truthlens.app/*",
-                "https://www.truthlens.app/*"
-            ]
-        }
-    ],
-    "content_scripts": [
-        {
-            "matches": ["<all_urls>"],
-            "js": ["src/content.js"],
-            "run_at": "document_idle"
-        }
-    ]
+   "manifest_version": 3,
+   "name": "TruthLens",
+   "version": "0.1.0",
+   "description": "AI-driven misinformation detection",
+   "icons": {
+      "16": "truthlens_logo.png",
+      "32": "truthlens_logo.png",
+      "48": "truthlens_logo.png",
+      "128": "truthlens_logo.png"
+   },
+   "action": {
+      "default_popup": "index.html",
+      "default_icon": {
+         "16": "truthlens_logo.png",
+         "32": "truthlens_logo.png",
+         "48": "truthlens_logo.png",
+         "128": "truthlens_logo.png"
+      }
+   },
+   "permissions": ["activeTab", "tabs", "storage"],
+   "background": {
+      "service_worker": "src/background.js",
+      "type": "module"
+   },
+   "web_accessible_resources": [
+      {
+         "resources": ["auth-bridge.js"],
+         "matches": [
+            "http://localhost:5174/*",
+            "http://127.0.0.1:5174/*",
+            "https://truthlens.app/*",
+            "https://www.truthlens.app/*"
+         ]
+      }
+   ],
+   "content_scripts": [
+      {
+         "matches": ["<all_urls>"],
+         "js": ["src/content.js"],
+         "run_at": "document_start"
+      }
+   ]
 }
