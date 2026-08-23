@@ -77,6 +77,7 @@ REST_FRAMEWORK = {
         'user': '100/minute',
         'fact_check': os.getenv('DRF_FACT_CHECK_THROTTLE_RATE', '5/minute'),
         "password_reset": "3/hour",
+        "email_verification": "3/hour",
     }
 }
 
@@ -267,10 +268,12 @@ SOCIALACCOUNT_PROVIDERS = {
 }
 
 #EMAIL CONFIGURATION
-EMAIL_BACKEND = os.getenv(
-    "EMAIL_BACKEND",
-    "django.core.mail.backends.console.EmailBackend",
-)
+# EMAIL_BACKEND = os.getenv(
+#     "EMAIL_BACKEND",
+#     "django.core.mail.backends.console.EmailBackend",
+# )
+
+EMAIL_BACKEND= os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
 
 EMAIL_HOST = os.getenv("EMAIL_HOST", "")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
@@ -289,4 +292,16 @@ DEFAULT_FROM_EMAIL = os.getenv(
 
 SOCIALACCOUNT_ADAPTER = (
     "api.adapters.TruthLensSocialAccountAdapter"
+)
+
+FRONTEND_URL = os.getenv(
+    "FRONTEND_URL",
+    "http://localhost:5174",
+)
+
+EMAIL_VERIFICATION_TOKEN_LIFETIME_HOURS = int(
+    os.getenv(
+        "EMAIL_VERIFICATION_TOKEN_LIFETIME_HOURS",
+        "24",
+    )
 )
