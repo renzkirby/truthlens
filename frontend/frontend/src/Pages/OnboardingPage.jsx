@@ -7,7 +7,7 @@
  * - Preserves the destination that initiated registration
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import Icons from "../components/Icons.jsx";
@@ -255,6 +255,12 @@ export default function OnboardingPage() {
    const onboardingCompleteEndpoint = resolveApiEndpoint("ONBOARDING_COMPLETE");
    const [isCompleting, setIsCompleting] = useState(false);
    const [completionError, setCompletionError] = useState("");
+   const [isTransitioning, setIsTransitioning] = useState(false);
+
+   const transitionTimerRef = useRef(null);
+   const titleRef = useRef(null);
+
+   const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
    const location = useLocation();
 
@@ -270,6 +276,14 @@ export default function OnboardingPage() {
    const step = STEPS[currentStep];
    const isFirst = currentStep === 0;
    const isLast = currentStep === STEPS.length - 1;
+
+   useEffect(() => {
+      return () => {
+         if (transitionTimerRef.current) {
+            clearTimeout(transitionTimerRef.current);
+         }
+      };
+   }, []);
 
    if (loading || !user) {
       return null;
@@ -305,34 +319,70 @@ export default function OnboardingPage() {
    };
 
    const goToStep = (nextIndex, dir = "forward") => {
-      setDirection(dir);
-      setExiting(true);
-      setTimeout(() => {
+      if (isTransitioning || nextIndex === currentStep || nextIndex < 0 || nextIndex >= STEPS.length) {
+         return;
+      }
+
+      const completeStepChange = () => {
          setCurrentStep(nextIndex);
          setExiting(false);
-      }, 220);
+         setIsTransitioning(false);
+         transitionTimerRef.current = null;
+
+         requestAnimationFrame(() => {
+            titleRef.current?.focus({
+               preventScroll: true,
+            });
+         });
+      };
+
+      setDirection(dir);
+      setIsTransitioning(true);
+
+      if (prefersReducedMotion) {
+         completeStepChange();
+         return;
+      }
+
+      setExiting(true);
+
+      transitionTimerRef.current = setTimeout(completeStepChange, 220);
    };
 
    const handleNext = () => {
+      if (isTransitioning || isCompleting) {
+         return;
+      }
+
       if (isLast) {
          completeOnboarding();
-      } else {
-         goToStep(currentStep + 1, "forward");
+         return;
       }
+
+      goToStep(currentStep + 1, "forward");
    };
 
    const handleBack = () => {
-      if (!isFirst) {
-         goToStep(currentStep - 1, "back");
+      if (isTransitioning || isCompleting || isFirst) {
+         return;
       }
+
+      goToStep(currentStep - 1, "back");
    };
 
    const handleSkip = () => {
+      if (isTransitioning || isCompleting) {
+         return;
+      }
+
       completeOnboarding();
    };
 
    const handleDotClick = (index) => {
-      if (index === currentStep) return;
+      if (isTransitioning || isCompleting || index === currentStep) {
+         return;
+      }
+
       goToStep(index, index > currentStep ? "forward" : "back");
    };
 
@@ -340,13 +390,13 @@ export default function OnboardingPage() {
       <div className="ob-page">
          {/* Skip button — always visible except on last step */}
          {!isLast && (
-            <button className="ob-skip-btn" onClick={handleSkip} disabled={isCompleting}>
+            <button className="ob-skip-btn" onClick={handleSkip} disabled={isTransitioning || isCompleting}>
                {isCompleting ? "Finishing..." : "Skip introduction"}
             </button>
          )}
 
          {/* Step counter */}
-         <div className="ob-step-counter">
+         <div className="ob-step-counter" aria-live="polite" aria-atomic="true">
             Step {currentStep + 1} of {STEPS.length}
          </div>
 
@@ -361,14 +411,16 @@ export default function OnboardingPage() {
                   <Icons name={step.icon} size={22} color={step.accentColor} />
                </div>
 
-               <h1 className="ob-title">{step.title(user?.username)}</h1>
+               <h1 ref={titleRef} className="ob-title" tabIndex={-1}>
+                  {step.title(user?.username)}
+               </h1>
 
                <p className="ob-subtitle">{step.subtitle}</p>
 
                <p className="ob-body">{step.body}</p>
 
                {completionError && (
-                  <p className="ob-completion-error" role="alert">
+                  <p className="ob-completion-error" role="alert" aria-live="assertive">
                      {completionError}
                   </p>
                )}
@@ -376,7 +428,11 @@ export default function OnboardingPage() {
                {/* Navigation */}
                <div className="ob-nav">
                   {!isFirst && (
-                     <button className="ob-btn ob-btn--back" onClick={handleBack}>
+                     <button
+                        className="ob-btn ob-btn--back"
+                        onClick={handleBack}
+                        disabled={isTransitioning || isCompleting}
+                     >
                         <Icons name="arrow-left" size={16} />
                         Back
                      </button>
@@ -385,7 +441,8 @@ export default function OnboardingPage() {
                   <button
                      className="ob-btn ob-btn--next"
                      onClick={handleNext}
-                     disabled={isCompleting}
+                     disabled={isTransitioning || isCompleting}
+                     aria-busy={isLast && isCompleting}
                      style={{
                         backgroundColor: step.accentColor,
                      }}
@@ -413,6 +470,7 @@ export default function OnboardingPage() {
                               : {}
                         }
                         onClick={() => handleDotClick(i)}
+                        disabled={isTransitioning || isCompleting}
                      />
                   ))}
                </nav>

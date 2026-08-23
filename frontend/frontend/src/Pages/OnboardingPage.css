@@ -240,6 +240,7 @@
 }
 
 .ob-dot {
+   position: relative;
    width: 8px;
    height: 8px;
    border-radius: 50%;
@@ -264,6 +265,12 @@
 
 .ob-dot--done {
    opacity: 1;
+}
+
+.ob-dot::before {
+   content: "";
+   position: absolute;
+   inset: -8px;
 }
 
 /* ── Right Visual Panel ── */
@@ -906,4 +913,32 @@
    font-size: 0.85rem;
    line-height: 1.5;
    color: var(--danger, #dc2626);
+}
+
+.ob-btn:disabled,
+.ob-skip-btn:disabled,
+.ob-dot:disabled {
+   cursor: not-allowed;
+   opacity: 0.55;
+   transform: none;
+}
+
+.ob-btn:disabled:hover,
+.ob-skip-btn:disabled:hover,
+.ob-dot:disabled:hover {
+   transform: none;
+}
+
+.ob-btn:focus-visible,
+.ob-skip-btn:focus-visible,
+.ob-dot:focus-visible {
+   outline: 3px solid color-mix(in srgb, var(--brand-primary) 35%, transparent);
+   outline-offset: 3px;
+}
+
+.ob-btn:focus-visible,
+.ob-skip-btn:focus-visible,
+.ob-dot:focus-visible {
+   outline: 3px solid rgba(79, 70, 229, 0.28);
+   outline-offset: 3px;
 }
