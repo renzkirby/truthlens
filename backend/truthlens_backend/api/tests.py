@@ -5,18 +5,28 @@ from django.urls import reverse
 from unittest.mock import patch
 from rest_framework import status
 from rest_framework.test import APITestCase, APIClient
+from django.utils import timezone
 
 from .models import Claim, ClaimCheckHistory, EvidenceSubmission, Thread, ThreadComment, UserProfile
 from .throttles import FactCheckRateThrottle
-
+from .trust_service import (
+    calculate_trust_components,
+    get_reputation_progression,
+    recompute_user_trust_score,
+)
 
 class ThreadEvidenceCommentAuthorizationTests(APITestCase):
     def setUp(self):
         self.owner = User.objects.create_user(username="owner", email="owner@test.com", password="pass1234")
         self.other = User.objects.create_user(username="other", email="other@test.com", password="pass1234")
 
-        UserProfile.objects.create(user=self.owner, trust_score=88.0)
-        UserProfile.objects.create(user=self.other, trust_score=42.0)
+        self.owner_profile = UserProfile.objects.get(user=self.owner)
+        self.owner_profile.trust_score = 88.0
+        self.owner_profile.save(update_fields=["trust_score"])
+
+        self.other_profile = UserProfile.objects.get(user=self.other)
+        self.other_profile.trust_score = 42.0
+        self.other_profile.save(update_fields=["trust_score"])
 
         self.claim1 = Claim.objects.create(
             claim_type=Claim.ClaimType.URL,
@@ -36,7 +46,7 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
             thread=self.thread,
             contributor=self.owner,
             evidence_caption="Owner evidence",
-            evidence_type=EvidenceSubmission.EvidenceType.URL_LINK,
+            evidence_type=EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
             evidence_url="https://evidence.example.com",
             contributor_trust_snapshot=self.owner.profile.trust_score,
         )
@@ -106,7 +116,7 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
                 "thread_id": str(self.thread.id),
                 "evidence_caption": "Allowed evidence",
                 "evidence_url": "https://proof.example.com",
-                "evidence_type": EvidenceSubmission.EvidenceType.URL_LINK,
+                "evidence_type": EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
                 "contributor_trust_snapshot": 9999,
             },
             format="json",
@@ -128,7 +138,7 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
                 "thread_id": str(self.thread.id),
                 "evidence_caption": "Owner evidence",
                 "evidence_url": "https://owner-proof.example.com",
-                "evidence_type": EvidenceSubmission.EvidenceType.URL_LINK,
+                "evidence_type": EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
             },
             format="json",
         )
@@ -212,7 +222,7 @@ class ModeratorEvidenceVerificationTests(APITestCase):
     Coverage:
     - Permission checks (only MODERATOR role can verify)  
     - Verification status updates (VERIFIED/REJECTED)
-    - Trust score calculations (+2 VERIFIED, -1 REJECTED, capped 0-100)
+    - Trust Score v2 recalculation and reputation progression
     - Moderator audit trail (verified_by, verified_at, moderator_notes)
     """
     
@@ -238,20 +248,34 @@ class ModeratorEvidenceVerificationTests(APITestCase):
         )
         
         # Set up user profiles with roles
-        self.contributor_profile = UserProfile.objects.create(
-            user=self.contributor, 
-            trust_score=50.0,
-            role=UserProfile.Role.USER
+        self.contributor_profile = self.contributor.profile
+        self.contributor_profile.trust_score = 50.0
+        self.contributor_profile.role = UserProfile.Role.USER
+        self.contributor_profile.save(
+            update_fields=[
+                "trust_score",
+                "role",
+            ]
         )
-        self.other_profile = UserProfile.objects.create(
-            user=self.other_user,
-            trust_score=75.0,
-            role=UserProfile.Role.USER
+
+        self.other_profile = self.other_user.profile
+        self.other_profile.trust_score = 75.0
+        self.other_profile.role = UserProfile.Role.USER
+        self.other_profile.save(
+            update_fields=[
+                "trust_score",
+                "role",
+            ]
         )
-        self.moderator_profile = UserProfile.objects.create(
-            user=self.moderator,
-            trust_score=95.0,
-            role=UserProfile.Role.MOD
+
+        self.moderator_profile = self.moderator.profile
+        self.moderator_profile.trust_score = 95.0
+        self.moderator_profile.role = UserProfile.Role.MOD
+        self.moderator_profile.save(
+            update_fields=[
+                "trust_score",
+                "role",
+            ]
         )
         
         # Create claim and thread
@@ -271,7 +295,7 @@ class ModeratorEvidenceVerificationTests(APITestCase):
             thread=self.thread,
             contributor=self.contributor,
             evidence_caption="Test evidence",
-            evidence_type=EvidenceSubmission.EvidenceType.URL_LINK,
+            evidence_type=EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
             evidence_url="https://evidence.example.com",
             contributor_trust_snapshot=self.contributor_profile.trust_score,
         )
@@ -282,6 +306,18 @@ class ModeratorEvidenceVerificationTests(APITestCase):
         
         self.other_client = APIClient()
         self.other_client.force_authenticate(user=self.other_user)
+        
+        self.assertEqual(
+            UserProfile.objects.get(
+                user=self.moderator
+            ).role,
+            UserProfile.Role.MOD,
+        )
+
+        self.assertEqual(
+            self.moderator.profile.role,
+            UserProfile.Role.MOD,
+        )
         
         self.moderator_client = APIClient()
         self.moderator_client.force_authenticate(user=self.moderator)
@@ -397,119 +433,151 @@ class ModeratorEvidenceVerificationTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("detail", res.data)
         
-    def test_verified_evidence_increases_trust_score_by_2(self):
-        """Verifying evidence should increase contributor trust score by +2."""
-        initial_score = self.contributor_profile.trust_score
-        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
-        
-        res = self.moderator_client.patch(
-            verify_url,
-            {"evidence_status": "VERIFIED"},
-            format="json"
+    def test_new_user_starts_at_neutral_baseline(self):
+        self.evidence.delete()
+
+        components = calculate_trust_components(
+            self.contributor
         )
-        
-        self.assertEqual(res.status_code, status.HTTP_200_OK)
-        
-        # Refresh and check trust score (Celery task would run in background)
-        # In tests, the task runs synchronously via CELERY_TASK_ALWAYS_EAGER
+
+        self.assertEqual(
+            components["resolved_actions"],
+            0,
+        )
+        self.assertEqual(
+            components["smoothed_accuracy"],
+            0.5,
+        )
+        self.assertEqual(
+            components["trust_score"],
+            50.0,
+        )
+
+
+    def test_one_verified_action_does_not_jump_to_high_trust(self):
+        self.evidence.evidence_status = (
+            EvidenceSubmission.EvidenceStatus.VERIFIED
+        )
+        self.evidence.verified_at = timezone.now()
+        self.evidence.save(
+            update_fields=[
+                "evidence_status",
+                "verified_at",
+            ]
+        )
+
+        components = calculate_trust_components(
+            self.contributor
+        )
+
+        self.assertEqual(
+            components["resolved_actions"],
+            1,
+        )
+
+        self.assertAlmostEqual(
+            components["smoothed_accuracy"],
+            0.6,
+            places=4,
+        )
+
+        self.assertLess(
+            components["trust_score"],
+            60,
+        )
+
+
+    def test_rejected_action_can_reduce_score_below_baseline(self):
+        self.evidence.evidence_status = (
+            EvidenceSubmission.EvidenceStatus.REJECTED
+        )
+        self.evidence.verified_at = timezone.now()
+        self.evidence.save(
+            update_fields=[
+                "evidence_status",
+                "verified_at",
+            ]
+        )
+
+        components = calculate_trust_components(
+            self.contributor
+        )
+
+        self.assertEqual(
+            components["resolved_actions"],
+            1,
+        )
+
+        self.assertLess(
+            components["trust_score"],
+            50,
+        )
+
+
+    def test_unresolved_evidence_does_not_affect_quality_score(self):
+        self.evidence.evidence_status = (
+            EvidenceSubmission.EvidenceStatus.UNVERIFIED
+        )
+        self.evidence.save(
+            update_fields=["evidence_status"]
+        )
+
+        components = calculate_trust_components(
+            self.contributor
+        )
+
+        self.assertEqual(
+            components["resolved_actions"],
+            0,
+        )
+        self.assertEqual(
+            components["trust_score"],
+            50.0,
+        )
+
+
+    def test_user_is_provisional_with_less_than_three_resolved_actions(self):
+        components = calculate_trust_components(
+            self.contributor
+        )
+
+        progression = get_reputation_progression(
+            components
+        )
+
+        self.assertEqual(
+            progression["status"],
+            "PROVISIONAL",
+        )
+        self.assertEqual(
+            progression["current_rank"],
+            "Provisional",
+        )
+
+
+    def test_recompute_persists_calculated_score(self):
+        self.evidence.evidence_status = (
+            EvidenceSubmission.EvidenceStatus.VERIFIED
+        )
+        self.evidence.verified_at = timezone.now()
+        self.evidence.save(
+            update_fields=[
+                "evidence_status",
+                "verified_at",
+            ]
+        )
+
+        components = recompute_user_trust_score(
+            self.contributor.id
+        )
+
         self.contributor_profile.refresh_from_db()
-        self.assertEqual(self.contributor_profile.trust_score, initial_score + 2.0)
-        
-    def test_rejected_evidence_decreases_trust_score_by_1(self):
-        """Rejecting evidence should decrease contributor trust score by -1."""
-        initial_score = self.contributor_profile.trust_score
-        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
-        
-        res = self.moderator_client.patch(
-            verify_url,
-            {"evidence_status": "REJECTED"},
-            format="json"
+
+        self.assertEqual(
+            self.contributor_profile.trust_score,
+            components["trust_score"],
         )
         
-        self.assertEqual(res.status_code, status.HTTP_200_OK)
-        
-        # Refresh and check trust score
-        self.contributor_profile.refresh_from_db()
-        self.assertEqual(self.contributor_profile.trust_score, initial_score - 1.0)
-        
-    def test_trust_score_capped_at_100(self):
-        """Trust score should not exceed 100."""
-        # Set contributor to high trust score
-        self.contributor_profile.trust_score = 99.0
-        self.contributor_profile.save()
-        
-        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
-        
-        # Verify evidence (should add +2)
-        res = self.moderator_client.patch(
-            verify_url,
-            {"evidence_status": "VERIFIED"},
-            format="json"
-        )
-        
-        self.assertEqual(res.status_code, status.HTTP_200_OK)
-        
-        # Check trust score is capped at 100
-        self.contributor_profile.refresh_from_db()
-        self.assertEqual(self.contributor_profile.trust_score, 100.0)
-        
-    def test_trust_score_capped_at_0(self):
-        """Trust score should not go below 0."""
-        # Set contributor to low trust score
-        self.contributor_profile.trust_score = 0.5
-        self.contributor_profile.save()
-        
-        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
-        
-        # Reject evidence (should subtract -1)
-        res = self.moderator_client.patch(
-            verify_url,
-            {"evidence_status": "REJECTED"},
-            format="json"
-        )
-        
-        self.assertEqual(res.status_code, status.HTTP_200_OK)
-        
-        # Check trust score is capped at 0
-        self.contributor_profile.refresh_from_db()
-        self.assertEqual(self.contributor_profile.trust_score, 0.0)
-        
-    def test_multiple_verifications_accumulate_trust_score(self):
-        """Multiple verifications should accumulate trust score changes."""
-        initial_score = self.contributor_profile.trust_score
-        
-        # Create multiple evidence items
-        evidence2 = EvidenceSubmission.objects.create(
-            thread=self.thread,
-            contributor=self.contributor,
-            evidence_caption="Test evidence 2",
-            evidence_type=EvidenceSubmission.EvidenceType.URL_LINK,
-            evidence_url="https://evidence2.example.com",
-            contributor_trust_snapshot=self.contributor_profile.trust_score,
-        )
-        
-        verify_url1 = reverse("evidence-verify", args=[str(self.evidence.id)])
-        verify_url2 = reverse("evidence-verify", args=[str(evidence2.id)])
-        
-        # Verify first evidence
-        res1 = self.moderator_client.patch(
-            verify_url1,
-            {"evidence_status": "VERIFIED"},
-            format="json"
-        )
-        self.assertEqual(res1.status_code, status.HTTP_200_OK)
-        
-        # Reject second evidence
-        res2 = self.moderator_client.patch(
-            verify_url2,
-            {"evidence_status": "REJECTED"},
-            format="json"
-        )
-        self.assertEqual(res2.status_code, status.HTTP_200_OK)
-        
-        # Check final trust score: initial + 2 - 1 = initial + 1
-        self.contributor_profile.refresh_from_db()
-        self.assertEqual(self.contributor_profile.trust_score, initial_score + 1.0)
         
     def test_verified_by_contains_moderator_info_in_response(self):
         """Response should include verified_by with moderator user info."""
@@ -548,9 +616,10 @@ class ModeratorEvidenceVerificationTests(APITestCase):
             email="mod2@test.com",
             password="pass1234"
         )
-        UserProfile.objects.create(
-            user=moderator2,
-            role=UserProfile.Role.MOD
+        moderator2_profile = moderator2.profile
+        moderator2_profile.role = UserProfile.Role.MOD
+        moderator2_profile.save(
+            update_fields=["role"]
         )
         moderator2_client = APIClient()
         moderator2_client.force_authenticate(user=moderator2)
@@ -576,7 +645,13 @@ class OptionalFactCheckAuthTests(APITestCase):
             email="detector@test.com",
             password="pass1234",
         )
-        UserProfile.objects.create(user=self.user, trust_score=50.0)
+        self.user_profile = UserProfile.objects.get(
+            user=self.user
+        )
+        self.user_profile.trust_score = 50.0
+        self.user_profile.save(
+            update_fields=["trust_score"]
+        )
 
         self.auth_client = APIClient()
         self.auth_client.force_authenticate(user=self.user)

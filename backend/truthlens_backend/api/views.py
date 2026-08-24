@@ -1079,15 +1079,28 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
         
         evidence = self.get_object()
 
-        status = request.data.get("evidence_status")
-        notes = request.data.get("moderator_notes", "")
+        evidence_status = request.data.get(
+            "evidence_status"
+        )
+        notes = request.data.get(
+            "moderator_notes",
+            "",
+        )
 
-        if status not in ["VERIFIED", "REJECTED"]:
-            return Response({
-                "detail": "Invalid evidence_status. Must be VERIFIED or REJECTED."
-            }, status=status.HTTP_400_BAD_REQUEST)
+        if evidence_status not in [
+            EvidenceSubmission.EvidenceStatus.VERIFIED,
+            EvidenceSubmission.EvidenceStatus.REJECTED,
+        ]:
+            return Response(
+                {
+                    "detail":
+                        "Invalid evidence_status. "
+                        "Must be VERIFIED or REJECTED."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        evidence.evidence_status = status
+        evidence.evidence_status = evidence_status
         evidence.verified_by = request.user
         evidence.verified_at = timezone.now()
         evidence.moderator_notes = notes
@@ -1096,7 +1109,7 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
         # Persist trust immediately so UI does not show stale overall score after moderation.
         recompute_user_trust_score(evidence.contributor.id)
         # Keep async recompute as a safety net for eventual consistency.
-        update_contributor_trust_score.delay(evidence.contributor.id, status)
+        update_contributor_trust_score.delay(evidence.contributor.id, evidence_status)
         
         serializer = EvidenceSubmissionSerializer(evidence, context={"request": request})
         return Response(serializer.data, status=200)
