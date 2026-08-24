@@ -99,7 +99,7 @@ function VerifyEmailPage() {
       return () => {
          isActive = false;
       };
-   }, [token]);
+   }, [token, isAuthenticated, refreshUser]);
 
    const content = {
       loading: {
