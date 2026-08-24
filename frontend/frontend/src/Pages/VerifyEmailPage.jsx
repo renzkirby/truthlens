@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-
+import { useAuth } from "../hooks/useAuth";
 import Icons from "../components/Icons";
 import AuthShell from "../components/auth/AuthShell";
 import { resolveApiEndpoint } from "../utils/api";
@@ -38,6 +38,7 @@ function requestEmailVerification(token) {
 function VerifyEmailPage() {
    const [searchParams] = useSearchParams();
    const token = searchParams.get("token");
+   const { user, refreshUser } = useAuth();
 
    const [status, setStatus] = useState("loading");
    const [message, setMessage] = useState("");
@@ -58,6 +59,16 @@ function VerifyEmailPage() {
             if (!isActive) return;
 
             if (ok && data?.status === "verified") {
+               if (user) {
+                  try {
+                     await refreshUser();
+                  } catch (error) {
+                     console.error("Failed to refresh verified user:", error);
+                  }
+               }
+
+               if (!isActive) return;
+
                setStatus("success");
                setMessage(data?.detail || "Your email has been verified successfully.");
                return;
@@ -145,13 +156,15 @@ function VerifyEmailPage() {
 
                {status === "success" && (
                   <div className="verify-email-actions">
-                     <Link to="/community" className="verify-email-btn verify-email-btn--primary">
-                        Continue to TruthLens
-                     </Link>
-
-                     <Link to="/login" className="verify-email-btn verify-email-btn--secondary">
-                        Sign in
-                     </Link>
+                     {user ? (
+                        <Link to="/community" className="verify-email-btn verify-email-btn--primary">
+                           Continue to TruthLens
+                        </Link>
+                     ) : (
+                        <Link to="/login" className="verify-email-btn verify-email-btn--primary">
+                           Sign in to TruthLens
+                        </Link>
+                     )}
                   </div>
                )}
 
