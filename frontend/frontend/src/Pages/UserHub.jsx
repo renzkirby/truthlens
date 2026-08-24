@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import "./UserHub.css";
 import Icons from "../components/Icons.jsx";
@@ -233,6 +234,79 @@ const TrustGauge = ({ score }) => {
    );
 };
 
+const formatTrustEffect = (value, type = "contribution") => {
+   const numericValue = Number(value) || 0;
+
+   if (type === "penalty") {
+      const penalty = Math.abs(numericValue);
+
+      if (penalty === 0) {
+         return "0";
+      }
+
+      return `-${penalty}`;
+   }
+
+   if (numericValue > 0) {
+      return `+${numericValue}`;
+   }
+
+   return `${numericValue}`;
+};
+
+const TrustBreakdownItem = ({ icon, label, description, value, type }) => {
+   const numericValue = Number(value) || 0;
+   const isPenalty = type === "penalty";
+
+   let tone = "neutral";
+
+   if (isPenalty && numericValue !== 0) {
+      tone = "negative";
+   } else if (!isPenalty && numericValue > 0) {
+      tone = "positive";
+   } else if (!isPenalty && numericValue < 0) {
+      tone = "negative";
+   }
+
+   return (
+      <div className="hub-trust-factor">
+         <div className="hub-trust-factor-main">
+            <div className="hub-trust-factor-icon">
+               <Icons name={icon} size={16} />
+            </div>
+
+            <div>
+               <div className="hub-trust-factor-label">{label}</div>
+
+               <div className="hub-trust-factor-description">{description}</div>
+            </div>
+         </div>
+
+         <span className={`hub-trust-factor-value hub-trust-factor-value--${tone}`}>
+            {formatTrustEffect(value, type)}
+         </span>
+      </div>
+   );
+};
+
+const ImpactCard = ({ icon, value, label, description, tone }) => {
+   return (
+      <article className={`hub-impact-card hub-impact-card--${tone}`}>
+         <div className="hub-impact-icon">
+            <Icons name={icon} size={19} />
+         </div>
+
+         <div className="hub-impact-content">
+            <div className="hub-impact-value">{value ?? 0}</div>
+
+            <div className="hub-impact-label">{label}</div>
+
+            <p className="hub-impact-description">{description}</p>
+         </div>
+      </article>
+   );
+};
+
 const UserHubSkeleton = () => {
    return (
       <div className="hub-page-layout">
@@ -423,6 +497,7 @@ const UserHubSkeleton = () => {
 
 export default function UserHub() {
    const { authFetch } = useAuth();
+   const navigate = useNavigate();
    const [hubData, setHubData] = useState(null);
    const [loading, setLoading] = useState(true);
    const [error, setError] = useState(null);
@@ -470,7 +545,11 @@ export default function UserHub() {
          </div>
       );
 
-   const { reputation, impact } = hubData;
+   const { reputation, impact, user_info: userInfo } = hubData;
+
+   const username = userInfo?.username || "User";
+   const avatarUrl = userInfo?.avatar_url;
+   const avatarInitial = username.charAt(0).toUpperCase();
 
    // Handle Publish Stub
    const handlePublish = (e) => {
@@ -493,91 +572,280 @@ export default function UserHub() {
          <NavigationBar />
          <div className="hub-wrapper">
             <main className="hub-container">
-               <header className="hub-header">
-                  <div className="hub-header-left">
-                     <h1 className="hub-title">My Hub</h1>
-                     <p className="hub-subtitle">Manage your progression and fact-check library.</p>
+               <header className="hub-overview">
+                  <div className="hub-overview-identity">
+                     <div className="hub-avatar">
+                        {avatarUrl ? (
+                           <img src={avatarUrl} alt={`${username}'s profile`} />
+                        ) : (
+                           <span>{avatarInitial}</span>
+                        )}
+                     </div>
+
+                     <div className="hub-overview-copy">
+                        <span className="hub-eyebrow">YOUR DASHBOARD</span>
+
+                        <h1 className="hub-title">Welcome back, @{username}</h1>
+
+                        <p className="hub-subtitle">
+                           Track your investigations, reputation, and contribution to TruthLens.
+                        </p>
+
+                        <div className="hub-status-row">
+                           <span className="hub-status-badge">{reputation?.status || "Provisional"}</span>
+
+                           {reputation?.confidence?.label && (
+                              <span className="hub-confidence-label">{reputation.confidence.label} confidence</span>
+                           )}
+                        </div>
+                     </div>
+                  </div>
+
+                  <div className="hub-overview-actions">
+                     <button
+                        type="button"
+                        className="hub-action hub-action-primary"
+                        onClick={() => navigate("/verify")}
+                     >
+                        <Icons name="scan-line" size={17} />
+                        Verify something
+                     </button>
+
+                     <button
+                        type="button"
+                        className="hub-action hub-action-secondary"
+                        onClick={() => navigate("/community")}
+                     >
+                        <Icons name="users" size={17} />
+                        Explore Community
+                     </button>
+
+                     <button
+                        type="button"
+                        className="hub-action hub-action-tertiary"
+                        onClick={() => navigate("/profile")}
+                     >
+                        <Icons name="user" size={17} />
+                        View profile
+                     </button>
                   </div>
                </header>
 
-               {/* Reputation & Progression Row */}
-               <div className="hub-rep-row box-panel">
-                  <div className="hub-rep-gauge">
-                     <TrustGauge score={reputation?.trust_score ?? 50} />
+               {/* Trust & Reputation */}
+               <section className="hub-reputation-card box-panel">
+                  <div className="hub-reputation-main">
+                     <div className="hub-reputation-heading">
+                        <div>
+                           <span className="hub-section-eyebrow">TRUST & REPUTATION</span>
+
+                           <h2 className="hub-section-heading">Your reputation</h2>
+                        </div>
+
+                        <div className="hub-confidence-chip">
+                           <Icons name="activity" size={14} />
+                           <span>{reputation?.confidence?.label || "Provisional"} confidence</span>
+                        </div>
+                     </div>
+
+                     <div className="hub-reputation-summary">
+                        <div className="hub-reputation-score">
+                           <TrustGauge score={reputation?.trust_score ?? 50} />
+                        </div>
+
+                        <div className="hub-reputation-rank">
+                           <span className="hub-reputation-rank-label">Current rank</span>
+
+                           <h3>{reputation?.current_rank || "Provisional"}</h3>
+
+                           {reputation?.current_rank === "Provisional" ? (
+                              <p className="hub-reputation-description">
+                                 We&apos;re still building enough history to establish your reputation.
+                              </p>
+                           ) : (
+                              <p className="hub-reputation-description">
+                                 Your Trust Score reflects the quality and reception of your verified contributions.
+                              </p>
+                           )}
+                        </div>
+                     </div>
+
+                     <div className="hub-rank-progress">
+                        <div className="hub-rank-progress-header">
+                           <div>
+                              <span className="hub-rank-progress-label">
+                                 {reputation?.next_rank ? `Progress to ${reputation.next_rank}` : "Reputation progress"}
+                              </span>
+
+                              <span className="hub-rank-progress-detail">
+                                 {reputation?.next_rank ? (
+                                    <>
+                                       {reputation.actions_to_next_rank > 0 && (
+                                          <>
+                                             {reputation.actions_to_next_rank} resolved{" "}
+                                             {reputation.actions_to_next_rank === 1 ? "action" : "actions"} needed
+                                          </>
+                                       )}
+
+                                       {reputation.actions_to_next_rank > 0 &&
+                                          reputation.score_to_next_rank > 0 &&
+                                          " · "}
+
+                                       {reputation.score_to_next_rank > 0 && (
+                                          <>
+                                             {reputation.score_to_next_rank} Trust Score{" "}
+                                             {reputation.score_to_next_rank === 1 ? "point" : "points"} needed
+                                          </>
+                                       )}
+
+                                       {reputation.actions_to_next_rank === 0 &&
+                                          reputation.score_to_next_rank === 0 &&
+                                          "Requirements met"}
+                                    </>
+                                 ) : (
+                                    "Highest reputation rank reached"
+                                 )}
+                              </span>
+                           </div>
+
+                           <span className="hub-rank-progress-percent">
+                              {Math.round(Math.max(0, Math.min(reputation?.progress_percent ?? 0, 100)))}%
+                           </span>
+                        </div>
+
+                        <div className="hub-progress-bar">
+                           <div
+                              className="hub-progress-fill"
+                              style={{
+                                 width: `${Math.max(0, Math.min(reputation?.progress_percent ?? 0, 100))}%`,
+                              }}
+                           />
+                        </div>
+
+                        <div className="hub-rank-progress-meta">
+                           <span>{reputation?.resolved_actions ?? 0} resolved actions</span>
+
+                           <span>Baseline Trust Score: {reputation?.breakdown?.base_score ?? 50}</span>
+                        </div>
+                     </div>
                   </div>
 
-                  <div className="hub-rep-info">
-                     <h2 className="hub-rank-title">{reputation?.current_rank || "Provisional"}</h2>
+                  <aside className="hub-trust-breakdown">
+                     <div className="hub-trust-breakdown-header">
+                        <div>
+                           <span className="hub-section-eyebrow">SCORE BREAKDOWN</span>
 
-                     <p className="hub-rank-sub">
-                        {reputation?.next_rank ? (
-                           <>
-                              Next Rank: <strong>{reputation.next_rank}</strong>
-                              {reputation.actions_to_next_rank > 0 && (
-                                 <>
-                                    {" "}
-                                    · <strong>{reputation.actions_to_next_rank}</strong> resolved{" "}
-                                    {reputation.actions_to_next_rank === 1 ? "action" : "actions"} needed
-                                 </>
-                              )}
-                              {reputation.score_to_next_rank > 0 && (
-                                 <>
-                                    {" "}
-                                    · <strong>{reputation.score_to_next_rank}</strong> Trust Score{" "}
-                                    {reputation.score_to_next_rank === 1 ? "point" : "points"} needed
-                                 </>
-                              )}
-                           </>
-                        ) : (
-                           "Highest reputation rank reached"
-                        )}
-                     </p>
+                           <h3>What affects your score</h3>
+                        </div>
 
-                     <div className="hub-progress-bar">
-                        <div
-                           className="hub-progress-fill"
-                           style={{
-                              width: `${Math.max(0, Math.min(reputation?.progress_percent ?? 0, 100))}%`,
-                           }}
+                        <div className="hub-score-total">
+                           <span>Current</span>
+                           <strong>{Math.round(reputation?.trust_score ?? 50)}</strong>
+                        </div>
+                     </div>
+
+                     <div className="hub-trust-factor-list">
+                        <TrustBreakdownItem
+                           icon="check-circle"
+                           label="Contribution Quality"
+                           description="Quality of resolved evidence and reports"
+                           value={reputation?.breakdown?.contribution_points}
+                        />
+
+                        <TrustBreakdownItem
+                           icon="users"
+                           label="Community Reception"
+                           description="Weighted reception from other contributors"
+                           value={reputation?.breakdown?.community_points}
+                        />
+
+                        <TrustBreakdownItem
+                           icon="clock"
+                           label="Account History"
+                           description="Sustained successful participation"
+                           value={reputation?.breakdown?.history_points}
+                        />
+
+                        <TrustBreakdownItem
+                           icon="shield"
+                           label="Moderation Penalties"
+                           description="Penalties from confirmed moderation actions"
+                           value={reputation?.breakdown?.moderation_penalty}
+                           type="penalty"
                         />
                      </div>
-                  </div>
-               </div>
 
-               {/* Impact Metrics Row */}
-               <div className="hub-impact-grid">
-                  <div className="hub-stat-card box-panel">
-                     <Icons name="scan-line" size={24} color="#6366f1" />
-                     <div className="stat-meta">
-                        <div className="stat-val">{impact.total_scans || 0}</div>
-                        <div className="stat-lbl">Total Scans</div>
-                     </div>
-                  </div>
-                  <div className="hub-stat-card box-panel">
-                     <Icons name="message-square" size={24} color="#3b82f6" />
-                     <div className="stat-meta">
-                        <div className="stat-val">{impact.community_contributions || 0}</div>
-                        <div className="stat-lbl">Contributions & Votes</div>
-                     </div>
-                  </div>
-                  <div className="hub-stat-card box-panel">
-                     <Icons name="activity" size={24} color="#10b981" />
-                     <div className="stat-meta">
-                        <div className="stat-val">{impact.impact_ripple || 0}</div>
-                        <div className="stat-lbl">Impact Ripple</div>
-                     </div>
-                  </div>
-               </div>
+                     <div className="hub-trust-note">
+                        <Icons name="info" size={14} />
 
-               {/* Private Fact-Check Library */}
-               <div className="hub-library box-panel">
+                        <p>Routine scans and passive activity do not directly increase your Trust Score.</p>
+                     </div>
+                  </aside>
+               </section>
+
+               {/* Impact Overview */}
+               <section className="hub-impact-section">
+                  <div className="hub-section-header">
+                     <div>
+                        <span className="hub-section-eyebrow">YOUR IMPACT</span>
+
+                        <h2 className="hub-section-heading">Activity overview</h2>
+
+                        <p className="hub-section-description">
+                           A snapshot of how you use TruthLens and contribute to community verification.
+                        </p>
+                     </div>
+                  </div>
+
+                  <div className="hub-impact-grid">
+                     <ImpactCard
+                        icon="scan-line"
+                        value={impact?.total_scans ?? 0}
+                        label="Fact checks"
+                        description="Claims you have investigated with TruthLens."
+                        tone="indigo"
+                     />
+
+                     <ImpactCard
+                        icon="message-square"
+                        value={impact?.community_contributions ?? 0}
+                        label="Community activity"
+                        description="Evidence submissions and votes you have contributed."
+                        tone="blue"
+                     />
+
+                     <ImpactCard
+                        icon="activity"
+                        value={impact?.impact_ripple ?? 0}
+                        label="Community impact"
+                        description="Votes received on evidence you submitted."
+                        tone="green"
+                     />
+                  </div>
+               </section>
+
+               {/* Fact-Check Activity */}
+               <section className="hub-library box-panel">
                   <div className="library-header">
-                     <h3 className="section-title">Private Fact-Check Library</h3>
+                     <div className="library-heading">
+                        <span className="hub-section-eyebrow">YOUR ACTIVITY</span>
+
+                        <div className="library-title-row">
+                           <h2 className="section-title">Recent fact checks</h2>
+
+                           <span className="library-count">{hubData?.library?.saved_receipts?.length ?? 0}</span>
+                        </div>
+
+                        <p className="library-description">
+                           Review claims you have previously checked and reopen their analysis.
+                        </p>
+                     </div>
                      <div className="library-search">
-                        <Icons name="search" size={16} color="#64748b" />
+                        <Icons name="search" size={16} />
+
                         <input
-                           type="text"
-                           placeholder="Search receipts..."
+                           type="search"
+                           placeholder="Search fact checks..."
+                           aria-label="Search fact checks"
                            value={searchQuery}
                            onChange={(e) => setSearchQuery(e.target.value)}
                         />
@@ -598,14 +866,19 @@ export default function UserHub() {
                                     />
                                  </div>
                                  <div className="li-content">
+                                    <div className="li-type-row">
+                                       <span className="li-type">{claim.claim_type || "CLAIM"}</span>
+
+                                       <span className="li-date">
+                                          {new Date(claim.last_updated).toLocaleDateString()}
+                                       </span>
+                                    </div>
                                     <p className="li-excerpt">
                                        {claim.context_text
                                           ? `"${claim.context_text}"`
                                           : claim.ai_summary || "No summary available."}
                                     </p>
                                     <div className="li-meta">
-                                       <span>{new Date(claim.last_updated).toLocaleDateString()}</span>
-
                                        {claim.canonical_source_url && (
                                           <span className="li-source-meta">
                                              <span className="li-source-label">Top Source</span>
@@ -645,12 +918,21 @@ export default function UserHub() {
                         ))
                      ) : (
                         <div className="library-empty">
-                           <Icons name="inbox" size={32} color="#cbd5e1" />
-                           <p>No saved receipts found. Scans you save privately will appear here.</p>
+                           <div className="library-empty-icon">
+                              <Icons name="inbox" size={24} />
+                           </div>
+
+                           <h3>{searchQuery ? "No matching fact checks" : "No fact checks yet"}</h3>
+
+                           <p>
+                              {searchQuery
+                                 ? "Try a different search term."
+                                 : "Claims you investigate will appear here."}
+                           </p>
                         </div>
                      )}
                   </div>
-               </div>
+               </section>
             </main>
          </div>
 
