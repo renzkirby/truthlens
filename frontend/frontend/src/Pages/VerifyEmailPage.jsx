@@ -42,6 +42,7 @@ function VerifyEmailPage() {
 
    const [status, setStatus] = useState("loading");
    const [message, setMessage] = useState("");
+   const isAuthenticated = Boolean(user);
 
    useEffect(() => {
       let isActive = true;
@@ -59,7 +60,7 @@ function VerifyEmailPage() {
             if (!isActive) return;
 
             if (ok && data?.status === "verified") {
-               if (user) {
+               if (isAuthenticated) {
                   try {
                      await refreshUser();
                   } catch (error) {
@@ -71,6 +72,7 @@ function VerifyEmailPage() {
 
                setStatus("success");
                setMessage(data?.detail || "Your email has been verified successfully.");
+
                return;
             }
 
