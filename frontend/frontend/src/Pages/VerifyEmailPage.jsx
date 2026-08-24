@@ -1,80 +1,180 @@
+import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import NavigationBar from "../components/NavigationBar";
+
 import Icons from "../components/Icons";
+import AuthShell from "../components/auth/AuthShell";
+import { resolveApiEndpoint } from "../utils/api";
 import "./VerifyEmailPage.css";
+
+const verificationRequests = new Map();
+
+function requestEmailVerification(token) {
+   if (verificationRequests.has(token)) {
+      return verificationRequests.get(token);
+   }
+
+   const request = (async () => {
+      const endpoint = new URL(resolveApiEndpoint("VERIFY_EMAIL"));
+
+      endpoint.searchParams.set("token", token);
+
+      const response = await fetch(endpoint.toString(), {
+         method: "GET",
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      return {
+         ok: response.ok,
+         data,
+      };
+   })();
+
+   verificationRequests.set(token, request);
+
+   return request;
+}
 
 function VerifyEmailPage() {
    const [searchParams] = useSearchParams();
-   const statusParam = (searchParams.get("status") || "pending").toLowerCase();
+   const token = searchParams.get("token");
 
-   const statusMap = {
+   const [status, setStatus] = useState("loading");
+   const [message, setMessage] = useState("");
+
+   useEffect(() => {
+      let isActive = true;
+
+      const verify = async () => {
+         if (!token) {
+            setStatus("invalid");
+            setMessage("This verification link is missing its token.");
+            return;
+         }
+
+         try {
+            const { ok, data } = await requestEmailVerification(token);
+
+            if (!isActive) return;
+
+            if (ok && data?.status === "verified") {
+               setStatus("success");
+               setMessage(data?.detail || "Your email has been verified successfully.");
+               return;
+            }
+
+            if (data?.status === "expired") {
+               setStatus("expired");
+               setMessage(data?.detail || "This verification link has expired.");
+               return;
+            }
+
+            setStatus("invalid");
+            setMessage(data?.detail || "This verification link is invalid or has already been used.");
+         } catch (error) {
+            console.error("Email verification failed:", error);
+
+            if (!isActive) return;
+
+            setStatus("error");
+            setMessage("We couldn't verify your email right now. Please try again.");
+         }
+      };
+
+      verify();
+
+      return () => {
+         isActive = false;
+      };
+   }, [token]);
+
+   const content = {
+      loading: {
+         icon: "loader",
+         title: "Verifying your email",
+         description: "Please wait while we confirm your email address.",
+      },
       success: {
-         title: "Email Verified",
-         subtitle: "Your account is now trusted for protected actions in TruthLens.",
          icon: "check-circle",
-         tone: "success",
+         title: "Email verified",
+         description: message,
       },
       expired: {
-         title: "Verification Link Expired",
-         subtitle: "Request a fresh verification link from your profile settings.",
+         icon: "clock",
+         title: "Verification link expired",
+         description: message,
+      },
+      invalid: {
          icon: "alert-circle",
-         tone: "warning",
+         title: "Verification link unavailable",
+         description: message,
       },
-      failed: {
-         title: "Verification Failed",
-         subtitle: "The link looks invalid. Try again or request a new one.",
-         icon: "x-circle",
-         tone: "danger",
-      },
-      pending: {
-         title: "Verify Your Email",
-         subtitle: "Open the verification message in your inbox to complete account setup.",
-         icon: "mail",
-         tone: "neutral",
+      error: {
+         icon: "alert-triangle",
+         title: "Verification unavailable",
+         description: message,
       },
    };
 
-   const current = statusMap[statusParam] || statusMap.pending;
+   const current = content[status];
 
    return (
-      <div className="verify-email-layout">
-         <NavigationBar />
-
-         <main className="verify-email-container">
-            <section className={`verify-email-card ${current.tone}`}>
-               <div className="verify-email-icon-wrap">
-                  <Icons
-                     name={current.icon}
-                     size={24}
-                  />
+      <AuthShell
+         eyebrow="Account Security"
+         title="Confirm your email address."
+         description="Email verification helps TruthLens confirm that the address connected to your account belongs to you."
+         highlights={[
+            "Confirm account ownership",
+            "Keep account recovery reliable",
+            "Support trusted account activity",
+         ]}
+      >
+         <div className="verify-email-panel">
+            <div className="verify-email-card" aria-live="polite" aria-busy={status === "loading"}>
+               <div className={`verify-email-icon verify-email-icon--${status}`}>
+                  {status === "loading" ? (
+                     <span className="verify-email-spinner" aria-hidden="true" />
+                  ) : (
+                     <Icons name={current.icon} size={28} aria-hidden="true" />
+                  )}
                </div>
 
-               <h1 className="verify-email-title">{current.title}</h1>
-               <p className="verify-email-subtitle">{current.subtitle}</p>
+               <h1>{current.title}</h1>
 
-               <div className="verify-email-actions">
-                  <Link
-                     to="/settings"
-                     className="verify-email-btn primary">
-                     <Icons
-                        name="settings"
-                        size={16}
-                     />
-                     Account Settings
-                  </Link>
-                  <Link
-                     to="/community"
-                     className="verify-email-btn secondary">
-                     <Icons
-                        name="globe"
-                        size={16}
-                     />
-                     Go To Community
-                  </Link>
-               </div>
-            </section>
-         </main>
-      </div>
+               <p>{current.description}</p>
+
+               {status === "success" && (
+                  <div className="verify-email-actions">
+                     <Link to="/community" className="verify-email-btn verify-email-btn--primary">
+                        Continue to TruthLens
+                     </Link>
+
+                     <Link to="/login" className="verify-email-btn verify-email-btn--secondary">
+                        Sign in
+                     </Link>
+                  </div>
+               )}
+
+               {(status === "expired" || status === "invalid") && (
+                  <div className="verify-email-actions">
+                     <Link to="/login" className="verify-email-btn verify-email-btn--primary">
+                        Sign in to resend verification email
+                     </Link>
+                  </div>
+               )}
+
+               {status === "error" && (
+                  <button
+                     type="button"
+                     className="verify-email-btn verify-email-btn--primary"
+                     onClick={() => window.location.reload()}
+                  >
+                     Try again
+                  </button>
+               )}
+            </div>
+         </div>
+      </AuthShell>
    );
 }
 
