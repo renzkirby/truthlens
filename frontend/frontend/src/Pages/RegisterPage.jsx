@@ -126,14 +126,16 @@ function RegisterPage() {
       setError("");
    };
 
-   const redirectAfterRegister = (isNewAccount = false) => {
+   const redirectAfterRegister = ({ isNewAccount = false, verificationEmailSent = null } = {}) => {
       if (isNewAccount) {
          navigate("/onboarding", {
             replace: true,
             state: {
                from: location.state?.from,
+               verificationEmailSent,
             },
          });
+
          return;
       }
 
@@ -220,7 +222,10 @@ function RegisterPage() {
 
          await login(data.access, data.refresh);
 
-         redirectAfterRegister(true);
+         redirectAfterRegister({
+            isNewAccount: true,
+            verificationEmailSent: data.verification_email_sent === true,
+         });
       } catch (err) {
          console.error("Registration error:", err);
 

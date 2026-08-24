@@ -881,6 +881,81 @@
    text-align: center;
 }
 
+.ob-completion-error {
+   margin: 0;
+   font-size: 0.85rem;
+   line-height: 1.5;
+   color: var(--danger, #dc2626);
+}
+
+.ob-btn:disabled,
+.ob-skip-btn:disabled,
+.ob-dot:disabled {
+   cursor: not-allowed;
+   opacity: 0.55;
+   transform: none;
+}
+
+.ob-btn:disabled:hover,
+.ob-skip-btn:disabled:hover,
+.ob-dot:disabled:hover {
+   transform: none;
+}
+
+.ob-btn:focus-visible,
+.ob-skip-btn:focus-visible,
+.ob-dot:focus-visible {
+   outline: 3px solid color-mix(in srgb, var(--brand-primary) 35%, transparent);
+   outline-offset: 3px;
+}
+
+.ob-btn:focus-visible,
+.ob-skip-btn:focus-visible,
+.ob-dot:focus-visible {
+   outline: 3px solid rgba(79, 70, 229, 0.28);
+   outline-offset: 3px;
+}
+
+.ob-email-notice {
+   display: flex;
+   align-items: flex-start;
+   gap: 0.75rem;
+   margin-bottom: 1.25rem;
+   padding: 0.9rem 1rem;
+   border: 1px solid;
+   border-radius: 0.75rem;
+   font-size: 0.875rem;
+   line-height: 1.5;
+}
+
+.ob-email-notice svg {
+   flex: 0 0 auto;
+   margin-top: 0.1rem;
+}
+
+.ob-email-notice div {
+   display: grid;
+   gap: 0.2rem;
+}
+
+.ob-email-notice strong {
+   color: var(--text-main);
+}
+
+.ob-email-notice span {
+   color: var(--text-muted);
+}
+
+.ob-email-notice--success {
+   border-color: #a7f3d0;
+   background: #ecfdf5;
+}
+
+.ob-email-notice--warning {
+   border-color: #fde68a;
+   background: #fffbeb;
+}
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
    .ob-page {
@@ -918,6 +993,13 @@
 }
 
 @media (max-width: 480px) {
+   .ob-email-notice {
+      gap: 0.625rem;
+      margin-bottom: 0.75rem;
+      padding: 0.75rem 0.8rem;
+      font-size: 0.8125rem;
+      line-height: 1.45;
+   }
    .ob-page {
       padding-left: 10px;
       padding-right: 10px;
@@ -956,39 +1038,4 @@
    .ob-ready-ring {
       animation: none;
    }
-}
-
-.ob-completion-error {
-   margin: 0;
-   font-size: 0.85rem;
-   line-height: 1.5;
-   color: var(--danger, #dc2626);
-}
-
-.ob-btn:disabled,
-.ob-skip-btn:disabled,
-.ob-dot:disabled {
-   cursor: not-allowed;
-   opacity: 0.55;
-   transform: none;
-}
-
-.ob-btn:disabled:hover,
-.ob-skip-btn:disabled:hover,
-.ob-dot:disabled:hover {
-   transform: none;
-}
-
-.ob-btn:focus-visible,
-.ob-skip-btn:focus-visible,
-.ob-dot:focus-visible {
-   outline: 3px solid color-mix(in srgb, var(--brand-primary) 35%, transparent);
-   outline-offset: 3px;
-}
-
-.ob-btn:focus-visible,
-.ob-skip-btn:focus-visible,
-.ob-dot:focus-visible {
-   outline: 3px solid rgba(79, 70, 229, 0.28);
-   outline-offset: 3px;
 }
