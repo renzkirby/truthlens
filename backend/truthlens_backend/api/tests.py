@@ -25,13 +25,13 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
         self.owner = User.objects.create_user(username="owner", email="owner@test.com", password="pass1234")
         self.other = User.objects.create_user(username="other", email="other@test.com", password="pass1234")
 
-        self.owner_profile = UserProfile.objects.get(user=self.owner)
+        self.owner_profile = self.owner.profile
         self.owner_profile.trust_score = 88.0
-        self.owner_profile.save()
+        self.owner_profile.save(update_fields=["trust_score"])
 
-        self.other_profile = UserProfile.objects.get(user=self.other)
+        self.other_profile = self.other.profile
         self.other_profile.trust_score = 42.0
-        self.other_profile.save()
+        self.other_profile.save(update_fields=["trust_score"])
 
         self.claim1 = Claim.objects.create(
             claim_type=Claim.ClaimType.URL,
@@ -253,20 +253,26 @@ class ModeratorEvidenceVerificationTests(APITestCase):
         )
         
         # Set up user profiles with roles
-        self.contributor_profile = UserProfile.objects.get(user=self.contributor)
+        self.contributor_profile = self.contributor.profile
         self.contributor_profile.trust_score = 50.0
         self.contributor_profile.role = UserProfile.Role.USER
-        self.contributor_profile.save()
+        self.contributor_profile.save(
+            update_fields=["trust_score", "role"]
+        )
 
-        self.other_profile = UserProfile.objects.get(user=self.other_user)
+        self.other_profile = self.other_user.profile
         self.other_profile.trust_score = 75.0
         self.other_profile.role = UserProfile.Role.USER
-        self.other_profile.save()
+        self.other_profile.save(
+            update_fields=["trust_score", "role"]
+        )
 
-        self.moderator_profile = UserProfile.objects.get(user=self.moderator)
+        self.moderator_profile = self.moderator.profile
         self.moderator_profile.trust_score = 95.0
         self.moderator_profile.role = UserProfile.Role.MOD
-        self.moderator_profile.save()
+        self.moderator_profile.save(
+            update_fields=["trust_score", "role"]
+        )
         
         # Create claim and thread
         self.claim = Claim.objects.create(
