@@ -63,7 +63,11 @@ from .models import (
     Vote,
     OfficialFactCheck,
 )
-from .trust_service import recompute_user_trust_score
+from .trust_service import (
+    calculate_trust_components,
+    get_reputation_progression,
+    recompute_user_trust_score,
+)
 from .throttles import (
     FactCheckRateThrottle,
     PasswordResetRateThrottle,
@@ -1604,28 +1608,8 @@ class UserHubView(APIView):
         profile = user.profile
 
         # 1. Reputation & Progression
-        score = profile.trust_score
-        rank = "Newbie"
-        next_milestone = 50
-        
-        if score == 100:
-            rank = "Expert Analyst"
-            next_milestone = "Max Rank"
-        elif score >= 75:
-            rank = "Trusted Analyst"
-            next_milestone = 100 - score
-        elif score >= 60:
-            rank = "Contributor"
-            next_milestone = 75 - score
-        elif score >= 40:
-            rank = "Newcomer"
-            next_milestone = 60 - score
-        elif score >= 30:
-            rank = "At Risk"
-            next_milestone = 40 - score
-        elif score <= 25:
-            rank = "Untrusted"
-            next_milestone = 30 - score
+        components = calculate_trust_components(user)
+        progression = get_reputation_progression(components)
             
 
         # 2. Personal Impact Metrics
@@ -1651,9 +1635,22 @@ class UserHubView(APIView):
                 "avatar_url": profile.avatar_url if hasattr(profile, 'avatar_url') and profile.avatar_url else None,
             },
             "reputation": {
-                "trust_score": score,
-                "current_rank": rank,
-                "points_to_next_rank": next_milestone,
+                "trust_score": components["trust_score"],
+                "status": progression["status"],
+                "current_rank": progression["current_rank"],
+                "next_rank": progression["next_rank"],
+                "score_to_next_rank": progression["score_to_next_rank"],
+                "actions_to_next_rank": progression["actions_to_next_rank"],
+                "progress_percent": progression["progress_percent"],
+                "resolved_actions": progression["resolved_actions"],
+                "confidence": progression["confidence"],
+                "breakdown": {
+                    "base_score": components["base_score"],
+                    "contribution_points": components["contribution_points"],
+                    "community_points": components["community_points"],
+                    "history_points": components["history_points"],
+                    "moderation_penalty": components["moderation_penalty"],
+                },
             },
             "impact": {
                 "total_scans": total_scans,

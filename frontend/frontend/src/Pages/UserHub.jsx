@@ -429,8 +429,6 @@ export default function UserHub() {
    const [searchQuery, setSearchQuery] = useState("");
    const [selectedClaimId, setSelectedClaimId] = useState(null);
 
-   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
-
    useEffect(() => {
       const loadDashboard = async () => {
          try {
@@ -480,6 +478,16 @@ export default function UserHub() {
       alert("Publish to Community feature is coming soon!");
    };
 
+   const getSourceLabel = (url) => {
+      if (!url) return "Source";
+
+      try {
+         return new URL(url).hostname.replace(/^www\./, "");
+      } catch {
+         return "Source";
+      }
+   };
+
    return (
       <div className="hub-page-layout">
          <NavigationBar />
@@ -495,20 +503,43 @@ export default function UserHub() {
                {/* Reputation & Progression Row */}
                <div className="hub-rep-row box-panel">
                   <div className="hub-rep-gauge">
-                     <TrustGauge score={reputation?.trust_score || 0} />
+                     <TrustGauge score={reputation?.trust_score ?? 50} />
                   </div>
+
                   <div className="hub-rep-info">
-                     <h2 className="hub-rank-title">{reputation.current_rank}</h2>
+                     <h2 className="hub-rank-title">{reputation?.current_rank || "Provisional"}</h2>
+
                      <p className="hub-rank-sub">
-                        Next Milestone: <strong>{reputation.points_to_next_rank}</strong> pt/s needed
+                        {reputation?.next_rank ? (
+                           <>
+                              Next Rank: <strong>{reputation.next_rank}</strong>
+                              {reputation.actions_to_next_rank > 0 && (
+                                 <>
+                                    {" "}
+                                    · <strong>{reputation.actions_to_next_rank}</strong> resolved{" "}
+                                    {reputation.actions_to_next_rank === 1 ? "action" : "actions"} needed
+                                 </>
+                              )}
+                              {reputation.score_to_next_rank > 0 && (
+                                 <>
+                                    {" "}
+                                    · <strong>{reputation.score_to_next_rank}</strong> Trust Score{" "}
+                                    {reputation.score_to_next_rank === 1 ? "point" : "points"} needed
+                                 </>
+                              )}
+                           </>
+                        ) : (
+                           "Highest reputation rank reached"
+                        )}
                      </p>
+
                      <div className="hub-progress-bar">
                         <div
                            className="hub-progress-fill"
                            style={{
-                              width: `${Math.min(((reputation.trust_score % 50) / 50) * 100, 100)}%`,
+                              width: `${Math.max(0, Math.min(reputation?.progress_percent ?? 0, 100))}%`,
                            }}
-                        ></div>
+                        />
                      </div>
                   </div>
                </div>
@@ -555,8 +586,8 @@ export default function UserHub() {
 
                   <div className="library-list">
                      {filteredLibrary.length > 0 ? (
-                        filteredLibrary.map((claim, idx) => (
-                           <div key={idx} className="library-item">
+                        filteredLibrary.map((claim) => (
+                           <div key={claim.id} className="library-item">
                               <div className="li-main">
                                  <div className="li-icon">
                                     <Icons
@@ -574,10 +605,23 @@ export default function UserHub() {
                                     </p>
                                     <div className="li-meta">
                                        <span>{new Date(claim.last_updated).toLocaleDateString()}</span>
-                                       {claim.source_link && (
-                                          <a href={claim.source_link} target="_blank" rel="noreferrer">
-                                             Source Link
-                                          </a>
+
+                                       {claim.canonical_source_url && (
+                                          <span className="li-source-meta">
+                                             <span className="li-source-label">Top Source</span>
+
+                                             <span aria-hidden="true">·</span>
+
+                                             <a
+                                                href={claim.canonical_source_url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="li-source-link"
+                                             >
+                                                {getSourceLabel(claim.canonical_source_url)}
+                                                <Icons name="external-link" size={11} />
+                                             </a>
+                                          </span>
                                        )}
                                     </div>
                                  </div>
