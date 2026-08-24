@@ -144,11 +144,19 @@ if not selected_db_url:
     raise RuntimeError("No Supabase database URL configured. Set SUPABASE_DATABASE_URL or environment-specific URLs.")
 
 DATABASES = {
-    "default": dj_database_url.parse(
-        selected_db_url,
-        conn_max_age=600,
-        conn_health_checks=True,
-    )
+    "default": {
+        **dj_database_url.parse(
+            selected_db_url,
+            conn_max_age=600,
+            conn_health_checks=True,
+        ),
+        "TEST": {
+            "NAME": os.getenv(
+                "TEST_DATABASE_NAME",
+                "test_postgres",
+            ),
+        },
+    }
 }
 
 # DATABASES = {

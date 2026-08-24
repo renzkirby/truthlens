@@ -29,7 +29,9 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
         self.owner_profile.trust_score = 88.0
         self.owner_profile.save()
 
-        UserProfile.objects.create(user=self.other, trust_score=42.0)
+        self.other_profile = UserProfile.objects.get(user=self.other)
+        self.other_profile.trust_score = 42.0
+        self.other_profile.save()
 
         self.claim1 = Claim.objects.create(
             claim_type=Claim.ClaimType.URL,
@@ -49,7 +51,7 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
             thread=self.thread,
             contributor=self.owner,
             evidence_caption="Owner evidence",
-            evidence_type=EvidenceSubmission.EvidenceType.URL_LINK,
+            evidence_type=EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
             evidence_url="https://evidence.example.com",
             contributor_trust_snapshot=self.owner.profile.trust_score,
         )
@@ -119,7 +121,7 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
                 "thread_id": str(self.thread.id),
                 "evidence_caption": "Allowed evidence",
                 "evidence_url": "https://proof.example.com",
-                "evidence_type": EvidenceSubmission.EvidenceType.URL_LINK,
+                "evidence_type": EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
                 "contributor_trust_snapshot": 9999,
             },
             format="json",
@@ -141,7 +143,7 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
                 "thread_id": str(self.thread.id),
                 "evidence_caption": "Owner evidence",
                 "evidence_url": "https://owner-proof.example.com",
-                "evidence_type": EvidenceSubmission.EvidenceType.URL_LINK,
+                "evidence_type": EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
             },
             format="json",
         )
@@ -251,21 +253,20 @@ class ModeratorEvidenceVerificationTests(APITestCase):
         )
         
         # Set up user profiles with roles
-        self.contributor_profile = UserProfile.objects.create(
-            user=self.contributor, 
-            trust_score=50.0,
-            role=UserProfile.Role.USER
-        )
-        self.other_profile = UserProfile.objects.create(
-            user=self.other_user,
-            trust_score=75.0,
-            role=UserProfile.Role.USER
-        )
-        self.moderator_profile = UserProfile.objects.create(
-            user=self.moderator,
-            trust_score=95.0,
-            role=UserProfile.Role.MOD
-        )
+        self.contributor_profile = UserProfile.objects.get(user=self.contributor)
+        self.contributor_profile.trust_score = 50.0
+        self.contributor_profile.role = UserProfile.Role.USER
+        self.contributor_profile.save()
+
+        self.other_profile = UserProfile.objects.get(user=self.other_user)
+        self.other_profile.trust_score = 75.0
+        self.other_profile.role = UserProfile.Role.USER
+        self.other_profile.save()
+
+        self.moderator_profile = UserProfile.objects.get(user=self.moderator)
+        self.moderator_profile.trust_score = 95.0
+        self.moderator_profile.role = UserProfile.Role.MOD
+        self.moderator_profile.save()
         
         # Create claim and thread
         self.claim = Claim.objects.create(
@@ -284,7 +285,7 @@ class ModeratorEvidenceVerificationTests(APITestCase):
             thread=self.thread,
             contributor=self.contributor,
             evidence_caption="Test evidence",
-            evidence_type=EvidenceSubmission.EvidenceType.URL_LINK,
+            evidence_type=EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
             evidence_url="https://evidence.example.com",
             contributor_trust_snapshot=self.contributor_profile.trust_score,
         )
@@ -496,7 +497,7 @@ class ModeratorEvidenceVerificationTests(APITestCase):
             thread=self.thread,
             contributor=self.contributor,
             evidence_caption="Test evidence 2",
-            evidence_type=EvidenceSubmission.EvidenceType.URL_LINK,
+            evidence_type=EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
             evidence_url="https://evidence2.example.com",
             contributor_trust_snapshot=self.contributor_profile.trust_score,
         )
@@ -540,7 +541,7 @@ class ModeratorEvidenceVerificationTests(APITestCase):
         if res.data["verified_by"]:  # Could be null if not serialized
             self.assertEqual(res.data["verified_by"]["username"], "moderator")
             
-    def test_moderator_cannot_verify_already_verified_evidence(self):
+    def test_moderator_can_reverify_already_verified_evidence(self):
         """
         Once evidence is verified, subsequent verify calls should update it.
         This tests idempotency / allows re-verification by another moderator.
@@ -561,10 +562,11 @@ class ModeratorEvidenceVerificationTests(APITestCase):
             email="mod2@test.com",
             password="pass1234"
         )
-        UserProfile.objects.create(
-            user=moderator2,
-            role=UserProfile.Role.MOD
-        )
+
+        moderator2_profile = UserProfile.objects.get(user=moderator2)
+        moderator2_profile.role = UserProfile.Role.MOD
+        moderator2_profile.save()
+
         moderator2_client = APIClient()
         moderator2_client.force_authenticate(user=moderator2)
         
@@ -589,7 +591,10 @@ class OptionalFactCheckAuthTests(APITestCase):
             email="detector@test.com",
             password="pass1234",
         )
-        UserProfile.objects.create(user=self.user, trust_score=50.0)
+
+        self.user_profile = UserProfile.objects.get(user=self.user)
+        self.user_profile.trust_score = 50.0
+        self.user_profile.save()
 
         self.auth_client = APIClient()
         self.auth_client.force_authenticate(user=self.user)
@@ -817,8 +822,6 @@ class CorsPolicyTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertIsNone(res.headers.get("Access-Control-Allow-Origin"))
 
-
-EvidenceSource.retrieved_at
 class VerificationEvidenceModelTests(APITestCase):
 
     def setUp(self):
