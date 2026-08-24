@@ -38,6 +38,7 @@ class UserProfile(models.Model):
     avatar_url = models.URLField(max_length=500, blank=True, null=True)
     is_email_verified = models.BooleanField(default=False)
     email_verification_token = models.CharField(max_length=64, blank=True, null=True)
+    email_verification_sent_at = models.DateTimeField(blank=True, null=True)
     followers = models.ManyToManyField(User, related_name="following_profiles", blank=True)
     saved_claims = models.ManyToManyField('Claim', related_name='saved_by_users', blank=True)
     has_completed_onboarding = models.BooleanField(default=False)

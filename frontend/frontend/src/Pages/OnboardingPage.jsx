@@ -284,6 +284,7 @@ export default function OnboardingPage() {
    const location = useLocation();
 
    const rawDestination = location.state?.from;
+   const verificationEmailSent = location.state?.verificationEmailSent;
 
    const onboardingDestination =
       typeof rawDestination === "string"
@@ -425,6 +426,42 @@ export default function OnboardingPage() {
          >
             {/* Left — text content */}
             <div className="ob-content">
+               {isFirst && user.is_email_verified === false && (
+                  <div
+                     className={`ob-email-notice ${
+                        verificationEmailSent === false ? "ob-email-notice--warning" : "ob-email-notice--success"
+                     }`}
+                     role="status"
+                  >
+                     <Icons
+                        name={verificationEmailSent === false ? "alert-circle" : "mail"}
+                        size={18}
+                        aria-hidden="true"
+                     />
+
+                     <div>
+                        {verificationEmailSent === false ? (
+                           <>
+                              <strong>Your account was created</strong>
+                              <span>
+                                 We couldn't send the verification email. You can request a new one later from your
+                                 account settings.
+                              </span>
+                           </>
+                        ) : (
+                           <>
+                              <strong>
+                                 {verificationEmailSent === true ? "Check your inbox" : "Verify your email"}
+                              </strong>
+                              <span>
+                                 Check your inbox for your TruthLens verification link. You can verify your address now
+                                 or continue exploring TruthLens.
+                              </span>
+                           </>
+                        )}
+                     </div>
+                  </div>
+               )}
                {/* Icon badge */}
                <div className="ob-icon-badge" style={{ backgroundColor: step.accentBg, color: step.accentColor }}>
                   <Icons name={step.icon} size={22} color={step.accentColor} />
