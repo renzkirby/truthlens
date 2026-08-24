@@ -5,9 +5,19 @@ from django.urls import reverse
 from unittest.mock import patch
 from rest_framework import status
 from rest_framework.test import APITestCase, APIClient
-
-from .models import Claim, ClaimCheckHistory, EvidenceSubmission, Thread, ThreadComment, UserProfile
 from .throttles import FactCheckRateThrottle
+from .models import (
+    Claim,
+    ClaimCheckHistory,
+    EvidenceSubmission,
+    Thread,
+    ThreadComment,
+    UserProfile,
+    CanonicalSource,
+    EvidenceSource,
+    VerificationRun,
+    VerificationEvidence,
+)
 
 
 class ThreadEvidenceCommentAuthorizationTests(APITestCase):
@@ -15,7 +25,10 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
         self.owner = User.objects.create_user(username="owner", email="owner@test.com", password="pass1234")
         self.other = User.objects.create_user(username="other", email="other@test.com", password="pass1234")
 
-        UserProfile.objects.create(user=self.owner, trust_score=88.0)
+        self.owner_profile = UserProfile.objects.get(user=self.owner)
+        self.owner_profile.trust_score = 88.0
+        self.owner_profile.save()
+
         UserProfile.objects.create(user=self.other, trust_score=42.0)
 
         self.claim1 = Claim.objects.create(
@@ -803,3 +816,104 @@ class CorsPolicyTests(APITestCase):
 
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertIsNone(res.headers.get("Access-Control-Allow-Origin"))
+
+
+EvidenceSource.retrieved_at
+class VerificationEvidenceModelTests(APITestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="testuser",
+            email="test@example.com",
+            password="pass1234",
+        )
+
+        self.claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Test claim",
+        )
+
+    def test_canonical_source_creation(self):
+        source = CanonicalSource.objects.create(
+            name="Reuters",
+            domain="reuters.com",
+            source_type="NEWS",
+            canonical_url="https://www.reuters.com",
+        )
+
+        self.assertEqual(source.name, "Reuters")
+        self.assertEqual(source.domain, "reuters.com")
+        self.assertEqual(source.source_type, "NEWS")
+
+    def test_evidence_source_creation(self):
+        source = EvidenceSource.objects.create(
+            provider="TAVILY",
+            url="https://example.com/article",
+            canonical_url="https://example.com/article",
+            title="Example Article",
+            publisher="Example News",
+            source_type="NEWS",
+            content="Example article content",
+            content_hash="a" * 64,
+        )
+
+        self.assertEqual(source.provider, "TAVILY")
+        self.assertEqual(source.publisher, "Example News")
+        self.assertEqual(source.content_hash, "a" * 64)
+
+    def test_evidence_source_can_link_to_canonical_source(self):
+        canonical = CanonicalSource.objects.create(
+            name="Reuters",
+            domain="reuters.com",
+            source_type="NEWS",
+        )
+
+        evidence = EvidenceSource.objects.create(
+            canonical_source=canonical,
+            provider="TAVILY",
+            url="https://www.reuters.com/example",
+            publisher="Reuters",
+            source_type="NEWS",
+        )
+
+        self.assertEqual(evidence.canonical_source, canonical)
+        self.assertIn(evidence, canonical.evidence_sources.all())
+
+    def test_verification_run_creation(self):
+        run = VerificationRun.objects.create(
+            claim=self.claim,
+            triggered_by=self.user,
+            pipeline_version="1.0.0",
+        )
+
+        self.assertEqual(run.status, VerificationRun.Status.PENDING)
+        self.assertEqual(run.pipeline_version, "1.0.0")
+        self.assertEqual(run.triggered_by, self.user)
+
+    def test_verification_evidence_creation(self):
+        run = VerificationRun.objects.create(
+            claim=self.claim,
+            triggered_by=self.user,
+        )
+
+        source = EvidenceSource.objects.create(
+            provider="TAVILY",
+            url="https://example.com/article",
+            title="Example Article",
+            publisher="Example News",
+        )
+
+        evidence = VerificationEvidence.objects.create(
+            verification_run=run,
+            evidence_source=source,
+            relevance_score=0.90,
+            directness_score=0.80,
+            recency_score=0.75,
+            stance=VerificationEvidence.Stance.SUPPORTS,
+            evidence_role=VerificationEvidence.EvidenceRole.SECONDARY,
+        )
+
+        self.assertEqual(evidence.verification_run, run)
+        self.assertEqual(evidence.evidence_source, source)
+        self.assertEqual(evidence.stance, "SUPPORTS")
+        self.assertEqual(evidence.evidence_role, "SECONDARY")

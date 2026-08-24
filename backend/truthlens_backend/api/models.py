@@ -148,6 +148,297 @@ class Claim(models.Model):
     class Meta:
         indexes = _claim_vector_indexes()
 
+class CanonicalSource(models.Model):
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    name = models.CharField(max_length=255)
+
+    domain = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+    )
+
+    source_type = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+    )
+
+    canonical_url = models.URLField(
+        max_length=2000,
+        blank=True,
+        null=True,
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+class EvidenceSource(models.Model):
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    canonical_source = models.ForeignKey(
+        CanonicalSource,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="evidence_sources",
+    )
+
+    provider = models.CharField(
+        max_length=50
+    )
+
+    url = models.URLField(
+        max_length=2000,
+        blank=True,
+        null=True,
+    )
+
+    canonical_url = models.URLField(
+        max_length=2000,
+        blank=True,
+        null=True,
+    )
+
+    title = models.TextField(
+        blank=True,
+        null=True,
+    )
+
+    publisher = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+    )
+
+    source_type = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+    )
+
+    authority_score = models.FloatField(
+        null=True,
+        blank=True,
+    )
+
+    content = models.TextField(
+        blank=True,
+        null=True,
+    )
+
+    content_hash = models.CharField(
+        max_length=64,
+        blank=True,
+        null=True,
+        db_index=True,
+    )
+
+    published_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    retrieved_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    raw_reference = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Provider-specific identifiers only. "
+            "Not for general content storage."
+            "Example: {'gfc_claim_id': '...', 'tavily_result_index': 2}"
+        ),
+    )
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["provider"],
+                name="evidence_provider_idx",
+            ),
+            models.Index(
+                fields=["publisher"],
+                name="evidence_publisher_idx",
+            ),
+        ]
+        ordering = ["-retrieved_at"]
+
+    def __str__(self):
+        return self.title or self.url or str(self.id)
+
+class VerificationRun(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        RUNNING = "RUNNING", "Running"
+        COMPLETED = "COMPLETED", "Completed"
+        ABSTAINED = "ABSTAINED", "Abstained"
+        FAILED = "FAILED", "Failed"
+        CANCELLED = "CANCELLED", "Cancelled"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    claim = models.ForeignKey(
+        Claim,
+        on_delete=models.CASCADE,
+        related_name="verification_runs",
+    )
+
+    triggered_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="verification_runs",
+        help_text="User who triggered this verification run, if authenticated.",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+
+    pipeline_version = models.CharField(
+        max_length=32,
+        default="1.0.0",
+        help_text=(
+            "Version of the verification pipeline used for this run."
+        ),
+    )
+
+    started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    failure_stage = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+    )
+
+    failure_code = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+    )
+
+    failure_message = models.TextField(
+        blank=True,
+        null=True,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"VerificationRun {self.id} - {self.status}"
+
+class VerificationEvidence(models.Model):
+    class Stance(models.TextChoices):
+        SUPPORTS = "SUPPORTS", "Supports"
+        REFUTES = "REFUTES", "Refutes"
+        CONTEXT = "CONTEXT", "Context"
+        UNKNOWN = "UNKNOWN", "Unknown"
+
+    class EvidenceRole(models.TextChoices):
+        PRIMARY = "PRIMARY", "Primary Source"
+        SECONDARY = "SECONDARY", "Secondary Source"
+        FACT_CHECK = "FACT_CHECK", "Fact Check"
+        CONTEXTUAL = "CONTEXTUAL", "Contextual"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    verification_run = models.ForeignKey(
+        VerificationRun,
+        on_delete=models.CASCADE,
+        related_name="evidence",
+    )
+
+    evidence_source = models.ForeignKey(
+        EvidenceSource,
+        on_delete=models.CASCADE,
+        related_name="verification_evidence",
+    )
+
+    relevance_score = models.FloatField(
+        null=True,
+        blank=True,
+    )
+
+    directness_score = models.FloatField(
+        null=True,
+        blank=True,
+    )
+
+    recency_score = models.FloatField(
+        null=True,
+        blank=True,
+    )
+
+    stance = models.CharField(
+        max_length=20,
+        choices=Stance.choices,
+        default=Stance.UNKNOWN,
+    )
+
+    evidence_role = models.CharField(
+        max_length=20,
+        choices=EvidenceRole.choices,
+        blank=True,
+        null=True,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["verification_run", "evidence_source"],
+                name="unique_evidence_per_verification_run",
+            )
+        ]   
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return (
+            f"VerificationEvidence {self.id} "
+            f"- {self.stance}"
+        )    
 
 class Thread(models.Model):
     class Status(models.TextChoices):
