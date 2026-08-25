@@ -4,6 +4,7 @@ from django.utils.encoding import force_bytes, force_str
 from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.paginator import Paginator, EmptyPage
 from django.http import JsonResponse
 from django.core.mail import send_mail
 from django.core.mail import EmailMultiAlternatives
@@ -1613,12 +1614,13 @@ class UserHubView(APIView):
             
 
         # 2. Personal Impact Metrics
-        my_scans = (
-            Claim.objects.filter(check_history__user=user)
-            .annotate(last_checked_at=Max("check_history__checked_at"))
-            .order_by("-last_checked_at", "-last_updated")
+        total_scans = (
+            Claim.objects
+            .filter(check_history__user=user)
+            .distinct()
+            .count()
         )
-        total_scans = my_scans.count()
+        
         evidence_submitted = EvidenceSubmission.objects.filter(contributor=user).count()
         votes_cast = Vote.objects.filter(voter=user).count()
         
@@ -1627,7 +1629,6 @@ class UserHubView(APIView):
 
         # 3. The Fact-Check Library (Saved Receipts)
         # Using your existing ClaimSerializer to format their private extension scans
-        serialized_saved = ClaimSerializer(my_scans, many=True).data
 
         return Response({
             "user_info": {
@@ -1657,10 +1658,222 @@ class UserHubView(APIView):
                 "community_contributions": evidence_submitted + votes_cast,
                 "impact_ripple": impact_ripple,
             },
-            "library": {
-                "saved_receipts": serialized_saved
-            }
         })
+
+class UserFactCheckLibraryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    DEFAULT_PAGE_SIZE = 10
+    MAX_PAGE_SIZE = 50
+
+    VALID_VIEWS = {"history", "saved"}
+    VALID_SORTS = {"newest", "oldest"}
+
+    VALID_VERDICTS = {
+        "FACT",
+        "FAKE",
+        "MISLEADING",
+        "SATIRE",
+        "UNVERIFIED",
+        "OUT_OF_SCOPE",
+    }
+
+    VALID_TYPES = {
+        Claim.ClaimType.TEXT,
+        Claim.ClaimType.IMAGE,
+        Claim.ClaimType.VIDEO,
+        Claim.ClaimType.URL,
+        Claim.ClaimType.FILE,
+    }
+
+    def get(self, request):
+        user = request.user
+
+        view_mode = (
+            request.query_params
+            .get("view", "history")
+            .strip()
+            .lower()
+        )
+
+        if view_mode not in self.VALID_VIEWS:
+            return Response(
+                {
+                    "detail":
+                        "Invalid view. Use 'history' or 'saved'."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        search_query = (
+            request.query_params
+            .get("search", "")
+            .strip()[:120]
+        )
+
+        verdict = (
+            request.query_params
+            .get("verdict", "")
+            .strip()
+            .upper()
+        )
+
+        claim_type = (
+            request.query_params
+            .get("type", "")
+            .strip()
+            .upper()
+        )
+
+        sort_order = (
+            request.query_params
+            .get("sort", "newest")
+            .strip()
+            .lower()
+        )
+
+        if sort_order not in self.VALID_SORTS:
+            sort_order = "newest"
+
+        try:
+            page_number = max(
+                int(request.query_params.get("page", 1)),
+                1,
+            )
+        except (TypeError, ValueError):
+            page_number = 1
+
+        try:
+            page_size = int(
+                request.query_params.get(
+                    "page_size",
+                    self.DEFAULT_PAGE_SIZE,
+                )
+            )
+        except (TypeError, ValueError):
+            page_size = self.DEFAULT_PAGE_SIZE
+
+        page_size = max(
+            1,
+            min(page_size, self.MAX_PAGE_SIZE),
+        )
+
+        if view_mode == "history":
+            queryset = (
+                Claim.objects
+                .filter(check_history__user=user)
+                .annotate(
+                    activity_at=Max(
+                        "check_history__checked_at"
+                    )
+                )
+            )
+
+            ordering = (
+                "activity_at",
+                "id",
+            )
+
+            if sort_order == "newest":
+                ordering = (
+                    "-activity_at",
+                    "-id",
+                )
+
+        else:
+            queryset = (
+                user.profile.saved_claims
+                .all()
+                .annotate(
+                    activity_at=F("last_updated")
+                )
+            )
+
+            ordering = (
+                "activity_at",
+                "id",
+            )
+
+            if sort_order == "newest":
+                ordering = (
+                    "-activity_at",
+                    "-id",
+                )
+
+        if search_query:
+            queryset = queryset.filter(
+                Q(context_text__icontains=search_query)
+                | Q(ai_summary__icontains=search_query)
+                | Q(ai_verdict__icontains=search_query)
+                | Q(final_verdict__icontains=search_query)
+                | Q(source_link__icontains=search_query)
+                | Q(top_verdict_source__icontains=search_query)
+                | Q(url_link__icontains=search_query)
+            )
+
+        if verdict:
+            if verdict not in self.VALID_VERDICTS:
+                return Response(
+                    {"detail": "Invalid verdict filter."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            queryset = queryset.filter(
+                Q(final_verdict=verdict)
+                | Q(
+                    final_verdict__isnull=True,
+                    ai_verdict=verdict,
+                )
+                | Q(
+                    final_verdict="",
+                    ai_verdict=verdict,
+                )
+            )
+
+        if claim_type:
+            if claim_type not in self.VALID_TYPES:
+                return Response(
+                    {"detail": "Invalid claim type filter."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            queryset = queryset.filter(
+                claim_type=claim_type
+            )
+
+        queryset = queryset.order_by(*ordering)
+
+        paginator = Paginator(
+            queryset,
+            page_size,
+        )
+
+        try:
+            page_obj = paginator.page(page_number)
+        except EmptyPage:
+            page_obj = paginator.page(
+                paginator.num_pages
+            )
+
+        serializer = ClaimSerializer(
+            page_obj.object_list,
+            many=True,
+            context={"request": request},
+        )
+
+        return Response(
+            {
+                "view": view_mode,
+                "count": paginator.count,
+                "page": page_obj.number,
+                "page_size": page_size,
+                "total_pages": paginator.num_pages,
+                "has_next": page_obj.has_next(),
+                "has_previous": page_obj.has_previous(),
+                "results": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])

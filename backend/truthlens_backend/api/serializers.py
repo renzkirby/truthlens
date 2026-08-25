@@ -270,6 +270,16 @@ class ClaimSerializer(serializers.ModelSerializer):
     verified_evidence_count = serializers.SerializerMethodField()
     moderator_verdict_info = serializers.SerializerMethodField()
     canonical_source_url = serializers.SerializerMethodField()
+    activity_at = serializers.SerializerMethodField()
+
+    def get_activity_at(self, obj):
+        activity_at = getattr(
+            obj,
+            "activity_at",
+            None,
+        )
+
+        return activity_at or obj.last_updated
 
     def get_canonical_source_url(self, obj):
         def extract_url(value):
@@ -345,30 +355,6 @@ class ClaimSerializer(serializers.ModelSerializer):
 
         return None
 
-        # For URL claims, prefer the originally submitted URL.
-        if obj.claim_type == Claim.ClaimType.URL:
-            url = extract_url(obj.url_link)
-            if url:
-                return url
-
-        # Then prefer the primary analysis source.
-        url = extract_url(obj.source_link)
-        if url:
-            return url
-
-        # Then the top verdict source.
-        url = extract_url(obj.top_verdict_source)
-        if url:
-            return url
-
-        # Final fallback for records whose source exists only in ai_sources.
-        if obj.ai_sources:
-            for source in obj.ai_sources:
-                url = extract_url(source)
-                if url:
-                    return url
-
-        return None
 
     def get_effective_verdict(self, obj):
         return obj.final_verdict or obj.ai_verdict
@@ -415,6 +401,7 @@ class ClaimSerializer(serializers.ModelSerializer):
             "has_moderator_verdict",
             "verified_evidence_count",
             "moderator_verdict_info",
+            "activity_at",
             "last_updated",
             "score_context",
             "top_verdict_source", 
