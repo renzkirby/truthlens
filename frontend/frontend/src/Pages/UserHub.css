@@ -533,6 +533,7 @@
    overflow: hidden;
    -webkit-box-orient: vertical;
    -webkit-line-clamp: 2;
+   line-clamp: 2;
    margin: 0;
    color: #1e293b;
    font-size: 13px;
@@ -1150,6 +1151,7 @@
 
    .li-excerpt {
       -webkit-line-clamp: 3;
+      line-clamp: 3;
    }
 
    .li-content {
