@@ -67,6 +67,7 @@ from .trust_service import recompute_user_trust_score
 from .throttles import (
     FactCheckRateThrottle,
     PasswordResetRateThrottle,
+    EmailVerificationRateThrottle,
 )
 from .serializers import (
     RegisterSerializer,
@@ -94,6 +95,7 @@ from .serializers import (
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.views import SocialLoginView
+from .email_verification import send_email_verification
 
 #GoogleLogin
 class GoogleLogin(SocialLoginView):
@@ -367,36 +369,52 @@ def verify_url(request):
         status=200,
     )
 
+def get_tokens_for_user(user):
+    refresh = RefreshToken.for_user(user)
+
+    return {
+        "refresh": str(refresh),
+        "access": str(refresh.access_token),
+    }
 
 #User registration
 @csrf_exempt
 @api_view(["POST"])
+@permission_classes([AllowAny])
 def register_user(request):
-    serializer = RegisterSerializer(data=request.data)
-    if serializer.is_valid():
-        user = serializer.save()
-        token = secrets.token_urlsafe(32)
-        user.profile.email_verification_token = token
-        user.profile.save()
+    serializer = RegisterSerializer(
+        data=request.data
+    )
 
-        verification_link = f"http://localhost:5174/verify-email?token={token}"
-        send_mail(
-            subject="Verify your TruthLens email",
-            message=f"Click the link to verify your email: {verification_link}",
-            from_email=None,
-            recipient_list=[user.email],
-            fail_silently=True,  # don't crash registration if email fails
+    if not serializer.is_valid():
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
-        return Response(get_tokens_for_user(user), status=status.HTTP_201_CREATED)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    user = serializer.save()
 
-def get_tokens_for_user(user):
-    refresh = RefreshToken.for_user(user)
-    return {
-        'refresh': str(refresh),
-        'access': str(refresh.access_token),
-    }
+    verification_email_sent = False
+
+    try:
+        send_email_verification(user)
+        verification_email_sent = True
+    except Exception as error:
+        print(
+            "Failed to send verification email:",
+            error,
+        )
+
+    tokens = get_tokens_for_user(user)
+
+    return Response(
+        {
+            **tokens,
+            "verification_email_sent":
+                verification_email_sent,
+        },
+        status=status.HTTP_201_CREATED,
+    )
     
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -514,45 +532,163 @@ def login_user(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@throttle_classes([EmailVerificationRateThrottle])
 def send_verification_email(request):
-    token = secrets.token_urlsafe(32)
+    profile = request.user.profile
+
+    if profile.is_email_verified:
+        return Response(
+            {
+                "detail":
+                    "Your email is already verified."
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    if not request.user.email:
+        return Response(
+            {
+                "detail":
+                    "No email address is associated "
+                    "with this account."
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     try:
-        user_profile = UserProfile.objects.get(user=request.user)
-    except UserProfile.DoesNotExist:
-        return Response({ "error": "User does not exist."}, status=404)
-    
-    user_profile.email_verification_token = token
-    user_profile.save()
-    
-    verification_link = f"http://localhost:5174/verify-email?token={token}"
-    
-    send_mail(
-        subject="Verify your TruthLens email",
-        message=f"Click the link to verify your email: {verification_link}",
-        from_email=None,
-        recipient_list=[request.user.email],
+        send_email_verification(request.user)
+    except Exception as error:
+        print(
+            "Failed to send verification email:",
+            error,
+        )
+
+        return Response(
+            {
+                "detail":
+                    "Unable to send the verification "
+                    "email right now."
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    return Response(
+        {
+            "detail":
+                "Verification email sent."
+        },
+        status=status.HTTP_200_OK,
     )
-    
-    return Response({"message": "Verification email sent."}, status=200) 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def verify_email(request):
     token = request.query_params.get("token")
 
     if not token:
-        return Response({"error": "Token is required."}, status=400)
+        return Response(
+            {
+                "status": "invalid",
+                "detail":
+                    "Verification token is required.",
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     try:
-        user_profile = UserProfile.objects.get(email_verification_token=token)
+        profile = UserProfile.objects.get(
+            email_verification_token=token
+        )
     except UserProfile.DoesNotExist:
-        return Response({"error": "Invalid or expired token"}, status=400)
-    
-    user_profile.is_email_verified = True
-    user_profile.email_verification_token = None
-    user_profile.save()
-    
-    return Response({"message": "Email verified successfully."}, status=200)
-    
+        return Response(
+            {
+                "status": "invalid",
+                "detail":
+                    "This verification link is invalid "
+                    "or has already been used.",
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if profile.is_email_verified:
+        profile.email_verification_token = None
+        profile.email_verification_sent_at = None
+
+        profile.save(
+            update_fields=[
+                "email_verification_token",
+                "email_verification_sent_at",
+            ]
+        )
+
+        return Response(
+            {
+                "status": "verified",
+                "detail":
+                    "Your email is already verified.",
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    sent_at = (
+        profile.email_verification_sent_at
+    )
+
+    if not sent_at:
+        return Response(
+            {
+                "status": "expired",
+                "detail":
+                    "This verification link has expired.",
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    expires_at = sent_at + timedelta(
+        hours=settings
+        .EMAIL_VERIFICATION_TOKEN_LIFETIME_HOURS
+    )
+
+    if timezone.now() > expires_at:
+        profile.email_verification_token = None
+        profile.email_verification_sent_at = None
+
+        profile.save(
+            update_fields=[
+                "email_verification_token",
+                "email_verification_sent_at",
+            ]
+        )
+
+        return Response(
+            {
+                "status": "expired",
+                "detail":
+                    "This verification link has expired.",
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    profile.is_email_verified = True
+    profile.email_verification_token = None
+    profile.email_verification_sent_at = None
+
+    profile.save(
+        update_fields=[
+            "is_email_verified",
+            "email_verification_token",
+            "email_verification_sent_at",
+        ]
+    )
+
+    return Response(
+        {
+            "status": "verified",
+            "detail":
+                "Email verified successfully.",
+        },
+        status=status.HTTP_200_OK,
+    )
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsModerator])
@@ -943,15 +1079,28 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
         
         evidence = self.get_object()
 
-        status = request.data.get("evidence_status")
-        notes = request.data.get("moderator_notes", "")
+        evidence_status = request.data.get(
+            "evidence_status"
+        )
+        notes = request.data.get(
+            "moderator_notes",
+            "",
+        )
 
-        if status not in ["VERIFIED", "REJECTED"]:
-            return Response({
-                "detail": "Invalid evidence_status. Must be VERIFIED or REJECTED."
-            }, status=status.HTTP_400_BAD_REQUEST)
+        if evidence_status not in [
+            EvidenceSubmission.EvidenceStatus.VERIFIED,
+            EvidenceSubmission.EvidenceStatus.REJECTED,
+        ]:
+            return Response(
+                {
+                    "detail":
+                        "Invalid evidence_status. "
+                        "Must be VERIFIED or REJECTED."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        evidence.evidence_status = status
+        evidence.evidence_status = evidence_status
         evidence.verified_by = request.user
         evidence.verified_at = timezone.now()
         evidence.moderator_notes = notes
@@ -960,7 +1109,7 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
         # Persist trust immediately so UI does not show stale overall score after moderation.
         recompute_user_trust_score(evidence.contributor.id)
         # Keep async recompute as a safety net for eventual consistency.
-        update_contributor_trust_score.delay(evidence.contributor.id, status)
+        update_contributor_trust_score.delay(evidence.contributor.id, evidence_status)
         
         serializer = EvidenceSubmissionSerializer(evidence, context={"request": request})
         return Response(serializer.data, status=200)

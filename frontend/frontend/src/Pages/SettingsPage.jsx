@@ -4,6 +4,7 @@ import NavigationBar from "../components/NavigationBar";
 import Icons from "../components/Icons";
 import "./SettingsPage.css";
 import { User } from "lucide-react";
+import { resolveApiEndpoint } from "../utils/api";
 
 function SettingsPage() {
    const { user, authFetch, refreshUser, logout } = useAuth();
@@ -19,6 +20,12 @@ function SettingsPage() {
    const [previewAvatar, setPreviewAvatar] = useState(null);
    const [isSaving, setIsSaving] = useState(false);
    const [message, setMessage] = useState({ text: "", type: "" });
+   const [isSendingVerification, setIsSendingVerification] = useState(false);
+   const [verificationMessage, setVerificationMessage] = useState({
+      text: "",
+      type: "",
+   });
+   const sendVerificationEndpoint = resolveApiEndpoint("SEND_VERIFICATION");
    const fileInputRef = useRef(null);
 
    useEffect(() => {
@@ -91,6 +98,43 @@ function SettingsPage() {
          });
       } finally {
          setIsSaving(false);
+      }
+   };
+
+   const handleResendVerification = async () => {
+      if (isSendingVerification || user?.is_email_verified) return;
+
+      setIsSendingVerification(true);
+      setVerificationMessage({
+         text: "",
+         type: "",
+      });
+
+      try {
+         const data = await authFetch(sendVerificationEndpoint, {
+            method: "POST",
+         });
+
+         setVerificationMessage({
+            text: data?.detail || "Verification email sent. Check your inbox.",
+            type: "success",
+         });
+      } catch (error) {
+         console.error("Failed to resend verification email:", error);
+
+         const isRateLimited =
+            error?.message?.toLowerCase().includes("throttle") ||
+            error?.message?.toLowerCase().includes("rate") ||
+            error?.message?.includes("429");
+
+         setVerificationMessage({
+            text: isRateLimited
+               ? "You've requested several verification emails. Please try again later."
+               : error?.message || "Unable to send the verification email right now.",
+            type: "error",
+         });
+      } finally {
+         setIsSendingVerification(false);
       }
    };
 
@@ -243,6 +287,68 @@ function SettingsPage() {
                               className="form-input"
                               placeholder="user@email.com"
                            />
+                        </div>
+
+                        {/* Email Verification */}
+                        <div className="settings-verification-card">
+                           <div className="settings-verification-content">
+                              <div
+                                 className={`settings-verification-icon ${
+                                    user?.is_email_verified
+                                       ? "settings-verification-icon--verified"
+                                       : "settings-verification-icon--pending"
+                                 }`}
+                              >
+                                 <Icons
+                                    name={user?.is_email_verified ? "check-circle" : "mail"}
+                                    size={20}
+                                    aria-hidden="true"
+                                 />
+                              </div>
+
+                              <div className="settings-verification-copy">
+                                 <div className="settings-verification-heading">
+                                    <strong>Email verification</strong>
+
+                                    <span
+                                       className={`settings-verification-badge ${
+                                          user?.is_email_verified
+                                             ? "settings-verification-badge--verified"
+                                             : "settings-verification-badge--pending"
+                                       }`}
+                                    >
+                                       {user?.is_email_verified ? "Verified" : "Not verified"}
+                                    </span>
+                                 </div>
+
+                                 <p>
+                                    {user?.is_email_verified
+                                       ? "Your email address has been verified."
+                                       : "Verify your email address to confirm account ownership and keep account recovery reliable."}
+                                 </p>
+
+                                 {!user?.is_email_verified && (
+                                    <button
+                                       type="button"
+                                       className="settings-verification-btn"
+                                       onClick={handleResendVerification}
+                                       disabled={isSendingVerification}
+                                       aria-busy={isSendingVerification}
+                                    >
+                                       {isSendingVerification ? "Sending..." : "Resend verification email"}
+                                    </button>
+                                 )}
+
+                                 {verificationMessage.text && (
+                                    <p
+                                       className={`settings-verification-message settings-verification-message--${verificationMessage.type}`}
+                                       role={verificationMessage.type === "error" ? "alert" : "status"}
+                                    >
+                                       {verificationMessage.text}
+                                    </p>
+                                 )}
+                              </div>
+                           </div>
                         </div>
 
                         <div className="settings-form-group">

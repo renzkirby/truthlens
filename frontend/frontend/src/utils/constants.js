@@ -104,6 +104,8 @@ export const API_ENDPOINTS = {
    PASSWORD_RESET: "auth/password-reset/",
    PASSWORD_RESET_CONFIRM: "auth/password-reset/confirm/",
    ONBOARDING_COMPLETE: "auth/onboarding/complete/",
+   VERIFY_EMAIL: "auth/verify-email/",
+   SEND_VERIFICATION: "auth/send-verification/",
 
    // Claims & Threads
    CLAIMS: "claims/",

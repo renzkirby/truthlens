@@ -36,6 +36,7 @@ function App() {
                <Route path="/reset-password/:uid/:token" element={<ResetPasswordPage />} />
                <Route path="/" element={<RootRedirect />} />
                <Route path="/wireframes" element={<TruthLensWireframes />} />
+               <Route path="/verify-email" element={<VerifyEmailPage />} />
 
                {/* Protected Moderator Page */}
                <Route element={<PrivateRoute requiredRole="MOD" />}>
@@ -52,7 +53,6 @@ function App() {
                   <Route path="/profile" element={<UserProfile />} />
                   <Route path="/thread/detail/:threadId" element={<ThreadDetailPage />} />
                   <Route path="/analysis/:claimId" element={<DeepAnalysisPage />} />
-                  <Route path="/verify-email" element={<VerifyEmailPage />} />
                   <Route path="/user/:username" element={<UserProfile />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/notifications" element={<NotificationPage />} />
