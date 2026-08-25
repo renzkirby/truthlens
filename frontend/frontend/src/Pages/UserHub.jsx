@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import "./UserHub.css";
@@ -501,8 +501,36 @@ export default function UserHub() {
    const [hubData, setHubData] = useState(null);
    const [loading, setLoading] = useState(true);
    const [error, setError] = useState(null);
-   const [searchQuery, setSearchQuery] = useState("");
    const [selectedClaimId, setSelectedClaimId] = useState(null);
+
+   const [libraryView, setLibraryView] = useState("history");
+   const [libraryData, setLibraryData] = useState({
+      count: 0,
+      page: 1,
+      page_size: 10,
+      total_pages: 1,
+      has_next: false,
+      has_previous: false,
+      results: [],
+   });
+
+   const [libraryLoading, setLibraryLoading] = useState(true);
+   const [libraryError, setLibraryError] = useState(null);
+
+   const [searchInput, setSearchInput] = useState("");
+   const [searchQuery, setSearchQuery] = useState("");
+
+   const [verdictFilter, setVerdictFilter] = useState("");
+   const [typeFilter, setTypeFilter] = useState("");
+   const [sortOrder, setSortOrder] = useState("newest");
+   const [libraryPage, setLibraryPage] = useState(1);
+
+   const [libraryCounts, setLibraryCounts] = useState({
+      history: null,
+      saved: null,
+   });
+
+   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
 
    useEffect(() => {
       const loadDashboard = async () => {
@@ -522,20 +550,78 @@ export default function UserHub() {
       loadDashboard();
    }, [authFetch]);
 
-   const filteredLibrary = useMemo(() => {
-      if (!hubData?.library?.saved_receipts) return [];
-      let receipts = hubData.library.saved_receipts;
-      if (searchQuery) {
-         const lower = searchQuery.toLowerCase();
-         receipts = receipts.filter(
-            (r) =>
-               (r.ai_summary && r.ai_summary.toLowerCase().includes(lower)) ||
-               (r.final_verdict && r.final_verdict.toLowerCase().includes(lower)) ||
-               (r.ai_verdict && r.ai_verdict.toLowerCase().includes(lower)),
-         );
-      }
-      return receipts;
-   }, [hubData?.library?.saved_receipts, searchQuery]);
+   useEffect(() => {
+      const timeoutId = window.setTimeout(() => {
+         setSearchQuery(searchInput.trim());
+         setLibraryPage(1);
+      }, 350);
+
+      return () => window.clearTimeout(timeoutId);
+   }, [searchInput]);
+
+   useEffect(() => {
+      let ignore = false;
+
+      const loadLibrary = async () => {
+         try {
+            setLibraryLoading(true);
+            setLibraryError(null);
+
+            const params = new URLSearchParams({
+               view: libraryView,
+               page: String(libraryPage),
+               page_size: "10",
+               sort: sortOrder,
+            });
+
+            if (searchQuery) {
+               params.set("search", searchQuery);
+            }
+
+            if (verdictFilter) {
+               params.set("verdict", verdictFilter);
+            }
+
+            if (typeFilter) {
+               params.set("type", typeFilter);
+            }
+
+            const data = await authFetch(buildApiUrl(`users/me/fact-checks/?${params.toString()}`), {
+               method: "GET",
+            });
+
+            if (ignore) return;
+
+            setLibraryData(data);
+
+            setLibraryCounts((current) => ({
+               ...current,
+               [libraryView]: data.count,
+            }));
+
+            // Protect against a stale page after filtering.
+            if (data.page !== libraryPage && data.page >= 1) {
+               setLibraryPage(data.page);
+            }
+         } catch (err) {
+            if (ignore) return;
+
+            console.error("Failed to load fact-check library:", err);
+
+            setLibraryError("Could not load your fact-check activity.");
+         } finally {
+            if (!ignore) {
+               setLibraryLoading(false);
+            }
+         }
+      };
+
+      loadLibrary();
+
+      return () => {
+         ignore = true;
+      };
+   }, [authFetch, libraryView, libraryPage, searchQuery, verdictFilter, typeFilter, sortOrder, libraryRefreshKey]);
 
    if (loading) return <UserHubSkeleton />;
    if (error)
@@ -564,6 +650,83 @@ export default function UserHub() {
          return new URL(url).hostname.replace(/^www\./, "");
       } catch {
          return "Source";
+      }
+   };
+
+   const handleLibraryViewChange = (nextView) => {
+      if (nextView === libraryView) return;
+
+      setLibraryView(nextView);
+      setLibraryPage(1);
+   };
+
+   const handleVerdictChange = (event) => {
+      setVerdictFilter(event.target.value);
+      setLibraryPage(1);
+   };
+
+   const handleTypeChange = (event) => {
+      setTypeFilter(event.target.value);
+      setLibraryPage(1);
+   };
+
+   const handleSortChange = (event) => {
+      setSortOrder(event.target.value);
+      setLibraryPage(1);
+   };
+
+   const clearLibraryFilters = () => {
+      setSearchInput("");
+      setSearchQuery("");
+      setVerdictFilter("");
+      setTypeFilter("");
+      setSortOrder("newest");
+      setLibraryPage(1);
+   };
+
+   const hasLibraryFilters =
+      Boolean(searchQuery) || Boolean(verdictFilter) || Boolean(typeFilter) || sortOrder !== "newest";
+
+   const handleToggleSave = async (claim) => {
+      try {
+         const result = await authFetch(buildApiUrl(`claims/${claim.id}/toggle-save/`), {
+            method: "POST",
+         });
+
+         const isNowSaved = result.is_saved;
+
+         setLibraryData((current) => ({
+            ...current,
+            results: current.results.map((item) =>
+               item.id === claim.id
+                  ? {
+                       ...item,
+                       is_saved: isNowSaved,
+                    }
+                  : item,
+            ),
+         }));
+
+         setLibraryCounts((current) => {
+            if (current.saved === null) {
+               return current;
+            }
+
+            return {
+               ...current,
+               saved: Math.max(0, current.saved + (isNowSaved ? 1 : -1)),
+            };
+         });
+
+         /*
+          * If we are inside Saved, an unsaved claim must
+          * disappear from the server-backed collection.
+          */
+         if (libraryView === "saved" && !isNowSaved) {
+            setLibraryRefreshKey((key) => key + 1);
+         }
+      } catch (err) {
+         console.error("Failed to update saved claim:", err);
       }
    };
 
@@ -823,115 +986,275 @@ export default function UserHub() {
                   </div>
                </section>
 
-               {/* Fact-Check Activity */}
+               {/* Fact-Check Library */}
                <section className="hub-library box-panel">
                   <div className="library-header">
                      <div className="library-heading">
-                        <span className="hub-section-eyebrow">YOUR ACTIVITY</span>
+                        <span className="hub-section-eyebrow">YOUR LIBRARY</span>
 
                         <div className="library-title-row">
-                           <h2 className="section-title">Recent fact checks</h2>
+                           <h2 className="section-title">Fact-check library</h2>
 
-                           <span className="library-count">{hubData?.library?.saved_receipts?.length ?? 0}</span>
+                           <span className="library-count">{libraryData.count}</span>
                         </div>
 
                         <p className="library-description">
-                           Review claims you have previously checked and reopen their analysis.
+                           Browse your fact-check history and claims you&apos;ve saved for later.
                         </p>
                      </div>
+                  </div>
+
+                  <div className="library-tabs">
+                     <button
+                        type="button"
+                        className={`library-tab ${libraryView === "history" ? "library-tab--active" : ""}`}
+                        onClick={() => handleLibraryViewChange("history")}
+                     >
+                        <Icons name="clock" size={15} />
+                        History
+                        {libraryCounts.history !== null && (
+                           <span className="library-tab-count">{libraryCounts.history}</span>
+                        )}
+                     </button>
+
+                     <button
+                        type="button"
+                        className={`library-tab ${libraryView === "saved" ? "library-tab--active" : ""}`}
+                        onClick={() => handleLibraryViewChange("saved")}
+                     >
+                        <Icons name="bookmark" size={15} />
+                        Saved
+                        {libraryCounts.saved !== null && (
+                           <span className="library-tab-count">{libraryCounts.saved}</span>
+                        )}
+                     </button>
+                  </div>
+
+                  <div className="library-toolbar">
                      <div className="library-search">
                         <Icons name="search" size={16} />
 
                         <input
                            type="search"
-                           placeholder="Search fact checks..."
+                           placeholder={libraryView === "history" ? "Search history..." : "Search saved claims..."}
                            aria-label="Search fact checks"
-                           value={searchQuery}
-                           onChange={(e) => setSearchQuery(e.target.value)}
+                           value={searchInput}
+                           onChange={(event) => setSearchInput(event.target.value)}
                         />
+                     </div>
+
+                     <div className="library-filters">
+                        <label className="library-filter">
+                           <span className="sr-only">Filter by verdict</span>
+
+                           <select value={verdictFilter} onChange={handleVerdictChange}>
+                              <option value="">All verdicts</option>
+                              <option value="FACT">Fact</option>
+                              <option value="FAKE">Fake</option>
+                              <option value="MISLEADING">Misleading</option>
+                              <option value="SATIRE">Satire</option>
+                              <option value="UNVERIFIED">Unverified</option>
+                              <option value="OUT_OF_SCOPE">Out of scope</option>
+                           </select>
+                        </label>
+
+                        <label className="library-filter">
+                           <span className="sr-only">Filter by claim type</span>
+
+                           <select value={typeFilter} onChange={handleTypeChange}>
+                              <option value="">All types</option>
+                              <option value="TEXT">Text</option>
+                              <option value="IMAGE">Image</option>
+                              <option value="URL">URL</option>
+                              <option value="VIDEO">Video</option>
+                              <option value="FILE">File</option>
+                           </select>
+                        </label>
+
+                        <label className="library-filter">
+                           <span className="sr-only">Sort fact checks</span>
+
+                           <select value={sortOrder} onChange={handleSortChange}>
+                              <option value="newest">Newest first</option>
+                              <option value="oldest">Oldest first</option>
+                           </select>
+                        </label>
+
+                        {hasLibraryFilters && (
+                           <button type="button" className="library-clear-filters" onClick={clearLibraryFilters}>
+                              Clear
+                           </button>
+                        )}
                      </div>
                   </div>
 
-                  <div className="library-list">
-                     {filteredLibrary.length > 0 ? (
-                        filteredLibrary.map((claim) => (
-                           <div key={claim.id} className="library-item">
-                              <div className="li-main">
-                                 <div className="li-icon">
-                                    <Icons
-                                       name={claim.claim_type === "IMAGE" ? "image" : "globe"}
-                                       size={20}
-                                       color="#64748b"
-                                       className="li-icon-svg"
-                                    />
-                                 </div>
-                                 <div className="li-content">
-                                    <div className="li-type-row">
-                                       <span className="li-type">{claim.claim_type || "CLAIM"}</span>
-
-                                       <span className="li-date">
-                                          {new Date(claim.last_updated).toLocaleDateString()}
-                                       </span>
-                                    </div>
-                                    <p className="li-excerpt">
-                                       {claim.context_text
-                                          ? `"${claim.context_text}"`
-                                          : claim.ai_summary || "No summary available."}
-                                    </p>
-                                    <div className="li-meta">
-                                       {claim.canonical_source_url && (
-                                          <span className="li-source-meta">
-                                             <span className="li-source-label">Top Source</span>
-
-                                             <span aria-hidden="true">·</span>
-
-                                             <a
-                                                href={claim.canonical_source_url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="li-source-link"
-                                             >
-                                                {getSourceLabel(claim.canonical_source_url)}
-                                                <Icons name="external-link" size={11} />
-                                             </a>
-                                          </span>
-                                       )}
-                                    </div>
-                                 </div>
-                              </div>
-                              <div className="li-actions">
-                                 <div className="li-verdict-top-right">
-                                    <VerdictBadge verdict={claim.final_verdict || claim.ai_verdict} />
-                                 </div>
-                                 <div className="hub-btns-row">
-                                    <button onClick={() => setSelectedClaimId(claim.id)} className="hub-btn-report">
-                                       <Icons name="file-text" size={14} className="hub-btn-icon" /> View Analysis
-                                       Report
-                                    </button>
-
-                                    <button className="hub-btn-publish" onClick={handlePublish}>
-                                       <Icons name="arrow-up-right" size={14} className="hub-btn-icon" /> Escalate
-                                    </button>
-                                 </div>
-                              </div>
+                  <div className="library-content">
+                     {libraryLoading ? (
+                        <div className="library-loading">
+                           <Icons name="loader" size={22} className="spin" />
+                           <span>Loading fact checks...</span>
+                        </div>
+                     ) : libraryError ? (
+                        <div className="library-empty">
+                           <div className="library-empty-icon">
+                              <Icons name="alert-triangle" size={24} />
                            </div>
-                        ))
+
+                           <h3>Unable to load fact checks</h3>
+                           <p>{libraryError}</p>
+                        </div>
+                     ) : libraryData.results.length > 0 ? (
+                        <div className="library-list">
+                           {libraryData.results.map((claim) => (
+                              <div key={claim.id} className="library-item">
+                                 <div className="li-main">
+                                    <div className="li-icon">
+                                       <Icons
+                                          name={
+                                             claim.claim_type === "IMAGE"
+                                                ? "image"
+                                                : claim.claim_type === "TEXT"
+                                                  ? "file-text"
+                                                  : claim.claim_type === "FILE"
+                                                    ? "file"
+                                                    : "globe"
+                                          }
+                                          size={20}
+                                          color="#64748b"
+                                          className="li-icon-svg"
+                                       />
+                                    </div>
+
+                                    <div className="li-content">
+                                       <div className="li-type-row">
+                                          <span className="li-type">{claim.claim_type || "CLAIM"}</span>
+
+                                          <span className="li-date">
+                                             {new Date(claim.activity_at || claim.last_updated).toLocaleDateString()}
+                                          </span>
+                                       </div>
+
+                                       <p className="li-excerpt">
+                                          {claim.context_text
+                                             ? `"${claim.context_text}"`
+                                             : claim.ai_summary || "No summary available."}
+                                       </p>
+
+                                       <div className="li-meta">
+                                          {claim.canonical_source_url && (
+                                             <span className="li-source-meta">
+                                                <span className="li-source-label">Top Source</span>
+
+                                                <span aria-hidden="true">·</span>
+
+                                                <a
+                                                   href={claim.canonical_source_url}
+                                                   target="_blank"
+                                                   rel="noopener noreferrer"
+                                                   className="li-source-link"
+                                                >
+                                                   {getSourceLabel(claim.canonical_source_url)}
+
+                                                   <Icons name="external-link" size={11} />
+                                                </a>
+                                             </span>
+                                          )}
+                                       </div>
+                                    </div>
+                                 </div>
+
+                                 <div className="li-actions">
+                                    <div className="li-verdict-top-right">
+                                       <VerdictBadge
+                                          verdict={claim.effective_verdict || claim.final_verdict || claim.ai_verdict}
+                                       />
+                                    </div>
+
+                                    <div className="hub-btns-row">
+                                       <button
+                                          type="button"
+                                          className={`hub-btn-save ${claim.is_saved ? "hub-btn-save--saved" : ""}`}
+                                          onClick={() => handleToggleSave(claim)}
+                                          aria-label={claim.is_saved ? "Remove from saved claims" : "Save claim"}
+                                       >
+                                          <Icons
+                                             name={claim.is_saved ? "bookmark" : "bookmark"}
+                                             size={14}
+                                             className="hub-btn-icon"
+                                          />
+
+                                          {claim.is_saved ? "Saved" : "Save"}
+                                       </button>
+                                       <button
+                                          type="button"
+                                          onClick={() => setSelectedClaimId(claim.id)}
+                                          className="hub-btn-report"
+                                       >
+                                          <Icons name="file-text" size={14} className="hub-btn-icon" />
+                                          View Analysis Report
+                                       </button>
+
+                                       <button type="button" className="hub-btn-publish" onClick={handlePublish}>
+                                          <Icons name="arrow-up-right" size={14} className="hub-btn-icon" />
+                                          Escalate
+                                       </button>
+                                    </div>
+                                 </div>
+                              </div>
+                           ))}
+                        </div>
                      ) : (
                         <div className="library-empty">
                            <div className="library-empty-icon">
-                              <Icons name="inbox" size={24} />
+                              <Icons name={libraryView === "saved" ? "bookmark" : "inbox"} size={24} />
                            </div>
 
-                           <h3>{searchQuery ? "No matching fact checks" : "No fact checks yet"}</h3>
+                           <h3>
+                              {hasLibraryFilters
+                                 ? "No matching fact checks"
+                                 : libraryView === "saved"
+                                   ? "No saved claims yet"
+                                   : "No fact checks yet"}
+                           </h3>
 
                            <p>
-                              {searchQuery
-                                 ? "Try a different search term."
-                                 : "Claims you investigate will appear here."}
+                              {hasLibraryFilters
+                                 ? "Try adjusting your search or filters."
+                                 : libraryView === "saved"
+                                   ? "Claims you save will appear here for quick access later."
+                                   : "Claims you investigate will appear here."}
                            </p>
                         </div>
                      )}
                   </div>
+
+                  {!libraryLoading && !libraryError && libraryData.count > 0 && (
+                     <div className="library-pagination">
+                        <button
+                           type="button"
+                           className="library-page-button"
+                           disabled={!libraryData.has_previous}
+                           onClick={() => setLibraryPage((page) => Math.max(1, page - 1))}
+                        >
+                           <Icons name="chevron-left" size={15} />
+                           Previous
+                        </button>
+
+                        <span className="library-page-status">
+                           Page <strong>{libraryData.page}</strong> of <strong>{libraryData.total_pages}</strong>
+                        </span>
+
+                        <button
+                           type="button"
+                           className="library-page-button"
+                           disabled={!libraryData.has_next}
+                           onClick={() => setLibraryPage((page) => page + 1)}
+                        >
+                           Next
+                           <Icons name="chevron-right" size={15} />
+                        </button>
+                     </div>
+                  )}
                </section>
             </main>
          </div>
