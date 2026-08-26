@@ -977,3 +977,401 @@ class VerificationEvidenceModelTests(APITestCase):
         self.assertEqual(evidence.evidence_source, source)
         self.assertEqual(evidence.stance, "SUPPORTS")
         self.assertEqual(evidence.evidence_role, "SECONDARY")
+class UserFactCheckLibraryTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="library_user",
+            email="library@test.com",
+            password="pass1234",
+        )
+
+        self.other_user = User.objects.create_user(
+            username="other_library_user",
+            email="other-library@test.com",
+            password="pass1234",
+        )
+
+        self.client.force_authenticate(user=self.user)
+
+        self.claim_fact = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Verified renewable energy claim",
+            ai_summary="Renewable energy summary",
+            ai_verdict="FACT",
+            verified_via=Claim.VerificationSource.AI_EXTENSION,
+        )
+
+        self.claim_misleading = Claim.objects.create(
+            claim_type=Claim.ClaimType.IMAGE,
+            context_text="Misleading school incident claim",
+            ai_summary="School incident summary",
+            ai_verdict="MISLEADING",
+            verified_via=Claim.VerificationSource.AI_EXTENSION,
+        )
+
+        self.claim_other_user = Claim.objects.create(
+            claim_type=Claim.ClaimType.URL,
+            context_text="Other user's private history",
+            ai_verdict="FAKE",
+            verified_via=Claim.VerificationSource.AI_EXTENSION,
+        )
+
+        ClaimCheckHistory.objects.create(
+            user=self.user,
+            claim=self.claim_fact,
+        )
+
+        ClaimCheckHistory.objects.create(
+            user=self.user,
+            claim=self.claim_misleading,
+        )
+
+        ClaimCheckHistory.objects.create(
+            user=self.other_user,
+            claim=self.claim_other_user,
+        )
+
+        self.user.profile.saved_claims.add(
+            self.claim_fact
+        )
+
+        self.url = reverse(
+            "user_fact_check_library"
+        )
+
+    def test_library_requires_authentication(self):
+        client = APIClient()
+
+        response = client.get(self.url)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+
+    def test_history_only_returns_current_users_claims(self):
+        response = self.client.get(
+            self.url,
+            {"view": "history"},
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        returned_ids = {
+            item["id"]
+            for item in response.data["results"]
+        }
+
+        self.assertIn(
+            str(self.claim_fact.id),
+            returned_ids,
+        )
+
+        self.assertIn(
+            str(self.claim_misleading.id),
+            returned_ids,
+        )
+
+        self.assertNotIn(
+            str(self.claim_other_user.id),
+            returned_ids,
+        )
+
+    def test_saved_view_only_returns_saved_claims(self):
+        response = self.client.get(
+            self.url,
+            {"view": "saved"},
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            response.data["count"],
+            1,
+        )
+
+        self.assertEqual(
+            response.data["results"][0]["id"],
+            str(self.claim_fact.id),
+        )
+
+        self.assertTrue(
+            response.data["results"][0]["is_saved"]
+        )
+
+    def test_response_includes_collection_counts(self):
+        response = self.client.get(
+            self.url,
+            {"view": "history"},
+        )
+
+        self.assertEqual(
+            response.data["counts"]["history"],
+            2,
+        )
+
+        self.assertEqual(
+            response.data["counts"]["saved"],
+            1,
+        )
+
+    def test_search_filters_server_side(self):
+        response = self.client.get(
+            self.url,
+            {
+                "view": "history",
+                "search": "renewable",
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            response.data["count"],
+            1,
+        )
+
+        self.assertEqual(
+            response.data["results"][0]["id"],
+            str(self.claim_fact.id),
+        )
+
+    def test_verdict_filter(self):
+        response = self.client.get(
+            self.url,
+            {
+                "view": "history",
+                "verdict": "MISLEADING",
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            response.data["count"],
+            1,
+        )
+
+        self.assertEqual(
+            response.data["results"][0]["id"],
+            str(self.claim_misleading.id),
+        )
+
+    def test_claim_type_filter(self):
+        response = self.client.get(
+            self.url,
+            {
+                "view": "history",
+                "type": "IMAGE",
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            response.data["count"],
+            1,
+        )
+
+        self.assertEqual(
+            response.data["results"][0]["id"],
+            str(self.claim_misleading.id),
+        )
+
+    def test_invalid_view_returns_400(self):
+        response = self.client.get(
+            self.url,
+            {"view": "invalid"},
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    def test_invalid_verdict_returns_400(self):
+        response = self.client.get(
+            self.url,
+            {
+                "view": "history",
+                "verdict": "UNKNOWN",
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    def test_invalid_claim_type_returns_400(self):
+        response = self.client.get(
+            self.url,
+            {
+                "view": "history",
+                "type": "UNKNOWN",
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    def test_page_size_is_capped(self):
+        response = self.client.get(
+            self.url,
+            {
+                "view": "history",
+                "page_size": 500,
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            response.data["page_size"],
+            50,
+        )
+
+    def test_activity_at_is_returned(self):
+        response = self.client.get(
+            self.url,
+            {"view": "history"},
+        )
+
+        self.assertIsNotNone(
+            response.data["results"][0][
+                "activity_at"
+            ]
+        )
+
+    def test_toggle_save_returns_authoritative_count(self):
+        toggle_url = reverse(
+            "toggle_save_claim",
+            args=[
+                str(self.claim_misleading.id)
+            ],
+        )
+
+        response = self.client.post(
+            toggle_url
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertTrue(
+            response.data["is_saved"]
+        )
+
+        self.assertEqual(
+            response.data["saved_count"],
+            2,
+        )
+
+        self.assertTrue(
+            self.user.profile.saved_claims.filter(
+                id=self.claim_misleading.id
+            ).exists()
+        )
+
+    def test_toggle_save_can_unsave(self):
+        toggle_url = reverse(
+            "toggle_save_claim",
+            args=[
+                str(self.claim_fact.id)
+            ],
+        )
+
+        response = self.client.post(
+            toggle_url
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertFalse(
+            response.data["is_saved"]
+        )
+
+        self.assertEqual(
+            response.data["saved_count"],
+            0,
+        )
+
+        self.assertFalse(
+            self.user.profile.saved_claims.filter(
+                id=self.claim_fact.id
+            ).exists()
+        )
+
+    def test_history_is_paginated(self):
+        for index in range(12):
+            claim = Claim.objects.create(
+                claim_type=Claim.ClaimType.TEXT,
+                context_text=f"Pagination claim {index}",
+                ai_verdict="FACT",
+                verified_via=(
+                    Claim.VerificationSource.AI_EXTENSION
+                ),
+            )
+
+            ClaimCheckHistory.objects.create(
+                user=self.user,
+                claim=claim,
+            )
+
+        response = self.client.get(
+            self.url,
+            {
+                "view": "history",
+                "page": 1,
+                "page_size": 10,
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            len(response.data["results"]),
+            10,
+        )
+
+        self.assertTrue(
+            response.data["has_next"]
+        )
+
+        self.assertEqual(
+            response.data["page"],
+            1,
+        )
+
+        self.assertGreater(
+            response.data["total_pages"],
+            1,
+        )

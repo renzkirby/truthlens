@@ -530,7 +530,9 @@ export default function UserHub() {
       saved: null,
    });
 
-   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
+   const [savingClaimIds, setSavingClaimIds] = useState(new Set());
+
+   const [saveError, setSaveError] = useState(null);
 
    useEffect(() => {
       const loadDashboard = async () => {
@@ -594,10 +596,12 @@ export default function UserHub() {
 
             setLibraryData(data);
 
-            setLibraryCounts((current) => ({
-               ...current,
-               [libraryView]: data.count,
-            }));
+            if (data.counts) {
+               setLibraryCounts({
+                  history: data.counts.history,
+                  saved: data.counts.saved,
+               });
+            }
 
             // Protect against a stale page after filtering.
             if (data.page !== libraryPage && data.page >= 1) {
@@ -621,7 +625,7 @@ export default function UserHub() {
       return () => {
          ignore = true;
       };
-   }, [authFetch, libraryView, libraryPage, searchQuery, verdictFilter, typeFilter, sortOrder, libraryRefreshKey]);
+   }, [authFetch, libraryView, libraryPage, searchQuery, verdictFilter, typeFilter, sortOrder]);
 
    if (loading) return <UserHubSkeleton />;
    if (error)
@@ -688,45 +692,137 @@ export default function UserHub() {
       Boolean(searchQuery) || Boolean(verdictFilter) || Boolean(typeFilter) || sortOrder !== "newest";
 
    const handleToggleSave = async (claim) => {
-      try {
-         const result = await authFetch(buildApiUrl(`claims/${claim.id}/toggle-save/`), {
-            method: "POST",
+      if (savingClaimIds.has(claim.id)) return;
+
+      const previousIsSaved = Boolean(claim.is_saved);
+      const optimisticIsSaved = !previousIsSaved;
+
+      const previousLibraryData = libraryData;
+      const previousLibraryCounts = libraryCounts;
+
+      setSaveError(null);
+
+      setSavingClaimIds((current) => {
+         const next = new Set(current);
+         next.add(claim.id);
+         return next;
+      });
+
+      /*
+       * Optimistic UI:
+       * update immediately before the server responds.
+       */
+      if (libraryView === "saved" && previousIsSaved) {
+         /*
+          * In Saved view, unsaving should immediately
+          * remove the card rather than reload the list.
+          */
+         setLibraryData((current) => {
+            const nextResults = current.results.filter((item) => item.id !== claim.id);
+
+            const nextCount = Math.max(0, current.count - 1);
+
+            const nextTotalPages = Math.max(1, Math.ceil(nextCount / current.page_size));
+
+            return {
+               ...current,
+               count: nextCount,
+               total_pages: nextTotalPages,
+               has_next: current.page < nextTotalPages,
+               results: nextResults,
+            };
          });
-
-         const isNowSaved = result.is_saved;
-
+      } else {
+         /*
+          * History view:
+          * simply flip Save <-> Saved in place.
+          */
          setLibraryData((current) => ({
             ...current,
             results: current.results.map((item) =>
                item.id === claim.id
                   ? {
                        ...item,
-                       is_saved: isNowSaved,
+                       is_saved: optimisticIsSaved,
                     }
                   : item,
             ),
          }));
+      }
 
-         setLibraryCounts((current) => {
-            if (current.saved === null) {
-               return current;
-            }
+      setLibraryCounts((current) => ({
+         ...current,
+         saved: current.saved === null ? current.saved : Math.max(0, current.saved + (optimisticIsSaved ? 1 : -1)),
+      }));
 
-            return {
-               ...current,
-               saved: Math.max(0, current.saved + (isNowSaved ? 1 : -1)),
-            };
+      try {
+         const result = await authFetch(buildApiUrl(`claims/${claim.id}/toggle-save/`), {
+            method: "POST",
          });
 
          /*
-          * If we are inside Saved, an unsaved claim must
-          * disappear from the server-backed collection.
+          * Server response is authoritative.
+          * Reconcile count in case another tab/session
+          * changed saved claims simultaneously.
           */
-         if (libraryView === "saved" && !isNowSaved) {
-            setLibraryRefreshKey((key) => key + 1);
+         if (typeof result.saved_count === "number") {
+            setLibraryCounts((current) => ({
+               ...current,
+               saved: result.saved_count,
+            }));
+         }
+
+         /*
+          * In History, reconcile button state too.
+          */
+         if (libraryView !== "saved") {
+            setLibraryData((current) => ({
+               ...current,
+               results: current.results.map((item) =>
+                  item.id === claim.id
+                     ? {
+                          ...item,
+                          is_saved: result.is_saved,
+                       }
+                     : item,
+               ),
+            }));
+         }
+
+         /*
+          * Rare pagination edge case:
+          * if we removed the final card on a Saved page,
+          * move backward one page.
+          *
+          * Example:
+          * page 3 contains only one item.
+          * After removing it, page 3 no longer exists.
+          */
+         if (
+            libraryView === "saved" &&
+            previousIsSaved &&
+            previousLibraryData.results.length === 1 &&
+            previousLibraryData.page > 1
+         ) {
+            setLibraryPage(previousLibraryData.page - 1);
          }
       } catch (err) {
          console.error("Failed to update saved claim:", err);
+
+         /*
+          * Roll back everything exactly as it was
+          * before the optimistic update.
+          */
+         setLibraryData(previousLibraryData);
+         setLibraryCounts(previousLibraryCounts);
+
+         setSaveError("Could not update this saved claim. Please try again.");
+      } finally {
+         setSavingClaimIds((current) => {
+            const next = new Set(current);
+            next.delete(claim.id);
+            return next;
+         });
       }
    };
 
@@ -1087,6 +1183,17 @@ export default function UserHub() {
                         )}
                      </div>
                   </div>
+                  {saveError && (
+                     <div className="library-save-error" role="alert">
+                        <Icons name="alert-circle" size={14} />
+
+                        <span>{saveError}</span>
+
+                        <button type="button" onClick={() => setSaveError(null)} aria-label="Dismiss save error">
+                           <Icons name="x" size={13} />
+                        </button>
+                     </div>
+                  )}
 
                   <div className="library-content">
                      {libraryLoading ? (
@@ -1175,13 +1282,15 @@ export default function UserHub() {
                                           type="button"
                                           className={`hub-btn-save ${claim.is_saved ? "hub-btn-save--saved" : ""}`}
                                           onClick={() => handleToggleSave(claim)}
+                                          disabled={savingClaimIds.has(claim.id)}
+                                          aria-busy={savingClaimIds.has(claim.id)}
                                           aria-label={claim.is_saved ? "Remove from saved claims" : "Save claim"}
                                        >
-                                          <Icons
-                                             name={claim.is_saved ? "bookmark" : "bookmark"}
-                                             size={14}
-                                             className="hub-btn-icon"
-                                          />
+                                          {savingClaimIds.has(claim.id) ? (
+                                             <Icons name="loader" size={14} className="hub-btn-icon spin" />
+                                          ) : (
+                                             <Icons name="bookmark" size={14} className="hub-btn-icon" />
+                                          )}
 
                                           {claim.is_saved ? "Saved" : "Save"}
                                        </button>

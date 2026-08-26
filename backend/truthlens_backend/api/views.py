@@ -1627,9 +1627,6 @@ class UserHubView(APIView):
         # Impact Ripple: How many votes did other people give to THIS user's evidence?
         impact_ripple = Vote.objects.filter(evidence__contributor=user).count()
 
-        # 3. The Fact-Check Library (Saved Receipts)
-        # Using your existing ClaimSerializer to format their private extension scans
-
         return Response({
             "user_info": {
                 "username": user.username,
@@ -1688,6 +1685,15 @@ class UserFactCheckLibraryView(APIView):
 
     def get(self, request):
         user = request.user
+
+        history_count = (
+            Claim.objects
+            .filter(check_history__user=user)
+            .distinct()
+            .count()
+        )
+
+        saved_count = user.profile.saved_claims.count()
 
         view_mode = (
             request.query_params
@@ -1878,6 +1884,10 @@ class UserFactCheckLibraryView(APIView):
         return Response(
             {
                 "view": view_mode,
+                "counts": {
+                    "history": history_count,
+                    "saved": saved_count,
+                },
                 "count": paginator.count,
                 "page": page_obj.number,
                 "page_size": page_size,
@@ -1907,7 +1917,13 @@ def toggle_save_claim(request, claim_id):
         profile.saved_claims.add(claim)
         is_saved = True
         
-    return Response({"is_saved": is_saved}, status=200)
+    return Response(
+        {
+            "is_saved": is_saved,
+            "saved_count": profile.saved_claims.count(),
+        },
+        status=status.HTTP_200_OK,
+    )
 
 @api_view(["GET"])
 @permission_classes([AllowAny])

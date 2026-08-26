@@ -1409,6 +1409,48 @@
    font-weight: 500;
 }
 
+.library-save-error {
+   display: flex;
+   align-items: center;
+   gap: 8px;
+   margin: -4px 0 16px;
+   padding: 9px 11px;
+   border: 1px solid #fecaca;
+   border-radius: 8px;
+   background: #fef2f2;
+   color: #b91c1c;
+   font-size: 11px;
+   font-weight: 600;
+}
+
+.library-save-error > span {
+   flex: 1;
+}
+
+.library-save-error button {
+   width: 24px;
+   height: 24px;
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   flex-shrink: 0;
+   padding: 0;
+   border: none;
+   border-radius: 6px;
+   background: transparent;
+   color: inherit;
+   cursor: pointer;
+}
+
+.library-save-error button:hover {
+   background: #fee2e2;
+}
+
+.hub-btn-save:disabled {
+   cursor: wait;
+   opacity: 0.72;
+}
+
 /* ── Responsive: tablet / mobile ────────────────── */
 @media (max-width: 768px) {
    .hub-wrapper {
