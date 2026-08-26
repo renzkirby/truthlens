@@ -211,13 +211,9 @@ function CreateThreadPage() {
          if (err?.existing_thread_id && err?.redirect) {
             setExistingThread(err.existing_thread_id);
             setError(null);
-            // Auto-redirect after a brief moment
-            setTimeout(() => {
-               navigate(`/thread/detail/${err.existing_thread_id}`);
-            }, 3000);
             return;
          }
-         setError(err?.detail || "Something went wrong in creating a thread.");
+         setError(err?.detail || err?.message || "Something went wrong in creating a thread.");
       } finally {
          setSubmitting(false);
       }
@@ -296,7 +292,7 @@ function CreateThreadPage() {
                <div>
                   <h1 className="create-thread-title">Escalate to Community</h1>
                   <p className="create-thread-subtitle">
-                     The AI couldn't verify this claim with confidence. Submit it to the community for review.
+                     Bring this claim to the community for further review, evidence, and discussion.
                   </p>
                </div>
             </div>
@@ -370,7 +366,7 @@ function CreateThreadPage() {
                </div>
             )}
 
-            {!loading && claim && (
+            {!loading && claim && !existingThread && (
                <div className="create-thread-body">
                   <div className="create-thread-form-col">
                      <div className="form-section box-panel">

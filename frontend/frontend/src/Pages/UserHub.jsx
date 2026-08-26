@@ -641,10 +641,8 @@ export default function UserHub() {
    const avatarUrl = userInfo?.avatar_url;
    const avatarInitial = username.charAt(0).toUpperCase();
 
-   // Handle Publish Stub
-   const handlePublish = (e) => {
-      e.preventDefault();
-      alert("Publish to Community feature is coming soon!");
+   const handleEscalate = (claimId) => {
+      navigate(`/thread/create?claim_id=${encodeURIComponent(claimId)}`);
    };
 
    const getSourceLabel = (url) => {
@@ -1303,7 +1301,11 @@ export default function UserHub() {
                                           View Analysis Report
                                        </button>
 
-                                       <button type="button" className="hub-btn-publish" onClick={handlePublish}>
+                                       <button
+                                          type="button"
+                                          className="hub-btn-publish"
+                                          onClick={() => handleEscalate(claim.id)}
+                                       >
                                           <Icons name="arrow-up-right" size={14} className="hub-btn-icon" />
                                           Escalate
                                        </button>
