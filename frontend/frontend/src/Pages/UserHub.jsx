@@ -156,6 +156,143 @@ const AnalysisModal = ({ claimId, onClose }) => {
    );
 };
 
+const TrustExplainerModal = ({ reputation, onClose }) => {
+   if (!reputation) return null;
+
+   const breakdown = reputation.breakdown || {};
+
+   return (
+      <div className="hub-modal-overlay" onClick={onClose}>
+         <div
+            className="hub-trust-explainer"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="trust-explainer-title"
+         >
+            <div className="hub-trust-explainer-header">
+               <div>
+                  <span className="hub-section-eyebrow">TRUST SCORE</span>
+
+                  <h2 id="trust-explainer-title">How your reputation works</h2>
+               </div>
+
+               <button
+                  type="button"
+                  className="br-close-btn"
+                  onClick={onClose}
+                  aria-label="Close Trust Score explanation"
+               >
+                  <Icons name="x" size={20} />
+               </button>
+            </div>
+
+            <div className="hub-trust-explainer-body">
+               <div className="hub-trust-current-summary">
+                  <div>
+                     <span>Current score</span>
+                     <strong>{Math.round(reputation.trust_score ?? 50)}</strong>
+                  </div>
+
+                  <div>
+                     <span>Rank</span>
+                     <strong>{reputation.current_rank || "Provisional"}</strong>
+                  </div>
+
+                  <div>
+                     <span>Confidence</span>
+                     <strong>{reputation.confidence?.label || "Provisional"}</strong>
+                  </div>
+               </div>
+
+               <section className="hub-explainer-section">
+                  <h3>Your score starts at 50</h3>
+
+                  <p>
+                     Every account begins from a neutral baseline. Your score then moves based on the quality and
+                     reception of verified community contributions.
+                  </p>
+               </section>
+
+               <section className="hub-explainer-section">
+                  <h3>What changes your score</h3>
+
+                  <div className="hub-explainer-factor-list">
+                     <TrustBreakdownItem
+                        icon="check-circle"
+                        label="Contribution Quality"
+                        description="Resolved evidence and reports can raise or lower your score based on their validation outcome."
+                        value={breakdown.contribution_points}
+                     />
+
+                     <TrustBreakdownItem
+                        icon="users"
+                        label="Community Reception"
+                        description="Votes from other contributors provide a bounded reputation signal."
+                        value={breakdown.community_points}
+                     />
+
+                     <TrustBreakdownItem
+                        icon="clock"
+                        label="Account History"
+                        description="Consistent successful participation over time can add a small history bonus."
+                        value={breakdown.history_points}
+                     />
+
+                     <TrustBreakdownItem
+                        icon="shield"
+                        label="Moderation Penalties"
+                        description="Confirmed moderation actions can reduce your Trust Score."
+                        value={breakdown.moderation_penalty}
+                        type="penalty"
+                     />
+                  </div>
+
+                  <div className="hub-score-range-grid">
+                     <div>
+                        <span>Contribution Quality</span>
+                        <strong>-25 to +25</strong>
+                     </div>
+
+                     <div>
+                        <span>Community Reception</span>
+                        <strong>-15 to +15</strong>
+                     </div>
+
+                     <div>
+                        <span>Account History</span>
+                        <strong>0 to +5</strong>
+                     </div>
+
+                     <div>
+                        <span>Moderation Penalties</span>
+                        <strong>-30 to 0</strong>
+                     </div>
+                  </div>
+               </section>
+
+               <section className="hub-explainer-section">
+                  <h3>What confidence means</h3>
+
+                  <p>
+                     Confidence reflects how much resolved contribution history supports your Trust Score. A newer
+                     account can have a reasonable score while still having low or developing confidence.
+                  </p>
+               </section>
+
+               <section className="hub-explainer-section">
+                  <h3>What does not increase it</h3>
+
+                  <p>
+                     Routine scans, logins, comments, and simply creating threads do not directly increase Trust Score.
+                  </p>
+               </section>
+            </div>
+         </div>
+      </div>
+   );
+};
+
 const VerdictBadge = ({ verdict }) => {
    const map = {
       FACT: {
@@ -534,6 +671,8 @@ export default function UserHub() {
 
    const [saveError, setSaveError] = useState(null);
 
+   const [trustExplainerOpen, setTrustExplainerOpen] = useState(false);
+
    useEffect(() => {
       const loadDashboard = async () => {
          try {
@@ -898,7 +1037,19 @@ export default function UserHub() {
                            <h2 className="hub-section-heading">Your reputation</h2>
                         </div>
 
-                        <div className="hub-confidence-chip">
+                        <button
+                           type="button"
+                           className="hub-trust-explain-btn"
+                           onClick={() => setTrustExplainerOpen(true)}
+                        >
+                           <Icons name="info" size={14} />
+                           How Trust Score works
+                        </button>
+
+                        <div
+                           className="hub-confidence-chip"
+                           title="Confidence reflects how much resolved contribution history exists behind your Trust Score."
+                        >
                            <Icons name="activity" size={14} />
                            <span>{reputation?.confidence?.label || "Provisional"} confidence</span>
                         </div>
@@ -983,6 +1134,20 @@ export default function UserHub() {
 
                            <span>Baseline Trust Score: {reputation?.breakdown?.base_score ?? 50}</span>
                         </div>
+                        <p className="hub-rank-guidance">
+                           {reputation?.next_rank ? (
+                              reputation.actions_to_next_rank > 0 || reputation.score_to_next_rank > 0 ? (
+                                 <>
+                                    Keep contributing high-quality, verified evidence to progress toward{" "}
+                                    <strong>{reputation.next_rank}</strong>.
+                                 </>
+                              ) : (
+                                 <>You currently meet the requirements for the next rank.</>
+                              )
+                           ) : (
+                              <>You have reached the highest current reputation rank.</>
+                           )}
+                        </p>
                      </div>
                   </div>
 
@@ -1371,6 +1536,9 @@ export default function UserHub() {
          </div>
 
          {selectedClaimId && <AnalysisModal claimId={selectedClaimId} onClose={() => setSelectedClaimId(null)} />}
+         {trustExplainerOpen && (
+            <TrustExplainerModal reputation={reputation} onClose={() => setTrustExplainerOpen(false)} />
+         )}
       </div>
    );
 }

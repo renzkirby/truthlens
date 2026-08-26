@@ -1801,3 +1801,218 @@
       padding: 14px;
    }
 }
+
+/* =========================
+   3E — TRUST SCORE EXPLAINER
+   ========================= */
+
+.hub-trust-explain-btn {
+   display: inline-flex;
+   align-items: center;
+   gap: 6px;
+   padding: 7px 10px;
+   border: 1px solid var(--border-subtle, #e2e8f0);
+   border-radius: 8px;
+   background: #fff;
+   color: #475569;
+   font-size: 12px;
+   font-weight: 600;
+   cursor: pointer;
+   transition:
+      background 0.2s ease,
+      border-color 0.2s ease,
+      color 0.2s ease;
+}
+
+.hub-trust-explain-btn:hover {
+   background: #f8fafc;
+   border-color: #cbd5e1;
+   color: #1e293b;
+}
+
+.hub-trust-explainer {
+   width: min(760px, calc(100vw - 32px));
+   max-height: calc(100vh - 48px);
+   overflow-y: auto;
+   border-radius: 16px;
+   background: #fff;
+   box-shadow:
+      0 24px 60px rgba(15, 23, 42, 0.18),
+      0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.hub-trust-explainer-header {
+   display: flex;
+   align-items: flex-start;
+   justify-content: space-between;
+   gap: 16px;
+   padding: 22px 24px 18px;
+   border-bottom: 1px solid #e2e8f0;
+}
+
+.hub-trust-explainer-header h2 {
+   margin: 4px 0 0;
+   color: #0f172a;
+   font-size: 20px;
+   font-weight: 800;
+}
+
+.hub-trust-explainer-body {
+   display: flex;
+   flex-direction: column;
+   gap: 20px;
+   padding: 22px 24px 26px;
+}
+
+.hub-trust-current-summary {
+   display: grid;
+   grid-template-columns: repeat(3, minmax(0, 1fr));
+   gap: 12px;
+}
+
+.hub-trust-current-summary > div {
+   display: flex;
+   flex-direction: column;
+   gap: 4px;
+   padding: 14px;
+   border: 1px solid #e2e8f0;
+   border-radius: 12px;
+   background: #f8fafc;
+}
+
+.hub-trust-current-summary span {
+   color: #64748b;
+   font-size: 11px;
+   font-weight: 600;
+   text-transform: uppercase;
+   letter-spacing: 0.04em;
+}
+
+.hub-trust-current-summary strong {
+   color: #0f172a;
+   font-size: 18px;
+   font-weight: 800;
+}
+
+.hub-explainer-section {
+   display: flex;
+   flex-direction: column;
+   gap: 10px;
+}
+
+.hub-explainer-section h3 {
+   margin: 0;
+   color: #0f172a;
+   font-size: 14px;
+   font-weight: 800;
+}
+
+.hub-explainer-section p {
+   margin: 0;
+   color: #64748b;
+   font-size: 13px;
+   line-height: 1.6;
+}
+
+.hub-explainer-factor-list {
+   display: flex;
+   flex-direction: column;
+   gap: 8px;
+}
+
+.hub-score-range-grid {
+   display: grid;
+   grid-template-columns: repeat(2, minmax(0, 1fr));
+   gap: 10px;
+   margin-top: 4px;
+}
+
+.hub-score-range-grid > div {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 12px;
+   padding: 10px 12px;
+   border: 1px solid #e2e8f0;
+   border-radius: 10px;
+   background: #f8fafc;
+}
+
+.hub-score-range-grid span {
+   color: #64748b;
+   font-size: 12px;
+   font-weight: 600;
+}
+
+.hub-score-range-grid strong {
+   flex-shrink: 0;
+   color: #0f172a;
+   font-size: 12px;
+   font-weight: 800;
+}
+
+.hub-rank-guidance {
+   margin: 10px 0 0;
+   color: #64748b;
+   font-size: 12px;
+   line-height: 1.5;
+}
+
+.hub-rank-guidance strong {
+   color: #334155;
+}
+
+/* =========================
+   3E — RESPONSIVE
+   ========================= */
+
+@media (max-width: 768px) {
+   .hub-reputation-heading {
+      align-items: flex-start;
+      flex-wrap: wrap;
+   }
+
+   .hub-trust-explain-btn {
+      order: 3;
+      width: 100%;
+      justify-content: center;
+   }
+
+   .hub-trust-explainer {
+      width: calc(100vw - 24px);
+      max-height: calc(100vh - 24px);
+      border-radius: 14px;
+   }
+
+   .hub-trust-explainer-header {
+      padding: 18px;
+   }
+
+   .hub-trust-explainer-body {
+      padding: 18px;
+   }
+
+   .hub-trust-current-summary {
+      grid-template-columns: 1fr;
+   }
+
+   .hub-score-range-grid {
+      grid-template-columns: 1fr;
+   }
+}
+
+@media (max-width: 480px) {
+   .hub-trust-explainer-header h2 {
+      font-size: 18px;
+   }
+
+   .hub-trust-current-summary strong {
+      font-size: 16px;
+   }
+
+   .hub-score-range-grid > div {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 4px;
+   }
+}
