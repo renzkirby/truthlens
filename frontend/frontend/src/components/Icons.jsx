@@ -105,6 +105,7 @@ import {
 } from "lucide-react";
 
 const ICON_MAP = {
+   "refresh-cw": RefreshCw,
    "chevron-left": ChevronLeft,
    bookmark: Bookmark,
    "mail-check": MailCheck,

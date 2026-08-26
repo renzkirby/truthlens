@@ -901,6 +901,7 @@
 /* 6. Modal */
 .hub-modal-overlay {
    position: fixed;
+   inset: 0;
    top: 0;
    left: 0;
    width: 100vw;
@@ -911,7 +912,9 @@
    display: flex;
    justify-content: center;
    align-items: center;
-   padding: 16px;
+   padding: 24px;
+   overflow-y: auto;
+   overscroll-behavior: contain;
 }
 
 .hub-modal-content {
@@ -2014,5 +2017,203 @@
       align-items: flex-start;
       flex-direction: column;
       gap: 4px;
+   }
+}
+
+/* =========================
+   3F.1 — DASHBOARD ERROR STATE
+   ========================= */
+
+.hub-error-state {
+   display: flex;
+   align-items: flex-start;
+   gap: 18px;
+   max-width: 680px;
+   margin: 80px auto;
+   padding: 28px;
+}
+
+.hub-error-state-icon {
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   flex: 0 0 auto;
+   width: 44px;
+   height: 44px;
+   border-radius: 12px;
+   background: #fff7ed;
+   color: #c2410c;
+}
+
+.hub-error-state-content {
+   display: flex;
+   flex-direction: column;
+   align-items: flex-start;
+}
+
+.hub-error-state-content h1 {
+   margin: 6px 0 8px;
+   color: #0f172a;
+   font-size: 22px;
+   font-weight: 800;
+   line-height: 1.25;
+}
+
+.hub-error-state-content p {
+   margin: 0;
+   color: #64748b;
+   font-size: 14px;
+   line-height: 1.6;
+}
+
+.hub-error-retry-btn {
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   gap: 7px;
+   margin-top: 18px;
+   padding: 9px 14px;
+   border: 1px solid #cbd5e1;
+   border-radius: 9px;
+   background: #ffffff;
+   color: #334155;
+   font-size: 13px;
+   font-weight: 700;
+   cursor: pointer;
+   transition:
+      background 0.2s ease,
+      border-color 0.2s ease;
+}
+
+.hub-error-retry-btn:hover {
+   background: #f8fafc;
+   border-color: #94a3b8;
+}
+
+@media (max-width: 640px) {
+   .hub-error-state {
+      margin: 48px 12px;
+      padding: 22px;
+   }
+
+   .hub-error-state-content h1 {
+      font-size: 19px;
+   }
+}
+
+/* =========================
+   3F.2 — DASHBOARD REFRESH
+   ========================= */
+
+.hub-action-refresh {
+   background: #ffffff;
+   color: #475569;
+   border: 1px solid #cbd5e1;
+}
+
+.hub-action-refresh:hover:not(:disabled) {
+   background: #f8fafc;
+   border-color: #94a3b8;
+   color: #1e293b;
+}
+
+.hub-action-refresh:disabled {
+   cursor: not-allowed;
+   opacity: 0.65;
+}
+
+.hub-last-updated {
+   color: #94a3b8;
+   font-size: 11px;
+   font-weight: 500;
+}
+
+@media (max-width: 768px) {
+   .hub-action-refresh {
+      width: 100%;
+   }
+}
+
+.hub-impact-card .skeleton-box {
+   flex-shrink: 0;
+}
+
+.hub-modal-content:focus,
+.hub-trust-explainer:focus {
+   outline: none;
+}
+
+/* =========================
+   3F.4 — ANALYSIS MODAL LOADING
+   ========================= */
+
+.hub-analysis-loading-modal {
+   display: flex;
+   align-items: center;
+   gap: 16px;
+
+   width: min(440px, calc(100vw - 32px));
+   padding: 22px 24px;
+
+   border: 1px solid #e2e8f0;
+   border-radius: 16px;
+   background: #ffffff;
+
+   box-shadow:
+      0 24px 60px rgba(15, 23, 42, 0.18),
+      0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.hub-analysis-loading-modal:focus {
+   outline: none;
+}
+
+.hub-analysis-loading-icon {
+   display: flex;
+   align-items: center;
+   justify-content: center;
+
+   flex: 0 0 auto;
+
+   width: 46px;
+   height: 46px;
+
+   border-radius: 12px;
+   background: #eef2ff;
+   color: #4f46e5;
+}
+
+.hub-analysis-loading-copy {
+   min-width: 0;
+}
+
+.hub-analysis-loading-copy h2 {
+   margin: 0 0 4px;
+
+   color: #0f172a;
+   font-size: 15px;
+   font-weight: 800;
+   line-height: 1.35;
+}
+
+.hub-analysis-loading-copy p {
+   margin: 0;
+
+   color: #64748b;
+   font-size: 12px;
+   line-height: 1.5;
+}
+
+@media (max-width: 480px) {
+   .hub-analysis-loading-modal {
+      align-items: flex-start;
+
+      padding: 18px;
+      border-radius: 14px;
+   }
+
+   .hub-analysis-loading-icon {
+      width: 42px;
+      height: 42px;
    }
 }
