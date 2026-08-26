@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import "./UserHub.css";
 import Icons from "../components/Icons.jsx";
@@ -12,8 +13,38 @@ const AnalysisModal = ({ claimId, onClose }) => {
    const [claimData, setClaimData] = useState(null);
    const [loading, setLoading] = useState(true);
    const [error, setError] = useState(null);
+   const modalRef = useRef(null);
 
    const apiUrl = (path) => `${import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api"}/${path}`;
+
+   useEffect(() => {
+      const previousBodyOverflow = document.body.style.overflow;
+
+      const previousHtmlOverflow = document.documentElement.style.overflow;
+
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+
+      const handleKeyDown = (event) => {
+         if (event.key === "Escape") {
+            onClose();
+         }
+      };
+
+      document.addEventListener("keydown", handleKeyDown);
+
+      window.requestAnimationFrame(() => {
+         modalRef.current?.focus();
+      });
+
+      return () => {
+         document.body.style.overflow = previousBodyOverflow;
+
+         document.documentElement.style.overflow = previousHtmlOverflow;
+
+         document.removeEventListener("keydown", handleKeyDown);
+      };
+   }, [onClose]);
 
    useEffect(() => {
       const fetchAnalysis = async () => {
@@ -35,10 +66,23 @@ const AnalysisModal = ({ claimId, onClose }) => {
    if (loading) {
       return (
          <div className="hub-modal-overlay" onClick={onClose}>
-            <div className="hub-modal-content" onClick={(e) => e.stopPropagation()}>
-               <div className="hub-modal-loading">
-                  <Icons name="loader" size={32} className="spin" color="#4f46e5" />
-                  <p>Loading Analysis Report...</p>
+            <div
+               ref={modalRef}
+               className="hub-analysis-loading-modal"
+               onClick={(event) => event.stopPropagation()}
+               role="dialog"
+               aria-modal="true"
+               aria-label="Loading analysis report"
+               tabIndex={-1}
+            >
+               <div className="hub-analysis-loading-icon">
+                  <Icons name="loader" size={28} className="spin" />
+               </div>
+
+               <div className="hub-analysis-loading-copy">
+                  <h2>Loading analysis report</h2>
+
+                  <p>Retrieving the claim verdict, evidence, and source details.</p>
                </div>
             </div>
          </div>
@@ -48,7 +92,15 @@ const AnalysisModal = ({ claimId, onClose }) => {
    if (error || !claimData) {
       return (
          <div className="hub-modal-overlay" onClick={onClose}>
-            <div className="hub-modal-content error" onClick={(e) => e.stopPropagation()}>
+            <div
+               ref={modalRef}
+               className="hub-modal-content error"
+               onClick={(event) => event.stopPropagation()}
+               role="dialog"
+               aria-modal="true"
+               aria-label="Analysis report error"
+               tabIndex={-1}
+            >
                <Icons name="alert-triangle" size={32} color="#d97706" />
                <h2>Error</h2>
                <p>{error || "Analysis not found."}</p>
@@ -65,7 +117,15 @@ const AnalysisModal = ({ claimId, onClose }) => {
 
    return (
       <div className="hub-modal-overlay" onClick={onClose}>
-         <div className="hub-modal-content community-brief-modal" onClick={(e) => e.stopPropagation()}>
+         <div
+            ref={modalRef}
+            className="hub-modal-content community-brief-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Analysis report"
+            tabIndex={-1}
+         >
             <div className="br-modal-header">
                <div className="br-verdict-row">
                   <span
@@ -155,6 +215,176 @@ const AnalysisModal = ({ claimId, onClose }) => {
    );
 };
 
+const TrustExplainerModal = ({ reputation, onClose }) => {
+   const modalRef = useRef(null);
+
+   useEffect(() => {
+      const previousBodyOverflow = document.body.style.overflow;
+
+      const previousHtmlOverflow = document.documentElement.style.overflow;
+
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+
+      const handleKeyDown = (event) => {
+         if (event.key === "Escape") {
+            onClose();
+         }
+      };
+
+      document.addEventListener("keydown", handleKeyDown);
+
+      window.requestAnimationFrame(() => {
+         modalRef.current?.focus();
+      });
+
+      return () => {
+         document.body.style.overflow = previousBodyOverflow;
+
+         document.documentElement.style.overflow = previousHtmlOverflow;
+
+         document.removeEventListener("keydown", handleKeyDown);
+      };
+   }, [onClose]);
+
+   if (!reputation) return null;
+
+   const breakdown = reputation.breakdown || {};
+
+   return (
+      <div className="hub-modal-overlay" onClick={onClose}>
+         <div
+            ref={modalRef}
+            className="hub-trust-explainer"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="trust-explainer-title"
+            tabIndex={-1}
+         >
+            <div className="hub-trust-explainer-header">
+               <div>
+                  <span className="hub-section-eyebrow">TRUST SCORE</span>
+
+                  <h2 id="trust-explainer-title">How your reputation works</h2>
+               </div>
+
+               <button
+                  type="button"
+                  className="br-close-btn"
+                  onClick={onClose}
+                  aria-label="Close Trust Score explanation"
+               >
+                  <Icons name="x" size={20} />
+               </button>
+            </div>
+
+            <div className="hub-trust-explainer-body">
+               <div className="hub-trust-current-summary">
+                  <div>
+                     <span>Current score</span>
+                     <strong>{Math.round(reputation.trust_score ?? 50)}</strong>
+                  </div>
+
+                  <div>
+                     <span>Rank</span>
+                     <strong>{reputation.current_rank || "Provisional"}</strong>
+                  </div>
+
+                  <div>
+                     <span>Confidence</span>
+                     <strong>{reputation.confidence?.label || "Provisional"}</strong>
+                  </div>
+               </div>
+
+               <section className="hub-explainer-section">
+                  <h3>Your score starts at 50</h3>
+
+                  <p>
+                     Every account begins from a neutral baseline. Your score then moves based on the quality and
+                     reception of verified community contributions.
+                  </p>
+               </section>
+
+               <section className="hub-explainer-section">
+                  <h3>What changes your score</h3>
+
+                  <div className="hub-explainer-factor-list">
+                     <TrustBreakdownItem
+                        icon="check-circle"
+                        label="Contribution Quality"
+                        description="Resolved evidence and reports can raise or lower your score based on their validation outcome."
+                        value={breakdown.contribution_points}
+                     />
+
+                     <TrustBreakdownItem
+                        icon="users"
+                        label="Community Reception"
+                        description="Votes from other contributors provide a bounded reputation signal."
+                        value={breakdown.community_points}
+                     />
+
+                     <TrustBreakdownItem
+                        icon="clock"
+                        label="Account History"
+                        description="Consistent successful participation over time can add a small history bonus."
+                        value={breakdown.history_points}
+                     />
+
+                     <TrustBreakdownItem
+                        icon="shield"
+                        label="Moderation Penalties"
+                        description="Confirmed moderation actions can reduce your Trust Score."
+                        value={breakdown.moderation_penalty}
+                        type="penalty"
+                     />
+                  </div>
+
+                  <div className="hub-score-range-grid">
+                     <div>
+                        <span>Contribution Quality</span>
+                        <strong>-25 to +25</strong>
+                     </div>
+
+                     <div>
+                        <span>Community Reception</span>
+                        <strong>-15 to +15</strong>
+                     </div>
+
+                     <div>
+                        <span>Account History</span>
+                        <strong>0 to +5</strong>
+                     </div>
+
+                     <div>
+                        <span>Moderation Penalties</span>
+                        <strong>-30 to 0</strong>
+                     </div>
+                  </div>
+               </section>
+
+               <section className="hub-explainer-section">
+                  <h3>What confidence means</h3>
+
+                  <p>
+                     Confidence reflects how much resolved contribution history supports your Trust Score. A newer
+                     account can have a reasonable score while still having low or developing confidence.
+                  </p>
+               </section>
+
+               <section className="hub-explainer-section">
+                  <h3>What does not increase it</h3>
+
+                  <p>
+                     Routine scans, logins, comments, and simply creating threads do not directly increase Trust Score.
+                  </p>
+               </section>
+            </div>
+         </div>
+      </div>
+   );
+};
+
 const VerdictBadge = ({ verdict }) => {
    const map = {
       FACT: {
@@ -233,83 +463,179 @@ const TrustGauge = ({ score }) => {
    );
 };
 
+const formatTrustEffect = (value, type = "contribution") => {
+   const numericValue = Number(value) || 0;
+
+   if (type === "penalty") {
+      const penalty = Math.abs(numericValue);
+
+      if (penalty === 0) {
+         return "0";
+      }
+
+      return `-${penalty}`;
+   }
+
+   if (numericValue > 0) {
+      return `+${numericValue}`;
+   }
+
+   return `${numericValue}`;
+};
+
+const TrustBreakdownItem = ({ icon, label, description, value, type }) => {
+   const numericValue = Number(value) || 0;
+   const isPenalty = type === "penalty";
+
+   let tone = "neutral";
+
+   if (isPenalty && numericValue !== 0) {
+      tone = "negative";
+   } else if (!isPenalty && numericValue > 0) {
+      tone = "positive";
+   } else if (!isPenalty && numericValue < 0) {
+      tone = "negative";
+   }
+
+   return (
+      <div className="hub-trust-factor">
+         <div className="hub-trust-factor-main">
+            <div className="hub-trust-factor-icon">
+               <Icons name={icon} size={16} />
+            </div>
+
+            <div>
+               <div className="hub-trust-factor-label">{label}</div>
+
+               <div className="hub-trust-factor-description">{description}</div>
+            </div>
+         </div>
+
+         <span className={`hub-trust-factor-value hub-trust-factor-value--${tone}`}>
+            {formatTrustEffect(value, type)}
+         </span>
+      </div>
+   );
+};
+
+const ImpactCard = ({ icon, value, label, description, tone }) => {
+   return (
+      <article className={`hub-impact-card hub-impact-card--${tone}`}>
+         <div className="hub-impact-icon">
+            <Icons name={icon} size={19} />
+         </div>
+
+         <div className="hub-impact-content">
+            <div className="hub-impact-value">{value ?? 0}</div>
+
+            <div className="hub-impact-label">{label}</div>
+
+            <p className="hub-impact-description">{description}</p>
+         </div>
+      </article>
+   );
+};
+
 const UserHubSkeleton = () => {
    return (
       <div className="hub-page-layout">
          <NavigationBar />
+
          <div className="hub-wrapper">
             <main className="hub-container">
-               <header className="hub-header">
-                  <div
-                     className="hub-header-left"
-                     style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "8px",
-                     }}
-                  >
+               {/* Overview skeleton */}
+               <header className="hub-overview">
+                  <div className="hub-overview-identity">
                      <div
                         className="skeleton-box"
                         style={{
-                           width: "150px",
-                           height: "32px",
-                           borderRadius: "8px",
+                           width: "64px",
+                           height: "64px",
+                           borderRadius: "50%",
+                           flexShrink: 0,
                         }}
-                     ></div>
-                     <div className="skeleton-box" style={{ width: "300px", height: "16px" }}></div>
-                  </div>
-               </header>
+                     />
 
-               <div className="hub-rep-row box-panel" style={{ display: "flex", gap: "24px", alignItems: "center" }}>
-                  <div
-                     className="skeleton-box"
-                     style={{
-                        width: "80px",
-                        height: "80px",
-                        borderRadius: "50%",
-                     }}
-                  ></div>
-                  <div
-                     className="hub-rep-info"
-                     style={{
-                        flex: 1,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "12px",
-                     }}
-                  >
-                     <div className="skeleton-box" style={{ width: "200px", height: "24px" }}></div>
-                     <div className="skeleton-box" style={{ width: "150px", height: "14px" }}></div>
                      <div
-                        className="skeleton-box"
-                        style={{
-                           width: "100%",
-                           height: "12px",
-                           borderRadius: "6px",
-                        }}
-                     ></div>
-                  </div>
-               </div>
-
-               <div className="hub-impact-grid">
-                  {[1, 2, 3].map((i) => (
-                     <div
-                        key={i}
-                        className="hub-stat-card box-panel"
                         style={{
                            display: "flex",
-                           alignItems: "center",
-                           gap: "16px",
+                           flexDirection: "column",
+                           gap: "10px",
+                           flex: 1,
                         }}
                      >
                         <div
                            className="skeleton-box"
                            style={{
-                              width: "40px",
-                              height: "40px",
-                              borderRadius: "12px",
+                              width: "120px",
+                              height: "12px",
                            }}
-                        ></div>
+                        />
+
+                        <div
+                           className="skeleton-box"
+                           style={{
+                              width: "260px",
+                              maxWidth: "70%",
+                              height: "28px",
+                           }}
+                        />
+
+                        <div
+                           className="skeleton-box"
+                           style={{
+                              width: "360px",
+                              maxWidth: "90%",
+                              height: "14px",
+                           }}
+                        />
+
+                        <div
+                           style={{
+                              display: "flex",
+                              gap: "8px",
+                           }}
+                        >
+                           <div
+                              className="skeleton-box"
+                              style={{
+                                 width: "88px",
+                                 height: "24px",
+                                 borderRadius: "999px",
+                              }}
+                           />
+
+                           <div
+                              className="skeleton-box"
+                              style={{
+                                 width: "120px",
+                                 height: "24px",
+                                 borderRadius: "999px",
+                              }}
+                           />
+                        </div>
+                     </div>
+                  </div>
+
+                  <div className="hub-overview-actions">
+                     {[1, 2, 3, 4].map((item) => (
+                        <div
+                           key={item}
+                           className="skeleton-box"
+                           style={{
+                              width: "140px",
+                              height: "38px",
+                              borderRadius: "9px",
+                           }}
+                        />
+                     ))}
+                  </div>
+               </header>
+
+               {/* Reputation skeleton */}
+               <section className="hub-reputation-card box-panel">
+                  <div className="hub-reputation-main">
+                     <div className="hub-reputation-heading">
                         <div
                            style={{
                               display: "flex",
@@ -317,104 +643,361 @@ const UserHubSkeleton = () => {
                               gap: "8px",
                            }}
                         >
-                           <div className="skeleton-box" style={{ width: "60px", height: "24px" }}></div>
-                           <div className="skeleton-box" style={{ width: "100px", height: "14px" }}></div>
-                        </div>
-                     </div>
-                  ))}
-               </div>
+                           <div
+                              className="skeleton-box"
+                              style={{
+                                 width: "140px",
+                                 height: "12px",
+                              }}
+                           />
 
-               <div className="hub-library box-panel">
-                  <div
-                     className="library-header"
-                     style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        marginBottom: "20px",
-                     }}
-                  >
-                     <div className="skeleton-box" style={{ width: "200px", height: "24px" }}></div>
-                     <div
-                        className="skeleton-box"
-                        style={{
-                           width: "150px",
-                           height: "36px",
-                           borderRadius: "20px",
-                        }}
-                     ></div>
-                  </div>
-                  <div className="library-list">
-                     {[1, 2, 3].map((i) => (
+                           <div
+                              className="skeleton-box"
+                              style={{
+                                 width: "190px",
+                                 height: "24px",
+                              }}
+                           />
+                        </div>
+
                         <div
-                           key={i}
-                           className="library-item"
+                           className="skeleton-box"
+                           style={{
+                              width: "150px",
+                              height: "30px",
+                              borderRadius: "999px",
+                           }}
+                        />
+                     </div>
+
+                     <div className="hub-reputation-summary">
+                        <div
+                           className="skeleton-box"
+                           style={{
+                              width: "80px",
+                              height: "80px",
+                              borderRadius: "50%",
+                              flexShrink: 0,
+                           }}
+                        />
+
+                        <div
                            style={{
                               display: "flex",
-                              justifyContent: "space-between",
-                              padding: "16px",
-                              borderBottom: "1px solid var(--border-subtle)",
+                              flexDirection: "column",
+                              gap: "10px",
+                              flex: 1,
                            }}
                         >
-                           <div style={{ display: "flex", gap: "16px", flex: 1 }}>
-                              <div
-                                 className="skeleton-box"
-                                 style={{
-                                    width: "40px",
-                                    height: "40px",
-                                    borderRadius: "8px",
-                                 }}
-                              ></div>
-                              <div
-                                 style={{
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    gap: "8px",
-                                    flex: 1,
-                                 }}
-                              >
-                                 <div className="skeleton-box" style={{ width: "80%", height: "16px" }}></div>
-                                 <div className="skeleton-box" style={{ width: "120px", height: "14px" }}></div>
-                              </div>
-                           </div>
+                           <div
+                              className="skeleton-box"
+                              style={{
+                                 width: "110px",
+                                 height: "12px",
+                              }}
+                           />
+
+                           <div
+                              className="skeleton-box"
+                              style={{
+                                 width: "180px",
+                                 height: "24px",
+                              }}
+                           />
+
+                           <div
+                              className="skeleton-box"
+                              style={{
+                                 width: "100%",
+                                 height: "14px",
+                              }}
+                           />
+                        </div>
+                     </div>
+
+                     <div
+                        style={{
+                           display: "flex",
+                           flexDirection: "column",
+                           gap: "10px",
+                           marginTop: "20px",
+                        }}
+                     >
+                        <div
+                           className="skeleton-box"
+                           style={{
+                              width: "220px",
+                              height: "14px",
+                           }}
+                        />
+
+                        <div
+                           className="skeleton-box"
+                           style={{
+                              width: "100%",
+                              height: "10px",
+                              borderRadius: "999px",
+                           }}
+                        />
+
+                        <div
+                           className="skeleton-box"
+                           style={{
+                              width: "280px",
+                              height: "12px",
+                           }}
+                        />
+                     </div>
+                  </div>
+
+                  <aside className="hub-trust-breakdown">
+                     <div
+                        style={{
+                           display: "flex",
+                           flexDirection: "column",
+                           gap: "10px",
+                        }}
+                     >
+                        <div
+                           className="skeleton-box"
+                           style={{
+                              width: "120px",
+                              height: "12px",
+                           }}
+                        />
+
+                        <div
+                           className="skeleton-box"
+                           style={{
+                              width: "190px",
+                              height: "22px",
+                           }}
+                        />
+                     </div>
+
+                     <div
+                        style={{
+                           display: "flex",
+                           flexDirection: "column",
+                           gap: "10px",
+                           marginTop: "18px",
+                        }}
+                     >
+                        {[1, 2, 3, 4].map((item) => (
+                           <div
+                              key={item}
+                              className="skeleton-box"
+                              style={{
+                                 width: "100%",
+                                 height: "54px",
+                                 borderRadius: "10px",
+                              }}
+                           />
+                        ))}
+                     </div>
+                  </aside>
+               </section>
+
+               {/* Impact skeleton */}
+               <section className="hub-impact-section">
+                  <div className="hub-section-header">
+                     <div
+                        style={{
+                           display: "flex",
+                           flexDirection: "column",
+                           gap: "8px",
+                        }}
+                     >
+                        <div
+                           className="skeleton-box"
+                           style={{
+                              width: "100px",
+                              height: "12px",
+                           }}
+                        />
+
+                        <div
+                           className="skeleton-box"
+                           style={{
+                              width: "180px",
+                              height: "24px",
+                           }}
+                        />
+
+                        <div
+                           className="skeleton-box"
+                           style={{
+                              width: "320px",
+                              maxWidth: "90%",
+                              height: "14px",
+                           }}
+                        />
+                     </div>
+                  </div>
+
+                  <div className="hub-impact-grid">
+                     {[1, 2, 3].map((item) => (
+                        <div key={item} className="hub-impact-card">
+                           <div
+                              className="skeleton-box"
+                              style={{
+                                 width: "42px",
+                                 height: "42px",
+                                 borderRadius: "12px",
+                              }}
+                           />
+
                            <div
                               style={{
                                  display: "flex",
                                  flexDirection: "column",
-                                 gap: "12px",
-                                 alignItems: "flex-end",
+                                 gap: "8px",
+                                 flex: 1,
                               }}
                            >
                               <div
                                  className="skeleton-box"
                                  style={{
-                                    width: "80px",
-                                    height: "24px",
-                                    borderRadius: "12px",
+                                    width: "70px",
+                                    height: "28px",
                                  }}
-                              ></div>
-                              <div style={{ display: "flex", gap: "8px" }}>
-                                 <div
-                                    className="skeleton-box"
-                                    style={{
-                                       width: "100px",
-                                       height: "30px",
-                                       borderRadius: "6px",
-                                    }}
-                                 ></div>
-                                 <div
-                                    className="skeleton-box"
-                                    style={{
-                                       width: "100px",
-                                       height: "30px",
-                                       borderRadius: "6px",
-                                    }}
-                                 ></div>
-                              </div>
+                              />
+
+                              <div
+                                 className="skeleton-box"
+                                 style={{
+                                    width: "120px",
+                                    height: "14px",
+                                 }}
+                              />
+
+                              <div
+                                 className="skeleton-box"
+                                 style={{
+                                    width: "100%",
+                                    height: "12px",
+                                 }}
+                              />
                            </div>
                         </div>
                      ))}
                   </div>
-               </div>
+               </section>
+
+               {/* Library skeleton */}
+               <section className="hub-library box-panel">
+                  <div className="library-header">
+                     <div
+                        style={{
+                           display: "flex",
+                           flexDirection: "column",
+                           gap: "8px",
+                        }}
+                     >
+                        <div
+                           className="skeleton-box"
+                           style={{
+                              width: "100px",
+                              height: "12px",
+                           }}
+                        />
+
+                        <div
+                           className="skeleton-box"
+                           style={{
+                              width: "220px",
+                              height: "24px",
+                           }}
+                        />
+
+                        <div
+                           className="skeleton-box"
+                           style={{
+                              width: "340px",
+                              maxWidth: "90%",
+                              height: "14px",
+                           }}
+                        />
+                     </div>
+                  </div>
+
+                  <div
+                     style={{
+                        display: "flex",
+                        gap: "8px",
+                        marginTop: "18px",
+                     }}
+                  >
+                     <div
+                        className="skeleton-box"
+                        style={{
+                           width: "110px",
+                           height: "34px",
+                           borderRadius: "9px",
+                        }}
+                     />
+
+                     <div
+                        className="skeleton-box"
+                        style={{
+                           width: "110px",
+                           height: "34px",
+                           borderRadius: "9px",
+                        }}
+                     />
+                  </div>
+
+                  <div
+                     style={{
+                        display: "flex",
+                        gap: "10px",
+                        marginTop: "16px",
+                        flexWrap: "wrap",
+                     }}
+                  >
+                     <div
+                        className="skeleton-box"
+                        style={{
+                           flex: "1 1 280px",
+                           height: "38px",
+                           borderRadius: "9px",
+                        }}
+                     />
+
+                     {[1, 2, 3].map((item) => (
+                        <div
+                           key={item}
+                           className="skeleton-box"
+                           style={{
+                              width: "130px",
+                              height: "38px",
+                              borderRadius: "9px",
+                           }}
+                        />
+                     ))}
+                  </div>
+
+                  <div
+                     style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "12px",
+                        marginTop: "20px",
+                     }}
+                  >
+                     {[1, 2, 3].map((item) => (
+                        <div
+                           key={item}
+                           className="skeleton-box"
+                           style={{
+                              width: "100%",
+                              height: "150px",
+                              borderRadius: "12px",
+                           }}
+                        />
+                     ))}
+                  </div>
+               </section>
             </main>
          </div>
       </div>
@@ -423,61 +1006,381 @@ const UserHubSkeleton = () => {
 
 export default function UserHub() {
    const { authFetch } = useAuth();
+   const navigate = useNavigate();
    const [hubData, setHubData] = useState(null);
    const [loading, setLoading] = useState(true);
    const [error, setError] = useState(null);
-   const [searchQuery, setSearchQuery] = useState("");
    const [selectedClaimId, setSelectedClaimId] = useState(null);
+   const [refreshing, setRefreshing] = useState(false);
+   const [lastUpdated, setLastUpdated] = useState(null);
 
-   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+   const [libraryView, setLibraryView] = useState("history");
+   const [libraryData, setLibraryData] = useState({
+      count: 0,
+      page: 1,
+      page_size: 10,
+      total_pages: 1,
+      has_next: false,
+      has_previous: false,
+      results: [],
+   });
 
-   useEffect(() => {
-      const loadDashboard = async () => {
+   const [libraryLoading, setLibraryLoading] = useState(true);
+   const [libraryError, setLibraryError] = useState(null);
+
+   const [searchInput, setSearchInput] = useState("");
+   const [searchQuery, setSearchQuery] = useState("");
+
+   const [verdictFilter, setVerdictFilter] = useState("");
+   const [typeFilter, setTypeFilter] = useState("");
+   const [sortOrder, setSortOrder] = useState("newest");
+   const [libraryPage, setLibraryPage] = useState(1);
+
+   const [libraryCounts, setLibraryCounts] = useState({
+      history: null,
+      saved: null,
+   });
+
+   const [savingClaimIds, setSavingClaimIds] = useState(new Set());
+
+   const [saveError, setSaveError] = useState(null);
+
+   const [trustExplainerOpen, setTrustExplainerOpen] = useState(false);
+
+   const loadDashboard = useCallback(
+      async ({ isRefresh = false } = {}) => {
          try {
-            setLoading(true);
+            if (isRefresh) {
+               setRefreshing(true);
+            } else {
+               setLoading(true);
+            }
+
+            setError(null);
+
             const data = await authFetch(buildApiUrl("users/me/dashboard/"), {
                method: "GET",
             });
+
             setHubData(data);
+            setLastUpdated(new Date());
          } catch (err) {
             console.error("Failed to load user hub data:", err);
-            setError("Failed to load your personal hub data.");
+
+            setError("We couldn't refresh your dashboard right now. Please try again.");
          } finally {
-            setLoading(false);
+            if (isRefresh) {
+               setRefreshing(false);
+            } else {
+               setLoading(false);
+            }
+         }
+      },
+      [authFetch],
+   );
+
+   useEffect(() => {
+      loadDashboard();
+   }, [loadDashboard]);
+
+   useEffect(() => {
+      const timeoutId = window.setTimeout(() => {
+         setSearchQuery(searchInput.trim());
+         setLibraryPage(1);
+      }, 350);
+
+      return () => window.clearTimeout(timeoutId);
+   }, [searchInput]);
+
+   useEffect(() => {
+      let ignore = false;
+
+      const loadLibrary = async () => {
+         try {
+            setLibraryLoading(true);
+            setLibraryError(null);
+
+            const params = new URLSearchParams({
+               view: libraryView,
+               page: String(libraryPage),
+               page_size: "10",
+               sort: sortOrder,
+            });
+
+            if (searchQuery) {
+               params.set("search", searchQuery);
+            }
+
+            if (verdictFilter) {
+               params.set("verdict", verdictFilter);
+            }
+
+            if (typeFilter) {
+               params.set("type", typeFilter);
+            }
+
+            const data = await authFetch(buildApiUrl(`users/me/fact-checks/?${params.toString()}`), {
+               method: "GET",
+            });
+
+            if (ignore) return;
+
+            setLibraryData(data);
+
+            if (data.counts) {
+               setLibraryCounts({
+                  history: data.counts.history,
+                  saved: data.counts.saved,
+               });
+            }
+
+            // Protect against a stale page after filtering.
+            if (data.page !== libraryPage && data.page >= 1) {
+               setLibraryPage(data.page);
+            }
+         } catch (err) {
+            if (ignore) return;
+
+            console.error("Failed to load fact-check library:", err);
+
+            setLibraryError("Could not load your fact-check activity.");
+         } finally {
+            if (!ignore) {
+               setLibraryLoading(false);
+            }
          }
       };
-      loadDashboard();
-   }, [authFetch]);
 
-   const filteredLibrary = useMemo(() => {
-      if (!hubData?.library?.saved_receipts) return [];
-      let receipts = hubData.library.saved_receipts;
-      if (searchQuery) {
-         const lower = searchQuery.toLowerCase();
-         receipts = receipts.filter(
-            (r) =>
-               (r.ai_summary && r.ai_summary.toLowerCase().includes(lower)) ||
-               (r.final_verdict && r.final_verdict.toLowerCase().includes(lower)) ||
-               (r.ai_verdict && r.ai_verdict.toLowerCase().includes(lower)),
-         );
-      }
-      return receipts;
-   }, [hubData?.library?.saved_receipts, searchQuery]);
+      loadLibrary();
+
+      return () => {
+         ignore = true;
+      };
+   }, [authFetch, libraryView, libraryPage, searchQuery, verdictFilter, typeFilter, sortOrder]);
 
    if (loading) return <UserHubSkeleton />;
-   if (error)
+   if (error && !hubData) {
       return (
-         <div className="hub-wrapper error">
-            <p>{error}</p>
+         <div className="hub-page-layout">
+            <NavigationBar />
+
+            <div className="hub-wrapper">
+               <main className="hub-container">
+                  <div className="hub-error-state box-panel">
+                     <div className="hub-error-state-icon">
+                        <Icons name="alert-triangle" size={22} />
+                     </div>
+
+                     <div className="hub-error-state-content">
+                        <span className="hub-section-eyebrow">DASHBOARD UNAVAILABLE</span>
+
+                        <h1>We couldn't load your dashboard</h1>
+
+                        <p>{error}</p>
+
+                        <button type="button" className="hub-error-retry-btn" onClick={loadDashboard}>
+                           <Icons name="refresh-cw" size={16} />
+                           Try again
+                        </button>
+                     </div>
+                  </div>
+               </main>
+            </div>
          </div>
       );
+   }
 
-   const { reputation, impact } = hubData;
+   const { reputation, impact, user_info: userInfo } = hubData;
 
-   // Handle Publish Stub
-   const handlePublish = (e) => {
-      e.preventDefault();
-      alert("Publish to Community feature is coming soon!");
+   const username = userInfo?.username || "User";
+   const avatarUrl = userInfo?.avatar_url;
+   const avatarInitial = username.charAt(0).toUpperCase();
+
+   const handleEscalate = (claimId) => {
+      navigate(`/thread/create?claim_id=${encodeURIComponent(claimId)}`);
+   };
+
+   const handleRefreshDashboard = async () => {
+      await loadDashboard({ isRefresh: true });
+   };
+
+   const getSourceLabel = (url) => {
+      if (!url) return "Source";
+
+      try {
+         return new URL(url).hostname.replace(/^www\./, "");
+      } catch {
+         return "Source";
+      }
+   };
+
+   const handleLibraryViewChange = (nextView) => {
+      if (nextView === libraryView) return;
+
+      setLibraryView(nextView);
+      setLibraryPage(1);
+   };
+
+   const handleVerdictChange = (event) => {
+      setVerdictFilter(event.target.value);
+      setLibraryPage(1);
+   };
+
+   const handleTypeChange = (event) => {
+      setTypeFilter(event.target.value);
+      setLibraryPage(1);
+   };
+
+   const handleSortChange = (event) => {
+      setSortOrder(event.target.value);
+      setLibraryPage(1);
+   };
+
+   const clearLibraryFilters = () => {
+      setSearchInput("");
+      setSearchQuery("");
+      setVerdictFilter("");
+      setTypeFilter("");
+      setSortOrder("newest");
+      setLibraryPage(1);
+   };
+
+   const hasLibraryFilters =
+      Boolean(searchQuery) || Boolean(verdictFilter) || Boolean(typeFilter) || sortOrder !== "newest";
+
+   const handleToggleSave = async (claim) => {
+      if (savingClaimIds.has(claim.id)) return;
+
+      const previousIsSaved = Boolean(claim.is_saved);
+      const optimisticIsSaved = !previousIsSaved;
+
+      const previousLibraryData = libraryData;
+      const previousLibraryCounts = libraryCounts;
+
+      setSaveError(null);
+
+      setSavingClaimIds((current) => {
+         const next = new Set(current);
+         next.add(claim.id);
+         return next;
+      });
+
+      /*
+       * Optimistic UI:
+       * update immediately before the server responds.
+       */
+      if (libraryView === "saved" && previousIsSaved) {
+         /*
+          * In Saved view, unsaving should immediately
+          * remove the card rather than reload the list.
+          */
+         setLibraryData((current) => {
+            const nextResults = current.results.filter((item) => item.id !== claim.id);
+
+            const nextCount = Math.max(0, current.count - 1);
+
+            const nextTotalPages = Math.max(1, Math.ceil(nextCount / current.page_size));
+
+            return {
+               ...current,
+               count: nextCount,
+               total_pages: nextTotalPages,
+               has_next: current.page < nextTotalPages,
+               results: nextResults,
+            };
+         });
+      } else {
+         /*
+          * History view:
+          * simply flip Save <-> Saved in place.
+          */
+         setLibraryData((current) => ({
+            ...current,
+            results: current.results.map((item) =>
+               item.id === claim.id
+                  ? {
+                       ...item,
+                       is_saved: optimisticIsSaved,
+                    }
+                  : item,
+            ),
+         }));
+      }
+
+      setLibraryCounts((current) => ({
+         ...current,
+         saved: current.saved === null ? current.saved : Math.max(0, current.saved + (optimisticIsSaved ? 1 : -1)),
+      }));
+
+      try {
+         const result = await authFetch(buildApiUrl(`claims/${claim.id}/toggle-save/`), {
+            method: "POST",
+         });
+
+         /*
+          * Server response is authoritative.
+          * Reconcile count in case another tab/session
+          * changed saved claims simultaneously.
+          */
+         if (typeof result.saved_count === "number") {
+            setLibraryCounts((current) => ({
+               ...current,
+               saved: result.saved_count,
+            }));
+         }
+
+         /*
+          * In History, reconcile button state too.
+          */
+         if (libraryView !== "saved") {
+            setLibraryData((current) => ({
+               ...current,
+               results: current.results.map((item) =>
+                  item.id === claim.id
+                     ? {
+                          ...item,
+                          is_saved: result.is_saved,
+                       }
+                     : item,
+               ),
+            }));
+         }
+
+         /*
+          * Rare pagination edge case:
+          * if we removed the final card on a Saved page,
+          * move backward one page.
+          *
+          * Example:
+          * page 3 contains only one item.
+          * After removing it, page 3 no longer exists.
+          */
+         if (
+            libraryView === "saved" &&
+            previousIsSaved &&
+            previousLibraryData.results.length === 1 &&
+            previousLibraryData.page > 1
+         ) {
+            setLibraryPage(previousLibraryData.page - 1);
+         }
+      } catch (err) {
+         console.error("Failed to update saved claim:", err);
+
+         /*
+          * Roll back everything exactly as it was
+          * before the optimistic update.
+          */
+         setLibraryData(previousLibraryData);
+         setLibraryCounts(previousLibraryCounts);
+
+         setSaveError("Could not update this saved claim. Please try again.");
+      } finally {
+         setSavingClaimIds((current) => {
+            const next = new Set(current);
+            next.delete(claim.id);
+            return next;
+         });
+      }
    };
 
    return (
@@ -485,132 +1388,596 @@ export default function UserHub() {
          <NavigationBar />
          <div className="hub-wrapper">
             <main className="hub-container">
-               <header className="hub-header">
-                  <div className="hub-header-left">
-                     <h1 className="hub-title">My Hub</h1>
-                     <p className="hub-subtitle">Manage your progression and fact-check library.</p>
+               <header className="hub-overview">
+                  <div className="hub-overview-identity">
+                     <div className="hub-avatar">
+                        {avatarUrl ? (
+                           <img src={avatarUrl} alt={`${username}'s profile`} />
+                        ) : (
+                           <span>{avatarInitial}</span>
+                        )}
+                     </div>
+
+                     <div className="hub-overview-copy">
+                        <span className="hub-eyebrow">YOUR DASHBOARD</span>
+
+                        <h1 className="hub-title">Welcome back, @{username}</h1>
+
+                        <p className="hub-subtitle">
+                           Track your investigations, reputation, and contribution to TruthLens.
+                        </p>
+
+                        <div className="hub-status-row">
+                           <span className="hub-status-badge">{reputation?.status || "Provisional"}</span>
+
+                           {reputation?.confidence?.label && (
+                              <span className="hub-confidence-label">{reputation.confidence.label} confidence</span>
+                           )}
+
+                           {lastUpdated && (
+                              <span className="hub-last-updated">
+                                 Updated{" "}
+                                 {lastUpdated.toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                 })}
+                              </span>
+                           )}
+                        </div>
+                     </div>
+                  </div>
+
+                  <div className="hub-overview-actions">
+                     <button
+                        type="button"
+                        className="hub-action hub-action-refresh"
+                        onClick={handleRefreshDashboard}
+                        disabled={refreshing}
+                     >
+                        <Icons name="refresh-cw" size={16} className={refreshing ? "spin" : ""} />
+                        {refreshing ? "Refreshing..." : "Refresh"}
+                     </button>
+                     <button
+                        type="button"
+                        className="hub-action hub-action-primary"
+                        onClick={() => navigate("/verify")}
+                     >
+                        <Icons name="scan-line" size={17} />
+                        Verify something
+                     </button>
+
+                     <button
+                        type="button"
+                        className="hub-action hub-action-secondary"
+                        onClick={() => navigate("/community")}
+                     >
+                        <Icons name="users" size={17} />
+                        Explore Community
+                     </button>
+
+                     <button
+                        type="button"
+                        className="hub-action hub-action-tertiary"
+                        onClick={() => navigate("/profile")}
+                     >
+                        <Icons name="user" size={17} />
+                        View profile
+                     </button>
                   </div>
                </header>
 
-               {/* Reputation & Progression Row */}
-               <div className="hub-rep-row box-panel">
-                  <div className="hub-rep-gauge">
-                     <TrustGauge score={reputation?.trust_score || 0} />
-                  </div>
-                  <div className="hub-rep-info">
-                     <h2 className="hub-rank-title">{reputation.current_rank}</h2>
-                     <p className="hub-rank-sub">
-                        Next Milestone: <strong>{reputation.points_to_next_rank}</strong> pt/s needed
-                     </p>
-                     <div className="hub-progress-bar">
+               {/* Trust & Reputation */}
+               <section className="hub-reputation-card box-panel">
+                  <div className="hub-reputation-main">
+                     <div className="hub-reputation-heading">
+                        <div>
+                           <span className="hub-section-eyebrow">TRUST & REPUTATION</span>
+
+                           <h2 className="hub-section-heading">Your reputation</h2>
+                        </div>
+
+                        <button
+                           type="button"
+                           className="hub-trust-explain-btn"
+                           onClick={() => setTrustExplainerOpen(true)}
+                        >
+                           <Icons name="info" size={14} />
+                           How Trust Score works
+                        </button>
+
                         <div
-                           className="hub-progress-fill"
-                           style={{
-                              width: `${Math.min(((reputation.trust_score % 50) / 50) * 100, 100)}%`,
-                           }}
-                        ></div>
+                           className="hub-confidence-chip"
+                           title="Confidence reflects how much resolved contribution history exists behind your Trust Score."
+                        >
+                           <Icons name="activity" size={14} />
+                           <span>{reputation?.confidence?.label || "Provisional"} confidence</span>
+                        </div>
                      </div>
-                  </div>
-               </div>
 
-               {/* Impact Metrics Row */}
-               <div className="hub-impact-grid">
-                  <div className="hub-stat-card box-panel">
-                     <Icons name="scan-line" size={24} color="#6366f1" />
-                     <div className="stat-meta">
-                        <div className="stat-val">{impact.total_scans || 0}</div>
-                        <div className="stat-lbl">Total Scans</div>
-                     </div>
-                  </div>
-                  <div className="hub-stat-card box-panel">
-                     <Icons name="message-square" size={24} color="#3b82f6" />
-                     <div className="stat-meta">
-                        <div className="stat-val">{impact.community_contributions || 0}</div>
-                        <div className="stat-lbl">Contributions & Votes</div>
-                     </div>
-                  </div>
-                  <div className="hub-stat-card box-panel">
-                     <Icons name="activity" size={24} color="#10b981" />
-                     <div className="stat-meta">
-                        <div className="stat-val">{impact.impact_ripple || 0}</div>
-                        <div className="stat-lbl">Impact Ripple</div>
-                     </div>
-                  </div>
-               </div>
+                     <div className="hub-reputation-summary">
+                        <div className="hub-reputation-score">
+                           <TrustGauge score={reputation?.trust_score ?? 50} />
+                        </div>
 
-               {/* Private Fact-Check Library */}
-               <div className="hub-library box-panel">
-                  <div className="library-header">
-                     <h3 className="section-title">Private Fact-Check Library</h3>
-                     <div className="library-search">
-                        <Icons name="search" size={16} color="#64748b" />
-                        <input
-                           type="text"
-                           placeholder="Search receipts..."
-                           value={searchQuery}
-                           onChange={(e) => setSearchQuery(e.target.value)}
+                        <div className="hub-reputation-rank">
+                           <span className="hub-reputation-rank-label">Current rank</span>
+
+                           <h3>{reputation?.current_rank || "Provisional"}</h3>
+
+                           {reputation?.current_rank === "Provisional" ? (
+                              <p className="hub-reputation-description">
+                                 We&apos;re still building enough history to establish your reputation.
+                              </p>
+                           ) : (
+                              <p className="hub-reputation-description">
+                                 Your Trust Score reflects the quality and reception of your verified contributions.
+                              </p>
+                           )}
+                        </div>
+                     </div>
+
+                     <div className="hub-rank-progress">
+                        <div className="hub-rank-progress-header">
+                           <div>
+                              <span className="hub-rank-progress-label">
+                                 {reputation?.next_rank ? `Progress to ${reputation.next_rank}` : "Reputation progress"}
+                              </span>
+
+                              <span className="hub-rank-progress-detail">
+                                 {reputation?.next_rank ? (
+                                    <>
+                                       {reputation.actions_to_next_rank > 0 && (
+                                          <>
+                                             {reputation.actions_to_next_rank} resolved{" "}
+                                             {reputation.actions_to_next_rank === 1 ? "action" : "actions"} needed
+                                          </>
+                                       )}
+
+                                       {reputation.actions_to_next_rank > 0 &&
+                                          reputation.score_to_next_rank > 0 &&
+                                          " · "}
+
+                                       {reputation.score_to_next_rank > 0 && (
+                                          <>
+                                             {reputation.score_to_next_rank} Trust Score{" "}
+                                             {reputation.score_to_next_rank === 1 ? "point" : "points"} needed
+                                          </>
+                                       )}
+
+                                       {reputation.actions_to_next_rank === 0 &&
+                                          reputation.score_to_next_rank === 0 &&
+                                          "Requirements met"}
+                                    </>
+                                 ) : (
+                                    "Highest reputation rank reached"
+                                 )}
+                              </span>
+                           </div>
+
+                           <span className="hub-rank-progress-percent">
+                              {Math.round(Math.max(0, Math.min(reputation?.progress_percent ?? 0, 100)))}%
+                           </span>
+                        </div>
+
+                        <div className="hub-progress-bar">
+                           <div
+                              className="hub-progress-fill"
+                              style={{
+                                 width: `${Math.max(0, Math.min(reputation?.progress_percent ?? 0, 100))}%`,
+                              }}
+                           />
+                        </div>
+
+                        <div className="hub-rank-progress-meta">
+                           <span>{reputation?.resolved_actions ?? 0} resolved actions</span>
+
+                           <span>Baseline Trust Score: {reputation?.breakdown?.base_score ?? 50}</span>
+                        </div>
+                        <p className="hub-rank-guidance">
+                           {reputation?.next_rank ? (
+                              reputation.actions_to_next_rank > 0 || reputation.score_to_next_rank > 0 ? (
+                                 <>
+                                    Keep contributing high-quality, verified evidence to progress toward{" "}
+                                    <strong>{reputation.next_rank}</strong>.
+                                 </>
+                              ) : (
+                                 <>You currently meet the requirements for the next rank.</>
+                              )
+                           ) : (
+                              <>You have reached the highest current reputation rank.</>
+                           )}
+                        </p>
+                     </div>
+                  </div>
+
+                  <aside className="hub-trust-breakdown">
+                     <div className="hub-trust-breakdown-header">
+                        <div>
+                           <span className="hub-section-eyebrow">SCORE BREAKDOWN</span>
+
+                           <h3>What affects your score</h3>
+                        </div>
+
+                        <div className="hub-score-total">
+                           <span>Current</span>
+                           <strong>{Math.round(reputation?.trust_score ?? 50)}</strong>
+                        </div>
+                     </div>
+
+                     <div className="hub-trust-factor-list">
+                        <TrustBreakdownItem
+                           icon="check-circle"
+                           label="Contribution Quality"
+                           description="Quality of resolved evidence and reports"
+                           value={reputation?.breakdown?.contribution_points}
+                        />
+
+                        <TrustBreakdownItem
+                           icon="users"
+                           label="Community Reception"
+                           description="Weighted reception from other contributors"
+                           value={reputation?.breakdown?.community_points}
+                        />
+
+                        <TrustBreakdownItem
+                           icon="clock"
+                           label="Account History"
+                           description="Sustained successful participation"
+                           value={reputation?.breakdown?.history_points}
+                        />
+
+                        <TrustBreakdownItem
+                           icon="shield"
+                           label="Moderation Penalties"
+                           description="Penalties from confirmed moderation actions"
+                           value={reputation?.breakdown?.moderation_penalty}
+                           type="penalty"
                         />
                      </div>
+
+                     <div className="hub-trust-note">
+                        <Icons name="info" size={14} />
+
+                        <p>Routine scans and passive activity do not directly increase your Trust Score.</p>
+                     </div>
+                  </aside>
+               </section>
+
+               {/* Impact Overview */}
+               <section className="hub-impact-section">
+                  <div className="hub-section-header">
+                     <div>
+                        <span className="hub-section-eyebrow">YOUR IMPACT</span>
+
+                        <h2 className="hub-section-heading">Activity overview</h2>
+
+                        <p className="hub-section-description">
+                           A snapshot of how you use TruthLens and contribute to community verification.
+                        </p>
+                     </div>
                   </div>
 
-                  <div className="library-list">
-                     {filteredLibrary.length > 0 ? (
-                        filteredLibrary.map((claim, idx) => (
-                           <div key={idx} className="library-item">
-                              <div className="li-main">
-                                 <div className="li-icon">
-                                    <Icons
-                                       name={claim.claim_type === "IMAGE" ? "image" : "globe"}
-                                       size={20}
-                                       color="#64748b"
-                                       className="li-icon-svg"
-                                    />
+                  <div className="hub-impact-grid">
+                     <ImpactCard
+                        icon="scan-line"
+                        value={impact?.total_scans ?? 0}
+                        label="Fact checks"
+                        description="Claims you have investigated with TruthLens."
+                        tone="indigo"
+                     />
+
+                     <ImpactCard
+                        icon="message-square"
+                        value={impact?.community_contributions ?? 0}
+                        label="Community activity"
+                        description="Evidence submissions and votes you have contributed."
+                        tone="blue"
+                     />
+
+                     <ImpactCard
+                        icon="activity"
+                        value={impact?.impact_ripple ?? 0}
+                        label="Community impact"
+                        description="Votes received on evidence you submitted."
+                        tone="green"
+                     />
+                  </div>
+               </section>
+
+               {/* Fact-Check Library */}
+               <section className="hub-library box-panel">
+                  <div className="library-header">
+                     <div className="library-heading">
+                        <span className="hub-section-eyebrow">YOUR LIBRARY</span>
+
+                        <div className="library-title-row">
+                           <h2 className="section-title">Fact-check library</h2>
+
+                           <span className="library-count">{libraryData.count}</span>
+                        </div>
+
+                        <p className="library-description">
+                           Browse your fact-check history and claims you&apos;ve saved for later.
+                        </p>
+                     </div>
+                  </div>
+
+                  <div className="library-tabs">
+                     <button
+                        type="button"
+                        className={`library-tab ${libraryView === "history" ? "library-tab--active" : ""}`}
+                        onClick={() => handleLibraryViewChange("history")}
+                     >
+                        <Icons name="clock" size={15} />
+                        History
+                        {libraryCounts.history !== null && (
+                           <span className="library-tab-count">{libraryCounts.history}</span>
+                        )}
+                     </button>
+
+                     <button
+                        type="button"
+                        className={`library-tab ${libraryView === "saved" ? "library-tab--active" : ""}`}
+                        onClick={() => handleLibraryViewChange("saved")}
+                     >
+                        <Icons name="bookmark" size={15} />
+                        Saved
+                        {libraryCounts.saved !== null && (
+                           <span className="library-tab-count">{libraryCounts.saved}</span>
+                        )}
+                     </button>
+                  </div>
+
+                  <div className="library-toolbar">
+                     <div className="library-search">
+                        <Icons name="search" size={16} />
+
+                        <input
+                           type="search"
+                           placeholder={libraryView === "history" ? "Search history..." : "Search saved claims..."}
+                           aria-label="Search fact checks"
+                           value={searchInput}
+                           onChange={(event) => setSearchInput(event.target.value)}
+                        />
+                     </div>
+
+                     <div className="library-filters">
+                        <label className="library-filter">
+                           <span className="sr-only">Filter by verdict</span>
+
+                           <select value={verdictFilter} onChange={handleVerdictChange}>
+                              <option value="">All verdicts</option>
+                              <option value="FACT">Fact</option>
+                              <option value="FAKE">Fake</option>
+                              <option value="MISLEADING">Misleading</option>
+                              <option value="SATIRE">Satire</option>
+                              <option value="UNVERIFIED">Unverified</option>
+                              <option value="OUT_OF_SCOPE">Out of scope</option>
+                           </select>
+                        </label>
+
+                        <label className="library-filter">
+                           <span className="sr-only">Filter by claim type</span>
+
+                           <select value={typeFilter} onChange={handleTypeChange}>
+                              <option value="">All types</option>
+                              <option value="TEXT">Text</option>
+                              <option value="IMAGE">Image</option>
+                              <option value="URL">URL</option>
+                              <option value="VIDEO">Video</option>
+                              <option value="FILE">File</option>
+                           </select>
+                        </label>
+
+                        <label className="library-filter">
+                           <span className="sr-only">Sort fact checks</span>
+
+                           <select value={sortOrder} onChange={handleSortChange}>
+                              <option value="newest">Newest first</option>
+                              <option value="oldest">Oldest first</option>
+                           </select>
+                        </label>
+
+                        {hasLibraryFilters && (
+                           <button type="button" className="library-clear-filters" onClick={clearLibraryFilters}>
+                              Clear
+                           </button>
+                        )}
+                     </div>
+                  </div>
+                  {saveError && (
+                     <div className="library-save-error" role="alert">
+                        <Icons name="alert-circle" size={14} />
+
+                        <span>{saveError}</span>
+
+                        <button type="button" onClick={() => setSaveError(null)} aria-label="Dismiss save error">
+                           <Icons name="x" size={13} />
+                        </button>
+                     </div>
+                  )}
+
+                  <div className="library-content">
+                     {libraryLoading ? (
+                        <div className="library-loading">
+                           <Icons name="loader" size={22} className="spin" />
+                           <span>Loading fact checks...</span>
+                        </div>
+                     ) : libraryError ? (
+                        <div className="library-empty">
+                           <div className="library-empty-icon">
+                              <Icons name="alert-triangle" size={24} />
+                           </div>
+
+                           <h3>Unable to load fact checks</h3>
+                           <p>{libraryError}</p>
+                        </div>
+                     ) : libraryData.results.length > 0 ? (
+                        <div className="library-list">
+                           {libraryData.results.map((claim) => (
+                              <div key={claim.id} className="library-item">
+                                 <div className="li-main">
+                                    <div className="li-icon">
+                                       <Icons
+                                          name={
+                                             claim.claim_type === "IMAGE"
+                                                ? "image"
+                                                : claim.claim_type === "TEXT"
+                                                  ? "file-text"
+                                                  : claim.claim_type === "FILE"
+                                                    ? "file"
+                                                    : "globe"
+                                          }
+                                          size={20}
+                                          color="#64748b"
+                                          className="li-icon-svg"
+                                       />
+                                    </div>
+
+                                    <div className="li-content">
+                                       <div className="li-type-row">
+                                          <span className="li-type">{claim.claim_type || "CLAIM"}</span>
+
+                                          <span className="li-date">
+                                             {new Date(claim.activity_at || claim.last_updated).toLocaleDateString()}
+                                          </span>
+                                       </div>
+
+                                       <p className="li-excerpt">
+                                          {claim.context_text
+                                             ? `"${claim.context_text}"`
+                                             : claim.ai_summary || "No summary available."}
+                                       </p>
+
+                                       <div className="li-meta">
+                                          {claim.canonical_source_url && (
+                                             <span className="li-source-meta">
+                                                <span className="li-source-label">Top Source</span>
+
+                                                <span aria-hidden="true">·</span>
+
+                                                <a
+                                                   href={claim.canonical_source_url}
+                                                   target="_blank"
+                                                   rel="noopener noreferrer"
+                                                   className="li-source-link"
+                                                >
+                                                   {getSourceLabel(claim.canonical_source_url)}
+
+                                                   <Icons name="external-link" size={11} />
+                                                </a>
+                                             </span>
+                                          )}
+                                       </div>
+                                    </div>
                                  </div>
-                                 <div className="li-content">
-                                    <p className="li-excerpt">
-                                       {claim.context_text
-                                          ? `"${claim.context_text}"`
-                                          : claim.ai_summary || "No summary available."}
-                                    </p>
-                                    <div className="li-meta">
-                                       <span>{new Date(claim.last_updated).toLocaleDateString()}</span>
-                                       {claim.source_link && (
-                                          <a href={claim.source_link} target="_blank" rel="noreferrer">
-                                             Source Link
-                                          </a>
-                                       )}
+
+                                 <div className="li-actions">
+                                    <div className="li-verdict-top-right">
+                                       <VerdictBadge
+                                          verdict={claim.effective_verdict || claim.final_verdict || claim.ai_verdict}
+                                       />
+                                    </div>
+
+                                    <div className="hub-btns-row">
+                                       <button
+                                          type="button"
+                                          className={`hub-btn-save ${claim.is_saved ? "hub-btn-save--saved" : ""}`}
+                                          onClick={() => handleToggleSave(claim)}
+                                          disabled={savingClaimIds.has(claim.id)}
+                                          aria-busy={savingClaimIds.has(claim.id)}
+                                          aria-label={claim.is_saved ? "Remove from saved claims" : "Save claim"}
+                                       >
+                                          {savingClaimIds.has(claim.id) ? (
+                                             <Icons name="loader" size={14} className="hub-btn-icon spin" />
+                                          ) : (
+                                             <Icons name="bookmark" size={14} className="hub-btn-icon" />
+                                          )}
+
+                                          {claim.is_saved ? "Saved" : "Save"}
+                                       </button>
+                                       <button
+                                          type="button"
+                                          onClick={() => setSelectedClaimId(claim.id)}
+                                          className="hub-btn-report"
+                                       >
+                                          <Icons name="file-text" size={14} className="hub-btn-icon" />
+                                          View Analysis Report
+                                       </button>
+
+                                       <button
+                                          type="button"
+                                          className="hub-btn-publish"
+                                          onClick={() => handleEscalate(claim.id)}
+                                       >
+                                          <Icons name="arrow-up-right" size={14} className="hub-btn-icon" />
+                                          Escalate
+                                       </button>
                                     </div>
                                  </div>
                               </div>
-                              <div className="li-actions">
-                                 <div className="li-verdict-top-right">
-                                    <VerdictBadge verdict={claim.final_verdict || claim.ai_verdict} />
-                                 </div>
-                                 <div className="hub-btns-row">
-                                    <button onClick={() => setSelectedClaimId(claim.id)} className="hub-btn-report">
-                                       <Icons name="file-text" size={14} className="hub-btn-icon" /> View Analysis
-                                       Report
-                                    </button>
-
-                                    <button className="hub-btn-publish" onClick={handlePublish}>
-                                       <Icons name="arrow-up-right" size={14} className="hub-btn-icon" /> Escalate
-                                    </button>
-                                 </div>
-                              </div>
-                           </div>
-                        ))
+                           ))}
+                        </div>
                      ) : (
                         <div className="library-empty">
-                           <Icons name="inbox" size={32} color="#cbd5e1" />
-                           <p>No saved receipts found. Scans you save privately will appear here.</p>
+                           <div className="library-empty-icon">
+                              <Icons name={libraryView === "saved" ? "bookmark" : "inbox"} size={24} />
+                           </div>
+
+                           <h3>
+                              {hasLibraryFilters
+                                 ? "No matching fact checks"
+                                 : libraryView === "saved"
+                                   ? "No saved claims yet"
+                                   : "No fact checks yet"}
+                           </h3>
+
+                           <p>
+                              {hasLibraryFilters
+                                 ? "Try adjusting your search or filters."
+                                 : libraryView === "saved"
+                                   ? "Claims you save will appear here for quick access later."
+                                   : "Claims you investigate will appear here."}
+                           </p>
                         </div>
                      )}
                   </div>
-               </div>
+
+                  {!libraryLoading && !libraryError && libraryData.count > 0 && (
+                     <div className="library-pagination">
+                        <button
+                           type="button"
+                           className="library-page-button"
+                           disabled={!libraryData.has_previous}
+                           onClick={() => setLibraryPage((page) => Math.max(1, page - 1))}
+                        >
+                           <Icons name="chevron-left" size={15} />
+                           Previous
+                        </button>
+
+                        <span className="library-page-status">
+                           Page <strong>{libraryData.page}</strong> of <strong>{libraryData.total_pages}</strong>
+                        </span>
+
+                        <button
+                           type="button"
+                           className="library-page-button"
+                           disabled={!libraryData.has_next}
+                           onClick={() => setLibraryPage((page) => page + 1)}
+                        >
+                           Next
+                           <Icons name="chevron-right" size={15} />
+                        </button>
+                     </div>
+                  )}
+               </section>
             </main>
          </div>
 
          {selectedClaimId && <AnalysisModal claimId={selectedClaimId} onClose={() => setSelectedClaimId(null)} />}
+         {trustExplainerOpen && (
+            <TrustExplainerModal reputation={reputation} onClose={() => setTrustExplainerOpen(false)} />
+         )}
       </div>
    );
 }

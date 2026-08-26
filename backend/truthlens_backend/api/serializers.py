@@ -4,6 +4,7 @@ from .models import Claim, Thread, UserProfile, EvidenceSubmission, Vote, Thread
 from .services import validate_public_url, check_url_threat_reputation
 from .trust_service import calculate_trust_components
 from django.contrib.auth.password_validation import validate_password
+import json, ast
 
 class PublicIdentityProfileSerializer(serializers.ModelSerializer):
     trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
@@ -268,6 +269,112 @@ class ClaimSerializer(serializers.ModelSerializer):
     has_moderator_verdict = serializers.SerializerMethodField()
     verified_evidence_count = serializers.SerializerMethodField()
     moderator_verdict_info = serializers.SerializerMethodField()
+    canonical_source_url = serializers.SerializerMethodField()
+    activity_at = serializers.SerializerMethodField()
+    is_saved = serializers.SerializerMethodField()
+
+    def get_is_saved(self, obj):
+        saved_claim_ids = self.context.get("saved_claim_ids")
+
+        if saved_claim_ids is not None:
+            return obj.id in saved_claim_ids
+
+        request = self.context.get("request")
+
+        if (
+            request
+            and request.user
+            and request.user.is_authenticated
+        ):
+            return request.user.profile.saved_claims.filter(
+                id=obj.id
+            ).exists()
+
+        return False
+
+    def get_activity_at(self, obj):
+        activity_at = getattr(
+            obj,
+            "activity_at",
+            None,
+        )
+
+        return activity_at or obj.last_updated
+
+    def get_canonical_source_url(self, obj):
+        def extract_url(value):
+            if not value:
+                return None
+
+            if isinstance(value, dict):
+                url = value.get("url")
+                if isinstance(url, str) and url.startswith(
+                    ("http://", "https://")
+                ):
+                    return url
+                return None
+
+            if not isinstance(value, str):
+                return None
+
+            value = value.strip()
+
+            # Normal URL
+            if value.startswith(("http://", "https://")):
+                return value
+
+            # Legacy serialized dictionary
+            if value.startswith("{"):
+                parsed = None
+
+                # Newer/JSON-style records
+                try:
+                    parsed = json.loads(value)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+                # Older Python-dict-style records:
+                # {'url': 'https://...', 'title': '...'}
+                if parsed is None:
+                    try:
+                        parsed = ast.literal_eval(value)
+                    except (ValueError, SyntaxError):
+                        pass
+
+                if isinstance(parsed, dict):
+                    url = parsed.get("url")
+
+                    if (
+                        isinstance(url, str)
+                        and url.startswith(
+                            ("http://", "https://")
+                        )
+                    ):
+                        return url
+
+            return None
+
+        if obj.claim_type == Claim.ClaimType.URL:
+            url = extract_url(obj.url_link)
+            if url:
+                return url
+
+        url = extract_url(obj.source_link)
+        if url:
+            return url
+
+        url = extract_url(obj.top_verdict_source)
+        if url:
+            return url
+
+        if obj.ai_sources:
+            for source in obj.ai_sources:
+                url = extract_url(source)
+                if url:
+                    return url
+
+        return None
+
 
     def get_effective_verdict(self, obj):
         return obj.final_verdict or obj.ai_verdict
@@ -308,15 +415,19 @@ class ClaimSerializer(serializers.ModelSerializer):
             "source_type",
             "consensus_score",
             "verified_via",
+            "url_link",
             "source_link",
             "media_url",
             "has_moderator_verdict",
             "verified_evidence_count",
             "moderator_verdict_info",
+            "activity_at",
             "last_updated",
             "score_context",
             "top_verdict_source", 
-            "is_ai_generated"
+            "is_ai_generated",
+            "canonical_source_url",
+            "is_saved",
         ]
 
 class ClaimDeepAnalysisSerializer(ClaimSerializer):
@@ -531,6 +642,7 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
             "evidence_url",
             "evidence_type",
             "evidence_verdict",
+            "evidence_status",
             "contributor_trust_snapshot",
             "submitted_at",
             "verified_by",

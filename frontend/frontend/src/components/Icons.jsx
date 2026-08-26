@@ -100,9 +100,14 @@ import {
    ArrowUpRight,
    ShieldCheck,
    MailCheck,
+   Bookmark,
+   ChevronLeft,
 } from "lucide-react";
 
 const ICON_MAP = {
+   "refresh-cw": RefreshCw,
+   "chevron-left": ChevronLeft,
+   bookmark: Bookmark,
    "mail-check": MailCheck,
    "shield-check": ShieldCheck,
    file: File,

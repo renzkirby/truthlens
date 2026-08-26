@@ -167,7 +167,15 @@ export function AuthProvider({ children }) {
             (typeof responseData === "object" && responseData?.detail) ||
             (typeof responseData === "string" ? responseData : null);
 
-         throw new Error(detailMessage || error.message || "Request failed");
+         const normalizedError = new Error(detailMessage || error.message || "Request failed");
+
+         normalizedError.status = error?.response?.status ?? null;
+
+         if (responseData && typeof responseData === "object") {
+            Object.assign(normalizedError, responseData);
+         }
+
+         throw normalizedError;
       }
    }, []);
 

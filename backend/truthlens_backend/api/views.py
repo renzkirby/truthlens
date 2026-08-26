@@ -4,6 +4,7 @@ from django.utils.encoding import force_bytes, force_str
 from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.paginator import Paginator, EmptyPage
 from django.http import JsonResponse
 from django.core.mail import send_mail
 from django.core.mail import EmailMultiAlternatives
@@ -63,7 +64,11 @@ from .models import (
     Vote,
     OfficialFactCheck,
 )
-from .trust_service import recompute_user_trust_score
+from .trust_service import (
+    calculate_trust_components,
+    get_reputation_progression,
+    recompute_user_trust_score,
+)
 from .throttles import (
     FactCheckRateThrottle,
     PasswordResetRateThrottle,
@@ -1079,15 +1084,28 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
         
         evidence = self.get_object()
 
-        status = request.data.get("evidence_status")
-        notes = request.data.get("moderator_notes", "")
+        evidence_status = request.data.get(
+            "evidence_status"
+        )
+        notes = request.data.get(
+            "moderator_notes",
+            "",
+        )
 
-        if status not in ["VERIFIED", "REJECTED"]:
-            return Response({
-                "detail": "Invalid evidence_status. Must be VERIFIED or REJECTED."
-            }, status=status.HTTP_400_BAD_REQUEST)
+        if evidence_status not in [
+            EvidenceSubmission.EvidenceStatus.VERIFIED,
+            EvidenceSubmission.EvidenceStatus.REJECTED,
+        ]:
+            return Response(
+                {
+                    "detail":
+                        "Invalid evidence_status. "
+                        "Must be VERIFIED or REJECTED."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        evidence.evidence_status = status
+        evidence.evidence_status = evidence_status
         evidence.verified_by = request.user
         evidence.verified_at = timezone.now()
         evidence.moderator_notes = notes
@@ -1096,7 +1114,7 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
         # Persist trust immediately so UI does not show stale overall score after moderation.
         recompute_user_trust_score(evidence.contributor.id)
         # Keep async recompute as a safety net for eventual consistency.
-        update_contributor_trust_score.delay(evidence.contributor.id, status)
+        update_contributor_trust_score.delay(evidence.contributor.id, evidence_status)
         
         serializer = EvidenceSubmissionSerializer(evidence, context={"request": request})
         return Response(serializer.data, status=200)
@@ -1591,46 +1609,23 @@ class UserHubView(APIView):
         profile = user.profile
 
         # 1. Reputation & Progression
-        score = profile.trust_score
-        rank = "Newbie"
-        next_milestone = 50
-        
-        if score == 100:
-            rank = "Expert Analyst"
-            next_milestone = "Max Rank"
-        elif score >= 75:
-            rank = "Trusted Analyst"
-            next_milestone = 100 - score
-        elif score >= 60:
-            rank = "Contributor"
-            next_milestone = 75 - score
-        elif score >= 40:
-            rank = "Newcomer"
-            next_milestone = 60 - score
-        elif score >= 30:
-            rank = "At Risk"
-            next_milestone = 40 - score
-        elif score <= 25:
-            rank = "Untrusted"
-            next_milestone = 30 - score
+        components = calculate_trust_components(user)
+        progression = get_reputation_progression(components)
             
 
         # 2. Personal Impact Metrics
-        my_scans = (
-            Claim.objects.filter(check_history__user=user)
-            .annotate(last_checked_at=Max("check_history__checked_at"))
-            .order_by("-last_checked_at", "-last_updated")
+        total_scans = (
+            Claim.objects
+            .filter(check_history__user=user)
+            .distinct()
+            .count()
         )
-        total_scans = my_scans.count()
+        
         evidence_submitted = EvidenceSubmission.objects.filter(contributor=user).count()
         votes_cast = Vote.objects.filter(voter=user).count()
         
         # Impact Ripple: How many votes did other people give to THIS user's evidence?
         impact_ripple = Vote.objects.filter(evidence__contributor=user).count()
-
-        # 3. The Fact-Check Library (Saved Receipts)
-        # Using your existing ClaimSerializer to format their private extension scans
-        serialized_saved = ClaimSerializer(my_scans, many=True).data
 
         return Response({
             "user_info": {
@@ -1638,19 +1633,271 @@ class UserHubView(APIView):
                 "avatar_url": profile.avatar_url if hasattr(profile, 'avatar_url') and profile.avatar_url else None,
             },
             "reputation": {
-                "trust_score": score,
-                "current_rank": rank,
-                "points_to_next_rank": next_milestone,
+                "trust_score": components["trust_score"],
+                "status": progression["status"],
+                "current_rank": progression["current_rank"],
+                "next_rank": progression["next_rank"],
+                "score_to_next_rank": progression["score_to_next_rank"],
+                "actions_to_next_rank": progression["actions_to_next_rank"],
+                "progress_percent": progression["progress_percent"],
+                "resolved_actions": progression["resolved_actions"],
+                "confidence": progression["confidence"],
+                "breakdown": {
+                    "base_score": components["base_score"],
+                    "contribution_points": components["contribution_points"],
+                    "community_points": components["community_points"],
+                    "history_points": components["history_points"],
+                    "moderation_penalty": components["moderation_penalty"],
+                },
             },
             "impact": {
                 "total_scans": total_scans,
                 "community_contributions": evidence_submitted + votes_cast,
                 "impact_ripple": impact_ripple,
             },
-            "library": {
-                "saved_receipts": serialized_saved
-            }
         })
+
+class UserFactCheckLibraryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    DEFAULT_PAGE_SIZE = 10
+    MAX_PAGE_SIZE = 50
+
+    VALID_VIEWS = {"history", "saved"}
+    VALID_SORTS = {"newest", "oldest"}
+
+    VALID_VERDICTS = {
+        "FACT",
+        "FAKE",
+        "MISLEADING",
+        "SATIRE",
+        "UNVERIFIED",
+        "OUT_OF_SCOPE",
+    }
+
+    VALID_TYPES = {
+        Claim.ClaimType.TEXT,
+        Claim.ClaimType.IMAGE,
+        Claim.ClaimType.VIDEO,
+        Claim.ClaimType.URL,
+        Claim.ClaimType.FILE,
+    }
+
+    def get(self, request):
+        user = request.user
+
+        history_count = (
+            Claim.objects
+            .filter(check_history__user=user)
+            .distinct()
+            .count()
+        )
+
+        saved_count = user.profile.saved_claims.count()
+
+        view_mode = (
+            request.query_params
+            .get("view", "history")
+            .strip()
+            .lower()
+        )
+
+        if view_mode not in self.VALID_VIEWS:
+            return Response(
+                {
+                    "detail":
+                        "Invalid view. Use 'history' or 'saved'."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        search_query = (
+            request.query_params
+            .get("search", "")
+            .strip()[:120]
+        )
+
+        verdict = (
+            request.query_params
+            .get("verdict", "")
+            .strip()
+            .upper()
+        )
+
+        claim_type = (
+            request.query_params
+            .get("type", "")
+            .strip()
+            .upper()
+        )
+
+        sort_order = (
+            request.query_params
+            .get("sort", "newest")
+            .strip()
+            .lower()
+        )
+
+        if sort_order not in self.VALID_SORTS:
+            sort_order = "newest"
+
+        try:
+            page_number = max(
+                int(request.query_params.get("page", 1)),
+                1,
+            )
+        except (TypeError, ValueError):
+            page_number = 1
+
+        try:
+            page_size = int(
+                request.query_params.get(
+                    "page_size",
+                    self.DEFAULT_PAGE_SIZE,
+                )
+            )
+        except (TypeError, ValueError):
+            page_size = self.DEFAULT_PAGE_SIZE
+
+        page_size = max(
+            1,
+            min(page_size, self.MAX_PAGE_SIZE),
+        )
+
+        if view_mode == "history":
+            queryset = (
+                Claim.objects
+                .filter(check_history__user=user)
+                .annotate(
+                    activity_at=Max(
+                        "check_history__checked_at"
+                    )
+                )
+            )
+
+            ordering = (
+                "activity_at",
+                "id",
+            )
+
+            if sort_order == "newest":
+                ordering = (
+                    "-activity_at",
+                    "-id",
+                )
+
+        else:
+            queryset = (
+                user.profile.saved_claims
+                .all()
+                .annotate(
+                    activity_at=F("last_updated")
+                )
+            )
+
+            ordering = (
+                "activity_at",
+                "id",
+            )
+
+            if sort_order == "newest":
+                ordering = (
+                    "-activity_at",
+                    "-id",
+                )
+
+        if search_query:
+            queryset = queryset.filter(
+                Q(context_text__icontains=search_query)
+                | Q(ai_summary__icontains=search_query)
+                | Q(ai_verdict__icontains=search_query)
+                | Q(final_verdict__icontains=search_query)
+                | Q(source_link__icontains=search_query)
+                | Q(top_verdict_source__icontains=search_query)
+                | Q(url_link__icontains=search_query)
+            )
+
+        if verdict:
+            if verdict not in self.VALID_VERDICTS:
+                return Response(
+                    {"detail": "Invalid verdict filter."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            queryset = queryset.filter(
+                Q(final_verdict=verdict)
+                | Q(
+                    final_verdict__isnull=True,
+                    ai_verdict=verdict,
+                )
+                | Q(
+                    final_verdict="",
+                    ai_verdict=verdict,
+                )
+            )
+
+        if claim_type:
+            if claim_type not in self.VALID_TYPES:
+                return Response(
+                    {"detail": "Invalid claim type filter."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            queryset = queryset.filter(
+                claim_type=claim_type
+            )
+
+        queryset = queryset.order_by(*ordering)
+
+        paginator = Paginator(
+            queryset,
+            page_size,
+        )
+
+        try:
+            page_obj = paginator.page(page_number)
+        except EmptyPage:
+            page_obj = paginator.page(
+                paginator.num_pages
+            )
+
+        page_claim_ids = [
+            claim.id
+            for claim in page_obj.object_list
+        ]
+
+        saved_claim_ids = set(
+            user.profile.saved_claims
+            .filter(id__in=page_claim_ids)
+            .values_list("id", flat=True)
+        )
+
+        serializer = ClaimSerializer(
+            page_obj.object_list,
+            many=True,
+            context={
+                "request": request,
+                "saved_claim_ids": saved_claim_ids,
+            },
+        )
+
+        return Response(
+            {
+                "view": view_mode,
+                "counts": {
+                    "history": history_count,
+                    "saved": saved_count,
+                },
+                "count": paginator.count,
+                "page": page_obj.number,
+                "page_size": page_size,
+                "total_pages": paginator.num_pages,
+                "has_next": page_obj.has_next(),
+                "has_previous": page_obj.has_previous(),
+                "results": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -1670,7 +1917,13 @@ def toggle_save_claim(request, claim_id):
         profile.saved_claims.add(claim)
         is_saved = True
         
-    return Response({"is_saved": is_saved}, status=200)
+    return Response(
+        {
+            "is_saved": is_saved,
+            "saved_count": profile.saved_claims.count(),
+        },
+        status=status.HTTP_200_OK,
+    )
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
