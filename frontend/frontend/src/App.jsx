@@ -8,7 +8,6 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import PrivateRoute from "./components/PrivateRoute";
 import CreateThreadPage from "./Pages/CreateThreadPage";
 import UserProfile from "./Pages/UserProfile.jsx";
-import Dashboard from "./Pages/Dashboard.jsx";
 import ThreadDetailPage from "./Pages/ThreadDetailPage";
 import VerifyPage from "./Pages/VerifyPage.jsx";
 import ModerationPage from "./Pages/ModerationPage.jsx";

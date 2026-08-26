@@ -7,7 +7,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase, APIClient
 from django.utils import timezone
 
-from .models import Claim, ClaimCheckHistory, EvidenceSubmission, Thread, ThreadComment, UserProfile
+from .models import Claim, ClaimCheckHistory, EvidenceSubmission, Thread, ThreadComment, UserProfile, CanonicalSource, EvidenceSource, VerificationRun, VerificationEvidence
 from .throttles import FactCheckRateThrottle
 from .trust_service import (
     calculate_trust_components,
