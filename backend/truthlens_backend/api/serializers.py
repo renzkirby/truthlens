@@ -271,6 +271,26 @@ class ClaimSerializer(serializers.ModelSerializer):
     moderator_verdict_info = serializers.SerializerMethodField()
     canonical_source_url = serializers.SerializerMethodField()
     activity_at = serializers.SerializerMethodField()
+    is_saved = serializers.SerializerMethodField()
+
+    def get_is_saved(self, obj):
+        saved_claim_ids = self.context.get("saved_claim_ids")
+
+        if saved_claim_ids is not None:
+            return obj.id in saved_claim_ids
+
+        request = self.context.get("request")
+
+        if (
+            request
+            and request.user
+            and request.user.is_authenticated
+        ):
+            return request.user.profile.saved_claims.filter(
+                id=obj.id
+            ).exists()
+
+        return False
 
     def get_activity_at(self, obj):
         activity_at = getattr(
@@ -407,6 +427,7 @@ class ClaimSerializer(serializers.ModelSerializer):
             "top_verdict_source", 
             "is_ai_generated",
             "canonical_source_url",
+            "is_saved",
         ]
 
 class ClaimDeepAnalysisSerializer(ClaimSerializer):

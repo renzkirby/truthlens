@@ -1855,10 +1855,24 @@ class UserFactCheckLibraryView(APIView):
                 paginator.num_pages
             )
 
+        page_claim_ids = [
+            claim.id
+            for claim in page_obj.object_list
+        ]
+
+        saved_claim_ids = set(
+            user.profile.saved_claims
+            .filter(id__in=page_claim_ids)
+            .values_list("id", flat=True)
+        )
+
         serializer = ClaimSerializer(
             page_obj.object_list,
             many=True,
-            context={"request": request},
+            context={
+                "request": request,
+                "saved_claim_ids": saved_claim_ids,
+            },
         )
 
         return Response(
