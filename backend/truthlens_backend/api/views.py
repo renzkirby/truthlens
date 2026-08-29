@@ -63,6 +63,14 @@ from .models import (
     FlagResolutionLog,
     Vote,
     OfficialFactCheck,
+    ModerationCase
+)
+from .moderation_service import (
+    ACTIVE_CASE_STATUSES,
+    ModerationCaseError,
+    ensure_safety_case,
+    escalate_safety_case,
+    resolve_safety_case,
 )
 from .trust_service import (
     calculate_trust_components,
@@ -696,28 +704,70 @@ def verify_email(request):
     )
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsModerator])
+@permission_classes([
+    IsAuthenticated,
+    IsModerator,
+])
 def moderation_queue(request):
-    # Safety queue: reported/flagged threads requiring moderator review for conduct issues.
-    status_filter = request.query_params.get("status", Thread.Status.PENDING)
-    allowed = {"ALL", Thread.Status.PENDING, Thread.Status.OPEN, Thread.Status.CLOSED, Thread.Status.REJECTED}
+    """
+    Return threads with active Safety moderation cases.
+    """
+
+    status_filter = request.query_params.get(
+        "status",
+        "ALL",
+    )
+
+    allowed = {
+        "ALL",
+        Thread.Status.PENDING,
+        Thread.Status.OPEN,
+        Thread.Status.CLOSED,
+        Thread.Status.REJECTED,
+    }
+
     if status_filter not in allowed:
         return Response(
-            {"detail": "Invalid status filter."},
+            {
+                "detail":
+                    "Invalid status filter."
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
     queryset = (
-        Thread.objects.filter(flags__isnull=False)
-        .select_related("claim", "author", "author__profile")
+        Thread.objects
+        .filter(
+            moderation_cases__case_type=(
+                ModerationCase.CaseType.SAFETY
+            ),
+            moderation_cases__status__in=(
+                ACTIVE_CASE_STATUSES
+            ),
+        )
+        .select_related(
+            "claim",
+            "author",
+            "author__profile",
+        )
         .distinct()
         .order_by("-created_at")
     )
-    if status_filter != "ALL":
-        queryset = queryset.filter(status=status_filter)
 
-    serializer = ThreadSerializer(queryset, many=True)
-    return Response(serializer.data)
+    if status_filter != "ALL":
+        queryset = queryset.filter(
+            status=status_filter
+        )
+
+    serializer = ThreadSerializer(
+        queryset,
+        many=True,
+    )
+
+    return Response(
+        serializer.data,
+        status=status.HTTP_200_OK,
+    )
 
 
 @api_view(["GET"])
@@ -826,82 +876,107 @@ def moderation_resolve_thread(request, thread_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated, IsModerator])
-def moderation_resolve_safety_thread(request, thread_id):
-    """Resolve a reported thread directly from the safety queue."""
-    try:
-        thread = Thread.objects.get(id=thread_id)
-    except Thread.DoesNotExist:
-        raise NotFound("Thread not found.")
+@permission_classes([
+    IsAuthenticated,
+    IsModerator,
+])
+def moderation_resolve_safety_thread(
+    request,
+    thread_id,
+):
+    thread = get_object_or_404(
+        Thread,
+        id=thread_id,
+    )
 
-    action = (request.data.get("action") or "").strip().upper()
-    moderator_notes = (request.data.get("moderator_notes") or "").strip()
-    allowed_actions = {"DISMISS", "REMOVE", "ESCALATE"}
+    action = (
+        request.data
+        .get("action", "")
+        .strip()
+        .upper()
+    )
+
+    moderator_notes = (
+        request.data
+        .get("moderator_notes", "")
+        .strip()
+    )
+
+    allowed_actions = {
+        "DISMISS",
+        "REMOVE",
+        "ESCALATE",
+    }
+
     if action not in allowed_actions:
         return Response(
-            {"detail": "Invalid action. Use DISMISS, REMOVE, or ESCALATE."},
+            {
+                "detail":
+                    "Invalid action. Use DISMISS, "
+                    "REMOVE, or ESCALATE."
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    contributor_ids = set(
-        thread.evidence_submissions.values_list("contributor_id", flat=True).distinct()
-    )
-
-    with transaction.atomic():
-        if action == "DISMISS":
-            thread.status = Thread.Status.OPEN
-        elif action == "REMOVE":
-            thread.status = Thread.Status.REJECTED
-        else:
-            thread.status = Thread.Status.CLOSED
-
-        thread.moderated_by = request.user
-        thread.moderated_at = timezone.now()
-        if moderator_notes:
-            thread.moderator_notes = moderator_notes
-
-        update_fields = ["status", "moderated_by", "moderated_at"]
-        if moderator_notes:
-            update_fields.append("moderator_notes")
-        thread.save(update_fields=update_fields)
-
-        # Persist resolved report history for trust-score accuracy metrics.
-        current_flags = list(thread.flags.select_related("flagged_by"))
-        resolved_logs = []
-        reporter_ids = set()
-        for flag in current_flags:
-            reporter_ids.add(flag.flagged_by_id)
-            resolved_logs.append(
-                FlagResolutionLog(
-                    thread=thread,
-                    flagged_by=flag.flagged_by,
-                    reason=flag.reason,
-                    notes=flag.notes,
-                    flagged_at=flag.flagged_at,
-                    resolved_action=action,
-                    is_valid_report=(action == "REMOVE"),
-                    resolved_by=request.user,
-                )
+    try:
+        if action == "ESCALATE":
+            escalate_safety_case(
+                thread=thread,
+                actor=request.user,
+                notes=moderator_notes,
             )
 
-        if resolved_logs:
-            FlagResolutionLog.objects.bulk_create(resolved_logs)
+            thread.refresh_from_db()
 
-        # Keep active queue clean after archiving resolved entries.
-        thread.flags.all().delete()
+            return Response(
+                ThreadSerializer(
+                    thread,
+                    context={"request": request},
+                ).data,
+                status=status.HTTP_200_OK,
+            )
 
-    # Recompute trust for all reporters involved in the resolved moderation event.
-    for reporter_id in reporter_ids:
-        recompute_user_trust_score_task.delay(reporter_id)
+        result = resolve_safety_case(
+            thread=thread,
+            actor=request.user,
+            action=action,
+            notes=moderator_notes,
+        )
 
-    # Conduct penalties apply to the thread author when a thread is removed.
+    except ModerationCaseError as error:
+        return Response(
+            {
+                "detail": str(error),
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    for reporter_id in result[
+        "reporter_ids"
+    ]:
+        recompute_user_trust_score_task.delay(
+            reporter_id
+        )
+
     if action == "REMOVE":
-        recompute_user_trust_score_task.delay(thread.author_id)
+        recompute_user_trust_score_task.delay(
+            result["author_id"]
+        )
 
-    for contributor_id in contributor_ids:
-        recompute_user_trust_score_task.delay(contributor_id)
+    for contributor_id in result[
+        "contributor_ids"
+    ]:
+        recompute_user_trust_score_task.delay(
+            contributor_id
+        )
 
-    return Response(ThreadSerializer(thread).data, status=status.HTTP_200_OK)
+    return Response(
+        ThreadSerializer(
+            result["thread"],
+            context={"request": request},
+        ).data,
+        status=status.HTTP_200_OK,
+    )
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsModerator])
@@ -1159,7 +1234,16 @@ class ThreadFlagViewSet(viewsets.ModelViewSet):
             raise NotFound("Thread not found.")
 
         try:
-            serializer.save(flagged_by=self.request.user, thread=thread)
+            with transaction.atomic():
+                serializer.save(
+                    flagged_by=self.request.user,
+                    thread=thread,
+                )
+
+                ensure_safety_case(
+                    thread=thread,
+                    actor=self.request.user,
+                )
         except IntegrityError:
             raise ValidationError({"detail": "You already flagged this thread."})
 
@@ -1586,7 +1670,17 @@ def moderation_stats_view(request):
     Returns system-wide aggregates for the Moderation Page.
     """
     from django.db.models import Q
-    flagged_threads = Thread.objects.filter(flags__isnull=False).distinct().count()
+    flagged_threads = (
+        ModerationCase.objects
+        .filter(
+            case_type=ModerationCase.CaseType.SAFETY,
+            status__in=ACTIVE_CASE_STATUSES,
+        )
+        .exclude(thread__isnull=True)
+        .values("thread_id")
+        .distinct()
+        .count()
+    )
     closed_threads = Thread.objects.filter(status=Thread.Status.CLOSED).count()
     open_threads = Thread.objects.filter(Q(status=Thread.Status.OPEN) | Q(status=Thread.Status.PENDING)).count()
     pending_verdicts = Thread.objects.filter(moderator_verdict__isnull=True).count()

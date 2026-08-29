@@ -1,4 +1,6 @@
 from django.db import models
+from django.db.models import Q
+from django.core.exceptions import ValidationError
 from django.contrib.auth.models import User
 from django.conf import settings
 from django.contrib.postgres.search import SearchVectorField, SearchVector
@@ -506,11 +508,26 @@ class ThreadFlag(models.Model):
     reason = models.CharField(max_length=20, choices=Reason.choices)
     notes = models.TextField(blank=True, null=True)
     flagged_at = models.DateTimeField(auto_now_add=True)
+
+    resolved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    resolution_case = models.ForeignKey(
+        "ModerationCase",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reports",
+    )
     
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["thread", "flagged_by"], name="unique_flag_per_thread_per_user"
+                fields=["thread", "flagged_by"],
+                condition=Q(resolved_at__isnull=True),
+                name="unique_active_flag_per_thread_user",
             )
         ]
 
@@ -579,6 +596,413 @@ class EvidenceSubmission(models.Model):
 
     def __str__(self):
         return f"EvidenceSubmission {self.id} - Thread ID: {self.thread.id} - Contributor: {self.contributor.username}"
+
+
+class ModerationCase(models.Model):
+    class CaseType(models.TextChoices):
+        SAFETY = "SAFETY", "Safety Review"
+        EVIDENCE = "EVIDENCE", "Evidence Review"
+        ADJUDICATION = "ADJUDICATION", "Verdict Adjudication"
+
+    class Status(models.TextChoices):
+        OPEN = "OPEN", "Open"
+        IN_REVIEW = "IN_REVIEW", "In Review"
+        ESCALATED = "ESCALATED", "Escalated"
+        RESOLVED = "RESOLVED", "Resolved"
+        REOPENED = "REOPENED", "Reopened"
+        CANCELLED = "CANCELLED", "Cancelled"
+
+    class Priority(models.TextChoices):
+        LOW = "LOW", "Low"
+        NORMAL = "NORMAL", "Normal"
+        HIGH = "HIGH", "High"
+        URGENT = "URGENT", "Urgent"
+
+    class Source(models.TextChoices):
+        USER_REPORT = "USER_REPORT", "User Report"
+        EVIDENCE_SUBMISSION = "EVIDENCE_SUBMISSION", "Evidence Submission"
+        COMMUNITY_ESCALATION = "COMMUNITY_ESCALATION", "Community Escalation"
+        SYSTEM = "SYSTEM", "System Generated"
+        MODERATOR = "MODERATOR", "Moderator Created"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    case_type = models.CharField(
+        max_length=20,
+        choices=CaseType.choices,
+        db_index=True,
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.OPEN,
+        db_index=True,
+    )
+
+    priority = models.CharField(
+        max_length=20,
+        choices=Priority.choices,
+        default=Priority.NORMAL,
+        db_index=True,
+    )
+
+    source = models.CharField(
+        max_length=30,
+        choices=Source.choices,
+        default=Source.SYSTEM,
+    )
+
+    thread = models.ForeignKey(
+        Thread,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="moderation_cases",
+    )
+
+    claim = models.ForeignKey(
+        Claim,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="moderation_cases",
+    )
+
+    evidence_submission = models.ForeignKey(
+        EvidenceSubmission,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="moderation_cases",
+    )
+
+    assigned_to = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_moderation_cases",
+    )
+
+    assigned_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    resolution_code = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+    )
+
+    resolution_summary = models.TextField(
+        blank=True,
+        null=True,
+    )
+
+    resolved_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="resolved_moderation_cases",
+    )
+
+    resolved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    def clean(self):
+        super().clean()
+
+        targets = {
+            self.CaseType.SAFETY: self.thread_id,
+            self.CaseType.EVIDENCE: self.evidence_submission_id,
+            self.CaseType.ADJUDICATION: self.claim_id,
+        }
+
+        expected_target = targets.get(self.case_type)
+
+        if expected_target is None:
+            raise ValidationError(
+                {
+                    "case_type":
+                        "This moderation case does not have its required target."
+                }
+            )
+
+        if self.case_type == self.CaseType.SAFETY:
+            invalid_extra_target = (
+                self.claim_id is not None
+                or self.evidence_submission_id is not None
+            )
+
+        elif self.case_type == self.CaseType.EVIDENCE:
+            invalid_extra_target = (
+                self.thread_id is not None
+                or self.claim_id is not None
+            )
+
+        else:
+            invalid_extra_target = (
+                self.thread_id is not None
+                or self.evidence_submission_id is not None
+            )
+
+        if invalid_extra_target:
+            raise ValidationError(
+                {
+                    "case_type":
+                        "A moderation case must use only the target "
+                        "appropriate for its case type."
+                }
+            )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+        indexes = [
+            models.Index(
+                fields=["case_type", "status", "-created_at"],
+                name="mod_case_type_status_idx",
+            ),
+            models.Index(
+                fields=["assigned_to", "status"],
+                name="mod_case_assignee_idx",
+            ),
+            models.Index(
+                fields=["priority", "status", "-created_at"],
+                name="mod_case_priority_idx",
+            ),
+        ]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["thread"],
+                condition=Q(
+                    case_type="SAFETY",
+                    status__in=[
+                        "OPEN",
+                        "IN_REVIEW",
+                        "ESCALATED",
+                        "REOPENED",
+                    ],
+                ),
+                name="uniq_active_safety_case_thread",
+            ),
+            models.UniqueConstraint(
+                fields=["evidence_submission"],
+                condition=Q(
+                    case_type="EVIDENCE",
+                    status__in=[
+                        "OPEN",
+                        "IN_REVIEW",
+                        "ESCALATED",
+                        "REOPENED",
+                    ],
+                ),
+                name="uniq_active_evidence_case",
+            ),
+            models.UniqueConstraint(
+                fields=["claim"],
+                condition=Q(
+                    case_type="ADJUDICATION",
+                    status__in=[
+                        "OPEN",
+                        "IN_REVIEW",
+                        "ESCALATED",
+                        "REOPENED",
+                    ],
+                ),
+                name="uniq_active_adjudication_case",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.get_case_type_display()} "
+            f"{self.id} - {self.status}"
+        )
+
+
+class ModerationEvent(models.Model):
+    class EventType(models.TextChoices):
+        CASE_CREATED = "CASE_CREATED", "Case Created"
+        CASE_CLAIMED = "CASE_CLAIMED", "Case Claimed"
+        CASE_ASSIGNED = "CASE_ASSIGNED", "Case Assigned"
+        CASE_UNASSIGNED = "CASE_UNASSIGNED", "Case Unassigned"
+
+        REVIEW_STARTED = "REVIEW_STARTED", "Review Started"
+
+        CASE_ESCALATED = "CASE_ESCALATED", "Case Escalated"
+        CASE_RESOLVED = "CASE_RESOLVED", "Case Resolved"
+        CASE_REOPENED = "CASE_REOPENED", "Case Reopened"
+        CASE_CANCELLED = "CASE_CANCELLED", "Case Cancelled"
+
+        SAFETY_DISMISSED = (
+            "SAFETY_DISMISSED",
+            "Safety Report Dismissed",
+        )
+        SAFETY_VIOLATION_CONFIRMED = (
+            "SAFETY_VIOLATION_CONFIRMED",
+            "Safety Violation Confirmed",
+        )
+        CONTENT_REMOVED = (
+            "CONTENT_REMOVED",
+            "Content Removed",
+        )
+
+        EVIDENCE_VERIFIED = (
+            "EVIDENCE_VERIFIED",
+            "Evidence Verified",
+        )
+        EVIDENCE_REJECTED = (
+            "EVIDENCE_REJECTED",
+            "Evidence Rejected",
+        )
+        EVIDENCE_REOPENED = (
+            "EVIDENCE_REOPENED",
+            "Evidence Review Reopened",
+        )
+
+        ADJUDICATION_STARTED = (
+            "ADJUDICATION_STARTED",
+            "Adjudication Started",
+        )
+        VERDICT_ISSUED = (
+            "VERDICT_ISSUED",
+            "Verdict Issued",
+        )
+        VERDICT_REOPENED = (
+            "VERDICT_REOPENED",
+            "Verdict Reopened",
+        )
+        VERDICT_REVISED = (
+            "VERDICT_REVISED",
+            "Verdict Revised",
+        )
+
+        ARTICLE_DRAFT_CREATED = (
+            "ARTICLE_DRAFT_CREATED",
+            "Article Draft Created",
+        )
+        ARTICLE_SUBMITTED = (
+            "ARTICLE_SUBMITTED",
+            "Article Submitted for Review",
+        )
+        ARTICLE_PUBLISHED = (
+            "ARTICLE_PUBLISHED",
+            "Article Published",
+        )
+        ARTICLE_REVISED = (
+            "ARTICLE_REVISED",
+            "Article Revised",
+        )
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    case = models.ForeignKey(
+        ModerationCase,
+        on_delete=models.CASCADE,
+        related_name="events",
+    )
+
+    actor = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="moderation_events",
+    )
+
+    event_type = models.CharField(
+        max_length=50,
+        choices=EventType.choices,
+        db_index=True,
+    )
+
+    from_status = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+    )
+
+    to_status = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+    )
+
+    reason_code = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+    )
+
+    notes = models.TextField(
+        blank=True,
+        null=True,
+    )
+
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    class Meta:
+        ordering = ["created_at"]
+
+        indexes = [
+            models.Index(
+                fields=["case", "created_at"],
+                name="mod_event_case_time_idx",
+            ),
+            models.Index(
+                fields=["event_type", "-created_at"],
+                name="mod_event_type_time_idx",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError(
+                "Moderation events are append-only and cannot be modified."
+            )
+
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            "Moderation events are append-only and cannot be deleted directly."
+        )
+
+    def __str__(self):
+        return (
+            f"{self.event_type} - "
+            f"Case {self.case_id}"
+        )
 
 
 class Vote(models.Model):

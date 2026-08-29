@@ -450,11 +450,24 @@ class ThreadSerializer(serializers.ModelSerializer):
     recent_flag_reason = serializers.SerializerMethodField()
 
     def get_recent_flag_reason(self, obj):
-        latest_flag = obj.flags.order_by("-flagged_at").first()
-        return latest_flag.reason if latest_flag else None
+        latest_flag = (
+            obj.flags
+            .filter(resolved_at__isnull=True)
+            .order_by("-flagged_at")
+            .first()
+        )
+
+        return (
+            latest_flag.reason
+            if latest_flag
+            else None
+        )
+
 
     def get_flag_count(self, obj):
-        return obj.flags.count()
+        return obj.flags.filter(
+            resolved_at__isnull=True
+        ).count()
 
     def get_evidence_count(self, obj):
         return obj.evidence_submissions.count()

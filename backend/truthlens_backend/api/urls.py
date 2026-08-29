@@ -42,11 +42,11 @@ urlpatterns = [
     path("users/me/fact-checks/", views.UserFactCheckLibraryView.as_view(), name="user_fact_check_library"),
     path("claims/<uuid:claim_id>/toggle-save/", views.toggle_save_claim, name="toggle_save_claim"),
     path("moderation/stats/", views.moderation_stats_view, name="moderation_stats"),
-    path('moderation/queue/', views.moderation_queue),
+    path("moderation/queue/", views.moderation_queue, name="moderation_queue"),
     path('moderation/evidence-queue/', views.evidence_moderation_queue),
     path('moderation/verdict-queue/', views.verdict_queue),
     path('moderation/threads/<uuid:thread_id>/resolve/', views.moderation_resolve_thread),
-    path('moderation/threads/<uuid:thread_id>/safety-action/', views.moderation_resolve_safety_thread),
+    path("moderation/threads/<uuid:thread_id>/safety-action/", views.moderation_resolve_safety_thread, name="moderation_safety_action"),
     
     #GoogleLogin URL
     path('auth/google/', views.GoogleLogin.as_view(), name='google_login'),

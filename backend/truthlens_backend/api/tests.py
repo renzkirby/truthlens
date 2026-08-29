@@ -6,13 +6,37 @@ from unittest.mock import patch
 from rest_framework import status
 from rest_framework.test import APITestCase, APIClient
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 
-from .models import Claim, ClaimCheckHistory, EvidenceSubmission, Thread, ThreadComment, UserProfile, CanonicalSource, EvidenceSource, VerificationRun, VerificationEvidence
+from .models import (
+    Claim, 
+    ClaimCheckHistory, 
+    EvidenceSubmission, 
+    Thread, ThreadComment, 
+    UserProfile, 
+    CanonicalSource, 
+    EvidenceSource, 
+    VerificationRun, 
+    VerificationEvidence, 
+    ModerationCase,
+    ModerationEvent, 
+    ThreadFlag,
+    FlagResolutionLog,
+)
 from .throttles import FactCheckRateThrottle
 from .trust_service import (
     calculate_trust_components,
     get_reputation_progression,
     recompute_user_trust_score,
+)
+from .moderation_service import (
+    DuplicateActiveModerationCase,
+    InvalidModerationCaseTarget,
+    InvalidModerationTransition,
+    assign_moderation_case,
+    create_moderation_case,
+    transition_moderation_case,
+    unassign_moderation_case,
 )
 
 class ThreadEvidenceCommentAuthorizationTests(APITestCase):
@@ -637,6 +661,528 @@ class ModeratorEvidenceVerificationTests(APITestCase):
         self.assertEqual(self.evidence.verified_by, moderator2)
         self.assertEqual(self.evidence.moderator_notes, "Second mod")
 
+class ModerationCaseFoundationTests(APITestCase):
+    def setUp(self):
+        self.author = User.objects.create_user(
+            username="caseauthor",
+            email="caseauthor@test.com",
+            password="pass1234",
+        )
+
+        self.moderator = User.objects.create_user(
+            username="casemoderator",
+            email="casemoderator@test.com",
+            password="pass1234",
+        )
+
+        self.moderator.profile.role = UserProfile.Role.MOD
+        self.moderator.profile.save(
+            update_fields=["role"]
+        )
+
+        self.other_moderator = User.objects.create_user(
+            username="othercasemod",
+            email="othercasemod@test.com",
+            password="pass1234",
+        )
+
+        self.other_moderator.profile.role = UserProfile.Role.MOD
+        self.other_moderator.profile.save(
+            update_fields=["role"]
+        )
+
+        self.claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Moderation case test claim.",
+            verified_via=Claim.VerificationSource.PENDING,
+        )
+
+        self.thread = Thread.objects.create(
+            claim=self.claim,
+            author=self.author,
+            caption="Moderation case test thread.",
+        )
+
+        self.evidence = EvidenceSubmission.objects.create(
+            thread=self.thread,
+            contributor=self.author,
+            evidence_caption="Moderation case evidence.",
+            evidence_type=(
+                EvidenceSubmission
+                .EvidenceType
+                .SOURCE_VERIFICATION
+            ),
+            evidence_url="https://example.com/evidence",
+            contributor_trust_snapshot=50.0,
+        )
+
+    def test_create_safety_case_creates_audit_event(self):
+        case = create_moderation_case(
+            case_type=ModerationCase.CaseType.SAFETY,
+            actor=self.moderator,
+            source=ModerationCase.Source.USER_REPORT,
+            thread=self.thread,
+        )
+
+        self.assertEqual(
+            case.status,
+            ModerationCase.Status.OPEN,
+        )
+        self.assertEqual(
+            case.thread,
+            self.thread,
+        )
+        self.assertIsNone(case.claim)
+        self.assertIsNone(case.evidence_submission)
+
+        event = case.events.get()
+
+        self.assertEqual(
+            event.event_type,
+            ModerationEvent.EventType.CASE_CREATED,
+        )
+        self.assertEqual(
+            event.actor,
+            self.moderator,
+        )
+
+    def test_case_type_requires_correct_target(self):
+        with self.assertRaises(
+            InvalidModerationCaseTarget
+        ):
+            create_moderation_case(
+                case_type=ModerationCase.CaseType.SAFETY,
+                actor=self.moderator,
+                claim=self.claim,
+            )
+
+    def test_duplicate_active_safety_case_is_rejected(self):
+        create_moderation_case(
+            case_type=ModerationCase.CaseType.SAFETY,
+            actor=self.moderator,
+            source=ModerationCase.Source.USER_REPORT,
+            thread=self.thread,
+        )
+
+        with self.assertRaises(
+            DuplicateActiveModerationCase
+        ):
+            create_moderation_case(
+                case_type=ModerationCase.CaseType.SAFETY,
+                actor=self.moderator,
+                source=ModerationCase.Source.USER_REPORT,
+                thread=self.thread,
+            )
+
+    def test_valid_case_lifecycle(self):
+        case = create_moderation_case(
+            case_type=ModerationCase.CaseType.SAFETY,
+            actor=self.moderator,
+            thread=self.thread,
+        )
+
+        case = transition_moderation_case(
+            case,
+            next_status=ModerationCase.Status.IN_REVIEW,
+            actor=self.moderator,
+        )
+
+        self.assertEqual(
+            case.status,
+            ModerationCase.Status.IN_REVIEW,
+        )
+
+        case = transition_moderation_case(
+            case,
+            next_status=ModerationCase.Status.ESCALATED,
+            actor=self.moderator,
+            reason_code="SPECIALIST_REVIEW",
+        )
+
+        self.assertEqual(
+            case.status,
+            ModerationCase.Status.ESCALATED,
+        )
+
+        case = transition_moderation_case(
+            case,
+            next_status=ModerationCase.Status.IN_REVIEW,
+            actor=self.other_moderator,
+        )
+
+        case = transition_moderation_case(
+            case,
+            next_status=ModerationCase.Status.RESOLVED,
+            actor=self.other_moderator,
+            resolution_code="NO_VIOLATION",
+            resolution_summary="No policy violation found.",
+        )
+
+        self.assertEqual(
+            case.status,
+            ModerationCase.Status.RESOLVED,
+        )
+        self.assertEqual(
+            case.resolved_by,
+            self.other_moderator,
+        )
+        self.assertIsNotNone(case.resolved_at)
+        self.assertEqual(
+            case.resolution_code,
+            "NO_VIOLATION",
+        )
+
+        self.assertEqual(
+            case.events.count(),
+            5,
+        )
+
+    def test_invalid_direct_resolution_is_rejected(self):
+        case = create_moderation_case(
+            case_type=ModerationCase.CaseType.SAFETY,
+            actor=self.moderator,
+            thread=self.thread,
+        )
+
+        with self.assertRaises(
+            InvalidModerationTransition
+        ):
+            transition_moderation_case(
+                case,
+                next_status=ModerationCase.Status.RESOLVED,
+                actor=self.moderator,
+            )
+
+        case.refresh_from_db()
+
+        self.assertEqual(
+            case.status,
+            ModerationCase.Status.OPEN,
+        )
+
+    def test_case_can_be_claimed_and_unassigned(self):
+        case = create_moderation_case(
+            case_type=ModerationCase.CaseType.SAFETY,
+            actor=self.moderator,
+            thread=self.thread,
+        )
+
+        case = assign_moderation_case(
+            case,
+            assignee=self.moderator,
+            actor=self.moderator,
+        )
+
+        self.assertEqual(
+            case.assigned_to,
+            self.moderator,
+        )
+        self.assertIsNotNone(case.assigned_at)
+
+        self.assertTrue(
+            case.events.filter(
+                event_type=(
+                    ModerationEvent
+                    .EventType
+                    .CASE_CLAIMED
+                )
+            ).exists()
+        )
+
+        case = unassign_moderation_case(
+            case,
+            actor=self.moderator,
+        )
+
+        self.assertIsNone(case.assigned_to)
+        self.assertIsNone(case.assigned_at)
+
+    def test_thread_flag_can_preserve_resolution_history(self):
+        flag = ThreadFlag.objects.create(
+            thread=self.thread,
+            flagged_by=self.moderator,
+            reason=ThreadFlag.Reason.SPAM,
+            notes="Test report",
+        )
+
+        case = create_moderation_case(
+            case_type=ModerationCase.CaseType.SAFETY,
+            actor=self.moderator,
+            source=ModerationCase.Source.USER_REPORT,
+            thread=self.thread,
+        )
+
+        flag.resolution_case = case
+        flag.resolved_at = timezone.now()
+
+        flag.save(
+            update_fields=[
+                "resolution_case",
+                "resolved_at",
+            ]
+        )
+
+        flag.refresh_from_db()
+
+        self.assertEqual(
+            flag.resolution_case,
+            case,
+        )
+        self.assertIsNotNone(flag.resolved_at)
+
+    def test_moderation_event_is_append_only(self):
+        case = create_moderation_case(
+            case_type=ModerationCase.CaseType.SAFETY,
+            actor=self.moderator,
+            thread=self.thread,
+        )
+
+        event = case.events.get(
+            event_type=(
+                ModerationEvent
+                .EventType
+                .CASE_CREATED
+            )
+        )
+
+        event.notes = "Attempted rewrite"
+
+        with self.assertRaises(ValidationError):
+            event.save()
+
+        with self.assertRaises(ValidationError):
+            event.delete()
+
+    def test_ensure_safety_case_reuses_active_case(self):
+        from .moderation_service import ensure_safety_case
+
+        first = ensure_safety_case(
+            thread=self.thread,
+            actor=self.moderator,
+        )
+
+        second = ensure_safety_case(
+            thread=self.thread,
+            actor=self.other_moderator,
+        )
+
+        self.assertEqual(
+            first.id,
+            second.id,
+        )
+
+        self.assertEqual(
+            ModerationCase.objects.filter(
+                case_type=ModerationCase.CaseType.SAFETY,
+                thread=self.thread,
+            ).count(),
+            1,
+        )
+
+
+    def test_escalating_safety_case_does_not_close_thread(self):
+        from .moderation_service import (
+            ensure_safety_case,
+            escalate_safety_case,
+        )
+
+        flag = ThreadFlag.objects.create(
+            thread=self.thread,
+            flagged_by=self.moderator,
+            reason=ThreadFlag.Reason.SPAM,
+        )
+
+        case = ensure_safety_case(
+            thread=self.thread,
+            actor=self.moderator,
+        )
+
+        case = escalate_safety_case(
+            thread=self.thread,
+            actor=self.moderator,
+            notes="Needs deeper review.",
+        )
+
+        self.thread.refresh_from_db()
+        flag.refresh_from_db()
+
+        self.assertEqual(
+            case.status,
+            ModerationCase.Status.ESCALATED,
+        )
+
+        self.assertEqual(
+            self.thread.status,
+            Thread.Status.OPEN,
+        )
+
+        self.assertIsNone(
+            flag.resolved_at
+        )
+
+        self.assertEqual(
+            FlagResolutionLog.objects.filter(
+                thread=self.thread
+            ).count(),
+            0,
+        )
+
+
+    def test_dismiss_preserves_report_history(self):
+        from .moderation_service import (
+            ensure_safety_case,
+            resolve_safety_case,
+        )
+
+        flag = ThreadFlag.objects.create(
+            thread=self.thread,
+            flagged_by=self.moderator,
+            reason=ThreadFlag.Reason.SPAM,
+            notes="Possible spam",
+        )
+
+        case = ensure_safety_case(
+            thread=self.thread,
+            actor=self.moderator,
+        )
+
+        result = resolve_safety_case(
+            thread=self.thread,
+            actor=self.moderator,
+            action="DISMISS",
+            notes="No violation found.",
+        )
+
+        flag.refresh_from_db()
+        self.thread.refresh_from_db()
+        case.refresh_from_db()
+
+        self.assertEqual(
+            result["case"].status,
+            ModerationCase.Status.RESOLVED,
+        )
+
+        self.assertEqual(
+            self.thread.status,
+            Thread.Status.OPEN,
+        )
+
+        self.assertIsNotNone(
+            flag.resolved_at
+        )
+
+        self.assertEqual(
+            flag.resolution_case,
+            case,
+        )
+
+        log = FlagResolutionLog.objects.get(
+            thread=self.thread
+        )
+
+        self.assertEqual(
+            log.resolved_action,
+            "DISMISS",
+        )
+
+        self.assertFalse(
+            log.is_valid_report
+        )
+
+
+    def test_remove_resolves_case_and_hides_thread(self):
+        from .moderation_service import (
+            ensure_safety_case,
+            resolve_safety_case,
+        )
+
+        flag = ThreadFlag.objects.create(
+            thread=self.thread,
+            flagged_by=self.moderator,
+            reason=ThreadFlag.Reason.HARASSMENT,
+        )
+
+        ensure_safety_case(
+            thread=self.thread,
+            actor=self.moderator,
+        )
+
+        result = resolve_safety_case(
+            thread=self.thread,
+            actor=self.moderator,
+            action="REMOVE",
+            notes="Confirmed policy violation.",
+        )
+
+        self.thread.refresh_from_db()
+        flag.refresh_from_db()
+
+        self.assertEqual(
+            self.thread.status,
+            Thread.Status.REJECTED,
+        )
+
+        self.assertEqual(
+            result["case"].status,
+            ModerationCase.Status.RESOLVED,
+        )
+
+        self.assertIsNotNone(
+            flag.resolved_at
+        )
+
+        log = FlagResolutionLog.objects.get(
+            thread=self.thread
+        )
+
+        self.assertTrue(
+            log.is_valid_report
+        )
+
+
+    def test_same_user_can_report_again_after_resolution(self):
+        from .moderation_service import (
+            ensure_safety_case,
+            resolve_safety_case,
+        )
+
+        first_flag = ThreadFlag.objects.create(
+            thread=self.thread,
+            flagged_by=self.moderator,
+            reason=ThreadFlag.Reason.SPAM,
+        )
+
+        ensure_safety_case(
+            thread=self.thread,
+            actor=self.moderator,
+        )
+
+        resolve_safety_case(
+            thread=self.thread,
+            actor=self.moderator,
+            action="DISMISS",
+        )
+
+        first_flag.refresh_from_db()
+
+        self.assertIsNotNone(
+            first_flag.resolved_at
+        )
+
+        second_flag = ThreadFlag.objects.create(
+            thread=self.thread,
+            flagged_by=self.moderator,
+            reason=ThreadFlag.Reason.HARASSMENT,
+        )
+
+        self.assertNotEqual(
+            first_flag.id,
+            second_flag.id,
+        )
+
+        self.assertIsNone(
+            second_flag.resolved_at
+        )
 
 class OptionalFactCheckAuthTests(APITestCase):
     def setUp(self):
