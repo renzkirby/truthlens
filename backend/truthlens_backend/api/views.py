@@ -1245,15 +1245,12 @@ class ThreadFlagViewSet(viewsets.ModelViewSet):
                     actor=self.request.user,
                 )
         except IntegrityError:
-            raise ValidationError({"detail": "You already flagged this thread."})
-
-        # Flagged threads are routed into moderation review without blocking all new threads.
-        if thread.status == Thread.Status.OPEN:
-            thread.status = Thread.Status.PENDING
-            thread.save(update_fields=["status"])
-
-        # Reporting activity affects contribution denominator immediately.
-        recompute_user_trust_score_task.delay(self.request.user.id)
+            raise ValidationError(
+                {
+                    "detail":
+                        "You already flagged this thread."
+                }
+            )
 
 
 class VoteViewSet(viewsets.ModelViewSet):

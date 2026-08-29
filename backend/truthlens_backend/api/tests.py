@@ -1184,6 +1184,70 @@ class ModerationCaseFoundationTests(APITestCase):
             second_flag.resolved_at
         )
 
+    def test_reporting_thread_does_not_change_community_status(self):
+        client = APIClient()
+        client.force_authenticate(
+            user=self.author
+        )
+
+        self.assertEqual(
+            self.thread.status,
+            Thread.Status.OPEN,
+        )
+
+        response = client.post(
+            reverse("thread-flag-list"),
+            {
+                "thread_id": str(
+                    self.thread.id
+                ),
+                "reason": (
+                    ThreadFlag
+                    .Reason
+                    .SPAM
+                ),
+                "notes": "Possible spam.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+        self.thread.refresh_from_db()
+
+        self.assertEqual(
+            self.thread.status,
+            Thread.Status.OPEN,
+        )
+
+        self.assertEqual(
+            ModerationCase.objects.filter(
+                case_type=(
+                    ModerationCase
+                    .CaseType
+                    .SAFETY
+                ),
+                thread=self.thread,
+                status=(
+                    ModerationCase
+                    .Status
+                    .OPEN
+                ),
+            ).count(),
+            1,
+        )
+
+        self.assertEqual(
+            ThreadFlag.objects.filter(
+                thread=self.thread,
+                resolved_at__isnull=True,
+            ).count(),
+            1,
+        )
+
 class OptionalFactCheckAuthTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(
