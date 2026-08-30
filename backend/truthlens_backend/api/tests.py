@@ -7,6 +7,10 @@ from rest_framework import status
 from rest_framework.test import APITestCase, APIClient
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+from django.db import (
+    IntegrityError,
+    transaction,
+)
 
 from .models import (
     Claim, 
@@ -22,6 +26,8 @@ from .models import (
     ModerationEvent, 
     ThreadFlag,
     FlagResolutionLog,
+    Organization,
+    OrganizationMembership,
 )
 from .throttles import FactCheckRateThrottle
 from .trust_service import (
@@ -37,6 +43,12 @@ from .moderation_service import (
     create_moderation_case,
     transition_moderation_case,
     unassign_moderation_case,
+)
+from .organization_service import (
+    PartnerCapability,
+    get_user_capabilities,
+    has_capability,
+    has_case_capability,
 )
 
 class ThreadEvidenceCommentAuthorizationTests(APITestCase):
@@ -1248,6 +1260,785 @@ class ModerationCaseFoundationTests(APITestCase):
             1,
         )
 
+class OrganizationFoundationTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="partneruser",
+            email="partner@test.com",
+            password="pass1234",
+        )
+
+        self.other_user = User.objects.create_user(
+            username="partneruser2",
+            email="partner2@test.com",
+            password="pass1234",
+        )
+
+        self.system_moderator = (
+            User.objects.create_user(
+                username="systemmod",
+                email="systemmod@test.com",
+                password="pass1234",
+            )
+        )
+
+        self.system_moderator.profile.role = (
+            UserProfile.Role.MOD
+        )
+        self.system_moderator.profile.save(
+            update_fields=["role"]
+        )
+
+        self.organization = (
+            Organization.objects.create(
+                name="Truth Research Lab",
+                slug="truth-research-lab",
+                organization_type=(
+                    Organization
+                    .OrganizationType
+                    .RESEARCH
+                ),
+            )
+        )
+
+    def test_organization_starts_unverified_and_not_partner(self):
+        self.assertEqual(
+            self.organization.verification_status,
+            (
+                Organization
+                .VerificationStatus
+                .UNVERIFIED
+            ),
+        )
+
+        self.assertEqual(
+            self.organization.partner_status,
+            Organization.PartnerStatus.NONE,
+        )
+
+    def test_organization_name_is_case_insensitively_unique(self):
+        with self.assertRaises(
+            IntegrityError
+        ):
+            with transaction.atomic():
+                Organization.objects.create(
+                    name="truth research lab",
+                    slug="truth-research-lab-2",
+                )
+
+    def test_user_can_only_have_one_membership_per_organization(self):
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=self.user,
+            role=(
+                OrganizationMembership
+                .Role
+                .RESEARCHER
+            ),
+            status=(
+                OrganizationMembership
+                .Status
+                .ACTIVE
+            ),
+        )
+
+        with self.assertRaises(
+            IntegrityError
+        ):
+            with transaction.atomic():
+                OrganizationMembership.objects.create(
+                    organization=self.organization,
+                    user=self.user,
+                    role=(
+                        OrganizationMembership
+                        .Role
+                        .MODERATOR
+                    ),
+                    status=(
+                        OrganizationMembership
+                        .Status
+                        .ACTIVE
+                    ),
+                )
+
+    def test_verified_partner_lead_verifier_gets_fact_check_capabilities(self):
+        self.organization.verification_status = (
+            Organization
+            .VerificationStatus
+            .VERIFIED
+        )
+
+        self.organization.partner_status = (
+            Organization
+            .PartnerStatus
+            .ACTIVE
+        )
+
+        self.organization.save(
+            update_fields=[
+                "verification_status",
+                "partner_status",
+            ]
+        )
+
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=self.user,
+            role=(
+                OrganizationMembership
+                .Role
+                .LEAD_VERIFIER
+            ),
+            status=(
+                OrganizationMembership
+                .Status
+                .ACTIVE
+            ),
+        )
+
+        capabilities = get_user_capabilities(
+            self.user,
+            organization=self.organization,
+        )
+
+        self.assertIn(
+            PartnerCapability.REVIEW_EVIDENCE,
+            capabilities,
+        )
+
+        self.assertIn(
+            PartnerCapability.ADJUDICATE,
+            capabilities,
+        )
+
+        self.assertIn(
+            PartnerCapability.PUBLISH_FACT_CHECK,
+            capabilities,
+        )
+
+        self.assertNotIn(
+            PartnerCapability.REVIEW_SAFETY,
+            capabilities,
+        )
+
+    def test_unverified_partner_does_not_get_verification_capabilities(self):
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=self.user,
+            role=(
+                OrganizationMembership
+                .Role
+                .LEAD_VERIFIER
+            ),
+            status=(
+                OrganizationMembership
+                .Status
+                .ACTIVE
+            ),
+        )
+
+        capabilities = get_user_capabilities(
+            self.user,
+            organization=self.organization,
+        )
+
+        self.assertNotIn(
+            PartnerCapability.ADJUDICATE,
+            capabilities,
+        )
+
+        self.assertNotIn(
+            PartnerCapability.PUBLISH_FACT_CHECK,
+            capabilities,
+        )
+
+    def test_researcher_can_draft_but_not_adjudicate(self):
+        self.organization.verification_status = (
+            Organization
+            .VerificationStatus
+            .VERIFIED
+        )
+
+        self.organization.partner_status = (
+            Organization
+            .PartnerStatus
+            .ACTIVE
+        )
+
+        self.organization.save(
+            update_fields=[
+                "verification_status",
+                "partner_status",
+            ]
+        )
+
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=self.user,
+            role=(
+                OrganizationMembership
+                .Role
+                .RESEARCHER
+            ),
+            status=(
+                OrganizationMembership
+                .Status
+                .ACTIVE
+            ),
+        )
+
+        self.assertTrue(
+            has_capability(
+                self.user,
+                (
+                    PartnerCapability
+                    .CREATE_FACT_CHECK_DRAFT
+                ),
+                organization=self.organization,
+            )
+        )
+
+        self.assertFalse(
+            has_capability(
+                self.user,
+                PartnerCapability.ADJUDICATE,
+                organization=self.organization,
+            )
+        )
+
+    def test_owner_can_manage_unverified_organization(self):
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=self.user,
+            role=(
+                OrganizationMembership
+                .Role
+                .OWNER
+            ),
+            status=(
+                OrganizationMembership
+                .Status
+                .ACTIVE
+            ),
+        )
+
+        self.assertTrue(
+            has_capability(
+                self.user,
+                (
+                    PartnerCapability
+                    .MANAGE_ORGANIZATION
+                ),
+                organization=self.organization,
+            )
+        )
+
+        self.assertFalse(
+            has_capability(
+                self.user,
+                PartnerCapability.ADJUDICATE,
+                organization=self.organization,
+            )
+        )
+
+    def test_suspended_membership_grants_no_partner_capabilities(self):
+        self.organization.verification_status = (
+            Organization
+            .VerificationStatus
+            .VERIFIED
+        )
+
+        self.organization.partner_status = (
+            Organization
+            .PartnerStatus
+            .ACTIVE
+        )
+
+        self.organization.save(
+            update_fields=[
+                "verification_status",
+                "partner_status",
+            ]
+        )
+
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=self.user,
+            role=(
+                OrganizationMembership
+                .Role
+                .LEAD_VERIFIER
+            ),
+            status=(
+                OrganizationMembership
+                .Status
+                .SUSPENDED
+            ),
+        )
+
+        self.assertEqual(
+            get_user_capabilities(
+                self.user,
+                organization=self.organization,
+            ),
+            set(),
+        )
+
+    def test_system_moderator_retains_system_capabilities(self):
+        capabilities = get_user_capabilities(
+            self.system_moderator
+        )
+
+        self.assertIn(
+            PartnerCapability.REVIEW_SAFETY,
+            capabilities,
+        )
+
+        self.assertIn(
+            PartnerCapability.REVIEW_EVIDENCE,
+            capabilities,
+        )
+
+        self.assertIn(
+            PartnerCapability.ADJUDICATE,
+            capabilities,
+        )
+
+        self.assertIn(
+            PartnerCapability.PUBLISH_FACT_CHECK,
+            capabilities,
+        )
+
+    def test_moderation_case_can_record_responsible_organization(self):
+        claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Partner case test.",
+        )
+
+        thread = Thread.objects.create(
+            claim=claim,
+            author=self.user,
+            caption="Partner case thread.",
+        )
+
+        case = create_moderation_case(
+            case_type=(
+                ModerationCase
+                .CaseType
+                .SAFETY
+            ),
+            actor=self.system_moderator,
+            thread=thread,
+            organization=self.organization,
+        )
+
+        self.assertEqual(
+            case.organization,
+            self.organization,
+        )
+
+    def test_partner_capability_does_not_leak_across_organizations(self):
+        self.organization.verification_status = (
+            Organization
+            .VerificationStatus
+            .VERIFIED
+        )
+
+        self.organization.partner_status = (
+            Organization
+            .PartnerStatus
+            .ACTIVE
+        )
+
+        self.organization.save(
+            update_fields=[
+                "verification_status",
+                "partner_status",
+            ]
+        )
+
+        other_organization = Organization.objects.create(
+            name="Independent Verification Lab",
+            slug="independent-verification-lab",
+            organization_type=(
+                Organization
+                .OrganizationType
+                .RESEARCH
+            ),
+            verification_status=(
+                Organization
+                .VerificationStatus
+                .VERIFIED
+            ),
+            partner_status=(
+                Organization
+                .PartnerStatus
+                .ACTIVE
+            ),
+        )
+
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=self.user,
+            role=(
+                OrganizationMembership
+                .Role
+                .LEAD_VERIFIER
+            ),
+            status=(
+                OrganizationMembership
+                .Status
+                .ACTIVE
+            ),
+        )
+
+        self.assertTrue(
+            has_capability(
+                self.user,
+                PartnerCapability.ADJUDICATE,
+                organization=self.organization,
+            )
+        )
+
+        self.assertFalse(
+            has_capability(
+                self.user,
+                PartnerCapability.ADJUDICATE,
+                organization=other_organization,
+            )
+        )
+
+    def test_partner_verification_capability_requires_organization_scope(self):
+        self.organization.verification_status = (
+            Organization
+            .VerificationStatus
+            .VERIFIED
+        )
+
+        self.organization.partner_status = (
+            Organization
+            .PartnerStatus
+            .ACTIVE
+        )
+
+        self.organization.save(
+            update_fields=[
+                "verification_status",
+                "partner_status",
+            ]
+        )
+
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=self.user,
+            role=(
+                OrganizationMembership
+                .Role
+                .LEAD_VERIFIER
+            ),
+            status=(
+                OrganizationMembership
+                .Status
+                .ACTIVE
+            ),
+        )
+
+        self.assertFalse(
+            has_capability(
+                self.user,
+                PartnerCapability.ADJUDICATE,
+            )
+        )
+
+    def test_partner_suspension_revokes_verification_capabilities(self):
+        self.organization.verification_status = (
+            Organization
+            .VerificationStatus
+            .VERIFIED
+        )
+
+        self.organization.partner_status = (
+            Organization
+            .PartnerStatus
+            .ACTIVE
+        )
+
+        self.organization.save(
+            update_fields=[
+                "verification_status",
+                "partner_status",
+            ]
+        )
+
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=self.user,
+            role=(
+                OrganizationMembership
+                .Role
+                .LEAD_VERIFIER
+            ),
+            status=(
+                OrganizationMembership
+                .Status
+                .ACTIVE
+            ),
+        )
+
+        self.assertTrue(
+            has_capability(
+                self.user,
+                PartnerCapability.ADJUDICATE,
+                organization=self.organization,
+            )
+        )
+
+        self.organization.partner_status = (
+            Organization
+            .PartnerStatus
+            .SUSPENDED
+        )
+
+        self.organization.save(
+            update_fields=["partner_status"]
+        )
+
+        self.assertFalse(
+            has_capability(
+                self.user,
+                PartnerCapability.ADJUDICATE,
+                organization=self.organization,
+            )
+        )
+
+        self.assertFalse(
+            has_capability(
+                self.user,
+                PartnerCapability.PUBLISH_FACT_CHECK,
+                organization=self.organization,
+            )
+        )
+
+    def test_organization_verification_revocation_removes_authority(self):
+        self.organization.verification_status = (
+            Organization
+            .VerificationStatus
+            .VERIFIED
+        )
+
+        self.organization.partner_status = (
+            Organization
+            .PartnerStatus
+            .ACTIVE
+        )
+
+        self.organization.save(
+            update_fields=[
+                "verification_status",
+                "partner_status",
+            ]
+        )
+
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=self.user,
+            role=(
+                OrganizationMembership
+                .Role
+                .MODERATOR
+            ),
+            status=(
+                OrganizationMembership
+                .Status
+                .ACTIVE
+            ),
+        )
+
+        self.assertTrue(
+            has_capability(
+                self.user,
+                PartnerCapability.ADJUDICATE,
+                organization=self.organization,
+            )
+        )
+
+        self.organization.verification_status = (
+            Organization
+            .VerificationStatus
+            .REJECTED
+        )
+
+        self.organization.save(
+            update_fields=["verification_status"]
+        )
+
+        self.assertFalse(
+            has_capability(
+                self.user,
+                PartnerCapability.ADJUDICATE,
+                organization=self.organization,
+            )
+        )
+
+    def test_partner_can_only_handle_case_for_own_organization(self):
+        self.organization.verification_status = (
+            Organization
+            .VerificationStatus
+            .VERIFIED
+        )
+
+        self.organization.partner_status = (
+            Organization
+            .PartnerStatus
+            .ACTIVE
+        )
+
+        self.organization.save(
+            update_fields=[
+                "verification_status",
+                "partner_status",
+            ]
+        )
+
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=self.user,
+            role=(
+                OrganizationMembership
+                .Role
+                .LEAD_VERIFIER
+            ),
+            status=(
+                OrganizationMembership
+                .Status
+                .ACTIVE
+            ),
+        )
+
+        claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Scoped partner case.",
+        )
+
+        case = create_moderation_case(
+            case_type=(
+                ModerationCase
+                .CaseType
+                .ADJUDICATION
+            ),
+            actor=self.system_moderator,
+            claim=claim,
+            organization=self.organization,
+        )
+
+        self.assertTrue(
+            has_case_capability(
+                self.user,
+                case,
+                PartnerCapability.ADJUDICATE,
+            )
+        )
+
+        other_organization = Organization.objects.create(
+            name="Another Verification Group",
+            slug="another-verification-group",
+            verification_status=(
+                Organization
+                .VerificationStatus
+                .VERIFIED
+            ),
+            partner_status=(
+                Organization
+                .PartnerStatus
+                .ACTIVE
+            ),
+        )
+
+        case.organization = other_organization
+        case.save(
+            update_fields=[
+                "organization",
+                "updated_at",
+            ]
+        )
+
+        self.assertFalse(
+            has_case_capability(
+                self.user,
+                case,
+                PartnerCapability.ADJUDICATE,
+            )
+        )
+
+    def test_partner_cannot_handle_unscoped_platform_case(self):
+        self.organization.verification_status = (
+            Organization
+            .VerificationStatus
+            .VERIFIED
+        )
+
+        self.organization.partner_status = (
+            Organization
+            .PartnerStatus
+            .ACTIVE
+        )
+
+        self.organization.save(
+            update_fields=[
+                "verification_status",
+                "partner_status",
+            ]
+        )
+
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=self.user,
+            role=(
+                OrganizationMembership
+                .Role
+                .LEAD_VERIFIER
+            ),
+            status=(
+                OrganizationMembership
+                .Status
+                .ACTIVE
+            ),
+        )
+
+        claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Platform-owned adjudication.",
+        )
+
+        case = create_moderation_case(
+            case_type=(
+                ModerationCase
+                .CaseType
+                .ADJUDICATION
+            ),
+            actor=self.system_moderator,
+            claim=claim,
+        )
+
+        self.assertIsNone(
+            case.organization
+        )
+
+        self.assertFalse(
+            has_case_capability(
+                self.user,
+                case,
+                PartnerCapability.ADJUDICATE,
+            )
+        )
+
+        self.assertTrue(
+            has_case_capability(
+                self.system_moderator,
+                case,
+                PartnerCapability.ADJUDICATE,
+            )
+        )
 class OptionalFactCheckAuthTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(

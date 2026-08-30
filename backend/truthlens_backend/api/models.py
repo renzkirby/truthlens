@@ -1,5 +1,6 @@
 from django.db import models
 from django.db.models import Q
+from django.db.models.functions import Lower
 from django.core.exceptions import ValidationError
 from django.contrib.auth.models import User
 from django.conf import settings
@@ -47,6 +48,283 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return f"UserProfile {self.id} - User: {self.user.username} - Trust Score: {self.trust_score}"
+
+
+class Organization(models.Model):
+    class OrganizationType(models.TextChoices):
+        FACT_CHECKING = (
+            "FACT_CHECKING",
+            "Fact-Checking Organization",
+        )
+        NEWS = (
+            "NEWS",
+            "News Organization",
+        )
+        UNIVERSITY = (
+            "UNIVERSITY",
+            "University",
+        )
+        RESEARCH = (
+            "RESEARCH",
+            "Research Organization",
+        )
+        NGO = (
+            "NGO",
+            "Non-Governmental Organization",
+        )
+        GOVERNMENT = (
+            "GOVERNMENT",
+            "Government Organization",
+        )
+        OTHER = (
+            "OTHER",
+            "Other",
+        )
+
+    class VerificationStatus(models.TextChoices):
+        UNVERIFIED = (
+            "UNVERIFIED",
+            "Unverified",
+        )
+        PENDING = (
+            "PENDING",
+            "Pending Verification",
+        )
+        VERIFIED = (
+            "VERIFIED",
+            "Verified",
+        )
+        REJECTED = (
+            "REJECTED",
+            "Rejected",
+        )
+
+    class PartnerStatus(models.TextChoices):
+        NONE = (
+            "NONE",
+            "Not a Partner",
+        )
+        ACTIVE = (
+            "ACTIVE",
+            "Active",
+        )
+        SUSPENDED = (
+            "SUSPENDED",
+            "Suspended",
+        )
+        FORMER = (
+            "FORMER",
+            "Former Partner",
+        )
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    name = models.CharField(
+        max_length=255,
+    )
+
+    slug = models.SlugField(
+        max_length=255,
+        unique=True,
+    )
+
+    description = models.TextField(
+        blank=True,
+        null=True,
+    )
+
+    website = models.URLField(
+        max_length=2000,
+        blank=True,
+        null=True,
+    )
+
+    logo_url = models.URLField(
+        max_length=2000,
+        blank=True,
+        null=True,
+    )
+
+    organization_type = models.CharField(
+        max_length=30,
+        choices=OrganizationType.choices,
+        default=OrganizationType.OTHER,
+    )
+
+    verification_status = models.CharField(
+        max_length=20,
+        choices=VerificationStatus.choices,
+        default=VerificationStatus.UNVERIFIED,
+        db_index=True,
+    )
+
+    partner_status = models.CharField(
+        max_length=20,
+        choices=PartnerStatus.choices,
+        default=PartnerStatus.NONE,
+        db_index=True,
+    )
+
+    expertise_areas = models.JSONField(
+        default=list,
+        blank=True,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    class Meta:
+        ordering = ["name"]
+
+        constraints = [
+            models.UniqueConstraint(
+                Lower("name"),
+                name="unique_organization_name_ci",
+            ),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class OrganizationMembership(models.Model):
+    class Role(models.TextChoices):
+        OWNER = "OWNER", "Owner"
+        ADMIN = "ADMIN", "Administrator"
+        LEAD_VERIFIER = (
+            "LEAD_VERIFIER",
+            "Lead Verifier",
+        )
+        MODERATOR = (
+            "MODERATOR",
+            "Moderator",
+        )
+        RESEARCHER = (
+            "RESEARCHER",
+            "Researcher",
+        )
+        CONTRIBUTOR = (
+            "CONTRIBUTOR",
+            "Contributor",
+        )
+
+    class Status(models.TextChoices):
+        PENDING = (
+            "PENDING",
+            "Pending",
+        )
+        ACTIVE = (
+            "ACTIVE",
+            "Active",
+        )
+        SUSPENDED = (
+            "SUSPENDED",
+            "Suspended",
+        )
+        LEFT = (
+            "LEFT",
+            "Left Organization",
+        )
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="memberships",
+    )
+
+    user = models.ForeignKey(
+        "auth.User",
+        on_delete=models.CASCADE,
+        related_name="organization_memberships",
+    )
+
+    role = models.CharField(
+        max_length=30,
+        choices=Role.choices,
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+
+    joined_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    approved_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name=(
+            "approved_organization_memberships"
+        ),
+    )
+
+    class Meta:
+        ordering = [
+            "organization_id",
+            "user_id",
+        ]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "organization",
+                    "user",
+                ],
+                name=(
+                    "unique_user_organization_membership"
+                ),
+            ),
+        ]
+
+        indexes = [
+            models.Index(
+                fields=[
+                    "organization",
+                    "status",
+                ],
+                name="org_member_org_status_idx",
+            ),
+            models.Index(
+                fields=[
+                    "user",
+                    "status",
+                ],
+                name="org_member_user_status_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.user.username} - "
+            f"{self.organization.name} "
+            f"({self.role})"
+        )
 
 
 class Claim(models.Model):
@@ -681,6 +959,14 @@ class ModerationCase(models.Model):
         related_name="moderation_cases",
     )
 
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="moderation_cases",
+    )
+
     assigned_to = models.ForeignKey(
         "auth.User",
         on_delete=models.SET_NULL,
@@ -787,6 +1073,10 @@ class ModerationCase(models.Model):
             models.Index(
                 fields=["priority", "status", "-created_at"],
                 name="mod_case_priority_idx",
+            ),
+            models.Index(
+                fields=["organization", "status"],
+                name="mod_case_org_status_idx",
             ),
         ]
 

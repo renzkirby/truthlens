@@ -92,6 +92,7 @@ def create_moderation_case(
     thread=None,
     claim=None,
     evidence_submission=None,
+    organization=None,
 ):
     case = ModerationCase(
         case_type=case_type,
@@ -100,6 +101,7 @@ def create_moderation_case(
         thread=thread,
         claim=claim,
         evidence_submission=evidence_submission,
+        organization=organization,
     )
 
     try:
