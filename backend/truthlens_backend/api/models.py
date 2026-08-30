@@ -846,6 +846,44 @@ class EvidenceSubmission(models.Model):
         VERIFIED = "VERIFIED", "Verified"
         REJECTED = "REJECTED", "Rejected"
 
+    class RejectionReason(models.TextChoices):
+        IRRELEVANT = (
+            "IRRELEVANT",
+            "Irrelevant",
+        )
+        UNRELIABLE_SOURCE = (
+            "UNRELIABLE_SOURCE",
+            "Unreliable Source",
+        )
+        INACCESSIBLE_SOURCE = (
+            "INACCESSIBLE_SOURCE",
+            "Inaccessible Source",
+        )
+        DUPLICATE = (
+            "DUPLICATE",
+            "Duplicate",
+        )
+        OUTDATED = (
+            "OUTDATED",
+            "Outdated",
+        )
+        MISREPRESENTS_SOURCE = (
+            "MISREPRESENTS_SOURCE",
+            "Misrepresents Source",
+        )
+        INSUFFICIENT_CONTEXT = (
+            "INSUFFICIENT_CONTEXT",
+            "Insufficient Context",
+        )
+        FABRICATED = (
+            "FABRICATED",
+            "Fabricated",
+        )
+        OTHER = (
+            "OTHER",
+            "Other",
+        )
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     thread = models.ForeignKey(
         Thread, on_delete=models.CASCADE, related_name="evidence_submissions"
@@ -871,6 +909,12 @@ class EvidenceSubmission(models.Model):
         null=True, blank=True, help_text="Timestamp when evidence was verified by moderator"
     )
     moderator_notes = models.TextField(blank=True, null=True, help_text="Notes from moderator why evidence was verified/rejected")
+    rejection_reason = models.CharField(
+        max_length=30,
+        choices=RejectionReason.choices,
+        null=True,
+        blank=True,
+    )
 
     def __str__(self):
         return f"EvidenceSubmission {self.id} - Thread ID: {self.thread.id} - Contributor: {self.contributor.username}"

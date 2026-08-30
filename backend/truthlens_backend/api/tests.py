@@ -13,17 +13,18 @@ from django.db import (
 )
 
 from .models import (
-    Claim, 
-    ClaimCheckHistory, 
-    EvidenceSubmission, 
-    Thread, ThreadComment, 
-    UserProfile, 
-    CanonicalSource, 
-    EvidenceSource, 
-    VerificationRun, 
-    VerificationEvidence, 
+    Claim,
+    ClaimCheckHistory,
+    EvidenceSubmission,
+    Thread,
+    ThreadComment,
+    UserProfile,
+    CanonicalSource,
+    EvidenceSource,
+    VerificationRun,
+    VerificationEvidence,
     ModerationCase,
-    ModerationEvent, 
+    ModerationEvent,
     ThreadFlag,
     FlagResolutionLog,
     Organization,
@@ -50,11 +51,22 @@ from .organization_service import (
     has_capability,
     has_case_capability,
 )
+from .evidence_review_service import (
+    EvidenceReviewConflict,
+    InvalidEvidenceDecision,
+    ensure_evidence_case,
+    review_evidence_submission,
+)
+
 
 class ThreadEvidenceCommentAuthorizationTests(APITestCase):
     def setUp(self):
-        self.owner = User.objects.create_user(username="owner", email="owner@test.com", password="pass1234")
-        self.other = User.objects.create_user(username="other", email="other@test.com", password="pass1234")
+        self.owner = User.objects.create_user(
+            username="owner", email="owner@test.com", password="pass1234"
+        )
+        self.other = User.objects.create_user(
+            username="other", email="other@test.com", password="pass1234"
+        )
 
         self.owner_profile = UserProfile.objects.get(user=self.owner)
         self.owner_profile.trust_score = 88.0
@@ -75,8 +87,12 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
             verified_via=Claim.VerificationSource.PENDING,
         )
 
-        self.thread = Thread.objects.create(claim=self.claim1, author=self.owner, caption="Owner thread")
-        self.other_thread = Thread.objects.create(claim=self.claim2, author=self.other, caption="Other thread")
+        self.thread = Thread.objects.create(
+            claim=self.claim1, author=self.owner, caption="Owner thread"
+        )
+        self.other_thread = Thread.objects.create(
+            claim=self.claim2, author=self.other, caption="Other thread"
+        )
 
         self.evidence = EvidenceSubmission.objects.create(
             thread=self.thread,
@@ -101,7 +117,9 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
     def test_non_owner_cannot_update_or_delete_thread(self):
         thread_detail = reverse("thread-detail", args=[str(self.thread.id)])
 
-        patch_res = self.other_client.patch(thread_detail, {"caption": "Hijack"}, format="json")
+        patch_res = self.other_client.patch(
+            thread_detail, {"caption": "Hijack"}, format="json"
+        )
         delete_res = self.other_client.delete(thread_detail)
 
         self.assertEqual(patch_res.status_code, status.HTTP_403_FORBIDDEN)
@@ -110,7 +128,9 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
     def test_non_owner_cannot_update_or_delete_comment(self):
         comment_detail = reverse("comment-detail", args=[str(self.comment.id)])
 
-        patch_res = self.other_client.patch(comment_detail, {"comment_text": "Hijack"}, format="json")
+        patch_res = self.other_client.patch(
+            comment_detail, {"comment_text": "Hijack"}, format="json"
+        )
         delete_res = self.other_client.delete(comment_detail)
 
         self.assertEqual(patch_res.status_code, status.HTTP_403_FORBIDDEN)
@@ -119,7 +139,9 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
     def test_non_owner_cannot_update_or_delete_evidence(self):
         evidence_detail = reverse("evidence-detail", args=[str(self.evidence.id)])
 
-        patch_res = self.other_client.patch(evidence_detail, {"evidence_caption": "Hijack"}, format="json")
+        patch_res = self.other_client.patch(
+            evidence_detail, {"evidence_caption": "Hijack"}, format="json"
+        )
         delete_res = self.other_client.delete(evidence_detail)
 
         self.assertEqual(patch_res.status_code, status.HTTP_403_FORBIDDEN)
@@ -163,7 +185,9 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
         created = EvidenceSubmission.objects.get(id=res.data["id"])
         self.assertEqual(created.contributor, self.other)
         self.assertEqual(created.thread, self.thread)
-        self.assertEqual(created.contributor_trust_snapshot, self.other.profile.trust_score)
+        self.assertEqual(
+            created.contributor_trust_snapshot, self.other.profile.trust_score
+        )
 
     def test_thread_owner_can_submit_evidence_on_own_thread(self):
         evidence_list = reverse("evidence-list")
@@ -254,35 +278,29 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
 class ModeratorEvidenceVerificationTests(APITestCase):
     """
     Tests for the moderator evidence verification workflow.
-    
+
     Coverage:
-    - Permission checks (only MODERATOR role can verify)  
+    - Permission checks (only MODERATOR role can verify)
     - Verification status updates (VERIFIED/REJECTED)
     - Trust Score v2 recalculation and reputation progression
     - Moderator audit trail (verified_by, verified_at, moderator_notes)
     """
-    
+
     def setUp(self):
         """Set up test data with regular users and a moderator."""
         # Create regular users
         self.contributor = User.objects.create_user(
-            username="contributor", 
-            email="contributor@test.com", 
-            password="pass1234"
+            username="contributor", email="contributor@test.com", password="pass1234"
         )
         self.other_user = User.objects.create_user(
-            username="otheruser",
-            email="otheruser@test.com",
-            password="pass1234"
+            username="otheruser", email="otheruser@test.com", password="pass1234"
         )
-        
+
         # Create moderator
         self.moderator = User.objects.create_user(
-            username="moderator",
-            email="moderator@test.com",
-            password="pass1234"
+            username="moderator", email="moderator@test.com", password="pass1234"
         )
-        
+
         # Set up user profiles with roles
         self.contributor_profile = self.contributor.profile
         self.contributor_profile.trust_score = 50.0
@@ -313,7 +331,7 @@ class ModeratorEvidenceVerificationTests(APITestCase):
                 "role",
             ]
         )
-        
+
         # Create claim and thread
         self.claim = Claim.objects.create(
             claim_type=Claim.ClaimType.URL,
@@ -323,9 +341,9 @@ class ModeratorEvidenceVerificationTests(APITestCase):
         self.thread = Thread.objects.create(
             claim=self.claim,
             author=self.other_user,
-            caption="Test thread for verification"
+            caption="Test thread for verification",
         )
-        
+
         # Create evidence
         self.evidence = EvidenceSubmission.objects.create(
             thread=self.thread,
@@ -335,18 +353,16 @@ class ModeratorEvidenceVerificationTests(APITestCase):
             evidence_url="https://evidence.example.com",
             contributor_trust_snapshot=self.contributor_profile.trust_score,
         )
-        
+
         # Set up API clients
         self.contributor_client = APIClient()
         self.contributor_client.force_authenticate(user=self.contributor)
-        
+
         self.other_client = APIClient()
         self.other_client.force_authenticate(user=self.other_user)
-        
+
         self.assertEqual(
-            UserProfile.objects.get(
-                user=self.moderator
-            ).role,
+            UserProfile.objects.get(user=self.moderator).role,
             UserProfile.Role.MOD,
         )
 
@@ -354,127 +370,146 @@ class ModeratorEvidenceVerificationTests(APITestCase):
             self.moderator.profile.role,
             UserProfile.Role.MOD,
         )
-        
+
         self.moderator_client = APIClient()
         self.moderator_client.force_authenticate(user=self.moderator)
-        
+
         self.unauthenticated_client = APIClient()
-        
+
     def test_unauthenticated_user_cannot_verify_evidence(self):
         """Unauthenticated users should get 401 Unauthorized."""
         verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
-        
+
         res = self.unauthenticated_client.patch(
-            verify_url,
-            {"evidence_status": "VERIFIED"},
-            format="json"
+            verify_url, {"evidence_status": "VERIFIED"}, format="json"
         )
-        
+
         self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
-        
+
     def test_non_moderator_user_cannot_verify_evidence(self):
         """Regular users (even contributors) should get 403 Forbidden."""
         verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
-        
+
         res = self.contributor_client.patch(
-            verify_url,
-            {"evidence_status": "VERIFIED"},
-            format="json"
+            verify_url, {"evidence_status": "VERIFIED"}, format="json"
         )
-        
+
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
-        
+
     def test_non_moderator_other_user_cannot_verify_evidence(self):
         """Another non-moderator user should also get 403 Forbidden."""
         verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
-        
+
         res = self.other_client.patch(
-            verify_url,
-            {"evidence_status": "VERIFIED"},
-            format="json"
+            verify_url, {"evidence_status": "VERIFIED"}, format="json"
         )
-        
+
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
-    
+
     def test_moderator_can_verify_evidence(self):
         """Moderators can verify evidence as VERIFIED."""
         verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
-        
+
         res = self.moderator_client.patch(
             verify_url,
             {
                 "evidence_status": "VERIFIED",
-                "moderator_notes": "Evidence looks legitimate"
+                "moderator_notes": "Evidence looks legitimate",
             },
-            format="json"
+            format="json",
         )
-        
+
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertEqual(res.data["evidence_status"], "VERIFIED")
-        
+
         # Verify database was updated
         self.evidence.refresh_from_db()
         self.assertEqual(self.evidence.evidence_status, "VERIFIED")
         self.assertEqual(self.evidence.verified_by, self.moderator)
         self.assertIsNotNone(self.evidence.verified_at)
         self.assertEqual(self.evidence.moderator_notes, "Evidence looks legitimate")
-        
+
     def test_moderator_can_reject_evidence(self):
         """Moderators can reject evidence as REJECTED."""
-        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
-        
+
+        verify_url = reverse(
+            "evidence-verify",
+            args=[str(self.evidence.id)],
+        )
+
         res = self.moderator_client.patch(
             verify_url,
             {
-                "evidence_status": "REJECTED",
-                "moderator_notes": "Evidence is not credible"
+                "evidence_status": (EvidenceSubmission.EvidenceStatus.REJECTED),
+                "rejection_reason": (
+                    EvidenceSubmission.RejectionReason.UNRELIABLE_SOURCE
+                ),
+                "moderator_notes": "Evidence is not credible",
             },
-            format="json"
+            format="json",
         )
-        
-        self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.data["evidence_status"], "REJECTED")
-        
-        # Verify database was updated
+
+        self.assertEqual(
+            res.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            res.data["evidence_status"],
+            EvidenceSubmission.EvidenceStatus.REJECTED,
+        )
+
         self.evidence.refresh_from_db()
-        self.assertEqual(self.evidence.evidence_status, "REJECTED")
-        self.assertEqual(self.evidence.verified_by, self.moderator)
+
+        self.assertEqual(
+            self.evidence.evidence_status,
+            EvidenceSubmission.EvidenceStatus.REJECTED,
+        )
+
+        self.assertEqual(
+            self.evidence.rejection_reason,
+            EvidenceSubmission.RejectionReason.UNRELIABLE_SOURCE,
+        )
+
+        self.assertEqual(
+            self.evidence.verified_by,
+            self.moderator,
+        )
+
         self.assertIsNotNone(self.evidence.verified_at)
-        self.assertEqual(self.evidence.moderator_notes, "Evidence is not credible")
-        
+
+        self.assertEqual(
+            self.evidence.moderator_notes,
+            "Evidence is not credible",
+        )
+
     def test_moderator_notes_are_optional(self):
         """Moderators should be able to verify without providing notes."""
         verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
-        
+
         res = self.moderator_client.patch(
-            verify_url,
-            {"evidence_status": "VERIFIED"},
-            format="json"
+            verify_url, {"evidence_status": "VERIFIED"}, format="json"
         )
-        
+
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.evidence.refresh_from_db()
         self.assertEqual(self.evidence.moderator_notes, "")
-        
+
     def test_invalid_evidence_status_returns_400(self):
         """Invalid evidence_status should return 400 Bad Request."""
         verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
-        
+
         res = self.moderator_client.patch(
-            verify_url,
-            {"evidence_status": "INVALID_STATUS"},
-            format="json"
+            verify_url, {"evidence_status": "INVALID_STATUS"}, format="json"
         )
-        
+
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("detail", res.data)
-        
+
     def test_new_user_starts_at_neutral_baseline(self):
         self.evidence.delete()
 
-        components = calculate_trust_components(
-            self.contributor
-        )
+        components = calculate_trust_components(self.contributor)
 
         self.assertEqual(
             components["resolved_actions"],
@@ -489,11 +524,8 @@ class ModeratorEvidenceVerificationTests(APITestCase):
             50.0,
         )
 
-
     def test_one_verified_action_does_not_jump_to_high_trust(self):
-        self.evidence.evidence_status = (
-            EvidenceSubmission.EvidenceStatus.VERIFIED
-        )
+        self.evidence.evidence_status = EvidenceSubmission.EvidenceStatus.VERIFIED
         self.evidence.verified_at = timezone.now()
         self.evidence.save(
             update_fields=[
@@ -502,9 +534,7 @@ class ModeratorEvidenceVerificationTests(APITestCase):
             ]
         )
 
-        components = calculate_trust_components(
-            self.contributor
-        )
+        components = calculate_trust_components(self.contributor)
 
         self.assertEqual(
             components["resolved_actions"],
@@ -522,11 +552,8 @@ class ModeratorEvidenceVerificationTests(APITestCase):
             60,
         )
 
-
     def test_rejected_action_can_reduce_score_below_baseline(self):
-        self.evidence.evidence_status = (
-            EvidenceSubmission.EvidenceStatus.REJECTED
-        )
+        self.evidence.evidence_status = EvidenceSubmission.EvidenceStatus.REJECTED
         self.evidence.verified_at = timezone.now()
         self.evidence.save(
             update_fields=[
@@ -535,9 +562,7 @@ class ModeratorEvidenceVerificationTests(APITestCase):
             ]
         )
 
-        components = calculate_trust_components(
-            self.contributor
-        )
+        components = calculate_trust_components(self.contributor)
 
         self.assertEqual(
             components["resolved_actions"],
@@ -549,18 +574,11 @@ class ModeratorEvidenceVerificationTests(APITestCase):
             50,
         )
 
-
     def test_unresolved_evidence_does_not_affect_quality_score(self):
-        self.evidence.evidence_status = (
-            EvidenceSubmission.EvidenceStatus.UNVERIFIED
-        )
-        self.evidence.save(
-            update_fields=["evidence_status"]
-        )
+        self.evidence.evidence_status = EvidenceSubmission.EvidenceStatus.UNVERIFIED
+        self.evidence.save(update_fields=["evidence_status"])
 
-        components = calculate_trust_components(
-            self.contributor
-        )
+        components = calculate_trust_components(self.contributor)
 
         self.assertEqual(
             components["resolved_actions"],
@@ -571,15 +589,10 @@ class ModeratorEvidenceVerificationTests(APITestCase):
             50.0,
         )
 
-
     def test_user_is_provisional_with_less_than_three_resolved_actions(self):
-        components = calculate_trust_components(
-            self.contributor
-        )
+        components = calculate_trust_components(self.contributor)
 
-        progression = get_reputation_progression(
-            components
-        )
+        progression = get_reputation_progression(components)
 
         self.assertEqual(
             progression["status"],
@@ -590,11 +603,8 @@ class ModeratorEvidenceVerificationTests(APITestCase):
             "Provisional",
         )
 
-
     def test_recompute_persists_calculated_score(self):
-        self.evidence.evidence_status = (
-            EvidenceSubmission.EvidenceStatus.VERIFIED
-        )
+        self.evidence.evidence_status = EvidenceSubmission.EvidenceStatus.VERIFIED
         self.evidence.verified_at = timezone.now()
         self.evidence.save(
             update_fields=[
@@ -603,9 +613,7 @@ class ModeratorEvidenceVerificationTests(APITestCase):
             ]
         )
 
-        components = recompute_user_trust_score(
-            self.contributor.id
-        )
+        components = recompute_user_trust_score(self.contributor.id)
 
         self.contributor_profile.refresh_from_db()
 
@@ -613,65 +621,59 @@ class ModeratorEvidenceVerificationTests(APITestCase):
             self.contributor_profile.trust_score,
             components["trust_score"],
         )
-        
-        
+
     def test_verified_by_contains_moderator_info_in_response(self):
         """Response should include verified_by with moderator user info."""
         verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
-        
+
         res = self.moderator_client.patch(
-            verify_url,
-            {"evidence_status": "VERIFIED"},
-            format="json"
+            verify_url, {"evidence_status": "VERIFIED"}, format="json"
         )
-        
+
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         # Check that verified_by contains user data
         self.assertIn("verified_by", res.data)
         if res.data["verified_by"]:  # Could be null if not serialized
             self.assertEqual(res.data["verified_by"]["username"], "moderator")
-            
+
     def test_moderator_can_reverify_already_verified_evidence(self):
         """
         Once evidence is verified, subsequent verify calls should update it.
         This tests idempotency / allows re-verification by another moderator.
         """
         verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
-        
+
         # First verification
         res1 = self.moderator_client.patch(
             verify_url,
             {"evidence_status": "VERIFIED", "moderator_notes": "First mod"},
-            format="json"
+            format="json",
         )
         self.assertEqual(res1.status_code, status.HTTP_200_OK)
-        
+
         # Create another moderator
         moderator2 = User.objects.create_user(
-            username="moderator2",
-            email="mod2@test.com",
-            password="pass1234"
+            username="moderator2", email="mod2@test.com", password="pass1234"
         )
         moderator2_profile = moderator2.profile
         moderator2_profile.role = UserProfile.Role.MOD
-        moderator2_profile.save(
-            update_fields=["role"]
-        )
+        moderator2_profile.save(update_fields=["role"])
         moderator2_client = APIClient()
         moderator2_client.force_authenticate(user=moderator2)
-        
+
         # Second moderator re-verifies with different notes
         res2 = moderator2_client.patch(
             verify_url,
             {"evidence_status": "VERIFIED", "moderator_notes": "Second mod"},
-            format="json"
+            format="json",
         )
         self.assertEqual(res2.status_code, status.HTTP_200_OK)
-        
+
         # Check that it was updated by second moderator
         self.evidence.refresh_from_db()
         self.assertEqual(self.evidence.verified_by, moderator2)
         self.assertEqual(self.evidence.moderator_notes, "Second mod")
+
 
 class ModerationCaseFoundationTests(APITestCase):
     def setUp(self):
@@ -688,9 +690,7 @@ class ModerationCaseFoundationTests(APITestCase):
         )
 
         self.moderator.profile.role = UserProfile.Role.MOD
-        self.moderator.profile.save(
-            update_fields=["role"]
-        )
+        self.moderator.profile.save(update_fields=["role"])
 
         self.other_moderator = User.objects.create_user(
             username="othercasemod",
@@ -699,9 +699,7 @@ class ModerationCaseFoundationTests(APITestCase):
         )
 
         self.other_moderator.profile.role = UserProfile.Role.MOD
-        self.other_moderator.profile.save(
-            update_fields=["role"]
-        )
+        self.other_moderator.profile.save(update_fields=["role"])
 
         self.claim = Claim.objects.create(
             claim_type=Claim.ClaimType.TEXT,
@@ -719,11 +717,7 @@ class ModerationCaseFoundationTests(APITestCase):
             thread=self.thread,
             contributor=self.author,
             evidence_caption="Moderation case evidence.",
-            evidence_type=(
-                EvidenceSubmission
-                .EvidenceType
-                .SOURCE_VERIFICATION
-            ),
+            evidence_type=(EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION),
             evidence_url="https://example.com/evidence",
             contributor_trust_snapshot=50.0,
         )
@@ -759,9 +753,7 @@ class ModerationCaseFoundationTests(APITestCase):
         )
 
     def test_case_type_requires_correct_target(self):
-        with self.assertRaises(
-            InvalidModerationCaseTarget
-        ):
+        with self.assertRaises(InvalidModerationCaseTarget):
             create_moderation_case(
                 case_type=ModerationCase.CaseType.SAFETY,
                 actor=self.moderator,
@@ -776,9 +768,7 @@ class ModerationCaseFoundationTests(APITestCase):
             thread=self.thread,
         )
 
-        with self.assertRaises(
-            DuplicateActiveModerationCase
-        ):
+        with self.assertRaises(DuplicateActiveModerationCase):
             create_moderation_case(
                 case_type=ModerationCase.CaseType.SAFETY,
                 actor=self.moderator,
@@ -856,9 +846,7 @@ class ModerationCaseFoundationTests(APITestCase):
             thread=self.thread,
         )
 
-        with self.assertRaises(
-            InvalidModerationTransition
-        ):
+        with self.assertRaises(InvalidModerationTransition):
             transition_moderation_case(
                 case,
                 next_status=ModerationCase.Status.RESOLVED,
@@ -893,11 +881,7 @@ class ModerationCaseFoundationTests(APITestCase):
 
         self.assertTrue(
             case.events.filter(
-                event_type=(
-                    ModerationEvent
-                    .EventType
-                    .CASE_CLAIMED
-                )
+                event_type=(ModerationEvent.EventType.CASE_CLAIMED)
             ).exists()
         )
 
@@ -949,13 +933,7 @@ class ModerationCaseFoundationTests(APITestCase):
             thread=self.thread,
         )
 
-        event = case.events.get(
-            event_type=(
-                ModerationEvent
-                .EventType
-                .CASE_CREATED
-            )
-        )
+        event = case.events.get(event_type=(ModerationEvent.EventType.CASE_CREATED))
 
         event.notes = "Attempted rewrite"
 
@@ -990,7 +968,6 @@ class ModerationCaseFoundationTests(APITestCase):
             ).count(),
             1,
         )
-
 
     def test_escalating_safety_case_does_not_close_thread(self):
         from .moderation_service import (
@@ -1028,17 +1005,12 @@ class ModerationCaseFoundationTests(APITestCase):
             Thread.Status.OPEN,
         )
 
-        self.assertIsNone(
-            flag.resolved_at
-        )
+        self.assertIsNone(flag.resolved_at)
 
         self.assertEqual(
-            FlagResolutionLog.objects.filter(
-                thread=self.thread
-            ).count(),
+            FlagResolutionLog.objects.filter(thread=self.thread).count(),
             0,
         )
-
 
     def test_dismiss_preserves_report_history(self):
         from .moderation_service import (
@@ -1079,28 +1051,21 @@ class ModerationCaseFoundationTests(APITestCase):
             Thread.Status.OPEN,
         )
 
-        self.assertIsNotNone(
-            flag.resolved_at
-        )
+        self.assertIsNotNone(flag.resolved_at)
 
         self.assertEqual(
             flag.resolution_case,
             case,
         )
 
-        log = FlagResolutionLog.objects.get(
-            thread=self.thread
-        )
+        log = FlagResolutionLog.objects.get(thread=self.thread)
 
         self.assertEqual(
             log.resolved_action,
             "DISMISS",
         )
 
-        self.assertFalse(
-            log.is_valid_report
-        )
-
+        self.assertFalse(log.is_valid_report)
 
     def test_remove_resolves_case_and_hides_thread(self):
         from .moderation_service import (
@@ -1139,18 +1104,11 @@ class ModerationCaseFoundationTests(APITestCase):
             ModerationCase.Status.RESOLVED,
         )
 
-        self.assertIsNotNone(
-            flag.resolved_at
-        )
+        self.assertIsNotNone(flag.resolved_at)
 
-        log = FlagResolutionLog.objects.get(
-            thread=self.thread
-        )
+        log = FlagResolutionLog.objects.get(thread=self.thread)
 
-        self.assertTrue(
-            log.is_valid_report
-        )
-
+        self.assertTrue(log.is_valid_report)
 
     def test_same_user_can_report_again_after_resolution(self):
         from .moderation_service import (
@@ -1177,9 +1135,7 @@ class ModerationCaseFoundationTests(APITestCase):
 
         first_flag.refresh_from_db()
 
-        self.assertIsNotNone(
-            first_flag.resolved_at
-        )
+        self.assertIsNotNone(first_flag.resolved_at)
 
         second_flag = ThreadFlag.objects.create(
             thread=self.thread,
@@ -1192,15 +1148,11 @@ class ModerationCaseFoundationTests(APITestCase):
             second_flag.id,
         )
 
-        self.assertIsNone(
-            second_flag.resolved_at
-        )
+        self.assertIsNone(second_flag.resolved_at)
 
     def test_reporting_thread_does_not_change_community_status(self):
         client = APIClient()
-        client.force_authenticate(
-            user=self.author
-        )
+        client.force_authenticate(user=self.author)
 
         self.assertEqual(
             self.thread.status,
@@ -1210,14 +1162,8 @@ class ModerationCaseFoundationTests(APITestCase):
         response = client.post(
             reverse("thread-flag-list"),
             {
-                "thread_id": str(
-                    self.thread.id
-                ),
-                "reason": (
-                    ThreadFlag
-                    .Reason
-                    .SPAM
-                ),
+                "thread_id": str(self.thread.id),
+                "reason": (ThreadFlag.Reason.SPAM),
                 "notes": "Possible spam.",
             },
             format="json",
@@ -1237,17 +1183,9 @@ class ModerationCaseFoundationTests(APITestCase):
 
         self.assertEqual(
             ModerationCase.objects.filter(
-                case_type=(
-                    ModerationCase
-                    .CaseType
-                    .SAFETY
-                ),
+                case_type=(ModerationCase.CaseType.SAFETY),
                 thread=self.thread,
-                status=(
-                    ModerationCase
-                    .Status
-                    .OPEN
-                ),
+                status=(ModerationCase.Status.OPEN),
             ).count(),
             1,
         )
@@ -1259,6 +1197,7 @@ class ModerationCaseFoundationTests(APITestCase):
             ).count(),
             1,
         )
+
 
 class OrganizationFoundationTests(APITestCase):
     def setUp(self):
@@ -1274,41 +1213,25 @@ class OrganizationFoundationTests(APITestCase):
             password="pass1234",
         )
 
-        self.system_moderator = (
-            User.objects.create_user(
-                username="systemmod",
-                email="systemmod@test.com",
-                password="pass1234",
-            )
+        self.system_moderator = User.objects.create_user(
+            username="systemmod",
+            email="systemmod@test.com",
+            password="pass1234",
         )
 
-        self.system_moderator.profile.role = (
-            UserProfile.Role.MOD
-        )
-        self.system_moderator.profile.save(
-            update_fields=["role"]
-        )
+        self.system_moderator.profile.role = UserProfile.Role.MOD
+        self.system_moderator.profile.save(update_fields=["role"])
 
-        self.organization = (
-            Organization.objects.create(
-                name="Truth Research Lab",
-                slug="truth-research-lab",
-                organization_type=(
-                    Organization
-                    .OrganizationType
-                    .RESEARCH
-                ),
-            )
+        self.organization = Organization.objects.create(
+            name="Truth Research Lab",
+            slug="truth-research-lab",
+            organization_type=(Organization.OrganizationType.RESEARCH),
         )
 
     def test_organization_starts_unverified_and_not_partner(self):
         self.assertEqual(
             self.organization.verification_status,
-            (
-                Organization
-                .VerificationStatus
-                .UNVERIFIED
-            ),
+            (Organization.VerificationStatus.UNVERIFIED),
         )
 
         self.assertEqual(
@@ -1317,9 +1240,7 @@ class OrganizationFoundationTests(APITestCase):
         )
 
     def test_organization_name_is_case_insensitively_unique(self):
-        with self.assertRaises(
-            IntegrityError
-        ):
+        with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 Organization.objects.create(
                     name="truth research lab",
@@ -1330,49 +1251,23 @@ class OrganizationFoundationTests(APITestCase):
         OrganizationMembership.objects.create(
             organization=self.organization,
             user=self.user,
-            role=(
-                OrganizationMembership
-                .Role
-                .RESEARCHER
-            ),
-            status=(
-                OrganizationMembership
-                .Status
-                .ACTIVE
-            ),
+            role=(OrganizationMembership.Role.RESEARCHER),
+            status=(OrganizationMembership.Status.ACTIVE),
         )
 
-        with self.assertRaises(
-            IntegrityError
-        ):
+        with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 OrganizationMembership.objects.create(
                     organization=self.organization,
                     user=self.user,
-                    role=(
-                        OrganizationMembership
-                        .Role
-                        .MODERATOR
-                    ),
-                    status=(
-                        OrganizationMembership
-                        .Status
-                        .ACTIVE
-                    ),
+                    role=(OrganizationMembership.Role.MODERATOR),
+                    status=(OrganizationMembership.Status.ACTIVE),
                 )
 
     def test_verified_partner_lead_verifier_gets_fact_check_capabilities(self):
-        self.organization.verification_status = (
-            Organization
-            .VerificationStatus
-            .VERIFIED
-        )
+        self.organization.verification_status = Organization.VerificationStatus.VERIFIED
 
-        self.organization.partner_status = (
-            Organization
-            .PartnerStatus
-            .ACTIVE
-        )
+        self.organization.partner_status = Organization.PartnerStatus.ACTIVE
 
         self.organization.save(
             update_fields=[
@@ -1384,16 +1279,8 @@ class OrganizationFoundationTests(APITestCase):
         OrganizationMembership.objects.create(
             organization=self.organization,
             user=self.user,
-            role=(
-                OrganizationMembership
-                .Role
-                .LEAD_VERIFIER
-            ),
-            status=(
-                OrganizationMembership
-                .Status
-                .ACTIVE
-            ),
+            role=(OrganizationMembership.Role.LEAD_VERIFIER),
+            status=(OrganizationMembership.Status.ACTIVE),
         )
 
         capabilities = get_user_capabilities(
@@ -1425,16 +1312,8 @@ class OrganizationFoundationTests(APITestCase):
         OrganizationMembership.objects.create(
             organization=self.organization,
             user=self.user,
-            role=(
-                OrganizationMembership
-                .Role
-                .LEAD_VERIFIER
-            ),
-            status=(
-                OrganizationMembership
-                .Status
-                .ACTIVE
-            ),
+            role=(OrganizationMembership.Role.LEAD_VERIFIER),
+            status=(OrganizationMembership.Status.ACTIVE),
         )
 
         capabilities = get_user_capabilities(
@@ -1453,17 +1332,9 @@ class OrganizationFoundationTests(APITestCase):
         )
 
     def test_researcher_can_draft_but_not_adjudicate(self):
-        self.organization.verification_status = (
-            Organization
-            .VerificationStatus
-            .VERIFIED
-        )
+        self.organization.verification_status = Organization.VerificationStatus.VERIFIED
 
-        self.organization.partner_status = (
-            Organization
-            .PartnerStatus
-            .ACTIVE
-        )
+        self.organization.partner_status = Organization.PartnerStatus.ACTIVE
 
         self.organization.save(
             update_fields=[
@@ -1475,25 +1346,14 @@ class OrganizationFoundationTests(APITestCase):
         OrganizationMembership.objects.create(
             organization=self.organization,
             user=self.user,
-            role=(
-                OrganizationMembership
-                .Role
-                .RESEARCHER
-            ),
-            status=(
-                OrganizationMembership
-                .Status
-                .ACTIVE
-            ),
+            role=(OrganizationMembership.Role.RESEARCHER),
+            status=(OrganizationMembership.Status.ACTIVE),
         )
 
         self.assertTrue(
             has_capability(
                 self.user,
-                (
-                    PartnerCapability
-                    .CREATE_FACT_CHECK_DRAFT
-                ),
+                (PartnerCapability.CREATE_FACT_CHECK_DRAFT),
                 organization=self.organization,
             )
         )
@@ -1510,25 +1370,14 @@ class OrganizationFoundationTests(APITestCase):
         OrganizationMembership.objects.create(
             organization=self.organization,
             user=self.user,
-            role=(
-                OrganizationMembership
-                .Role
-                .OWNER
-            ),
-            status=(
-                OrganizationMembership
-                .Status
-                .ACTIVE
-            ),
+            role=(OrganizationMembership.Role.OWNER),
+            status=(OrganizationMembership.Status.ACTIVE),
         )
 
         self.assertTrue(
             has_capability(
                 self.user,
-                (
-                    PartnerCapability
-                    .MANAGE_ORGANIZATION
-                ),
+                (PartnerCapability.MANAGE_ORGANIZATION),
                 organization=self.organization,
             )
         )
@@ -1542,17 +1391,9 @@ class OrganizationFoundationTests(APITestCase):
         )
 
     def test_suspended_membership_grants_no_partner_capabilities(self):
-        self.organization.verification_status = (
-            Organization
-            .VerificationStatus
-            .VERIFIED
-        )
+        self.organization.verification_status = Organization.VerificationStatus.VERIFIED
 
-        self.organization.partner_status = (
-            Organization
-            .PartnerStatus
-            .ACTIVE
-        )
+        self.organization.partner_status = Organization.PartnerStatus.ACTIVE
 
         self.organization.save(
             update_fields=[
@@ -1564,16 +1405,8 @@ class OrganizationFoundationTests(APITestCase):
         OrganizationMembership.objects.create(
             organization=self.organization,
             user=self.user,
-            role=(
-                OrganizationMembership
-                .Role
-                .LEAD_VERIFIER
-            ),
-            status=(
-                OrganizationMembership
-                .Status
-                .SUSPENDED
-            ),
+            role=(OrganizationMembership.Role.LEAD_VERIFIER),
+            status=(OrganizationMembership.Status.SUSPENDED),
         )
 
         self.assertEqual(
@@ -1585,9 +1418,7 @@ class OrganizationFoundationTests(APITestCase):
         )
 
     def test_system_moderator_retains_system_capabilities(self):
-        capabilities = get_user_capabilities(
-            self.system_moderator
-        )
+        capabilities = get_user_capabilities(self.system_moderator)
 
         self.assertIn(
             PartnerCapability.REVIEW_SAFETY,
@@ -1622,11 +1453,7 @@ class OrganizationFoundationTests(APITestCase):
         )
 
         case = create_moderation_case(
-            case_type=(
-                ModerationCase
-                .CaseType
-                .SAFETY
-            ),
+            case_type=(ModerationCase.CaseType.SAFETY),
             actor=self.system_moderator,
             thread=thread,
             organization=self.organization,
@@ -1638,17 +1465,9 @@ class OrganizationFoundationTests(APITestCase):
         )
 
     def test_partner_capability_does_not_leak_across_organizations(self):
-        self.organization.verification_status = (
-            Organization
-            .VerificationStatus
-            .VERIFIED
-        )
+        self.organization.verification_status = Organization.VerificationStatus.VERIFIED
 
-        self.organization.partner_status = (
-            Organization
-            .PartnerStatus
-            .ACTIVE
-        )
+        self.organization.partner_status = Organization.PartnerStatus.ACTIVE
 
         self.organization.save(
             update_fields=[
@@ -1660,36 +1479,16 @@ class OrganizationFoundationTests(APITestCase):
         other_organization = Organization.objects.create(
             name="Independent Verification Lab",
             slug="independent-verification-lab",
-            organization_type=(
-                Organization
-                .OrganizationType
-                .RESEARCH
-            ),
-            verification_status=(
-                Organization
-                .VerificationStatus
-                .VERIFIED
-            ),
-            partner_status=(
-                Organization
-                .PartnerStatus
-                .ACTIVE
-            ),
+            organization_type=(Organization.OrganizationType.RESEARCH),
+            verification_status=(Organization.VerificationStatus.VERIFIED),
+            partner_status=(Organization.PartnerStatus.ACTIVE),
         )
 
         OrganizationMembership.objects.create(
             organization=self.organization,
             user=self.user,
-            role=(
-                OrganizationMembership
-                .Role
-                .LEAD_VERIFIER
-            ),
-            status=(
-                OrganizationMembership
-                .Status
-                .ACTIVE
-            ),
+            role=(OrganizationMembership.Role.LEAD_VERIFIER),
+            status=(OrganizationMembership.Status.ACTIVE),
         )
 
         self.assertTrue(
@@ -1709,17 +1508,9 @@ class OrganizationFoundationTests(APITestCase):
         )
 
     def test_partner_verification_capability_requires_organization_scope(self):
-        self.organization.verification_status = (
-            Organization
-            .VerificationStatus
-            .VERIFIED
-        )
+        self.organization.verification_status = Organization.VerificationStatus.VERIFIED
 
-        self.organization.partner_status = (
-            Organization
-            .PartnerStatus
-            .ACTIVE
-        )
+        self.organization.partner_status = Organization.PartnerStatus.ACTIVE
 
         self.organization.save(
             update_fields=[
@@ -1731,16 +1522,8 @@ class OrganizationFoundationTests(APITestCase):
         OrganizationMembership.objects.create(
             organization=self.organization,
             user=self.user,
-            role=(
-                OrganizationMembership
-                .Role
-                .LEAD_VERIFIER
-            ),
-            status=(
-                OrganizationMembership
-                .Status
-                .ACTIVE
-            ),
+            role=(OrganizationMembership.Role.LEAD_VERIFIER),
+            status=(OrganizationMembership.Status.ACTIVE),
         )
 
         self.assertFalse(
@@ -1751,17 +1534,9 @@ class OrganizationFoundationTests(APITestCase):
         )
 
     def test_partner_suspension_revokes_verification_capabilities(self):
-        self.organization.verification_status = (
-            Organization
-            .VerificationStatus
-            .VERIFIED
-        )
+        self.organization.verification_status = Organization.VerificationStatus.VERIFIED
 
-        self.organization.partner_status = (
-            Organization
-            .PartnerStatus
-            .ACTIVE
-        )
+        self.organization.partner_status = Organization.PartnerStatus.ACTIVE
 
         self.organization.save(
             update_fields=[
@@ -1773,16 +1548,8 @@ class OrganizationFoundationTests(APITestCase):
         OrganizationMembership.objects.create(
             organization=self.organization,
             user=self.user,
-            role=(
-                OrganizationMembership
-                .Role
-                .LEAD_VERIFIER
-            ),
-            status=(
-                OrganizationMembership
-                .Status
-                .ACTIVE
-            ),
+            role=(OrganizationMembership.Role.LEAD_VERIFIER),
+            status=(OrganizationMembership.Status.ACTIVE),
         )
 
         self.assertTrue(
@@ -1793,15 +1560,9 @@ class OrganizationFoundationTests(APITestCase):
             )
         )
 
-        self.organization.partner_status = (
-            Organization
-            .PartnerStatus
-            .SUSPENDED
-        )
+        self.organization.partner_status = Organization.PartnerStatus.SUSPENDED
 
-        self.organization.save(
-            update_fields=["partner_status"]
-        )
+        self.organization.save(update_fields=["partner_status"])
 
         self.assertFalse(
             has_capability(
@@ -1820,17 +1581,9 @@ class OrganizationFoundationTests(APITestCase):
         )
 
     def test_organization_verification_revocation_removes_authority(self):
-        self.organization.verification_status = (
-            Organization
-            .VerificationStatus
-            .VERIFIED
-        )
+        self.organization.verification_status = Organization.VerificationStatus.VERIFIED
 
-        self.organization.partner_status = (
-            Organization
-            .PartnerStatus
-            .ACTIVE
-        )
+        self.organization.partner_status = Organization.PartnerStatus.ACTIVE
 
         self.organization.save(
             update_fields=[
@@ -1842,16 +1595,8 @@ class OrganizationFoundationTests(APITestCase):
         OrganizationMembership.objects.create(
             organization=self.organization,
             user=self.user,
-            role=(
-                OrganizationMembership
-                .Role
-                .MODERATOR
-            ),
-            status=(
-                OrganizationMembership
-                .Status
-                .ACTIVE
-            ),
+            role=(OrganizationMembership.Role.MODERATOR),
+            status=(OrganizationMembership.Status.ACTIVE),
         )
 
         self.assertTrue(
@@ -1862,15 +1607,9 @@ class OrganizationFoundationTests(APITestCase):
             )
         )
 
-        self.organization.verification_status = (
-            Organization
-            .VerificationStatus
-            .REJECTED
-        )
+        self.organization.verification_status = Organization.VerificationStatus.REJECTED
 
-        self.organization.save(
-            update_fields=["verification_status"]
-        )
+        self.organization.save(update_fields=["verification_status"])
 
         self.assertFalse(
             has_capability(
@@ -1881,17 +1620,9 @@ class OrganizationFoundationTests(APITestCase):
         )
 
     def test_partner_can_only_handle_case_for_own_organization(self):
-        self.organization.verification_status = (
-            Organization
-            .VerificationStatus
-            .VERIFIED
-        )
+        self.organization.verification_status = Organization.VerificationStatus.VERIFIED
 
-        self.organization.partner_status = (
-            Organization
-            .PartnerStatus
-            .ACTIVE
-        )
+        self.organization.partner_status = Organization.PartnerStatus.ACTIVE
 
         self.organization.save(
             update_fields=[
@@ -1903,16 +1634,8 @@ class OrganizationFoundationTests(APITestCase):
         OrganizationMembership.objects.create(
             organization=self.organization,
             user=self.user,
-            role=(
-                OrganizationMembership
-                .Role
-                .LEAD_VERIFIER
-            ),
-            status=(
-                OrganizationMembership
-                .Status
-                .ACTIVE
-            ),
+            role=(OrganizationMembership.Role.LEAD_VERIFIER),
+            status=(OrganizationMembership.Status.ACTIVE),
         )
 
         claim = Claim.objects.create(
@@ -1921,11 +1644,7 @@ class OrganizationFoundationTests(APITestCase):
         )
 
         case = create_moderation_case(
-            case_type=(
-                ModerationCase
-                .CaseType
-                .ADJUDICATION
-            ),
+            case_type=(ModerationCase.CaseType.ADJUDICATION),
             actor=self.system_moderator,
             claim=claim,
             organization=self.organization,
@@ -1942,16 +1661,8 @@ class OrganizationFoundationTests(APITestCase):
         other_organization = Organization.objects.create(
             name="Another Verification Group",
             slug="another-verification-group",
-            verification_status=(
-                Organization
-                .VerificationStatus
-                .VERIFIED
-            ),
-            partner_status=(
-                Organization
-                .PartnerStatus
-                .ACTIVE
-            ),
+            verification_status=(Organization.VerificationStatus.VERIFIED),
+            partner_status=(Organization.PartnerStatus.ACTIVE),
         )
 
         case.organization = other_organization
@@ -1971,17 +1682,9 @@ class OrganizationFoundationTests(APITestCase):
         )
 
     def test_partner_cannot_handle_unscoped_platform_case(self):
-        self.organization.verification_status = (
-            Organization
-            .VerificationStatus
-            .VERIFIED
-        )
+        self.organization.verification_status = Organization.VerificationStatus.VERIFIED
 
-        self.organization.partner_status = (
-            Organization
-            .PartnerStatus
-            .ACTIVE
-        )
+        self.organization.partner_status = Organization.PartnerStatus.ACTIVE
 
         self.organization.save(
             update_fields=[
@@ -1993,16 +1696,8 @@ class OrganizationFoundationTests(APITestCase):
         OrganizationMembership.objects.create(
             organization=self.organization,
             user=self.user,
-            role=(
-                OrganizationMembership
-                .Role
-                .LEAD_VERIFIER
-            ),
-            status=(
-                OrganizationMembership
-                .Status
-                .ACTIVE
-            ),
+            role=(OrganizationMembership.Role.LEAD_VERIFIER),
+            status=(OrganizationMembership.Status.ACTIVE),
         )
 
         claim = Claim.objects.create(
@@ -2011,18 +1706,12 @@ class OrganizationFoundationTests(APITestCase):
         )
 
         case = create_moderation_case(
-            case_type=(
-                ModerationCase
-                .CaseType
-                .ADJUDICATION
-            ),
+            case_type=(ModerationCase.CaseType.ADJUDICATION),
             actor=self.system_moderator,
             claim=claim,
         )
 
-        self.assertIsNone(
-            case.organization
-        )
+        self.assertIsNone(case.organization)
 
         self.assertFalse(
             has_case_capability(
@@ -2039,6 +1728,514 @@ class OrganizationFoundationTests(APITestCase):
                 PartnerCapability.ADJUDICATE,
             )
         )
+
+
+class EvidenceCaseFoundationTests(APITestCase):
+    def setUp(self):
+        self.contributor = User.objects.create_user(
+            username="evidencecontributor",
+            email="evidence@test.com",
+            password="pass1234",
+        )
+
+        self.moderator = User.objects.create_user(
+            username="evidencemoderator",
+            email="evidencemod@test.com",
+            password="pass1234",
+        )
+
+        self.moderator.profile.role = UserProfile.Role.MOD
+
+        self.moderator.profile.save(update_fields=["role"])
+
+        self.second_moderator = User.objects.create_user(
+            username="evidencemoderator2",
+            email="evidencemod2@test.com",
+            password="pass1234",
+        )
+
+        self.second_moderator.profile.role = UserProfile.Role.MOD
+
+        self.second_moderator.profile.save(update_fields=["role"])
+
+        self.claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text=("Evidence review test claim."),
+        )
+
+        self.thread = Thread.objects.create(
+            claim=self.claim,
+            author=self.contributor,
+            caption="Evidence review thread.",
+        )
+
+        self.evidence = EvidenceSubmission.objects.create(
+            thread=self.thread,
+            contributor=self.contributor,
+            evidence_caption=("Evidence review submission."),
+            evidence_url=("https://example.com/evidence"),
+            evidence_type=(EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION),
+            evidence_status=(EvidenceSubmission.EvidenceStatus.UNVERIFIED),
+            contributor_trust_snapshot=50.0,
+        )
+
+    def test_ensure_evidence_case_creates_one_active_case(self):
+        first = ensure_evidence_case(
+            evidence=self.evidence,
+            actor=self.contributor,
+        )
+
+        second = ensure_evidence_case(
+            evidence=self.evidence,
+            actor=self.contributor,
+        )
+
+        self.assertEqual(
+            first.id,
+            second.id,
+        )
+
+        self.assertEqual(
+            first.case_type,
+            ModerationCase.CaseType.EVIDENCE,
+        )
+
+        self.assertEqual(
+            first.status,
+            ModerationCase.Status.OPEN,
+        )
+
+    def test_verified_evidence_resolves_case(self):
+        case = ensure_evidence_case(
+            evidence=self.evidence,
+            actor=self.contributor,
+        )
+
+        result = review_evidence_submission(
+            evidence=self.evidence,
+            actor=self.moderator,
+            evidence_status=(EvidenceSubmission.EvidenceStatus.VERIFIED),
+            moderator_notes=("Source directly supports the claim."),
+        )
+
+        self.evidence.refresh_from_db()
+        case.refresh_from_db()
+
+        self.assertEqual(
+            self.evidence.evidence_status,
+            EvidenceSubmission.EvidenceStatus.VERIFIED,
+        )
+
+        self.assertIsNone(self.evidence.rejection_reason)
+
+        self.assertEqual(
+            case.status,
+            ModerationCase.Status.RESOLVED,
+        )
+
+        self.assertEqual(
+            result["contributor_id"],
+            self.contributor.id,
+        )
+
+    def test_rejected_evidence_requires_reason(self):
+        ensure_evidence_case(
+            evidence=self.evidence,
+            actor=self.contributor,
+        )
+
+        with self.assertRaises(InvalidEvidenceDecision):
+            review_evidence_submission(
+                evidence=self.evidence,
+                actor=self.moderator,
+                evidence_status=(EvidenceSubmission.EvidenceStatus.REJECTED),
+            )
+
+    def test_rejected_evidence_records_structured_reason(self):
+        ensure_evidence_case(
+            evidence=self.evidence,
+            actor=self.contributor,
+        )
+
+        review_evidence_submission(
+            evidence=self.evidence,
+            actor=self.moderator,
+            evidence_status=(EvidenceSubmission.EvidenceStatus.REJECTED),
+            rejection_reason=(EvidenceSubmission.RejectionReason.UNRELIABLE_SOURCE),
+            moderator_notes=("Publisher cannot be verified."),
+        )
+
+        self.evidence.refresh_from_db()
+
+        self.assertEqual(
+            self.evidence.rejection_reason,
+            (EvidenceSubmission.RejectionReason.UNRELIABLE_SOURCE),
+        )
+
+    def test_verified_decision_clears_old_rejection_reason(self):
+        self.evidence.evidence_status = EvidenceSubmission.EvidenceStatus.REJECTED
+
+        self.evidence.rejection_reason = EvidenceSubmission.RejectionReason.IRRELEVANT
+
+        self.evidence.save(
+            update_fields=[
+                "evidence_status",
+                "rejection_reason",
+            ]
+        )
+
+        ensure_evidence_case(
+            evidence=self.evidence,
+            actor=self.contributor,
+        )
+
+        review_evidence_submission(
+            evidence=self.evidence,
+            actor=self.moderator,
+            evidence_status=(EvidenceSubmission.EvidenceStatus.VERIFIED),
+        )
+
+        self.evidence.refresh_from_db()
+
+        self.assertIsNone(self.evidence.rejection_reason)
+
+    def test_resolved_evidence_case_can_be_reopened_for_review(self):
+        case = ensure_evidence_case(
+            evidence=self.evidence,
+            actor=self.contributor,
+        )
+
+        review_evidence_submission(
+            evidence=self.evidence,
+            actor=self.moderator,
+            evidence_status=(EvidenceSubmission.EvidenceStatus.VERIFIED),
+        )
+
+        review_evidence_submission(
+            evidence=self.evidence,
+            actor=self.second_moderator,
+            evidence_status=(EvidenceSubmission.EvidenceStatus.REJECTED),
+            rejection_reason=(EvidenceSubmission.RejectionReason.MISREPRESENTS_SOURCE),
+        )
+
+        case.refresh_from_db()
+        self.evidence.refresh_from_db()
+
+        self.assertEqual(
+            case.status,
+            ModerationCase.Status.RESOLVED,
+        )
+
+        self.assertEqual(
+            self.evidence.evidence_status,
+            EvidenceSubmission.EvidenceStatus.REJECTED,
+        )
+
+        self.assertTrue(
+            case.events.filter(
+                event_type=(ModerationEvent.EventType.EVIDENCE_REOPENED)
+            ).exists()
+        )
+
+        self.assertEqual(
+            case.events.filter(
+                event_type=(ModerationEvent.EventType.EVIDENCE_VERIFIED)
+            ).count(),
+            1,
+        )
+
+        self.assertEqual(
+            case.events.filter(
+                event_type=(ModerationEvent.EventType.EVIDENCE_REJECTED)
+            ).count(),
+            1,
+        )
+
+    def test_stale_evidence_review_is_rejected(self):
+        ensure_evidence_case(
+            evidence=self.evidence,
+            actor=self.contributor,
+        )
+
+        self.evidence.evidence_status = EvidenceSubmission.EvidenceStatus.VERIFIED
+
+        self.evidence.save(
+            update_fields=[
+                "evidence_status",
+            ]
+        )
+
+        with self.assertRaises(EvidenceReviewConflict):
+            review_evidence_submission(
+                evidence=self.evidence,
+                actor=self.moderator,
+                evidence_status=(EvidenceSubmission.EvidenceStatus.REJECTED),
+                rejection_reason=(EvidenceSubmission.RejectionReason.IRRELEVANT),
+                expected_status=(EvidenceSubmission.EvidenceStatus.UNVERIFIED),
+            )
+
+
+class EvidenceReviewCapabilityTests(APITestCase):
+    def setUp(self):
+        self.contributor = User.objects.create_user(
+            username="partner-evidence-author",
+            email="partner-author@test.com",
+            password="pass1234",
+        )
+
+        self.partner_reviewer = User.objects.create_user(
+            username="partner-reviewer",
+            email="partner-reviewer@test.com",
+            password="pass1234",
+        )
+
+        self.outsider = User.objects.create_user(
+            username="partner-outsider",
+            email="partner-outsider@test.com",
+            password="pass1234",
+        )
+
+        self.organization = Organization.objects.create(
+            name="Evidence Verification Lab",
+            slug="evidence-verification-lab",
+            organization_type=(Organization.OrganizationType.FACT_CHECKING),
+            verification_status=(Organization.VerificationStatus.VERIFIED),
+            partner_status=(Organization.PartnerStatus.ACTIVE),
+        )
+
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=self.partner_reviewer,
+            role=(OrganizationMembership.Role.LEAD_VERIFIER),
+            status=(OrganizationMembership.Status.ACTIVE),
+        )
+
+        self.claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text=("Partner evidence review claim."),
+        )
+
+        self.thread = Thread.objects.create(
+            claim=self.claim,
+            author=self.contributor,
+            caption=("Partner evidence review thread."),
+        )
+
+        self.evidence = EvidenceSubmission.objects.create(
+            thread=self.thread,
+            contributor=self.contributor,
+            evidence_caption=("Partner-reviewed evidence."),
+            evidence_url=("https://example.com/" "partner-evidence"),
+            evidence_type=(EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION),
+            contributor_trust_snapshot=50.0,
+        )
+
+        self.case = ensure_evidence_case(
+            evidence=self.evidence,
+            actor=self.contributor,
+        )
+
+        self.case.organization = self.organization
+
+        self.case.save(
+            update_fields=[
+                "organization",
+                "updated_at",
+            ]
+        )
+
+    def test_partner_reviewer_can_review_own_organization_case(self):
+        client = APIClient()
+
+        client.force_authenticate(user=self.partner_reviewer)
+
+        response = client.patch(
+            reverse(
+                "evidence-verify",
+                kwargs={
+                    "pk": self.evidence.id,
+                },
+            ),
+            {
+                "evidence_status": EvidenceSubmission.EvidenceStatus.VERIFIED,
+                "expected_status": EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+                "moderator_notes": "Source is credible.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.evidence.refresh_from_db()
+
+        self.assertEqual(
+            self.evidence.evidence_status,
+            EvidenceSubmission.EvidenceStatus.VERIFIED,
+        )
+
+    def test_outsider_cannot_review_partner_case(self):
+        client = APIClient()
+
+        client.force_authenticate(user=self.outsider)
+
+        response = client.patch(
+            reverse(
+                "evidence-verify",
+                kwargs={
+                    "pk": self.evidence.id,
+                },
+            ),
+            {
+                "evidence_status": EvidenceSubmission.EvidenceStatus.VERIFIED,
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_reviewer_cannot_review_own_evidence(self):
+        own_evidence = EvidenceSubmission.objects.create(
+            thread=self.thread,
+            contributor=(self.partner_reviewer),
+            evidence_caption=("Reviewer-owned evidence."),
+            evidence_url=("https://example.com/" "reviewer-evidence"),
+            contributor_trust_snapshot=50.0,
+        )
+
+        own_case = ensure_evidence_case(
+            evidence=own_evidence,
+            actor=self.partner_reviewer,
+        )
+
+        own_case.organization = self.organization
+
+        own_case.save(
+            update_fields=[
+                "organization",
+                "updated_at",
+            ]
+        )
+
+        client = APIClient()
+
+        client.force_authenticate(user=self.partner_reviewer)
+
+        response = client.patch(
+            reverse(
+                "evidence-verify",
+                kwargs={
+                    "pk": own_evidence.id,
+                },
+            ),
+            {
+                "evidence_status": EvidenceSubmission.EvidenceStatus.VERIFIED,
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_rejection_requires_structured_reason(self):
+        client = APIClient()
+
+        client.force_authenticate(user=self.partner_reviewer)
+
+        response = client.patch(
+            reverse(
+                "evidence-verify",
+                kwargs={
+                    "pk": self.evidence.id,
+                },
+            ),
+            {
+                "evidence_status": EvidenceSubmission.EvidenceStatus.REJECTED,
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    def test_partner_can_read_scoped_evidence_queue(self):
+        client = APIClient()
+
+        client.force_authenticate(user=self.partner_reviewer)
+
+        response = client.get(
+            reverse("moderation_evidence_queue"),
+            {
+                "organization_id": str(self.organization.id),
+                "status": EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            response.data["count"],
+            1,
+        )
+
+    def test_partner_queue_requires_organization_scope(self):
+        client = APIClient()
+
+        client.force_authenticate(user=self.partner_reviewer)
+
+        response = client.get(reverse("moderation_evidence_queue"))
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    def test_evidence_queue_rejects_invalid_pagination(self):
+        self.partner_reviewer.profile.role = UserProfile.Role.MOD
+
+        self.partner_reviewer.profile.save(update_fields=["role"])
+
+        client = APIClient()
+
+        client.force_authenticate(user=self.partner_reviewer)
+
+        response = client.get(
+            reverse("moderation_evidence_queue"),
+            {
+                "limit": "not-a-number",
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        response = client.get(
+            reverse("moderation_evidence_queue"),
+            {
+                "limit": "101",
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+
 class OptionalFactCheckAuthTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(
@@ -2046,13 +2243,9 @@ class OptionalFactCheckAuthTests(APITestCase):
             email="detector@test.com",
             password="pass1234",
         )
-        self.user_profile = UserProfile.objects.get(
-            user=self.user
-        )
+        self.user_profile = UserProfile.objects.get(user=self.user)
         self.user_profile.trust_score = 50.0
-        self.user_profile.save(
-            update_fields=["trust_score"]
-        )
+        self.user_profile.save(update_fields=["trust_score"])
 
         self.auth_client = APIClient()
         self.auth_client.force_authenticate(user=self.user)
@@ -2280,6 +2473,7 @@ class CorsPolicyTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertIsNone(res.headers.get("Access-Control-Allow-Origin"))
 
+
 class VerificationEvidenceModelTests(APITestCase):
 
     def setUp(self):
@@ -2378,6 +2572,8 @@ class VerificationEvidenceModelTests(APITestCase):
         self.assertEqual(evidence.evidence_source, source)
         self.assertEqual(evidence.stance, "SUPPORTS")
         self.assertEqual(evidence.evidence_role, "SECONDARY")
+
+
 class UserFactCheckLibraryTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(
@@ -2432,13 +2628,9 @@ class UserFactCheckLibraryTests(APITestCase):
             claim=self.claim_other_user,
         )
 
-        self.user.profile.saved_claims.add(
-            self.claim_fact
-        )
+        self.user.profile.saved_claims.add(self.claim_fact)
 
-        self.url = reverse(
-            "user_fact_check_library"
-        )
+        self.url = reverse("user_fact_check_library")
 
     def test_library_requires_authentication(self):
         client = APIClient()
@@ -2461,10 +2653,7 @@ class UserFactCheckLibraryTests(APITestCase):
             status.HTTP_200_OK,
         )
 
-        returned_ids = {
-            item["id"]
-            for item in response.data["results"]
-        }
+        returned_ids = {item["id"] for item in response.data["results"]}
 
         self.assertIn(
             str(self.claim_fact.id),
@@ -2502,9 +2691,7 @@ class UserFactCheckLibraryTests(APITestCase):
             str(self.claim_fact.id),
         )
 
-        self.assertTrue(
-            response.data["results"][0]["is_saved"]
-        )
+        self.assertTrue(response.data["results"][0]["is_saved"])
 
     def test_response_includes_collection_counts(self):
         response = self.client.get(
@@ -2658,32 +2845,22 @@ class UserFactCheckLibraryTests(APITestCase):
             {"view": "history"},
         )
 
-        self.assertIsNotNone(
-            response.data["results"][0][
-                "activity_at"
-            ]
-        )
+        self.assertIsNotNone(response.data["results"][0]["activity_at"])
 
     def test_toggle_save_returns_authoritative_count(self):
         toggle_url = reverse(
             "toggle_save_claim",
-            args=[
-                str(self.claim_misleading.id)
-            ],
+            args=[str(self.claim_misleading.id)],
         )
 
-        response = self.client.post(
-            toggle_url
-        )
+        response = self.client.post(toggle_url)
 
         self.assertEqual(
             response.status_code,
             status.HTTP_200_OK,
         )
 
-        self.assertTrue(
-            response.data["is_saved"]
-        )
+        self.assertTrue(response.data["is_saved"])
 
         self.assertEqual(
             response.data["saved_count"],
@@ -2691,31 +2868,23 @@ class UserFactCheckLibraryTests(APITestCase):
         )
 
         self.assertTrue(
-            self.user.profile.saved_claims.filter(
-                id=self.claim_misleading.id
-            ).exists()
+            self.user.profile.saved_claims.filter(id=self.claim_misleading.id).exists()
         )
 
     def test_toggle_save_can_unsave(self):
         toggle_url = reverse(
             "toggle_save_claim",
-            args=[
-                str(self.claim_fact.id)
-            ],
+            args=[str(self.claim_fact.id)],
         )
 
-        response = self.client.post(
-            toggle_url
-        )
+        response = self.client.post(toggle_url)
 
         self.assertEqual(
             response.status_code,
             status.HTTP_200_OK,
         )
 
-        self.assertFalse(
-            response.data["is_saved"]
-        )
+        self.assertFalse(response.data["is_saved"])
 
         self.assertEqual(
             response.data["saved_count"],
@@ -2723,9 +2892,7 @@ class UserFactCheckLibraryTests(APITestCase):
         )
 
         self.assertFalse(
-            self.user.profile.saved_claims.filter(
-                id=self.claim_fact.id
-            ).exists()
+            self.user.profile.saved_claims.filter(id=self.claim_fact.id).exists()
         )
 
     def test_history_is_paginated(self):
@@ -2734,9 +2901,7 @@ class UserFactCheckLibraryTests(APITestCase):
                 claim_type=Claim.ClaimType.TEXT,
                 context_text=f"Pagination claim {index}",
                 ai_verdict="FACT",
-                verified_via=(
-                    Claim.VerificationSource.AI_EXTENSION
-                ),
+                verified_via=(Claim.VerificationSource.AI_EXTENSION),
             )
 
             ClaimCheckHistory.objects.create(
@@ -2763,9 +2928,7 @@ class UserFactCheckLibraryTests(APITestCase):
             10,
         )
 
-        self.assertTrue(
-            response.data["has_next"]
-        )
+        self.assertTrue(response.data["has_next"])
 
         self.assertEqual(
             response.data["page"],

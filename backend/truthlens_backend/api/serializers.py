@@ -665,6 +665,7 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
             "downvotes",
             "my_vote",
             "weighted_score",
+            "rejection_reason",
         ]
         read_only_fields = [
             "id",
@@ -676,6 +677,7 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
             "moderator_notes",
             "thread",
             "evidence_status",
+            "rejection_reason",
         ]
 
     def validate(self, attrs):
