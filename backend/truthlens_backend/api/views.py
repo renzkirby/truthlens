@@ -35,7 +35,6 @@ from rest_framework.exceptions import (
     ValidationError,
 )
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework.exceptions import NotFound
 from rest_framework.pagination import CursorPagination
 from rest_framework.views import APIView
 from datetime import timedelta
@@ -105,7 +104,6 @@ from .adjudication_service import (
     get_latest_adjudication_case,
     has_adjudication_conflict,
     issue_adjudication_decision,
-    get_latest_adjudication_case,
 )
 from .trust_service import (
     calculate_trust_components,
@@ -1128,9 +1126,9 @@ def moderation_resolve_thread(
     """
     Legacy thread-addressed adjudication endpoint.
 
-    The authoritative decision is now Claim-centric.
-    Thread moderation fields are maintained only as
-    temporary compatibility mirrors.
+    The authoritative decision is Claim-centric.
+    Thread moderation fields remain temporary
+    compatibility mirrors only.
 
     Thread.status is intentionally not changed.
     Publication is intentionally not performed here.
@@ -1143,84 +1141,6 @@ def moderation_resolve_thread(
 
     claim = thread.claim
 
-    serializer = ModerationDecisionSerializer(data=request.data)
-
-    serializer.is_valid(raise_exception=True)
-
-    system_moderator = _has_moderator_role(request.user)
-
-    case = get_latest_adjudication_case(claim)
-
-    if case is None:
-        if not system_moderator:
-            return Response(
-                {"detail": "No adjudication case " "is available for this " "claim."},
-                status=(status.HTTP_403_FORBIDDEN),
-            )
-
-        case = ensure_adjudication_case(
-            claim=claim,
-            actor=request.user,
-        )
-
-    if not system_moderator:
-        if not has_case_capability(
-            request.user,
-            case,
-            PartnerCapability.ADJUDICATE,
-        ):
-            return Response(
-                {
-                    "detail": "You do not have "
-                    "permission to adjudicate "
-                    "this claim."
-                },
-                status=(status.HTTP_403_FORBIDDEN),
-            )
-
-    if has_adjudication_conflict(
-        request.user,
-        claim,
-    ):
-        return Response(
-            {
-                "detail": "You cannot adjudicate a "
-                "claim in which you have a "
-                "direct contribution."
-            },
-            status=(status.HTTP_403_FORBIDDEN),
-        )
-
-    verification_run = None
-
-    verification_run_id = serializer.validated_data.get("verification_run_id")
-
-    if verification_run_id:
-        verification_run = get_object_or_404(
-            VerificationRun,
-            id=verification_run_id,
-            claim=claim,
-        )
-
-    moderator_verdict = serializer.validated_data["moderator_verdict"]
-
-    moderator_notes = serializer.validated_data["moderator_notes"]
-
-    canonical_claim = serializer.validated_data["canonical_claim"]
-
-    expected_revision = serializer.validated_data.get("expected_revision")
-
-    contributor_ids = list(
-        EvidenceSubmission.objects.filter(
-            thread__claim=claim,
-        )
-        .values_list(
-            "contributor_id",
-            flat=True,
-        )
-        .distinct()
-    )
-
     try:
         with transaction.atomic():
             decision = _execute_claim_adjudication(
@@ -1230,8 +1150,10 @@ def moderation_resolve_thread(
 
     except AdjudicationConflict as error:
         return Response(
-            {"detail": str(error)},
-            status=status.HTTP_409_CONFLICT,
+            {
+                "detail": str(error),
+            },
+            status=(status.HTTP_409_CONFLICT),
         )
 
     except (
@@ -1239,8 +1161,10 @@ def moderation_resolve_thread(
         ModerationCaseError,
     ) as error:
         return Response(
-            {"detail": str(error)},
-            status=status.HTTP_400_BAD_REQUEST,
+            {
+                "detail": str(error),
+            },
+            status=(status.HTTP_400_BAD_REQUEST),
         )
 
     thread.refresh_from_db()

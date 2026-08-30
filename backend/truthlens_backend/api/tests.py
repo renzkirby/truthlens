@@ -2962,6 +2962,55 @@ class AdjudicationApiFoundationTests(APITestCase):
             AdjudicationDecision.Verdict.FAKE,
         )
 
+    def test_conflicted_legacy_adjudication_does_not_leave_case_behind(
+        self,
+    ):
+        conflicted_claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text=("Claim authored for conflict " "rollback testing."),
+            ai_verdict="FAKE",
+        )
+
+        conflicted_thread = Thread.objects.create(
+            claim=conflicted_claim,
+            author=self.moderator,
+            caption=("Moderator-authored thread."),
+            status=Thread.Status.OPEN,
+        )
+
+        url = reverse(
+            "moderation_resolve_thread",
+            kwargs={
+                "thread_id": conflicted_thread.id,
+            },
+        )
+
+        response = self.client.post(
+            url,
+            self._valid_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+        self.assertFalse(
+            ModerationCase.objects.filter(
+                claim=conflicted_claim,
+                case_type=(ModerationCase.CaseType.ADJUDICATION),
+            ).exists()
+        )
+
+        self.assertFalse(
+            AdjudicationDecision.objects.filter(claim=conflicted_claim).exists()
+        )
+
+        conflicted_claim.refresh_from_db()
+
+        self.assertIsNone(conflicted_claim.final_verdict)
+
 
 class AdjudicationReadinessAndQueueTests(APITestCase):
     def setUp(self):
