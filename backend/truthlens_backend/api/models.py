@@ -7,6 +7,7 @@ from django.conf import settings
 from django.contrib.postgres.search import SearchVectorField, SearchVector
 from django.contrib.postgres.indexes import GinIndex
 from pgvector.django import VectorField, HnswIndex
+from django.utils import timezone
 import uuid
 
 
@@ -30,7 +31,7 @@ class UserProfile(models.Model):
     class Role(models.TextChoices):
         USER = "USER", "User"
         MOD = "MOD", "Moderator"
-    
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.USER)
@@ -42,8 +43,12 @@ class UserProfile(models.Model):
     is_email_verified = models.BooleanField(default=False)
     email_verification_token = models.CharField(max_length=64, blank=True, null=True)
     email_verification_sent_at = models.DateTimeField(blank=True, null=True)
-    followers = models.ManyToManyField(User, related_name="following_profiles", blank=True)
-    saved_claims = models.ManyToManyField('Claim', related_name='saved_by_users', blank=True)
+    followers = models.ManyToManyField(
+        User, related_name="following_profiles", blank=True
+    )
+    saved_claims = models.ManyToManyField(
+        "Claim", related_name="saved_by_users", blank=True
+    )
     has_completed_onboarding = models.BooleanField(default=False)
 
     def __str__(self):
@@ -279,9 +284,7 @@ class OrganizationMembership(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name=(
-            "approved_organization_memberships"
-        ),
+        related_name=("approved_organization_memberships"),
     )
 
     class Meta:
@@ -296,9 +299,7 @@ class OrganizationMembership(models.Model):
                     "organization",
                     "user",
                 ],
-                name=(
-                    "unique_user_organization_membership"
-                ),
+                name=("unique_user_organization_membership"),
             ),
         ]
 
@@ -320,11 +321,7 @@ class OrganizationMembership(models.Model):
         ]
 
     def __str__(self):
-        return (
-            f"{self.user.username} - "
-            f"{self.organization.name} "
-            f"({self.role})"
-        )
+        return f"{self.user.username} - " f"{self.organization.name} " f"({self.role})"
 
 
 class Claim(models.Model):
@@ -342,9 +339,11 @@ class Claim(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
-    claim_type = models.CharField(max_length=20, choices=ClaimType.choices, default=ClaimType.TEXT)
+    claim_type = models.CharField(
+        max_length=20, choices=ClaimType.choices, default=ClaimType.TEXT
+    )
     media_url = models.CharField(max_length=2000, blank=True, null=True)
-    image = models.ImageField(upload_to='claims/images/', null=True, blank=True)
+    image = models.ImageField(upload_to="claims/images/", null=True, blank=True)
     media_hash = models.CharField(max_length=64, blank=True, null=True)
     url_link = models.URLField(max_length=2000, blank=True, null=True)
     context_text = models.TextField(blank=True, null=True)
@@ -371,24 +370,29 @@ class Claim(models.Model):
 
     # Deduplication fingerprint for claim matching / resolution cache
     claim_fingerprint = models.CharField(
-        max_length=128, db_index=True, blank=True, null=True,
-        help_text="Canonical fingerprint for deduplication (pHash for images, normalized URL hash, or text hash)"
+        max_length=128,
+        db_index=True,
+        blank=True,
+        null=True,
+        help_text="Canonical fingerprint for deduplication (pHash for images, normalized URL hash, or text hash)",
     )
 
     # Semantic similarity embedding for paraphrase detection
     claim_embedding = VectorField(
-        dimensions=384, null=True, blank=True,
-        help_text="384-dim embedding vector from all-MiniLM-L6-v2 for semantic claim matching"
+        dimensions=384,
+        null=True,
+        blank=True,
+        help_text="384-dim embedding vector from all-MiniLM-L6-v2 for semantic claim matching",
     )
 
     def __str__(self):
         return f"Claim {self.id} - Type: {self.claim_type} - Final Verdict: {self.final_verdict or self.ai_verdict}"
-    
+
     def compute_final_verdict(self):
         """
         Compute final verdict based on verified evidence in all threads for this claim.
         Returns the verdict that should be set as final_verdict.
-        
+
         Logic:
         - If all verified evidence SUPPORTS → FACT
         - If all verified evidence CONTRADICTS → FAKE
@@ -397,37 +401,45 @@ class Claim(models.Model):
         - If no verified evidence → no change
         """
         from django.db.models import Q
-        
+
         # Get all threads for this claim
         threads = self.threads.all()
-        
+
         # Get all VERIFIED evidence submissions for these threads
         verified_evidence = EvidenceSubmission.objects.filter(
-            thread__in=threads,
-            evidence_status='VERIFIED'
-        ).select_related('thread')
-        
+            thread__in=threads, evidence_status="VERIFIED"
+        ).select_related("thread")
+
         if not verified_evidence.exists():
             return None
-        
+
         # Count evidence types
-        supports_count = verified_evidence.filter(evidence_type='SUPPORTS CLAIM').count()
-        contradicts_count = verified_evidence.filter(evidence_type='CONTRADICTS CLAIM').count()
-        context_count = verified_evidence.filter(evidence_type='PROVIDES CONTEXT').count()
-        verification_count = verified_evidence.filter(evidence_type='SOURCE VERIFICATION').count()
-        
+        supports_count = verified_evidence.filter(
+            evidence_type="SUPPORTS CLAIM"
+        ).count()
+        contradicts_count = verified_evidence.filter(
+            evidence_type="CONTRADICTS CLAIM"
+        ).count()
+        context_count = verified_evidence.filter(
+            evidence_type="PROVIDES CONTEXT"
+        ).count()
+        verification_count = verified_evidence.filter(
+            evidence_type="SOURCE VERIFICATION"
+        ).count()
+
         # Determine verdict based on evidence
         if contradicts_count == 0 and supports_count > 0:
-            return 'FACT'  # All verified evidence supports the claim
+            return "FACT"  # All verified evidence supports the claim
         elif supports_count == 0 and contradicts_count > 0:
-            return 'FAKE'  # All verified evidence contradicts the claim
+            return "FAKE"  # All verified evidence contradicts the claim
         elif supports_count > 0 and contradicts_count > 0:
-            return 'MISLEADING'  # Mixed evidence - partially accurate
+            return "MISLEADING"  # Mixed evidence - partially accurate
         else:
             return None  # Not enough decisive evidence
 
     class Meta:
         indexes = _claim_vector_indexes()
+
 
 class CanonicalSource(models.Model):
     id = models.UUIDField(
@@ -462,6 +474,7 @@ class CanonicalSource(models.Model):
     def __str__(self):
         return self.name
 
+
 class EvidenceSource(models.Model):
     id = models.UUIDField(
         primary_key=True,
@@ -477,9 +490,7 @@ class EvidenceSource(models.Model):
         related_name="evidence_sources",
     )
 
-    provider = models.CharField(
-        max_length=50
-    )
+    provider = models.CharField(max_length=50)
 
     url = models.URLField(
         max_length=2000,
@@ -562,6 +573,7 @@ class EvidenceSource(models.Model):
     def __str__(self):
         return self.title or self.url or str(self.id)
 
+
 class VerificationRun(models.Model):
     class Status(models.TextChoices):
         PENDING = "PENDING", "Pending"
@@ -601,9 +613,7 @@ class VerificationRun(models.Model):
     pipeline_version = models.CharField(
         max_length=32,
         default="1.0.0",
-        help_text=(
-            "Version of the verification pipeline used for this run."
-        ),
+        help_text=("Version of the verification pipeline used for this run."),
     )
 
     started_at = models.DateTimeField(
@@ -642,6 +652,7 @@ class VerificationRun(models.Model):
 
     def __str__(self):
         return f"VerificationRun {self.id} - {self.status}"
+
 
 class VerificationEvidence(models.Model):
     class Stance(models.TextChoices):
@@ -712,28 +723,33 @@ class VerificationEvidence(models.Model):
                 fields=["verification_run", "evidence_source"],
                 name="unique_evidence_per_verification_run",
             )
-        ]   
+        ]
         ordering = ["-created_at"]
 
     def __str__(self):
-        return (
-            f"VerificationEvidence {self.id} "
-            f"- {self.stance}"
-        )    
+        return f"VerificationEvidence {self.id} " f"- {self.stance}"
+
 
 class Thread(models.Model):
     class Status(models.TextChoices):
         PENDING = "PENDING", "Pending"
         OPEN = "OPEN", "Open"
         CLOSED = "CLOSED", "Closed"
-        REJECTED = "REJECTED", "Rejected"    
+        REJECTED = "REJECTED", "Rejected"
+
     class EscalationReason(models.TextChoices):
-        INCORRECT_VERDICT = "INCORRECT_VERDICT", "AI gave an incorrect or unverified verdict"
+        INCORRECT_VERDICT = (
+            "INCORRECT_VERDICT",
+            "AI gave an incorrect or unverified verdict",
+        )
         LOW_CONFIDENCE = "LOW_CONFIDENCE", "AI confidence score is too low"
-        MISSING_CONTEXT = "MISSING_CONTEXT", "The context provided is incomplete or missing"
+        MISSING_CONTEXT = (
+            "MISSING_CONTEXT",
+            "The context provided is incomplete or missing",
+        )
         OUTDATED_INFO = "OUTDATED_INFO", "The AI relied on outdated information or news"
         OTHER = "OTHER", "Other"
-    
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     display_id = models.PositiveIntegerField(unique=True, editable=False, null=True)
     claim = models.ForeignKey(Claim, on_delete=models.CASCADE, related_name="threads")
@@ -743,15 +759,18 @@ class Thread(models.Model):
     caption = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=20, blank=True, null=True, default="OPEN")
     # flag_reason = models.CharField(max_length=20, choices=FlagReason.choices, blank=True, null=True)
-    escalation_reason = models.CharField(max_length=20, choices=EscalationReason.choices, blank=True, null=True)
+    escalation_reason = models.CharField(
+        max_length=20, choices=EscalationReason.choices, blank=True, null=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     moderator_verdict = models.CharField(max_length=20, blank=True, null=True)
     moderator_notes = models.TextField(blank=True, null=True)
     moderated_by = models.ForeignKey(
         "auth.User",
         on_delete=models.SET_NULL,
-        null=True, blank=True,
-        related_name="moderated_threads"
+        null=True,
+        blank=True,
+        related_name="moderated_threads",
     )
     moderated_at = models.DateTimeField(null=True, blank=True)
 
@@ -761,8 +780,12 @@ class Thread(models.Model):
 
 class ClaimCheckHistory(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey("auth.User", on_delete=models.CASCADE, related_name="claim_check_history")
-    claim = models.ForeignKey(Claim, on_delete=models.CASCADE, related_name="check_history")
+    user = models.ForeignKey(
+        "auth.User", on_delete=models.CASCADE, related_name="claim_check_history"
+    )
+    claim = models.ForeignKey(
+        Claim, on_delete=models.CASCADE, related_name="check_history"
+    )
     checked_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -771,13 +794,14 @@ class ClaimCheckHistory(models.Model):
     def __str__(self):
         return f"ClaimCheckHistory {self.id} - User: {self.user.username} - Claim ID: {self.claim.id}"
 
+
 class ThreadFlag(models.Model):
     class Reason(models.TextChoices):
         INAPPROPRIATE = "INAPPROPRIATE", "Inappropriate Content"
         SPAM = "SPAM", "Spam"
         HARASSMENT = "HARASSMENT", "Harassment"
         OTHER = "OTHER", "Other"
-    
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     thread = models.ForeignKey(Thread, on_delete=models.CASCADE, related_name="flags")
     flagged_by = models.ForeignKey(
@@ -799,7 +823,7 @@ class ThreadFlag(models.Model):
         blank=True,
         related_name="reports",
     )
-    
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
@@ -817,7 +841,9 @@ class FlagResolutionLog(models.Model):
         ESCALATE = "ESCALATE", "Escalate"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    thread = models.ForeignKey(Thread, on_delete=models.CASCADE, related_name="flag_resolution_logs")
+    thread = models.ForeignKey(
+        Thread, on_delete=models.CASCADE, related_name="flag_resolution_logs"
+    )
     flagged_by = models.ForeignKey(
         "auth.User", on_delete=models.CASCADE, related_name="resolved_thread_flags"
     )
@@ -827,12 +853,17 @@ class FlagResolutionLog(models.Model):
     resolved_action = models.CharField(max_length=20, choices=ResolutionAction.choices)
     is_valid_report = models.BooleanField(default=False)
     resolved_by = models.ForeignKey(
-        "auth.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="resolved_flags_moderated"
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="resolved_flags_moderated",
     )
     resolved_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-resolved_at"]
+
 
 class EvidenceSubmission(models.Model):
     class EvidenceType(models.TextChoices):
@@ -840,7 +871,7 @@ class EvidenceSubmission(models.Model):
         SUPPORTS = "SUPPORTS CLAIM", "Supports Claim"
         PROVIDES_CONTEXT = "PROVIDES CONTEXT", "Provides Context"
         SOURCE_VERIFICATION = "SOURCE VERIFICATION", "Source Verification"
-    
+
     class EvidenceStatus(models.TextChoices):
         UNVERIFIED = "UNVERIFIED", "Unverified"
         VERIFIED = "VERIFIED", "Verified"
@@ -903,12 +934,23 @@ class EvidenceSubmission(models.Model):
     contributor_trust_snapshot = models.FloatField(blank=True, null=True)
     submitted_at = models.DateTimeField(auto_now_add=True)
     verified_by = models.ForeignKey(
-        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="verified_evidence", help_text="Moderator who verified this evidence"
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="verified_evidence",
+        help_text="Moderator who verified this evidence",
     )
     verified_at = models.DateTimeField(
-        null=True, blank=True, help_text="Timestamp when evidence was verified by moderator"
+        null=True,
+        blank=True,
+        help_text="Timestamp when evidence was verified by moderator",
     )
-    moderator_notes = models.TextField(blank=True, null=True, help_text="Notes from moderator why evidence was verified/rejected")
+    moderator_notes = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Notes from moderator why evidence was verified/rejected",
+    )
     rejection_reason = models.CharField(
         max_length=30,
         choices=RejectionReason.choices,
@@ -1069,36 +1111,29 @@ class ModerationCase(models.Model):
 
         if expected_target is None:
             raise ValidationError(
-                {
-                    "case_type":
-                        "This moderation case does not have its required target."
-                }
+                {"case_type": "This moderation case does not have its required target."}
             )
 
         if self.case_type == self.CaseType.SAFETY:
             invalid_extra_target = (
-                self.claim_id is not None
-                or self.evidence_submission_id is not None
+                self.claim_id is not None or self.evidence_submission_id is not None
             )
 
         elif self.case_type == self.CaseType.EVIDENCE:
             invalid_extra_target = (
-                self.thread_id is not None
-                or self.claim_id is not None
+                self.thread_id is not None or self.claim_id is not None
             )
 
         else:
             invalid_extra_target = (
-                self.thread_id is not None
-                or self.evidence_submission_id is not None
+                self.thread_id is not None or self.evidence_submission_id is not None
             )
 
         if invalid_extra_target:
             raise ValidationError(
                 {
-                    "case_type":
-                        "A moderation case must use only the target "
-                        "appropriate for its case type."
+                    "case_type": "A moderation case must use only the target "
+                    "appropriate for its case type."
                 }
             )
 
@@ -1167,10 +1202,7 @@ class ModerationCase(models.Model):
         ]
 
     def __str__(self):
-        return (
-            f"{self.get_case_type_display()} "
-            f"{self.id} - {self.status}"
-        )
+        return f"{self.get_case_type_display()} " f"{self.id} - {self.status}"
 
 
 class ModerationEvent(models.Model):
@@ -1333,9 +1365,194 @@ class ModerationEvent(models.Model):
         )
 
     def __str__(self):
+        return f"{self.event_type} - " f"Case {self.case_id}"
+
+
+class AdjudicationDecision(models.Model):
+    class Verdict(models.TextChoices):
+        FACT = "FACT", "Fact"
+        FAKE = "FAKE", "Fake"
+        MISLEADING = "MISLEADING", "Misleading"
+        SATIRE = "SATIRE", "Satire"
+        UNVERIFIED = "UNVERIFIED", "Unverified"
+
+    class DecisionSource(models.TextChoices):
+        HUMAN_REVIEW = (
+            "HUMAN_REVIEW",
+            "Human Review",
+        )
+        LEGACY_MIGRATION = (
+            "LEGACY_MIGRATION",
+            "Legacy Migration",
+        )
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    claim = models.ForeignKey(
+        Claim,
+        on_delete=models.PROTECT,
+        related_name="adjudication_decisions",
+    )
+
+    moderation_case = models.ForeignKey(
+        ModerationCase,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="adjudication_decisions",
+    )
+
+    verdict = models.CharField(
+        max_length=20,
+        choices=Verdict.choices,
+    )
+
+    canonical_claim = models.TextField(
+        blank=True,
+    )
+
+    rationale = models.TextField(
+        blank=True,
+    )
+
+    decided_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="adjudication_decisions",
+    )
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="adjudication_decisions",
+    )
+
+    verification_run = models.ForeignKey(
+        VerificationRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="adjudication_decisions",
+    )
+
+    ai_verdict_snapshot = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+    )
+
+    ai_confidence_snapshot = models.FloatField(
+        null=True,
+        blank=True,
+    )
+
+    ai_summary_snapshot = models.TextField(
+        null=True,
+        blank=True,
+    )
+
+    ai_pipeline_version_snapshot = models.CharField(
+        max_length=32,
+        null=True,
+        blank=True,
+    )
+
+    decision_source = models.CharField(
+        max_length=30,
+        choices=DecisionSource.choices,
+        default=DecisionSource.HUMAN_REVIEW,
+    )
+
+    revision_number = models.PositiveIntegerField(
+        default=1,
+    )
+
+    supersedes = models.OneToOneField(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="superseded_by",
+    )
+
+    is_current = models.BooleanField(
+        default=True,
+        db_index=True,
+    )
+
+    decided_at = models.DateTimeField(
+        default=timezone.now,
+    )
+
+    class Meta:
+        ordering = [
+            "-decided_at",
+        ]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["claim"],
+                condition=Q(is_current=True),
+                name=("uniq_current_adjudication_" "decision_claim"),
+            ),
+            models.UniqueConstraint(
+                fields=[
+                    "claim",
+                    "revision_number",
+                ],
+                name=("uniq_adjudication_" "claim_revision"),
+            ),
+        ]
+
+        indexes = [
+            models.Index(
+                fields=[
+                    "claim",
+                    "is_current",
+                ],
+                name="adj_dec_claim_current_idx",
+            ),
+            models.Index(
+                fields=[
+                    "organization",
+                    "-decided_at",
+                ],
+                name="adj_dec_org_time_idx",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+
+        if self.supersedes_id and self.supersedes.claim_id != self.claim_id:
+            raise ValidationError(
+                {
+                    "supersedes": "An adjudication decision "
+                    "may only supersede a "
+                    "decision for the same claim."
+                }
+            )
+
+    @property
+    def ai_agrees(self):
+        if not self.ai_verdict_snapshot:
+            return None
+
+        return self.ai_verdict_snapshot == self.verdict
+
+    def __str__(self):
         return (
-            f"{self.event_type} - "
-            f"Case {self.case_id}"
+            f"{self.verdict} - "
+            f"Claim {self.claim_id} "
+            f"(revision {self.revision_number})"
         )
 
 
@@ -1376,35 +1593,47 @@ class ThreadComment(models.Model):
     def __str__(self):
         return f"ThreadComment {self.id} - Thread ID: {self.thread.id} - Commenter: {self.commenter.username}"
 
+
 class OfficialFactCheck(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
+
     # 1. The Core Data (ClaimReview Standard)
     canonical_claim = models.TextField(
         help_text="A clean, third-person statement of the rumor (e.g., 'The Pope wore a white puffer jacket.')"
     )
-    verdict = models.CharField(max_length=20) # FACT, FAKE, MISLEADING, SATIRE
-    summary = models.TextField(help_text="The official explanation approved by a moderator.")
-    sources = models.JSONField(default=list, blank=True, help_text="List of verified URL strings.")
-    
+    verdict = models.CharField(max_length=20)  # FACT, FAKE, MISLEADING, SATIRE
+    summary = models.TextField(
+        help_text="The official explanation approved by a moderator."
+    )
+    sources = models.JSONField(
+        default=list, blank=True, help_text="List of verified URL strings."
+    )
+
     # 2. Hybrid Search Fields
     embedding = VectorField(
-        dimensions=384, null=True, blank=True, 
-        help_text="Sentence transformer embedding for Semantic Search"
+        dimensions=384,
+        null=True,
+        blank=True,
+        help_text="Sentence transformer embedding for Semantic Search",
     )
     search_vector = SearchVectorField(
-        null=True, blank=True, 
-        help_text="PostgreSQL tsvector for BM25 Keyword Search"
+        null=True, blank=True, help_text="PostgreSQL tsvector for BM25 Keyword Search"
     )
 
     # 3. Metadata
     created_at = models.DateTimeField(auto_now_add=True)
     published_by = models.ForeignKey(
-        "auth.User", on_delete=models.SET_NULL, null=True, related_name="published_fact_checks"
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="published_fact_checks",
     )
     source_thread = models.ForeignKey(
-        'Thread', on_delete=models.SET_NULL, null=True, blank=True,
-        help_text="Links back to the community thread if auto-published."
+        "Thread",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Links back to the community thread if auto-published.",
     )
 
     class Meta:
@@ -1425,7 +1654,8 @@ class OfficialFactCheck(models.Model):
         if self.canonical_claim:
             # We assign Weight 'A' to the claim, and 'B' to the summary so keywords in the claim rank higher.
             OfficialFactCheck.objects.filter(pk=self.pk).update(
-                search_vector=SearchVector('canonical_claim', weight='A') + SearchVector('summary', weight='B')
+                search_vector=SearchVector("canonical_claim", weight="A")
+                + SearchVector("summary", weight="B")
             )
 
     def __str__(self):

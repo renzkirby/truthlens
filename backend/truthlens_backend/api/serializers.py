@@ -1,15 +1,28 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Claim, Thread, UserProfile, EvidenceSubmission, Vote, ThreadComment, ThreadFlag
+from .models import (
+    Claim,
+    Thread,
+    UserProfile,
+    EvidenceSubmission,
+    Vote,
+    ThreadComment,
+    ThreadFlag,
+    AdjudicationDecision,
+    ModerationCase,
+)
 from .services import validate_public_url, check_url_threat_reputation
 from .trust_service import calculate_trust_components
 from django.contrib.auth.password_validation import validate_password
 import json, ast
 
+
 class PublicIdentityProfileSerializer(serializers.ModelSerializer):
     trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
     role = serializers.CharField(source="profile.role", read_only=True)
-    organization_name = serializers.CharField(source="profile.organization_name", read_only=True)
+    organization_name = serializers.CharField(
+        source="profile.organization_name", read_only=True
+    )
     avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
     bio = serializers.CharField(source="profile.bio", read_only=True)
     followers_count = serializers.SerializerMethodField()
@@ -130,6 +143,7 @@ class PublicModeratorVerdictSerializer(serializers.ModelSerializer):
             "moderated_at",
         ]
 
+
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
         write_only=True,
@@ -144,9 +158,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         value = value.strip()
 
         if User.objects.filter(username__iexact=value).exists():
-            raise serializers.ValidationError(
-                "This username is already taken."
-            )
+            raise serializers.ValidationError("This username is already taken.")
 
         return value
 
@@ -163,6 +175,7 @@ class RegisterSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         return User.objects.create_user(**validated_data)
 
+
 class UserSerializer(serializers.ModelSerializer):
     trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
     is_email_verified = serializers.BooleanField(
@@ -174,7 +187,9 @@ class UserSerializer(serializers.ModelSerializer):
     )
     date_joined = serializers.DateTimeField(read_only=True)
     role = serializers.CharField(source="profile.role", read_only=True)
-    organization_name = serializers.CharField(source="profile.organization_name", read_only=True)
+    organization_name = serializers.CharField(
+        source="profile.organization_name", read_only=True
+    )
     followers_count = serializers.SerializerMethodField()
     following_count = serializers.SerializerMethodField()
     is_following = serializers.SerializerMethodField()
@@ -207,10 +222,10 @@ class UserSerializer(serializers.ModelSerializer):
             "date_joined",
             "role",
             "organization_name",
-            "followers_count", 
-            "following_count", 
+            "followers_count",
+            "following_count",
             "is_following",
-            "avatar_url", 
+            "avatar_url",
             "bio",
         ]
 
@@ -218,7 +233,9 @@ class UserSerializer(serializers.ModelSerializer):
 class PublicUserSearchSerializer(serializers.ModelSerializer):
     trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
     role = serializers.CharField(source="profile.role", read_only=True)
-    organization_name = serializers.CharField(source="profile.organization_name", read_only=True)
+    organization_name = serializers.CharField(
+        source="profile.organization_name", read_only=True
+    )
     avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
     bio = serializers.CharField(source="profile.bio", read_only=True)
     followers_count = serializers.SerializerMethodField()
@@ -258,9 +275,18 @@ class CurrentUserSerializer(UserWithTrustBreakdownSerializer):
 class UserProfileSerializer(serializers.ModelSerializer):
     trust_score = serializers.FloatField(read_only=True)
     role = serializers.CharField(read_only=True)
+
     class Meta:
         model = UserProfile
-        fields = ["id", "user", "trust_score", "bio", "is_email_verified", "role", "organization_name"]
+        fields = [
+            "id",
+            "user",
+            "trust_score",
+            "bio",
+            "is_email_verified",
+            "role",
+            "organization_name",
+        ]
         read_only_fields = ["id", "user", "trust_score", "is_email_verified", "role"]
 
 
@@ -281,14 +307,8 @@ class ClaimSerializer(serializers.ModelSerializer):
 
         request = self.context.get("request")
 
-        if (
-            request
-            and request.user
-            and request.user.is_authenticated
-        ):
-            return request.user.profile.saved_claims.filter(
-                id=obj.id
-            ).exists()
+        if request and request.user and request.user.is_authenticated:
+            return request.user.profile.saved_claims.filter(id=obj.id).exists()
 
         return False
 
@@ -308,9 +328,7 @@ class ClaimSerializer(serializers.ModelSerializer):
 
             if isinstance(value, dict):
                 url = value.get("url")
-                if isinstance(url, str) and url.startswith(
-                    ("http://", "https://")
-                ):
+                if isinstance(url, str) and url.startswith(("http://", "https://")):
                     return url
                 return None
 
@@ -344,12 +362,7 @@ class ClaimSerializer(serializers.ModelSerializer):
                 if isinstance(parsed, dict):
                     url = parsed.get("url")
 
-                    if (
-                        isinstance(url, str)
-                        and url.startswith(
-                            ("http://", "https://")
-                        )
-                    ):
+                    if isinstance(url, str) and url.startswith(("http://", "https://")):
                         return url
 
             return None
@@ -375,30 +388,29 @@ class ClaimSerializer(serializers.ModelSerializer):
 
         return None
 
-
     def get_effective_verdict(self, obj):
         return obj.final_verdict or obj.ai_verdict
-    
+
     def get_has_moderator_verdict(self, obj):
         """Check if moderators have set a final verdict on this claim"""
         # Direct check: final_verdict is only set when moderators have verified evidence
         return bool(obj.final_verdict)
-    
+
     def get_verified_evidence_count(self, obj):
         """Get count of verified evidence for this claim"""
         from .models import EvidenceSubmission
+
         return EvidenceSubmission.objects.filter(
-            thread__claim=obj,
-            evidence_status='VERIFIED'
+            thread__claim=obj, evidence_status="VERIFIED"
         ).count()
-    
+
     def get_moderator_verdict_info(self, obj):
         """Return moderator verdict status and supporting evidence"""
         if obj.final_verdict:
             return {
                 "verdict": obj.final_verdict,
                 "source": "MODERATORS",
-                "verified_evidence_count": self.get_verified_evidence_count(obj)
+                "verified_evidence_count": self.get_verified_evidence_count(obj),
             }
         return None
 
@@ -424,11 +436,12 @@ class ClaimSerializer(serializers.ModelSerializer):
             "activity_at",
             "last_updated",
             "score_context",
-            "top_verdict_source", 
+            "top_verdict_source",
             "is_ai_generated",
             "canonical_source_url",
             "is_saved",
         ]
+
 
 class ClaimDeepAnalysisSerializer(ClaimSerializer):
     class Meta(ClaimSerializer.Meta):
@@ -437,8 +450,9 @@ class ClaimDeepAnalysisSerializer(ClaimSerializer):
             "ai_sources",
             "context_text",
             "url_link",
-            "claim_fingerprint"
+            "claim_fingerprint",
         ]
+
 
 class ThreadSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
@@ -451,23 +465,13 @@ class ThreadSerializer(serializers.ModelSerializer):
 
     def get_recent_flag_reason(self, obj):
         latest_flag = (
-            obj.flags
-            .filter(resolved_at__isnull=True)
-            .order_by("-flagged_at")
-            .first()
+            obj.flags.filter(resolved_at__isnull=True).order_by("-flagged_at").first()
         )
 
-        return (
-            latest_flag.reason
-            if latest_flag
-            else None
-        )
-
+        return latest_flag.reason if latest_flag else None
 
     def get_flag_count(self, obj):
-        return obj.flags.filter(
-            resolved_at__isnull=True
-        ).count()
+        return obj.flags.filter(resolved_at__isnull=True).count()
 
     def get_evidence_count(self, obj):
         return obj.evidence_submissions.count()
@@ -521,13 +525,13 @@ class ThreadSerializer(serializers.ModelSerializer):
             "comment_count",
             "flag_count",
         ]
-        
+
 
 class ThreadFlagSerializer(serializers.ModelSerializer):
     flagged_by = UserSerializer(read_only=True)
     thread = ThreadSerializer(read_only=True)
     thread_id = serializers.UUIDField(write_only=True)
-    
+
     class Meta:
         model = ThreadFlag
         fields = [
@@ -584,11 +588,16 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
                 "caption": obj.thread.caption,
                 "status": obj.thread.status,
                 "created_at": obj.thread.created_at,
-                "claim": {
-                    "id": str(obj.thread.claim.id),
-                    "context_text": obj.thread.claim.context_text,
-                    "verdict": obj.thread.claim.final_verdict or obj.thread.claim.ai_verdict,
-                } if obj.thread.claim else None,
+                "claim": (
+                    {
+                        "id": str(obj.thread.claim.id),
+                        "context_text": obj.thread.claim.context_text,
+                        "verdict": obj.thread.claim.final_verdict
+                        or obj.thread.claim.ai_verdict,
+                    }
+                    if obj.thread.claim
+                    else None
+                ),
             }
         return None
 
@@ -611,7 +620,10 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
 
         prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("votes")
         if prefetched is not None:
-            vote = next((entry for entry in prefetched if entry.voter_id == request.user.id), None)
+            vote = next(
+                (entry for entry in prefetched if entry.voter_id == request.user.id),
+                None,
+            )
         else:
             vote = obj.votes.filter(voter=request.user).first()
         if not vote:
@@ -625,7 +637,11 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
     def get_weighted_score(self, obj):
         upvotes = self.get_upvotes(obj)
         downvotes = self.get_downvotes(obj)
-        contributor_trust = obj.contributor.profile.trust_score if hasattr(obj.contributor, "profile") else 0
+        contributor_trust = (
+            obj.contributor.profile.trust_score
+            if hasattr(obj.contributor, "profile")
+            else 0
+        )
         return round((upvotes * (contributor_trust / 100)) - (downvotes * 0.5), 2)
 
     def validate_evidence_url(self, value):
@@ -736,10 +752,141 @@ class ThreadDetailSerializer(serializers.ModelSerializer):
 
 class ModerationDecisionSerializer(serializers.Serializer):
     moderator_verdict = serializers.ChoiceField(
-        choices=["FACT", "FAKE", "MISLEADING", "SATIRE", "UNVERIFIED"]
+        choices=(AdjudicationDecision.Verdict.choices)
     )
-    moderator_notes = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    status = serializers.ChoiceField(choices=["OPEN", "CLOSED", "REJECTED"], required=False)
+
+    moderator_notes = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+    canonical_claim = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+    expected_revision = serializers.IntegerField(
+        required=False,
+        min_value=0,
+    )
+
+    verification_run_id = serializers.UUIDField(
+        required=False,
+        allow_null=True,
+    )
+
+    # Temporary compatibility with the
+    # existing moderation frontend.
+    #
+    # Adjudication no longer owns Thread.status.
+    status = serializers.ChoiceField(
+        choices=[
+            Thread.Status.CLOSED,
+        ],
+        required=False,
+        write_only=True,
+    )
+
+
+class AdjudicationDecisionSerializer(serializers.ModelSerializer):
+    decided_by = UserSerializer(read_only=True)
+
+    ai_agrees = serializers.BooleanField(read_only=True)
+
+    organization = serializers.SerializerMethodField()
+
+    moderation_case_id = serializers.SerializerMethodField()
+
+    def get_organization(self, obj):
+        if not obj.organization:
+            return None
+
+        return {
+            "id": str(obj.organization.id),
+            "name": obj.organization.name,
+            "slug": obj.organization.slug,
+        }
+
+    def get_moderation_case_id(
+        self,
+        obj,
+    ):
+        return str(obj.moderation_case_id) if obj.moderation_case_id else None
+
+    class Meta:
+        model = AdjudicationDecision
+
+        fields = [
+            "id",
+            "claim",
+            "moderation_case_id",
+            "verdict",
+            "canonical_claim",
+            "rationale",
+            "decided_by",
+            "organization",
+            "verification_run",
+            "ai_verdict_snapshot",
+            "ai_confidence_snapshot",
+            "ai_summary_snapshot",
+            "ai_pipeline_version_snapshot",
+            "ai_agrees",
+            "revision_number",
+            "supersedes",
+            "is_current",
+            "decided_at",
+        ]
+
+        read_only_fields = fields
+
+
+class AdjudicationQueueCaseSerializer(serializers.ModelSerializer):
+    claim = ClaimSerializer(read_only=True)
+
+    assigned_to = UserSerializer(read_only=True)
+
+    organization = serializers.SerializerMethodField()
+
+    total_evidence = serializers.IntegerField(read_only=True)
+
+    verified_evidence = serializers.IntegerField(read_only=True)
+
+    rejected_evidence = serializers.IntegerField(read_only=True)
+
+    def get_organization(
+        self,
+        obj,
+    ):
+        if not obj.organization:
+            return None
+
+        return {
+            "id": str(obj.organization.id),
+            "name": obj.organization.name,
+            "slug": obj.organization.slug,
+        }
+
+    class Meta:
+        model = ModerationCase
+
+        fields = [
+            "id",
+            "claim",
+            "status",
+            "priority",
+            "source",
+            "organization",
+            "assigned_to",
+            "total_evidence",
+            "verified_evidence",
+            "rejected_evidence",
+            "created_at",
+            "updated_at",
+        ]
+
+        read_only_fields = fields
 
 
 class VoteSerializer(serializers.ModelSerializer):
@@ -767,9 +914,10 @@ class VoteSerializer(serializers.ModelSerializer):
 
 class ClaimMatchSerializer(serializers.Serializer):
     """Serializer for claim match/deduplication responses."""
+
     match_type = serializers.ChoiceField(
         choices=["resolved", "has_thread", "has_verdict", "no_verdict"],
-        help_text="Type of match: resolved (moderator verdict), has_thread (active thread), has_verdict (AI only), no_verdict"
+        help_text="Type of match: resolved (moderator verdict), has_thread (active thread), has_verdict (AI only), no_verdict",
     )
     claim_id = serializers.CharField()
     claim_type = serializers.CharField()
@@ -785,10 +933,3 @@ class ClaimMatchSerializer(serializers.Serializer):
     thread_status = serializers.CharField(allow_null=True)
     moderator_notes = serializers.CharField(allow_null=True)
     score_context = serializers.CharField(allow_null=True, required=False)
-
-class ModerationDecisionSerializer(serializers.Serializer):
-    moderator_verdict = serializers.CharField(max_length=20)
-    moderator_notes = serializers.CharField(required=False, allow_blank=True)
-    status = serializers.CharField(max_length=20, required=False)
-    # ADD THIS LINE:
-    canonical_claim = serializers.CharField(required=False, allow_blank=True)

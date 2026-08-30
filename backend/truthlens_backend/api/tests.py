@@ -29,6 +29,9 @@ from .models import (
     FlagResolutionLog,
     Organization,
     OrganizationMembership,
+    AdjudicationDecision,
+    VerificationRun,
+    OfficialFactCheck,
 )
 from .throttles import FactCheckRateThrottle
 from .trust_service import (
@@ -56,6 +59,14 @@ from .evidence_review_service import (
     InvalidEvidenceDecision,
     ensure_evidence_case,
     review_evidence_submission,
+)
+from .adjudication_service import (
+    AdjudicationConflict,
+    InvalidAdjudicationDecision,
+    ensure_adjudication_case,
+    ensure_claim_adjudication_readiness,
+    is_claim_ready_for_adjudication,
+    issue_adjudication_decision,
 )
 
 
@@ -2233,6 +2244,1348 @@ class EvidenceReviewCapabilityTests(APITestCase):
         self.assertEqual(
             response.status_code,
             status.HTTP_400_BAD_REQUEST,
+        )
+
+
+class AdjudicationFoundationTests(APITestCase):
+    def setUp(self):
+        self.moderator = User.objects.create_user(
+            username="adjudicationmod",
+            email="adjudicationmod@test.com",
+            password="pass1234",
+        )
+
+        self.moderator.profile.role = UserProfile.Role.MOD
+        self.moderator.profile.save(update_fields=["role"])
+
+        self.second_moderator = User.objects.create_user(
+            username="adjudicationmod2",
+            email="adjudicationmod2@test.com",
+            password="pass1234",
+        )
+
+        self.second_moderator.profile.role = UserProfile.Role.MOD
+        self.second_moderator.profile.save(update_fields=["role"])
+
+        self.claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text=("The original claim being " "reviewed by moderators."),
+            ai_verdict="FAKE",
+            ai_summary=(
+                "AI analysis found the claim " "unsupported by available sources."
+            ),
+            consensus_score=82.5,
+        )
+
+    def test_ensure_adjudication_case_creates_and_reuses_active_case(
+        self,
+    ):
+        first = ensure_adjudication_case(
+            claim=self.claim,
+            actor=self.moderator,
+        )
+
+        second = ensure_adjudication_case(
+            claim=self.claim,
+            actor=self.second_moderator,
+        )
+
+        self.assertEqual(
+            first.id,
+            second.id,
+        )
+
+        self.assertEqual(
+            first.case_type,
+            ModerationCase.CaseType.ADJUDICATION,
+        )
+
+        self.assertEqual(
+            first.status,
+            ModerationCase.Status.OPEN,
+        )
+
+        self.assertEqual(
+            ModerationCase.objects.filter(
+                claim=self.claim,
+                case_type=(ModerationCase.CaseType.ADJUDICATION),
+                status__in=[
+                    ModerationCase.Status.OPEN,
+                    ModerationCase.Status.IN_REVIEW,
+                    ModerationCase.Status.ESCALATED,
+                    ModerationCase.Status.REOPENED,
+                ],
+            ).count(),
+            1,
+        )
+
+    def test_first_decision_resolves_adjudication_case(
+        self,
+    ):
+        case = ensure_adjudication_case(
+            claim=self.claim,
+            actor=self.moderator,
+        )
+
+        result = issue_adjudication_decision(
+            claim=self.claim,
+            actor=self.moderator,
+            verdict=(AdjudicationDecision.Verdict.FAKE),
+            canonical_claim=("The reviewed claim is false."),
+            rationale=("Verified evidence contradicts " "the claim."),
+            expected_revision=0,
+        )
+
+        case.refresh_from_db()
+
+        self.assertEqual(
+            case.status,
+            ModerationCase.Status.RESOLVED,
+        )
+
+        self.assertEqual(
+            result["case"].id,
+            case.id,
+        )
+
+        self.assertEqual(
+            result["decision"].moderation_case_id,
+            case.id,
+        )
+
+    def test_first_decision_updates_claim_final_verdict(
+        self,
+    ):
+        result = issue_adjudication_decision(
+            claim=self.claim,
+            actor=self.moderator,
+            verdict=(AdjudicationDecision.Verdict.MISLEADING),
+            canonical_claim=("The reviewed claim omits " "important context."),
+            rationale=(
+                "The central statement contains "
+                "some accurate information but "
+                "creates a misleading conclusion."
+            ),
+            expected_revision=0,
+        )
+
+        self.claim.refresh_from_db()
+
+        self.assertEqual(
+            self.claim.final_verdict,
+            AdjudicationDecision.Verdict.MISLEADING,
+        )
+
+        self.assertEqual(
+            result["claim"].final_verdict,
+            AdjudicationDecision.Verdict.MISLEADING,
+        )
+
+    def test_decision_snapshots_current_ai_output(
+        self,
+    ):
+        result = issue_adjudication_decision(
+            claim=self.claim,
+            actor=self.moderator,
+            verdict=(AdjudicationDecision.Verdict.FAKE),
+            canonical_claim=("The reviewed claim is false."),
+            rationale=("Reliable evidence contradicts " "the claim."),
+            expected_revision=0,
+        )
+
+        decision = result["decision"]
+
+        self.assertEqual(
+            decision.ai_verdict_snapshot,
+            "FAKE",
+        )
+
+        self.assertEqual(
+            decision.ai_confidence_snapshot,
+            82.5,
+        )
+
+        self.assertEqual(
+            decision.ai_summary_snapshot,
+            ("AI analysis found the claim " "unsupported by available sources."),
+        )
+
+        self.assertIsNone(decision.ai_pipeline_version_snapshot)
+
+        self.assertTrue(decision.ai_agrees)
+
+    def test_second_decision_supersedes_first_and_increments_revision(
+        self,
+    ):
+        first_result = issue_adjudication_decision(
+            claim=self.claim,
+            actor=self.moderator,
+            verdict=(AdjudicationDecision.Verdict.FAKE),
+            canonical_claim=("The reviewed claim is false."),
+            rationale="Initial review.",
+            expected_revision=0,
+        )
+
+        first_decision = first_result["decision"]
+
+        second_result = issue_adjudication_decision(
+            claim=self.claim,
+            actor=self.second_moderator,
+            verdict=(AdjudicationDecision.Verdict.MISLEADING),
+            canonical_claim=("The reviewed claim contains " "misleading context."),
+            rationale=(
+                "A second review found that "
+                "the claim is better classified "
+                "as misleading."
+            ),
+            expected_revision=1,
+        )
+
+        second_decision = second_result["decision"]
+
+        first_decision.refresh_from_db()
+
+        self.assertEqual(
+            first_decision.revision_number,
+            1,
+        )
+
+        self.assertFalse(first_decision.is_current)
+
+        self.assertEqual(
+            second_decision.revision_number,
+            2,
+        )
+
+        self.assertTrue(second_decision.is_current)
+
+        self.assertEqual(
+            second_decision.supersedes_id,
+            first_decision.id,
+        )
+
+        self.assertEqual(
+            first_decision.superseded_by.id,
+            second_decision.id,
+        )
+
+    def test_only_one_current_decision_exists_after_revision(
+        self,
+    ):
+        issue_adjudication_decision(
+            claim=self.claim,
+            actor=self.moderator,
+            verdict=(AdjudicationDecision.Verdict.FAKE),
+            canonical_claim=("The reviewed claim is false."),
+            rationale="Initial decision.",
+            expected_revision=0,
+        )
+
+        issue_adjudication_decision(
+            claim=self.claim,
+            actor=self.second_moderator,
+            verdict=(AdjudicationDecision.Verdict.FACT),
+            canonical_claim=("The reviewed claim is accurate."),
+            rationale=("New authoritative evidence " "supports the claim."),
+            expected_revision=1,
+        )
+
+        decisions = AdjudicationDecision.objects.filter(claim=self.claim)
+
+        self.assertEqual(
+            decisions.count(),
+            2,
+        )
+
+        self.assertEqual(
+            decisions.filter(is_current=True).count(),
+            1,
+        )
+
+        current = decisions.get(is_current=True)
+
+        self.assertEqual(
+            current.revision_number,
+            2,
+        )
+
+        self.assertEqual(
+            current.verdict,
+            AdjudicationDecision.Verdict.FACT,
+        )
+
+    def test_revision_records_reopen_and_revised_events(
+        self,
+    ):
+        first_result = issue_adjudication_decision(
+            claim=self.claim,
+            actor=self.moderator,
+            verdict=(AdjudicationDecision.Verdict.FAKE),
+            canonical_claim=("The reviewed claim is false."),
+            rationale="Initial adjudication.",
+            expected_revision=0,
+        )
+
+        case = first_result["case"]
+
+        issue_adjudication_decision(
+            claim=self.claim,
+            actor=self.second_moderator,
+            verdict=(AdjudicationDecision.Verdict.MISLEADING),
+            canonical_claim=("The reviewed claim is misleading."),
+            rationale=("Additional context requires " "revision of the verdict."),
+            expected_revision=1,
+        )
+
+        self.assertTrue(
+            case.events.filter(
+                event_type=(ModerationEvent.EventType.VERDICT_REOPENED)
+            ).exists()
+        )
+
+        self.assertTrue(
+            case.events.filter(
+                event_type=(ModerationEvent.EventType.VERDICT_REVISED)
+            ).exists()
+        )
+
+        self.assertEqual(
+            case.events.filter(
+                event_type=(ModerationEvent.EventType.VERDICT_ISSUED)
+            ).count(),
+            1,
+        )
+
+        self.assertEqual(
+            case.events.filter(
+                event_type=(ModerationEvent.EventType.VERDICT_REVISED)
+            ).count(),
+            1,
+        )
+
+    def test_stale_expected_revision_is_rejected(
+        self,
+    ):
+        issue_adjudication_decision(
+            claim=self.claim,
+            actor=self.moderator,
+            verdict=(AdjudicationDecision.Verdict.FAKE),
+            canonical_claim=("The reviewed claim is false."),
+            rationale="Initial decision.",
+            expected_revision=0,
+        )
+
+        with self.assertRaises(AdjudicationConflict):
+            issue_adjudication_decision(
+                claim=self.claim,
+                actor=self.second_moderator,
+                verdict=(AdjudicationDecision.Verdict.FACT),
+                canonical_claim=("The reviewed claim is true."),
+                rationale=("Attempt based on stale " "review state."),
+                expected_revision=0,
+            )
+
+        self.claim.refresh_from_db()
+
+        self.assertEqual(
+            AdjudicationDecision.objects.filter(claim=self.claim).count(),
+            1,
+        )
+
+        self.assertEqual(
+            self.claim.final_verdict,
+            AdjudicationDecision.Verdict.FAKE,
+        )
+
+    def test_canonical_claim_and_rationale_are_required(
+        self,
+    ):
+        with self.subTest("canonical claim required"):
+            with self.assertRaises(InvalidAdjudicationDecision):
+                issue_adjudication_decision(
+                    claim=self.claim,
+                    actor=self.moderator,
+                    verdict=(AdjudicationDecision.Verdict.FAKE),
+                    canonical_claim="",
+                    rationale=("There is a rationale."),
+                    expected_revision=0,
+                )
+
+        with self.subTest("rationale required"):
+            with self.assertRaises(InvalidAdjudicationDecision):
+                issue_adjudication_decision(
+                    claim=self.claim,
+                    actor=self.moderator,
+                    verdict=(AdjudicationDecision.Verdict.FAKE),
+                    canonical_claim=("A canonical claim."),
+                    rationale="",
+                    expected_revision=0,
+                )
+
+        self.assertEqual(
+            AdjudicationDecision.objects.filter(claim=self.claim).count(),
+            0,
+        )
+
+    def test_verification_run_must_match_claim_and_snapshots_pipeline_version(
+        self,
+    ):
+        other_claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text=("A completely different claim."),
+        )
+
+        wrong_run = VerificationRun.objects.create(
+            claim=other_claim,
+            status=(VerificationRun.Status.COMPLETED),
+            pipeline_version=("wrong-1.0.0"),
+        )
+
+        with self.assertRaises(InvalidAdjudicationDecision):
+            issue_adjudication_decision(
+                claim=self.claim,
+                actor=self.moderator,
+                verdict=(AdjudicationDecision.Verdict.FAKE),
+                canonical_claim=("The reviewed claim is false."),
+                rationale=("This should reject the " "unrelated verification run."),
+                verification_run=wrong_run,
+                expected_revision=0,
+            )
+
+        self.assertEqual(
+            AdjudicationDecision.objects.filter(claim=self.claim).count(),
+            0,
+        )
+
+        valid_run = VerificationRun.objects.create(
+            claim=self.claim,
+            status=(VerificationRun.Status.COMPLETED),
+            pipeline_version=("test-2.0.0"),
+        )
+
+        result = issue_adjudication_decision(
+            claim=self.claim,
+            actor=self.moderator,
+            verdict=(AdjudicationDecision.Verdict.FAKE),
+            canonical_claim=("The reviewed claim is false."),
+            rationale=("The submitted sources " "contradict the claim."),
+            verification_run=valid_run,
+            expected_revision=0,
+        )
+
+        decision = result["decision"]
+
+        self.assertEqual(
+            decision.verification_run,
+            valid_run,
+        )
+
+        self.assertEqual(
+            decision.ai_pipeline_version_snapshot,
+            "test-2.0.0",
+        )
+
+
+class AdjudicationApiFoundationTests(APITestCase):
+    def setUp(self):
+        self.author = User.objects.create_user(
+            username="adjudication-author",
+            email="adjudication-author@test.com",
+            password="pass1234",
+        )
+
+        self.moderator = User.objects.create_user(
+            username="adjudication-api-mod",
+            email="adjudication-api-mod@test.com",
+            password="pass1234",
+        )
+
+        self.moderator.profile.role = UserProfile.Role.MOD
+        self.moderator.profile.save(update_fields=["role"])
+
+        self.claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text=("The API adjudication test claim."),
+            ai_verdict="FAKE",
+            ai_summary=("AI analysis found the claim " "unsupported."),
+            consensus_score=87.0,
+        )
+
+        self.thread = Thread.objects.create(
+            claim=self.claim,
+            author=self.author,
+            caption=("Community discussion for " "adjudication API testing."),
+            status=Thread.Status.OPEN,
+        )
+
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.moderator)
+
+        self.url = reverse(
+            "moderation_resolve_thread",
+            kwargs={
+                "thread_id": self.thread.id,
+            },
+        )
+
+    def _valid_payload(
+        self,
+        *,
+        verdict=None,
+        expected_revision=0,
+    ):
+        return {
+            "moderator_verdict": (verdict or AdjudicationDecision.Verdict.FAKE),
+            "moderator_notes": ("Verified sources contradict " "the claim."),
+            "canonical_claim": ("The reviewed claim is false."),
+            # Legacy frontend compatibility.
+            # This must NOT actually close
+            # the community thread anymore.
+            "status": Thread.Status.CLOSED,
+            "expected_revision": expected_revision,
+        }
+
+    def test_system_moderator_can_adjudicate_through_legacy_thread_endpoint(
+        self,
+    ):
+        response = self.client.post(
+            self.url,
+            self._valid_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            AdjudicationDecision.objects.filter(
+                claim=self.claim,
+                is_current=True,
+            ).count(),
+            1,
+        )
+
+        decision = AdjudicationDecision.objects.get(
+            claim=self.claim,
+            is_current=True,
+        )
+
+        self.assertEqual(
+            decision.verdict,
+            AdjudicationDecision.Verdict.FAKE,
+        )
+
+        self.assertEqual(
+            decision.decided_by,
+            self.moderator,
+        )
+
+        self.assertEqual(
+            decision.revision_number,
+            1,
+        )
+
+        self.claim.refresh_from_db()
+
+        self.assertEqual(
+            self.claim.final_verdict,
+            AdjudicationDecision.Verdict.FAKE,
+        )
+
+        self.assertIn(
+            "adjudication",
+            response.data,
+        )
+
+        self.assertEqual(
+            response.data["adjudication"]["revision_number"],
+            1,
+        )
+
+    def test_adjudication_does_not_change_thread_community_status(
+        self,
+    ):
+        original_status = self.thread.status
+
+        response = self.client.post(
+            self.url,
+            self._valid_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.thread.refresh_from_db()
+
+        self.assertEqual(
+            self.thread.status,
+            original_status,
+        )
+
+        # Temporary compatibility mirror
+        # still receives the verdict.
+        self.assertEqual(
+            self.thread.moderator_verdict,
+            AdjudicationDecision.Verdict.FAKE,
+        )
+
+        self.assertEqual(
+            self.thread.moderator_notes,
+            ("Verified sources contradict " "the claim."),
+        )
+
+        self.assertEqual(
+            self.thread.moderated_by,
+            self.moderator,
+        )
+
+        self.assertIsNotNone(self.thread.moderated_at)
+
+    def test_adjudication_does_not_publish_official_fact_check(
+        self,
+    ):
+        initial_count = OfficialFactCheck.objects.count()
+
+        response = self.client.post(
+            self.url,
+            self._valid_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            OfficialFactCheck.objects.count(),
+            initial_count,
+        )
+
+        self.assertTrue(
+            AdjudicationDecision.objects.filter(
+                claim=self.claim,
+                is_current=True,
+            ).exists()
+        )
+
+    def test_invalid_verdict_returns_400(
+        self,
+    ):
+        payload = self._valid_payload()
+
+        payload["moderator_verdict"] = "TOTALLY_INVALID"
+
+        response = self.client.post(
+            self.url,
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        self.assertEqual(
+            AdjudicationDecision.objects.filter(claim=self.claim).count(),
+            0,
+        )
+
+        self.claim.refresh_from_db()
+
+        self.assertIsNone(self.claim.final_verdict)
+
+    def test_stale_expected_revision_returns_409(
+        self,
+    ):
+        first_response = self.client.post(
+            self.url,
+            self._valid_payload(
+                expected_revision=0,
+            ),
+            format="json",
+        )
+
+        self.assertEqual(
+            first_response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        stale_response = self.client.post(
+            self.url,
+            self._valid_payload(
+                verdict=(AdjudicationDecision.Verdict.MISLEADING),
+                expected_revision=0,
+            ),
+            format="json",
+        )
+
+        self.assertEqual(
+            stale_response.status_code,
+            status.HTTP_409_CONFLICT,
+        )
+
+        self.assertIn(
+            "detail",
+            stale_response.data,
+        )
+
+        decisions = AdjudicationDecision.objects.filter(claim=self.claim)
+
+        self.assertEqual(
+            decisions.count(),
+            1,
+        )
+
+        current = decisions.get(is_current=True)
+
+        self.assertEqual(
+            current.revision_number,
+            1,
+        )
+
+        self.assertEqual(
+            current.verdict,
+            AdjudicationDecision.Verdict.FAKE,
+        )
+
+        self.claim.refresh_from_db()
+
+        self.assertEqual(
+            self.claim.final_verdict,
+            AdjudicationDecision.Verdict.FAKE,
+        )
+
+
+class AdjudicationReadinessAndQueueTests(APITestCase):
+    def setUp(self):
+        # ---------------------------------
+        # Users
+        # ---------------------------------
+        self.author = User.objects.create_user(
+            username="readiness-author",
+            email="readiness-author@test.com",
+            password="pass1234",
+        )
+
+        self.contributor = User.objects.create_user(
+            username="readiness-contributor",
+            email="readiness-contributor@test.com",
+            password="pass1234",
+        )
+
+        self.moderator = User.objects.create_user(
+            username="readiness-mod",
+            email="readiness-mod@test.com",
+            password="pass1234",
+        )
+
+        self.moderator.profile.role = UserProfile.Role.MOD
+
+        self.moderator.profile.save(update_fields=["role"])
+
+        self.partner_reviewer = User.objects.create_user(
+            username="partner-adjudicator",
+            email="partner-adjudicator@test.com",
+            password="pass1234",
+        )
+
+        # ---------------------------------
+        # Partner organizations
+        # ---------------------------------
+        self.organization = Organization.objects.create(
+            name=("TruthLens Adjudication " "Partner"),
+            slug=("truthlens-adjudication-" "partner"),
+            organization_type=(Organization.OrganizationType.FACT_CHECKING),
+            verification_status=(Organization.VerificationStatus.VERIFIED),
+            partner_status=(Organization.PartnerStatus.ACTIVE),
+        )
+
+        self.other_organization = Organization.objects.create(
+            name="Other Fact Check Lab",
+            slug="other-fact-check-lab",
+            organization_type=(Organization.OrganizationType.FACT_CHECKING),
+            verification_status=(Organization.VerificationStatus.VERIFIED),
+            partner_status=(Organization.PartnerStatus.ACTIVE),
+        )
+
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=self.partner_reviewer,
+            role=(OrganizationMembership.Role.LEAD_VERIFIER),
+            status=(OrganizationMembership.Status.ACTIVE),
+        )
+
+        # ---------------------------------
+        # API clients
+        # ---------------------------------
+        self.moderator_client = APIClient()
+
+        self.moderator_client.force_authenticate(user=self.moderator)
+
+        self.partner_client = APIClient()
+
+        self.partner_client.force_authenticate(user=self.partner_reviewer)
+
+    # =====================================
+    # Test helpers
+    # =====================================
+
+    def _create_claim_and_thread(
+        self,
+        *,
+        suffix="default",
+    ):
+        claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text=(f"Adjudication readiness " f"claim {suffix}."),
+            ai_verdict="FAKE",
+            ai_summary=("AI analysis suggests the " "claim is false."),
+            consensus_score=84.0,
+        )
+
+        thread = Thread.objects.create(
+            claim=claim,
+            author=self.author,
+            caption=(f"Community discussion " f"{suffix}."),
+            status=Thread.Status.OPEN,
+        )
+
+        return claim, thread
+
+    def _create_evidence(
+        self,
+        thread,
+        *,
+        suffix,
+    ):
+        evidence = EvidenceSubmission.objects.create(
+            thread=thread,
+            contributor=self.contributor,
+            evidence_caption=(f"Evidence submission " f"{suffix}."),
+            evidence_url=("https://example.com/" f"evidence-{suffix}"),
+            evidence_type=(EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION),
+            evidence_status=(EvidenceSubmission.EvidenceStatus.UNVERIFIED),
+            contributor_trust_snapshot=50.0,
+        )
+
+        ensure_evidence_case(
+            evidence=evidence,
+            actor=self.contributor,
+        )
+
+        return evidence
+
+    def _verify_evidence(
+        self,
+        evidence,
+    ):
+        return review_evidence_submission(
+            evidence=evidence,
+            actor=self.moderator,
+            evidence_status=(EvidenceSubmission.EvidenceStatus.VERIFIED),
+            moderator_notes=("Evidence source was reviewed " "and accepted."),
+            expected_status=(EvidenceSubmission.EvidenceStatus.UNVERIFIED),
+        )
+
+    def _reject_evidence(
+        self,
+        evidence,
+    ):
+        return review_evidence_submission(
+            evidence=evidence,
+            actor=self.moderator,
+            evidence_status=(EvidenceSubmission.EvidenceStatus.REJECTED),
+            rejection_reason=(EvidenceSubmission.RejectionReason.UNRELIABLE_SOURCE),
+            moderator_notes=("The submitted source is " "not sufficiently reliable."),
+            expected_status=(EvidenceSubmission.EvidenceStatus.UNVERIFIED),
+        )
+
+    def _make_claim_ready(
+        self,
+        *,
+        suffix="ready",
+    ):
+        claim, thread = self._create_claim_and_thread(suffix=suffix)
+
+        first_evidence = self._create_evidence(
+            thread,
+            suffix=f"{suffix}-1",
+        )
+
+        second_evidence = self._create_evidence(
+            thread,
+            suffix=f"{suffix}-2",
+        )
+
+        self._verify_evidence(first_evidence)
+
+        self._reject_evidence(second_evidence)
+
+        case = ModerationCase.objects.get(
+            claim=claim,
+            case_type=(ModerationCase.CaseType.ADJUDICATION),
+        )
+
+        return {
+            "claim": claim,
+            "thread": thread,
+            "case": case,
+            "first_evidence": first_evidence,
+            "second_evidence": second_evidence,
+        }
+
+    # =====================================
+    # 1. Unreviewed evidence blocks readiness
+    # =====================================
+
+    def test_unverified_evidence_prevents_adjudication_readiness(
+        self,
+    ):
+        claim, thread = self._create_claim_and_thread(suffix="blocked")
+
+        verified_evidence = self._create_evidence(
+            thread,
+            suffix="blocked-verified",
+        )
+
+        unresolved_evidence = self._create_evidence(
+            thread,
+            suffix="blocked-pending",
+        )
+
+        self._verify_evidence(verified_evidence)
+
+        unresolved_evidence.refresh_from_db()
+
+        self.assertEqual(
+            unresolved_evidence.evidence_status,
+            EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+        )
+
+        self.assertFalse(is_claim_ready_for_adjudication(claim))
+
+        case = ensure_claim_adjudication_readiness(
+            claim=claim,
+            actor=self.moderator,
+        )
+
+        self.assertIsNone(case)
+
+        self.assertFalse(
+            ModerationCase.objects.filter(
+                claim=claim,
+                case_type=(ModerationCase.CaseType.ADJUDICATION),
+            ).exists()
+        )
+
+    # =====================================
+    # 2. Final evidence resolution creates
+    #    the adjudication case
+    # =====================================
+
+    def test_resolving_final_evidence_creates_open_adjudication_case(
+        self,
+    ):
+        claim, thread = self._create_claim_and_thread(suffix="final-evidence")
+
+        first = self._create_evidence(
+            thread,
+            suffix="final-1",
+        )
+
+        final = self._create_evidence(
+            thread,
+            suffix="final-2",
+        )
+
+        first_result = self._verify_evidence(first)
+
+        self.assertIsNone(first_result["adjudication_case"])
+
+        self.assertFalse(
+            ModerationCase.objects.filter(
+                claim=claim,
+                case_type=(ModerationCase.CaseType.ADJUDICATION),
+            ).exists()
+        )
+
+        final_result = self._reject_evidence(final)
+
+        adjudication_case = final_result["adjudication_case"]
+
+        self.assertIsNotNone(adjudication_case)
+
+        self.assertEqual(
+            adjudication_case.case_type,
+            ModerationCase.CaseType.ADJUDICATION,
+        )
+
+        self.assertEqual(
+            adjudication_case.status,
+            ModerationCase.Status.OPEN,
+        )
+
+        self.assertEqual(
+            adjudication_case.claim,
+            claim,
+        )
+
+        self.assertEqual(
+            ModerationCase.objects.filter(
+                claim=claim,
+                case_type=(ModerationCase.CaseType.ADJUDICATION),
+            ).count(),
+            1,
+        )
+
+        self.assertTrue(is_claim_ready_for_adjudication(claim))
+
+    # =====================================
+    # 3. Zero evidence must not make a
+    #    claim automatically ready
+    # =====================================
+
+    def test_claim_without_evidence_is_not_automatically_ready(
+        self,
+    ):
+        claim, _thread = self._create_claim_and_thread(suffix="no-evidence")
+
+        self.assertFalse(is_claim_ready_for_adjudication(claim))
+
+        result = ensure_claim_adjudication_readiness(
+            claim=claim,
+            actor=self.moderator,
+        )
+
+        self.assertIsNone(result)
+
+        self.assertFalse(
+            ModerationCase.objects.filter(
+                claim=claim,
+                case_type=(ModerationCase.CaseType.ADJUDICATION),
+            ).exists()
+        )
+
+    # =====================================
+    # 4. System moderator sees actual
+    #    ready cases in pending queue
+    # =====================================
+
+    def test_system_moderator_sees_ready_claim_in_pending_queue(
+        self,
+    ):
+        ready = self._make_claim_ready(suffix="system-queue")
+
+        response = self.moderator_client.get(
+            reverse("moderation_verdict_queue"),
+            {
+                "reviewed": "pending",
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            response.data["count"],
+            1,
+        )
+
+        self.assertEqual(
+            len(response.data["results"]),
+            1,
+        )
+
+        result = response.data["results"][0]
+
+        self.assertEqual(
+            str(result["id"]),
+            str(ready["case"].id),
+        )
+
+        self.assertEqual(
+            str(result["claim"]["id"]),
+            str(ready["claim"].id),
+        )
+
+        self.assertEqual(
+            result["status"],
+            ModerationCase.Status.OPEN,
+        )
+
+        self.assertEqual(
+            result["total_evidence"],
+            2,
+        )
+
+        self.assertEqual(
+            result["verified_evidence"],
+            1,
+        )
+
+        self.assertEqual(
+            result["rejected_evidence"],
+            1,
+        )
+
+    # =====================================
+    # 5. Resolved case moves from pending
+    #    queue to resolved queue
+    # =====================================
+
+    def test_resolved_adjudication_case_moves_from_pending_to_resolved_queue(
+        self,
+    ):
+        ready = self._make_claim_ready(suffix="resolved-queue")
+
+        issue_adjudication_decision(
+            claim=ready["claim"],
+            actor=self.moderator,
+            verdict=(AdjudicationDecision.Verdict.FAKE),
+            canonical_claim=("The reviewed claim is false."),
+            rationale=("Reviewed community evidence " "does not support the claim."),
+            expected_revision=0,
+        )
+
+        pending_response = self.moderator_client.get(
+            reverse("moderation_verdict_queue"),
+            {
+                "reviewed": "pending",
+            },
+        )
+
+        self.assertEqual(
+            pending_response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            pending_response.data["count"],
+            0,
+        )
+
+        resolved_response = self.moderator_client.get(
+            reverse("moderation_verdict_queue"),
+            {
+                "reviewed": "resolved",
+            },
+        )
+
+        self.assertEqual(
+            resolved_response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            resolved_response.data["count"],
+            1,
+        )
+
+        self.assertEqual(
+            str(resolved_response.data["results"][0]["id"]),
+            str(ready["case"].id),
+        )
+
+        self.assertEqual(
+            resolved_response.data["results"][0]["status"],
+            ModerationCase.Status.RESOLVED,
+        )
+
+    # =====================================
+    # 6. Partner queue requires explicit
+    #    organization scope
+    # =====================================
+
+    def test_partner_adjudicator_queue_requires_organization_scope(
+        self,
+    ):
+        claim, _thread = self._create_claim_and_thread(suffix="partner-scope")
+
+        ensure_adjudication_case(
+            claim=claim,
+            actor=self.moderator,
+            organization=self.organization,
+        )
+
+        response = self.partner_client.get(
+            reverse("moderation_verdict_queue"),
+            {
+                "reviewed": "pending",
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        self.assertIn(
+            "organization_id",
+            response.data["detail"],
+        )
+
+    # =====================================
+    # 7. Partner can only see organization
+    #    cases within their capability scope
+    # =====================================
+
+    def test_partner_can_only_view_own_organization_adjudication_queue(
+        self,
+    ):
+        own_claim, _own_thread = self._create_claim_and_thread(suffix="own-org")
+
+        own_case = ensure_adjudication_case(
+            claim=own_claim,
+            actor=self.moderator,
+            organization=(self.organization),
+        )
+
+        other_claim, _other_thread = self._create_claim_and_thread(suffix="other-org")
+
+        ensure_adjudication_case(
+            claim=other_claim,
+            actor=self.moderator,
+            organization=(self.other_organization),
+        )
+
+        own_response = self.partner_client.get(
+            reverse("moderation_verdict_queue"),
+            {
+                "reviewed": "pending",
+                "organization_id": (str(self.organization.id)),
+            },
+        )
+
+        self.assertEqual(
+            own_response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            own_response.data["count"],
+            1,
+        )
+
+        self.assertEqual(
+            str(own_response.data["results"][0]["id"]),
+            str(own_case.id),
+        )
+
+        self.assertEqual(
+            str(own_response.data["results"][0]["organization"]["id"]),
+            str(self.organization.id),
+        )
+
+        other_response = self.partner_client.get(
+            reverse("moderation_verdict_queue"),
+            {
+                "reviewed": "pending",
+                "organization_id": (str(self.other_organization.id)),
+            },
+        )
+
+        self.assertEqual(
+            other_response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    # =====================================
+    # 8. Canonical Claim endpoint performs
+    #    adjudication without closing thread
+    # =====================================
+
+    def test_canonical_claim_adjudication_endpoint_creates_decision_without_changing_thread_status(
+        self,
+    ):
+        ready = self._make_claim_ready(suffix="canonical-endpoint")
+
+        claim = ready["claim"]
+        thread = ready["thread"]
+
+        original_thread_status = thread.status
+
+        response = self.moderator_client.post(
+            reverse(
+                "adjudicate_claim",
+                kwargs={
+                    "claim_id": claim.id,
+                },
+            ),
+            {
+                "moderator_verdict": (AdjudicationDecision.Verdict.FAKE),
+                "moderator_notes": ("The reviewed evidence " "contradicts the claim."),
+                "canonical_claim": ("The reviewed claim " "is false."),
+                "expected_revision": 0,
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            response.data["verdict"],
+            AdjudicationDecision.Verdict.FAKE,
+        )
+
+        self.assertEqual(
+            response.data["revision_number"],
+            1,
+        )
+
+        self.assertTrue(response.data["is_current"])
+
+        decision = AdjudicationDecision.objects.get(
+            claim=claim,
+            is_current=True,
+        )
+
+        self.assertEqual(
+            decision.verdict,
+            AdjudicationDecision.Verdict.FAKE,
+        )
+
+        self.assertEqual(
+            decision.decided_by,
+            self.moderator,
+        )
+
+        claim.refresh_from_db()
+        thread.refresh_from_db()
+
+        self.assertEqual(
+            claim.final_verdict,
+            AdjudicationDecision.Verdict.FAKE,
+        )
+
+        # Community lifecycle must remain
+        # independent from adjudication.
+        self.assertEqual(
+            thread.status,
+            original_thread_status,
+        )
+
+        # Compatibility mirror remains
+        # available temporarily.
+        self.assertEqual(
+            thread.moderator_verdict,
+            AdjudicationDecision.Verdict.FAKE,
+        )
+
+        self.assertEqual(
+            thread.moderated_by,
+            self.moderator,
         )
 
 

@@ -29,7 +29,11 @@ from rest_framework.permissions import (
     AllowAny,
 )
 from rest_framework.response import Response
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import (
+    NotFound,
+    PermissionDenied,
+    ValidationError,
+)
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import NotFound
 from rest_framework.pagination import CursorPagination
@@ -37,7 +41,6 @@ from rest_framework.views import APIView
 from datetime import timedelta
 from django.shortcuts import get_object_or_404
 from PIL import Image
-from .embedding_service import generate_embedding
 import json
 import secrets
 import base64
@@ -71,9 +74,10 @@ from .models import (
     ThreadFlag,
     FlagResolutionLog,
     Vote,
-    OfficialFactCheck,
     ModerationCase,
     Organization,
+    AdjudicationDecision,
+    VerificationRun,
 )
 from .moderation_service import (
     ACTIVE_CASE_STATUSES,
@@ -93,6 +97,15 @@ from .evidence_review_service import (
     ensure_evidence_case,
     get_latest_evidence_case,
     review_evidence_submission,
+)
+from .adjudication_service import (
+    AdjudicationConflict,
+    AdjudicationError,
+    ensure_adjudication_case,
+    get_latest_adjudication_case,
+    has_adjudication_conflict,
+    issue_adjudication_decision,
+    get_latest_adjudication_case,
 )
 from .trust_service import (
     calculate_trust_components,
@@ -126,6 +139,8 @@ from .serializers import (
     ClaimMatchSerializer,
     UserWithTrustBreakdownSerializer,
     ClaimDeepAnalysisSerializer,
+    AdjudicationDecisionSerializer,
+    AdjudicationQueueCaseSerializer,
 )
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
@@ -157,14 +172,6 @@ class StandardCursorPagination(CursorPagination):
         if sort_order == "oldest":
             return ("created_at",)
         return ("-created_at",)
-
-
-ALLOWED_MODERATION_TRANSITIONS = {
-    "PENDING": {"OPEN", "CLOSED", "REJECTED"},
-    "OPEN": {"CLOSED", "REJECTED"},
-    "CLOSED": {"OPEN"},
-    "REJECTED": set(),
-}
 
 
 class IsThreadOwnerOrReadOnly(BasePermission):
@@ -842,111 +849,470 @@ def moderation_queue(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsModerator])
+@permission_classes(
+    [
+        IsAuthenticated,
+    ]
+)
 def verdict_queue(request):
-    # Verdict queue: claim adjudication workflow, independent of report/flag status.
-    reviewed_filter = request.query_params.get("reviewed", "pending")
-    allowed = {"all", "pending", "resolved"}
+    reviewed_filter = (
+        request.query_params.get(
+            "reviewed",
+            "pending",
+        )
+        .strip()
+        .lower()
+    )
+
+    allowed = {
+        "all",
+        "pending",
+        "resolved",
+    }
+
     if reviewed_filter not in allowed:
         return Response(
-            {"detail": "Invalid reviewed filter. Use all, pending, or resolved."},
+            {"detail": "Invalid reviewed filter. " "Use all, pending, or " "resolved."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    queryset = Thread.objects.select_related(
-        "claim", "author", "author__profile", "moderated_by", "moderated_by__profile"
-    ).order_by("-created_at")
-    if reviewed_filter == "pending":
-        queryset = queryset.filter(moderator_verdict__isnull=True)
-    elif reviewed_filter == "resolved":
-        queryset = queryset.filter(moderator_verdict__isnull=False)
-
-    serializer = ThreadSerializer(queryset, many=True)
-    return Response(serializer.data)
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated, IsModerator])
-def moderation_resolve_thread(request, thread_id):
     try:
-        thread = Thread.objects.get(id=thread_id)
-    except Thread.DoesNotExist:
-        raise NotFound("Thread not found.")
+        limit = int(
+            request.query_params.get(
+                "limit",
+                20,
+            )
+        )
 
-    serializer = ModerationDecisionSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
+        offset = int(
+            request.query_params.get(
+                "offset",
+                0,
+            )
+        )
 
-    moderator_verdict = serializer.validated_data["moderator_verdict"]
-    moderator_notes = serializer.validated_data.get("moderator_notes", "")
-    next_status = serializer.validated_data.get("status", Thread.Status.CLOSED)
-    canonical_claim = serializer.validated_data.get("canonical_claim", "")
+    except (
+        TypeError,
+        ValueError,
+    ):
+        return Response(
+            {"detail": "limit and offset must " "be integers."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-    current_status = thread.status or Thread.Status.OPEN
-    if next_status not in ALLOWED_MODERATION_TRANSITIONS.get(current_status, set()):
+    if limit < 1 or limit > 100 or offset < 0:
         return Response(
             {
-                "detail": f"Invalid status transition from {current_status} to {next_status}."
+                "detail": "limit must be between "
+                "1 and 100, and offset "
+                "must be zero or greater."
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    contributor_ids = set(
-        thread.evidence_submissions.values_list("contributor_id", flat=True).distinct()
-    )
+    organization_id = request.query_params.get("organization_id")
 
-    with transaction.atomic():
-        thread.moderator_verdict = moderator_verdict
-        thread.moderator_notes = moderator_notes
-        thread.status = next_status
-        thread.moderated_by = request.user
-        thread.moderated_at = timezone.now()
-        thread.save(
-            update_fields=[
-                "moderator_verdict",
-                "moderator_notes",
-                "status",
-                "moderated_by",
-                "moderated_at",
-            ]
+    system_moderator = _has_moderator_role(request.user)
+
+    organization = None
+
+    if organization_id:
+        organization = get_object_or_404(
+            Organization,
+            id=organization_id,
         )
 
-        # Keep AI verdict immutable and write moderator decision to final verdict.
-        thread.claim.final_verdict = moderator_verdict
-        thread.claim.last_updated = timezone.now()
-        thread.claim.save(update_fields=["final_verdict", "last_updated"])
-
-        # If the thread is closing, has a real verdict, AND the mod wrote a canonical claim...
-        if (
-            next_status == "CLOSED"
-            and moderator_verdict in ["FACT", "FAKE", "MISLEADING", "SATIRE"]
-            and canonical_claim
+        if not system_moderator and not has_capability(
+            request.user,
+            PartnerCapability.ADJUDICATE,
+            organization=organization,
         ):
-
-            # 1. Grab all VERIFIED URLs from this specific thread
-            verified_urls = list(
-                thread.evidence_submissions.filter(evidence_status="VERIFIED")
-                .exclude(evidence_url="")
-                .values_list("evidence_url", flat=True)
+            return Response(
+                {
+                    "detail": "You do not have "
+                    "permission to adjudicate "
+                    "for this organization."
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
 
-            # 2. Generate the Vector Embedding
-            embedding_vector = generate_embedding(canonical_claim)
+    elif not system_moderator:
+        return Response(
+            {"detail": "organization_id is required " "for partner adjudicators."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-            # 3. Save to the Knowledge Vault!
-            OfficialFactCheck.objects.create(
-                canonical_claim=canonical_claim,
-                verdict=moderator_verdict,
-                summary=moderator_notes,
-                sources=verified_urls,
-                embedding=embedding_vector,
-                published_by=request.user,
-                source_thread=thread,
+    queryset = ModerationCase.objects.filter(
+        case_type=(ModerationCase.CaseType.ADJUDICATION)
+    )
+
+    if reviewed_filter == "pending":
+        queryset = queryset.filter(status__in=ACTIVE_CASE_STATUSES)
+
+    elif reviewed_filter == "resolved":
+        queryset = queryset.filter(status=(ModerationCase.Status.RESOLVED))
+
+    else:
+        queryset = queryset.exclude(status=(ModerationCase.Status.CANCELLED))
+
+    if organization is not None:
+        queryset = queryset.filter(organization=organization)
+
+    queryset = (
+        queryset.select_related(
+            "claim",
+            "organization",
+            "assigned_to",
+            "assigned_to__profile",
+        )
+        .annotate(
+            total_evidence=Count(
+                "claim__threads__evidence_submissions",
+                distinct=True,
+            ),
+            verified_evidence=Count(
+                "claim__threads__evidence_submissions",
+                filter=Q(
+                    claim__threads__evidence_submissions__evidence_status=(
+                        EvidenceSubmission.EvidenceStatus.VERIFIED
+                    )
+                ),
+                distinct=True,
+            ),
+            rejected_evidence=Count(
+                "claim__threads__evidence_submissions",
+                filter=Q(
+                    claim__threads__evidence_submissions__evidence_status=(
+                        EvidenceSubmission.EvidenceStatus.REJECTED
+                    )
+                ),
+                distinct=True,
+            ),
+        )
+        .order_by(
+            "-priority",
+            "-created_at",
+        )
+    )
+
+    total_count = queryset.count()
+
+    cases = queryset[offset : offset + limit]
+
+    serializer = AdjudicationQueueCaseSerializer(
+        cases,
+        many=True,
+        context={
+            "request": request,
+        },
+    )
+
+    return Response(
+        {
+            "count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "results": serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+def _execute_claim_adjudication(
+    request,
+    claim,
+):
+    serializer = ModerationDecisionSerializer(data=request.data)
+
+    serializer.is_valid(raise_exception=True)
+
+    system_moderator = _has_moderator_role(request.user)
+
+    case = get_latest_adjudication_case(claim)
+
+    if case is None:
+        if not system_moderator:
+            raise PermissionDenied(
+                "No adjudication case is " "available for this claim."
             )
+
+        case = ensure_adjudication_case(
+            claim=claim,
+            actor=request.user,
+        )
+
+    if not system_moderator and not has_case_capability(
+        request.user,
+        case,
+        PartnerCapability.ADJUDICATE,
+    ):
+        raise PermissionDenied(
+            "You do not have permission " "to adjudicate this claim."
+        )
+
+    if has_adjudication_conflict(
+        request.user,
+        claim,
+    ):
+        raise PermissionDenied(
+            "You cannot adjudicate a claim "
+            "in which you have a direct "
+            "contribution."
+        )
+
+    verification_run = None
+
+    verification_run_id = serializer.validated_data.get("verification_run_id")
+
+    if verification_run_id:
+        verification_run = get_object_or_404(
+            VerificationRun,
+            id=verification_run_id,
+            claim=claim,
+        )
+
+    contributor_ids = list(
+        EvidenceSubmission.objects.filter(thread__claim=claim)
+        .values_list(
+            "contributor_id",
+            flat=True,
+        )
+        .distinct()
+    )
+
+    result = issue_adjudication_decision(
+        claim=claim,
+        actor=request.user,
+        verdict=(serializer.validated_data["moderator_verdict"]),
+        canonical_claim=(serializer.validated_data["canonical_claim"]),
+        rationale=(serializer.validated_data["moderator_notes"]),
+        organization=case.organization,
+        verification_run=(verification_run),
+        expected_revision=(serializer.validated_data.get("expected_revision")),
+    )
+
+    decision = result["decision"]
+
+    # Compatibility mirror only.
+    Thread.objects.filter(
+        claim=claim,
+    ).exclude(
+        status=Thread.Status.REJECTED,
+    ).update(
+        moderator_verdict=decision.verdict,
+        moderator_notes=decision.rationale,
+        moderated_by=request.user,
+        moderated_at=decision.decided_at,
+    )
 
     for contributor_id in contributor_ids:
-        recompute_user_trust_score_task.delay(contributor_id)
+        transaction.on_commit(
+            lambda user_id=contributor_id: (
+                recompute_user_trust_score_task.delay(user_id)
+            )
+        )
 
-    return Response(ThreadDetailSerializer(thread).data, status=status.HTTP_200_OK)
+    return decision
+
+
+@api_view(["POST"])
+@permission_classes(
+    [
+        IsAuthenticated,
+    ]
+)
+def moderation_resolve_thread(
+    request,
+    thread_id,
+):
+    """
+    Legacy thread-addressed adjudication endpoint.
+
+    The authoritative decision is now Claim-centric.
+    Thread moderation fields are maintained only as
+    temporary compatibility mirrors.
+
+    Thread.status is intentionally not changed.
+    Publication is intentionally not performed here.
+    """
+
+    thread = get_object_or_404(
+        Thread.objects.select_related("claim"),
+        id=thread_id,
+    )
+
+    claim = thread.claim
+
+    serializer = ModerationDecisionSerializer(data=request.data)
+
+    serializer.is_valid(raise_exception=True)
+
+    system_moderator = _has_moderator_role(request.user)
+
+    case = get_latest_adjudication_case(claim)
+
+    if case is None:
+        if not system_moderator:
+            return Response(
+                {"detail": "No adjudication case " "is available for this " "claim."},
+                status=(status.HTTP_403_FORBIDDEN),
+            )
+
+        case = ensure_adjudication_case(
+            claim=claim,
+            actor=request.user,
+        )
+
+    if not system_moderator:
+        if not has_case_capability(
+            request.user,
+            case,
+            PartnerCapability.ADJUDICATE,
+        ):
+            return Response(
+                {
+                    "detail": "You do not have "
+                    "permission to adjudicate "
+                    "this claim."
+                },
+                status=(status.HTTP_403_FORBIDDEN),
+            )
+
+    if has_adjudication_conflict(
+        request.user,
+        claim,
+    ):
+        return Response(
+            {
+                "detail": "You cannot adjudicate a "
+                "claim in which you have a "
+                "direct contribution."
+            },
+            status=(status.HTTP_403_FORBIDDEN),
+        )
+
+    verification_run = None
+
+    verification_run_id = serializer.validated_data.get("verification_run_id")
+
+    if verification_run_id:
+        verification_run = get_object_or_404(
+            VerificationRun,
+            id=verification_run_id,
+            claim=claim,
+        )
+
+    moderator_verdict = serializer.validated_data["moderator_verdict"]
+
+    moderator_notes = serializer.validated_data["moderator_notes"]
+
+    canonical_claim = serializer.validated_data["canonical_claim"]
+
+    expected_revision = serializer.validated_data.get("expected_revision")
+
+    contributor_ids = list(
+        EvidenceSubmission.objects.filter(
+            thread__claim=claim,
+        )
+        .values_list(
+            "contributor_id",
+            flat=True,
+        )
+        .distinct()
+    )
+
+    try:
+        with transaction.atomic():
+            decision = _execute_claim_adjudication(
+                request,
+                claim,
+            )
+
+    except AdjudicationConflict as error:
+        return Response(
+            {"detail": str(error)},
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    except (
+        AdjudicationError,
+        ModerationCaseError,
+    ) as error:
+        return Response(
+            {"detail": str(error)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    thread.refresh_from_db()
+
+    response_data = dict(
+        ThreadDetailSerializer(
+            thread,
+            context={
+                "request": request,
+            },
+        ).data
+    )
+
+    response_data["adjudication"] = AdjudicationDecisionSerializer(
+        decision,
+        context={
+            "request": request,
+        },
+    ).data
+
+    return Response(
+        response_data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes(
+    [
+        IsAuthenticated,
+    ]
+)
+def adjudicate_claim(
+    request,
+    claim_id,
+):
+    claim = get_object_or_404(
+        Claim,
+        id=claim_id,
+    )
+
+    try:
+        with transaction.atomic():
+            decision = _execute_claim_adjudication(
+                request,
+                claim,
+            )
+
+    except AdjudicationConflict as error:
+        return Response(
+            {"detail": str(error)},
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    except (
+        AdjudicationError,
+        ModerationCaseError,
+    ) as error:
+        return Response(
+            {"detail": str(error)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    return Response(
+        AdjudicationDecisionSerializer(
+            decision,
+            context={
+                "request": request,
+            },
+        ).data,
+        status=status.HTTP_200_OK,
+    )
 
 
 @api_view(["POST"])
