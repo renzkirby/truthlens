@@ -1,62 +1,94 @@
 # TruthLens
 
-> An AI-driven browser extension and community platform for real-time misinformation filtering, synthetic media detection, and collaborative fact-checking.
+> An AI-driven browser extension and web community platform for misinformation verification, synthetic media detection, and collaborative fact-checking.
 
-TruthLens bridges the gap between automated AI analysis and human consensus. By integrating directly into the browser, it removes the friction of traditional fact-checking, allowing users to verify claims, scan articles, and detect AI-generated media with a single click.
+TruthLens helps users verify questionable online content without leaving their current browsing experience. It combines automated evidence retrieval and AI-assisted analysis with a community verification platform for claims that cannot be resolved through available online evidence.
+
+Rather than relying solely on AI-generated judgments, TruthLens follows an **evidence-first approach** by retrieving relevant fact-checks and web sources before producing a verification result.
 
 ---
 
 ## Key Features
 
-### The Browser Extension (Manifest V3)
+### Browser Extension (Manifest V3)
 
-- **Action Snip:** Activate the built-in snipping tool to capture claims from social media feeds or videos. Extracts text via OCR for rapid AI verification.
-- **URL Scanner:** Paste any article link to instantly extract the central narrative and cross-reference it against live web data.
-- **Forensic File Upload:** A dedicated drag-and-drop pipeline for downloaded images and PDFs to detect deepfakes, synthetic generation, and manipulated metadata.
+- **Image Snipping:** Capture suspicious content directly from a webpage and extract text using OCR for verification.
+- **URL Analysis:** Analyze article links, extract their central claims, and cross-check them against available evidence.
+- **Text Verification:** Submit textual claims directly for fact-checking.
+- **File Analysis:** Upload supported documents for text extraction and claim verification.
+- **Deepfake Detection:** Analyze images for signs of AI-generated or manipulated visual content.
+- **In-Page Results:** Display verification results directly on the active webpage.
 
-### The Community Dashboard
+### Community Platform
 
-- **Community Feed & Threads:** Users can view recent investigations, read AI summaries, and dive into specific claim threads.
-- **Collaborative Verification:** A human-in-the-loop system where users submit evidence to prove or disprove claims.
-- **Trust Score Economy:** Users earn reputation points through highly upvoted, credible evidence submissions, creating a self-regulating community.
-- **Moderation Panel:** Enterprise-grade tools for admins to manage flagged content, override AI verdicts, and monitor the async verification queue.
+- **Community Feed & Threads:** Browse verified claims, ongoing investigations, evidence, and discussions.
+- **Community Escalation:** Claims with insufficient evidence can be escalated for collaborative verification.
+- **Evidence Submission:** Users can contribute supporting, contradicting, or contextual evidence.
+- **Trust Score System:** User reputation is adjusted based on the quality of resolved contributions.
+- **Moderation Panel:** Moderators can review evidence, resolve escalated claims, and manage community activity.
 
 ---
 
-## System Architecture
+## Verification Pipeline
 
-TruthLens utilizes a **Dual-Pipeline Architecture** to balance speed with deep forensic accuracy:
+TruthLens uses an evidence-first verification pipeline:
 
-1. **The High-Velocity Pipeline (Snippets & URLs):** Prioritizes rapid OCR text extraction (EasyOCR) and live web context retrieval (Tavily). The data is orchestrated through Groq's LLaMA models to produce strict, JSON-formatted verdicts (Fact, Fake, Misleading, Unverified, Satire).
-2. **The Deep Forensic Pipeline (File Uploads):** Bypasses browser compression to analyze raw file data. This pipeline processes physical files through dedicated synthetic media detection APIs to flag AI-generated images before running standard text verification.
+1. **Input Processing**  
+   Claims are extracted from image snippets, text, URLs, or uploaded documents.
+
+2. **Claim Matching**  
+   Previously processed claims are checked using fingerprinting and semantic similarity.
+
+3. **Verified Knowledge Retrieval**  
+   TruthLens searches its internal verified information before performing external retrieval.
+
+4. **Google Fact Check Tools API**  
+   Existing professional fact-checks are prioritized when available.
+
+5. **Tavily Web Retrieval**  
+   Additional evidence is retrieved from selected online sources when relevant fact-checks are unavailable.
+
+6. **Evidence-Grounded AI Analysis**  
+   Google Gemini analyzes the claim against the retrieved evidence, with Groq-hosted Llama models available as a fallback.
+
+The system may return:
+
+**FACT · FAKE · MISLEADING · SATIRE · UNVERIFIED**
+
+Claims without enough reliable evidence are intentionally classified as **UNVERIFIED** and may be escalated to the community platform.
 
 ---
 
 ## Tech Stack
 
-**Frontend (Web & Extension)**
+### Frontend
 
-- React & Vite
-- Vanilla CSS
-- Lucide React (Iconography)
+- React
+- Vite
+- Chrome Extension API / Manifest V3
+- Axios
+- Lucide React
+- Recharts
 
-**Backend & API**
+### Backend
 
-- Django & Django REST Framework (DRF)
-- PostgreSQL
-- Django Channels (WebSockets)
-
-**Asynchronous Pipeline & Infrastructure**
-
+- Django
+- Django REST Framework
+- PostgreSQL via Supabase
+- pgvector
 - Celery
-- Redis (via Memurai)
-- pHash (Semantic Claim Caching & Deduplication)
+- Redis
 
-**AI & Orchestration**
+### AI & Verification
 
-- **Groq API:** Ultra-low latency LLM inference (LLaMA-3) for prompt orchestration and JSON extraction.
-- **Tavily API:** Real-time web search optimized for LLM context retrieval.
-- **EasyOCR / OpenCV:** Optical Character Recognition for the Snipping Tool.
+- **Google Gemini** — primary evidence-grounded AI analysis
+- **Groq / Llama** — fallback AI provider
+- **Google Fact Check Tools API** — professional fact-check retrieval
+- **Tavily API** — live web evidence retrieval
+- **Google Cloud Vision** — primary OCR
+- **EasyOCR** — OCR fallback
+- **Sightengine** — AI-generated image and deepfake detection
+- **Sentence Transformers** — semantic claim matching
 
 ---
 
@@ -66,58 +98,59 @@ TruthLens utilizes a **Dual-Pipeline Architecture** to balance speed with deep f
 
 - Python 3.10+
 - Node.js & npm
-- PostgreSQL
-- Redis (Memurai if running on Windows 10)
+- Redis
+- PostgreSQL / Supabase development database
 
-### 1. Backend Setup
+### 1. Clone the Repository
 
 ```powershell
-# Clone the repository
-git clone https://github.com/renzkirby/truthlens-capstone.git
-cd TruthLens/backend/truthlens_backend/
+git clone https://github.com/renzkirby/truthlens.git
+cd truthlens
+2. Backend Setup
+cd backend/truthlens_backend
 
-# Create and activate a virtual environment
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 
-# Install dependencies
 pip install -r requirements.txt
 
-# Set up the database
-python manage.py makemigrations
 python manage.py migrate
+python manage.py runserver
 
-# Start the Celery worker (in a separate terminal)
+Start Redis and run the Celery worker in a separate terminal:
+
 celery -A truthlens_backend worker -l info --pool=solo
 
-# Start the Django development server
-python manage.py runserver
-```
+Configure the required API keys and database credentials in the backend .env file before running verification features.
 
-### 2. Frontend Dashboard Setup
+3. Web Platform Setup
+cd frontend/frontend
 
-```powershell
-cd ../../frontend/dashboard/
 npm install
 npm run dev
-```
+4. Browser Extension Setup
+cd extension
 
-### 3. Chrome Extension Setup
+npm install
+npm run build
 
-1. Open Chrome and navigate to chrome://extensions/
-2. Enable Developer mode in the top right corner.
-3. Click Load unpacked and select the truthlens-capstone/extension/dist/ directory (after running npm run build in your extension folder).
+Then:
 
----
+Open chrome://extensions/
+Enable Developer mode
+Click Load unpacked
+Select the extension/dist/ directory
+Development
 
-## The Team
+TruthLens follows an iterative engineering workflow:
 
-> - Brian Josh Yaiso
-> - Keanna Nicole Montero
-> - Lhoraine Palenzuela
-> - Rachele Rosal
-> - Renz Kirby Ramirez
+Inspect → Plan → Implement → Test → Fix → Polish → Lock
 
----
+The project is currently under active development as part of an undergraduate capstone study at Cavite State University – Bacoor City Campus.
 
-### Developed for academic project — targeting a cleaner, safer, and more verifiable internet.
+The Team
+Brian Josh Yaiso
+Keanna Nicole Montero
+Lhoraine Palenzuela
+Rachele Rosal
+Renz Kirby Ramirez
