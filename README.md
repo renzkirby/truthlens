@@ -91,7 +91,6 @@ Claims without enough reliable evidence are intentionally classified as **UNVERI
 - **Sentence Transformers** — semantic claim matching
 
 ---
-
 ## Local Development Setup
 
 ### Prerequisites
@@ -106,7 +105,11 @@ Claims without enough reliable evidence are intentionally classified as **UNVERI
 ```powershell
 git clone https://github.com/renzkirby/truthlens.git
 cd truthlens
-2. Backend Setup
+```
+
+### 2. Backend Setup
+
+```powershell
 cd backend/truthlens_backend
 
 python -m venv .venv
@@ -116,35 +119,38 @@ pip install -r requirements.txt
 
 python manage.py migrate
 python manage.py runserver
+```
 
 Start Redis and run the Celery worker in a separate terminal:
 
+```powershell
 celery -A truthlens_backend worker -l info --pool=solo
+```
 
-Configure the required API keys and database credentials in the backend .env file before running verification features.
+> **Note:** Configure the required API keys and database credentials in the backend `.env` file before running the verification features.
 
-3. Web Platform Setup
+### 3. Web Platform Setup
+
+```powershell
 cd frontend/frontend
-
 npm install
 npm run dev
-4. Browser Extension Setup
-cd extension
+```
 
+### 4. Chrome Extension Setup
+
+```powershell
+cd extension
 npm install
 npm run build
+```
 
 Then:
 
-Open chrome://extensions/
-Enable Developer mode
-Click Load unpacked
-Select the extension/dist/ directory
-Development
-
-TruthLens follows an iterative engineering workflow:
-
-Inspect → Plan → Implement → Test → Fix → Polish → Lock
+1. Open Chrome and navigate to `chrome://extensions/`
+2. Enable **Developer mode**
+3. Click **Load unpacked**
+4. Select the `extension/dist/` directory
 
 The project is currently under active development as part of an undergraduate capstone study at Cavite State University – Bacoor City Campus.
 
