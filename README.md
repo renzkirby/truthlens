@@ -154,9 +154,9 @@ Then:
 
 The project is currently under active development as part of an undergraduate capstone study at Cavite State University – Bacoor City Campus.
 
-The Team
-Brian Josh Yaiso
-Keanna Nicole Montero
-Lhoraine Palenzuela
-Rachele Rosal
-Renz Kirby Ramirez
+## The Team 
+> - Brian Josh Yaiso
+> - Keanna Nicole Montero
+> - Lhoraine Palenzuela 
+> - Rachele Rosal 
+> - Renz Kirby Ramirez
