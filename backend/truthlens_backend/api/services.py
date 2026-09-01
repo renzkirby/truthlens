@@ -14,7 +14,7 @@ import requests
 from io import BytesIO
 from PIL import Image
 from supabase import create_client
- 
+
 logger = logging.getLogger(__name__)
 
 
@@ -25,7 +25,9 @@ def _float_env(name, default):
     try:
         return float(raw_value)
     except ValueError:
-        logger.warning("Invalid %s value '%s'; using default %.2f", name, raw_value, default)
+        logger.warning(
+            "Invalid %s value '%s'; using default %.2f", name, raw_value, default
+        )
         return default
 
 
@@ -35,48 +37,51 @@ HF_DETECT_TIMEOUT_SEC = _float_env("HF_DETECT_TIMEOUT_SEC", 18.0)
 groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
+
 def call_llm_with_fallback(system_instructions, user_prompt):
     """
-    Attempts to call Gemini 2.5 Flash. 
+    Attempts to call Gemini 2.5 Flash.
     If it fails (e.g., 503 Overloaded), instantly falls back to Groq Llama 3.
     """
     try:
         # PRIMARY: Google Gemini
         response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
+            model="gemini-2.5-flash",
             contents=user_prompt,
             config=types.GenerateContentConfig(
                 system_instruction=system_instructions,
                 response_mime_type="application/json",
                 temperature=0.1,
-            )
+            ),
         )
         return response.text
-        
+
     except Exception as gemini_err:
         logger.warning(f"Gemini API Failed ({gemini_err}). Triggering Groq Fallback...")
-        
+
         try:
             # FALLBACK: Groq (Llama 3.3 70B is excellent at strict JSON fact-checking)
             chat_completion = groq_client.chat.completions.create(
                 messages=[
                     {"role": "system", "content": system_instructions},
-                    {"role": "user", "content": user_prompt}
+                    {"role": "user", "content": user_prompt},
                 ],
                 model="llama-3.3-70b-versatile",
                 response_format={"type": "json_object"},
-                temperature=0.1, # Low temperature for strict logic
+                temperature=0.1,  # Low temperature for strict logic
             )
             return chat_completion.choices[0].message.content
-            
+
         except Exception as groq_err:
             logger.error(f"Groq Fallback also failed: {groq_err}")
             raise Exception("Both AI providers are currently unavailable.")
+
 
 def _parse_llm_json(raw_content):
     """Strip markdown formatting and parse JSON from LLM responses."""
     cleaned = raw_content.strip().replace("```json", "").replace("```", "").strip()
     return json.loads(cleaned)
+
 
 def validate_public_url(raw_url):
     """Allow only public http(s) URLs to reduce unsafe URL processing risk."""
@@ -98,24 +103,43 @@ def validate_public_url(raw_url):
 
     if host in {"localhost", "127.0.0.1", "::1"}:
         return None, "Local URLs are not allowed."
-    if host.endswith(".local") or host.endswith(".internal") or host.endswith(".localhost"):
+    if (
+        host.endswith(".local")
+        or host.endswith(".internal")
+        or host.endswith(".localhost")
+    ):
         return None, "Private network URLs are not allowed."
 
     try:
         ip = ipaddress.ip_address(host)
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+        ):
             return None, "Private network URLs are not allowed."
     except ValueError:
         # Host is a domain name, which is allowed.
         pass
 
     from urllib.parse import parse_qs, urlencode
+
     TRACKING_PARAMS = {
-        "utm_source", "utm_medium", "utm_campaign", "utm_term",
-        "utm_content", "fbclid", "gclid", "ref", "mc_eid"
+        "utm_source",
+        "utm_medium",
+        "utm_campaign",
+        "utm_term",
+        "utm_content",
+        "fbclid",
+        "gclid",
+        "ref",
+        "mc_eid",
     }
     cleaned_params = {
-        k: v for k, v in parse_qs(parsed.query).items()
+        k: v
+        for k, v in parse_qs(parsed.query).items()
         if k.lower() not in TRACKING_PARAMS
     }
     cleaned_query = urlencode(cleaned_params, doseq=True)
@@ -137,7 +161,9 @@ def check_url_threat_reputation(candidate_url):
             "reason": "SAFE_BROWSING_API_KEY not configured",
         }
 
-    endpoint = f"https://safebrowsing.googleapis.com/v4/threatMatches:find?key={api_key}"
+    endpoint = (
+        f"https://safebrowsing.googleapis.com/v4/threatMatches:find?key={api_key}"
+    )
     payload = {
         "client": {"clientId": "truthlens", "clientVersion": "1.0.0"},
         "threatInfo": {
@@ -231,8 +257,9 @@ def clean_ocr_text(raw_text):
         return {
             "cleaned_claim": "OUT_OF_SCOPE",
             "search_query": "error",
-            "article_stance": "NEUTRAL"
+            "article_stance": "NEUTRAL",
         }
+
 
 def is_fact_check_relevant(original_text, fact_check_text):
     """Check if a fact check result is relevant to the original claim or article."""
@@ -244,7 +271,10 @@ def is_fact_check_relevant(original_text, fact_check_text):
     )
 
     try:
-        response_text = call_llm_with_fallback(system_instructions, f'Claim: "{original_text}"\n\nFact Check: "{fact_check_text}"')
+        response_text = call_llm_with_fallback(
+            system_instructions,
+            f'Claim: "{original_text}"\n\nFact Check: "{fact_check_text}"',
+        )
         result = _parse_llm_json(response_text)
         logger.debug("is_fact_check_relevant RESPONSE: %s", result)
         return result.get("is_relevant", False)
@@ -254,7 +284,9 @@ def is_fact_check_relevant(original_text, fact_check_text):
 
 
 # Evaluate Google's Fact Check Tools data against the original claim using Groq
-def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, article_stance="NEUTRAL"):
+def evaluate_image_claim_with_gfc(
+    original_claim, google_fact_check_data, article_stance="NEUTRAL"
+):
 
     # 1. Safely extract the data blocks
     claim_data = google_fact_check_data.get("claims", [{}])[0]
@@ -320,11 +352,11 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, articl
         }
         """
     user_data = (
-            f"<claim>{original_claim}</claim>\n\n"
-            f"<stance>{article_stance}</stance>\n\n"
-            f"<evidence>The claim '{fact_check_text}' was reviewed by {publisher} and received an Official Rating of: {gfc_rating.upper()}</evidence>\n\n"
-        )
-    
+        f"<claim>{original_claim}</claim>\n\n"
+        f"<stance>{article_stance}</stance>\n\n"
+        f"<evidence>The claim '{fact_check_text}' was reviewed by {publisher} and received an Official Rating of: {gfc_rating.upper()}</evidence>\n\n"
+    )
+
     try:
         response_text = call_llm_with_fallback(system_instructions, user_data)
         logger.debug("evaluate_image_claim_with_gfc OUTPUT: %s", response_text)
@@ -338,7 +370,9 @@ def evaluate_image_claim_with_gfc(original_claim, google_fact_check_data, articl
         }
 
 
-def evaluate_image_claim_with_tavily(original_claim, combined_context, article_stance="NEUTRAL"):
+def evaluate_image_claim_with_tavily(
+    original_claim, combined_context, article_stance="NEUTRAL"
+):
     """Evaluate an image claim against Tavily live news results."""
 
     logger.debug("EVIDENCE TEXT: %s", combined_context)
@@ -395,7 +429,7 @@ def evaluate_image_claim_with_tavily(original_claim, combined_context, article_s
     user_data = (
         f"<claim>{original_claim}</claim>\n\n"
         f"<stance>{article_stance}</stance>\n\n"
-        f"<evidence>{combined_context}</evidence>\n\n" # <--- FIXED
+        f"<evidence>{combined_context}</evidence>\n\n"  # <--- FIXED
     )
 
     try:
@@ -410,17 +444,19 @@ def evaluate_image_claim_with_tavily(original_claim, combined_context, article_s
             "confidence_score": 0,
         }
 
+
 # URL PIPELINE
 def clean_extracted_text(text):
     """Strip markdown, links, and short lines from URL-extracted text."""
     text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
     text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
     text = re.sub(r"http\S+", "", text)
-    
+
     # FIX: Lowered the threshold from 40 to 15 to prevent destroying valid sentences
     lines = [line.strip() for line in text.split("\n") if len(line.strip()) > 15]
-    
+
     return "\n".join(lines)[:3000]
+
 
 def extract_search_query(text, source_url=""):
     system_instructions = """
@@ -451,7 +487,9 @@ def extract_search_query(text, source_url=""):
     }
     """
     try:
-        response_text = call_llm_with_fallback(system_instructions, f"Source URL: {source_url}\n\nText: {text}")
+        response_text = call_llm_with_fallback(
+            system_instructions, f"Source URL: {source_url}\n\nText: {text}"
+        )
         logger.debug("extract_search_query OUTPUT: %s", response_text)
         return _parse_llm_json(response_text)
     except Exception as e:
@@ -459,9 +497,9 @@ def extract_search_query(text, source_url=""):
         return {
             "cleaned_claim": "OUT_OF_SCOPE",
             "search_query": "error",
-            "article_stance": "NEUTRAL"
+            "article_stance": "NEUTRAL",
         }
-    
+
 
 def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRAL"):
     gfc_claim_text = gfc_data.get("claims", [{}])[0].get("text", "")
@@ -524,7 +562,7 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
         f"<stance>{article_stance}</stance>\n\n"
         f"<evidence>{gfc_claim_text} (Official Rating: {gfc_rating})</evidence>\n\n"
     )
-    
+
     try:
         response_text = call_llm_with_fallback(system_instructions, user_data)
         return _parse_llm_json(response_text)
@@ -594,7 +632,7 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
         f"<stance>{article_stance}</stance>\n\n"
         f"<evidence>{context}</evidence>\n\n"
     )
-    
+
     try:
         response_text = call_llm_with_fallback(system_instructions, user_data)
         return _parse_llm_json(response_text)
@@ -606,6 +644,7 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
             "confidence_score": 0,
         }
 
+
 # SHARED UTILITIES
 def process_image(raw_base64):
     """Decode a base64 image and compute its perceptual hash."""
@@ -614,12 +653,13 @@ def process_image(raw_base64):
     image_hash = str(imagehash.phash(pil_img))
     return image_hash, image_bytes
 
+
 def upload_image_to_database(base64_string):
     supabase = create_client(
         os.environ.get("SUPABASE_URL"),
         os.environ.get("SUPABASE_SERVICE_KEY"),
     )
-    
+
     image_bytes = base64.b64decode(base64_string)
     file_name = f"{uuid.uuid4()}.png"
 
@@ -628,55 +668,58 @@ def upload_image_to_database(base64_string):
         image_bytes,
         {"content-type": "image/png"},
     )
-    
+
     public_url = supabase.storage.from_("claim-images").get_public_url(file_name)
     logger.debug("Uploaded image to Supabase. Public URL: %s", public_url)
     return public_url
-    
+
 
 # AI DEEPFAKE/AI GENERATED IMAGE PIPELINE
 def detect_ai_image(image_bytes):
     """Sends image to Sightengine and returns the score AND the specific type of AI used."""
     API_URL = "https://api.sightengine.com/1.0/check.json"
     data = {
-        'models': 'genai,deepfake',
-        'api_user': os.environ.get('SIGHTENGINE_API_USER'),
-        'api_secret': os.environ.get('SIGHTENGINE_API_SECRET')
+        "models": "genai,deepfake",
+        "api_user": os.environ.get("SIGHTENGINE_API_USER"),
+        "api_secret": os.environ.get("SIGHTENGINE_API_SECRET"),
     }
-    files = {'media': ('image.jpg', image_bytes, 'image/jpeg')}
-    
+    files = {"media": ("image.jpg", image_bytes, "image/jpeg")}
+
     try:
         response = requests.post(API_URL, data=data, files=files, timeout=15)
         if response.status_code != 200:
             return None
-            
+
         result = response.json()
         if result.get("status") != "success":
             return None
-            
+
         genai_score = result.get("type", {}).get("ai_generated", 0.0)
-        
+
         deepfake_score = 0.0
         faces = result.get("faces", [])
         if faces:
-            deepfake_score = max((face.get("features", {}).get("deepfake", 0.0) for face in faces), default=0.0)
-            
+            deepfake_score = max(
+                (face.get("features", {}).get("deepfake", 0.0) for face in faces),
+                default=0.0,
+            )
+
         highest_score = float(max(genai_score, deepfake_score))
-        
+
         # EXTRACT THE EXACT CATEGORY
         if genai_score > deepfake_score:
-            fake_category = "Diffusion Generative AI (e.g., Midjourney, DALL-E, Stable Diffusion)"
+            fake_category = (
+                "Diffusion Generative AI (e.g., Midjourney, DALL-E, Stable Diffusion)"
+            )
         else:
             fake_category = "Face-Swap / Deepfake Manipulation"
-            
-        return {
-            "score": highest_score,
-            "category": fake_category
-        }
-        
-    except Exception as e:  
+
+        return {"score": highest_score, "category": fake_category}
+
+    except Exception as e:
         logger.error("Sightengine Pipeline Error: %s", e)
         return None
+
 
 def generate_deepfake_explanation(base64_string, fake_category):
     """Uses Groq Vision and forensic metadata to write a highly accurate explanation."""
@@ -697,59 +740,87 @@ def generate_deepfake_explanation(base64_string, fake_category):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "Analyze this image and explain the forensic artifacts."},
-                        {"type": "image_url", "image_url": {"url": image_url}}
-                    ]
-                }
+                        {
+                            "type": "text",
+                            "text": "Analyze this image and explain the forensic artifacts.",
+                        },
+                        {"type": "image_url", "image_url": {"url": image_url}},
+                    ],
+                },
             ],
-            model="meta-llama/llama-4-scout-17b-16e-instruct", # Updated Groq Model!
+            model="meta-llama/llama-4-scout-17b-16e-instruct",  # Updated Groq Model!
             temperature=0.3,
-            max_tokens=150
+            max_tokens=150,
         )
-        
+
         return chat_completion.choices[0].message.content
-        
+
     except Exception as e:
         print(f"Vision AI Error: {str(e)}")
         return f"Forensic analysis indicates this is a {fake_category}. However, a detailed visual summary could not be generated at this time."
 
-def search_official_vault(cleaned_claim_text):
-    """Searches the internal OfficialFactCheck vault using Hybrid Search."""
-    from .embedding_service import generate_embedding
-    
-    # 1. Convert the search text into a vector
-    try:
-        query_embedding = generate_embedding(cleaned_claim_text)
-    except Exception as e:
-        logger.error("Embedding failed during vault search: %s", e)
-        return None
 
-    # 2. Ping the Supabase RPC
-    supabase = create_client(
-        os.environ.get("SUPABASE_URL"),
-        os.environ.get("SUPABASE_SERVICE_KEY"),
+def search_official_vault(
+    cleaned_claim_text,
+    *,
+    target_claim=None,
+    triggered_by=None,
+):
+    """
+    Backward-compatible Knowledge Vault entrypoint.
+
+    Search is now owned by the Django application
+    and considers only currently PUBLISHED
+    OfficialFactCheck records.
+    """
+
+    from .knowledge_reuse_service import (
+        build_published_fact_check_payload,
+        find_published_fact_check_match,
+        record_knowledge_reuse,
     )
-    
-    try:
-        # We pass the text for BM25, and the vector for Semantic Search
-        response = supabase.rpc(
-            'hybrid_search_fact_checks',
-            {
-                'query_text': cleaned_claim_text,
-                'query_embedding': query_embedding,
-                'match_count': 1  # We only care about the absolute best match
-            }
-        ).execute()
 
-        results = response.data
-        if results and len(results) > 0:
-            top_match = results[0]
-            # RRF (Reciprocal Rank Fusion) scores are usually small decimals (e.g., 0.01 to 0.03).
-            # A score > 0.015 usually indicates a very strong hybrid match.
-            if top_match.get('similarity', 0) > 0.015: 
-                return top_match
-                
+    from .models import (
+        KnowledgeReuseEvent,
+    )
+
+    try:
+        match = find_published_fact_check_match(cleaned_claim_text)
+
+    except Exception as error:
+        logger.error(
+            "Knowledge Vault search failed: %s",
+            error,
+        )
+
         return None
-    except Exception as e:
-        logger.error("Vault search error: %s", e)
+
+    if not match:
         return None
+
+    payload = build_published_fact_check_payload(match)
+
+    try:
+        record_knowledge_reuse(
+            fact_check=match.fact_check,
+            reuse_type=(KnowledgeReuseEvent.ReuseType.VERIFICATION_CONTEXT),
+            match_method=(match.match_method),
+            target_claim=target_claim,
+            triggered_by=triggered_by,
+            similarity_score=(match.similarity_score),
+            query_text=(cleaned_claim_text),
+            metadata={
+                "source": ("KNOWLEDGE_VAULT"),
+            },
+        )
+
+    except Exception as error:
+        # Reuse analytics must never prevent
+        # an otherwise valid fact-check from
+        # being used as verification context.
+        logger.warning(
+            "Failed to record Knowledge " "Vault reuse event: %s",
+            error,
+        )
+
+    return payload
