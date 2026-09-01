@@ -77,6 +77,7 @@ from .models import (
     Organization,
     AdjudicationDecision,
     VerificationRun,
+    OfficialFactCheck,
 )
 from .moderation_service import (
     ACTIVE_CASE_STATUSES,
@@ -110,6 +111,15 @@ from .trust_service import (
     get_reputation_progression,
     recompute_user_trust_score,
 )
+from .publishing_service import (
+    PublishingError,
+    PublishingAuthorizationError,
+    PublishingConflict,
+    create_fact_check_draft,
+    update_fact_check_draft,
+    submit_fact_check_for_review,
+    publish_fact_check,
+)
 from .throttles import (
     FactCheckRateThrottle,
     PasswordResetRateThrottle,
@@ -139,6 +149,9 @@ from .serializers import (
     ClaimDeepAnalysisSerializer,
     AdjudicationDecisionSerializer,
     AdjudicationQueueCaseSerializer,
+    FactCheckDraftCreateSerializer,
+    FactCheckDraftUpdateSerializer,
+    OfficialFactCheckSerializer,
 )
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
@@ -1016,6 +1029,32 @@ def verdict_queue(request):
     )
 
 
+def _publishing_error_response(
+    error,
+):
+    if isinstance(
+        error,
+        PublishingAuthorizationError,
+    ):
+        response_status = status.HTTP_403_FORBIDDEN
+
+    elif isinstance(
+        error,
+        PublishingConflict,
+    ):
+        response_status = status.HTTP_409_CONFLICT
+
+    else:
+        response_status = status.HTTP_400_BAD_REQUEST
+
+    return Response(
+        {
+            "detail": str(error),
+        },
+        status=response_status,
+    )
+
+
 def _execute_claim_adjudication(
     request,
     claim,
@@ -1231,6 +1270,216 @@ def adjudicate_claim(
     return Response(
         AdjudicationDecisionSerializer(
             decision,
+            context={
+                "request": request,
+            },
+        ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes(
+    [
+        IsAuthenticated,
+    ]
+)
+def fact_check_draft_create(
+    request,
+    claim_id,
+):
+    claim = get_object_or_404(
+        Claim,
+        id=claim_id,
+    )
+
+    serializer = FactCheckDraftCreateSerializer(data=request.data)
+
+    serializer.is_valid(raise_exception=True)
+
+    decision = (
+        AdjudicationDecision.objects.filter(
+            claim=claim,
+            is_current=True,
+        )
+        .select_related(
+            "organization",
+        )
+        .first()
+    )
+
+    if not decision:
+        return Response(
+            {
+                "detail": "This claim does not "
+                "have a current "
+                "adjudication decision."
+            },
+            status=(status.HTTP_409_CONFLICT),
+        )
+
+    expected_revision = serializer.validated_data.get("expected_revision")
+
+    if expected_revision is not None and (
+        expected_revision != decision.revision_number
+    ):
+        return Response(
+            {
+                "detail": "The adjudication "
+                "decision changed after "
+                "the publishing workspace "
+                "was opened. Refresh "
+                "before creating a draft."
+            },
+            status=(status.HTTP_409_CONFLICT),
+        )
+
+    try:
+        draft = create_fact_check_draft(
+            decision=decision,
+            actor=request.user,
+            headline=(serializer.validated_data["headline"]),
+            summary=(serializer.validated_data["summary"]),
+            article_body=(
+                serializer.validated_data.get(
+                    "article_body",
+                    "",
+                )
+            ),
+            source_urls=(
+                serializer.validated_data.get(
+                    "source_urls",
+                    [],
+                )
+            ),
+        )
+
+    except PublishingError as error:
+        return _publishing_error_response(error)
+
+    return Response(
+        OfficialFactCheckSerializer(
+            draft,
+            context={
+                "request": request,
+            },
+        ).data,
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(["PATCH"])
+@permission_classes(
+    [
+        IsAuthenticated,
+    ]
+)
+def fact_check_draft_update(
+    request,
+    fact_check_id,
+):
+    fact_check = get_object_or_404(
+        OfficialFactCheck,
+        id=fact_check_id,
+    )
+
+    serializer = FactCheckDraftUpdateSerializer(
+        data=request.data,
+        partial=True,
+    )
+
+    serializer.is_valid(raise_exception=True)
+
+    data = serializer.validated_data
+
+    try:
+        updated = update_fact_check_draft(
+            fact_check=fact_check,
+            actor=request.user,
+            headline=data.get("headline"),
+            summary=data.get("summary"),
+            article_body=data.get("article_body"),
+            source_urls=(data["source_urls"] if "source_urls" in data else None),
+        )
+
+    except PublishingError as error:
+        return _publishing_error_response(error)
+
+    return Response(
+        OfficialFactCheckSerializer(
+            updated,
+            context={
+                "request": request,
+            },
+        ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes(
+    [
+        IsAuthenticated,
+    ]
+)
+def fact_check_submit(
+    request,
+    fact_check_id,
+):
+    fact_check = get_object_or_404(
+        OfficialFactCheck,
+        id=fact_check_id,
+    )
+
+    try:
+        submitted = submit_fact_check_for_review(
+            fact_check=fact_check,
+            actor=request.user,
+        )
+
+    except PublishingError as error:
+        return _publishing_error_response(error)
+
+    return Response(
+        OfficialFactCheckSerializer(
+            submitted,
+            context={
+                "request": request,
+            },
+        ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes(
+    [
+        IsAuthenticated,
+    ]
+)
+def fact_check_publish(
+    request,
+    fact_check_id,
+):
+    fact_check = get_object_or_404(
+        OfficialFactCheck,
+        id=fact_check_id,
+    )
+
+    try:
+        result = publish_fact_check(
+            fact_check=fact_check,
+            actor=request.user,
+        )
+
+    except PublishingError as error:
+        return _publishing_error_response(error)
+
+    published = result["fact_check"]
+
+    return Response(
+        OfficialFactCheckSerializer(
+            published,
             context={
                 "request": request,
             },

@@ -10,6 +10,8 @@ from .models import (
     ThreadFlag,
     AdjudicationDecision,
     ModerationCase,
+    OfficialFactCheck,
+    OfficialFactCheckSource,
 )
 from .services import validate_public_url, check_url_threat_reputation
 from .trust_service import calculate_trust_components
@@ -882,6 +884,232 @@ class AdjudicationQueueCaseSerializer(serializers.ModelSerializer):
             "total_evidence",
             "verified_evidence",
             "rejected_evidence",
+            "created_at",
+            "updated_at",
+        ]
+
+        read_only_fields = fields
+
+
+class FactCheckInputProtectionMixin:
+    protected_fields = {
+        "claim",
+        "canonical_claim",
+        "verdict",
+        "adjudication_decision",
+        "organization",
+        "publication_status",
+        "version",
+        "drafted_by",
+        "reviewed_by",
+        "published_by",
+        "published_at",
+        "archived_at",
+    }
+
+    def validate(self, attrs):
+        supplied_protected_fields = self.protected_fields.intersection(
+            self.initial_data.keys()
+        )
+
+        if supplied_protected_fields:
+            raise serializers.ValidationError(
+                {
+                    field: ("This field is " "read-only.")
+                    for field in sorted(supplied_protected_fields)
+                }
+            )
+
+        return attrs
+
+
+class FactCheckDraftCreateSerializer(
+    FactCheckInputProtectionMixin,
+    serializers.Serializer,
+):
+    headline = serializers.CharField(
+        max_length=300,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+    summary = serializers.CharField(
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+    article_body = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+
+    source_urls = serializers.ListField(
+        child=serializers.URLField(
+            max_length=2000,
+        ),
+        required=False,
+        allow_empty=True,
+        default=list,
+    )
+
+    expected_revision = serializers.IntegerField(
+        required=False,
+        min_value=1,
+    )
+
+
+class FactCheckDraftUpdateSerializer(
+    FactCheckInputProtectionMixin,
+    serializers.Serializer,
+):
+    headline = serializers.CharField(
+        max_length=300,
+        required=False,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+    summary = serializers.CharField(
+        required=False,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+    article_body = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+    )
+
+    source_urls = serializers.ListField(
+        child=serializers.URLField(
+            max_length=2000,
+        ),
+        required=False,
+        allow_empty=True,
+    )
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+
+        if not attrs:
+            raise serializers.ValidationError(
+                "At least one editable field " "must be provided."
+            )
+
+        return attrs
+
+
+class OfficialFactCheckSourceSerializer(serializers.ModelSerializer):
+    added_by = UserSerializer(read_only=True)
+
+    evidence_submission_id = serializers.SerializerMethodField()
+
+    def get_evidence_submission_id(
+        self,
+        obj,
+    ):
+        if not obj.evidence_submission_id:
+            return None
+
+        return str(obj.evidence_submission_id)
+
+    class Meta:
+        model = OfficialFactCheckSource
+
+        fields = [
+            "id",
+            "url",
+            "title",
+            "source_type",
+            "evidence_submission_id",
+            "added_by",
+            "created_at",
+        ]
+
+        read_only_fields = fields
+
+
+class OfficialFactCheckSerializer(serializers.ModelSerializer):
+    organization = serializers.SerializerMethodField()
+
+    claim_id = serializers.SerializerMethodField()
+
+    adjudication_decision_id = serializers.SerializerMethodField()
+
+    source_thread_id = serializers.SerializerMethodField()
+
+    drafted_by = UserSerializer(read_only=True)
+
+    reviewed_by = UserSerializer(read_only=True)
+
+    published_by = UserSerializer(read_only=True)
+
+    source_items = OfficialFactCheckSourceSerializer(
+        many=True,
+        read_only=True,
+    )
+
+    def get_claim_id(
+        self,
+        obj,
+    ):
+        return str(obj.claim_id) if obj.claim_id else None
+
+    def get_adjudication_decision_id(
+        self,
+        obj,
+    ):
+        return (
+            str(obj.adjudication_decision_id) if obj.adjudication_decision_id else None
+        )
+
+    def get_source_thread_id(
+        self,
+        obj,
+    ):
+        return str(obj.source_thread_id) if obj.source_thread_id else None
+
+    def get_organization(
+        self,
+        obj,
+    ):
+        if not obj.organization:
+            return None
+
+        return {
+            "id": str(obj.organization.id),
+            "name": (obj.organization.name),
+            "slug": (obj.organization.slug),
+        }
+
+    class Meta:
+        model = OfficialFactCheck
+
+        fields = [
+            "id",
+            "claim_id",
+            "adjudication_decision_id",
+            "organization",
+            "canonical_claim",
+            "verdict",
+            "headline",
+            "summary",
+            "article_body",
+            "publication_status",
+            "version",
+            "sources",
+            "source_items",
+            "drafted_by",
+            "submitted_for_review_at",
+            "reviewed_by",
+            "reviewed_at",
+            "published_by",
+            "published_at",
+            "archived_at",
+            "source_thread_id",
             "created_at",
             "updated_at",
         ]

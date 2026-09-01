@@ -32,6 +32,7 @@ from .models import (
     AdjudicationDecision,
     VerificationRun,
     OfficialFactCheck,
+    OfficialFactCheckSource,
 )
 from .throttles import FactCheckRateThrottle
 from .trust_service import (
@@ -67,6 +68,16 @@ from .adjudication_service import (
     ensure_claim_adjudication_readiness,
     is_claim_ready_for_adjudication,
     issue_adjudication_decision,
+)
+from .publishing_service import (
+    InvalidFactCheckContent,
+    InvalidPublicationTransition,
+    PublishingAuthorizationError,
+    PublishingConflict,
+    create_fact_check_draft,
+    publish_fact_check,
+    submit_fact_check_for_review,
+    update_fact_check_draft,
 )
 
 
@@ -3635,6 +3646,1318 @@ class AdjudicationReadinessAndQueueTests(APITestCase):
         self.assertEqual(
             thread.moderated_by,
             self.moderator,
+        )
+
+
+class PublishingFoundationTests(APITestCase):
+    def setUp(self):
+        self.author = User.objects.create_user(
+            username="publishing-author",
+            email="publishing-author@test.com",
+            password="pass1234",
+        )
+
+        self.contributor = User.objects.create_user(
+            username="publishing-contributor",
+            email=("publishing-contributor" "@test.com"),
+            password="pass1234",
+        )
+
+        self.moderator = User.objects.create_user(
+            username="publishing-mod",
+            email="publishing-mod@test.com",
+            password="pass1234",
+        )
+
+        self.moderator.profile.role = UserProfile.Role.MOD
+
+        self.moderator.profile.save(update_fields=["role"])
+
+        self.claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text=("Publishing foundation " "test claim."),
+            ai_verdict="FAKE",
+            ai_summary=("AI analysis suggests " "the claim is false."),
+            consensus_score=86.0,
+        )
+
+        self.thread = Thread.objects.create(
+            claim=self.claim,
+            author=self.author,
+            caption=("Publishing foundation " "community thread."),
+            status=Thread.Status.OPEN,
+        )
+
+        self.evidence = EvidenceSubmission.objects.create(
+            thread=self.thread,
+            contributor=(self.contributor),
+            evidence_caption=("Authoritative source " "for publication."),
+            evidence_url=("https://example.com/" "publishing-source"),
+            evidence_type=(EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION),
+            evidence_status=(EvidenceSubmission.EvidenceStatus.VERIFIED),
+            contributor_trust_snapshot=(50.0),
+            verified_by=self.moderator,
+            verified_at=timezone.now(),
+        )
+
+        self.decision_result = issue_adjudication_decision(
+            claim=self.claim,
+            actor=self.moderator,
+            verdict=(AdjudicationDecision.Verdict.FAKE),
+            canonical_claim=("The reviewed claim " "is false."),
+            rationale=("The verified evidence " "contradicts the claim."),
+            expected_revision=0,
+        )
+
+        self.decision = self.decision_result["decision"]
+
+    def _create_complete_draft(
+        self,
+        *,
+        suffix="default",
+    ):
+        return create_fact_check_draft(
+            decision=self.decision,
+            actor=self.moderator,
+            headline=(f"Fact Check {suffix}"),
+            summary=(
+                "The reviewed claim is " "not supported by the " "available evidence."
+            ),
+            article_body=(
+                "TruthLens reviewed the "
+                "available evidence and "
+                "found that the claim is "
+                "not supported."
+            ),
+        )
+
+    def _publish(
+        self,
+        fact_check,
+    ):
+        fact_check = submit_fact_check_for_review(
+            fact_check=fact_check,
+            actor=self.moderator,
+        )
+
+        return publish_fact_check(
+            fact_check=fact_check,
+            actor=self.moderator,
+        )
+
+    def test_create_draft_uses_authoritative_decision_snapshot(
+        self,
+    ):
+        draft = self._create_complete_draft()
+
+        self.assertEqual(
+            draft.claim,
+            self.claim,
+        )
+
+        self.assertEqual(
+            draft.adjudication_decision,
+            self.decision,
+        )
+
+        self.assertEqual(
+            draft.canonical_claim,
+            self.decision.canonical_claim,
+        )
+
+        self.assertEqual(
+            draft.verdict,
+            self.decision.verdict,
+        )
+
+        self.assertEqual(
+            draft.publication_status,
+            OfficialFactCheck.PublicationStatus.DRAFT,
+        )
+
+        self.assertEqual(
+            draft.version,
+            1,
+        )
+
+        self.assertEqual(
+            draft.drafted_by,
+            self.moderator,
+        )
+
+    def test_draft_automatically_includes_verified_evidence_source(
+        self,
+    ):
+        draft = self._create_complete_draft(suffix="sources")
+
+        source = OfficialFactCheckSource.objects.get(
+            fact_check=draft,
+            url=self.evidence.evidence_url,
+        )
+
+        self.assertEqual(
+            source.source_type,
+            OfficialFactCheckSource.SourceType.VERIFIED_EVIDENCE,
+        )
+
+        self.assertEqual(
+            source.evidence_submission,
+            self.evidence,
+        )
+
+        draft.refresh_from_db()
+
+        self.assertIn(
+            self.evidence.evidence_url,
+            draft.sources,
+        )
+
+    def test_only_one_active_draft_exists_per_claim(
+        self,
+    ):
+        self._create_complete_draft(suffix="first")
+
+        with self.assertRaises(PublishingConflict):
+            self._create_complete_draft(suffix="second")
+
+        self.assertEqual(
+            OfficialFactCheck.objects.filter(
+                claim=self.claim,
+                publication_status__in=[
+                    OfficialFactCheck.PublicationStatus.DRAFT,
+                    OfficialFactCheck.PublicationStatus.IN_REVIEW,
+                ],
+            ).count(),
+            1,
+        )
+
+    def test_submit_requires_complete_article_content(
+        self,
+    ):
+        draft = create_fact_check_draft(
+            decision=self.decision,
+            actor=self.moderator,
+            headline="Incomplete article",
+            summary=("The article has no " "analysis body yet."),
+            article_body="",
+        )
+
+        with self.assertRaises(InvalidFactCheckContent):
+            submit_fact_check_for_review(
+                fact_check=draft,
+                actor=self.moderator,
+            )
+
+        draft.refresh_from_db()
+
+        self.assertEqual(
+            draft.publication_status,
+            OfficialFactCheck.PublicationStatus.DRAFT,
+        )
+
+    def test_submit_moves_draft_into_review_and_records_event(
+        self,
+    ):
+        draft = self._create_complete_draft(suffix="review")
+
+        submitted = submit_fact_check_for_review(
+            fact_check=draft,
+            actor=self.moderator,
+        )
+
+        self.assertEqual(
+            submitted.publication_status,
+            OfficialFactCheck.PublicationStatus.IN_REVIEW,
+        )
+
+        self.assertIsNotNone(submitted.submitted_for_review_at)
+
+        self.assertTrue(
+            self.decision.moderation_case.events.filter(
+                event_type=(ModerationEvent.EventType.ARTICLE_SUBMITTED)
+            ).exists()
+        )
+
+    def test_draft_cannot_skip_directly_to_published(
+        self,
+    ):
+        draft = self._create_complete_draft(suffix="skip")
+
+        with self.assertRaises(InvalidPublicationTransition):
+            publish_fact_check(
+                fact_check=draft,
+                actor=self.moderator,
+            )
+
+        draft.refresh_from_db()
+
+        self.assertEqual(
+            draft.publication_status,
+            OfficialFactCheck.PublicationStatus.DRAFT,
+        )
+
+    def test_publish_sets_publication_identity_and_timestamp(
+        self,
+    ):
+        draft = self._create_complete_draft(suffix="publish")
+
+        result = self._publish(draft)
+
+        published = result["fact_check"]
+
+        self.assertEqual(
+            published.publication_status,
+            OfficialFactCheck.PublicationStatus.PUBLISHED,
+        )
+
+        self.assertEqual(
+            published.reviewed_by,
+            self.moderator,
+        )
+
+        self.assertEqual(
+            published.published_by,
+            self.moderator,
+        )
+
+        self.assertIsNotNone(published.reviewed_at)
+
+        self.assertIsNotNone(published.published_at)
+
+        self.assertIsNone(result["archived_fact_check"])
+
+        self.assertTrue(
+            self.decision.moderation_case.events.filter(
+                event_type=(ModerationEvent.EventType.ARTICLE_PUBLISHED)
+            ).exists()
+        )
+
+    def test_stale_adjudication_blocks_existing_draft(
+        self,
+    ):
+        draft = self._create_complete_draft(suffix="stale")
+
+        revised_result = issue_adjudication_decision(
+            claim=self.claim,
+            actor=self.moderator,
+            verdict=(AdjudicationDecision.Verdict.MISLEADING),
+            canonical_claim=("The reviewed claim " "is misleading."),
+            rationale=("Additional review " "changed the verdict."),
+            expected_revision=1,
+        )
+
+        self.assertEqual(
+            revised_result["decision"].revision_number,
+            2,
+        )
+
+        with self.assertRaises(PublishingConflict):
+            submit_fact_check_for_review(
+                fact_check=draft,
+                actor=self.moderator,
+            )
+
+        draft.refresh_from_db()
+
+        self.assertEqual(
+            draft.publication_status,
+            OfficialFactCheck.PublicationStatus.DRAFT,
+        )
+
+    def test_new_published_version_archives_previous_version(
+        self,
+    ):
+        first_draft = self._create_complete_draft(suffix="v1")
+
+        first_result = self._publish(first_draft)
+
+        first_published = first_result["fact_check"]
+
+        second_draft = self._create_complete_draft(suffix="v2")
+
+        self.assertEqual(
+            second_draft.version,
+            2,
+        )
+
+        second_result = self._publish(second_draft)
+
+        second_published = second_result["fact_check"]
+
+        first_published.refresh_from_db()
+
+        self.assertEqual(
+            first_published.publication_status,
+            OfficialFactCheck.PublicationStatus.ARCHIVED,
+        )
+
+        self.assertIsNotNone(first_published.archived_at)
+
+        self.assertEqual(
+            second_published.publication_status,
+            OfficialFactCheck.PublicationStatus.PUBLISHED,
+        )
+
+        self.assertEqual(
+            second_published.version,
+            2,
+        )
+
+        self.assertEqual(
+            OfficialFactCheck.objects.filter(
+                claim=self.claim,
+                publication_status=(OfficialFactCheck.PublicationStatus.PUBLISHED),
+            ).count(),
+            1,
+        )
+
+        self.assertEqual(
+            second_result["archived_fact_check"].id,
+            first_published.id,
+        )
+
+    def test_update_draft_cannot_change_authoritative_fields(
+        self,
+    ):
+        draft = self._create_complete_draft(suffix="editable")
+
+        original_claim = draft.canonical_claim
+
+        original_verdict = draft.verdict
+
+        updated = update_fact_check_draft(
+            fact_check=draft,
+            actor=self.moderator,
+            headline=("Updated editorial " "headline"),
+            summary=("Updated editorial " "summary."),
+            article_body=(
+                "Updated analysis " "without changing the " "authoritative verdict."
+            ),
+            source_urls=[
+                ("https://example.org/" "additional-source"),
+            ],
+        )
+
+        self.assertEqual(
+            updated.headline,
+            ("Updated editorial " "headline"),
+        )
+
+        self.assertEqual(
+            updated.canonical_claim,
+            original_claim,
+        )
+
+        self.assertEqual(
+            updated.verdict,
+            original_verdict,
+        )
+
+        self.assertTrue(
+            updated.source_items.filter(
+                url=("https://example.org/" "additional-source"),
+                source_type=(OfficialFactCheckSource.SourceType.MODERATOR_ADDED),
+            ).exists()
+        )
+
+    def test_publication_does_not_mutate_claim_or_thread_adjudication_state(
+        self,
+    ):
+        # The adjudication service updates a
+        # locked/refetched Claim instance.
+        # Refresh our test instances so the
+        # baseline reflects persisted state.
+        self.claim.refresh_from_db()
+        self.thread.refresh_from_db()
+        self.decision.refresh_from_db()
+
+        original_thread_status = self.thread.status
+
+        original_final_verdict = self.claim.final_verdict
+
+        original_decision_count = AdjudicationDecision.objects.filter(
+            claim=self.claim
+        ).count()
+
+        draft = self._create_complete_draft(suffix="separation")
+
+        self._publish(draft)
+
+        self.thread.refresh_from_db()
+        self.claim.refresh_from_db()
+        self.decision.refresh_from_db()
+
+        self.assertEqual(
+            self.thread.status,
+            original_thread_status,
+        )
+
+        self.assertEqual(
+            self.claim.final_verdict,
+            original_final_verdict,
+        )
+
+        self.assertEqual(
+            original_final_verdict,
+            AdjudicationDecision.Verdict.FAKE,
+        )
+
+        self.assertTrue(self.decision.is_current)
+
+        self.assertEqual(
+            AdjudicationDecision.objects.filter(claim=self.claim).count(),
+            original_decision_count,
+        )
+
+    def test_replacing_moderator_sources_preserves_verified_evidence_sources(
+        self,
+    ):
+        draft = create_fact_check_draft(
+            decision=self.decision,
+            actor=self.moderator,
+            headline=("Source provenance test"),
+            summary=("Testing publication source " "replacement behavior."),
+            article_body=(
+                "This article contains enough " "content for publication review."
+            ),
+            source_urls=[
+                ("https://example.org/" "manual-source-one"),
+            ],
+        )
+
+        updated = update_fact_check_draft(
+            fact_check=draft,
+            actor=self.moderator,
+            source_urls=[
+                ("https://example.org/" "manual-source-two"),
+            ],
+        )
+
+        self.assertTrue(
+            updated.source_items.filter(
+                url=self.evidence.evidence_url,
+                source_type=(OfficialFactCheckSource.SourceType.VERIFIED_EVIDENCE),
+            ).exists()
+        )
+
+        self.assertFalse(
+            updated.source_items.filter(
+                url=("https://example.org/" "manual-source-one"),
+            ).exists()
+        )
+
+        self.assertTrue(
+            updated.source_items.filter(
+                url=("https://example.org/" "manual-source-two"),
+                source_type=(OfficialFactCheckSource.SourceType.MODERATOR_ADDED),
+            ).exists()
+        )
+
+        updated.refresh_from_db()
+
+        self.assertIn(
+            self.evidence.evidence_url,
+            updated.sources,
+        )
+
+        self.assertIn(
+            ("https://example.org/" "manual-source-two"),
+            updated.sources,
+        )
+
+    def test_new_adjudication_retires_stale_in_review_article(
+        self,
+    ):
+        stale_article = self._create_complete_draft(suffix="stale-review")
+
+        stale_article = submit_fact_check_for_review(
+            fact_check=stale_article,
+            actor=self.moderator,
+        )
+
+        self.assertEqual(
+            stale_article.publication_status,
+            OfficialFactCheck.PublicationStatus.IN_REVIEW,
+        )
+
+        revised = issue_adjudication_decision(
+            claim=self.claim,
+            actor=self.moderator,
+            verdict=(AdjudicationDecision.Verdict.MISLEADING),
+            canonical_claim=("The revised reviewed claim " "is misleading."),
+            rationale=("Additional review changed " "the authoritative verdict."),
+            expected_revision=1,
+        )
+
+        fresh_draft = create_fact_check_draft(
+            decision=(revised["decision"]),
+            actor=self.moderator,
+            headline=("Updated Fact Check"),
+            summary=("The updated adjudication " "requires a new article."),
+            article_body=("This article reflects the " "new authoritative decision."),
+        )
+
+        stale_article.refresh_from_db()
+
+        self.assertEqual(
+            stale_article.publication_status,
+            OfficialFactCheck.PublicationStatus.ARCHIVED,
+        )
+
+        self.assertIsNotNone(stale_article.archived_at)
+
+        self.assertEqual(
+            fresh_draft.publication_status,
+            OfficialFactCheck.PublicationStatus.DRAFT,
+        )
+
+        self.assertEqual(
+            fresh_draft.version,
+            2,
+        )
+
+        self.assertEqual(
+            fresh_draft.adjudication_decision,
+            revised["decision"],
+        )
+
+
+class PublishingApiAuthorizationTests(APITestCase):
+    def setUp(self):
+        self.author = User.objects.create_user(
+            username="publishing-api-author",
+            email=("publishing-api-author" "@test.com"),
+            password="pass1234",
+        )
+
+        self.system_moderator = User.objects.create_user(
+            username=("publishing-api-system"),
+            email=("publishing-api-system" "@test.com"),
+            password="pass1234",
+        )
+
+        self.system_moderator.profile.role = UserProfile.Role.MOD
+
+        self.system_moderator.profile.save(update_fields=["role"])
+
+        self.researcher = User.objects.create_user(
+            username=("publishing-researcher"),
+            email=("publishing-researcher" "@test.com"),
+            password="pass1234",
+        )
+
+        self.partner_moderator = User.objects.create_user(
+            username=("publishing-partner-mod"),
+            email=("publishing-partner-mod" "@test.com"),
+            password="pass1234",
+        )
+
+        self.lead_verifier = User.objects.create_user(
+            username=("publishing-lead"),
+            email=("publishing-lead" "@test.com"),
+            password="pass1234",
+        )
+
+        self.organization = Organization.objects.create(
+            name=("Publishing Partner"),
+            slug=("publishing-partner"),
+            organization_type=(Organization.OrganizationType.FACT_CHECKING),
+            verification_status=(Organization.VerificationStatus.VERIFIED),
+            partner_status=(Organization.PartnerStatus.ACTIVE),
+        )
+
+        self.other_organization = Organization.objects.create(
+            name=("Other Publishing " "Partner"),
+            slug=("other-publishing-" "partner"),
+            organization_type=(Organization.OrganizationType.FACT_CHECKING),
+            verification_status=(Organization.VerificationStatus.VERIFIED),
+            partner_status=(Organization.PartnerStatus.ACTIVE),
+        )
+
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=self.researcher,
+            role=(OrganizationMembership.Role.RESEARCHER),
+            status=(OrganizationMembership.Status.ACTIVE),
+        )
+
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=self.partner_moderator,
+            role=(OrganizationMembership.Role.MODERATOR),
+            status=(OrganizationMembership.Status.ACTIVE),
+        )
+
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=self.lead_verifier,
+            role=(OrganizationMembership.Role.LEAD_VERIFIER),
+            status=(OrganizationMembership.Status.ACTIVE),
+        )
+
+        (
+            self.platform_claim,
+            self.platform_decision,
+        ) = self._create_decision(
+            suffix="platform",
+            organization=None,
+        )
+
+        (
+            self.partner_claim,
+            self.partner_decision,
+        ) = self._create_decision(
+            suffix="partner",
+            organization=(self.organization),
+        )
+
+        (
+            self.other_claim,
+            self.other_decision,
+        ) = self._create_decision(
+            suffix="other",
+            organization=(self.other_organization),
+        )
+
+        self.system_client = APIClient()
+        self.system_client.force_authenticate(user=self.system_moderator)
+
+        self.researcher_client = APIClient()
+        self.researcher_client.force_authenticate(user=self.researcher)
+
+        self.partner_mod_client = APIClient()
+        self.partner_mod_client.force_authenticate(user=self.partner_moderator)
+
+        self.lead_client = APIClient()
+        self.lead_client.force_authenticate(user=self.lead_verifier)
+
+    def _create_decision(
+        self,
+        *,
+        suffix,
+        organization,
+    ):
+        claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text=(f"Publishing API claim " f"{suffix}."),
+            ai_verdict="FAKE",
+            ai_summary=("AI analysis indicates " "the claim is false."),
+            consensus_score=82.0,
+        )
+
+        Thread.objects.create(
+            claim=claim,
+            author=self.author,
+            caption=(f"Publishing API thread " f"{suffix}."),
+            status=Thread.Status.OPEN,
+        )
+
+        if organization is not None:
+            ensure_adjudication_case(
+                claim=claim,
+                actor=(self.system_moderator),
+                organization=organization,
+            )
+
+        result = issue_adjudication_decision(
+            claim=claim,
+            actor=self.system_moderator,
+            verdict=(AdjudicationDecision.Verdict.FAKE),
+            canonical_claim=(f"The reviewed {suffix} " f"claim is false."),
+            rationale=("The reviewed evidence " "does not support the " "claim."),
+            organization=organization,
+            expected_revision=0,
+        )
+
+        return (
+            claim,
+            result["decision"],
+        )
+
+    def _draft_payload(
+        self,
+        *,
+        expected_revision=1,
+    ):
+        return {
+            "headline": ("TruthLens Fact Check"),
+            "summary": ("The reviewed claim is " "not supported."),
+            "article_body": (
+                "TruthLens reviewed the "
+                "available information and "
+                "found the claim unsupported."
+            ),
+            "source_urls": [
+                ("https://example.com/" "publishing-api-source"),
+            ],
+            "expected_revision": (expected_revision),
+        }
+
+    def _create_draft(
+        self,
+        client,
+        claim,
+    ):
+        return client.post(
+            reverse(
+                ("moderation_fact_check_" "draft_create"),
+                kwargs={
+                    "claim_id": claim.id,
+                },
+            ),
+            self._draft_payload(),
+            format="json",
+        )
+
+    def _submit(
+        self,
+        client,
+        fact_check_id,
+    ):
+        return client.post(
+            reverse(
+                "moderation_fact_check_submit",
+                kwargs={
+                    "fact_check_id": fact_check_id,
+                },
+            ),
+            {},
+            format="json",
+        )
+
+    def _publish(
+        self,
+        client,
+        fact_check_id,
+    ):
+        return client.post(
+            reverse(
+                ("moderation_fact_check_" "publish"),
+                kwargs={
+                    "fact_check_id": fact_check_id,
+                },
+            ),
+            {},
+            format="json",
+        )
+
+    # ---------------------------------
+    # 1. System moderator full lifecycle
+    # ---------------------------------
+
+    def test_system_moderator_can_complete_publication_lifecycle(
+        self,
+    ):
+        create_response = self._create_draft(
+            self.system_client,
+            self.platform_claim,
+        )
+
+        self.assertEqual(
+            create_response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+        fact_check_id = create_response.data["id"]
+
+        self.assertEqual(
+            create_response.data["publication_status"],
+            OfficialFactCheck.PublicationStatus.DRAFT,
+        )
+
+        self.assertEqual(
+            create_response.data["verdict"],
+            self.platform_decision.verdict,
+        )
+
+        update_response = self.system_client.patch(
+            reverse(
+                ("moderation_fact_check_" "draft_update"),
+                kwargs={
+                    "fact_check_id": fact_check_id,
+                },
+            ),
+            {
+                "headline": ("Updated TruthLens " "Fact Check"),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            update_response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            update_response.data["headline"],
+            ("Updated TruthLens " "Fact Check"),
+        )
+
+        submit_response = self._submit(
+            self.system_client,
+            fact_check_id,
+        )
+
+        self.assertEqual(
+            submit_response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            submit_response.data["publication_status"],
+            OfficialFactCheck.PublicationStatus.IN_REVIEW,
+        )
+
+        publish_response = self._publish(
+            self.system_client,
+            fact_check_id,
+        )
+
+        self.assertEqual(
+            publish_response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            publish_response.data["publication_status"],
+            OfficialFactCheck.PublicationStatus.PUBLISHED,
+        )
+
+        self.assertIsNotNone(publish_response.data["published_at"])
+
+    # ---------------------------------
+    # 2. Researcher can draft/submit
+    #    but cannot publish
+    # ---------------------------------
+
+    def test_researcher_can_submit_but_cannot_publish(
+        self,
+    ):
+        create_response = self._create_draft(
+            self.researcher_client,
+            self.partner_claim,
+        )
+
+        self.assertEqual(
+            create_response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+        fact_check_id = create_response.data["id"]
+
+        submit_response = self._submit(
+            self.researcher_client,
+            fact_check_id,
+        )
+
+        self.assertEqual(
+            submit_response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        publish_response = self._publish(
+            self.researcher_client,
+            fact_check_id,
+        )
+
+        self.assertEqual(
+            publish_response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+        fact_check = OfficialFactCheck.objects.get(id=fact_check_id)
+
+        self.assertEqual(
+            fact_check.publication_status,
+            OfficialFactCheck.PublicationStatus.IN_REVIEW,
+        )
+
+    # ---------------------------------
+    # 3. Partner moderator cannot publish
+    # ---------------------------------
+
+    def test_partner_moderator_cannot_publish(
+        self,
+    ):
+        create_response = self._create_draft(
+            self.partner_mod_client,
+            self.partner_claim,
+        )
+
+        self.assertEqual(
+            create_response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+        fact_check_id = create_response.data["id"]
+
+        submit_response = self._submit(
+            self.partner_mod_client,
+            fact_check_id,
+        )
+
+        self.assertEqual(
+            submit_response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        publish_response = self._publish(
+            self.partner_mod_client,
+            fact_check_id,
+        )
+
+        self.assertEqual(
+            publish_response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    # ---------------------------------
+    # 4. Lead verifier can publish
+    # ---------------------------------
+
+    def test_lead_verifier_can_publish_for_own_organization(
+        self,
+    ):
+        create_response = self._create_draft(
+            self.lead_client,
+            self.partner_claim,
+        )
+
+        self.assertEqual(
+            create_response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+        fact_check_id = create_response.data["id"]
+
+        self.assertEqual(
+            str(create_response.data["organization"]["id"]),
+            str(self.organization.id),
+        )
+
+        self.assertEqual(
+            self._submit(
+                self.lead_client,
+                fact_check_id,
+            ).status_code,
+            status.HTTP_200_OK,
+        )
+
+        publish_response = self._publish(
+            self.lead_client,
+            fact_check_id,
+        )
+
+        self.assertEqual(
+            publish_response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            publish_response.data["publication_status"],
+            OfficialFactCheck.PublicationStatus.PUBLISHED,
+        )
+
+    # ---------------------------------
+    # 5. Cross-org access denied
+    # ---------------------------------
+
+    def test_partner_cannot_edit_another_organizations_draft(
+        self,
+    ):
+        create_response = self._create_draft(
+            self.system_client,
+            self.other_claim,
+        )
+
+        self.assertEqual(
+            create_response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+        fact_check_id = create_response.data["id"]
+
+        response = self.lead_client.patch(
+            reverse(
+                ("moderation_fact_check_" "draft_update"),
+                kwargs={
+                    "fact_check_id": fact_check_id,
+                },
+            ),
+            {
+                "headline": "Unauthorized edit",
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    # ---------------------------------
+    # 6. Stale existing draft → 409
+    # ---------------------------------
+
+    def test_stale_adjudication_returns_409_on_submit(
+        self,
+    ):
+        create_response = self._create_draft(
+            self.lead_client,
+            self.partner_claim,
+        )
+
+        self.assertEqual(
+            create_response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+        fact_check_id = create_response.data["id"]
+
+        revised = issue_adjudication_decision(
+            claim=self.partner_claim,
+            actor=self.system_moderator,
+            verdict=(AdjudicationDecision.Verdict.MISLEADING),
+            canonical_claim=("The reviewed partner " "claim is misleading."),
+            rationale=("Additional evidence " "changed the decision."),
+            organization=(self.organization),
+            expected_revision=1,
+        )
+
+        self.assertEqual(
+            revised["decision"].revision_number,
+            2,
+        )
+
+        response = self._submit(
+            self.lead_client,
+            fact_check_id,
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_409_CONFLICT,
+        )
+
+    # ---------------------------------
+    # 7. Cannot skip review
+    # ---------------------------------
+
+    def test_draft_cannot_be_published_directly(
+        self,
+    ):
+        create_response = self._create_draft(
+            self.system_client,
+            self.platform_claim,
+        )
+
+        self.assertEqual(
+            create_response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+        response = self._publish(
+            self.system_client,
+            create_response.data["id"],
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    # ---------------------------------
+    # 8. Published article cannot use
+    #    draft edit endpoint
+    # ---------------------------------
+
+    def test_published_fact_check_cannot_be_edited_as_draft(
+        self,
+    ):
+        created = self._create_draft(
+            self.system_client,
+            self.platform_claim,
+        )
+
+        fact_check_id = created.data["id"]
+
+        self._submit(
+            self.system_client,
+            fact_check_id,
+        )
+
+        self._publish(
+            self.system_client,
+            fact_check_id,
+        )
+
+        response = self.system_client.patch(
+            reverse(
+                ("moderation_fact_check_" "draft_update"),
+                kwargs={
+                    "fact_check_id": fact_check_id,
+                },
+            ),
+            {
+                "headline": "Should not change",
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    # ---------------------------------
+    # 9. Authoritative fields rejected
+    # ---------------------------------
+
+    def test_draft_api_rejects_authoritative_field_edits(
+        self,
+    ):
+        created = self._create_draft(
+            self.system_client,
+            self.platform_claim,
+        )
+
+        fact_check_id = created.data["id"]
+
+        response = self.system_client.patch(
+            reverse(
+                ("moderation_fact_check_" "draft_update"),
+                kwargs={
+                    "fact_check_id": fact_check_id,
+                },
+            ),
+            {
+                "verdict": "FACT",
+                "canonical_claim": ("Editor attempted " "replacement."),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        fact_check = OfficialFactCheck.objects.get(id=fact_check_id)
+
+        self.assertEqual(
+            fact_check.verdict,
+            self.platform_decision.verdict,
+        )
+
+        self.assertEqual(
+            fact_check.canonical_claim,
+            (self.platform_decision.canonical_claim),
+        )
+
+    # ---------------------------------
+    # 10. Stale workspace revision
+    #     rejected before draft creation
+    # ---------------------------------
+
+    def test_create_draft_rejects_stale_expected_revision(
+        self,
+    ):
+        issue_adjudication_decision(
+            claim=self.partner_claim,
+            actor=self.system_moderator,
+            verdict=(AdjudicationDecision.Verdict.MISLEADING),
+            canonical_claim=("The newer canonical " "claim is misleading."),
+            rationale=("The decision changed."),
+            organization=(self.organization),
+            expected_revision=1,
+        )
+
+        response = self.lead_client.post(
+            reverse(
+                ("moderation_fact_check_" "draft_create"),
+                kwargs={
+                    "claim_id": self.partner_claim.id,
+                },
+            ),
+            self._draft_payload(expected_revision=1),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_409_CONFLICT,
+        )
+
+        self.assertFalse(
+            OfficialFactCheck.objects.filter(
+                claim=self.partner_claim,
+                publication_status=(OfficialFactCheck.PublicationStatus.DRAFT),
+            ).exists()
+        )
+
+    # ---------------------------------
+    # 11. New adjudication retires stale
+    #     draft and permits fresh draft
+    # ---------------------------------
+
+    def test_new_decision_archives_stale_draft_when_fresh_draft_is_created(
+        self,
+    ):
+        first_response = self._create_draft(
+            self.lead_client,
+            self.partner_claim,
+        )
+
+        self.assertEqual(
+            first_response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+        stale_draft_id = first_response.data["id"]
+
+        revised = issue_adjudication_decision(
+            claim=self.partner_claim,
+            actor=self.system_moderator,
+            verdict=(AdjudicationDecision.Verdict.MISLEADING),
+            canonical_claim=("The revised claim is " "misleading."),
+            rationale=("New evidence changed " "the authoritative result."),
+            organization=(self.organization),
+            expected_revision=1,
+        )
+
+        second_response = self.lead_client.post(
+            reverse(
+                ("moderation_fact_check_" "draft_create"),
+                kwargs={
+                    "claim_id": self.partner_claim.id,
+                },
+            ),
+            self._draft_payload(expected_revision=2),
+            format="json",
+        )
+
+        self.assertEqual(
+            second_response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+        stale_draft = OfficialFactCheck.objects.get(id=stale_draft_id)
+
+        self.assertEqual(
+            stale_draft.publication_status,
+            OfficialFactCheck.PublicationStatus.ARCHIVED,
+        )
+
+        self.assertIsNotNone(stale_draft.archived_at)
+
+        self.assertEqual(
+            second_response.data["version"],
+            2,
+        )
+
+        self.assertEqual(
+            second_response.data["verdict"],
+            revised["decision"].verdict,
         )
 
 

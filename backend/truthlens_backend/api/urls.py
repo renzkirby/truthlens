@@ -86,6 +86,26 @@ urlpatterns = [
         views.adjudicate_claim,
         name="adjudicate_claim",
     ),
+    path(
+        "moderation/claims/" "<uuid:claim_id>/" "fact-checks/draft/",
+        views.fact_check_draft_create,
+        name=("moderation_fact_check_" "draft_create"),
+    ),
+    path(
+        "moderation/fact-checks/" "<uuid:fact_check_id>/draft/",
+        views.fact_check_draft_update,
+        name=("moderation_fact_check_" "draft_update"),
+    ),
+    path(
+        "moderation/fact-checks/" "<uuid:fact_check_id>/submit/",
+        views.fact_check_submit,
+        name=("moderation_fact_check_submit"),
+    ),
+    path(
+        "moderation/fact-checks/" "<uuid:fact_check_id>/publish/",
+        views.fact_check_publish,
+        name=("moderation_fact_check_publish"),
+    ),
     # GoogleLogin URL
     path("auth/google/", views.GoogleLogin.as_view(), name="google_login"),
 ]

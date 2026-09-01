@@ -1595,48 +1595,207 @@ class ThreadComment(models.Model):
 
 
 class OfficialFactCheck(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    class PublicationStatus(models.TextChoices):
+        DRAFT = "DRAFT", "Draft"
+        IN_REVIEW = "IN_REVIEW", "In Review"
+        PUBLISHED = "PUBLISHED", "Published"
+        ARCHIVED = "ARCHIVED", "Archived"
 
-    # 1. The Core Data (ClaimReview Standard)
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    # ---------------------------------
+    # Authoritative provenance
+    # ---------------------------------
+
+    claim = models.ForeignKey(
+        Claim,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="official_fact_checks",
+    )
+
+    adjudication_decision = models.ForeignKey(
+        AdjudicationDecision,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="official_fact_checks",
+    )
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="official_fact_checks",
+    )
+
+    # ---------------------------------
+    # Fact-check content
+    # ---------------------------------
+
     canonical_claim = models.TextField(
-        help_text="A clean, third-person statement of the rumor (e.g., 'The Pope wore a white puffer jacket.')"
-    )
-    verdict = models.CharField(max_length=20)  # FACT, FAKE, MISLEADING, SATIRE
-    summary = models.TextField(
-        help_text="The official explanation approved by a moderator."
-    )
-    sources = models.JSONField(
-        default=list, blank=True, help_text="List of verified URL strings."
+        help_text=(
+            "The authoritative canonical claim " "from the adjudication decision."
+        )
     )
 
-    # 2. Hybrid Search Fields
+    verdict = models.CharField(
+        max_length=20,
+        choices=AdjudicationDecision.Verdict.choices,
+    )
+
+    headline = models.CharField(
+        max_length=300,
+        blank=True,
+    )
+
+    summary = models.TextField(
+        help_text=("Concise public-facing summary of " "the fact-check.")
+    )
+
+    article_body = models.TextField(
+        blank=True,
+        help_text=("Full public-facing fact-check " "analysis."),
+    )
+
+    # Temporary compatibility cache.
+    #
+    # OfficialFactCheckSource becomes the
+    # normalized source of truth.
+    sources = models.JSONField(
+        default=list,
+        blank=True,
+    )
+
+    # ---------------------------------
+    # Search / knowledge reuse
+    # ---------------------------------
+
     embedding = VectorField(
         dimensions=384,
         null=True,
         blank=True,
-        help_text="Sentence transformer embedding for Semantic Search",
-    )
-    search_vector = SearchVectorField(
-        null=True, blank=True, help_text="PostgreSQL tsvector for BM25 Keyword Search"
+        help_text=("Sentence-transformer embedding " "for semantic search."),
     )
 
-    # 3. Metadata
-    created_at = models.DateTimeField(auto_now_add=True)
+    search_vector = SearchVectorField(
+        null=True,
+        blank=True,
+        help_text=("PostgreSQL full-text search vector."),
+    )
+
+    # ---------------------------------
+    # Publication lifecycle
+    # ---------------------------------
+
+    publication_status = models.CharField(
+        max_length=20,
+        choices=PublicationStatus.choices,
+        default=PublicationStatus.DRAFT,
+        db_index=True,
+    )
+
+    version = models.PositiveIntegerField(
+        default=1,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    drafted_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="drafted_fact_checks",
+    )
+
+    submitted_for_review_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    reviewed_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_fact_checks",
+    )
+
+    reviewed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
     published_by = models.ForeignKey(
         "auth.User",
         on_delete=models.SET_NULL,
         null=True,
+        blank=True,
         related_name="published_fact_checks",
     )
+
+    published_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    archived_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    # ---------------------------------
+    # Legacy compatibility
+    # ---------------------------------
+
     source_thread = models.ForeignKey(
         "Thread",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        help_text="Links back to the community thread if auto-published.",
+        help_text=(
+            "Legacy link to the community " "thread that produced this fact-check."
+        ),
     )
 
     class Meta:
+        ordering = [
+            "-published_at",
+            "-created_at",
+        ]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "claim",
+                    "version",
+                ],
+                condition=Q(claim__isnull=False),
+                name=("uniq_fact_check_" "claim_version"),
+            ),
+            models.UniqueConstraint(
+                fields=["claim"],
+                condition=Q(
+                    publication_status=("PUBLISHED"),
+                    claim__isnull=False,
+                ),
+                name=("uniq_published_" "fact_check_claim"),
+            ),
+        ]
+
         indexes = [
             HnswIndex(
                 name="official_claim_hnsw_idx",
@@ -1645,18 +1804,206 @@ class OfficialFactCheck(models.Model):
                 ef_construction=128,
                 opclasses=["vector_cosine_ops"],
             ),
-            GinIndex(fields=["search_vector"], name="official_claim_gin_idx"),
+            GinIndex(
+                fields=["search_vector"],
+                name="official_claim_gin_idx",
+            ),
+            models.Index(
+                fields=[
+                    "publication_status",
+                    "-published_at",
+                ],
+                name=("factcheck_status_" "published_idx"),
+            ),
+            models.Index(
+                fields=[
+                    "organization",
+                    "publication_status",
+                ],
+                name=("factcheck_org_" "status_idx"),
+            ),
         ]
 
+    def clean(self):
+        super().clean()
+
+        if self.adjudication_decision_id:
+            decision = self.adjudication_decision
+
+            if self.claim_id and decision.claim_id != self.claim_id:
+                raise ValidationError(
+                    {
+                        "adjudication_decision": "The adjudication "
+                        "decision belongs to "
+                        "a different claim."
+                    }
+                )
+
+            if self.organization_id != decision.organization_id:
+                raise ValidationError(
+                    {
+                        "organization": "The publication "
+                        "organization must "
+                        "match the "
+                        "adjudication "
+                        "decision."
+                    }
+                )
+
+            if self.verdict != decision.verdict:
+                raise ValidationError(
+                    {
+                        "verdict": "The publication "
+                        "verdict must match "
+                        "the adjudication "
+                        "decision."
+                    }
+                )
+
+        if (
+            self.source_thread_id
+            and self.claim_id
+            and self.source_thread.claim_id != self.claim_id
+        ):
+            raise ValidationError(
+                {
+                    "source_thread": "The source thread "
+                    "belongs to a different "
+                    "claim."
+                }
+            )
+
     def save(self, *args, **kwargs):
-        # Automatically generate the PostgreSQL Search Vector when saving
         super().save(*args, **kwargs)
+
         if self.canonical_claim:
-            # We assign Weight 'A' to the claim, and 'B' to the summary so keywords in the claim rank higher.
             OfficialFactCheck.objects.filter(pk=self.pk).update(
-                search_vector=SearchVector("canonical_claim", weight="A")
-                + SearchVector("summary", weight="B")
+                search_vector=(
+                    SearchVector(
+                        "canonical_claim",
+                        weight="A",
+                    )
+                    + SearchVector(
+                        "headline",
+                        weight="A",
+                    )
+                    + SearchVector(
+                        "summary",
+                        weight="B",
+                    )
+                    + SearchVector(
+                        "article_body",
+                        weight="C",
+                    )
+                )
             )
 
     def __str__(self):
-        return f"[{self.verdict}] {self.canonical_claim[:50]}..."
+        return f"[{self.verdict}] " f"{self.canonical_claim[:50]}..."
+
+
+class OfficialFactCheckSource(models.Model):
+    class SourceType(models.TextChoices):
+        VERIFIED_EVIDENCE = (
+            "VERIFIED_EVIDENCE",
+            "Verified Community Evidence",
+        )
+
+        MODERATOR_ADDED = (
+            "MODERATOR_ADDED",
+            "Moderator Added",
+        )
+
+        LEGACY_IMPORT = (
+            "LEGACY_IMPORT",
+            "Legacy Import",
+        )
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    fact_check = models.ForeignKey(
+        OfficialFactCheck,
+        on_delete=models.CASCADE,
+        related_name="source_items",
+    )
+
+    url = models.URLField(
+        max_length=2000,
+    )
+
+    title = models.TextField(
+        blank=True,
+        null=True,
+    )
+
+    evidence_submission = models.ForeignKey(
+        EvidenceSubmission,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name=("official_fact_check_sources"),
+    )
+
+    added_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name=("added_fact_check_sources"),
+    )
+
+    source_type = models.CharField(
+        max_length=30,
+        choices=SourceType.choices,
+        default=SourceType.MODERATOR_ADDED,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    class Meta:
+        ordering = ["created_at"]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "fact_check",
+                    "url",
+                ],
+                name=("unique_fact_check_" "source_url"),
+            ),
+        ]
+
+        indexes = [
+            models.Index(
+                fields=[
+                    "fact_check",
+                    "source_type",
+                ],
+                name=("factcheck_source_" "type_idx"),
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+
+        if (
+            self.evidence_submission_id
+            and self.fact_check.claim_id
+            and (self.evidence_submission.thread.claim_id != self.fact_check.claim_id)
+        ):
+            raise ValidationError(
+                {
+                    "evidence_submission": "The evidence source "
+                    "belongs to a different "
+                    "claim."
+                }
+            )
+
+    def __str__(self):
+        return self.url
