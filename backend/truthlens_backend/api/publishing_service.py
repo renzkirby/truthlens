@@ -21,6 +21,35 @@ from .organization_service import (
     PartnerCapability,
     has_capability,
 )
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def _queue_fact_check_index(
+    fact_check_id,
+):
+    """
+    Best-effort background indexing.
+
+    Publication has already committed at this
+    point, so a broker/indexing failure must not
+    undo or invalidate the publication.
+    """
+
+    try:
+        from .tasks import (
+            index_official_fact_check_task,
+        )
+
+        (index_official_fact_check_task.delay(str(fact_check_id)))
+
+    except Exception as error:
+        logger.exception(
+            "Failed to queue fact-check " "indexing for %s: %s",
+            fact_check_id,
+            error,
+        )
 
 
 class PublishingError(Exception):
@@ -745,6 +774,10 @@ def publish_fact_check(
                 ),
             },
         )
+
+        published_fact_check_id = locked_fact_check.id
+
+        transaction.on_commit(lambda: _queue_fact_check_index(published_fact_check_id))
 
         return {
             "fact_check": locked_fact_check,

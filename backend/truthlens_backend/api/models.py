@@ -2007,3 +2007,138 @@ class OfficialFactCheckSource(models.Model):
 
     def __str__(self):
         return self.url
+
+
+class KnowledgeReuseEvent(models.Model):
+    class ReuseType(models.TextChoices):
+        USER_RESPONSE = (
+            "USER_RESPONSE",
+            "User-Facing Reuse",
+        )
+
+        VERIFICATION_CONTEXT = (
+            "VERIFICATION_CONTEXT",
+            "Verification Context Reuse",
+        )
+
+    class MatchMethod(models.TextChoices):
+        EXACT_TEXT = (
+            "EXACT_TEXT",
+            "Exact Text Match",
+        )
+
+        SEMANTIC = (
+            "SEMANTIC",
+            "Semantic Match",
+        )
+
+        FULL_TEXT = (
+            "FULL_TEXT",
+            "Full-Text Match",
+        )
+
+        CLAIM_CACHE = (
+            "CLAIM_CACHE",
+            "Claim Cache Match",
+        )
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    fact_check = models.ForeignKey(
+        OfficialFactCheck,
+        on_delete=models.PROTECT,
+        related_name="reuse_events",
+    )
+
+    target_claim = models.ForeignKey(
+        Claim,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="knowledge_reuse_events",
+    )
+
+    triggered_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="knowledge_reuse_events",
+    )
+
+    reuse_type = models.CharField(
+        max_length=30,
+        choices=ReuseType.choices,
+        db_index=True,
+    )
+
+    match_method = models.CharField(
+        max_length=30,
+        choices=MatchMethod.choices,
+        db_index=True,
+    )
+
+    similarity_score = models.FloatField(
+        null=True,
+        blank=True,
+    )
+
+    # We intentionally avoid storing the
+    # user's raw search/claim text here.
+    #
+    # A normalized SHA-256 fingerprint gives
+    # us future deduplication/analytics
+    # capability without retaining another
+    # copy of potentially sensitive text.
+    query_fingerprint = models.CharField(
+        max_length=64,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    class Meta:
+        ordering = [
+            "-created_at",
+        ]
+
+        indexes = [
+            models.Index(
+                fields=[
+                    "fact_check",
+                    "reuse_type",
+                    "-created_at",
+                ],
+                name="reuse_fact_type_time_idx",
+            ),
+            models.Index(
+                fields=[
+                    "target_claim",
+                    "-created_at",
+                ],
+                name="reuse_target_time_idx",
+            ),
+            models.Index(
+                fields=[
+                    "match_method",
+                    "-created_at",
+                ],
+                name="reuse_method_time_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.reuse_type} - " f"Fact Check {self.fact_check_id}"

@@ -1144,8 +1144,18 @@ class ClaimMatchSerializer(serializers.Serializer):
     """Serializer for claim match/deduplication responses."""
 
     match_type = serializers.ChoiceField(
-        choices=["resolved", "has_thread", "has_verdict", "no_verdict"],
-        help_text="Type of match: resolved (moderator verdict), has_thread (active thread), has_verdict (AI only), no_verdict",
+        choices=[
+            "resolved",
+            "has_thread",
+            "has_verdict",
+            "no_verdict",
+        ],
+        help_text=(
+            "Claim-cache state: authoritative "
+            "resolution, active community "
+            "thread, AI-only result, or no "
+            "verdict."
+        ),
     )
     claim_id = serializers.CharField()
     claim_type = serializers.CharField()
@@ -1161,3 +1171,22 @@ class ClaimMatchSerializer(serializers.Serializer):
     thread_status = serializers.CharField(allow_null=True)
     moderator_notes = serializers.CharField(allow_null=True)
     score_context = serializers.CharField(allow_null=True, required=False)
+    sources = serializers.JSONField(
+        required=False,
+    )
+
+    resolution_source = serializers.ChoiceField(
+        choices=[
+            "OFFICIAL_FACT_CHECK",
+            "ADJUDICATION",
+            "COMMUNITY_THREAD",
+            "AI",
+        ],
+        required=False,
+        allow_null=True,
+    )
+
+    official_fact_check = serializers.JSONField(
+        required=False,
+        allow_null=True,
+    )

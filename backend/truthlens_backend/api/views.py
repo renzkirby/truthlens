@@ -319,7 +319,11 @@ def receive_snippet(request):
         if matched_claim:
             _record_authenticated_claim_check(authenticated_user, matched_claim)
             # A moderator has already resolved this claim — return cached verdict
-            match_result = get_match_result(matched_claim)
+            match_result = get_match_result(
+                matched_claim,
+                triggered_by=(authenticated_user),
+                record_reuse=True,
+            )
             return JsonResponse(
                 {
                     "claim_id": str(matched_claim.id),
@@ -378,53 +382,26 @@ def claim_polling_endpoint(request, claim_id):
     if ai_verdict is None:
         return JsonResponse({"verdict": "PENDING"}, status=200)
     else:
-        # Include community verdict info when available
-        effective_verdict = claim.final_verdict or ai_verdict
-        active_thread = (
-            claim.threads.exclude(status="REJECTED").order_by("-created_at").first()
-        )
-        moderator_notes = None
-        sources = []
-
-        if active_thread:
-            verified_evidence = active_thread.evidence_submissions.filter(
-                evidence_status="VERIFIED"
-            )[:3]
-            sources = [
-                ev.evidence_url
-                for ev in verified_evidence
-                if getattr(ev, "evidence_url", None)
-            ]
-
-            if claim.final_verdict:
-                resolved_thread = (
-                    claim.threads.filter(moderator_verdict__isnull=False)
-                    .order_by("-moderated_at")
-                    .first()
-                )
-                if resolved_thread:
-                    moderator_notes = resolved_thread.moderator_notes
-
-        if not sources and claim.ai_sources:
-            sources.extend(claim.ai_sources)
-        elif not sources and claim.top_verdict_source:
-            sources.append(claim.top_verdict_source)
+        match_result = get_match_result(claim)
 
         return JsonResponse(
             {
-                "id": claim_id,
-                "verdict": effective_verdict,
-                "ai_verdict": ai_verdict,
-                "final_verdict": claim.final_verdict,
-                "summary": moderator_notes or claim.ai_summary,
-                "confidence_score": claim.consensus_score,
-                "source_type": claim.source_type,
-                "source_url": claim.top_verdict_source,
-                "sources": sources,
-                "is_ai_generated": claim.is_ai_generated,
-                "thread_id": str(active_thread.id) if active_thread else None,
-                "has_community_verdict": bool(claim.final_verdict),
-                "score_context": claim.score_context,
+                "id": str(claim_id),
+                "verdict": (match_result["verdict"]),
+                "ai_verdict": (match_result["ai_verdict"]),
+                "final_verdict": (match_result["final_verdict"]),
+                "summary": (match_result["summary"]),
+                "confidence_score": (match_result["confidence_score"]),
+                "source_type": (match_result["source_type"]),
+                "source_url": (match_result["source_url"]),
+                "sources": (match_result["sources"]),
+                "is_ai_generated": (match_result["is_ai_generated"]),
+                "thread_id": (match_result["thread_id"]),
+                # Temporary compatibility name.
+                "has_community_verdict": (bool(claim.final_verdict)),
+                "score_context": (match_result["score_context"]),
+                "resolution_source": (match_result["resolution_source"]),
+                "official_fact_check": (match_result["official_fact_check"]),
             },
             status=200,
         )
@@ -460,7 +437,12 @@ def verify_url(request):
         matched_claim = find_matching_claim(fingerprint, "URL")
         if matched_claim:
             _record_authenticated_claim_check(authenticated_user, matched_claim)
-            match_result = get_match_result(matched_claim)
+            match_result = get_match_result(
+                matched_claim,
+                triggered_by=(authenticated_user),
+                record_reuse=True,
+                query_text=safe_url,
+            )
             return JsonResponse(
                 {
                     "claim_id": str(matched_claim.id),
@@ -2136,7 +2118,12 @@ def verify_text(request):
 
     if matched_claim:
         _record_authenticated_claim_check(authenticated_user, matched_claim)
-        match_result = get_match_result(matched_claim)
+        match_result = get_match_result(
+            matched_claim,
+            triggered_by=(authenticated_user),
+            record_reuse=True,
+            query_text=text_content,
+        )
         return JsonResponse(
             {"claim_id": str(matched_claim.id), "cached": True, "match": match_result},
             status=200,
@@ -2179,12 +2166,19 @@ def claim_match(request):
     claim_type = request.query_params.get("claim_type", "").upper()
     text = request.query_params.get("text")
 
+    authenticated_user = _authenticated_user_or_none(request)
+
     if not fingerprint and not text:
         return Response({"match": None}, status=200)
 
     matched_claim = find_matching_claim(fingerprint, claim_type, context_text=text)
     if matched_claim:
-        match_result = get_match_result(matched_claim)
+        match_result = get_match_result(
+            matched_claim,
+            triggered_by=(authenticated_user),
+            record_reuse=True,
+            query_text=text,
+        )
         serializer = ClaimMatchSerializer(data=match_result)
         serializer.is_valid(raise_exception=True)
         return Response({"match": serializer.validated_data}, status=200)

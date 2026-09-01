@@ -11,6 +11,10 @@ from django.db import (
     IntegrityError,
     transaction,
 )
+from django.core.management import (
+    call_command,
+)
+from io import StringIO
 
 from .models import (
     Claim,
@@ -33,6 +37,7 @@ from .models import (
     VerificationRun,
     OfficialFactCheck,
     OfficialFactCheckSource,
+    KnowledgeReuseEvent,
 )
 from .throttles import FactCheckRateThrottle
 from .trust_service import (
@@ -79,6 +84,22 @@ from .publishing_service import (
     submit_fact_check_for_review,
     update_fact_check_draft,
 )
+from .knowledge_reuse_service import (
+    InvalidKnowledgeReuse,
+    build_published_fact_check_payload,
+    build_query_fingerprint,
+    find_published_fact_check_match,
+    record_knowledge_reuse,
+    index_published_fact_check,
+)
+from .services import (
+    search_official_vault,
+)
+from .claim_matching import (
+    compute_fingerprint,
+    get_match_result,
+)
+from .serializers import ClaimMatchSerializer
 
 
 class ThreadEvidenceCommentAuthorizationTests(APITestCase):
@@ -4221,6 +4242,27 @@ class PublishingFoundationTests(APITestCase):
             revised["decision"],
         )
 
+    def test_publication_queues_knowledge_index_after_commit(
+        self,
+    ):
+        draft = self._create_complete_draft(suffix="index-queue")
+
+        draft = submit_fact_check_for_review(
+            fact_check=draft,
+            actor=self.moderator,
+        )
+
+        with patch(("api.publishing_service" "._queue_fact_check_index")) as queue_mock:
+            with self.captureOnCommitCallbacks(execute=True):
+                result = publish_fact_check(
+                    fact_check=draft,
+                    actor=self.moderator,
+                )
+
+        published = result["fact_check"]
+
+        queue_mock.assert_called_once_with(published.id)
+
 
 class PublishingApiAuthorizationTests(APITestCase):
     def setUp(self):
@@ -4958,6 +5000,616 @@ class PublishingApiAuthorizationTests(APITestCase):
         self.assertEqual(
             second_response.data["verdict"],
             revised["decision"].verdict,
+        )
+
+
+class KnowledgeReuseFoundationTests(APITestCase):
+    def setUp(self):
+        self.moderator = User.objects.create_user(
+            username="reuse-mod",
+            email="reuse-mod@test.com",
+            password="pass1234",
+        )
+
+        self.moderator.profile.role = UserProfile.Role.MOD
+
+        self.moderator.profile.save(update_fields=["role"])
+
+        self.organization = Organization.objects.create(
+            name=("Knowledge Reuse Lab"),
+            slug=("knowledge-reuse-lab"),
+            organization_type=(Organization.OrganizationType.FACT_CHECKING),
+            verification_status=(Organization.VerificationStatus.VERIFIED),
+            partner_status=(Organization.PartnerStatus.ACTIVE),
+        )
+
+        self.claim = Claim.objects.create(
+            claim_type=(Claim.ClaimType.TEXT),
+            context_text=("The original knowledge " "reuse test claim."),
+            ai_verdict="FAKE",
+            ai_summary=("AI analysis suggests " "the claim is false."),
+            consensus_score=90.0,
+        )
+
+        ensure_adjudication_case(
+            claim=self.claim,
+            actor=self.moderator,
+            organization=(self.organization),
+        )
+
+        result = issue_adjudication_decision(
+            claim=self.claim,
+            actor=self.moderator,
+            verdict=(AdjudicationDecision.Verdict.FAKE),
+            canonical_claim=("The moon is made " "entirely of cheese."),
+            rationale=("Authoritative evidence " "does not support the " "claim."),
+            organization=(self.organization),
+            expected_revision=0,
+        )
+
+        self.decision = result["decision"]
+
+        # issue_adjudication_decision() updates a
+        # locked/refetched Claim instance.
+        # Refresh the fixture so subsequent tests
+        # see the persisted authoritative verdict.
+        self.claim.refresh_from_db()
+        self.decision.refresh_from_db()
+
+        self.assertEqual(
+            self.claim.final_verdict,
+            AdjudicationDecision.Verdict.FAKE,
+        )
+
+        self.fact_check = OfficialFactCheck.objects.create(
+            claim=self.claim,
+            adjudication_decision=(self.decision),
+            organization=(self.organization),
+            canonical_claim=(self.decision.canonical_claim),
+            verdict=(self.decision.verdict),
+            headline=("Fact Check: " "The Moon Is Not Cheese"),
+            summary=(
+                "Available evidence " "shows that the moon " "is not made of cheese."
+            ),
+            article_body=(
+                "The published " "fact-check explains " "the available evidence."
+            ),
+            publication_status=(OfficialFactCheck.PublicationStatus.PUBLISHED),
+            version=1,
+            drafted_by=(self.moderator),
+            reviewed_by=(self.moderator),
+            published_by=(self.moderator),
+            submitted_for_review_at=(timezone.now()),
+            reviewed_at=(timezone.now()),
+            published_at=(timezone.now()),
+        )
+
+        self.source = OfficialFactCheckSource.objects.create(
+            fact_check=(self.fact_check),
+            url=("https://example.com/" "moon-source"),
+            title=("Authoritative Moon " "Source"),
+            source_type=(OfficialFactCheckSource.SourceType.MODERATOR_ADDED),
+            added_by=(self.moderator),
+        )
+
+    def test_exact_search_returns_only_published_fact_check(
+        self,
+    ):
+        match = find_published_fact_check_match(
+            ("The moon is made " "entirely of cheese.")
+        )
+
+        self.assertIsNotNone(match)
+
+        self.assertEqual(
+            match.fact_check,
+            self.fact_check,
+        )
+
+        self.assertEqual(
+            match.match_method,
+            KnowledgeReuseEvent.MatchMethod.EXACT_TEXT,
+        )
+
+        self.assertEqual(
+            match.similarity_score,
+            1.0,
+        )
+
+    def test_archived_fact_check_is_not_reusable(
+        self,
+    ):
+        archived_claim = Claim.objects.create(
+            claim_type=(Claim.ClaimType.TEXT),
+            context_text=("Archived knowledge " "reuse claim."),
+        )
+
+        archived = OfficialFactCheck.objects.create(
+            claim=archived_claim,
+            canonical_claim=("Archived exact " "knowledge claim."),
+            verdict=(AdjudicationDecision.Verdict.FAKE),
+            headline=("Archived article"),
+            summary=("Archived summary."),
+            article_body=("Archived body."),
+            publication_status=(OfficialFactCheck.PublicationStatus.ARCHIVED),
+            version=1,
+            archived_at=(timezone.now()),
+        )
+
+        with patch(
+            ("api.knowledge_reuse_service" ".generate_embedding"),
+            return_value=None,
+        ):
+            match = find_published_fact_check_match(archived.canonical_claim)
+
+        self.assertIsNone(match)
+
+    def test_reuse_payload_contains_partner_attribution_and_sources(
+        self,
+    ):
+        match = find_published_fact_check_match(self.fact_check.canonical_claim)
+
+        payload = build_published_fact_check_payload(match)
+
+        self.assertEqual(
+            payload["fact_check_id"],
+            str(self.fact_check.id),
+        )
+
+        self.assertEqual(
+            payload["verdict"],
+            (AdjudicationDecision.Verdict.FAKE),
+        )
+
+        self.assertEqual(
+            payload["organization"]["name"],
+            self.organization.name,
+        )
+
+        self.assertEqual(
+            payload["organization"]["slug"],
+            self.organization.slug,
+        )
+
+        self.assertEqual(
+            payload["sources"][0]["url"],
+            self.source.url,
+        )
+
+    def test_reuse_event_stores_hash_not_raw_query(
+        self,
+    ):
+        query_text = "A future user asks whether " "the moon is made of cheese."
+
+        event = record_knowledge_reuse(
+            fact_check=self.fact_check,
+            reuse_type=(KnowledgeReuseEvent.ReuseType.USER_RESPONSE),
+            match_method=(KnowledgeReuseEvent.MatchMethod.EXACT_TEXT),
+            target_claim=self.claim,
+            triggered_by=(self.moderator),
+            similarity_score=1.0,
+            query_text=query_text,
+            metadata={
+                "channel": "TEST",
+            },
+        )
+
+        self.assertEqual(
+            len(event.query_fingerprint),
+            64,
+        )
+
+        self.assertNotEqual(
+            event.query_fingerprint,
+            query_text,
+        )
+
+        self.assertEqual(
+            event.metadata["channel"],
+            "TEST",
+        )
+
+        self.assertEqual(
+            event.fact_check,
+            self.fact_check,
+        )
+
+    def test_query_fingerprint_is_normalized_and_stable(
+        self,
+    ):
+        first = build_query_fingerprint(("The Moon Is Made " "Of Cheese"))
+
+        second = build_query_fingerprint(("  the moon is made   " "of cheese  "))
+
+        self.assertEqual(
+            first,
+            second,
+        )
+
+    def test_non_published_article_cannot_record_reuse(
+        self,
+    ):
+        draft_claim = Claim.objects.create(
+            claim_type=(Claim.ClaimType.TEXT),
+            context_text=("Draft knowledge claim."),
+        )
+
+        draft = OfficialFactCheck.objects.create(
+            claim=draft_claim,
+            canonical_claim=("A draft should " "never be reused."),
+            verdict=(AdjudicationDecision.Verdict.UNVERIFIED),
+            headline=("Draft article"),
+            summary=("Draft summary."),
+            article_body=("Draft body."),
+            publication_status=(OfficialFactCheck.PublicationStatus.DRAFT),
+            version=1,
+        )
+
+        with self.assertRaises(InvalidKnowledgeReuse):
+            record_knowledge_reuse(
+                fact_check=draft,
+                reuse_type=(KnowledgeReuseEvent.ReuseType.USER_RESPONSE),
+                match_method=(KnowledgeReuseEvent.MatchMethod.CLAIM_CACHE),
+            )
+
+    def test_published_fact_check_can_be_indexed(
+        self,
+    ):
+        self.fact_check.embedding = None
+
+        (
+            OfficialFactCheck.objects.filter(id=self.fact_check.id).update(
+                embedding=None,
+                search_vector=None,
+            )
+        )
+
+        fake_embedding = [0.01] * 384
+
+        with patch(
+            ("api.knowledge_reuse_service" ".generate_embedding"),
+            return_value=fake_embedding,
+        ):
+            indexed = index_published_fact_check(self.fact_check)
+
+        self.assertTrue(indexed)
+
+        self.fact_check.refresh_from_db()
+
+        self.assertIsNotNone(self.fact_check.embedding)
+
+        self.assertIsNotNone(self.fact_check.search_vector)
+
+    def test_draft_fact_check_is_not_knowledge_indexed(
+        self,
+    ):
+        draft_claim = Claim.objects.create(
+            claim_type=(Claim.ClaimType.TEXT),
+            context_text=("Draft indexing claim."),
+        )
+
+        draft = OfficialFactCheck.objects.create(
+            claim=draft_claim,
+            canonical_claim=("Draft articles should " "not enter the vault."),
+            verdict=(AdjudicationDecision.Verdict.UNVERIFIED),
+            headline="Draft",
+            summary="Draft summary.",
+            article_body="Draft body.",
+            publication_status=(OfficialFactCheck.PublicationStatus.DRAFT),
+            version=1,
+        )
+
+        with patch(
+            ("api.knowledge_reuse_service" ".generate_embedding")
+        ) as embedding_mock:
+            indexed = index_published_fact_check(draft)
+
+        self.assertFalse(indexed)
+
+        embedding_mock.assert_not_called()
+
+        draft.refresh_from_db()
+
+        self.assertIsNone(draft.embedding)
+
+    def test_vault_search_records_verification_context_reuse(
+        self,
+    ):
+        payload = search_official_vault(
+            self.fact_check.canonical_claim,
+            target_claim=self.claim,
+            triggered_by=self.moderator,
+        )
+
+        self.assertIsNotNone(payload)
+
+        self.assertEqual(
+            payload["fact_check_id"],
+            str(self.fact_check.id),
+        )
+
+        event = KnowledgeReuseEvent.objects.get(
+            fact_check=self.fact_check,
+            reuse_type=(KnowledgeReuseEvent.ReuseType.VERIFICATION_CONTEXT),
+        )
+
+        self.assertEqual(
+            event.target_claim,
+            self.claim,
+        )
+
+        self.assertEqual(
+            event.triggered_by,
+            self.moderator,
+        )
+
+        self.assertEqual(
+            event.match_method,
+            KnowledgeReuseEvent.MatchMethod.EXACT_TEXT,
+        )
+
+    def test_reuse_event_failure_does_not_hide_valid_vault_match(
+        self,
+    ):
+        with patch(
+            ("api.knowledge_reuse_service" ".record_knowledge_reuse"),
+            side_effect=Exception("analytics unavailable"),
+        ):
+            payload = search_official_vault(
+                self.fact_check.canonical_claim,
+                target_claim=self.claim,
+            )
+
+        self.assertIsNotNone(payload)
+
+        self.assertEqual(
+            payload["verdict"],
+            self.fact_check.verdict,
+        )
+
+    def test_claim_cache_prefers_published_fact_check_content(
+        self,
+    ):
+        result = get_match_result(self.claim)
+
+        self.assertEqual(
+            result["match_type"],
+            "resolved",
+        )
+
+        self.assertEqual(
+            result["resolution_source"],
+            "OFFICIAL_FACT_CHECK",
+        )
+
+        self.assertEqual(
+            result["verdict"],
+            self.fact_check.verdict,
+        )
+
+        self.assertEqual(
+            result["summary"],
+            self.fact_check.summary,
+        )
+
+        self.assertIsNone(result["moderator_notes"])
+
+        self.assertEqual(
+            result["official_fact_check"]["fact_check_id"],
+            str(self.fact_check.id),
+        )
+
+        self.assertEqual(
+            result["official_fact_check"]["organization"]["name"],
+            self.organization.name,
+        )
+
+        self.assertIn(
+            self.source.url,
+            result["sources"],
+        )
+
+    def test_user_facing_claim_cache_records_reuse_event(
+        self,
+    ):
+        query_text = "Is the moon made entirely " "of cheese?"
+
+        get_match_result(
+            self.claim,
+            triggered_by=self.moderator,
+            record_reuse=True,
+            query_text=query_text,
+        )
+
+        event = KnowledgeReuseEvent.objects.get(
+            fact_check=self.fact_check,
+            reuse_type=(KnowledgeReuseEvent.ReuseType.USER_RESPONSE),
+        )
+
+        self.assertEqual(
+            event.target_claim,
+            self.claim,
+        )
+
+        self.assertEqual(
+            event.triggered_by,
+            self.moderator,
+        )
+
+        self.assertEqual(
+            event.match_method,
+            KnowledgeReuseEvent.MatchMethod.CLAIM_CACHE,
+        )
+
+        self.assertIsNotNone(event.query_fingerprint)
+
+    def test_unpublished_adjudication_does_not_expose_thread_moderator_notes(
+        self,
+    ):
+        unpublished_claim = Claim.objects.create(
+            claim_type=(Claim.ClaimType.TEXT),
+            context_text=("An adjudicated but " "unpublished claim."),
+            ai_verdict="FAKE",
+            ai_summary=("Public-safe AI summary."),
+            final_verdict="FAKE",
+        )
+
+        Thread.objects.create(
+            claim=unpublished_claim,
+            author=self.moderator,
+            caption="Legacy thread",
+            status=Thread.Status.CLOSED,
+            moderator_verdict="FAKE",
+            moderator_notes=("PRIVATE INTERNAL " "MODERATOR NOTE"),
+            moderated_by=self.moderator,
+            moderated_at=timezone.now(),
+        )
+
+        result = get_match_result(unpublished_claim)
+
+        self.assertEqual(
+            result["resolution_source"],
+            "ADJUDICATION",
+        )
+
+        self.assertEqual(
+            result["summary"],
+            "Public-safe AI summary.",
+        )
+
+        self.assertIsNone(result["moderator_notes"])
+
+        self.assertIsNone(result["official_fact_check"])
+
+        self.assertNotIn(
+            "PRIVATE INTERNAL",
+            result["summary"],
+        )
+
+    def test_claim_match_serializer_preserves_fact_check_attribution(
+        self,
+    ):
+        payload = get_match_result(self.claim)
+
+        serializer = ClaimMatchSerializer(data=payload)
+
+        serializer.is_valid(raise_exception=True)
+
+        validated = serializer.validated_data
+
+        self.assertEqual(
+            validated["resolution_source"],
+            "OFFICIAL_FACT_CHECK",
+        )
+
+        self.assertEqual(
+            validated["official_fact_check"]["fact_check_id"],
+            str(self.fact_check.id),
+        )
+
+        self.assertIn(
+            self.source.url,
+            validated["sources"],
+        )
+
+    def test_polling_uses_published_fact_check_without_recording_reuse(
+        self,
+    ):
+        client = APIClient()
+
+        response = client.get(
+            reverse(
+                "claim_status",
+                kwargs={
+                    "claim_id": (self.claim.id),
+                },
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        data = response.json()
+
+        self.assertEqual(
+            data["resolution_source"],
+            "OFFICIAL_FACT_CHECK",
+        )
+
+        self.assertEqual(
+            data["summary"],
+            self.fact_check.summary,
+        )
+
+        self.assertEqual(
+            data["official_fact_check"]["fact_check_id"],
+            str(self.fact_check.id),
+        )
+
+        self.assertFalse(
+            KnowledgeReuseEvent.objects.filter(
+                reuse_type=(KnowledgeReuseEvent.ReuseType.USER_RESPONSE)
+            ).exists()
+        )
+
+    def test_cached_text_endpoint_records_user_facing_fact_check_reuse(
+        self,
+    ):
+        query_text = self.fact_check.canonical_claim
+
+        self.claim.context_text = query_text
+
+        self.claim.claim_fingerprint = compute_fingerprint(
+            "TEXT",
+            query_text,
+        )
+
+        self.claim.save(
+            update_fields=[
+                "context_text",
+                "claim_fingerprint",
+            ]
+        )
+
+        client = APIClient()
+
+        client.force_authenticate(user=self.moderator)
+
+        response = client.post(
+            reverse("verify_text"),
+            {
+                "text": query_text,
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        data = response.json()
+
+        self.assertTrue(data["cached"])
+
+        self.assertEqual(
+            data["match"]["resolution_source"],
+            "OFFICIAL_FACT_CHECK",
+        )
+
+        self.assertEqual(
+            data["match"]["official_fact_check"]["fact_check_id"],
+            str(self.fact_check.id),
+        )
+
+        self.assertTrue(
+            KnowledgeReuseEvent.objects.filter(
+                fact_check=(self.fact_check),
+                reuse_type=(KnowledgeReuseEvent.ReuseType.USER_RESPONSE),
+                triggered_by=(self.moderator),
+            ).exists()
         )
 
 
