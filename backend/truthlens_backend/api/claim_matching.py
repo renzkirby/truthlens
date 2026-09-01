@@ -183,6 +183,7 @@ def find_matching_claim(
     hamming_threshold=5,
     context_text=None,
     semantic_threshold=0.80,
+    allow_semantic_fallback=False,
 ):
     """
     Search the database for an existing claim that matches the given fingerprint or text.
@@ -251,7 +252,7 @@ def find_matching_claim(
 
     # --- 3. Semantic similarity match for TEXT/URL claims (Phase 2 Fallback) ---
     # Only applies if we have context_text and didn't find an exact match above
-    if claim_type in ["TEXT", "URL"] and context_text:
+    if allow_semantic_fallback and claim_type in ["TEXT", "URL"] and context_text:
         print(
             f"No exact match found for {claim_type}. Generating embedding for semantic check..."
         )

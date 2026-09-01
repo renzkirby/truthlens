@@ -216,7 +216,12 @@ def execute_core_text_pipeline(raw_text, claim_id):
     from .claim_matching import compute_fingerprint, find_matching_claim
 
     text_fingerprint = compute_fingerprint("TEXT", raw_text)
-    matched_claim = find_matching_claim(text_fingerprint, "TEXT", context_text=raw_text)
+    matched_claim = find_matching_claim(
+        text_fingerprint,
+        "TEXT",
+        context_text=raw_text,
+        allow_semantic_fallback=False,
+    )
 
     if matched_claim and str(matched_claim.id) != str(claim_id):
         logger.info(

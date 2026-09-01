@@ -97,9 +97,11 @@ from .services import (
 )
 from .claim_matching import (
     compute_fingerprint,
+    find_matching_claim,
     get_match_result,
 )
 from .serializers import ClaimMatchSerializer
+from .tasks import execute_core_text_pipeline
 
 
 class ThreadEvidenceCommentAuthorizationTests(APITestCase):
@@ -5611,6 +5613,89 @@ class KnowledgeReuseFoundationTests(APITestCase):
                 triggered_by=(self.moderator),
             ).exists()
         )
+
+    def test_claim_cache_does_not_use_semantic_fallback(
+        self,
+    ):
+        with patch(
+            "api.claim_matching.find_semantic_match",
+            return_value=self.claim,
+        ) as semantic_mock:
+            result = find_matching_claim(
+                "txt:definitely-not-an-exact-match",
+                "TEXT",
+                context_text=(
+                    "A semantically related but " "factually distinct statement."
+                ),
+                allow_semantic_fallback=False,
+            )
+
+        semantic_mock.assert_not_called()
+        self.assertIsNone(result)
+
+    def test_text_endpoint_does_not_return_semantic_match_as_cached_verdict(
+        self,
+    ):
+        query_text = (
+            "A different claim that is only "
+            "semantically related to the "
+            "published fact-check."
+        )
+
+        client = APIClient()
+
+        with patch(
+            "api.claim_matching.find_semantic_match",
+            return_value=self.claim,
+        ) as semantic_mock:
+            with patch("api.views.text_fact_check_process.delay"):
+                response = client.post(
+                    reverse("verify_text"),
+                    {
+                        "text": query_text,
+                    },
+                    format="json",
+                )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertFalse(response.json()["cached"])
+
+        semantic_mock.assert_not_called()
+
+    def test_second_chance_dedup_does_not_copy_semantic_final_verdict(
+        self,
+    ):
+        new_claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text=("A semantically related but " "distinct new claim."),
+        )
+
+        with patch(
+            "api.claim_matching.find_semantic_match",
+            return_value=self.claim,
+        ) as semantic_mock:
+            with patch(
+                "api.tasks.clean_ocr_text",
+                return_value={
+                    "cleaned_claim": "OUT_OF_SCOPE",
+                    "search_query": "test",
+                    "article_stance": "NEUTRAL",
+                },
+            ):
+                execute_core_text_pipeline(
+                    new_claim.context_text,
+                    new_claim.id,
+                )
+
+        semantic_mock.assert_not_called()
+
+        new_claim.refresh_from_db()
+
+        self.assertIsNone(new_claim.final_verdict)
 
 
 class OptionalFactCheckAuthTests(APITestCase):

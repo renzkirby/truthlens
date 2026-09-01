@@ -2113,7 +2113,12 @@ def verify_text(request):
     # ── Claim Deduplication Pre-Check ──
     fingerprint = compute_fingerprint("TEXT", text_content)
     # Even if fingerprint is None or exact match fails, we want semantic fallback!
-    matched_claim = find_matching_claim(fingerprint, "TEXT", context_text=text_content)
+    matched_claim = find_matching_claim(
+        fingerprint,
+        "TEXT",
+        context_text=text_content,
+        allow_semantic_fallback=False,
+    )
     authenticated_user = _authenticated_user_or_none(request)
 
     if matched_claim:
@@ -2171,7 +2176,12 @@ def claim_match(request):
     if not fingerprint and not text:
         return Response({"match": None}, status=200)
 
-    matched_claim = find_matching_claim(fingerprint, claim_type, context_text=text)
+    matched_claim = find_matching_claim(
+        fingerprint,
+        claim_type,
+        context_text=text,
+        allow_semantic_fallback=False,
+    )
     if matched_claim:
         match_result = get_match_result(
             matched_claim,
