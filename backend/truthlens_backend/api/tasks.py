@@ -26,6 +26,10 @@ from .models import (
     UserProfile,
 )
 from .trust_service import recompute_user_trust_score
+from .verification.ingestion import ingest_raw_evidence
+from .verification.providers.google_fact_check import (
+    GoogleFactCheckProvider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +51,69 @@ DEFAULT_HTTP_TIMEOUT_SEC = _float_env("DEFAULT_HTTP_TIMEOUT_SEC", 12.0)
 SUPABASE_MEDIA_FETCH_TIMEOUT_SEC = _float_env("SUPABASE_MEDIA_FETCH_TIMEOUT_SEC", 15.0)
 GFC_HTTP_TIMEOUT_SEC = _float_env("GFC_HTTP_TIMEOUT_SEC", DEFAULT_HTTP_TIMEOUT_SEC)
 TAVILY_EXTRACT_TIMEOUT_SEC = _float_env("TAVILY_EXTRACT_TIMEOUT_SEC", 20.0)
+
+
+def _retrieve_and_ingest_gfc(
+    search_query,
+    claim_id,
+    *,
+    stage_prefix="",
+):
+    """
+    Retrieve Google Fact Check data once and persist the parsed
+    evidence without making a second provider request.
+
+    Evidence persistence is best-effort during runtime wiring:
+    a persistence failure must not discard otherwise usable GFC
+    data or change the existing verdict path.
+    """
+
+    provider = GoogleFactCheckProvider(
+        timeout=GFC_HTTP_TIMEOUT_SEC,
+    )
+
+    payload, raw_evidence_items = (
+        provider.search_with_payload(
+            search_query,
+            limit=5,
+        )
+    )
+
+    ingestion_started_at = time.perf_counter()
+    stage_name = (
+        f"{stage_prefix}gfc_evidence_ingestion"
+    )
+
+    try:
+        evidence_sources = ingest_raw_evidence(
+            raw_evidence_items
+        )
+
+        _log_stage(
+            claim_id,
+            stage_name,
+            ingestion_started_at,
+            evidence_sources=len(
+                evidence_sources
+            ),
+        )
+
+    except Exception as exc:
+        _log_stage(
+            claim_id,
+            f"{stage_name}_failed",
+            ingestion_started_at,
+            error=str(exc)[:120],
+        )
+
+        logger.error(
+            "GFC evidence ingestion failed "
+            "for claim %s: %s",
+            claim_id,
+            exc,
+        )
+
+    return payload
 
 
 def _elapsed_ms(started_at):
@@ -357,22 +424,21 @@ def execute_core_text_pipeline(raw_text, claim_id):
 
         # Try GFC first — return early if relevant result found
         gfc_started_at = time.perf_counter()
+
         try:
-            gfc_response = requests.get(
-                "https://factchecktools.googleapis.com/v1alpha1/claims:search",
-                params={
-                    "query": search_query[:200],
-                    "key": os.environ.get("FACT_CHECK_API_KEY"),
-                },
-                timeout=GFC_HTTP_TIMEOUT_SEC,
+            gfc_data = _retrieve_and_ingest_gfc(
+                search_query,
+                claim_id,
             )
-            gfc_data = gfc_response.json()
-            gfc_claims = gfc_data.get("claims", [])
+
+            gfc_claims = gfc_data.get(
+                "claims",
+                [],
+            )
             _log_stage(
                 claim_id,
                 "gfc_search",
                 gfc_started_at,
-                status_code=gfc_response.status_code,
                 claims=len(gfc_claims),
             )
 
@@ -681,22 +747,22 @@ def url_fact_check_process(url, claim_id):
 
     # Step 3 — Try GFC first, return early if relevant
     gfc_started_at = time.perf_counter()
+
     try:
-        gfc_response = requests.get(
-            "https://factchecktools.googleapis.com/v1alpha1/claims:search",
-            params={
-                "query": search_query[:200],
-                "key": os.environ.get("FACT_CHECK_API_KEY"),
-            },
-            timeout=GFC_HTTP_TIMEOUT_SEC,
+        gfc_data = _retrieve_and_ingest_gfc(
+            search_query,
+            claim_id,
+            stage_prefix="url_",
         )
-        gfc_data = gfc_response.json()
-        gfc_claims = gfc_data.get("claims", [])
+
+        gfc_claims = gfc_data.get(
+            "claims",
+            [],
+        )
         _log_stage(
             claim_id,
             "url_gfc_search",
             gfc_started_at,
-            status_code=gfc_response.status_code,
             claims=len(gfc_claims),
         )
 

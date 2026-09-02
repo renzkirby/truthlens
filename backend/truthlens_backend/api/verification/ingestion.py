@@ -1,35 +1,23 @@
+from collections.abc import Iterable
+
 from django.db import transaction
 
 from ..models import EvidenceSource
+from .contracts import RawEvidence
 from .normalizers import normalize_evidence
 from .persistence import persist_evidence_source
 from .providers.base import EvidenceProvider
 
 
-def ingest_provider_evidence(
-    provider: EvidenceProvider,
-    query: str,
-    *,
-    limit: int = 5,
+def ingest_raw_evidence(
+    raw_evidence_items: Iterable[RawEvidence],
 ) -> list[EvidenceSource]:
     """
-    Retrieve evidence from a provider, normalize it, and persist it.
+    Normalize and persist evidence that has already been retrieved.
 
-    Provider retrieval remains separate from TruthLens persistence:
-    providers return RawEvidence, while this ingestion layer converts
-    those results into reusable EvidenceSource records.
-
-    Duplicate evidence that resolves to the same EvidenceSource is
-    returned only once.
+    This allows runtime callers to retain provider-specific response
+    data without performing the external provider request twice.
     """
-
-    if limit <= 0:
-        return []
-
-    raw_evidence_items = provider.search(
-        query,
-        limit=limit,
-    )
 
     persisted_sources: list[EvidenceSource] = []
     seen_source_ids: set[object] = set()
@@ -58,3 +46,26 @@ def ingest_provider_evidence(
             )
 
     return persisted_sources
+
+
+def ingest_provider_evidence(
+    provider: EvidenceProvider,
+    query: str,
+    *,
+    limit: int = 5,
+) -> list[EvidenceSource]:
+    """
+    Retrieve evidence from a provider, normalize it, and persist it.
+    """
+
+    if limit <= 0:
+        return []
+
+    raw_evidence_items = provider.search(
+        query,
+        limit=limit,
+    )
+
+    return ingest_raw_evidence(
+        raw_evidence_items
+    )

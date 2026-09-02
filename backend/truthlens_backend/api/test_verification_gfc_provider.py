@@ -396,3 +396,108 @@ class GoogleFactCheckProviderTests(
             provider.search(
                 "example claim"
             )
+
+    def test_search_with_payload_returns_payload_and_evidence(
+        self,
+    ):
+        payload = {
+            "claims": [
+                {
+                    "text": "Example claim.",
+                    "claimReview": [
+                        {
+                            "publisher": {
+                                "name": "Example Checker",
+                            },
+                            "url": (
+                                "https://example.com/fact-check"
+                            ),
+                            "textualRating": "False",
+                        }
+                    ],
+                }
+            ]
+        }
+
+        response = Mock()
+        response.json.return_value = payload
+
+        http_client = Mock()
+        http_client.get.return_value = response
+
+        provider = GoogleFactCheckProvider(
+            api_key="test-api-key",
+            http_client=http_client,
+        )
+
+        returned_payload, evidence_items = (
+            provider.search_with_payload(
+                "example claim",
+            )
+        )
+
+        self.assertIs(
+            returned_payload,
+            payload,
+        )
+
+        self.assertEqual(
+            len(evidence_items),
+            1,
+        )
+
+        self.assertEqual(
+            evidence_items[0].provider,
+            "GOOGLE_FACT_CHECK",
+        )
+
+        http_client.get.assert_called_once()
+
+    def test_search_still_returns_parsed_evidence(
+        self,
+    ):
+        payload = {
+            "claims": [
+                {
+                    "text": "Example claim.",
+                    "claimReview": [
+                        {
+                            "publisher": {
+                                "name": "Example Checker",
+                            },
+                            "url": (
+                                "https://example.com/fact-check"
+                            ),
+                            "textualRating": "False",
+                        }
+                    ],
+                }
+            ]
+        }
+
+        response = Mock()
+        response.json.return_value = payload
+
+        http_client = Mock()
+        http_client.get.return_value = response
+
+        provider = GoogleFactCheckProvider(
+            api_key="test-api-key",
+            http_client=http_client,
+        )
+
+        evidence_items = provider.search(
+            "example claim",
+        )
+
+        self.assertEqual(
+            len(evidence_items),
+            1,
+        )
+
+        self.assertEqual(
+            evidence_items[0].publisher,
+            "Example Checker",
+        )
+
+        http_client.get.assert_called_once()
