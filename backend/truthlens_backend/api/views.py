@@ -15,19 +15,31 @@ from django.contrib.auth import authenticate
 from django.utils import timezone
 from django.db import IntegrityError, transaction
 from django.db.models import Q, Count, F, Max
-from rest_framework.decorators import api_view, permission_classes, action, throttle_classes
+from rest_framework.decorators import (
+    api_view,
+    permission_classes,
+    action,
+    throttle_classes,
+)
 from rest_framework import status, viewsets
-from rest_framework.permissions import IsAuthenticated, BasePermission, SAFE_METHODS, AllowAny
+from rest_framework.permissions import (
+    IsAuthenticated,
+    BasePermission,
+    SAFE_METHODS,
+    AllowAny,
+)
 from rest_framework.response import Response
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import (
+    NotFound,
+    PermissionDenied,
+    ValidationError,
+)
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework.exceptions import NotFound
 from rest_framework.pagination import CursorPagination
 from rest_framework.views import APIView
 from datetime import timedelta
 from django.shortcuts import get_object_or_404
 from PIL import Image
-from .embedding_service import generate_embedding
 import json
 import secrets
 import base64
@@ -37,18 +49,17 @@ import PyPDF2
 import docx
 import os
 from .services import (
-    detect_ai_image, 
+    detect_ai_image,
     generate_deepfake_explanation,
-    process_image, 
+    process_image,
     upload_image_to_database,
-    validate_public_url, 
+    validate_public_url,
     check_url_threat_reputation,
 )
 from .claim_matching import compute_fingerprint, find_matching_claim, get_match_result
 from .tasks import (
     snippet_fact_check_process,
     url_fact_check_process,
-    update_contributor_trust_score,
     text_fact_check_process,
     recompute_user_trust_score_task,
 )
@@ -62,12 +73,67 @@ from .models import (
     ThreadFlag,
     FlagResolutionLog,
     Vote,
+    ModerationCase,
+    Organization,
+    AdjudicationDecision,
+    VerificationRun,
     OfficialFactCheck,
+    VerificationAssignment,
+)
+from .moderation_service import (
+    ACTIVE_CASE_STATUSES,
+    ModerationCaseError,
+    ensure_safety_case,
+    escalate_safety_case,
+    resolve_safety_case,
+)
+from .organization_service import (
+    PartnerCapability,
+    has_capability,
+    has_case_capability,
+)
+from .evidence_review_service import (
+    EvidenceReviewAuthorizationError,
+    EvidenceReviewConflict,
+    EvidenceReviewError,
+    ensure_evidence_case,
+    get_latest_evidence_case,
+    review_evidence_submission,
+)
+from .adjudication_service import (
+    AdjudicationAuthorizationError,
+    AdjudicationConflict,
+    AdjudicationError,
+    ensure_adjudication_case,
+    get_latest_adjudication_case,
+    has_adjudication_conflict,
+    issue_adjudication_decision,
 )
 from .trust_service import (
     calculate_trust_components,
     get_reputation_progression,
     recompute_user_trust_score,
+)
+from .publishing_service import (
+    PublishingError,
+    PublishingAuthorizationError,
+    PublishingConflict,
+    create_fact_check_draft,
+    update_fact_check_draft,
+    submit_fact_check_for_review,
+    publish_fact_check,
+)
+from .verification_assignment_service import (
+    VerificationAssignmentAuthorizationError,
+    VerificationAssignmentConflict,
+    VerificationAssignmentError,
+    VerificationAssignmentReleaseBlocked,
+    claim_verification_assignment,
+    ensure_verification_assignment,
+    get_available_verification_assignments,
+    get_claim_verification_organization,
+    get_organization_verification_workload,
+    release_verification_assignment,
 )
 from .throttles import (
     FactCheckRateThrottle,
@@ -95,18 +161,27 @@ from .serializers import (
     ModerationDecisionSerializer,
     ClaimMatchSerializer,
     UserWithTrustBreakdownSerializer,
-    ClaimDeepAnalysisSerializer
+    ClaimDeepAnalysisSerializer,
+    AdjudicationDecisionSerializer,
+    AdjudicationQueueCaseSerializer,
+    FactCheckDraftCreateSerializer,
+    FactCheckDraftUpdateSerializer,
+    OfficialFactCheckSerializer,
+    VerificationAssignmentClaimSerializer,
+    VerificationAssignmentSerializer,
 )
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.views import SocialLoginView
 from .email_verification import send_email_verification
 
-#GoogleLogin
+
+# GoogleLogin
 class GoogleLogin(SocialLoginView):
     adapter_class = GoogleOAuth2Adapter
     client_class = OAuth2Client
-    callback_url = "https://truthlens-dev.vercel.app/" #TODO: update to production URL in env vars
+    callback_url = "https://truthlens-dev.vercel.app/"  # TODO: update to production URL in env vars
+
 
 # ── Pagination Configuration ──
 class StandardCursorPagination(CursorPagination):
@@ -114,30 +189,26 @@ class StandardCursorPagination(CursorPagination):
     Cursor-based pagination for efficient infinite scrolling.
     More efficient than offset pagination for large datasets.
     """
+
     page_size = 20
-    ordering = '-created_at'
-    cursor_query_param = 'cursor'
+    ordering = "-created_at"
+    cursor_query_param = "cursor"
     template = None  # Disable HTML template
 
     def get_ordering(self, request, queryset, view):
-        sort_order = request.query_params.get('sort', 'newest')
-        if sort_order == 'oldest':
-            return ('created_at',)
-        return ('-created_at',)
+        sort_order = request.query_params.get("sort", "newest")
+        if sort_order == "oldest":
+            return ("created_at",)
+        return ("-created_at",)
 
-ALLOWED_MODERATION_TRANSITIONS = {
-    "PENDING": {"OPEN", "CLOSED", "REJECTED"},
-    "OPEN": {"CLOSED", "REJECTED"},
-    "CLOSED": {"OPEN"},
-    "REJECTED": set(),
-}
 
 class IsThreadOwnerOrReadOnly(BasePermission):
     def has_object_permission(self, request, view, obj):
         if request.method in SAFE_METHODS:
             return True
         return obj.author == request.user
-    
+
+
 class IsEvidenceContributorOrReadOnly(BasePermission):
     def has_permission(self, request, view):
         # Allow authenticated users to create evidence (POST)
@@ -145,11 +216,12 @@ class IsEvidenceContributorOrReadOnly(BasePermission):
             return request.user.is_authenticated
         # Allow everyone to read
         return True
-    
+
     def has_object_permission(self, request, view, obj):
         if request.method in SAFE_METHODS:
             return True
         return obj.contributor == request.user
+
 
 class IsCommenterOrReadOnly(BasePermission):
     def has_object_permission(self, request, view, obj):
@@ -172,9 +244,52 @@ def _has_moderator_role(user):
     # Backward-compatible during migration from MODERATOR -> MOD.
     return profile.role in {UserProfile.Role.MOD, "MODERATOR"}
 
+
 class IsModerator(BasePermission):
+    """
+    Legacy class name.
+
+    MOD now represents the TruthLens Platform
+    Safety Moderator role, not a factual verifier.
+    """
+
     def has_permission(self, request, view):
-        return request.user.is_authenticated and _has_moderator_role(request.user)
+        return has_capability(
+            request.user,
+            PartnerCapability.REVIEW_SAFETY,
+        )
+
+
+class CanReviewEvidence(BasePermission):
+    def has_permission(
+        self,
+        request,
+        view,
+    ):
+        return request.user and request.user.is_authenticated
+
+    def has_object_permission(
+        self,
+        request,
+        view,
+        obj,
+    ):
+        # Nobody may issue an authoritative
+        # review of their own evidence.
+        if obj.contributor_id == request.user.id:
+            return False
+
+        case = get_latest_evidence_case(obj)
+
+        if case is None:
+            return False
+
+        return has_case_capability(
+            request.user,
+            case,
+            PartnerCapability.REVIEW_EVIDENCE,
+        )
+
 
 class IsNotModerator(BasePermission):
     def has_permission(self, request, view):
@@ -200,6 +315,7 @@ def _record_authenticated_claim_check(user, claim):
     if profile:
         profile.fact_check_points += 1
         profile.save(update_fields=["fact_check_points"])
+
 
 # Create your views here.
 @csrf_exempt
@@ -229,14 +345,22 @@ def receive_snippet(request):
         if matched_claim:
             _record_authenticated_claim_check(authenticated_user, matched_claim)
             # A moderator has already resolved this claim — return cached verdict
-            match_result = get_match_result(matched_claim)
+            match_result = get_match_result(
+                matched_claim,
+                triggered_by=(authenticated_user),
+                record_reuse=True,
+            )
             return JsonResponse(
-                {"claim_id": str(matched_claim.id), "cached": True, "match": match_result},
+                {
+                    "claim_id": str(matched_claim.id),
+                    "cached": True,
+                    "match": match_result,
+                },
                 status=200,
             )
 
     media_url = upload_image_to_database(base64_string)
-    
+
     print("IMAGE HASH:", image_hash)
     print("DEEPFAKE CHECK ENABLED:", check_deepfake)
 
@@ -250,13 +374,14 @@ def receive_snippet(request):
     _record_authenticated_claim_check(authenticated_user, claim)
     claim_id = claim.id  # Get the ID of the saved claim
 
-    snippet_fact_check_process.delay(image_hash, str(claim_id), check_deepfake, base64_string)
+    snippet_fact_check_process.delay(
+        image_hash, str(claim_id), check_deepfake, base64_string
+    )
 
     return JsonResponse(
         {"claim_id": str(claim_id), "cached": False},
         status=200,
     )
-
 
 
 @csrf_exempt
@@ -269,54 +394,40 @@ def claim_polling_endpoint(request, claim_id):
     try:
         claim = Claim.objects.get(id=claim_id)
     except Claim.DoesNotExist:
-        return JsonResponse({
-            "verdict": "OUT_OF_SCOPE",
-            "summary": "The content of the image is not a claim that can be fact-checked.",
-            "confidence_score": 100,
-            "source_type": "N/A",
-            }, status=200)
+        return JsonResponse(
+            {
+                "verdict": "OUT_OF_SCOPE",
+                "summary": "The content of the image is not a claim that can be fact-checked.",
+                "confidence_score": 100,
+                "source_type": "N/A",
+            },
+            status=200,
+        )
 
     ai_verdict = claim.ai_verdict
     if ai_verdict is None:
         return JsonResponse({"verdict": "PENDING"}, status=200)
     else:
-        # Include community verdict info when available
-        effective_verdict = claim.final_verdict or ai_verdict
-        active_thread = claim.threads.exclude(status="REJECTED").order_by("-created_at").first()
-        moderator_notes = None
-        sources = []
-
-        if active_thread:
-            verified_evidence = active_thread.evidence_submissions.filter(evidence_status="VERIFIED")[:3]
-            sources = [ev.evidence_url for ev in verified_evidence if getattr(ev, 'evidence_url', None)]
-
-            if claim.final_verdict:
-                resolved_thread = claim.threads.filter(
-                    moderator_verdict__isnull=False
-                ).order_by("-moderated_at").first()
-                if resolved_thread:
-                    moderator_notes = resolved_thread.moderator_notes
-
-        if not sources and claim.ai_sources:
-            sources.extend(claim.ai_sources)
-        elif not sources and claim.top_verdict_source:
-            sources.append(claim.top_verdict_source)
+        match_result = get_match_result(claim)
 
         return JsonResponse(
             {
-                "id": claim_id,
-                "verdict": effective_verdict,
-                "ai_verdict": ai_verdict,
-                "final_verdict": claim.final_verdict,
-                "summary": moderator_notes or claim.ai_summary,
-                "confidence_score": claim.consensus_score,
-                "source_type": claim.source_type,
-                "source_url": claim.top_verdict_source,
-                "sources": sources,
-                "is_ai_generated": claim.is_ai_generated,
-                "thread_id": str(active_thread.id) if active_thread else None,
-                "has_community_verdict": bool(claim.final_verdict),
-                "score_context": claim.score_context,
+                "id": str(claim_id),
+                "verdict": (match_result["verdict"]),
+                "ai_verdict": (match_result["ai_verdict"]),
+                "final_verdict": (match_result["final_verdict"]),
+                "summary": (match_result["summary"]),
+                "confidence_score": (match_result["confidence_score"]),
+                "source_type": (match_result["source_type"]),
+                "source_url": (match_result["source_url"]),
+                "sources": (match_result["sources"]),
+                "is_ai_generated": (match_result["is_ai_generated"]),
+                "thread_id": (match_result["thread_id"]),
+                # Temporary compatibility name.
+                "has_community_verdict": (bool(claim.final_verdict)),
+                "score_context": (match_result["score_context"]),
+                "resolution_source": (match_result["resolution_source"]),
+                "official_fact_check": (match_result["official_fact_check"]),
             },
             status=200,
         )
@@ -352,9 +463,19 @@ def verify_url(request):
         matched_claim = find_matching_claim(fingerprint, "URL")
         if matched_claim:
             _record_authenticated_claim_check(authenticated_user, matched_claim)
-            match_result = get_match_result(matched_claim)
+            match_result = get_match_result(
+                matched_claim,
+                triggered_by=(authenticated_user),
+                record_reuse=True,
+                query_text=safe_url,
+            )
             return JsonResponse(
-                {"claim_id": str(matched_claim.id), "url_safety": url_safety, "cached": True, "match": match_result},
+                {
+                    "claim_id": str(matched_claim.id),
+                    "url_safety": url_safety,
+                    "cached": True,
+                    "match": match_result,
+                },
                 status=200,
             )
 
@@ -366,13 +487,14 @@ def verify_url(request):
     )
     _record_authenticated_claim_check(authenticated_user, claim)
     claim_id = claim.id
-    
+
     url_fact_check_process.delay(safe_url, claim_id)
-    
+
     return JsonResponse(
         {"claim_id": str(claim_id), "url_safety": url_safety, "cached": False},
         status=200,
     )
+
 
 def get_tokens_for_user(user):
     refresh = RefreshToken.for_user(user)
@@ -382,14 +504,13 @@ def get_tokens_for_user(user):
         "access": str(refresh.access_token),
     }
 
-#User registration
+
+# User registration
 @csrf_exempt
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def register_user(request):
-    serializer = RegisterSerializer(
-        data=request.data
-    )
+    serializer = RegisterSerializer(data=request.data)
 
     if not serializer.is_valid():
         return Response(
@@ -415,17 +536,18 @@ def register_user(request):
     return Response(
         {
             **tokens,
-            "verification_email_sent":
-                verification_email_sent,
+            "verification_email_sent": verification_email_sent,
         },
         status=status.HTTP_201_CREATED,
     )
-    
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_current_user(request):
     serializer = CurrentUserSerializer(request.user)
     return Response(serializer.data)
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -458,7 +580,9 @@ def sync_guest_scan(request):
 
         if existing_claim:
             _record_authenticated_claim_check(request.user, existing_claim)
-            return Response({"id": str(existing_claim.id), "mode": "linked"}, status=200)
+            return Response(
+                {"id": str(existing_claim.id), "mode": "linked"}, status=200
+            )
 
     scan_type = str(scan.get("scan_type") or "SCAN").upper()
     verdict = str(scan.get("verdict") or "UNVERIFIED").upper()
@@ -467,7 +591,14 @@ def sync_guest_scan(request):
     source_url = str(scan.get("source_url") or "").strip()
     scanned_at = str(scan.get("scanned_at") or "").strip()
 
-    allowed_verdicts = {"FACT", "FAKE", "MISLEADING", "SATIRE", "UNVERIFIED", "OUT_OF_SCOPE"}
+    allowed_verdicts = {
+        "FACT",
+        "FAKE",
+        "MISLEADING",
+        "SATIRE",
+        "UNVERIFIED",
+        "OUT_OF_SCOPE",
+    }
     if verdict not in allowed_verdicts:
         verdict = "UNVERIFIED"
 
@@ -478,7 +609,9 @@ def sync_guest_scan(request):
     consensus_score = max(0.0, min(consensus_score, 100.0))
 
     normalized_source_url = (
-        source_url if source_url.startswith("http://") or source_url.startswith("https://") else None
+        source_url
+        if source_url.startswith("http://") or source_url.startswith("https://")
+        else None
     )
 
     if scan_type == "URL":
@@ -487,7 +620,7 @@ def sync_guest_scan(request):
         claim_type = Claim.ClaimType.TEXT
     else:
         claim_type = Claim.ClaimType.IMAGE
-        
+
     context_text = (
         f"Synced from extension guest scan ({scan_type}) at {scanned_at}"
         if scanned_at
@@ -510,6 +643,7 @@ def sync_guest_scan(request):
     _record_authenticated_claim_check(request.user, claim)
     return Response({"id": str(claim.id), "mode": "created"}, status=201)
 
+
 @api_view(["POST"])
 def login_user(request):
     username = request.data.get("username")
@@ -521,7 +655,7 @@ def login_user(request):
     if user is None:
         return Response(
             {"detail": "No active account found with the given credentials"},
-            status=status.HTTP_401_UNAUTHORIZED
+            status=status.HTTP_401_UNAUTHORIZED,
         )
 
     refresh = RefreshToken.for_user(user)
@@ -529,10 +663,12 @@ def login_user(request):
     if remember_me:
         refresh.set_exp(lifetime=timedelta(days=30))
 
-    return Response({
-        "access": str(refresh.access_token),
-        "refresh": str(refresh),
-    })
+    return Response(
+        {
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+        }
+    )
 
 
 @api_view(["POST"])
@@ -543,20 +679,13 @@ def send_verification_email(request):
 
     if profile.is_email_verified:
         return Response(
-            {
-                "detail":
-                    "Your email is already verified."
-            },
+            {"detail": "Your email is already verified."},
             status=status.HTTP_200_OK,
         )
 
     if not request.user.email:
         return Response(
-            {
-                "detail":
-                    "No email address is associated "
-                    "with this account."
-            },
+            {"detail": "No email address is associated " "with this account."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -569,21 +698,15 @@ def send_verification_email(request):
         )
 
         return Response(
-            {
-                "detail":
-                    "Unable to send the verification "
-                    "email right now."
-            },
+            {"detail": "Unable to send the verification " "email right now."},
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
     return Response(
-        {
-            "detail":
-                "Verification email sent."
-        },
+        {"detail": "Verification email sent."},
         status=status.HTTP_200_OK,
     )
+
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
@@ -594,23 +717,19 @@ def verify_email(request):
         return Response(
             {
                 "status": "invalid",
-                "detail":
-                    "Verification token is required.",
+                "detail": "Verification token is required.",
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
     try:
-        profile = UserProfile.objects.get(
-            email_verification_token=token
-        )
+        profile = UserProfile.objects.get(email_verification_token=token)
     except UserProfile.DoesNotExist:
         return Response(
             {
                 "status": "invalid",
-                "detail":
-                    "This verification link is invalid "
-                    "or has already been used.",
+                "detail": "This verification link is invalid "
+                "or has already been used.",
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
@@ -629,29 +748,24 @@ def verify_email(request):
         return Response(
             {
                 "status": "verified",
-                "detail":
-                    "Your email is already verified.",
+                "detail": "Your email is already verified.",
             },
             status=status.HTTP_200_OK,
         )
 
-    sent_at = (
-        profile.email_verification_sent_at
-    )
+    sent_at = profile.email_verification_sent_at
 
     if not sent_at:
         return Response(
             {
                 "status": "expired",
-                "detail":
-                    "This verification link has expired.",
+                "detail": "This verification link has expired.",
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
     expires_at = sent_at + timedelta(
-        hours=settings
-        .EMAIL_VERIFICATION_TOKEN_LIFETIME_HOURS
+        hours=settings.EMAIL_VERIFICATION_TOKEN_LIFETIME_HOURS
     )
 
     if timezone.now() > expires_at:
@@ -668,8 +782,7 @@ def verify_email(request):
         return Response(
             {
                 "status": "expired",
-                "detail":
-                    "This verification link has expired.",
+                "detail": "This verification link has expired.",
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
@@ -689,18 +802,37 @@ def verify_email(request):
     return Response(
         {
             "status": "verified",
-            "detail":
-                "Email verified successfully.",
+            "detail": "Email verified successfully.",
         },
         status=status.HTTP_200_OK,
     )
 
+
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsModerator])
+@permission_classes(
+    [
+        IsAuthenticated,
+        IsModerator,
+    ]
+)
 def moderation_queue(request):
-    # Safety queue: reported/flagged threads requiring moderator review for conduct issues.
-    status_filter = request.query_params.get("status", Thread.Status.PENDING)
-    allowed = {"ALL", Thread.Status.PENDING, Thread.Status.OPEN, Thread.Status.CLOSED, Thread.Status.REJECTED}
+    """
+    Return threads with active Safety moderation cases.
+    """
+
+    status_filter = request.query_params.get(
+        "status",
+        "ALL",
+    )
+
+    allowed = {
+        "ALL",
+        Thread.Status.PENDING,
+        Thread.Status.OPEN,
+        Thread.Status.CLOSED,
+        Thread.Status.REJECTED,
+    }
+
     if status_filter not in allowed:
         return Response(
             {"detail": "Invalid status filter."},
@@ -708,240 +840,1187 @@ def moderation_queue(request):
         )
 
     queryset = (
-        Thread.objects.filter(flags__isnull=False)
-        .select_related("claim", "author", "author__profile")
+        Thread.objects.filter(
+            moderation_cases__case_type=(ModerationCase.CaseType.SAFETY),
+            moderation_cases__status__in=(ACTIVE_CASE_STATUSES),
+        )
+        .select_related(
+            "claim",
+            "author",
+            "author__profile",
+        )
         .distinct()
         .order_by("-created_at")
     )
+
     if status_filter != "ALL":
         queryset = queryset.filter(status=status_filter)
 
-    serializer = ThreadSerializer(queryset, many=True)
-    return Response(serializer.data)
+    serializer = ThreadSerializer(
+        queryset,
+        many=True,
+    )
+
+    return Response(
+        serializer.data,
+        status=status.HTTP_200_OK,
+    )
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsModerator])
+@permission_classes(
+    [
+        IsAuthenticated,
+    ]
+)
 def verdict_queue(request):
-    # Verdict queue: claim adjudication workflow, independent of report/flag status.
-    reviewed_filter = request.query_params.get("reviewed", "pending")
-    allowed = {"all", "pending", "resolved"}
+    reviewed_filter = (
+        request.query_params.get(
+            "reviewed",
+            "pending",
+        )
+        .strip()
+        .lower()
+    )
+
+    allowed = {
+        "all",
+        "pending",
+        "resolved",
+    }
+
     if reviewed_filter not in allowed:
         return Response(
-            {"detail": "Invalid reviewed filter. Use all, pending, or resolved."},
+            {"detail": "Invalid reviewed filter. " "Use all, pending, or " "resolved."},
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+    try:
+        limit = int(
+            request.query_params.get(
+                "limit",
+                20,
+            )
+        )
+
+        offset = int(
+            request.query_params.get(
+                "offset",
+                0,
+            )
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+        return Response(
+            {"detail": "limit and offset must " "be integers."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if limit < 1 or limit > 100 or offset < 0:
+        return Response(
+            {
+                "detail": "limit must be between "
+                "1 and 100, and offset "
+                "must be zero or greater."
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    organization_id = request.query_params.get("organization_id")
+
+    if not organization_id:
+        return Response(
+            {"detail": "organization_id is required " "for adjudication review."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    organization = get_object_or_404(
+        Organization,
+        id=organization_id,
+    )
+
+    if not has_capability(
+        request.user,
+        PartnerCapability.ADJUDICATE,
+        organization=organization,
+    ):
+        return Response(
+            {
+                "detail": "You do not have permission "
+                "to adjudicate for this "
+                "organization."
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    queryset = ModerationCase.objects.filter(
+        case_type=(ModerationCase.CaseType.ADJUDICATION)
+    )
+
+    if reviewed_filter == "pending":
+        queryset = queryset.filter(status__in=ACTIVE_CASE_STATUSES)
+
+    elif reviewed_filter == "resolved":
+        queryset = queryset.filter(status=(ModerationCase.Status.RESOLVED))
+
+    else:
+        queryset = queryset.exclude(status=(ModerationCase.Status.CANCELLED))
+
+    queryset = queryset.filter(organization=organization)
 
     queryset = (
-        Thread.objects.select_related(
-            "claim", "author", "author__profile", "moderated_by", "moderated_by__profile"
+        queryset.select_related(
+            "claim",
+            "organization",
+            "assigned_to",
+            "assigned_to__profile",
         )
-        .order_by("-created_at")
+        .annotate(
+            total_evidence=Count(
+                "claim__threads__evidence_submissions",
+                distinct=True,
+            ),
+            verified_evidence=Count(
+                "claim__threads__evidence_submissions",
+                filter=Q(
+                    claim__threads__evidence_submissions__evidence_status=(
+                        EvidenceSubmission.EvidenceStatus.VERIFIED
+                    )
+                ),
+                distinct=True,
+            ),
+            rejected_evidence=Count(
+                "claim__threads__evidence_submissions",
+                filter=Q(
+                    claim__threads__evidence_submissions__evidence_status=(
+                        EvidenceSubmission.EvidenceStatus.REJECTED
+                    )
+                ),
+                distinct=True,
+            ),
+        )
+        .order_by(
+            "-priority",
+            "-created_at",
+        )
     )
-    if reviewed_filter == "pending":
-        queryset = queryset.filter(moderator_verdict__isnull=True)
-    elif reviewed_filter == "resolved":
-        queryset = queryset.filter(moderator_verdict__isnull=False)
 
-    serializer = ThreadSerializer(queryset, many=True)
-    return Response(serializer.data)
+    total_count = queryset.count()
+
+    cases = queryset[offset : offset + limit]
+
+    serializer = AdjudicationQueueCaseSerializer(
+        cases,
+        many=True,
+        context={
+            "request": request,
+        },
+    )
+
+    return Response(
+        {
+            "count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "results": serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )
 
 
-@api_view(["POST"])
-@permission_classes([IsAuthenticated, IsModerator])
-def moderation_resolve_thread(request, thread_id):
-    try:
-        thread = Thread.objects.get(id=thread_id)
-    except Thread.DoesNotExist:
-        raise NotFound("Thread not found.")
+def _publishing_error_response(
+    error,
+):
+    if isinstance(
+        error,
+        PublishingAuthorizationError,
+    ):
+        response_status = status.HTTP_403_FORBIDDEN
 
+    elif isinstance(
+        error,
+        PublishingConflict,
+    ):
+        response_status = status.HTTP_409_CONFLICT
+
+    else:
+        response_status = status.HTTP_400_BAD_REQUEST
+
+    return Response(
+        {
+            "detail": str(error),
+        },
+        status=response_status,
+    )
+
+
+def _execute_claim_adjudication(
+    request,
+    claim,
+):
     serializer = ModerationDecisionSerializer(data=request.data)
+
     serializer.is_valid(raise_exception=True)
 
-    moderator_verdict = serializer.validated_data["moderator_verdict"]
-    moderator_notes = serializer.validated_data.get("moderator_notes", "")
-    next_status = serializer.validated_data.get("status", Thread.Status.CLOSED)
-    canonical_claim = serializer.validated_data.get("canonical_claim", "")
+    case = get_latest_adjudication_case(claim)
 
-    current_status = thread.status or Thread.Status.OPEN
-    if next_status not in ALLOWED_MODERATION_TRANSITIONS.get(current_status, set()):
-        return Response(
-            {"detail": f"Invalid status transition from {current_status} to {next_status}."},
-            status=status.HTTP_400_BAD_REQUEST
+    if case is None:
+        raise PermissionDenied("No adjudication case is available " "for this claim.")
+
+    if not has_case_capability(
+        request.user,
+        case,
+        PartnerCapability.ADJUDICATE,
+    ):
+        raise PermissionDenied(
+            "You do not have permission " "to adjudicate this claim."
         )
-    
-    contributor_ids = set(
-        thread.evidence_submissions.values_list("contributor_id", flat=True).distinct()
+
+    if has_adjudication_conflict(
+        request.user,
+        claim,
+    ):
+        raise PermissionDenied(
+            "You cannot adjudicate a claim "
+            "in which you have a direct "
+            "contribution."
+        )
+
+    verification_run = None
+
+    verification_run_id = serializer.validated_data.get("verification_run_id")
+
+    if verification_run_id:
+        verification_run = get_object_or_404(
+            VerificationRun,
+            id=verification_run_id,
+            claim=claim,
+        )
+
+    contributor_ids = list(
+        EvidenceSubmission.objects.filter(thread__claim=claim)
+        .values_list(
+            "contributor_id",
+            flat=True,
+        )
+        .distinct()
     )
 
-    with transaction.atomic():
-        thread.moderator_verdict = moderator_verdict
-        thread.moderator_notes = moderator_notes
-        thread.status = next_status
-        thread.moderated_by = request.user
-        thread.moderated_at = timezone.now()
-        thread.save(
-            update_fields=[
-                "moderator_verdict",
-                "moderator_notes",
-                "status",
-                "moderated_by",
-                "moderated_at",
-            ]
+    try:
+        result = issue_adjudication_decision(
+            claim=claim,
+            actor=request.user,
+            verdict=(serializer.validated_data["moderator_verdict"]),
+            canonical_claim=(serializer.validated_data["canonical_claim"]),
+            rationale=(serializer.validated_data["moderator_notes"]),
+            organization=case.organization,
+            verification_run=verification_run,
+            expected_revision=(serializer.validated_data.get("expected_revision")),
         )
 
-        # Keep AI verdict immutable and write moderator decision to final verdict.
-        thread.claim.final_verdict = moderator_verdict
-        thread.claim.last_updated = timezone.now()
-        thread.claim.save(update_fields=["final_verdict", "last_updated"])
+    except AdjudicationAuthorizationError as error:
+        raise PermissionDenied(str(error)) from error
 
-        # If the thread is closing, has a real verdict, AND the mod wrote a canonical claim...
-        if next_status == "CLOSED" and moderator_verdict in ["FACT", "FAKE", "MISLEADING", "SATIRE"] and canonical_claim:
-            
-            # 1. Grab all VERIFIED URLs from this specific thread
-            verified_urls = list(
-                thread.evidence_submissions.filter(
-                    evidence_status="VERIFIED"
-                ).exclude(evidence_url="").values_list("evidence_url", flat=True)
-            )
+    decision = result["decision"]
 
-            # 2. Generate the Vector Embedding
-            embedding_vector = generate_embedding(canonical_claim)
+    # Compatibility mirror only.
+    Thread.objects.filter(
+        claim=claim,
+    ).exclude(
+        status=Thread.Status.REJECTED,
+    ).update(
+        moderator_verdict=decision.verdict,
+        moderator_notes=decision.rationale,
+        moderated_by=request.user,
+        moderated_at=decision.decided_at,
+    )
 
-            # 3. Save to the Knowledge Vault!
-            OfficialFactCheck.objects.create(
-                canonical_claim=canonical_claim,
-                verdict=moderator_verdict,
-                summary=moderator_notes,
-                sources=verified_urls,
-                embedding=embedding_vector,
-                published_by=request.user,
-                source_thread=thread
-            )
-            
     for contributor_id in contributor_ids:
-        recompute_user_trust_score_task.delay(contributor_id)
+        transaction.on_commit(
+            lambda user_id=contributor_id: (
+                recompute_user_trust_score_task.delay(user_id)
+            )
+        )
 
-    return Response(ThreadDetailSerializer(thread).data, status=status.HTTP_200_OK)
+    return decision
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated, IsModerator])
-def moderation_resolve_safety_thread(request, thread_id):
-    """Resolve a reported thread directly from the safety queue."""
-    try:
-        thread = Thread.objects.get(id=thread_id)
-    except Thread.DoesNotExist:
-        raise NotFound("Thread not found.")
+@permission_classes(
+    [
+        IsAuthenticated,
+    ]
+)
+def moderation_resolve_thread(
+    request,
+    thread_id,
+):
+    """
+    Legacy thread-addressed adjudication endpoint.
 
-    action = (request.data.get("action") or "").strip().upper()
-    moderator_notes = (request.data.get("moderator_notes") or "").strip()
-    allowed_actions = {"DISMISS", "REMOVE", "ESCALATE"}
-    if action not in allowed_actions:
+    The authoritative decision is Claim-centric.
+    Thread moderation fields remain temporary
+    compatibility mirrors only.
+
+    Thread.status is intentionally not changed.
+    Publication is intentionally not performed here.
+    """
+
+    thread = get_object_or_404(
+        Thread.objects.select_related("claim"),
+        id=thread_id,
+    )
+
+    claim = thread.claim
+
+    try:
+        with transaction.atomic():
+            decision = _execute_claim_adjudication(
+                request,
+                claim,
+            )
+
+    except AdjudicationConflict as error:
         return Response(
-            {"detail": "Invalid action. Use DISMISS, REMOVE, or ESCALATE."},
+            {
+                "detail": str(error),
+            },
+            status=(status.HTTP_409_CONFLICT),
+        )
+
+    except (
+        AdjudicationError,
+        ModerationCaseError,
+    ) as error:
+        return Response(
+            {
+                "detail": str(error),
+            },
+            status=(status.HTTP_400_BAD_REQUEST),
+        )
+
+    thread.refresh_from_db()
+
+    response_data = dict(
+        ThreadDetailSerializer(
+            thread,
+            context={
+                "request": request,
+            },
+        ).data
+    )
+
+    response_data["adjudication"] = AdjudicationDecisionSerializer(
+        decision,
+        context={
+            "request": request,
+        },
+    ).data
+
+    return Response(
+        response_data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes(
+    [
+        IsAuthenticated,
+    ]
+)
+def adjudicate_claim(
+    request,
+    claim_id,
+):
+    claim = get_object_or_404(
+        Claim,
+        id=claim_id,
+    )
+
+    try:
+        with transaction.atomic():
+            decision = _execute_claim_adjudication(
+                request,
+                claim,
+            )
+
+    except AdjudicationConflict as error:
+        return Response(
+            {"detail": str(error)},
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    except (
+        AdjudicationError,
+        ModerationCaseError,
+    ) as error:
+        return Response(
+            {"detail": str(error)},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    contributor_ids = set(
-        thread.evidence_submissions.values_list("contributor_id", flat=True).distinct()
+    return Response(
+        AdjudicationDecisionSerializer(
+            decision,
+            context={
+                "request": request,
+            },
+        ).data,
+        status=status.HTTP_200_OK,
     )
 
-    with transaction.atomic():
-        if action == "DISMISS":
-            thread.status = Thread.Status.OPEN
-        elif action == "REMOVE":
-            thread.status = Thread.Status.REJECTED
-        else:
-            thread.status = Thread.Status.CLOSED
 
-        thread.moderated_by = request.user
-        thread.moderated_at = timezone.now()
-        if moderator_notes:
-            thread.moderator_notes = moderator_notes
+@api_view(["POST"])
+@permission_classes(
+    [
+        IsAuthenticated,
+    ]
+)
+def fact_check_draft_create(
+    request,
+    claim_id,
+):
+    claim = get_object_or_404(
+        Claim,
+        id=claim_id,
+    )
 
-        update_fields = ["status", "moderated_by", "moderated_at"]
-        if moderator_notes:
-            update_fields.append("moderator_notes")
-        thread.save(update_fields=update_fields)
+    serializer = FactCheckDraftCreateSerializer(data=request.data)
 
-        # Persist resolved report history for trust-score accuracy metrics.
-        current_flags = list(thread.flags.select_related("flagged_by"))
-        resolved_logs = []
-        reporter_ids = set()
-        for flag in current_flags:
-            reporter_ids.add(flag.flagged_by_id)
-            resolved_logs.append(
-                FlagResolutionLog(
-                    thread=thread,
-                    flagged_by=flag.flagged_by,
-                    reason=flag.reason,
-                    notes=flag.notes,
-                    flagged_at=flag.flagged_at,
-                    resolved_action=action,
-                    is_valid_report=(action == "REMOVE"),
-                    resolved_by=request.user,
+    serializer.is_valid(raise_exception=True)
+
+    decision = (
+        AdjudicationDecision.objects.filter(
+            claim=claim,
+            is_current=True,
+        )
+        .select_related(
+            "organization",
+        )
+        .first()
+    )
+
+    if not decision:
+        return Response(
+            {
+                "detail": "This claim does not "
+                "have a current "
+                "adjudication decision."
+            },
+            status=(status.HTTP_409_CONFLICT),
+        )
+
+    expected_revision = serializer.validated_data.get("expected_revision")
+
+    if expected_revision is not None and (
+        expected_revision != decision.revision_number
+    ):
+        return Response(
+            {
+                "detail": "The adjudication "
+                "decision changed after "
+                "the publishing workspace "
+                "was opened. Refresh "
+                "before creating a draft."
+            },
+            status=(status.HTTP_409_CONFLICT),
+        )
+
+    try:
+        draft = create_fact_check_draft(
+            decision=decision,
+            actor=request.user,
+            headline=(serializer.validated_data["headline"]),
+            summary=(serializer.validated_data["summary"]),
+            article_body=(
+                serializer.validated_data.get(
+                    "article_body",
+                    "",
                 )
+            ),
+            source_urls=(
+                serializer.validated_data.get(
+                    "source_urls",
+                    [],
+                )
+            ),
+        )
+
+    except PublishingError as error:
+        return _publishing_error_response(error)
+
+    return Response(
+        OfficialFactCheckSerializer(
+            draft,
+            context={
+                "request": request,
+            },
+        ).data,
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(["PATCH"])
+@permission_classes(
+    [
+        IsAuthenticated,
+    ]
+)
+def fact_check_draft_update(
+    request,
+    fact_check_id,
+):
+    fact_check = get_object_or_404(
+        OfficialFactCheck,
+        id=fact_check_id,
+    )
+
+    serializer = FactCheckDraftUpdateSerializer(
+        data=request.data,
+        partial=True,
+    )
+
+    serializer.is_valid(raise_exception=True)
+
+    data = serializer.validated_data
+
+    try:
+        updated = update_fact_check_draft(
+            fact_check=fact_check,
+            actor=request.user,
+            headline=data.get("headline"),
+            summary=data.get("summary"),
+            article_body=data.get("article_body"),
+            source_urls=(data["source_urls"] if "source_urls" in data else None),
+        )
+
+    except PublishingError as error:
+        return _publishing_error_response(error)
+
+    return Response(
+        OfficialFactCheckSerializer(
+            updated,
+            context={
+                "request": request,
+            },
+        ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes(
+    [
+        IsAuthenticated,
+    ]
+)
+def fact_check_submit(
+    request,
+    fact_check_id,
+):
+    fact_check = get_object_or_404(
+        OfficialFactCheck,
+        id=fact_check_id,
+    )
+
+    try:
+        submitted = submit_fact_check_for_review(
+            fact_check=fact_check,
+            actor=request.user,
+        )
+
+    except PublishingError as error:
+        return _publishing_error_response(error)
+
+    return Response(
+        OfficialFactCheckSerializer(
+            submitted,
+            context={
+                "request": request,
+            },
+        ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes(
+    [
+        IsAuthenticated,
+    ]
+)
+def fact_check_publish(
+    request,
+    fact_check_id,
+):
+    fact_check = get_object_or_404(
+        OfficialFactCheck,
+        id=fact_check_id,
+    )
+
+    try:
+        result = publish_fact_check(
+            fact_check=fact_check,
+            actor=request.user,
+        )
+
+    except PublishingError as error:
+        return _publishing_error_response(error)
+
+    published = result["fact_check"]
+
+    return Response(
+        OfficialFactCheckSerializer(
+            published,
+            context={
+                "request": request,
+            },
+        ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes(
+    [
+        IsAuthenticated,
+        IsModerator,
+    ]
+)
+def moderation_resolve_safety_thread(
+    request,
+    thread_id,
+):
+    thread = get_object_or_404(
+        Thread,
+        id=thread_id,
+    )
+
+    action = request.data.get("action", "").strip().upper()
+
+    moderator_notes = request.data.get("moderator_notes", "").strip()
+
+    allowed_actions = {
+        "DISMISS",
+        "REMOVE",
+        "ESCALATE",
+    }
+
+    if action not in allowed_actions:
+        return Response(
+            {"detail": "Invalid action. Use DISMISS, " "REMOVE, or ESCALATE."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        if action == "ESCALATE":
+            escalate_safety_case(
+                thread=thread,
+                actor=request.user,
+                notes=moderator_notes,
             )
 
-        if resolved_logs:
-            FlagResolutionLog.objects.bulk_create(resolved_logs)
+            thread.refresh_from_db()
 
-        # Keep active queue clean after archiving resolved entries.
-        thread.flags.all().delete()
+            return Response(
+                ThreadSerializer(
+                    thread,
+                    context={"request": request},
+                ).data,
+                status=status.HTTP_200_OK,
+            )
 
-    # Recompute trust for all reporters involved in the resolved moderation event.
-    for reporter_id in reporter_ids:
+        result = resolve_safety_case(
+            thread=thread,
+            actor=request.user,
+            action=action,
+            notes=moderator_notes,
+        )
+
+    except ModerationCaseError as error:
+        return Response(
+            {
+                "detail": str(error),
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    for reporter_id in result["reporter_ids"]:
         recompute_user_trust_score_task.delay(reporter_id)
 
-    # Conduct penalties apply to the thread author when a thread is removed.
     if action == "REMOVE":
-        recompute_user_trust_score_task.delay(thread.author_id)
+        recompute_user_trust_score_task.delay(result["author_id"])
 
-    for contributor_id in contributor_ids:
+    for contributor_id in result["contributor_ids"]:
         recompute_user_trust_score_task.delay(contributor_id)
 
-    return Response(ThreadSerializer(thread).data, status=status.HTTP_200_OK)
+    return Response(
+        ThreadSerializer(
+            result["thread"],
+            context={"request": request},
+        ).data,
+        status=status.HTTP_200_OK,
+    )
+
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsModerator])
+@permission_classes([IsAuthenticated])
 def evidence_moderation_queue(request):
     """
-    Returns unverified evidence submissions for review. Moderators only.
-    
-    Query params:
-    - status: filter by status (UNVERIFIED, VERIFIED, REJECTED)
-    - thread_id: filter by thread
-    - limit: number of items per page (default 20)
-    - offset: number of items to skip (default 0)
-    """
-    
-    status = request.query_params.get("status", "UNVERIFIED")
-    thread_id = request.query_params.get("thread_id")
-    limit = int(request.query_params.get("limit", 20))
-    offset = int(request.query_params.get("offset", 0))
+    Evidence review queue.
 
-    evidence_query = EvidenceSubmission.objects.filter(evidence_status=status).select_related("contributor", "thread__claim").order_by("-submitted_at")
-    
+    Professional evidence review is available only
+    through an explicitly scoped verified partner
+    organization with REVIEW_EVIDENCE capability.
+    """
+
+    evidence_status_filter = (
+        request.query_params.get(
+            "status",
+            EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+        )
+        .strip()
+        .upper()
+    )
+
+    allowed_statuses = {
+        value for value, _label in EvidenceSubmission.EvidenceStatus.choices
+    }
+
+    if evidence_status_filter not in allowed_statuses:
+        return Response(
+            {"detail": "Invalid evidence status."},
+            status=(status.HTTP_400_BAD_REQUEST),
+        )
+
+    try:
+        limit = int(
+            request.query_params.get(
+                "limit",
+                20,
+            )
+        )
+
+        offset = int(
+            request.query_params.get(
+                "offset",
+                0,
+            )
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+        return Response(
+            {"detail": "limit and offset must " "be integers."},
+            status=(status.HTTP_400_BAD_REQUEST),
+        )
+
+    if limit < 1 or limit > 100 or offset < 0:
+        return Response(
+            {
+                "detail": "limit must be between "
+                "1 and 100, and offset "
+                "must be zero or greater."
+            },
+            status=(status.HTTP_400_BAD_REQUEST),
+        )
+
+    thread_id = request.query_params.get("thread_id")
+
+    organization_id = request.query_params.get("organization_id")
+
+    if not organization_id:
+        return Response(
+            {"detail": "organization_id is required " "for evidence review."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    organization = get_object_or_404(
+        Organization,
+        id=organization_id,
+    )
+
+    if not has_capability(
+        request.user,
+        PartnerCapability.REVIEW_EVIDENCE,
+        organization=organization,
+    ):
+        return Response(
+            {
+                "detail": "You do not have permission "
+                "to review evidence for this "
+                "organization."
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    evidence_query = EvidenceSubmission.objects.filter(
+        evidence_status=(evidence_status_filter)
+    )
+
+    # UNVERIFIED is an operational queue,
+    # so it must correspond to an active
+    # Evidence ModerationCase.
+    if evidence_status_filter == EvidenceSubmission.EvidenceStatus.UNVERIFIED:
+        evidence_query = evidence_query.filter(
+            moderation_cases__case_type=(ModerationCase.CaseType.EVIDENCE),
+            moderation_cases__status__in=(ACTIVE_CASE_STATUSES),
+        )
+
+    evidence_query = evidence_query.filter(
+        moderation_cases__case_type=(ModerationCase.CaseType.EVIDENCE),
+        moderation_cases__organization=organization,
+    )
+
     if thread_id:
         evidence_query = evidence_query.filter(thread_id=thread_id)
-    
-    # Get total count for pagination info
-    total_count = evidence_query.count()
-    
-    # Apply pagination
-    evidence = evidence_query[offset:offset + limit]
-        
-    serializer = EvidenceSubmissionSerializer(evidence, many=True, context={"request": request})
-    
-    return Response({
-        "count": total_count,
-        "limit": limit,
-        "offset": offset,
-        "results": serializer.data
-    }, status=200)
 
-#Viewsets
+    evidence_query = (
+        evidence_query.select_related(
+            "contributor",
+            "contributor__profile",
+            "thread",
+            "thread__claim",
+            "verified_by",
+            "verified_by__profile",
+        )
+        .prefetch_related(
+            "votes",
+        )
+        .distinct()
+        .order_by("-submitted_at")
+    )
+
+    total_count = evidence_query.count()
+
+    evidence = evidence_query[offset : offset + limit]
+
+    serializer = EvidenceSubmissionSerializer(
+        evidence,
+        many=True,
+        context={
+            "request": request,
+        },
+    )
+
+    return Response(
+        {
+            "count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "results": serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+VERIFICATION_WORKLOAD_CAPABILITIES = {
+    PartnerCapability.CLAIM_VERIFICATION_WORK,
+    PartnerCapability.REVIEW_EVIDENCE,
+    PartnerCapability.ADJUDICATE,
+    PartnerCapability.CREATE_FACT_CHECK_DRAFT,
+    PartnerCapability.PUBLISH_FACT_CHECK,
+    PartnerCapability.MANAGE_ORGANIZATION,
+}
+
+
+def _parse_verification_pagination(request):
+    try:
+        limit = int(
+            request.query_params.get(
+                "limit",
+                20,
+            )
+        )
+
+        offset = int(
+            request.query_params.get(
+                "offset",
+                0,
+            )
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+        raise ValidationError({"detail": "limit and offset must be integers."})
+
+    if limit < 1 or limit > 100 or offset < 0:
+        raise ValidationError(
+            {
+                "detail": "limit must be between 1 and 100, "
+                "and offset must be zero or greater."
+            }
+        )
+
+    return limit, offset
+
+
+def _get_verification_organization(
+    request,
+    *,
+    from_body=False,
+):
+    if from_body:
+        serializer = VerificationAssignmentClaimSerializer(data=request.data)
+
+        serializer.is_valid(raise_exception=True)
+
+        organization_id = serializer.validated_data["organization_id"]
+
+    else:
+        organization_id = request.query_params.get("organization_id")
+
+        if not organization_id:
+            raise ValidationError({"detail": "organization_id is required."})
+
+    return get_object_or_404(
+        Organization,
+        id=organization_id,
+    )
+
+
+def _can_view_verification_workload(
+    user,
+    organization,
+):
+    return any(
+        has_capability(
+            user,
+            capability,
+            organization=organization,
+        )
+        for capability in VERIFICATION_WORKLOAD_CAPABILITIES
+    )
+
+
+def _verification_assignment_error_response(
+    error,
+):
+    if isinstance(
+        error,
+        VerificationAssignmentAuthorizationError,
+    ):
+        response_status = status.HTTP_403_FORBIDDEN
+
+    elif isinstance(
+        error,
+        (
+            VerificationAssignmentConflict,
+            VerificationAssignmentReleaseBlocked,
+        ),
+    ):
+        response_status = status.HTTP_409_CONFLICT
+
+    else:
+        response_status = status.HTTP_400_BAD_REQUEST
+
+    return Response(
+        {
+            "detail": str(error),
+        },
+        status=response_status,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def verification_intake(request):
+    """
+    Shared pool of AVAILABLE professional
+    verification investigations.
+
+    An organization_id is required so access is
+    evaluated in the context of a specific verified
+    partner organization.
+    """
+
+    organization = _get_verification_organization(
+        request,
+    )
+
+    if not has_capability(
+        request.user,
+        PartnerCapability.CLAIM_VERIFICATION_WORK,
+        organization=organization,
+    ):
+        return Response(
+            {
+                "detail": "You do not have permission to "
+                "access verification intake for "
+                "this organization."
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    limit, offset = _parse_verification_pagination(request)
+
+    queryset = get_available_verification_assignments()
+
+    total_count = queryset.count()
+
+    assignments = queryset[offset : offset + limit]
+
+    serializer = VerificationAssignmentSerializer(
+        assignments,
+        many=True,
+        context={
+            "request": request,
+        },
+    )
+
+    return Response(
+        {
+            "count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "results": serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def verification_assignment_claim(
+    request,
+    assignment_id,
+):
+    assignment = get_object_or_404(
+        VerificationAssignment,
+        id=assignment_id,
+    )
+
+    organization = _get_verification_organization(
+        request,
+        from_body=True,
+    )
+
+    try:
+        claimed = claim_verification_assignment(
+            assignment=assignment,
+            organization=organization,
+            actor=request.user,
+        )
+
+    except VerificationAssignmentError as error:
+        return _verification_assignment_error_response(error)
+
+    return Response(
+        VerificationAssignmentSerializer(
+            claimed,
+            context={
+                "request": request,
+            },
+        ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def verification_assignment_release(
+    request,
+    assignment_id,
+):
+    assignment = get_object_or_404(
+        VerificationAssignment,
+        id=assignment_id,
+    )
+
+    try:
+        result = release_verification_assignment(
+            assignment=assignment,
+            actor=request.user,
+        )
+
+    except VerificationAssignmentError as error:
+        return _verification_assignment_error_response(error)
+
+    return Response(
+        {
+            "released_assignment": VerificationAssignmentSerializer(
+                result["released_assignment"],
+                context={
+                    "request": request,
+                },
+            ).data,
+            "available_assignment": VerificationAssignmentSerializer(
+                result["available_assignment"],
+                context={
+                    "request": request,
+                },
+            ).data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def verification_workload(request):
+    """
+    Return ACTIVE professional verification work
+    belonging to one organization.
+    """
+
+    organization = _get_verification_organization(
+        request,
+    )
+
+    if not _can_view_verification_workload(
+        request.user,
+        organization,
+    ):
+        return Response(
+            {
+                "detail": "You do not have permission to "
+                "view verification work for this "
+                "organization."
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    limit, offset = _parse_verification_pagination(request)
+
+    queryset = get_organization_verification_workload(organization)
+
+    total_count = queryset.count()
+
+    assignments = queryset[offset : offset + limit]
+
+    serializer = VerificationAssignmentSerializer(
+        assignments,
+        many=True,
+        context={
+            "request": request,
+        },
+    )
+
+    return Response(
+        {
+            "count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "organization": {
+                "id": str(organization.id),
+                "name": organization.name,
+                "slug": organization.slug,
+            },
+            "results": serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+# Viewsets
 class ThreadViewSet(viewsets.ModelViewSet):
     serializer_class = ThreadSerializer
     permission_classes = [IsAuthenticated, IsThreadOwnerOrReadOnly]
@@ -951,7 +2030,7 @@ class ThreadViewSet(viewsets.ModelViewSet):
         # Dynamic sorting based on parameter
         sort_order = self.request.query_params.get("sort", "newest")
         order_field = "created_at" if sort_order == "oldest" else "-created_at"
-        
+
         queryset = (
             Thread.objects.exclude(status=Thread.Status.REJECTED)
             .select_related("claim", "author", "author__profile")
@@ -992,19 +2071,29 @@ class ThreadViewSet(viewsets.ModelViewSet):
         try:
             claim = Claim.objects.get(id=claim_id)
         except Claim.DoesNotExist:
-            raise NotFound('Claim not found.')
+            raise NotFound("Claim not found.")
 
         # ── Thread Deduplication: Block + Redirect ──
         # Check if this claim (or a matching claim) already has an active thread
         existing_thread = self._find_existing_thread(claim)
         if existing_thread:
-            raise ValidationError({
-                "detail": "A community discussion already exists for this claim.",
-                "existing_thread_id": str(existing_thread.id),
-                "redirect": True,
-            })
+            raise ValidationError(
+                {
+                    "detail": "A community discussion already exists for this claim.",
+                    "existing_thread_id": str(existing_thread.id),
+                    "redirect": True,
+                }
+            )
 
-        serializer.save(author=self.request.user, claim=claim)
+        with transaction.atomic():
+            serializer.save(
+                author=self.request.user,
+                claim=claim,
+            )
+
+            ensure_verification_assignment(
+                claim=claim,
+            )
 
     def _find_existing_thread(self, claim):
         """
@@ -1013,8 +2102,7 @@ class ThreadViewSet(viewsets.ModelViewSet):
         """
         # Direct check: does this exact claim already have a non-rejected thread?
         direct_thread = (
-            Thread.objects
-            .filter(claim=claim)
+            Thread.objects.filter(claim=claim)
             .exclude(status=Thread.Status.REJECTED)
             .order_by("-created_at")
             .first()
@@ -1024,11 +2112,12 @@ class ThreadViewSet(viewsets.ModelViewSet):
 
         # Fingerprint check: does a matching claim have a thread?
         if claim.claim_fingerprint:
-            matched_claim = find_matching_claim(claim.claim_fingerprint, claim.claim_type)
+            matched_claim = find_matching_claim(
+                claim.claim_fingerprint, claim.claim_type
+            )
             if matched_claim and matched_claim.id != claim.id:
                 matched_thread = (
-                    Thread.objects
-                    .filter(claim=matched_claim)
+                    Thread.objects.filter(claim=matched_claim)
                     .exclude(status=Thread.Status.REJECTED)
                     .order_by("-created_at")
                     .first()
@@ -1043,90 +2132,151 @@ class ThreadViewSet(viewsets.ModelViewSet):
             return ThreadDetailSerializer
         return ThreadSerializer
 
+
 class ClaimViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ClaimSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         return Claim.objects.all()
 
 
 class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
     serializer_class = EvidenceSubmissionSerializer
-    permission_classes = [IsAuthenticated, IsNotModerator, IsEvidenceContributorOrReadOnly] #If moderator submits evidence, returns an error
+    permission_classes = [
+        IsAuthenticated,
+        IsNotModerator,
+        IsEvidenceContributorOrReadOnly,
+    ]  # If moderator submits evidence, returns an error
 
     def get_queryset(self):
         return EvidenceSubmission.objects.all()
-    
+
     def perform_create(self, serializer):
         thread_id = serializer.validated_data.pop("thread_id")
+
         try:
-            thread = Thread.objects.get(id=thread_id)
+            thread = Thread.objects.select_related("claim").get(id=thread_id)
         except Thread.DoesNotExist:
             raise NotFound("Thread not found.")
-        serializer.save(
-            contributor=self.request.user,
-            thread=thread,
-            contributor_trust_snapshot=self.request.user.profile.trust_score,
-            evidence_status=EvidenceSubmission.EvidenceStatus.UNVERIFIED,
-        )
-        
-    @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated, IsModerator])
-    def verify(self, request, pk=None):
-        """
-        Verify or reject an evidence. Moderators only.
-        Request body:
-        {
-            "evidence_status": "VERIFIED" or "REJECTED",
-            "moderator_notes": "Optional notes",
-        }
-        """
-        
+
+        with transaction.atomic():
+            organization = get_claim_verification_organization(
+                thread.claim,
+                lock=True,
+            )
+
+            evidence = serializer.save(
+                contributor=self.request.user,
+                thread=thread,
+                contributor_trust_snapshot=(self.request.user.profile.trust_score),
+                evidence_status=(EvidenceSubmission.EvidenceStatus.UNVERIFIED),
+            )
+
+            ensure_evidence_case(
+                evidence=evidence,
+                actor=self.request.user,
+                organization=organization,
+            )
+
+    @action(
+        detail=True,
+        methods=["patch"],
+        permission_classes=[
+            IsAuthenticated,
+            CanReviewEvidence,
+        ],
+    )
+    def verify(
+        self,
+        request,
+        pk=None,
+    ):
         evidence = self.get_object()
 
-        evidence_status = request.data.get(
-            "evidence_status"
-        )
+        evidence_status = request.data.get("evidence_status")
+
         notes = request.data.get(
             "moderator_notes",
             "",
+        ).strip()
+
+        rejection_reason = request.data.get("rejection_reason")
+
+        expected_status = request.data.get(
+            "expected_status",
+            evidence.evidence_status,
         )
 
-        if evidence_status not in [
-            EvidenceSubmission.EvidenceStatus.VERIFIED,
-            EvidenceSubmission.EvidenceStatus.REJECTED,
-        ]:
+        try:
+            result = review_evidence_submission(
+                evidence=evidence,
+                actor=request.user,
+                evidence_status=evidence_status,
+                moderator_notes=notes,
+                rejection_reason=rejection_reason,
+                expected_status=expected_status,
+            )
+
+        except EvidenceReviewConflict as error:
             return Response(
                 {
-                    "detail":
-                        "Invalid evidence_status. "
-                        "Must be VERIFIED or REJECTED."
+                    "detail": str(error),
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        except EvidenceReviewAuthorizationError as error:
+            return Response(
+                {
+                    "detail": str(error),
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        except (
+            EvidenceReviewError,
+            ModerationCaseError,
+        ) as error:
+            return Response(
+                {
+                    "detail": str(error),
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        evidence.evidence_status = evidence_status
-        evidence.verified_by = request.user
-        evidence.verified_at = timezone.now()
-        evidence.moderator_notes = notes
-        evidence.save(update_fields=["evidence_status", "verified_by", "verified_at", "moderator_notes"])
-        
-        # Persist trust immediately so UI does not show stale overall score after moderation.
-        recompute_user_trust_score(evidence.contributor.id)
-        # Keep async recompute as a safety net for eventual consistency.
-        update_contributor_trust_score.delay(evidence.contributor.id, evidence_status)
-        
-        serializer = EvidenceSubmissionSerializer(evidence, context={"request": request})
-        return Response(serializer.data, status=200)
-        
-        
+        reviewed_evidence = result["evidence"]
+
+        contributor_id = result["contributor_id"]
+
+        # The review transaction has completed before
+        # reputation is recomputed.
+        recompute_user_trust_score(contributor_id)
+
+        transaction.on_commit(
+            lambda: (recompute_user_trust_score_task.delay(contributor_id))
+        )
+
+        serializer = EvidenceSubmissionSerializer(
+            reviewed_evidence,
+            context={
+                "request": request,
+            },
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+
 class ThreadCommentViewSet(viewsets.ModelViewSet):
     serializer_class = ThreadCommentSerializer
     permission_classes = [IsAuthenticated, IsCommenterOrReadOnly]
-    
+
     def get_queryset(self):
         return ThreadComment.objects.all().order_by("-commented_at")
-    
+
     def perform_create(self, serializer):
         thread_id = serializer.validated_data.pop("thread_id")
         try:
@@ -1146,10 +2296,14 @@ class ThreadFlagViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         if _has_moderator_role(self.request.user):
-            return ThreadFlag.objects.select_related("thread", "flagged_by").order_by("-flagged_at")
-        return ThreadFlag.objects.filter(flagged_by=self.request.user).select_related(
-            "thread", "flagged_by"
-        ).order_by("-flagged_at")
+            return ThreadFlag.objects.select_related("thread", "flagged_by").order_by(
+                "-flagged_at"
+            )
+        return (
+            ThreadFlag.objects.filter(flagged_by=self.request.user)
+            .select_related("thread", "flagged_by")
+            .order_by("-flagged_at")
+        )
 
     def perform_create(self, serializer):
         thread_id = serializer.validated_data.pop("thread_id")
@@ -1159,17 +2313,18 @@ class ThreadFlagViewSet(viewsets.ModelViewSet):
             raise NotFound("Thread not found.")
 
         try:
-            serializer.save(flagged_by=self.request.user, thread=thread)
+            with transaction.atomic():
+                serializer.save(
+                    flagged_by=self.request.user,
+                    thread=thread,
+                )
+
+                ensure_safety_case(
+                    thread=thread,
+                    actor=self.request.user,
+                )
         except IntegrityError:
             raise ValidationError({"detail": "You already flagged this thread."})
-
-        # Flagged threads are routed into moderation review without blocking all new threads.
-        if thread.status == Thread.Status.OPEN:
-            thread.status = Thread.Status.PENDING
-            thread.save(update_fields=["status"])
-
-        # Reporting activity affects contribution denominator immediately.
-        recompute_user_trust_score_task.delay(self.request.user.id)
 
 
 class VoteViewSet(viewsets.ModelViewSet):
@@ -1221,27 +2376,27 @@ def test_deepfake(request):
 
         # 1. Decode the raw bytes safely
         raw_image_bytes = base64.b64decode(base64_string)
-        
+
         # 2. Standardize and optimize the image using Pillow
         img = Image.open(io.BytesIO(raw_image_bytes))
-        
+
         # Strip alpha channels (transparency) which confuse AI models
-        if img.mode in ('RGBA', 'P'):
-            img = img.convert('RGB')
-            
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+
         # Resize down if the image is massive (keeps API fast and under limits)
         img.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
-        
+
         # Save to a new buffer as a clean JPEG
         output_buffer = io.BytesIO()
         img.save(output_buffer, format="JPEG", quality=90)
         optimized_image_bytes = output_buffer.getvalue()
-    # 3. Send the clean, optimized bytes to your model
+        # 3. Send the clean, optimized bytes to your model
         ai_data = detect_ai_image(optimized_image_bytes)
-        
+
         if not ai_data:
             return JsonResponse({"error": "Detection API unavailable."}, status=503)
-            
+
         ai_probability = ai_data["score"]
         fake_category = ai_data["category"]
         is_fake = ai_probability > 0.65
@@ -1249,23 +2404,27 @@ def test_deepfake(request):
         # 4. Generate the dynamic explanation!
         summary_text = ""
         if is_fake:
-            base64_for_groq = base64.b64encode(optimized_image_bytes).decode('utf-8')
+            base64_for_groq = base64.b64encode(optimized_image_bytes).decode("utf-8")
             # Pass the category into the Groq function
             summary_text = generate_deepfake_explanation(base64_for_groq, fake_category)
         else:
             summary_text = "No significant indicators of AI generation were detected. The image appears to possess natural digital noise and structural consistency."
 
-        return JsonResponse({
-            "ai_probability": ai_probability,
-            "is_fake": is_fake,
-            "summary": summary_text # <-- Pass this back to React!
-        }, status=200)
+        return JsonResponse(
+            {
+                "ai_probability": ai_probability,
+                "is_fake": is_fake,
+                "summary": summary_text,  # <-- Pass this back to React!
+            },
+            status=200,
+        )
 
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON payload"}, status=400)
     except Exception as e:
         print(f"Deepfake view error: {str(e)}")
         return JsonResponse({"error": "Failed to process image format."}, status=400)
+
 
 @csrf_exempt
 @api_view(["POST"])
@@ -1274,21 +2433,31 @@ def test_deepfake(request):
 def verify_text(request):
     """Endpoint for pure text fact-checking."""
     text_content = request.data.get("text")
-    
+
     if not text_content:
         return Response({"error": "Text is required"}, status=400)
-        
+
     print(f"Received Text: {text_content[:100]}...")
 
     # ── Claim Deduplication Pre-Check ──
     fingerprint = compute_fingerprint("TEXT", text_content)
     # Even if fingerprint is None or exact match fails, we want semantic fallback!
-    matched_claim = find_matching_claim(fingerprint, "TEXT", context_text=text_content)
+    matched_claim = find_matching_claim(
+        fingerprint,
+        "TEXT",
+        context_text=text_content,
+        allow_semantic_fallback=False,
+    )
     authenticated_user = _authenticated_user_or_none(request)
-    
+
     if matched_claim:
         _record_authenticated_claim_check(authenticated_user, matched_claim)
-        match_result = get_match_result(matched_claim)
+        match_result = get_match_result(
+            matched_claim,
+            triggered_by=(authenticated_user),
+            record_reuse=True,
+            query_text=text_content,
+        )
         return JsonResponse(
             {"claim_id": str(matched_claim.id), "cached": True, "match": match_result},
             status=200,
@@ -1298,17 +2467,17 @@ def verify_text(request):
     # We set url_link to a short string so it doesn't crash the 500-character database limit!
     # Proper Implementation: Save as TEXT and store the content in context_text
     claim = Claim.objects.create(
-        claim_type=Claim.ClaimType.TEXT, 
+        claim_type=Claim.ClaimType.TEXT,
         context_text=text_content,
         claim_fingerprint=fingerprint,
         verified_via=Claim.VerificationSource.PENDING,
     )
     _record_authenticated_claim_check(authenticated_user, claim)
     claim_id = claim.id
-    
+
     # Send the raw text to the Celery worker
     text_fact_check_process.delay(text_content, claim_id)
-    
+
     return JsonResponse(
         {"claim_id": str(claim_id), "cached": False},
         status=200,
@@ -1331,17 +2500,30 @@ def claim_match(request):
     claim_type = request.query_params.get("claim_type", "").upper()
     text = request.query_params.get("text")
 
+    authenticated_user = _authenticated_user_or_none(request)
+
     if not fingerprint and not text:
         return Response({"match": None}, status=200)
 
-    matched_claim = find_matching_claim(fingerprint, claim_type, context_text=text)
+    matched_claim = find_matching_claim(
+        fingerprint,
+        claim_type,
+        context_text=text,
+        allow_semantic_fallback=False,
+    )
     if matched_claim:
-        match_result = get_match_result(matched_claim)
+        match_result = get_match_result(
+            matched_claim,
+            triggered_by=(authenticated_user),
+            record_reuse=True,
+            query_text=text,
+        )
         serializer = ClaimMatchSerializer(data=match_result)
         serializer.is_valid(raise_exception=True)
         return Response({"match": serializer.validated_data}, status=200)
 
     return Response({"match": None}, status=200)
+
 
 # for user view
 @api_view(["GET"])
@@ -1366,7 +2548,9 @@ def search_users(request):
         .order_by("username")[:limit]
     )
 
-    serializer = PublicUserSearchSerializer(users, many=True, context={"request": request})
+    serializer = PublicUserSearchSerializer(
+        users, many=True, context={"request": request}
+    )
     return Response(serializer.data, status=200)
 
 
@@ -1374,9 +2558,13 @@ def search_users(request):
 @permission_classes([AllowAny])
 def get_public_user_profile(request, username):
     """Fetch read-only public identity fields for a user profile."""
-    target_user = get_object_or_404(User.objects.select_related("profile"), username=username)
+    target_user = get_object_or_404(
+        User.objects.select_related("profile"), username=username
+    )
 
-    serializer = PublicIdentityProfileSerializer(target_user, context={"request": request})
+    serializer = PublicIdentityProfileSerializer(
+        target_user, context={"request": request}
+    )
     return Response(serializer.data)
 
 
@@ -1384,7 +2572,9 @@ def get_public_user_profile(request, username):
 @permission_classes([AllowAny])
 def public_user_threads(request, username):
     """Fetch public threads initiated by a specific user."""
-    target_user = get_object_or_404(User.objects.select_related("profile"), username=username)
+    target_user = get_object_or_404(
+        User.objects.select_related("profile"), username=username
+    )
 
     threads = (
         Thread.objects.filter(author=target_user)
@@ -1392,7 +2582,9 @@ def public_user_threads(request, username):
         .order_by("-created_at")
     )
 
-    serializer = PublicUserThreadSerializer(threads, many=True, context={"request": request})
+    serializer = PublicUserThreadSerializer(
+        threads, many=True, context={"request": request}
+    )
     return Response(serializer.data, status=200)
 
 
@@ -1400,7 +2592,9 @@ def public_user_threads(request, username):
 @permission_classes([AllowAny])
 def public_user_evidence(request, username):
     """Fetch public evidence and comments submitted by a specific user."""
-    target_user = get_object_or_404(User.objects.select_related("profile"), username=username)
+    target_user = get_object_or_404(
+        User.objects.select_related("profile"), username=username
+    )
 
     evidence_items = list(
         EvidenceSubmission.objects.filter(contributor=target_user)
@@ -1424,9 +2618,13 @@ def public_user_evidence(request, username):
     payload = []
     for _, activity_type, item in merged_activity:
         if activity_type == "EVIDENCE":
-            payload.append(PublicUserEvidenceSerializer(item, context={"request": request}).data)
+            payload.append(
+                PublicUserEvidenceSerializer(item, context={"request": request}).data
+            )
         else:
-            payload.append(PublicUserCommentSerializer(item, context={"request": request}).data)
+            payload.append(
+                PublicUserCommentSerializer(item, context={"request": request}).data
+            )
 
     return Response(payload, status=200)
 
@@ -1435,19 +2633,18 @@ def public_user_evidence(request, username):
 @permission_classes([AllowAny])
 def public_user_verdicts(request, username):
     """Fetch public moderator verdict activity for a specific moderator user."""
-    target_user = get_object_or_404(User.objects.select_related("profile"), username=username)
+    target_user = get_object_or_404(
+        User.objects.select_related("profile"), username=username
+    )
 
     if not _has_moderator_role(target_user):
         return Response([], status=200)
 
-    verdict_threads = (
-        Thread.objects.filter(
-            moderated_by=target_user,
-            moderator_verdict__isnull=False,
-            status=Thread.Status.CLOSED,
-        )
-        .order_by("-moderated_at", "-created_at")
-    )
+    verdict_threads = Thread.objects.filter(
+        moderated_by=target_user,
+        moderator_verdict__isnull=False,
+        status=Thread.Status.CLOSED,
+    ).order_by("-moderated_at", "-created_at")
 
     serializer = PublicModeratorVerdictSerializer(
         verdict_threads,
@@ -1455,6 +2652,7 @@ def public_user_verdicts(request, username):
         context={"request": request},
     )
     return Response(serializer.data, status=200)
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -1466,7 +2664,7 @@ def public_user_claims(request, username):
         .annotate(last_checked_at=Max("check_history__checked_at"))
         .order_by("-last_checked_at", "-last_updated")
     )
-    
+
     serializer = ClaimSerializer(claims, many=True)
     return Response(serializer.data)
 
@@ -1475,7 +2673,9 @@ def public_user_claims(request, username):
 @permission_classes([IsAuthenticated])
 def moderator_transparency_stats(request, username):
     """Return moderator activity metrics for institutional transparency cards."""
-    target_user = get_object_or_404(User.objects.select_related("profile"), username=username)
+    target_user = get_object_or_404(
+        User.objects.select_related("profile"), username=username
+    )
 
     if not _has_moderator_role(target_user):
         return Response({"detail": "This user is not a moderator."}, status=400)
@@ -1487,8 +2687,12 @@ def moderator_transparency_stats(request, username):
 
     stats = {
         "total_claims_resolved": resolved_threads.count(),
-        "fact_verdicts_issued": resolved_threads.filter(moderator_verdict="FACT").count(),
-        "fake_verdicts_issued": resolved_threads.filter(moderator_verdict="FAKE").count(),
+        "fact_verdicts_issued": resolved_threads.filter(
+            moderator_verdict="FACT"
+        ).count(),
+        "fake_verdicts_issued": resolved_threads.filter(
+            moderator_verdict="FAKE"
+        ).count(),
         "pending_moderator_review": Thread.objects.filter(
             status=Thread.Status.PENDING,
             moderator_verdict__isnull=True,
@@ -1497,16 +2701,17 @@ def moderator_transparency_stats(request, username):
 
     return Response(stats, status=200)
 
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def toggle_follow_user(request, username):
     """Toggle follow/unfollow for a specific user."""
     if request.user.username == username:
         return Response({"error": "You cannot follow yourself."}, status=400)
-        
+
     target_user = get_object_or_404(User, username=username)
     profile = target_user.profile
-    
+
     # If already following, UNFOLLOW
     if profile.followers.filter(id=request.user.id).exists():
         profile.followers.remove(request.user)
@@ -1515,11 +2720,12 @@ def toggle_follow_user(request, username):
     else:
         profile.followers.add(request.user)
         is_following = True
-        
-    return Response({
-        "is_following": is_following,
-        "followers_count": profile.followers.count()
-    }, status=200)
+
+    return Response(
+        {"is_following": is_following, "followers_count": profile.followers.count()},
+        status=200,
+    )
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -1531,6 +2737,7 @@ def get_user_followers(request, username):
     serializer = UserSerializer(followers, many=True, context={"request": request})
     return Response(serializer.data)
 
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_user_following(request, username):
@@ -1541,6 +2748,7 @@ def get_user_following(request, username):
     serializer = UserSerializer(following, many=True, context={"request": request})
     return Response(serializer.data)
 
+
 @api_view(["PATCH"])
 @permission_classes([IsAuthenticated])
 def update_profile(request):
@@ -1548,32 +2756,32 @@ def update_profile(request):
     user = request.user
     profile = user.profile
     data = request.data
-    
+
     # Update User model fields
     if "username" in data and data["username"]:
         user.username = data["username"]
     if "email" in data and data["email"]:
         user.email = data["email"]
-    
+
     # Update Bio if provided
     if "bio" in data:
         profile.bio = data["bio"]
-        
+
     # Update Avatar if base64 image is provided
     if "avatar_base64" in data and data["avatar_base64"]:
         base64_string = data["avatar_base64"]
         # Strip the data:image/png;base64, header if it exists
         if "," in base64_string:
             base64_string = base64_string.split(",")[1]
-            
+
         # Reuse your awesome existing upload service!
         avatar_url = upload_image_to_database(base64_string)
         if avatar_url:
             profile.avatar_url = avatar_url
-            
+
     user.save()
     profile.save()
-    
+
     # Return the updated user data
     serializer = UserWithTrustBreakdownSerializer(user, context={"request": request})
     return Response(serializer.data, status=200)
@@ -1586,19 +2794,33 @@ def moderation_stats_view(request):
     Returns system-wide aggregates for the Moderation Page.
     """
     from django.db.models import Q
-    flagged_threads = Thread.objects.filter(flags__isnull=False).distinct().count()
+
+    flagged_threads = (
+        ModerationCase.objects.filter(
+            case_type=ModerationCase.CaseType.SAFETY,
+            status__in=ACTIVE_CASE_STATUSES,
+        )
+        .exclude(thread__isnull=True)
+        .values("thread_id")
+        .distinct()
+        .count()
+    )
     closed_threads = Thread.objects.filter(status=Thread.Status.CLOSED).count()
-    open_threads = Thread.objects.filter(Q(status=Thread.Status.OPEN) | Q(status=Thread.Status.PENDING)).count()
+    open_threads = Thread.objects.filter(
+        Q(status=Thread.Status.OPEN) | Q(status=Thread.Status.PENDING)
+    ).count()
     pending_verdicts = Thread.objects.filter(moderator_verdict__isnull=True).count()
     total_claims = Claim.objects.count()
 
-    return Response({
-        "flagged_threads": flagged_threads,
-        "closed_threads": closed_threads,
-        "open_threads": open_threads,
-        "pending_verdicts": pending_verdicts,
-        "total_claims": total_claims
-    })
+    return Response(
+        {
+            "flagged_threads": flagged_threads,
+            "closed_threads": closed_threads,
+            "open_threads": open_threads,
+            "pending_verdicts": pending_verdicts,
+            "total_claims": total_claims,
+        }
+    )
 
 
 class UserHubView(APIView):
@@ -1611,51 +2833,52 @@ class UserHubView(APIView):
         # 1. Reputation & Progression
         components = calculate_trust_components(user)
         progression = get_reputation_progression(components)
-            
 
         # 2. Personal Impact Metrics
-        total_scans = (
-            Claim.objects
-            .filter(check_history__user=user)
-            .distinct()
-            .count()
-        )
-        
+        total_scans = Claim.objects.filter(check_history__user=user).distinct().count()
+
         evidence_submitted = EvidenceSubmission.objects.filter(contributor=user).count()
         votes_cast = Vote.objects.filter(voter=user).count()
-        
+
         # Impact Ripple: How many votes did other people give to THIS user's evidence?
         impact_ripple = Vote.objects.filter(evidence__contributor=user).count()
 
-        return Response({
-            "user_info": {
-                "username": user.username,
-                "avatar_url": profile.avatar_url if hasattr(profile, 'avatar_url') and profile.avatar_url else None,
-            },
-            "reputation": {
-                "trust_score": components["trust_score"],
-                "status": progression["status"],
-                "current_rank": progression["current_rank"],
-                "next_rank": progression["next_rank"],
-                "score_to_next_rank": progression["score_to_next_rank"],
-                "actions_to_next_rank": progression["actions_to_next_rank"],
-                "progress_percent": progression["progress_percent"],
-                "resolved_actions": progression["resolved_actions"],
-                "confidence": progression["confidence"],
-                "breakdown": {
-                    "base_score": components["base_score"],
-                    "contribution_points": components["contribution_points"],
-                    "community_points": components["community_points"],
-                    "history_points": components["history_points"],
-                    "moderation_penalty": components["moderation_penalty"],
+        return Response(
+            {
+                "user_info": {
+                    "username": user.username,
+                    "avatar_url": (
+                        profile.avatar_url
+                        if hasattr(profile, "avatar_url") and profile.avatar_url
+                        else None
+                    ),
                 },
-            },
-            "impact": {
-                "total_scans": total_scans,
-                "community_contributions": evidence_submitted + votes_cast,
-                "impact_ripple": impact_ripple,
-            },
-        })
+                "reputation": {
+                    "trust_score": components["trust_score"],
+                    "status": progression["status"],
+                    "current_rank": progression["current_rank"],
+                    "next_rank": progression["next_rank"],
+                    "score_to_next_rank": progression["score_to_next_rank"],
+                    "actions_to_next_rank": progression["actions_to_next_rank"],
+                    "progress_percent": progression["progress_percent"],
+                    "resolved_actions": progression["resolved_actions"],
+                    "confidence": progression["confidence"],
+                    "breakdown": {
+                        "base_score": components["base_score"],
+                        "contribution_points": components["contribution_points"],
+                        "community_points": components["community_points"],
+                        "history_points": components["history_points"],
+                        "moderation_penalty": components["moderation_penalty"],
+                    },
+                },
+                "impact": {
+                    "total_scans": total_scans,
+                    "community_contributions": evidence_submitted + votes_cast,
+                    "impact_ripple": impact_ripple,
+                },
+            }
+        )
+
 
 class UserFactCheckLibraryView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1687,56 +2910,26 @@ class UserFactCheckLibraryView(APIView):
         user = request.user
 
         history_count = (
-            Claim.objects
-            .filter(check_history__user=user)
-            .distinct()
-            .count()
+            Claim.objects.filter(check_history__user=user).distinct().count()
         )
 
         saved_count = user.profile.saved_claims.count()
 
-        view_mode = (
-            request.query_params
-            .get("view", "history")
-            .strip()
-            .lower()
-        )
+        view_mode = request.query_params.get("view", "history").strip().lower()
 
         if view_mode not in self.VALID_VIEWS:
             return Response(
-                {
-                    "detail":
-                        "Invalid view. Use 'history' or 'saved'."
-                },
+                {"detail": "Invalid view. Use 'history' or 'saved'."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        search_query = (
-            request.query_params
-            .get("search", "")
-            .strip()[:120]
-        )
+        search_query = request.query_params.get("search", "").strip()[:120]
 
-        verdict = (
-            request.query_params
-            .get("verdict", "")
-            .strip()
-            .upper()
-        )
+        verdict = request.query_params.get("verdict", "").strip().upper()
 
-        claim_type = (
-            request.query_params
-            .get("type", "")
-            .strip()
-            .upper()
-        )
+        claim_type = request.query_params.get("type", "").strip().upper()
 
-        sort_order = (
-            request.query_params
-            .get("sort", "newest")
-            .strip()
-            .lower()
-        )
+        sort_order = request.query_params.get("sort", "newest").strip().lower()
 
         if sort_order not in self.VALID_SORTS:
             sort_order = "newest"
@@ -1765,14 +2958,8 @@ class UserFactCheckLibraryView(APIView):
         )
 
         if view_mode == "history":
-            queryset = (
-                Claim.objects
-                .filter(check_history__user=user)
-                .annotate(
-                    activity_at=Max(
-                        "check_history__checked_at"
-                    )
-                )
+            queryset = Claim.objects.filter(check_history__user=user).annotate(
+                activity_at=Max("check_history__checked_at")
             )
 
             ordering = (
@@ -1787,12 +2974,8 @@ class UserFactCheckLibraryView(APIView):
                 )
 
         else:
-            queryset = (
-                user.profile.saved_claims
-                .all()
-                .annotate(
-                    activity_at=F("last_updated")
-                )
+            queryset = user.profile.saved_claims.all().annotate(
+                activity_at=F("last_updated")
             )
 
             ordering = (
@@ -1843,9 +3026,7 @@ class UserFactCheckLibraryView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            queryset = queryset.filter(
-                claim_type=claim_type
-            )
+            queryset = queryset.filter(claim_type=claim_type)
 
         queryset = queryset.order_by(*ordering)
 
@@ -1857,19 +3038,14 @@ class UserFactCheckLibraryView(APIView):
         try:
             page_obj = paginator.page(page_number)
         except EmptyPage:
-            page_obj = paginator.page(
-                paginator.num_pages
-            )
+            page_obj = paginator.page(paginator.num_pages)
 
-        page_claim_ids = [
-            claim.id
-            for claim in page_obj.object_list
-        ]
+        page_claim_ids = [claim.id for claim in page_obj.object_list]
 
         saved_claim_ids = set(
-            user.profile.saved_claims
-            .filter(id__in=page_claim_ids)
-            .values_list("id", flat=True)
+            user.profile.saved_claims.filter(id__in=page_claim_ids).values_list(
+                "id", flat=True
+            )
         )
 
         serializer = ClaimSerializer(
@@ -1899,6 +3075,7 @@ class UserFactCheckLibraryView(APIView):
             status=status.HTTP_200_OK,
         )
 
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def toggle_save_claim(request, claim_id):
@@ -1907,16 +3084,16 @@ def toggle_save_claim(request, claim_id):
         claim = Claim.objects.get(id=claim_id)
     except Claim.DoesNotExist:
         return Response({"error": "Claim not found."}, status=404)
-        
+
     profile = request.user.profile
-    
+
     if profile.saved_claims.filter(id=claim.id).exists():
         profile.saved_claims.remove(claim)
         is_saved = False
     else:
         profile.saved_claims.add(claim)
         is_saved = True
-        
+
     return Response(
         {
             "is_saved": is_saved,
@@ -1925,12 +3102,14 @@ def toggle_save_claim(request, claim_id):
         status=status.HTTP_200_OK,
     )
 
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def get_claim_analysis(request, claim_id):
     claim = get_object_or_404(Claim, id=claim_id)
     serializer = ClaimDeepAnalysisSerializer(claim, context={"request": request})
     return Response(serializer.data)
+
 
 @csrf_exempt
 @api_view(["POST"])
@@ -1939,7 +3118,7 @@ def get_claim_analysis(request, claim_id):
 def verify_file(request):
     base64_string = request.data.get("file_data")
     file_name = request.data.get("file_name", "")
-    
+
     if not base64_string:
         return Response({"error": "No document data provided"}, status=400)
 
@@ -1951,7 +3130,7 @@ def verify_file(request):
         file_bytes = base64.b64decode(base64_string)
         file_obj = io.BytesIO(file_bytes)
         extracted_text = ""
-        
+
         # Extract text based on file extension
         if file_name.lower().endswith(".pdf"):
             reader = PyPDF2.PdfReader(file_obj)
@@ -1959,33 +3138,47 @@ def verify_file(request):
                 page_text = page.extract_text()
                 if page_text:
                     extracted_text += page_text + "\n"
-                    
+
         elif file_name.lower().endswith(".docx") and docx:
             doc = docx.Document(file_obj)
             extracted_text = "\n".join([para.text for para in doc.paragraphs])
-            
+
         elif file_name.lower().endswith(".txt"):
-            extracted_text = file_bytes.decode('utf-8')
-            
+            extracted_text = file_bytes.decode("utf-8")
+
         else:
-            return Response({"error": "Unsupported file format. Please use PDF, DOCX, or TXT."}, status=400)
-                
+            return Response(
+                {"error": "Unsupported file format. Please use PDF, DOCX, or TXT."},
+                status=400,
+            )
+
         # Limit text to 5000 characters to protect your Groq/Llama-3 context window
         extracted_text = extracted_text.strip()[:5000]
 
         if not extracted_text:
-            return Response({"error": "Could not extract text. If this is a scanned image PDF, OCR is required."}, status=400)
+            return Response(
+                {
+                    "error": "Could not extract text. If this is a scanned image PDF, OCR is required."
+                },
+                status=400,
+            )
 
         # ── Claim Deduplication Pre-Check ──
         fingerprint = compute_fingerprint("TEXT", extracted_text)
-        matched_claim = find_matching_claim(fingerprint, "TEXT", context_text=extracted_text)
+        matched_claim = find_matching_claim(
+            fingerprint, "TEXT", context_text=extracted_text
+        )
         authenticated_user = _authenticated_user_or_none(request)
-        
+
         if matched_claim:
             _record_authenticated_claim_check(authenticated_user, matched_claim)
             match_result = get_match_result(matched_claim)
             return JsonResponse(
-                {"claim_id": str(matched_claim.id), "cached": True, "match": match_result},
+                {
+                    "claim_id": str(matched_claim.id),
+                    "cached": True,
+                    "match": match_result,
+                },
                 status=200,
             )
 
@@ -1994,22 +3187,22 @@ def verify_file(request):
             claim_type=Claim.ClaimType.FILE,
             url_link=f"Document Input: {file_name}",
             claim_fingerprint=fingerprint,
-
             verified_via=Claim.VerificationSource.PENDING,
         )
         _record_authenticated_claim_check(authenticated_user, claim)
         claim_id = claim.id
-        
+
         # Send the extracted text to your existing Celery worker
         text_fact_check_process.delay(extracted_text, claim_id)
-        
+
         return JsonResponse(
             {"claim_id": str(claim_id), "cached": False},
             status=200,
         )
-        
+
     except Exception as e:
         return Response({"error": f"Failed to process document: {str(e)}"}, status=500)
+
 
 # Password Reset Request Endpoint
 @api_view(["POST"])
@@ -2081,6 +3274,7 @@ def request_password_reset(request):
         status=status.HTTP_200_OK,
     )
 
+
 # Password Reset Confirmation Endpoint
 @api_view(["POST"])
 @permission_classes([AllowAny])
@@ -2146,6 +3340,7 @@ def confirm_password_reset(request):
         status=status.HTTP_200_OK,
     )
 
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def complete_onboarding(request):
@@ -2153,9 +3348,7 @@ def complete_onboarding(request):
 
     if not profile.has_completed_onboarding:
         profile.has_completed_onboarding = True
-        profile.save(
-            update_fields=["has_completed_onboarding"]
-        )
+        profile.save(update_fields=["has_completed_onboarding"])
 
     return Response(
         {

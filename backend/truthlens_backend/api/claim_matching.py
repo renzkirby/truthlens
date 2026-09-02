@@ -16,12 +16,21 @@ immediately — saving AI/API costs and giving the user an instant answer.
 
 import hashlib
 import re
+import logging
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
 from django.db.models import Q
 from pgvector.django import CosineDistance
 
 from .embedding_service import generate_embedding
+from .knowledge_reuse_service import (
+    PublishedFactCheckMatch,
+    build_published_fact_check_payload,
+    get_published_fact_check_for_claim,
+    record_knowledge_reuse,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def compute_fingerprint(claim_type, data):
@@ -70,8 +79,17 @@ def _fingerprint_url(raw_url):
         return None
 
     TRACKING_PARAMS = {
-        "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
-        "fbclid", "gclid", "ref", "source", "ref_src", "ref_url",
+        "utm_source",
+        "utm_medium",
+        "utm_campaign",
+        "utm_term",
+        "utm_content",
+        "fbclid",
+        "gclid",
+        "ref",
+        "source",
+        "ref_src",
+        "ref_url",
     }
 
     parsed = urlparse(raw_url.strip())
@@ -82,7 +100,8 @@ def _fingerprint_url(raw_url):
     # Filter out tracking query params
     query_params = parse_qs(parsed.query, keep_blank_values=False)
     filtered = {
-        k: v for k, v in sorted(query_params.items())
+        k: v
+        for k, v in sorted(query_params.items())
         if k.lower() not in TRACKING_PARAMS
     }
     clean_query = urlencode(filtered, doseq=True)
@@ -137,8 +156,7 @@ def find_semantic_match(embedding, claim_type="TEXT", threshold=0.85):
     max_distance = 1.0 - threshold
 
     candidates = (
-        Claim.objects
-        .exclude(claim_embedding__isnull=True)
+        Claim.objects.exclude(claim_embedding__isnull=True)
         .filter(claim_type=claim_type)
         .annotate(distance=CosineDistance("claim_embedding", embedding))
         .filter(distance__lt=max_distance)
@@ -159,7 +177,14 @@ def find_semantic_match(embedding, claim_type="TEXT", threshold=0.85):
     return candidates.first()
 
 
-def find_matching_claim(fingerprint, claim_type, hamming_threshold=5, context_text=None, semantic_threshold=0.80):
+def find_matching_claim(
+    fingerprint,
+    claim_type,
+    hamming_threshold=5,
+    context_text=None,
+    semantic_threshold=0.80,
+    allow_semantic_fallback=False,
+):
     """
     Search the database for an existing claim that matches the given fingerprint or text.
 
@@ -180,8 +205,7 @@ def find_matching_claim(fingerprint, claim_type, hamming_threshold=5, context_te
     # --- 1. Exact fingerprint match (all types) ---
     if fingerprint:
         exact_matches = (
-            Claim.objects
-            .filter(claim_fingerprint=fingerprint)
+            Claim.objects.filter(claim_fingerprint=fingerprint)
             .select_related()
             .prefetch_related("threads")
             .order_by("-last_updated")
@@ -204,8 +228,7 @@ def find_matching_claim(fingerprint, claim_type, hamming_threshold=5, context_te
     if claim_type == "IMAGE" and fingerprint and fingerprint.startswith("img:"):
         incoming_hash = fingerprint[4:]  # Strip "img:" prefix
         image_candidates = (
-            Claim.objects
-            .filter(
+            Claim.objects.filter(
                 claim_type="IMAGE",
                 claim_fingerprint__startswith="img:",
             )
@@ -229,13 +252,19 @@ def find_matching_claim(fingerprint, claim_type, hamming_threshold=5, context_te
 
     # --- 3. Semantic similarity match for TEXT/URL claims (Phase 2 Fallback) ---
     # Only applies if we have context_text and didn't find an exact match above
-    if claim_type in ["TEXT", "URL"] and context_text:
-        print(f"No exact match found for {claim_type}. Generating embedding for semantic check...")
+    if allow_semantic_fallback and claim_type in ["TEXT", "URL"] and context_text:
+        print(
+            f"No exact match found for {claim_type}. Generating embedding for semantic check..."
+        )
         embedding = generate_embedding(context_text)
         if embedding:
-            semantic_match = find_semantic_match(embedding, claim_type, semantic_threshold)
+            semantic_match = find_semantic_match(
+                embedding, claim_type, semantic_threshold
+            )
             if semantic_match:
-                print(f"Semantic match found! (Threshold {semantic_threshold}) -> Claim ID: {semantic_match.id}")
+                print(
+                    f"Semantic match found! (Threshold {semantic_threshold}) -> Claim ID: {semantic_match.id}"
+                )
                 return semantic_match
             else:
                 print("No semantic match found above threshold.")
@@ -243,74 +272,195 @@ def find_matching_claim(fingerprint, claim_type, hamming_threshold=5, context_te
     return None
 
 
-def get_match_result(matched_claim):
+def get_match_result(
+    matched_claim,
+    *,
+    triggered_by=None,
+    record_reuse=False,
+    query_text=None,
+):
     """
-    Format the match result for API response.
+    Format a claim-cache result.
 
-    Returns a dict with:
-      - match_type: "resolved", "has_thread", or "no_verdict"
-      - claim_id: matched claim UUID
-      - verdict: the effective verdict
-      - summary: AI or moderator summary
-      - thread_id: first active thread ID (if any)
-      - moderator_notes: notes from moderator (if resolved)
+    When an authoritative published
+    OfficialFactCheck exists, public-facing
+    content comes from that publication rather
+    than legacy Thread moderator notes.
     """
+
     if not matched_claim:
         return None
 
-    threads = list(matched_claim.threads.exclude(status="REJECTED").order_by("-created_at"))
+    from .models import (
+        KnowledgeReuseEvent,
+    )
+
+    threads = list(
+        matched_claim.threads.exclude(status="REJECTED").order_by("-created_at")
+    )
+
     active_thread = threads[0] if threads else None
-    print(active_thread)
 
-    # 1. Determine Sources: Prefer verified community evidence, fallback to full AI sources
     sources = []
-    if active_thread:
-        verified_ev = active_thread.evidence_submissions.filter(evidence_status="VERIFIED")[:3]
-        sources = [ev.evidence_url for ev in verified_ev if getattr(ev, "evidence_url", None)]
-        
-    if not sources and matched_claim.ai_sources:
-        sources = matched_claim.ai_sources
-    elif not sources and matched_claim.top_verdict_source:
-        sources = [matched_claim.top_verdict_source]
+    moderator_notes = None
+    official_fact_check = None
+    resolution_source = None
 
-    # 2. Determine match_type
+    effective_verdict = matched_claim.final_verdict or matched_claim.ai_verdict
+
+    summary = matched_claim.ai_summary
+
+    source_type = matched_claim.source_type
+
+    source_url = matched_claim.top_verdict_source or matched_claim.source_link
+
+    # =====================================
+    # 1. AUTHORITATIVE RESOLVED CLAIM
+    # =====================================
+
     if matched_claim.final_verdict:
         match_type = "resolved"
+
+        published_fact_check = get_published_fact_check_for_claim(matched_claim)
+
+        if published_fact_check:
+            published_match = PublishedFactCheckMatch(
+                fact_check=(published_fact_check),
+                match_method=(KnowledgeReuseEvent.MatchMethod.CLAIM_CACHE),
+                similarity_score=None,
+            )
+
+            official_fact_check = build_published_fact_check_payload(published_match)
+
+            # Public-facing truth comes from
+            # the approved publication.
+            effective_verdict = published_fact_check.verdict
+
+            summary = published_fact_check.summary
+
+            resolution_source = "OFFICIAL_FACT_CHECK"
+
+            source_type = "TruthLens Published Fact Check"
+
+            published_sources = official_fact_check.get(
+                "sources",
+                [],
+            )
+
+            sources = [
+                source["url"]
+                for source in published_sources
+                if (isinstance(source, dict) and source.get("url"))
+            ]
+
+            if sources:
+                source_url = sources[0]
+
+            # Material user-facing reuse is
+            # recorded only when the caller
+            # explicitly says this response
+            # was actually served.
+            if record_reuse:
+                try:
+                    record_knowledge_reuse(
+                        fact_check=(published_fact_check),
+                        reuse_type=(KnowledgeReuseEvent.ReuseType.USER_RESPONSE),
+                        match_method=(KnowledgeReuseEvent.MatchMethod.CLAIM_CACHE),
+                        target_claim=(matched_claim),
+                        triggered_by=(triggered_by),
+                        query_text=(query_text),
+                        metadata={
+                            "source": ("CLAIM_CACHE"),
+                        },
+                    )
+
+                except Exception as error:
+                    # Analytics must never
+                    # suppress a valid cached
+                    # user response.
+                    logger.warning(
+                        "Failed to record " "user-facing knowledge " "reuse: %s",
+                        error,
+                    )
+
+        else:
+            # The Claim has an authoritative
+            # adjudication, but no public
+            # article has been published.
+            #
+            # Do not expose internal moderator
+            # or adjudication notes here.
+            resolution_source = "ADJUDICATION"
+
+    # =====================================
+    # 2. ACTIVE COMMUNITY DISCUSSION
+    # =====================================
+
     elif active_thread:
         match_type = "has_thread"
+
+        resolution_source = "COMMUNITY_THREAD"
+
+    # =====================================
+    # 3. AI-ONLY RESULT
+    # =====================================
+
+    elif matched_claim.ai_verdict:
+        match_type = "has_verdict"
+
+        resolution_source = "AI"
+
     else:
         match_type = "no_verdict"
 
-    # 3. Determine Summary and Moderator Notes
-    summary = matched_claim.ai_summary
-    moderator_notes = None
+    # =====================================
+    # 4. SOURCE FALLBACK
+    # =====================================
 
-    if match_type == "resolved":
-        # Get moderator notes from the resolved thread
-        resolved_thread = matched_claim.threads.filter(
-            moderator_verdict__isnull=False
-        ).order_by("-moderated_at").first()
-        
-        if resolved_thread:
-            moderator_notes = resolved_thread.moderator_notes
-            summary = resolved_thread.moderator_notes or matched_claim.ai_summary
+    if not sources and active_thread:
+        verified_evidence = active_thread.evidence_submissions.filter(
+            evidence_status="VERIFIED"
+        )[:3]
 
-    # 4. Construct Final Payload
-    print(match_type)
+        sources = [
+            evidence.evidence_url
+            for evidence in verified_evidence
+            if getattr(
+                evidence,
+                "evidence_url",
+                None,
+            )
+        ]
+
+    if not sources and matched_claim.ai_sources:
+        # Preserve the existing AI-source
+        # response structure for compatibility.
+        sources = matched_claim.ai_sources
+
+    elif not sources and matched_claim.top_verdict_source:
+        sources = [matched_claim.top_verdict_source]
+
     return {
         "match_type": match_type,
         "claim_id": str(matched_claim.id),
-        "claim_type": matched_claim.claim_type,
-        "verdict": matched_claim.final_verdict or matched_claim.ai_verdict,
-        "ai_verdict": matched_claim.ai_verdict,
-        "final_verdict": matched_claim.final_verdict,
+        "claim_type": (matched_claim.claim_type),
+        "verdict": effective_verdict,
+        "ai_verdict": (matched_claim.ai_verdict),
+        "final_verdict": (matched_claim.final_verdict),
         "summary": summary,
-        "confidence_score": matched_claim.consensus_score,
-        "source_type": matched_claim.source_type,
-        "source_url": matched_claim.top_verdict_source or matched_claim.source_link,
+        "confidence_score": (matched_claim.consensus_score),
+        "source_type": source_type,
+        "source_url": source_url,
         "sources": sources,
-        "is_ai_generated": matched_claim.is_ai_generated,
-        "thread_id": str(active_thread.id) if active_thread else None,
-        "thread_status": active_thread.status if active_thread else None,
-        "moderator_notes": moderator_notes,
+        "is_ai_generated": (matched_claim.is_ai_generated),
+        "thread_id": (str(active_thread.id) if active_thread else None),
+        "thread_status": (active_thread.status if active_thread else None),
+        # Kept temporarily for response
+        # compatibility, but public published
+        # results no longer expose internal
+        # moderator notes.
+        "moderator_notes": (moderator_notes),
+        "score_context": (matched_claim.score_context),
+        "resolution_source": (resolution_source),
+        "official_fact_check": (official_fact_check),
     }
