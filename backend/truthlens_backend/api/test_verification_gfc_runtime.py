@@ -8,6 +8,7 @@ from .tasks import (
     GFC_HTTP_TIMEOUT_SEC,
     _retrieve_and_ingest_gfc,
     execute_core_text_pipeline,
+    url_fact_check_process,
 )
 
 
@@ -403,6 +404,270 @@ class GoogleFactCheckRuntimeBridgeTests(
         retrieve_gfc.assert_called_once_with(
             search_query,
             claim_id,
+        )
+
+        (
+            tavily_class
+            .return_value
+            .search
+            .assert_called_once()
+        )
+
+        self.assertEqual(
+            save_claim.call_args.args[2],
+            "Live Web Search",
+        )
+
+        requests_get.assert_not_called()
+
+    def test_url_pipeline_uses_runtime_bridge_and_preserves_gfc_verdict_path(
+        self,
+    ):
+        claim_id = "claim-id"
+        source_url = "https://example.com/article"
+
+        cleaned_text = "Cleaned article content."
+        cleaned_claim = "Example public claim."
+        search_query = "example public claim"
+
+        extraction_response = Mock()
+        extraction_response.status_code = 200
+        extraction_response.json.return_value = {
+            "results": [
+                {
+                    "raw_content": (
+                        "Raw article content."
+                    ),
+                }
+            ]
+        }
+
+        gfc_payload = {
+            "claims": [
+                {
+                    "text": "Example public claim.",
+                    "claimReview": [
+                        {
+                            "publisher": {
+                                "name": "Example Checker",
+                            },
+                            "url": (
+                                "https://example.com/"
+                                "fact-check"
+                            ),
+                            "textualRating": "False",
+                        }
+                    ],
+                }
+            ]
+        }
+
+        ai_verdict = {
+            "verdict": "FAKE",
+            "summary": "Example summary.",
+            "confidence_score": 95,
+        }
+
+        claim_queryset = Mock()
+        claim_queryset.first.return_value = Mock()
+
+        with (
+            patch(
+                "api.tasks.requests.post",
+                return_value=extraction_response,
+            ) as requests_post,
+            patch(
+                "api.tasks.requests.get"
+            ) as requests_get,
+            patch(
+                "api.tasks.clean_extracted_text",
+                return_value=cleaned_text,
+            ),
+            patch(
+                "api.tasks.extract_search_query",
+                return_value={
+                    "cleaned_claim": cleaned_claim,
+                    "search_query": search_query,
+                    "article_stance": "NEUTRAL",
+                },
+            ),
+            patch(
+                "api.tasks.Claim.objects.filter",
+                return_value=claim_queryset,
+            ),
+            patch(
+                "api.tasks.search_official_vault",
+                return_value=None,
+            ),
+            patch(
+                "api.tasks._retrieve_and_ingest_gfc",
+                return_value=gfc_payload,
+            ) as retrieve_gfc,
+            patch(
+                "api.tasks.is_fact_check_relevant",
+                return_value=True,
+            ) as relevance_check,
+            patch(
+                "api.tasks.evaluate_url_claim_with_gfc",
+                return_value=ai_verdict,
+            ) as evaluate_gfc,
+            patch(
+                "api.tasks._save_claim"
+            ) as save_claim,
+            patch(
+                "api.tasks.TavilyClient"
+            ) as tavily_class,
+            patch(
+                "api.tasks._log_stage"
+            ),
+        ):
+            url_fact_check_process.run(
+                source_url,
+                claim_id,
+            )
+
+        retrieve_gfc.assert_called_once_with(
+            search_query,
+            claim_id,
+            stage_prefix="url_",
+        )
+
+        relevance_check.assert_called_once_with(
+            cleaned_claim,
+            "Example public claim.",
+        )
+
+        evaluate_gfc.assert_called_once_with(
+            cleaned_claim,
+            gfc_payload,
+            "NEUTRAL",
+        )
+
+        save_claim.assert_called_once_with(
+            claim_id,
+            ai_verdict,
+            "Official Fact Check",
+            cleaned_text,
+            [
+                (
+                    "https://example.com/"
+                    "fact-check"
+                )
+            ],
+        )
+
+        requests_post.assert_called_once()
+        requests_get.assert_not_called()
+        tavily_class.assert_not_called()
+
+    def test_url_pipeline_provider_failure_still_falls_back_to_tavily(
+        self,
+    ):
+        claim_id = "claim-id"
+        source_url = "https://example.com/article"
+
+        cleaned_text = "Cleaned article content."
+        cleaned_claim = "Example public claim."
+        search_query = "example public claim"
+
+        extraction_response = Mock()
+        extraction_response.status_code = 200
+        extraction_response.json.return_value = {
+            "results": [
+                {
+                    "raw_content": (
+                        "Raw article content."
+                    ),
+                }
+            ]
+        }
+
+        tavily_response = {
+            "answer": "Web evidence answer.",
+            "results": [
+                {
+                    "title": "Web Result",
+                    "url": "https://example.com/web",
+                    "content": (
+                        "Relevant web evidence."
+                    ),
+                }
+            ],
+        }
+
+        ai_verdict = {
+            "verdict": "UNVERIFIED",
+            "summary": "Example summary.",
+            "confidence_score": 60,
+        }
+
+        claim_queryset = Mock()
+        claim_queryset.first.return_value = Mock()
+
+        with (
+            patch(
+                "api.tasks.requests.post",
+                return_value=extraction_response,
+            ),
+            patch(
+                "api.tasks.requests.get"
+            ) as requests_get,
+            patch(
+                "api.tasks.clean_extracted_text",
+                return_value=cleaned_text,
+            ),
+            patch(
+                "api.tasks.extract_search_query",
+                return_value={
+                    "cleaned_claim": cleaned_claim,
+                    "search_query": search_query,
+                    "article_stance": "NEUTRAL",
+                },
+            ),
+            patch(
+                "api.tasks.Claim.objects.filter",
+                return_value=claim_queryset,
+            ),
+            patch(
+                "api.tasks.search_official_vault",
+                return_value=None,
+            ),
+            patch(
+                "api.tasks._retrieve_and_ingest_gfc",
+                side_effect=requests.HTTPError(
+                    "Google unavailable"
+                ),
+            ) as retrieve_gfc,
+            patch(
+                "api.tasks.evaluate_url_claim_with_tavily",
+                return_value=ai_verdict,
+            ),
+            patch(
+                "api.tasks._save_claim"
+            ) as save_claim,
+            patch(
+                "api.tasks.TavilyClient"
+            ) as tavily_class,
+            patch(
+                "api.tasks._log_stage"
+            ),
+        ):
+            (
+                tavily_class
+                .return_value
+                .search
+                .return_value
+            ) = tavily_response
+
+            url_fact_check_process.run(
+                source_url,
+                claim_id,
+            )
+
+        retrieve_gfc.assert_called_once_with(
+            search_query,
+            claim_id,
+            stage_prefix="url_",
         )
 
         (
