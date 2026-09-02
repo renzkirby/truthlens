@@ -424,22 +424,21 @@ def execute_core_text_pipeline(raw_text, claim_id):
 
         # Try GFC first — return early if relevant result found
         gfc_started_at = time.perf_counter()
+
         try:
-            gfc_response = requests.get(
-                "https://factchecktools.googleapis.com/v1alpha1/claims:search",
-                params={
-                    "query": search_query[:200],
-                    "key": os.environ.get("FACT_CHECK_API_KEY"),
-                },
-                timeout=GFC_HTTP_TIMEOUT_SEC,
+            gfc_data = _retrieve_and_ingest_gfc(
+                search_query,
+                claim_id,
             )
-            gfc_data = gfc_response.json()
-            gfc_claims = gfc_data.get("claims", [])
+
+            gfc_claims = gfc_data.get(
+                "claims",
+                [],
+            )
             _log_stage(
                 claim_id,
                 "gfc_search",
                 gfc_started_at,
-                status_code=gfc_response.status_code,
                 claims=len(gfc_claims),
             )
 
