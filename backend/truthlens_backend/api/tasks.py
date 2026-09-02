@@ -26,6 +26,10 @@ from .models import (
     UserProfile,
 )
 from .trust_service import recompute_user_trust_score
+from .verification.ingestion import ingest_raw_evidence
+from .verification.providers.google_fact_check import (
+    GoogleFactCheckProvider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +51,69 @@ DEFAULT_HTTP_TIMEOUT_SEC = _float_env("DEFAULT_HTTP_TIMEOUT_SEC", 12.0)
 SUPABASE_MEDIA_FETCH_TIMEOUT_SEC = _float_env("SUPABASE_MEDIA_FETCH_TIMEOUT_SEC", 15.0)
 GFC_HTTP_TIMEOUT_SEC = _float_env("GFC_HTTP_TIMEOUT_SEC", DEFAULT_HTTP_TIMEOUT_SEC)
 TAVILY_EXTRACT_TIMEOUT_SEC = _float_env("TAVILY_EXTRACT_TIMEOUT_SEC", 20.0)
+
+
+def _retrieve_and_ingest_gfc(
+    search_query,
+    claim_id,
+    *,
+    stage_prefix="",
+):
+    """
+    Retrieve Google Fact Check data once and persist the parsed
+    evidence without making a second provider request.
+
+    Evidence persistence is best-effort during runtime wiring:
+    a persistence failure must not discard otherwise usable GFC
+    data or change the existing verdict path.
+    """
+
+    provider = GoogleFactCheckProvider(
+        timeout=GFC_HTTP_TIMEOUT_SEC,
+    )
+
+    payload, raw_evidence_items = (
+        provider.search_with_payload(
+            search_query,
+            limit=5,
+        )
+    )
+
+    ingestion_started_at = time.perf_counter()
+    stage_name = (
+        f"{stage_prefix}gfc_evidence_ingestion"
+    )
+
+    try:
+        evidence_sources = ingest_raw_evidence(
+            raw_evidence_items
+        )
+
+        _log_stage(
+            claim_id,
+            stage_name,
+            ingestion_started_at,
+            evidence_sources=len(
+                evidence_sources
+            ),
+        )
+
+    except Exception as exc:
+        _log_stage(
+            claim_id,
+            f"{stage_name}_failed",
+            ingestion_started_at,
+            error=str(exc)[:120],
+        )
+
+        logger.error(
+            "GFC evidence ingestion failed "
+            "for claim %s: %s",
+            claim_id,
+            exc,
+        )
+
+    return payload
 
 
 def _elapsed_ms(started_at):
