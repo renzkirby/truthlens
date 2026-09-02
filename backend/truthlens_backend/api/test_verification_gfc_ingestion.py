@@ -5,8 +5,10 @@ import requests
 from django.test import TestCase
 
 from .models import EvidenceSource
+from .verification.contracts import RawEvidence
 from .verification.ingestion import (
     ingest_provider_evidence,
+    ingest_raw_evidence,
 )
 from .verification.providers.google_fact_check import (
     GoogleFactCheckProvider,
@@ -389,4 +391,102 @@ class GoogleFactCheckIngestionTests(
                 "Checker 1",
                 "Checker 2",
             },
+        )
+
+    def test_raw_evidence_can_be_ingested_without_provider_search(
+        self,
+    ):
+        raw_evidence = RawEvidence(
+            provider="GOOGLE_FACT_CHECK",
+            url=(
+                "HTTPS://Example.com:443/"
+                "fact-check?utm_source=test&id=42"
+            ),
+            title="Example Review",
+            publisher="Example Checker",
+            content=(
+                "Claim reviewed: Example claim.\n"
+                "Rating: False"
+            ),
+            source_type="FACT_CHECK",
+        )
+
+        sources = ingest_raw_evidence(
+            [raw_evidence]
+        )
+
+        self.assertEqual(
+            len(sources),
+            1,
+        )
+
+        source = sources[0]
+
+        self.assertEqual(
+            EvidenceSource.objects.count(),
+            1,
+        )
+
+        self.assertEqual(
+            source.provider,
+            "GOOGLE_FACT_CHECK",
+        )
+
+        self.assertEqual(
+            source.canonical_url,
+            "https://example.com/fact-check?id=42",
+        )
+
+        self.assertIsNotNone(
+            source.content_hash
+        )
+
+    def test_raw_evidence_ingestion_reuses_existing_source(
+        self,
+    ):
+        first = RawEvidence(
+            provider="GOOGLE_FACT_CHECK",
+            url=(
+                "https://example.com/fact-check"
+                "?utm_source=test&id=42"
+            ),
+            title="Original Review",
+            publisher="Example Checker",
+            content="Rating: False",
+            source_type="FACT_CHECK",
+        )
+
+        second = RawEvidence(
+            provider="GOOGLE_FACT_CHECK",
+            url=(
+                "https://example.com/fact-check"
+                "?id=42#results"
+            ),
+            title="Updated Review",
+            publisher="Example Checker",
+            content="Rating: False",
+            source_type="FACT_CHECK",
+        )
+
+        first_sources = ingest_raw_evidence(
+            [first]
+        )
+
+        second_sources = ingest_raw_evidence(
+            [second]
+        )
+
+        self.assertEqual(
+            EvidenceSource.objects.count(),
+            1,
+        )
+
+        self.assertEqual(
+            first_sources[0].pk,
+            second_sources[0].pk,
+        )
+
+        self.assertEqual(
+            second_sources[0].title,
+            "Original Review",
         )

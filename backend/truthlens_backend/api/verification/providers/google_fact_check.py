@@ -263,16 +263,27 @@ class GoogleFactCheckProvider:
             or requests
         )
 
-    def search(
+    def search_with_payload(
         self,
         query: str,
         *,
         limit: int = 5,
-    ) -> list[RawEvidence]:
+    ) -> tuple[
+        dict[str, Any],
+        list[RawEvidence],
+    ]:
+        """
+        Retrieve Google Fact Check data once and return both the
+        original provider payload and parsed TruthLens evidence.
+
+        The original payload is retained for compatibility with the
+        existing runtime relevance and LLM evaluation logic.
+        """
+
         cleaned_query = query.strip()
 
         if not cleaned_query or limit <= 0:
-            return []
+            return {}, []
 
         if not self.api_key:
             raise ValueError(
@@ -294,9 +305,28 @@ class GoogleFactCheckProvider:
         payload = response.json()
 
         if not isinstance(payload, dict):
-            return []
+            return {}, []
 
-        return parse_google_fact_check_response(
-            payload,
-            limit=limit,
+        evidence_items = (
+            parse_google_fact_check_response(
+                payload,
+                limit=limit,
+            )
         )
+
+        return payload, evidence_items
+
+    def search(
+        self,
+        query: str,
+        *,
+        limit: int = 5,
+    ) -> list[RawEvidence]:
+        _, evidence_items = (
+            self.search_with_payload(
+                query,
+                limit=limit,
+            )
+        )
+
+        return evidence_items
