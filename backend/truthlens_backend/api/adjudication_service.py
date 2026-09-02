@@ -16,9 +16,20 @@ from .moderation_service import (
     create_moderation_case,
     transition_moderation_case,
 )
+from .organization_service import (
+    PartnerCapability,
+    has_case_capability,
+)
+from .verification_assignment_service import (
+    get_claim_verification_organization,
+)
 
 
 class AdjudicationError(Exception):
+    pass
+
+
+class AdjudicationAuthorizationError(AdjudicationError):
     pass
 
 
@@ -88,6 +99,25 @@ def ensure_adjudication_case(
     existing_case = get_active_adjudication_case(claim)
 
     if existing_case:
+        if organization is not None:
+            if (
+                existing_case.organization_id
+                and existing_case.organization_id != organization.id
+            ):
+                raise AdjudicationConflict(
+                    "This adjudication case belongs " "to another organization."
+                )
+
+            if existing_case.organization_id is None:
+                existing_case.organization = organization
+
+                existing_case.save(
+                    update_fields=[
+                        "organization",
+                        "updated_at",
+                    ]
+                )
+
         return existing_case
 
     latest_case = get_latest_adjudication_case(claim)
@@ -108,6 +138,25 @@ def ensure_adjudication_case(
         existing_case = get_active_adjudication_case(claim)
 
         if existing_case:
+            if organization is not None:
+                if (
+                    existing_case.organization_id
+                    and existing_case.organization_id != organization.id
+                ):
+                    raise AdjudicationConflict(
+                        "This adjudication case belongs " "to another organization."
+                    )
+
+                if existing_case.organization_id is None:
+                    existing_case.organization = organization
+
+                    existing_case.save(
+                        update_fields=[
+                            "organization",
+                            "updated_at",
+                        ]
+                    )
+
             return existing_case
 
         raise
@@ -217,6 +266,7 @@ def ensure_claim_adjudication_readiness(
     *,
     claim,
     actor=None,
+    organization=None,
 ):
     if not is_claim_ready_for_adjudication(claim):
         return None
@@ -231,6 +281,7 @@ def ensure_claim_adjudication_readiness(
     return ensure_adjudication_case(
         claim=claim,
         actor=actor,
+        organization=organization,
     )
 
 
@@ -262,6 +313,24 @@ def issue_adjudication_decision(
 
     with transaction.atomic():
         locked_claim = Claim.objects.select_for_update().get(pk=claim.pk)
+
+        assigned_organization = get_claim_verification_organization(
+            locked_claim,
+            lock=True,
+        )
+
+        if assigned_organization is None:
+            raise AdjudicationAuthorizationError(
+                "This claim is not currently assigned " "to a partner organization."
+            )
+
+        if organization is not None and organization.id != assigned_organization.id:
+            raise AdjudicationAuthorizationError(
+                "The requested organization does not "
+                "own this verification assignment."
+            )
+
+        organization = assigned_organization
 
         current_decision = get_current_adjudication_decision(
             locked_claim,
@@ -299,6 +368,24 @@ def issue_adjudication_decision(
         ):
             raise InvalidAdjudicationDecision(
                 "The adjudication case belongs " "to a different organization."
+            )
+
+        if not has_case_capability(
+            actor,
+            case,
+            PartnerCapability.ADJUDICATE,
+        ):
+            raise AdjudicationAuthorizationError(
+                "You do not have permission to " "adjudicate this claim."
+            )
+
+        if has_adjudication_conflict(
+            actor,
+            locked_claim,
+        ):
+            raise AdjudicationAuthorizationError(
+                "You cannot adjudicate a claim in "
+                "which you have a direct contribution."
             )
 
         case = _prepare_adjudication_case(

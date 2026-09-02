@@ -78,6 +78,7 @@ from .models import (
     AdjudicationDecision,
     VerificationRun,
     OfficialFactCheck,
+    VerificationAssignment,
 )
 from .moderation_service import (
     ACTIVE_CASE_STATUSES,
@@ -92,6 +93,7 @@ from .organization_service import (
     has_case_capability,
 )
 from .evidence_review_service import (
+    EvidenceReviewAuthorizationError,
     EvidenceReviewConflict,
     EvidenceReviewError,
     ensure_evidence_case,
@@ -99,6 +101,7 @@ from .evidence_review_service import (
     review_evidence_submission,
 )
 from .adjudication_service import (
+    AdjudicationAuthorizationError,
     AdjudicationConflict,
     AdjudicationError,
     ensure_adjudication_case,
@@ -119,6 +122,18 @@ from .publishing_service import (
     update_fact_check_draft,
     submit_fact_check_for_review,
     publish_fact_check,
+)
+from .verification_assignment_service import (
+    VerificationAssignmentAuthorizationError,
+    VerificationAssignmentConflict,
+    VerificationAssignmentError,
+    VerificationAssignmentReleaseBlocked,
+    claim_verification_assignment,
+    ensure_verification_assignment,
+    get_available_verification_assignments,
+    get_claim_verification_organization,
+    get_organization_verification_workload,
+    release_verification_assignment,
 )
 from .throttles import (
     FactCheckRateThrottle,
@@ -152,6 +167,8 @@ from .serializers import (
     FactCheckDraftCreateSerializer,
     FactCheckDraftUpdateSerializer,
     OfficialFactCheckSerializer,
+    VerificationAssignmentClaimSerializer,
+    VerificationAssignmentSerializer,
 )
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
@@ -229,8 +246,18 @@ def _has_moderator_role(user):
 
 
 class IsModerator(BasePermission):
+    """
+    Legacy class name.
+
+    MOD now represents the TruthLens Platform
+    Safety Moderator role, not a factual verifier.
+    """
+
     def has_permission(self, request, view):
-        return request.user.is_authenticated and _has_moderator_role(request.user)
+        return has_capability(
+            request.user,
+            PartnerCapability.REVIEW_SAFETY,
+        )
 
 
 class CanReviewEvidence(BasePermission):
@@ -254,9 +281,8 @@ class CanReviewEvidence(BasePermission):
 
         case = get_latest_evidence_case(obj)
 
-        # Legacy/system-only fallback.
         if case is None:
-            return _has_moderator_role(request.user)
+            return False
 
         return has_case_capability(
             request.user,
@@ -905,34 +931,29 @@ def verdict_queue(request):
 
     organization_id = request.query_params.get("organization_id")
 
-    system_moderator = _has_moderator_role(request.user)
-
-    organization = None
-
-    if organization_id:
-        organization = get_object_or_404(
-            Organization,
-            id=organization_id,
+    if not organization_id:
+        return Response(
+            {"detail": "organization_id is required " "for adjudication review."},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
-        if not system_moderator and not has_capability(
-            request.user,
-            PartnerCapability.ADJUDICATE,
-            organization=organization,
-        ):
-            return Response(
-                {
-                    "detail": "You do not have "
-                    "permission to adjudicate "
-                    "for this organization."
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
+    organization = get_object_or_404(
+        Organization,
+        id=organization_id,
+    )
 
-    elif not system_moderator:
+    if not has_capability(
+        request.user,
+        PartnerCapability.ADJUDICATE,
+        organization=organization,
+    ):
         return Response(
-            {"detail": "organization_id is required " "for partner adjudicators."},
-            status=status.HTTP_400_BAD_REQUEST,
+            {
+                "detail": "You do not have permission "
+                "to adjudicate for this "
+                "organization."
+            },
+            status=status.HTTP_403_FORBIDDEN,
         )
 
     queryset = ModerationCase.objects.filter(
@@ -948,8 +969,7 @@ def verdict_queue(request):
     else:
         queryset = queryset.exclude(status=(ModerationCase.Status.CANCELLED))
 
-    if organization is not None:
-        queryset = queryset.filter(organization=organization)
+    queryset = queryset.filter(organization=organization)
 
     queryset = (
         queryset.select_related(
@@ -1045,22 +1065,12 @@ def _execute_claim_adjudication(
 
     serializer.is_valid(raise_exception=True)
 
-    system_moderator = _has_moderator_role(request.user)
-
     case = get_latest_adjudication_case(claim)
 
     if case is None:
-        if not system_moderator:
-            raise PermissionDenied(
-                "No adjudication case is " "available for this claim."
-            )
+        raise PermissionDenied("No adjudication case is available " "for this claim.")
 
-        case = ensure_adjudication_case(
-            claim=claim,
-            actor=request.user,
-        )
-
-    if not system_moderator and not has_case_capability(
+    if not has_case_capability(
         request.user,
         case,
         PartnerCapability.ADJUDICATE,
@@ -1099,16 +1109,20 @@ def _execute_claim_adjudication(
         .distinct()
     )
 
-    result = issue_adjudication_decision(
-        claim=claim,
-        actor=request.user,
-        verdict=(serializer.validated_data["moderator_verdict"]),
-        canonical_claim=(serializer.validated_data["canonical_claim"]),
-        rationale=(serializer.validated_data["moderator_notes"]),
-        organization=case.organization,
-        verification_run=(verification_run),
-        expected_revision=(serializer.validated_data.get("expected_revision")),
-    )
+    try:
+        result = issue_adjudication_decision(
+            claim=claim,
+            actor=request.user,
+            verdict=(serializer.validated_data["moderator_verdict"]),
+            canonical_claim=(serializer.validated_data["canonical_claim"]),
+            rationale=(serializer.validated_data["moderator_notes"]),
+            organization=case.organization,
+            verification_run=verification_run,
+            expected_revision=(serializer.validated_data.get("expected_revision")),
+        )
+
+    except AdjudicationAuthorizationError as error:
+        raise PermissionDenied(str(error)) from error
 
     decision = result["decision"]
 
@@ -1559,11 +1573,9 @@ def evidence_moderation_queue(request):
     """
     Evidence review queue.
 
-    System moderators may review platform-wide.
-
-    Partner reviewers must explicitly scope the
-    queue to an organization for which they have
-    REVIEW_EVIDENCE capability.
+    Professional evidence review is available only
+    through an explicitly scoped verified partner
+    organization with REVIEW_EVIDENCE capability.
     """
 
     evidence_status_filter = (
@@ -1623,35 +1635,29 @@ def evidence_moderation_queue(request):
 
     organization_id = request.query_params.get("organization_id")
 
-    system_moderator = _has_moderator_role(request.user)
-
-    organization = None
-
-    if organization_id:
-        organization = get_object_or_404(
-            Organization,
-            id=organization_id,
+    if not organization_id:
+        return Response(
+            {"detail": "organization_id is required " "for evidence review."},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
-        if not system_moderator and not has_capability(
-            request.user,
-            (PartnerCapability.REVIEW_EVIDENCE),
-            organization=organization,
-        ):
-            return Response(
-                {
-                    "detail": "You do not have "
-                    "permission to review "
-                    "evidence for this "
-                    "organization."
-                },
-                status=(status.HTTP_403_FORBIDDEN),
-            )
+    organization = get_object_or_404(
+        Organization,
+        id=organization_id,
+    )
 
-    elif not system_moderator:
+    if not has_capability(
+        request.user,
+        PartnerCapability.REVIEW_EVIDENCE,
+        organization=organization,
+    ):
         return Response(
-            {"detail": "organization_id is " "required for partner " "reviewers."},
-            status=(status.HTTP_400_BAD_REQUEST),
+            {
+                "detail": "You do not have permission "
+                "to review evidence for this "
+                "organization."
+            },
+            status=status.HTTP_403_FORBIDDEN,
         )
 
     evidence_query = EvidenceSubmission.objects.filter(
@@ -1667,11 +1673,10 @@ def evidence_moderation_queue(request):
             moderation_cases__status__in=(ACTIVE_CASE_STATUSES),
         )
 
-    if organization is not None:
-        evidence_query = evidence_query.filter(
-            moderation_cases__case_type=(ModerationCase.CaseType.EVIDENCE),
-            moderation_cases__organization=(organization),
-        )
+    evidence_query = evidence_query.filter(
+        moderation_cases__case_type=(ModerationCase.CaseType.EVIDENCE),
+        moderation_cases__organization=organization,
+    )
 
     if thread_id:
         evidence_query = evidence_query.filter(thread_id=thread_id)
@@ -1709,6 +1714,306 @@ def evidence_moderation_queue(request):
             "count": total_count,
             "limit": limit,
             "offset": offset,
+            "results": serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+VERIFICATION_WORKLOAD_CAPABILITIES = {
+    PartnerCapability.CLAIM_VERIFICATION_WORK,
+    PartnerCapability.REVIEW_EVIDENCE,
+    PartnerCapability.ADJUDICATE,
+    PartnerCapability.CREATE_FACT_CHECK_DRAFT,
+    PartnerCapability.PUBLISH_FACT_CHECK,
+    PartnerCapability.MANAGE_ORGANIZATION,
+}
+
+
+def _parse_verification_pagination(request):
+    try:
+        limit = int(
+            request.query_params.get(
+                "limit",
+                20,
+            )
+        )
+
+        offset = int(
+            request.query_params.get(
+                "offset",
+                0,
+            )
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+        raise ValidationError({"detail": "limit and offset must be integers."})
+
+    if limit < 1 or limit > 100 or offset < 0:
+        raise ValidationError(
+            {
+                "detail": "limit must be between 1 and 100, "
+                "and offset must be zero or greater."
+            }
+        )
+
+    return limit, offset
+
+
+def _get_verification_organization(
+    request,
+    *,
+    from_body=False,
+):
+    if from_body:
+        serializer = VerificationAssignmentClaimSerializer(data=request.data)
+
+        serializer.is_valid(raise_exception=True)
+
+        organization_id = serializer.validated_data["organization_id"]
+
+    else:
+        organization_id = request.query_params.get("organization_id")
+
+        if not organization_id:
+            raise ValidationError({"detail": "organization_id is required."})
+
+    return get_object_or_404(
+        Organization,
+        id=organization_id,
+    )
+
+
+def _can_view_verification_workload(
+    user,
+    organization,
+):
+    return any(
+        has_capability(
+            user,
+            capability,
+            organization=organization,
+        )
+        for capability in VERIFICATION_WORKLOAD_CAPABILITIES
+    )
+
+
+def _verification_assignment_error_response(
+    error,
+):
+    if isinstance(
+        error,
+        VerificationAssignmentAuthorizationError,
+    ):
+        response_status = status.HTTP_403_FORBIDDEN
+
+    elif isinstance(
+        error,
+        (
+            VerificationAssignmentConflict,
+            VerificationAssignmentReleaseBlocked,
+        ),
+    ):
+        response_status = status.HTTP_409_CONFLICT
+
+    else:
+        response_status = status.HTTP_400_BAD_REQUEST
+
+    return Response(
+        {
+            "detail": str(error),
+        },
+        status=response_status,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def verification_intake(request):
+    """
+    Shared pool of AVAILABLE professional
+    verification investigations.
+
+    An organization_id is required so access is
+    evaluated in the context of a specific verified
+    partner organization.
+    """
+
+    organization = _get_verification_organization(
+        request,
+    )
+
+    if not has_capability(
+        request.user,
+        PartnerCapability.CLAIM_VERIFICATION_WORK,
+        organization=organization,
+    ):
+        return Response(
+            {
+                "detail": "You do not have permission to "
+                "access verification intake for "
+                "this organization."
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    limit, offset = _parse_verification_pagination(request)
+
+    queryset = get_available_verification_assignments()
+
+    total_count = queryset.count()
+
+    assignments = queryset[offset : offset + limit]
+
+    serializer = VerificationAssignmentSerializer(
+        assignments,
+        many=True,
+        context={
+            "request": request,
+        },
+    )
+
+    return Response(
+        {
+            "count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "results": serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def verification_assignment_claim(
+    request,
+    assignment_id,
+):
+    assignment = get_object_or_404(
+        VerificationAssignment,
+        id=assignment_id,
+    )
+
+    organization = _get_verification_organization(
+        request,
+        from_body=True,
+    )
+
+    try:
+        claimed = claim_verification_assignment(
+            assignment=assignment,
+            organization=organization,
+            actor=request.user,
+        )
+
+    except VerificationAssignmentError as error:
+        return _verification_assignment_error_response(error)
+
+    return Response(
+        VerificationAssignmentSerializer(
+            claimed,
+            context={
+                "request": request,
+            },
+        ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def verification_assignment_release(
+    request,
+    assignment_id,
+):
+    assignment = get_object_or_404(
+        VerificationAssignment,
+        id=assignment_id,
+    )
+
+    try:
+        result = release_verification_assignment(
+            assignment=assignment,
+            actor=request.user,
+        )
+
+    except VerificationAssignmentError as error:
+        return _verification_assignment_error_response(error)
+
+    return Response(
+        {
+            "released_assignment": VerificationAssignmentSerializer(
+                result["released_assignment"],
+                context={
+                    "request": request,
+                },
+            ).data,
+            "available_assignment": VerificationAssignmentSerializer(
+                result["available_assignment"],
+                context={
+                    "request": request,
+                },
+            ).data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def verification_workload(request):
+    """
+    Return ACTIVE professional verification work
+    belonging to one organization.
+    """
+
+    organization = _get_verification_organization(
+        request,
+    )
+
+    if not _can_view_verification_workload(
+        request.user,
+        organization,
+    ):
+        return Response(
+            {
+                "detail": "You do not have permission to "
+                "view verification work for this "
+                "organization."
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    limit, offset = _parse_verification_pagination(request)
+
+    queryset = get_organization_verification_workload(organization)
+
+    total_count = queryset.count()
+
+    assignments = queryset[offset : offset + limit]
+
+    serializer = VerificationAssignmentSerializer(
+        assignments,
+        many=True,
+        context={
+            "request": request,
+        },
+    )
+
+    return Response(
+        {
+            "count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "organization": {
+                "id": str(organization.id),
+                "name": organization.name,
+                "slug": organization.slug,
+            },
             "results": serializer.data,
         },
         status=status.HTTP_200_OK,
@@ -1780,7 +2085,15 @@ class ThreadViewSet(viewsets.ModelViewSet):
                 }
             )
 
-        serializer.save(author=self.request.user, claim=claim)
+        with transaction.atomic():
+            serializer.save(
+                author=self.request.user,
+                claim=claim,
+            )
+
+            ensure_verification_assignment(
+                claim=claim,
+            )
 
     def _find_existing_thread(self, claim):
         """
@@ -1841,11 +2154,18 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         thread_id = serializer.validated_data.pop("thread_id")
+
         try:
-            thread = Thread.objects.get(id=thread_id)
+            thread = Thread.objects.select_related("claim").get(id=thread_id)
         except Thread.DoesNotExist:
             raise NotFound("Thread not found.")
+
         with transaction.atomic():
+            organization = get_claim_verification_organization(
+                thread.claim,
+                lock=True,
+            )
+
             evidence = serializer.save(
                 contributor=self.request.user,
                 thread=thread,
@@ -1856,6 +2176,7 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
             ensure_evidence_case(
                 evidence=evidence,
                 actor=self.request.user,
+                organization=organization,
             )
 
     @action(
@@ -1903,6 +2224,14 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
                     "detail": str(error),
                 },
                 status=status.HTTP_409_CONFLICT,
+            )
+
+        except EvidenceReviewAuthorizationError as error:
+            return Response(
+                {
+                    "detail": str(error),
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         except (

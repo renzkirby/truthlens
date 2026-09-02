@@ -21,6 +21,9 @@ from .organization_service import (
     PartnerCapability,
     has_capability,
 )
+from .verification_assignment_service import (
+    complete_verification_assignment,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -773,6 +776,11 @@ def publish_fact_check(
                     previous_published.version if previous_published else None
                 ),
             },
+        )
+
+        complete_verification_assignment(
+            claim=locked_fact_check.claim,
+            organization=locked_fact_check.organization,
         )
 
         published_fact_check_id = locked_fact_check.id

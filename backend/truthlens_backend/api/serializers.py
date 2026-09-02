@@ -12,6 +12,7 @@ from .models import (
     ModerationCase,
     OfficialFactCheck,
     OfficialFactCheckSource,
+    VerificationAssignment,
 )
 from .services import validate_public_url, check_url_threat_reputation
 from .trust_service import calculate_trust_components
@@ -454,6 +455,92 @@ class ClaimDeepAnalysisSerializer(ClaimSerializer):
             "url_link",
             "claim_fingerprint",
         ]
+
+
+class VerificationIntakeClaimSerializer(serializers.ModelSerializer):
+    """
+    Lightweight claim representation for the
+    professional verification workspace.
+
+    Keep this intentionally smaller than ClaimSerializer
+    because intake/workload endpoints may return many
+    assignments at once.
+    """
+
+    class Meta:
+        model = Claim
+
+        fields = [
+            "id",
+            "claim_type",
+            "context_text",
+            "ai_verdict",
+            "final_verdict",
+            "ai_summary",
+            "consensus_score",
+            "source_type",
+            "url_link",
+            "source_link",
+            "media_url",
+            "last_updated",
+        ]
+
+        read_only_fields = fields
+
+
+class VerificationAssignmentUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+
+        fields = [
+            "id",
+            "username",
+        ]
+
+        read_only_fields = fields
+
+
+class VerificationAssignmentSerializer(serializers.ModelSerializer):
+    claim = VerificationIntakeClaimSerializer(read_only=True)
+
+    claimed_by = VerificationAssignmentUserSerializer(read_only=True)
+
+    organization = serializers.SerializerMethodField()
+
+    def get_organization(
+        self,
+        obj,
+    ):
+        if not obj.organization:
+            return None
+
+        return {
+            "id": str(obj.organization.id),
+            "name": obj.organization.name,
+            "slug": obj.organization.slug,
+        }
+
+    class Meta:
+        model = VerificationAssignment
+
+        fields = [
+            "id",
+            "claim",
+            "organization",
+            "claimed_by",
+            "status",
+            "claimed_at",
+            "released_at",
+            "completed_at",
+            "created_at",
+            "updated_at",
+        ]
+
+        read_only_fields = fields
+
+
+class VerificationAssignmentClaimSerializer(serializers.Serializer):
+    organization_id = serializers.UUIDField()
 
 
 class ThreadSerializer(serializers.ModelSerializer):
