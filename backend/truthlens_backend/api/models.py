@@ -441,6 +441,140 @@ class Claim(models.Model):
         indexes = _claim_vector_indexes()
 
 
+class VerificationAssignment(models.Model):
+    class Status(models.TextChoices):
+        AVAILABLE = "AVAILABLE", "Available"
+        ACTIVE = "ACTIVE", "Active"
+        RELEASED = "RELEASED", "Released"
+        COMPLETED = "COMPLETED", "Completed"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    claim = models.ForeignKey(
+        Claim,
+        on_delete=models.CASCADE,
+        related_name="verification_assignments",
+    )
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="verification_assignments",
+    )
+
+    claimed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="claimed_verification_assignments",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.AVAILABLE,
+        db_index=True,
+    )
+
+    claimed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    released_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["claim"],
+                condition=Q(
+                    status__in=[
+                        "AVAILABLE",
+                        "ACTIVE",
+                    ]
+                ),
+                name=("unique_open_verification_" "assignment_per_claim"),
+            ),
+        ]
+
+        indexes = [
+            models.Index(
+                fields=[
+                    "status",
+                    "-created_at",
+                ],
+                name="verify_assign_status_idx",
+            ),
+            models.Index(
+                fields=[
+                    "organization",
+                    "status",
+                ],
+                name="verify_assign_org_idx",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+
+        if self.status == self.Status.AVAILABLE and self.organization_id is not None:
+            raise ValidationError(
+                {
+                    "organization": "Available verification work "
+                    "must not already belong to an "
+                    "organization."
+                }
+            )
+
+        if self.status == self.Status.ACTIVE and self.organization_id is None:
+            raise ValidationError(
+                {
+                    "organization": "Active verification work must "
+                    "belong to an organization."
+                }
+            )
+
+        if self.status == self.Status.ACTIVE and self.claimed_by_id is None:
+            raise ValidationError(
+                {
+                    "claimed_by": "Active verification work must "
+                    "record who claimed it."
+                }
+            )
+
+    def __str__(self):
+        organization_name = (
+            self.organization.name if self.organization else "Unassigned"
+        )
+
+        return f"{self.claim_id} - " f"{organization_name} " f"({self.status})"
+
+
 class CanonicalSource(models.Model):
     id = models.UUIDField(
         primary_key=True,

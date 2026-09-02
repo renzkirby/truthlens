@@ -17,9 +17,20 @@ from .moderation_service import (
 from .adjudication_service import (
     ensure_claim_adjudication_readiness,
 )
+from .verification_assignment_service import (
+    get_claim_verification_organization,
+)
+from .organization_service import (
+    PartnerCapability,
+    has_case_capability,
+)
 
 
 class EvidenceReviewError(Exception):
+    pass
+
+
+class EvidenceReviewAuthorizationError(EvidenceReviewError):
     pass
 
 
@@ -73,6 +84,25 @@ def ensure_evidence_case(
     existing_case = get_active_evidence_case(evidence)
 
     if existing_case:
+        if organization is not None:
+            if (
+                existing_case.organization_id
+                and existing_case.organization_id != organization.id
+            ):
+                raise EvidenceReviewConflict(
+                    "This evidence case belongs to " "another organization."
+                )
+
+            if existing_case.organization_id is None:
+                existing_case.organization = organization
+
+                existing_case.save(
+                    update_fields=[
+                        "organization",
+                        "updated_at",
+                    ]
+                )
+
         return existing_case
 
     latest_case = get_latest_evidence_case(evidence)
@@ -93,6 +123,25 @@ def ensure_evidence_case(
         existing_case = get_active_evidence_case(evidence)
 
         if existing_case:
+            if organization is not None:
+                if (
+                    existing_case.organization_id
+                    and existing_case.organization_id != organization.id
+                ):
+                    raise EvidenceReviewConflict(
+                        "This evidence case belongs to " "another organization."
+                    )
+
+                if existing_case.organization_id is None:
+                    existing_case.organization = organization
+
+                    existing_case.save(
+                        update_fields=[
+                            "organization",
+                            "updated_at",
+                        ]
+                    )
+
             return existing_case
 
         raise
@@ -191,6 +240,16 @@ def review_evidence_submission(
             .get(pk=evidence.pk)
         )
 
+        if not actor or not actor.is_authenticated:
+            raise EvidenceReviewAuthorizationError(
+                "Authentication is required to review " "evidence."
+            )
+
+        if locked_evidence.contributor_id == actor.id:
+            raise EvidenceReviewAuthorizationError(
+                "You cannot review your own evidence."
+            )
+
         if (
             expected_status is not None
             and locked_evidence.evidence_status != expected_status
@@ -200,10 +259,25 @@ def review_evidence_submission(
                 "was opened. Refresh it before deciding."
             )
 
+        organization = get_claim_verification_organization(
+            locked_evidence.thread.claim,
+            lock=True,
+        )
+
         case = ensure_evidence_case(
             evidence=locked_evidence,
             actor=actor,
+            organization=organization,
         )
+
+        if not has_case_capability(
+            actor,
+            case,
+            PartnerCapability.REVIEW_EVIDENCE,
+        ):
+            raise EvidenceReviewAuthorizationError(
+                "You do not have permission to review " "this evidence."
+            )
 
         case = _prepare_evidence_case_for_review(
             case,
@@ -273,6 +347,7 @@ def review_evidence_submission(
         adjudication_case = ensure_claim_adjudication_readiness(
             claim=locked_evidence.thread.claim,
             actor=actor,
+            organization=organization,
         )
 
         return {
