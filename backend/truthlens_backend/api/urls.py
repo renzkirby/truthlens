@@ -71,6 +71,27 @@ urlpatterns = [
         views.verdict_queue,
         name="moderation_verdict_queue",
     ),
+    # Partner verification intake
+    path(
+        "verification/intake/",
+        views.verification_intake,
+        name="verification_intake",
+    ),
+    path(
+        ("verification/assignments/<uuid:assignment_id>/claim/"),
+        views.verification_assignment_claim,
+        name="verification_assignment_claim",
+    ),
+    path(
+        ("verification/assignments/<uuid:assignment_id>/release/"),
+        views.verification_assignment_release,
+        name="verification_assignment_release",
+    ),
+    path(
+        "verification/workload/",
+        views.verification_workload,
+        name="verification_workload",
+    ),
     path(
         "moderation/threads/<uuid:thread_id>/resolve/",
         views.moderation_resolve_thread,

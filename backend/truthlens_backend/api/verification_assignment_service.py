@@ -107,6 +107,50 @@ def get_claim_verification_organization(
     return assignment.organization
 
 
+def get_available_verification_assignments():
+    """
+    Return the shared verification intake pool.
+
+    AVAILABLE work has not yet been accepted by
+    any partner organization.
+    """
+
+    return (
+        VerificationAssignment.objects.filter(
+            status=(VerificationAssignment.Status.AVAILABLE),
+            organization__isnull=True,
+        )
+        .select_related(
+            "claim",
+            "organization",
+            "claimed_by",
+        )
+        .order_by("-created_at")
+    )
+
+
+def get_organization_verification_workload(
+    organization,
+):
+    """
+    Return active factual-verification work currently
+    owned by one partner organization.
+    """
+
+    return (
+        VerificationAssignment.objects.filter(
+            organization=organization,
+            status=(VerificationAssignment.Status.ACTIVE),
+        )
+        .select_related(
+            "claim",
+            "organization",
+            "claimed_by",
+        )
+        .order_by("-claimed_at", "-created_at")
+    )
+
+
 def ensure_verification_assignment(
     *,
     claim,
