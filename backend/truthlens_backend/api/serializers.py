@@ -18,6 +18,9 @@ from .services import validate_public_url, check_url_threat_reputation
 from .trust_service import calculate_trust_components
 from django.contrib.auth.password_validation import validate_password
 import json, ast
+from .organization_service import (
+    get_workspace_access_context,
+)
 
 
 class PublicIdentityProfileSerializer(serializers.ModelSerializer):
@@ -271,8 +274,13 @@ class UserWithTrustBreakdownSerializer(UserSerializer):
 
 
 class CurrentUserSerializer(UserWithTrustBreakdownSerializer):
+    workspace = serializers.SerializerMethodField()
+
+    def get_workspace(self, obj):
+        return get_workspace_access_context(obj)
+
     class Meta(UserWithTrustBreakdownSerializer.Meta):
-        fields = UserWithTrustBreakdownSerializer.Meta.fields
+        fields = UserWithTrustBreakdownSerializer.Meta.fields + ["workspace"]
 
 
 class UserProfileSerializer(serializers.ModelSerializer):

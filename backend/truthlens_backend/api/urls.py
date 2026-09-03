@@ -20,7 +20,7 @@ urlpatterns = [
     path("auth/login/", views.login_user),
     path("auth/refresh/", TokenRefreshView.as_view()),
     path("auth/register/", views.register_user),
-    path("auth/me/", views.get_current_user),
+    path("auth/me/", views.get_current_user, name="auth_me"),
     path("auth/profile/update/", views.update_profile),
     path("auth/guest-scan-sync/", views.sync_guest_scan),
     path("users/search/", views.search_users),
