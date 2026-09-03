@@ -18,6 +18,7 @@ import Icons from "../components/Icons.jsx";
 import { useGoogleLogin } from "@react-oauth/google";
 import AuthShell from "../components/auth/AuthShell.jsx";
 import { useNotification } from "../hooks/useNotification";
+import { canAccessWorkspace } from "../utils/workspace";
 
 // ── Utilities & Constants ──
 import { resolveApiEndpoint } from "../utils/api";
@@ -56,9 +57,7 @@ function LoginPage() {
             duration: 3000,
          });
 
-         const isModerator = user.role === "MOD" || user.role === "MODERATOR";
-
-         const destination = from || (isModerator ? "/moderation" : "/community");
+         const destination = from || (canAccessWorkspace(user) ? "/workspace" : "/community");
 
          navigate(destination, {
             replace: true,
