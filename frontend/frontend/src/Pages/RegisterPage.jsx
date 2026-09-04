@@ -26,6 +26,7 @@ import AuthShell from "../components/auth/AuthShell.jsx";
 
 // ── Utilities & Constants ──
 import { resolveApiEndpoint } from "../utils/api";
+import { resolveAuthDestination } from "../utils/authNavigation";
 
 // ── Styles ──
 import "./RegisterPage.css";
@@ -34,7 +35,7 @@ function RegisterPage() {
    const { login } = useAuth();
    const navigate = useNavigate();
    const location = useLocation();
-   const from = location.state?.from ? location.state.from.pathname + location.state.from.search : "/community";
+   const from = resolveAuthDestination(location.state?.from, "/community");
    const [error, setError] = useState("");
    const [fieldErrors, setFieldErrors] = useState({});
    const [showPassword, setShowPassword] = useState(false);
@@ -84,7 +85,7 @@ function RegisterPage() {
                navigate("/onboarding", {
                   replace: true,
                   state: {
-                     from: location.state?.from,
+                     from,
                   },
                });
 
@@ -131,7 +132,7 @@ function RegisterPage() {
          navigate("/onboarding", {
             replace: true,
             state: {
-               from: location.state?.from,
+               from,
                verificationEmailSent,
             },
          });
@@ -139,7 +140,9 @@ function RegisterPage() {
          return;
       }
 
-      navigate(from, { replace: true });
+      navigate(from, {
+         replace: true,
+      });
    };
 
    const normalizeRegistrationErrors = (data) => {
@@ -388,7 +391,7 @@ function RegisterPage() {
                   <Link
                      to="/login"
                      state={{
-                        from: location.state?.from,
+                        from,
                      }}
                   >
                      Sign in

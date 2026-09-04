@@ -13,6 +13,7 @@ import { useAuth } from "../hooks/useAuth";
 import Icons from "../components/Icons.jsx";
 import "./OnboardingPage.css";
 import { resolveApiEndpoint } from "../utils/api";
+import { resolveAuthDestination } from "../utils/authNavigation";
 
 // ── Step Definitions ──────────────────────────────────────────────
 const STEPS = [
@@ -282,16 +283,9 @@ export default function OnboardingPage() {
    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
    const location = useLocation();
-
-   const rawDestination = location.state?.from;
    const verificationEmailSent = location.state?.verificationEmailSent;
 
-   const onboardingDestination =
-      typeof rawDestination === "string"
-         ? rawDestination
-         : rawDestination?.pathname
-           ? `${rawDestination.pathname}${rawDestination.search || ""}${rawDestination.hash || ""}`
-           : "/community";
+   const onboardingDestination = resolveAuthDestination(location.state?.from, "/community");
 
    const step = STEPS[currentStep];
    const isFirst = currentStep === 0;

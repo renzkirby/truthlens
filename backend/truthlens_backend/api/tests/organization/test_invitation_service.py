@@ -86,6 +86,21 @@ class OrganizationInvitationServiceTests(TestCase):
             status=(OrganizationMembership.Status.ACTIVE),
         )
 
+    def verify_email(
+        self,
+        user,
+    ):
+        profile = user.profile
+        profile.is_email_verified = True
+
+        profile.save(
+            update_fields=[
+                "is_email_verified",
+            ]
+        )
+
+        return user
+
     def test_owner_can_invite_admin(
         self,
     ):
@@ -492,6 +507,10 @@ class OrganizationInvitationServiceTests(TestCase):
             password="test-password",
         )
 
+        self.verify_email(
+            recipient,
+        )
+
         invitation, raw_token = create_organization_invitation(
             organization=self.organization,
             email="recipient@example.com",
@@ -567,9 +586,13 @@ class OrganizationInvitationServiceTests(TestCase):
             password="test-password",
         )
 
+        self.verify_email(
+            recipient,
+        )
+
         _invitation, raw_token = create_organization_invitation(
             organization=self.organization,
-            email="single-use@example.com",
+            email=recipient.email,
             invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
             actor=self.owner,
         )
@@ -631,9 +654,13 @@ class OrganizationInvitationServiceTests(TestCase):
         self,
     ):
         recipient = User.objects.create_user(
-            username="returning-member",
-            email="returning@example.com",
+            username="recipient",
+            email="recipient@example.com",
             password="test-password",
+        )
+
+        self.verify_email(
+            recipient,
         )
 
         membership = OrganizationMembership.objects.create(
@@ -703,6 +730,10 @@ class OrganizationInvitationServiceTests(TestCase):
             username="late-member",
             email="late-member@example.com",
             password="test-password",
+        )
+
+        self.verify_email(
+            recipient,
         )
 
         invitation, raw_token = create_organization_invitation(
@@ -801,6 +832,10 @@ class OrganizationInvitationServiceTests(TestCase):
             password="test-password",
         )
 
+        self.verify_email(
+            recipient,
+        )
+
         invitation, raw_token = create_organization_invitation(
             organization=self.organization,
             email=recipient.email,
@@ -821,6 +856,42 @@ class OrganizationInvitationServiceTests(TestCase):
                 raw_token=raw_token,
                 actor=recipient,
             )
+
+        self.assertFalse(
+            OrganizationMembership.objects.filter(
+                organization=self.organization,
+                user=recipient,
+            ).exists()
+        )
+
+    def test_unverified_email_cannot_accept_invitation(
+        self,
+    ):
+        recipient = User.objects.create_user(
+            username="unverified-recipient",
+            email="unverified@example.com",
+            password="test-password",
+        )
+
+        invitation, raw_token = create_organization_invitation(
+            organization=self.organization,
+            email=recipient.email,
+            invited_role=(OrganizationMembership.Role.RESEARCHER),
+            actor=self.owner,
+        )
+
+        with self.assertRaises(OrganizationInvitationAuthorizationError):
+            accept_organization_invitation(
+                raw_token=raw_token,
+                actor=recipient,
+            )
+
+        invitation.refresh_from_db()
+
+        self.assertEqual(
+            invitation.status,
+            OrganizationInvitation.Status.PENDING,
+        )
 
         self.assertFalse(
             OrganizationMembership.objects.filter(

@@ -261,6 +261,21 @@ def accept_organization_invitation(
                     )
                 )
 
+            profile = getattr(
+                actor,
+                "profile",
+                None,
+            )
+
+            if not profile or not profile.is_email_verified:
+                raise (
+                    OrganizationInvitationAuthorizationError(
+                        "Verify your email address "
+                        "before accepting this "
+                        "organization invitation."
+                    )
+                )
+
             # Defense in depth. Ordinary
             # invitations must never produce
             # organization ownership.

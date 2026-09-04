@@ -58,6 +58,21 @@ class OrganizationInvitationAcceptanceApiTests(APITestCase):
             status=(OrganizationMembership.Status.ACTIVE),
         )
 
+    def verify_email(
+        self,
+        user,
+    ):
+        profile = user.profile
+        profile.is_email_verified = True
+
+        profile.save(
+            update_fields=[
+                "is_email_verified",
+            ]
+        )
+
+        return user
+
     def client_for(
         self,
         user,
@@ -255,6 +270,9 @@ class OrganizationInvitationAcceptanceApiTests(APITestCase):
     def test_correct_recipient_can_accept_invitation(
         self,
     ):
+        self.verify_email(
+            self.recipient,
+        )
         invitation, raw_token = self.create_invitation()
 
         url = reverse(
@@ -393,6 +411,9 @@ class OrganizationInvitationAcceptanceApiTests(APITestCase):
     def test_accepted_invitation_url_becomes_invalid(
         self,
     ):
+        self.verify_email(
+            self.recipient,
+        )
         _invitation, raw_token = self.create_invitation()
 
         accept_url = reverse(
@@ -499,6 +520,9 @@ class OrganizationInvitationAcceptanceApiTests(APITestCase):
     def test_left_member_can_accept_new_invitation(
         self,
     ):
+        self.verify_email(
+            self.recipient,
+        )
         membership = OrganizationMembership.objects.create(
             organization=self.organization,
             user=self.recipient,
@@ -552,6 +576,9 @@ class OrganizationInvitationAcceptanceApiTests(APITestCase):
     def test_acceptance_response_does_not_expose_secrets(
         self,
     ):
+        self.verify_email(
+            self.recipient,
+        )
         _invitation, raw_token = self.create_invitation()
 
         url = reverse(
@@ -584,4 +611,54 @@ class OrganizationInvitationAcceptanceApiTests(APITestCase):
         self.assertNotIn(
             "email",
             invitation_data,
+        )
+
+    def test_unverified_recipient_cannot_accept_invitation(
+        self,
+    ):
+        invitation, raw_token = self.create_invitation()
+
+        # Ensure this particular recipient
+        # remains unverified.
+        profile = self.recipient.profile
+        profile.is_email_verified = False
+
+        profile.save(
+            update_fields=[
+                "is_email_verified",
+            ]
+        )
+
+        url = reverse(
+            "organization_invitation_accept",
+            kwargs={
+                "token": raw_token,
+            },
+        )
+
+        response = self.client_for(
+            self.recipient,
+        ).post(
+            url,
+            {},
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+        invitation.refresh_from_db()
+
+        self.assertEqual(
+            invitation.status,
+            OrganizationInvitation.Status.PENDING,
+        )
+
+        self.assertFalse(
+            OrganizationMembership.objects.filter(
+                organization=self.organization,
+                user=self.recipient,
+            ).exists()
         )
