@@ -93,6 +93,11 @@ urlpatterns = [
         name="verification_workload",
     ),
     path(
+        "organizations/" "<uuid:organization_id>/members/",
+        views.organization_members,
+        name="organization_members",
+    ),
+    path(
         "moderation/threads/<uuid:thread_id>/resolve/",
         views.moderation_resolve_thread,
         name="moderation_resolve_thread",

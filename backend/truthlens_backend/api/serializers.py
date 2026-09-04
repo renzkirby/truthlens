@@ -13,6 +13,7 @@ from .models import (
     OfficialFactCheck,
     OfficialFactCheckSource,
     VerificationAssignment,
+    OrganizationMembership,
 )
 from .services import validate_public_url, check_url_threat_reputation
 from .trust_service import calculate_trust_components
@@ -510,6 +511,54 @@ class VerificationAssignmentUserSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "username",
+        ]
+
+        read_only_fields = fields
+
+
+class OrganizationAdminUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+
+        fields = [
+            "id",
+            "username",
+            "email",
+        ]
+
+        read_only_fields = fields
+
+
+class OrganizationMembershipAdminSerializer(serializers.ModelSerializer):
+    user = OrganizationAdminUserSerializer(
+        read_only=True,
+    )
+
+    approved_by = serializers.SerializerMethodField()
+
+    def get_approved_by(
+        self,
+        obj,
+    ):
+        if not obj.approved_by:
+            return None
+
+        return {
+            "id": obj.approved_by.id,
+            "username": obj.approved_by.username,
+        }
+
+    class Meta:
+        model = OrganizationMembership
+
+        fields = [
+            "id",
+            "user",
+            "role",
+            "status",
+            "joined_at",
+            "approved_at",
+            "approved_by",
         ]
 
         read_only_fields = fields

@@ -75,6 +75,7 @@ from .models import (
     Vote,
     ModerationCase,
     Organization,
+    OrganizationMembership,
     AdjudicationDecision,
     VerificationRun,
     OfficialFactCheck,
@@ -169,6 +170,7 @@ from .serializers import (
     OfficialFactCheckSerializer,
     VerificationAssignmentClaimSerializer,
     VerificationAssignmentSerializer,
+    OrganizationMembershipAdminSerializer,
 )
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
@@ -3353,6 +3355,90 @@ def complete_onboarding(request):
     return Response(
         {
             "has_completed_onboarding": True,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def organization_members(
+    request,
+    organization_id,
+):
+    """
+    Return the current administrative roster for
+    one organization.
+
+    Only users with MANAGE_ORGANIZATION for the
+    requested organization may access the roster.
+
+    LEFT memberships are historical relationships
+    and are intentionally excluded from the current
+    administrative roster.
+    """
+
+    organization = get_object_or_404(
+        Organization,
+        id=organization_id,
+    )
+
+    if not has_capability(
+        request.user,
+        PartnerCapability.MANAGE_ORGANIZATION,
+        organization=organization,
+    ):
+        return Response(
+            {
+                "detail": (
+                    "You do not have permission " "to manage this organization."
+                ),
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    memberships = (
+        OrganizationMembership.objects.filter(
+            organization=organization,
+        )
+        .exclude(
+            status=(OrganizationMembership.Status.LEFT),
+        )
+        .select_related(
+            "user",
+            "approved_by",
+        )
+        .order_by(
+            "user__username",
+            "id",
+        )
+    )
+
+    serializer = OrganizationMembershipAdminSerializer(
+        memberships,
+        many=True,
+    )
+
+    return Response(
+        {
+            "organization": {
+                "id": str(organization.id),
+                "name": organization.name,
+                "slug": organization.slug,
+            },
+            "count": memberships.count(),
+            "summary": {
+                "active": memberships.filter(
+                    status=(OrganizationMembership.Status.ACTIVE),
+                ).count(),
+                "pending": memberships.filter(
+                    status=(OrganizationMembership.Status.PENDING),
+                ).count(),
+                "suspended": memberships.filter(
+                    status=(OrganizationMembership.Status.SUSPENDED),
+                ).count(),
+            },
+            "results": serializer.data,
         },
         status=status.HTTP_200_OK,
     )
