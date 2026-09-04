@@ -291,7 +291,7 @@ function DeepAnalysisPage() {
                <aside className="tdp-sidebar">
                   <div className="tdp-sidebar-card">
                      <div className="tdp-sidebar-card-label" style={{ marginBottom: "16px" }}>
-                        EVIDENCE SOURCES ({claimData.ai_sources?.length || 0})
+                        AI-RETRIEVED SOURCES ({claimData.ai_sources?.length || 0})
                      </div>
 
                      {claimData.ai_sources && claimData.ai_sources.length > 0 ? (

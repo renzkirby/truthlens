@@ -475,6 +475,12 @@ class VerificationIntakeClaimSerializer(serializers.ModelSerializer):
     assignments at once.
     """
 
+    community_threads = PublicThreadSummarySerializer(
+        source="threads",
+        many=True,
+        read_only=True,
+    )
+
     class Meta:
         model = Claim
 
@@ -491,6 +497,7 @@ class VerificationIntakeClaimSerializer(serializers.ModelSerializer):
             "source_link",
             "media_url",
             "last_updated",
+            "community_threads",
         ]
 
         read_only_fields = fields

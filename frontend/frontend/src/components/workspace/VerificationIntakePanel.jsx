@@ -8,6 +8,7 @@ import { resolveApiEndpoint } from "../../utils/api";
 import { VERDICT_CONFIG } from "../../utils/constants";
 
 import "./VerificationIntakePanel.css";
+import InvestigationContextLinks from "./InvestigationContextLinks.jsx";
 
 const PAGE_SIZE = 10;
 
@@ -39,7 +40,7 @@ function formatDateTime(value) {
    }).format(date);
 }
 
-function formatConsensus(value) {
+function formatConfidence(value) {
    const number = Number(value);
 
    if (!Number.isFinite(number)) {
@@ -53,10 +54,6 @@ function getVerdictMeta(verdict) {
    const normalizedVerdict = String(verdict || "UNVERIFIED").toUpperCase();
 
    return VERDICT_CONFIG[normalizedVerdict] ?? VERDICT_CONFIG.UNVERIFIED;
-}
-
-function getClaimSourceUrl(claim) {
-   return claim?.url_link || claim?.source_link || null;
 }
 
 function VerificationIntakePanel({ organizationId, organizationName }) {
@@ -331,8 +328,6 @@ function VerificationIntakePanel({ organizationId, organizationName }) {
 
                      const verdictMeta = getVerdictMeta(claim.ai_verdict);
 
-                     const sourceUrl = getClaimSourceUrl(claim);
-
                      const isConfirming = confirmingId === assignment.id;
 
                      const isClaiming = claimingId === assignment.id;
@@ -370,9 +365,9 @@ function VerificationIntakePanel({ organizationId, organizationName }) {
                               </div>
 
                               <div>
-                                 <span className="intake-signal-label">Community consensus</span>
+                                 <span className="intake-signal-label">AI confidence</span>
 
-                                 <strong>{formatConsensus(claim.consensus_score)}</strong>
+                                 <strong>{formatConfidence(claim.consensus_score)}</strong>
                               </div>
 
                               <div>
@@ -383,16 +378,7 @@ function VerificationIntakePanel({ organizationId, organizationName }) {
                            </div>
 
                            <div className="intake-card-footer">
-                              <div className="intake-source-area">
-                                 {sourceUrl ? (
-                                    <a href={sourceUrl} target="_blank" rel="noopener noreferrer">
-                                       <Icons name="external-link" size={14} />
-                                       View source
-                                    </a>
-                                 ) : (
-                                    <span>No external source attached</span>
-                                 )}
-                              </div>
+                              <InvestigationContextLinks claim={claim} />
 
                               {isConfirming ? (
                                  <div className="intake-confirm">

@@ -6,6 +6,7 @@ import Icons from "../Icons.jsx";
 import { resolveApiEndpoint } from "../../utils/api";
 
 import "./OrganizationWorkloadPanel.css";
+import InvestigationContextLinks from "./InvestigationContextLinks.jsx";
 
 const PAGE_SIZE = 10;
 
@@ -334,6 +335,9 @@ function OrganizationWorkloadPanel({ organizationId, organizationName, canReleas
 
                                  <strong>{formatDateTime(claim.last_updated)}</strong>
                               </div>
+                           </div>
+                           <div className="workload-context-row">
+                              <InvestigationContextLinks claim={claim} />
                            </div>
                            {canReleaseInvestigation && (
                               <div className="workload-card-actions">
