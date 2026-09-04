@@ -229,3 +229,38 @@ class OrganizationAdminApiTests(APITestCase):
                 "suspended": 1,
             },
         )
+
+    def test_member_roster_requires_authentication(
+        self,
+    ):
+        response = APIClient().get(
+            self.url,
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+
+    def test_suspended_admin_cannot_view_member_roster(
+        self,
+    ):
+        membership = OrganizationMembership.objects.get(
+            organization=self.organization,
+            user=self.admin,
+        )
+
+        membership.status = OrganizationMembership.Status.SUSPENDED
+
+        membership.save(
+            update_fields=["status"],
+        )
+
+        response = self.client_for(
+            self.admin,
+        ).get(self.url)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
