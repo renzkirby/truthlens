@@ -14,6 +14,7 @@ from .models import (
     OfficialFactCheckSource,
     VerificationAssignment,
     OrganizationMembership,
+    OrganizationInvitation,
 )
 from .services import validate_public_url, check_url_threat_reputation
 from .trust_service import calculate_trust_components
@@ -524,6 +525,75 @@ class OrganizationAdminUserSerializer(serializers.ModelSerializer):
             "id",
             "username",
             "email",
+        ]
+
+        read_only_fields = fields
+
+
+class OrganizationInvitationActorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+
+        fields = [
+            "id",
+            "username",
+        ]
+
+        read_only_fields = fields
+
+
+class OrganizationInvitationCreateSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    invited_role = serializers.ChoiceField(
+        choices=(OrganizationMembership.Role.choices),
+    )
+
+
+class OrganizationInvitationAdminSerializer(serializers.ModelSerializer):
+    organization = serializers.SerializerMethodField()
+
+    invited_by = OrganizationInvitationActorSerializer(
+        read_only=True,
+    )
+
+    accepted_by = OrganizationInvitationActorSerializer(
+        read_only=True,
+    )
+
+    cancelled_by = OrganizationInvitationActorSerializer(
+        read_only=True,
+    )
+
+    def get_organization(
+        self,
+        obj,
+    ):
+        return {
+            "id": str(obj.organization.id),
+            "name": obj.organization.name,
+            "slug": obj.organization.slug,
+        }
+
+    class Meta:
+        model = OrganizationInvitation
+
+        fields = [
+            "id",
+            "organization",
+            "email",
+            "invited_role",
+            "status",
+            "invited_by",
+            "expires_at",
+            "last_sent_at",
+            "send_count",
+            "accepted_by",
+            "accepted_at",
+            "cancelled_by",
+            "cancelled_at",
+            "created_at",
+            "updated_at",
         ]
 
         read_only_fields = fields

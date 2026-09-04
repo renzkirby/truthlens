@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.utils import timezone
+from datetime import timedelta
 
 from .models import (
     Organization,
@@ -14,9 +15,25 @@ from .organization_invitation_service import (
     create_organization_invitation,
     hash_invitation_token,
     OrganizationInvitationError,
+    OrganizationInvitationDeliveryError,
+    cancel_organization_invitation,
+    create_and_send_organization_invitation,
+    get_organization_invitations,
+    resend_organization_invitation,
+)
+from unittest.mock import patch
+
+from django.core import mail
+from django.test import (
+    TestCase,
+    override_settings,
 )
 
 
+@override_settings(
+    EMAIL_BACKEND=("django.core.mail.backends." "locmem.EmailBackend"),
+    DEFAULT_FROM_EMAIL=("noreply@truthlens.test"),
+)
 class OrganizationInvitationServiceTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_user(
@@ -236,3 +253,163 @@ class OrganizationInvitationServiceTests(TestCase):
                 invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
                 actor=self.owner,
             )
+
+    def test_create_and_send_delivers_invitation_email(
+        self,
+    ):
+        invitation = create_and_send_organization_invitation(
+            organization=self.organization,
+            email="recipient@example.com",
+            invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+            actor=self.owner,
+        )
+
+        self.assertEqual(
+            len(mail.outbox),
+            1,
+        )
+
+        self.assertEqual(
+            mail.outbox[0].to,
+            ["recipient@example.com"],
+        )
+
+        self.assertIn(
+            self.organization.name,
+            mail.outbox[0].subject,
+        )
+
+        self.assertIn(
+            "/organization-invitations/",
+            mail.outbox[0].body,
+        )
+
+        self.assertEqual(
+            invitation.send_count,
+            1,
+        )
+
+    @patch(
+        "api.organization_invitation_service." "EmailMultiAlternatives.send",
+        side_effect=Exception("SMTP unavailable"),
+    )
+    def test_delivery_failure_rolls_back_creation(
+        self,
+        _mock_send,
+    ):
+        with self.assertRaises(OrganizationInvitationDeliveryError):
+            create_and_send_organization_invitation(
+                organization=self.organization,
+                email="failed@example.com",
+                invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+                actor=self.owner,
+            )
+
+        self.assertFalse(
+            OrganizationInvitation.objects.filter(
+                organization=self.organization,
+                email="failed@example.com",
+            ).exists()
+        )
+
+    def test_resend_rotates_token_and_increments_count(
+        self,
+    ):
+        invitation = create_and_send_organization_invitation(
+            organization=self.organization,
+            email="resend@example.com",
+            invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+            actor=self.owner,
+        )
+
+        old_digest = invitation.token_digest
+
+        mail.outbox.clear()
+
+        invitation = resend_organization_invitation(
+            invitation=invitation,
+            actor=self.owner,
+        )
+
+        self.assertNotEqual(
+            invitation.token_digest,
+            old_digest,
+        )
+
+        self.assertEqual(
+            invitation.send_count,
+            2,
+        )
+
+        self.assertEqual(
+            len(mail.outbox),
+            1,
+        )
+
+    def test_cancel_invalidates_pending_invitation(
+        self,
+    ):
+        invitation, _ = create_organization_invitation(
+            organization=self.organization,
+            email="cancel@example.com",
+            invited_role=(OrganizationMembership.Role.RESEARCHER),
+            actor=self.owner,
+        )
+
+        old_digest = invitation.token_digest
+
+        invitation = cancel_organization_invitation(
+            invitation=invitation,
+            actor=self.owner,
+        )
+
+        self.assertEqual(
+            invitation.status,
+            OrganizationInvitation.Status.CANCELLED,
+        )
+
+        self.assertEqual(
+            invitation.cancelled_by,
+            self.owner,
+        )
+
+        self.assertIsNotNone(
+            invitation.cancelled_at,
+        )
+
+        self.assertNotEqual(
+            invitation.token_digest,
+            old_digest,
+        )
+
+    def test_listing_materializes_expired_invitations(
+        self,
+    ):
+        invitation, _ = create_organization_invitation(
+            organization=self.organization,
+            email="expired@example.com",
+            invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+            actor=self.owner,
+        )
+
+        invitation.expires_at = timezone.now() - timedelta(minutes=1)
+
+        invitation.save(
+            update_fields=[
+                "expires_at",
+            ]
+        )
+
+        list(
+            get_organization_invitations(
+                organization=self.organization,
+                actor=self.owner,
+            )
+        )
+
+        invitation.refresh_from_db()
+
+        self.assertEqual(
+            invitation.status,
+            OrganizationInvitation.Status.EXPIRED,
+        )

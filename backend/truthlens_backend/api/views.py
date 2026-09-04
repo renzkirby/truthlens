@@ -75,6 +75,7 @@ from .models import (
     Vote,
     ModerationCase,
     Organization,
+    OrganizationInvitation,
     OrganizationMembership,
     AdjudicationDecision,
     VerificationRun,
@@ -136,6 +137,16 @@ from .verification_assignment_service import (
     get_organization_verification_workload,
     release_verification_assignment,
 )
+from .organization_invitation_service import (
+    OrganizationInvitationAuthorizationError,
+    OrganizationInvitationConflict,
+    OrganizationInvitationDeliveryError,
+    OrganizationInvitationError,
+    cancel_organization_invitation,
+    create_and_send_organization_invitation,
+    get_organization_invitations,
+    resend_organization_invitation,
+)
 from .throttles import (
     FactCheckRateThrottle,
     PasswordResetRateThrottle,
@@ -171,6 +182,8 @@ from .serializers import (
     VerificationAssignmentClaimSerializer,
     VerificationAssignmentSerializer,
     OrganizationMembershipAdminSerializer,
+    OrganizationInvitationAdminSerializer,
+    OrganizationInvitationCreateSerializer,
 )
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
@@ -1047,6 +1060,38 @@ def _publishing_error_response(
         PublishingConflict,
     ):
         response_status = status.HTTP_409_CONFLICT
+
+    else:
+        response_status = status.HTTP_400_BAD_REQUEST
+
+    return Response(
+        {
+            "detail": str(error),
+        },
+        status=response_status,
+    )
+
+
+def _organization_invitation_error_response(
+    error,
+):
+    if isinstance(
+        error,
+        OrganizationInvitationAuthorizationError,
+    ):
+        response_status = status.HTTP_403_FORBIDDEN
+
+    elif isinstance(
+        error,
+        OrganizationInvitationConflict,
+    ):
+        response_status = status.HTTP_409_CONFLICT
+
+    elif isinstance(
+        error,
+        OrganizationInvitationDeliveryError,
+    ):
+        response_status = status.HTTP_503_SERVICE_UNAVAILABLE
 
     else:
         response_status = status.HTTP_400_BAD_REQUEST
@@ -3360,6 +3405,184 @@ def complete_onboarding(request):
     )
 
 
+@api_view(
+    [
+        "GET",
+        "POST",
+    ]
+)
+@permission_classes([IsAuthenticated])
+def organization_invitations(
+    request,
+    organization_id,
+):
+    organization = _get_managed_organization(
+        request,
+        organization_id,
+    )
+
+    if request.method == "GET":
+        try:
+            invitations = get_organization_invitations(
+                organization=organization,
+                actor=request.user,
+            )
+
+        except OrganizationInvitationError as error:
+            return _organization_invitation_error_response(
+                error,
+            )
+
+        serializer = OrganizationInvitationAdminSerializer(
+            invitations,
+            many=True,
+        )
+
+        return Response(
+            {
+                "organization": {
+                    "id": str(organization.id),
+                    "name": (organization.name),
+                    "slug": (organization.slug),
+                },
+                "count": (invitations.count()),
+                "summary": {
+                    "pending": (
+                        invitations.filter(
+                            status=(OrganizationInvitation.Status.PENDING),
+                        ).count()
+                    ),
+                    "accepted": (
+                        invitations.filter(
+                            status=(OrganizationInvitation.Status.ACCEPTED),
+                        ).count()
+                    ),
+                    "cancelled": (
+                        invitations.filter(
+                            status=(OrganizationInvitation.Status.CANCELLED),
+                        ).count()
+                    ),
+                    "expired": (
+                        invitations.filter(
+                            status=(OrganizationInvitation.Status.EXPIRED),
+                        ).count()
+                    ),
+                },
+                "results": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    serializer = OrganizationInvitationCreateSerializer(
+        data=request.data,
+    )
+
+    serializer.is_valid(
+        raise_exception=True,
+    )
+
+    try:
+        invitation = create_and_send_organization_invitation(
+            organization=organization,
+            email=(serializer.validated_data["email"]),
+            invited_role=(serializer.validated_data["invited_role"]),
+            actor=request.user,
+        )
+
+    except OrganizationInvitationError as error:
+        return _organization_invitation_error_response(
+            error,
+        )
+
+    return Response(
+        OrganizationInvitationAdminSerializer(
+            invitation,
+        ).data,
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def organization_invitation_resend(
+    request,
+    organization_id,
+    invitation_id,
+):
+    organization = _get_managed_organization(
+        request,
+        organization_id,
+    )
+
+    invitation = get_object_or_404(
+        OrganizationInvitation.objects.select_related(
+            "organization",
+            "invited_by",
+        ),
+        id=invitation_id,
+        organization=organization,
+    )
+
+    try:
+        invitation = resend_organization_invitation(
+            invitation=invitation,
+            actor=request.user,
+        )
+
+    except OrganizationInvitationError as error:
+        return _organization_invitation_error_response(
+            error,
+        )
+
+    return Response(
+        OrganizationInvitationAdminSerializer(
+            invitation,
+        ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def organization_invitation_cancel(
+    request,
+    organization_id,
+    invitation_id,
+):
+    organization = _get_managed_organization(
+        request,
+        organization_id,
+    )
+
+    invitation = get_object_or_404(
+        OrganizationInvitation.objects.select_related(
+            "organization",
+            "invited_by",
+            "cancelled_by",
+        ),
+        id=invitation_id,
+        organization=organization,
+    )
+
+    try:
+        invitation = cancel_organization_invitation(
+            invitation=invitation,
+            actor=request.user,
+        )
+
+    except OrganizationInvitationError as error:
+        return _organization_invitation_error_response(
+            error,
+        )
+
+    return Response(
+        OrganizationInvitationAdminSerializer(
+            invitation,
+        ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def organization_members(
@@ -3442,3 +3665,24 @@ def organization_members(
         },
         status=status.HTTP_200_OK,
     )
+
+
+def _get_managed_organization(
+    request,
+    organization_id,
+):
+    organization = get_object_or_404(
+        Organization,
+        id=organization_id,
+    )
+
+    if not has_capability(
+        request.user,
+        PartnerCapability.MANAGE_ORGANIZATION,
+        organization=organization,
+    ):
+        raise PermissionDenied(
+            "You do not have permission " "to manage this organization."
+        )
+
+    return organization

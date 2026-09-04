@@ -98,6 +98,33 @@ urlpatterns = [
         name="organization_members",
     ),
     path(
+        ("organizations/" "<uuid:organization_id>/" "invitations/"),
+        views.organization_invitations,
+        name="organization_invitations",
+    ),
+    path(
+        (
+            "organizations/"
+            "<uuid:organization_id>/"
+            "invitations/"
+            "<uuid:invitation_id>/"
+            "resend/"
+        ),
+        views.organization_invitation_resend,
+        name="organization_invitation_resend",
+    ),
+    path(
+        (
+            "organizations/"
+            "<uuid:organization_id>/"
+            "invitations/"
+            "<uuid:invitation_id>/"
+            "cancel/"
+        ),
+        views.organization_invitation_cancel,
+        name="organization_invitation_cancel",
+    ),
+    path(
         "moderation/threads/<uuid:thread_id>/resolve/",
         views.moderation_resolve_thread,
         name="moderation_resolve_thread",
