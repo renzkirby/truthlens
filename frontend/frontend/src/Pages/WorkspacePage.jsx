@@ -15,6 +15,7 @@ import {
 import "./WorkspacePage.css";
 import VerificationIntakePanel from "../components/workspace/VerificationIntakePanel.jsx";
 import OrganizationWorkloadPanel from "../components/workspace/OrganizationWorkloadPanel.jsx";
+import OrganizationAdminPanel from "../components/workspace/OrganizationAdminPanel.jsx";
 
 const WORKLOAD_CAPABILITIES = [
    WorkspaceCapability.CLAIM_VERIFICATION_WORK,
@@ -314,6 +315,12 @@ function WorkspacePage() {
                               canReleaseInvestigation={organizationCapabilities.includes(
                                  WorkspaceCapability.CLAIM_VERIFICATION_WORK,
                               )}
+                           />
+                        ) : activeSection.id === "organization" ? (
+                           <OrganizationAdminPanel
+                              key={selectedOrganizationId ?? "no-organization"}
+                              organizationId={selectedOrganizationId}
+                              organizationName={selectedOrganization?.name}
                            />
                         ) : (
                            <div className="workspace-placeholder">
