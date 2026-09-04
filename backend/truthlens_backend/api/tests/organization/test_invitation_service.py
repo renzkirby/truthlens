@@ -3,23 +3,26 @@ from django.test import TestCase
 from django.utils import timezone
 from datetime import timedelta
 
-from .models import (
+from api.models import (
     Organization,
     OrganizationInvitation,
     OrganizationMembership,
 )
-from .organization_invitation_service import (
+from api.organization_invitation_service import (
     InvalidOrganizationInvitationRole,
     OrganizationInvitationAuthorizationError,
     OrganizationInvitationConflict,
-    create_organization_invitation,
-    hash_invitation_token,
     OrganizationInvitationError,
     OrganizationInvitationDeliveryError,
+    OrganizationInvitationNotFound,
+    create_organization_invitation,
+    hash_invitation_token,
     cancel_organization_invitation,
     create_and_send_organization_invitation,
     get_organization_invitations,
     resend_organization_invitation,
+    accept_organization_invitation,
+    get_organization_invitation_by_token,
 )
 from unittest.mock import patch
 
@@ -412,4 +415,416 @@ class OrganizationInvitationServiceTests(TestCase):
         self.assertEqual(
             invitation.status,
             OrganizationInvitation.Status.EXPIRED,
+        )
+
+    def test_lookup_invitation_by_token(
+        self,
+    ):
+        invitation, raw_token = create_organization_invitation(
+            organization=self.organization,
+            email="lookup@example.com",
+            invited_role=(OrganizationMembership.Role.RESEARCHER),
+            actor=self.owner,
+        )
+
+        resolved = get_organization_invitation_by_token(raw_token)
+
+        self.assertEqual(
+            resolved.id,
+            invitation.id,
+        )
+
+        self.assertEqual(
+            resolved.status,
+            OrganizationInvitation.Status.PENDING,
+        )
+
+    def test_invalid_invitation_token_is_rejected(
+        self,
+    ):
+        with self.assertRaises(OrganizationInvitationNotFound):
+            get_organization_invitation_by_token("not-a-real-token")
+
+    def test_blank_invitation_token_is_rejected(
+        self,
+    ):
+        with self.assertRaises(OrganizationInvitationNotFound):
+            get_organization_invitation_by_token("   ")
+
+    def test_lookup_materializes_expired_invitation(
+        self,
+    ):
+        invitation, raw_token = create_organization_invitation(
+            organization=self.organization,
+            email="lookup-expired@example.com",
+            invited_role=(OrganizationMembership.Role.RESEARCHER),
+            actor=self.owner,
+        )
+
+        invitation.expires_at = timezone.now() - timedelta(minutes=1)
+
+        invitation.save(
+            update_fields=[
+                "expires_at",
+            ]
+        )
+
+        resolved = get_organization_invitation_by_token(raw_token)
+
+        self.assertEqual(
+            resolved.status,
+            OrganizationInvitation.Status.EXPIRED,
+        )
+
+        invitation.refresh_from_db()
+
+        self.assertEqual(
+            invitation.status,
+            OrganizationInvitation.Status.EXPIRED,
+        )
+
+    def test_existing_user_can_accept_invitation(
+        self,
+    ):
+        recipient = User.objects.create_user(
+            username="recipient",
+            email="recipient@example.com",
+            password="test-password",
+        )
+
+        invitation, raw_token = create_organization_invitation(
+            organization=self.organization,
+            email="recipient@example.com",
+            invited_role=(OrganizationMembership.Role.RESEARCHER),
+            actor=self.owner,
+        )
+
+        old_digest = invitation.token_digest
+
+        result = accept_organization_invitation(
+            raw_token=raw_token,
+            actor=recipient,
+        )
+
+        membership = result["membership"]
+
+        invitation.refresh_from_db()
+
+        self.assertEqual(
+            membership.organization,
+            self.organization,
+        )
+
+        self.assertEqual(
+            membership.user,
+            recipient,
+        )
+
+        self.assertEqual(
+            membership.role,
+            OrganizationMembership.Role.RESEARCHER,
+        )
+
+        self.assertEqual(
+            membership.status,
+            OrganizationMembership.Status.ACTIVE,
+        )
+
+        self.assertEqual(
+            membership.approved_by,
+            self.owner,
+        )
+
+        self.assertIsNotNone(
+            membership.approved_at,
+        )
+
+        self.assertEqual(
+            invitation.status,
+            OrganizationInvitation.Status.ACCEPTED,
+        )
+
+        self.assertEqual(
+            invitation.accepted_by,
+            recipient,
+        )
+
+        self.assertIsNotNone(
+            invitation.accepted_at,
+        )
+
+        self.assertNotEqual(
+            invitation.token_digest,
+            old_digest,
+        )
+
+    def test_accepted_invitation_token_cannot_be_reused(
+        self,
+    ):
+        recipient = User.objects.create_user(
+            username="single-use",
+            email="single-use@example.com",
+            password="test-password",
+        )
+
+        _invitation, raw_token = create_organization_invitation(
+            organization=self.organization,
+            email="single-use@example.com",
+            invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+            actor=self.owner,
+        )
+
+        accept_organization_invitation(
+            raw_token=raw_token,
+            actor=recipient,
+        )
+
+        with self.assertRaises(OrganizationInvitationNotFound):
+            accept_organization_invitation(
+                raw_token=raw_token,
+                actor=recipient,
+            )
+
+    def test_invitation_cannot_be_accepted_by_different_email(
+        self,
+    ):
+        recipient = User.objects.create_user(
+            username="intended-recipient",
+            email="intended@example.com",
+            password="test-password",
+        )
+
+        wrong_user = User.objects.create_user(
+            username="wrong-recipient",
+            email="wrong@example.com",
+            password="test-password",
+        )
+
+        invitation, raw_token = create_organization_invitation(
+            organization=self.organization,
+            email=recipient.email,
+            invited_role=(OrganizationMembership.Role.RESEARCHER),
+            actor=self.owner,
+        )
+
+        with self.assertRaises(OrganizationInvitationAuthorizationError):
+            accept_organization_invitation(
+                raw_token=raw_token,
+                actor=wrong_user,
+            )
+
+        self.assertFalse(
+            OrganizationMembership.objects.filter(
+                organization=self.organization,
+                user=wrong_user,
+            ).exists()
+        )
+
+        invitation.refresh_from_db()
+
+        self.assertEqual(
+            invitation.status,
+            OrganizationInvitation.Status.PENDING,
+        )
+
+    def test_left_member_is_reactivated_on_acceptance(
+        self,
+    ):
+        recipient = User.objects.create_user(
+            username="returning-member",
+            email="returning@example.com",
+            password="test-password",
+        )
+
+        membership = OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=recipient,
+            role=(OrganizationMembership.Role.CONTRIBUTOR),
+            status=(OrganizationMembership.Status.LEFT),
+        )
+
+        membership_id = membership.id
+        original_joined_at = membership.joined_at
+
+        invitation, raw_token = create_organization_invitation(
+            organization=self.organization,
+            email=recipient.email,
+            invited_role=(OrganizationMembership.Role.RESEARCHER),
+            actor=self.owner,
+        )
+
+        result = accept_organization_invitation(
+            raw_token=raw_token,
+            actor=recipient,
+        )
+
+        membership = result["membership"]
+
+        self.assertEqual(
+            membership.id,
+            membership_id,
+        )
+
+        self.assertEqual(
+            membership.status,
+            OrganizationMembership.Status.ACTIVE,
+        )
+
+        self.assertEqual(
+            membership.role,
+            OrganizationMembership.Role.RESEARCHER,
+        )
+
+        self.assertEqual(
+            membership.joined_at,
+            original_joined_at,
+        )
+
+        self.assertEqual(
+            membership.approved_by,
+            self.owner,
+        )
+
+        self.assertIsNotNone(
+            membership.approved_at,
+        )
+
+        invitation.refresh_from_db()
+
+        self.assertEqual(
+            invitation.status,
+            OrganizationInvitation.Status.ACCEPTED,
+        )
+
+    def test_acceptance_conflicts_if_user_gains_current_membership(
+        self,
+    ):
+        recipient = User.objects.create_user(
+            username="late-member",
+            email="late-member@example.com",
+            password="test-password",
+        )
+
+        invitation, raw_token = create_organization_invitation(
+            organization=self.organization,
+            email=recipient.email,
+            invited_role=(OrganizationMembership.Role.RESEARCHER),
+            actor=self.owner,
+        )
+
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=recipient,
+            role=(OrganizationMembership.Role.CONTRIBUTOR),
+            status=(OrganizationMembership.Status.ACTIVE),
+        )
+
+        with self.assertRaises(OrganizationInvitationConflict):
+            accept_organization_invitation(
+                raw_token=raw_token,
+                actor=recipient,
+            )
+
+        invitation.refresh_from_db()
+
+        self.assertEqual(
+            invitation.status,
+            OrganizationInvitation.Status.PENDING,
+        )
+
+    def test_expired_invitation_cannot_be_accepted(
+        self,
+    ):
+        recipient = User.objects.create_user(
+            username="expired-recipient",
+            email="expired-recipient@example.com",
+            password="test-password",
+        )
+
+        invitation, raw_token = create_organization_invitation(
+            organization=self.organization,
+            email=recipient.email,
+            invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+            actor=self.owner,
+        )
+
+        invitation.expires_at = timezone.now() - timedelta(seconds=1)
+
+        invitation.save(
+            update_fields=[
+                "expires_at",
+            ]
+        )
+
+        with self.assertRaises(OrganizationInvitationConflict):
+            accept_organization_invitation(
+                raw_token=raw_token,
+                actor=recipient,
+            )
+
+        invitation.refresh_from_db()
+
+        self.assertEqual(
+            invitation.status,
+            OrganizationInvitation.Status.EXPIRED,
+        )
+
+        self.assertFalse(
+            OrganizationMembership.objects.filter(
+                organization=self.organization,
+                user=recipient,
+            ).exists()
+        )
+
+    def test_acceptance_requires_authenticated_user(
+        self,
+    ):
+        _invitation, raw_token = create_organization_invitation(
+            organization=self.organization,
+            email="auth-required@example.com",
+            invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+            actor=self.owner,
+        )
+
+        with self.assertRaises(OrganizationInvitationAuthorizationError):
+            accept_organization_invitation(
+                raw_token=raw_token,
+                actor=None,
+            )
+
+    def test_acceptance_never_grants_owner_role(
+        self,
+    ):
+        recipient = User.objects.create_user(
+            username="owner-escalation",
+            email="owner-escalation@example.com",
+            password="test-password",
+        )
+
+        invitation, raw_token = create_organization_invitation(
+            organization=self.organization,
+            email=recipient.email,
+            invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+            actor=self.owner,
+        )
+
+        invitation.invited_role = OrganizationMembership.Role.OWNER
+
+        invitation.save(
+            update_fields=[
+                "invited_role",
+            ]
+        )
+
+        with self.assertRaises(InvalidOrganizationInvitationRole):
+            accept_organization_invitation(
+                raw_token=raw_token,
+                actor=recipient,
+            )
+
+        self.assertFalse(
+            OrganizationMembership.objects.filter(
+                organization=self.organization,
+                user=recipient,
+            ).exists()
         )

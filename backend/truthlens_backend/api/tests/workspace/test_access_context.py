@@ -1,12 +1,12 @@
 from django.contrib.auth.models import User
 from django.test import TestCase
 
-from .models import (
+from api.models import (
     Organization,
     OrganizationMembership,
     UserProfile,
 )
-from .organization_service import (
+from api.organization_service import (
     PartnerCapability,
     get_workspace_access_context,
 )

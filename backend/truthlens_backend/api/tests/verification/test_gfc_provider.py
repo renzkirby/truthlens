@@ -2,16 +2,14 @@ from datetime import timezone
 from unittest import TestCase
 from unittest.mock import Mock
 
-from .verification.providers.google_fact_check import (
+from api.verification.providers.google_fact_check import (
     GOOGLE_FACT_CHECK_ENDPOINT,
     GoogleFactCheckProvider,
     parse_google_fact_check_response,
 )
 
 
-class GoogleFactCheckResponseParserTests(
-    TestCase
-):
+class GoogleFactCheckResponseParserTests(TestCase):
 
     def test_parses_fact_check_review_into_raw_evidence(
         self,
@@ -19,34 +17,18 @@ class GoogleFactCheckResponseParserTests(
         payload = {
             "claims": [
                 {
-                    "text": (
-                        "Example public claim."
-                    ),
+                    "text": ("Example public claim."),
                     "claimant": "Example Person",
-                    "claimDate": (
-                        "2026-08-20T10:00:00Z"
-                    ),
+                    "claimDate": ("2026-08-20T10:00:00Z"),
                     "claimReview": [
                         {
                             "publisher": {
-                                "name": (
-                                    "Example "
-                                    "Fact Checker"
-                                ),
+                                "name": ("Example " "Fact Checker"),
                             },
-                            "url": (
-                                "https://example.com/"
-                                "fact-check"
-                            ),
-                            "title": (
-                                "Example Fact Check"
-                            ),
-                            "reviewDate": (
-                                "2026-08-21T12:30:00Z"
-                            ),
-                            "textualRating": (
-                                "False"
-                            ),
+                            "url": ("https://example.com/" "fact-check"),
+                            "title": ("Example Fact Check"),
+                            "reviewDate": ("2026-08-21T12:30:00Z"),
+                            "textualRating": ("False"),
                             "languageCode": "en",
                         }
                     ],
@@ -54,11 +36,7 @@ class GoogleFactCheckResponseParserTests(
             ]
         }
 
-        results = (
-            parse_google_fact_check_response(
-                payload
-            )
-        )
+        results = parse_google_fact_check_response(payload)
 
         self.assertEqual(
             len(results),
@@ -74,10 +52,7 @@ class GoogleFactCheckResponseParserTests(
 
         self.assertEqual(
             evidence.url,
-            (
-                "https://example.com/"
-                "fact-check"
-            ),
+            ("https://example.com/" "fact-check"),
         )
 
         self.assertEqual(
@@ -96,8 +71,7 @@ class GoogleFactCheckResponseParserTests(
         )
 
         self.assertIn(
-            "Claim reviewed: "
-            "Example public claim.",
+            "Claim reviewed: " "Example public claim.",
             evidence.content,
         )
 
@@ -131,36 +105,22 @@ class GoogleFactCheckResponseParserTests(
                             "publisher": {
                                 "name": "Checker A",
                             },
-                            "url": (
-                                "https://a.example/"
-                                "review"
-                            ),
-                            "textualRating": (
-                                "False"
-                            ),
+                            "url": ("https://a.example/" "review"),
+                            "textualRating": ("False"),
                         },
                         {
                             "publisher": {
                                 "name": "Checker B",
                             },
-                            "url": (
-                                "https://b.example/"
-                                "review"
-                            ),
-                            "textualRating": (
-                                "Misleading"
-                            ),
+                            "url": ("https://b.example/" "review"),
+                            "textualRating": ("Misleading"),
                         },
                     ],
                 }
             ]
         }
 
-        results = (
-            parse_google_fact_check_response(
-                payload
-            )
-        )
+        results = parse_google_fact_check_response(payload)
 
         self.assertEqual(
             len(results),
@@ -186,30 +146,22 @@ class GoogleFactCheckResponseParserTests(
                     "text": "Example claim.",
                     "claimReview": [
                         {
-                            "url": (
-                                "https://example.com/1"
-                            ),
+                            "url": ("https://example.com/1"),
                         },
                         {
-                            "url": (
-                                "https://example.com/2"
-                            ),
+                            "url": ("https://example.com/2"),
                         },
                         {
-                            "url": (
-                                "https://example.com/3"
-                            ),
+                            "url": ("https://example.com/3"),
                         },
                     ],
                 }
             ]
         }
 
-        results = (
-            parse_google_fact_check_response(
-                payload,
-                limit=2,
-            )
+        results = parse_google_fact_check_response(
+            payload,
+            limit=2,
         )
 
         self.assertEqual(
@@ -221,9 +173,7 @@ class GoogleFactCheckResponseParserTests(
         self,
     ):
         self.assertEqual(
-            parse_google_fact_check_response(
-                {}
-            ),
+            parse_google_fact_check_response({}),
             [],
         )
 
@@ -243,15 +193,10 @@ class GoogleFactCheckResponseParserTests(
             "claims": [
                 {
                     "text": "Example claim.",
-                    "claimDate": (
-                        "2026-08-20T10:00:00Z"
-                    ),
+                    "claimDate": ("2026-08-20T10:00:00Z"),
                     "claimReview": [
                         {
-                            "url": (
-                                "https://example.com/"
-                                "review"
-                            ),
+                            "url": ("https://example.com/" "review"),
                             "reviewDate": "not-a-date",
                         }
                     ],
@@ -259,15 +204,9 @@ class GoogleFactCheckResponseParserTests(
             ]
         }
 
-        evidence = (
-            parse_google_fact_check_response(
-                payload
-            )[0]
-        )
+        evidence = parse_google_fact_check_response(payload)[0]
 
-        self.assertIsNone(
-            evidence.published_at
-        )
+        self.assertIsNone(evidence.published_at)
 
     def test_empty_claim_review_is_skipped(
         self,
@@ -283,11 +222,7 @@ class GoogleFactCheckResponseParserTests(
             ]
         }
 
-        results = (
-            parse_google_fact_check_response(
-                payload
-            )
-        )
+        results = parse_google_fact_check_response(payload)
 
         self.assertEqual(
             results,
@@ -295,9 +230,7 @@ class GoogleFactCheckResponseParserTests(
         )
 
 
-class GoogleFactCheckProviderTests(
-    TestCase
-):
+class GoogleFactCheckProviderTests(TestCase):
 
     def test_search_calls_google_and_returns_evidence(
         self,
@@ -311,17 +244,10 @@ class GoogleFactCheckProviderTests(
                     "claimReview": [
                         {
                             "publisher": {
-                                "name": (
-                                    "Example Checker"
-                                ),
+                                "name": ("Example Checker"),
                             },
-                            "url": (
-                                "https://example.com/"
-                                "review"
-                            ),
-                            "textualRating": (
-                                "False"
-                            ),
+                            "url": ("https://example.com/" "review"),
+                            "textualRating": ("False"),
                         }
                     ],
                 }
@@ -329,9 +255,7 @@ class GoogleFactCheckProviderTests(
         }
 
         http_client = Mock()
-        http_client.get.return_value = (
-            response
-        )
+        http_client.get.return_value = response
 
         provider = GoogleFactCheckProvider(
             api_key="test-api-key",
@@ -393,9 +317,7 @@ class GoogleFactCheckProviderTests(
         )
 
         with self.assertRaises(ValueError):
-            provider.search(
-                "example claim"
-            )
+            provider.search("example claim")
 
     def test_search_with_payload_returns_payload_and_evidence(
         self,
@@ -409,9 +331,7 @@ class GoogleFactCheckProviderTests(
                             "publisher": {
                                 "name": "Example Checker",
                             },
-                            "url": (
-                                "https://example.com/fact-check"
-                            ),
+                            "url": ("https://example.com/fact-check"),
                             "textualRating": "False",
                         }
                     ],
@@ -430,10 +350,8 @@ class GoogleFactCheckProviderTests(
             http_client=http_client,
         )
 
-        returned_payload, evidence_items = (
-            provider.search_with_payload(
-                "example claim",
-            )
+        returned_payload, evidence_items = provider.search_with_payload(
+            "example claim",
         )
 
         self.assertIs(
@@ -465,9 +383,7 @@ class GoogleFactCheckProviderTests(
                             "publisher": {
                                 "name": "Example Checker",
                             },
-                            "url": (
-                                "https://example.com/fact-check"
-                            ),
+                            "url": ("https://example.com/fact-check"),
                             "textualRating": "False",
                         }
                     ],

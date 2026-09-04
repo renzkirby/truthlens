@@ -599,6 +599,44 @@ class OrganizationInvitationAdminSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class OrganizationInvitationPublicSerializer(serializers.ModelSerializer):
+    organization = serializers.SerializerMethodField()
+
+    invited_by = OrganizationInvitationActorSerializer(
+        read_only=True,
+    )
+
+    invited_role_label = serializers.CharField(
+        source="get_invited_role_display",
+        read_only=True,
+    )
+
+    def get_organization(
+        self,
+        obj,
+    ):
+        return {
+            "id": str(obj.organization.id),
+            "name": obj.organization.name,
+            "slug": obj.organization.slug,
+            "logo_url": obj.organization.logo_url,
+        }
+
+    class Meta:
+        model = OrganizationInvitation
+
+        fields = [
+            "organization",
+            "invited_role",
+            "invited_role_label",
+            "status",
+            "expires_at",
+            "invited_by",
+        ]
+
+        read_only_fields = fields
+
+
 class OrganizationMembershipAdminSerializer(serializers.ModelSerializer):
     user = OrganizationAdminUserSerializer(
         read_only=True,

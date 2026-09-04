@@ -142,8 +142,11 @@ from .organization_invitation_service import (
     OrganizationInvitationConflict,
     OrganizationInvitationDeliveryError,
     OrganizationInvitationError,
+    OrganizationInvitationNotFound,
+    accept_organization_invitation,
     cancel_organization_invitation,
     create_and_send_organization_invitation,
+    get_organization_invitation_by_token,
     get_organization_invitations,
     resend_organization_invitation,
 )
@@ -184,6 +187,7 @@ from .serializers import (
     OrganizationMembershipAdminSerializer,
     OrganizationInvitationAdminSerializer,
     OrganizationInvitationCreateSerializer,
+    OrganizationInvitationPublicSerializer,
 )
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
@@ -1076,6 +1080,12 @@ def _organization_invitation_error_response(
     error,
 ):
     if isinstance(
+        error,
+        OrganizationInvitationNotFound,
+    ):
+        response_status = status.HTTP_404_NOT_FOUND
+
+    elif isinstance(
         error,
         OrganizationInvitationAuthorizationError,
     ):
@@ -3686,3 +3696,67 @@ def _get_managed_organization(
         )
 
     return organization
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def organization_invitation_detail(
+    request,
+    token,
+):
+    try:
+        invitation = get_organization_invitation_by_token(token)
+
+    except OrganizationInvitationError as error:
+        return _organization_invitation_error_response(
+            error,
+        )
+
+    return Response(
+        OrganizationInvitationPublicSerializer(
+            invitation,
+        ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def organization_invitation_accept(
+    request,
+    token,
+):
+    try:
+        result = accept_organization_invitation(
+            raw_token=token,
+            actor=request.user,
+        )
+
+    except OrganizationInvitationError as error:
+        return _organization_invitation_error_response(
+            error,
+        )
+
+    invitation = result["invitation"]
+    membership = result["membership"]
+
+    return Response(
+        {
+            "invitation": (
+                OrganizationInvitationPublicSerializer(
+                    invitation,
+                ).data
+            ),
+            "membership": {
+                "id": str(membership.id),
+                "organization": {
+                    "id": str(membership.organization.id),
+                    "name": (membership.organization.name),
+                    "slug": (membership.organization.slug),
+                },
+                "role": membership.role,
+                "status": membership.status,
+            },
+        },
+        status=status.HTTP_200_OK,
+    )

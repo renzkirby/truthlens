@@ -7,12 +7,12 @@ from rest_framework.test import (
     APITestCase,
 )
 
-from .models import (
+from api.models import (
     Organization,
     OrganizationMembership,
     UserProfile,
 )
-from .organization_service import (
+from api.organization_service import (
     PartnerCapability,
 )
 

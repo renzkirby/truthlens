@@ -2,11 +2,11 @@ from django.contrib.auth.models import User
 
 from django.test import TestCase
 
-from .adjudication_service import (
+from api.adjudication_service import (
     ensure_adjudication_case,
     issue_adjudication_decision,
 )
-from .models import (
+from api.models import (
     AdjudicationDecision,
     Claim,
     OfficialFactCheck,
@@ -15,13 +15,13 @@ from .models import (
     Thread,
     VerificationAssignment,
 )
-from .publishing_service import (
+from api.publishing_service import (
     InvalidPublicationTransition,
     create_fact_check_draft,
     publish_fact_check,
     submit_fact_check_for_review,
 )
-from .verification_assignment_service import (
+from api.verification_assignment_service import (
     claim_verification_assignment,
     ensure_verification_assignment,
 )

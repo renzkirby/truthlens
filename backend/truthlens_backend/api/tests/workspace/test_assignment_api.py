@@ -7,7 +7,7 @@ from rest_framework.test import (
     APITestCase,
 )
 
-from .models import (
+from api.models import (
     Claim,
     EvidenceSubmission,
     Organization,
@@ -17,7 +17,7 @@ from .models import (
     VerificationAssignment,
 )
 
-from .verification_assignment_service import (
+from api.verification_assignment_service import (
     claim_verification_assignment,
     ensure_verification_assignment,
 )

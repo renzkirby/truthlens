@@ -13,13 +13,13 @@ from rest_framework.test import (
     APITestCase,
 )
 
-from .models import (
+from api.models import (
     Organization,
     OrganizationInvitation,
     OrganizationMembership,
 )
 
-from .organization_invitation_service import (
+from api.organization_invitation_service import (
     create_organization_invitation,
 )
 

@@ -1,8 +1,8 @@
 from django.test import TestCase
 
-from .models import EvidenceSource
-from .verification.contracts import NormalizedEvidence
-from .verification.persistence import (
+from api.models import EvidenceSource
+from api.verification.contracts import NormalizedEvidence
+from api.verification.persistence import (
     persist_evidence_source,
 )
 
@@ -24,9 +24,7 @@ class EvidenceSourcePersistenceTests(TestCase):
             },
         )
 
-        source, created = persist_evidence_source(
-            evidence
-        )
+        source, created = persist_evidence_source(evidence)
 
         self.assertTrue(created)
 
@@ -65,9 +63,7 @@ class EvidenceSourcePersistenceTests(TestCase):
             content_hash="a" * 64,
         )
 
-        first_source, first_created = (
-            persist_evidence_source(first)
-        )
+        first_source, first_created = persist_evidence_source(first)
 
         second = NormalizedEvidence(
             provider="TAVILY",
@@ -76,9 +72,7 @@ class EvidenceSourcePersistenceTests(TestCase):
             content_hash="b" * 64,
         )
 
-        second_source, second_created = (
-            persist_evidence_source(second)
-        )
+        second_source, second_created = persist_evidence_source(second)
 
         self.assertTrue(first_created)
         self.assertFalse(second_created)
@@ -107,9 +101,7 @@ class EvidenceSourcePersistenceTests(TestCase):
             content_hash="c" * 64,
         )
 
-        first_source, _ = persist_evidence_source(
-            first
-        )
+        first_source, _ = persist_evidence_source(first)
 
         second = NormalizedEvidence(
             provider="TAVILY",
@@ -118,9 +110,7 @@ class EvidenceSourcePersistenceTests(TestCase):
             content_hash="c" * 64,
         )
 
-        second_source, created = (
-            persist_evidence_source(second)
-        )
+        second_source, created = persist_evidence_source(second)
 
         self.assertFalse(created)
 
@@ -147,13 +137,9 @@ class EvidenceSourcePersistenceTests(TestCase):
             content_hash="d" * 64,
         )
 
-        tavily_source, _ = persist_evidence_source(
-            tavily
-        )
+        tavily_source, _ = persist_evidence_source(tavily)
 
-        gfc_source, gfc_created = (
-            persist_evidence_source(gfc)
-        )
+        gfc_source, gfc_created = persist_evidence_source(gfc)
 
         self.assertTrue(gfc_created)
 
@@ -173,13 +159,9 @@ class EvidenceSourcePersistenceTests(TestCase):
             title="Evidence without stable identity",
         )
 
-        first_source, first_created = (
-            persist_evidence_source(evidence)
-        )
+        first_source, first_created = persist_evidence_source(evidence)
 
-        second_source, second_created = (
-            persist_evidence_source(evidence)
-        )
+        second_source, second_created = persist_evidence_source(evidence)
 
         self.assertTrue(first_created)
         self.assertTrue(second_created)

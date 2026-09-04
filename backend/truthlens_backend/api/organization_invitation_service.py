@@ -49,6 +49,10 @@ class OrganizationInvitationConflict(OrganizationInvitationError):
     pass
 
 
+class OrganizationInvitationNotFound(OrganizationInvitationError):
+    pass
+
+
 class OrganizationInvitationDeliveryError(OrganizationInvitationError):
     pass
 
@@ -100,6 +104,268 @@ def hash_invitation_token(
 
 def generate_invitation_token():
     return secrets.token_urlsafe(32)
+
+
+def _normalize_invitation_token(
+    raw_token,
+):
+    token = str(raw_token or "").strip()
+
+    if not token:
+        raise (
+            OrganizationInvitationNotFound(
+                "This invitation link is " "invalid or no longer available."
+            )
+        )
+
+    return token
+
+
+def _get_invitation_from_token(
+    raw_token,
+    *,
+    for_update=False,
+):
+    token = _normalize_invitation_token(
+        raw_token,
+    )
+
+    token_digest = hash_invitation_token(
+        token,
+    )
+
+    queryset = OrganizationInvitation.objects.select_related(
+        "organization",
+        "invited_by",
+        "accepted_by",
+        "cancelled_by",
+    )
+
+    if for_update:
+        queryset = queryset.select_for_update(
+            of=("self",),
+        )
+
+    invitation = queryset.filter(
+        token_digest=token_digest,
+    ).first()
+
+    if not invitation:
+        raise (
+            OrganizationInvitationNotFound(
+                "This invitation link is " "invalid or no longer available."
+            )
+        )
+
+    return invitation
+
+
+def get_organization_invitation_by_token(
+    raw_token,
+):
+    with transaction.atomic():
+        invitation = _get_invitation_from_token(
+            raw_token,
+            for_update=True,
+        )
+
+        now = timezone.now()
+
+        if (
+            invitation.status == OrganizationInvitation.Status.PENDING
+            and invitation.expires_at <= now
+        ):
+            invitation.status = OrganizationInvitation.Status.EXPIRED
+
+            invitation.save(
+                update_fields=[
+                    "status",
+                    "updated_at",
+                ]
+            )
+
+        return invitation
+
+
+def accept_organization_invitation(
+    *,
+    raw_token,
+    actor,
+):
+    if not actor or not actor.is_authenticated:
+        raise (
+            OrganizationInvitationAuthorizationError(
+                "You must sign in before " "accepting this invitation."
+            )
+        )
+
+    expired = False
+
+    accepted_invitation = None
+    membership = None
+
+    with transaction.atomic():
+        invitation = _get_invitation_from_token(
+            raw_token,
+            for_update=True,
+        )
+
+        now = timezone.now()
+
+        if (
+            invitation.status == OrganizationInvitation.Status.PENDING
+            and invitation.expires_at <= now
+        ):
+            invitation.status = OrganizationInvitation.Status.EXPIRED
+
+            invitation.save(
+                update_fields=[
+                    "status",
+                    "updated_at",
+                ]
+            )
+
+            expired = True
+
+        else:
+            if invitation.status == OrganizationInvitation.Status.EXPIRED:
+                raise (OrganizationInvitationConflict("This invitation has expired."))
+
+            if invitation.status == OrganizationInvitation.Status.ACCEPTED:
+                raise (
+                    OrganizationInvitationConflict(
+                        "This invitation has " "already been accepted."
+                    )
+                )
+
+            if invitation.status == OrganizationInvitation.Status.CANCELLED:
+                raise (
+                    OrganizationInvitationConflict(
+                        "This invitation is " "no longer available."
+                    )
+                )
+
+            if invitation.status != OrganizationInvitation.Status.PENDING:
+                raise (
+                    OrganizationInvitationConflict(
+                        "This invitation cannot " "be accepted."
+                    )
+                )
+
+            actor_email = str(actor.email or "").strip().lower()
+
+            if not actor_email or actor_email != invitation.email:
+                raise (
+                    OrganizationInvitationAuthorizationError(
+                        "This invitation was " "issued to a different " "email address."
+                    )
+                )
+
+            # Defense in depth. Ordinary
+            # invitations must never produce
+            # organization ownership.
+            if invitation.invited_role not in OWNER_INVITABLE_ROLES:
+                raise (
+                    InvalidOrganizationInvitationRole(
+                        "This invitation contains " "an invalid organization " "role."
+                    )
+                )
+
+            membership = (
+                OrganizationMembership.objects.select_for_update()
+                .filter(
+                    organization=(invitation.organization),
+                    user=actor,
+                )
+                .first()
+            )
+
+            if membership and membership.status != OrganizationMembership.Status.LEFT:
+                raise (
+                    OrganizationInvitationConflict(
+                        "You already have a "
+                        "current membership in "
+                        "this organization."
+                    )
+                )
+
+            if membership:
+                membership.role = invitation.invited_role
+
+                membership.status = OrganizationMembership.Status.ACTIVE
+
+                membership.approved_at = now
+
+                # The organization authority
+                # that originally issued the
+                # invitation remains the
+                # approving authority.
+                membership.approved_by = invitation.invited_by
+
+                membership.save(
+                    update_fields=[
+                        "role",
+                        "status",
+                        "approved_at",
+                        "approved_by",
+                    ]
+                )
+
+            else:
+                try:
+                    with transaction.atomic():
+                        membership = OrganizationMembership.objects.create(
+                            organization=(invitation.organization),
+                            user=actor,
+                            role=(invitation.invited_role),
+                            status=(OrganizationMembership.Status.ACTIVE),
+                            approved_at=now,
+                            approved_by=(invitation.invited_by),
+                        )
+
+                except IntegrityError as error:
+                    raise (
+                        OrganizationInvitationConflict(
+                            "You already have a "
+                            "current membership in "
+                            "this organization."
+                        )
+                    ) from error
+
+            invitation.status = OrganizationInvitation.Status.ACCEPTED
+
+            invitation.accepted_by = actor
+            invitation.accepted_at = now
+
+            # Consume the invitation token.
+            #
+            # This makes acceptance genuinely
+            # single-use even if a later caller
+            # accidentally looks up the token
+            # before checking status.
+            invitation.token_digest = hash_invitation_token(generate_invitation_token())
+
+            invitation.save(
+                update_fields=[
+                    "status",
+                    "accepted_by",
+                    "accepted_at",
+                    "token_digest",
+                    "updated_at",
+                ]
+            )
+
+            accepted_invitation = invitation
+
+    # Raise only AFTER leaving the transaction so
+    # the EXPIRED materialization above commits.
+    if expired:
+        raise (OrganizationInvitationConflict("This invitation has expired."))
+
+    return {
+        "invitation": accepted_invitation,
+        "membership": membership,
+    }
 
 
 def build_invitation_url(

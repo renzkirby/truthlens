@@ -4,20 +4,18 @@ import requests
 
 from django.test import TestCase
 
-from .models import EvidenceSource
-from .verification.contracts import RawEvidence
-from .verification.ingestion import (
+from api.models import EvidenceSource
+from api.verification.contracts import RawEvidence
+from api.verification.ingestion import (
     ingest_provider_evidence,
     ingest_raw_evidence,
 )
-from .verification.providers.google_fact_check import (
+from api.verification.providers.google_fact_check import (
     GoogleFactCheckProvider,
 )
 
 
-class GoogleFactCheckIngestionTests(
-    TestCase
-):
+class GoogleFactCheckIngestionTests(TestCase):
 
     def _build_provider(
         self,
@@ -46,15 +44,11 @@ class GoogleFactCheckIngestionTests(
         payload = {
             "claims": [
                 {
-                    "text": (
-                        "Example public claim."
-                    ),
+                    "text": ("Example public claim."),
                     "claimReview": [
                         {
                             "publisher": {
-                                "name": (
-                                    "Example Checker"
-                                ),
+                                "name": ("Example Checker"),
                             },
                             "url": (
                                 "HTTPS://Example.com:443/"
@@ -63,26 +57,16 @@ class GoogleFactCheckIngestionTests(
                                 "&id=42"
                                 "#results"
                             ),
-                            "title": (
-                                "Example Fact Check"
-                            ),
-                            "reviewDate": (
-                                "2026-08-21T12:30:00Z"
-                            ),
-                            "textualRating": (
-                                "False"
-                            ),
+                            "title": ("Example Fact Check"),
+                            "reviewDate": ("2026-08-21T12:30:00Z"),
+                            "textualRating": ("False"),
                         }
                     ],
                 }
             ]
         }
 
-        provider, _, _ = (
-            self._build_provider(
-                payload
-            )
-        )
+        provider, _, _ = self._build_provider(payload)
 
         sources = ingest_provider_evidence(
             provider,
@@ -118,15 +102,10 @@ class GoogleFactCheckIngestionTests(
 
         self.assertEqual(
             source.canonical_url,
-            (
-                "https://example.com/"
-                "fact-check?id=42"
-            ),
+            ("https://example.com/" "fact-check?id=42"),
         )
 
-        self.assertIsNotNone(
-            source.content_hash
-        )
+        self.assertIsNotNone(source.content_hash)
 
         self.assertIn(
             "Rating: False",
@@ -169,10 +148,7 @@ class GoogleFactCheckIngestionTests(
                                 "name": "Checker",
                             },
                             "url": (
-                                "https://example.com/"
-                                "fact-check"
-                                "?id=42"
-                                "#results"
+                                "https://example.com/" "fact-check" "?id=42" "#results"
                             ),
                             "title": "Updated Review",
                             "textualRating": "False",
@@ -182,30 +158,18 @@ class GoogleFactCheckIngestionTests(
             ]
         }
 
-        first_provider, _, _ = (
-            self._build_provider(
-                first_payload
-            )
+        first_provider, _, _ = self._build_provider(first_payload)
+
+        second_provider, _, _ = self._build_provider(second_payload)
+
+        first_sources = ingest_provider_evidence(
+            first_provider,
+            "example claim",
         )
 
-        second_provider, _, _ = (
-            self._build_provider(
-                second_payload
-            )
-        )
-
-        first_sources = (
-            ingest_provider_evidence(
-                first_provider,
-                "example claim",
-            )
-        )
-
-        second_sources = (
-            ingest_provider_evidence(
-                second_provider,
-                "example claim",
-            )
+        second_sources = ingest_provider_evidence(
+            second_provider,
+            "example claim",
         )
 
         self.assertEqual(
@@ -235,34 +199,22 @@ class GoogleFactCheckIngestionTests(
                             "publisher": {
                                 "name": "Checker A",
                             },
-                            "url": (
-                                "https://a.example/"
-                                "review"
-                            ),
+                            "url": ("https://a.example/" "review"),
                             "textualRating": "False",
                         },
                         {
                             "publisher": {
                                 "name": "Checker B",
                             },
-                            "url": (
-                                "https://b.example/"
-                                "review"
-                            ),
-                            "textualRating": (
-                                "Misleading"
-                            ),
+                            "url": ("https://b.example/" "review"),
+                            "textualRating": ("Misleading"),
                         },
                     ],
                 }
             ]
         }
 
-        provider, _, _ = (
-            self._build_provider(
-                payload
-            )
-        )
+        provider, _, _ = self._build_provider(payload)
 
         sources = ingest_provider_evidence(
             provider,
@@ -280,10 +232,7 @@ class GoogleFactCheckIngestionTests(
         )
 
         self.assertEqual(
-            {
-                source.publisher
-                for source in sources
-            },
+            {source.publisher for source in sources},
             {
                 "Checker A",
                 "Checker B",
@@ -294,10 +243,8 @@ class GoogleFactCheckIngestionTests(
         self,
     ):
         response = Mock()
-        response.raise_for_status.side_effect = (
-            requests.HTTPError(
-                "Google provider unavailable"
-            )
+        response.raise_for_status.side_effect = requests.HTTPError(
+            "Google provider unavailable"
         )
 
         http_client = Mock()
@@ -308,9 +255,7 @@ class GoogleFactCheckIngestionTests(
             http_client=http_client,
         )
 
-        with self.assertRaises(
-            requests.HTTPError
-        ):
+        with self.assertRaises(requests.HTTPError):
             ingest_provider_evidence(
                 provider,
                 "example claim",
@@ -333,27 +278,21 @@ class GoogleFactCheckIngestionTests(
                             "publisher": {
                                 "name": "Checker 1",
                             },
-                            "url": (
-                                "https://example.com/1"
-                            ),
+                            "url": ("https://example.com/1"),
                             "textualRating": "False",
                         },
                         {
                             "publisher": {
                                 "name": "Checker 2",
                             },
-                            "url": (
-                                "https://example.com/2"
-                            ),
+                            "url": ("https://example.com/2"),
                             "textualRating": "True",
                         },
                         {
                             "publisher": {
                                 "name": "Checker 3",
                             },
-                            "url": (
-                                "https://example.com/3"
-                            ),
+                            "url": ("https://example.com/3"),
                             "textualRating": "Misleading",
                         },
                     ],
@@ -361,11 +300,7 @@ class GoogleFactCheckIngestionTests(
             ]
         }
 
-        provider, _, _ = (
-            self._build_provider(
-                payload
-            )
-        )
+        provider, _, _ = self._build_provider(payload)
 
         sources = ingest_provider_evidence(
             provider,
@@ -383,10 +318,7 @@ class GoogleFactCheckIngestionTests(
             2,
         )
         self.assertEqual(
-            {
-                source.publisher
-                for source in sources
-            },
+            {source.publisher for source in sources},
             {
                 "Checker 1",
                 "Checker 2",
@@ -398,22 +330,14 @@ class GoogleFactCheckIngestionTests(
     ):
         raw_evidence = RawEvidence(
             provider="GOOGLE_FACT_CHECK",
-            url=(
-                "HTTPS://Example.com:443/"
-                "fact-check?utm_source=test&id=42"
-            ),
+            url=("HTTPS://Example.com:443/" "fact-check?utm_source=test&id=42"),
             title="Example Review",
             publisher="Example Checker",
-            content=(
-                "Claim reviewed: Example claim.\n"
-                "Rating: False"
-            ),
+            content=("Claim reviewed: Example claim.\n" "Rating: False"),
             source_type="FACT_CHECK",
         )
 
-        sources = ingest_raw_evidence(
-            [raw_evidence]
-        )
+        sources = ingest_raw_evidence([raw_evidence])
 
         self.assertEqual(
             len(sources),
@@ -437,19 +361,14 @@ class GoogleFactCheckIngestionTests(
             "https://example.com/fact-check?id=42",
         )
 
-        self.assertIsNotNone(
-            source.content_hash
-        )
+        self.assertIsNotNone(source.content_hash)
 
     def test_raw_evidence_ingestion_reuses_existing_source(
         self,
     ):
         first = RawEvidence(
             provider="GOOGLE_FACT_CHECK",
-            url=(
-                "https://example.com/fact-check"
-                "?utm_source=test&id=42"
-            ),
+            url=("https://example.com/fact-check" "?utm_source=test&id=42"),
             title="Original Review",
             publisher="Example Checker",
             content="Rating: False",
@@ -458,23 +377,16 @@ class GoogleFactCheckIngestionTests(
 
         second = RawEvidence(
             provider="GOOGLE_FACT_CHECK",
-            url=(
-                "https://example.com/fact-check"
-                "?id=42#results"
-            ),
+            url=("https://example.com/fact-check" "?id=42#results"),
             title="Updated Review",
             publisher="Example Checker",
             content="Rating: False",
             source_type="FACT_CHECK",
         )
 
-        first_sources = ingest_raw_evidence(
-            [first]
-        )
+        first_sources = ingest_raw_evidence([first])
 
-        second_sources = ingest_raw_evidence(
-            [second]
-        )
+        second_sources = ingest_raw_evidence([second])
 
         self.assertEqual(
             EvidenceSource.objects.count(),

@@ -1,14 +1,14 @@
 from django.contrib.auth.models import User
 from django.test import TestCase
 
-from .adjudication_service import (
+from api.adjudication_service import (
     ensure_adjudication_case,
     ensure_claim_adjudication_readiness,
 )
-from .evidence_review_service import (
+from api.evidence_review_service import (
     ensure_evidence_case,
 )
-from .models import (
+from api.models import (
     Claim,
     EvidenceSubmission,
     ModerationCase,
@@ -18,10 +18,10 @@ from .models import (
     VerificationAssignment,
     UserProfile,
 )
-from .moderation_service import (
+from api.moderation_service import (
     ensure_safety_case,
 )
-from .verification_assignment_service import (
+from api.verification_assignment_service import (
     VerificationAssignmentAuthorizationError,
     VerificationAssignmentConflict,
     VerificationAssignmentReleaseBlocked,
@@ -30,7 +30,7 @@ from .verification_assignment_service import (
     get_claim_verification_organization,
     release_verification_assignment,
 )
-from .organization_service import (
+from api.organization_service import (
     PartnerCapability,
     get_user_capabilities,
     has_capability,

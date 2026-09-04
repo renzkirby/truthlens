@@ -159,6 +159,16 @@ urlpatterns = [
         views.fact_check_publish,
         name=("moderation_fact_check_publish"),
     ),
+    path(
+        ("organization-invitations/" "<str:token>/"),
+        views.organization_invitation_detail,
+        name="organization_invitation_detail",
+    ),
+    path(
+        ("organization-invitations/" "<str:token>/" "accept/"),
+        views.organization_invitation_accept,
+        name="organization_invitation_accept",
+    ),
     # GoogleLogin URL
     path("auth/google/", views.GoogleLogin.as_view(), name="google_login"),
 ]
