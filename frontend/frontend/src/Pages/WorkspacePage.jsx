@@ -313,7 +313,19 @@ function WorkspacePage() {
                               organizationName={selectedOrganization?.name}
                            />
                         ) : (
-                           <div className="workspace-placeholder">{/* keep existing placeholder exactly as-is */}</div>
+                           <div className="workspace-placeholder">
+                              <div className="workspace-placeholder-icon">
+                                 <Icons name={activeSection.icon} size={24} />
+                              </div>
+
+                              <div>
+                                 <strong>Workspace foundation ready</strong>
+
+                                 <p>This section is authorized and ready for its workflow integration.</p>
+
+                                 <code>{activeSection.capability}</code>
+                              </div>
+                           </div>
                         )}
                      </>
                   ) : (
