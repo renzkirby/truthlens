@@ -120,6 +120,7 @@ export const API_ENDPOINTS = {
    VERIFICATION_INTAKE: "verification/intake/",
    VERIFICATION_WORKLOAD: "verification/workload/",
    VERIFICATION_ASSIGNMENT_CLAIM: (assignmentId) => `verification/assignments/${assignmentId}/claim/`,
+   VERIFICATION_ASSIGNMENT_RELEASE: (assignmentId) => `verification/assignments/${assignmentId}/release/`,
 
    // Other
    POLLING: "polling/",

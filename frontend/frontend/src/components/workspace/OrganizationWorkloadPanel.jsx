@@ -37,7 +37,7 @@ function formatLabel(value) {
       .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-function OrganizationWorkloadPanel({ organizationId, organizationName }) {
+function OrganizationWorkloadPanel({ organizationId, organizationName, canReleaseInvestigation = false }) {
    const { authFetch } = useAuth();
 
    const [offset, setOffset] = useState(0);
@@ -52,6 +52,14 @@ function OrganizationWorkloadPanel({ organizationId, organizationName }) {
    const [loading, setLoading] = useState(true);
 
    const [errorMessage, setErrorMessage] = useState("");
+
+   const [notice, setNotice] = useState("");
+
+   const [actionError, setActionError] = useState("");
+
+   const [confirmingReleaseId, setConfirmingReleaseId] = useState(null);
+
+   const [releasingId, setReleasingId] = useState(null);
 
    const workloadUrl = useMemo(() => {
       if (!organizationId) {
@@ -115,6 +123,9 @@ function OrganizationWorkloadPanel({ organizationId, organizationName }) {
    const refresh = () => {
       setLoading(true);
       setErrorMessage("");
+      setNotice("");
+      setActionError("");
+      setConfirmingReleaseId(null);
 
       setRequestVersion((current) => current + 1);
    };
@@ -122,6 +133,9 @@ function OrganizationWorkloadPanel({ organizationId, organizationName }) {
    const handlePreviousPage = () => {
       setLoading(true);
       setErrorMessage("");
+      setNotice("");
+      setActionError("");
+      setConfirmingReleaseId(null);
 
       setOffset((currentOffset) => Math.max(0, currentOffset - PAGE_SIZE));
    };
@@ -129,6 +143,9 @@ function OrganizationWorkloadPanel({ organizationId, organizationName }) {
    const handleNextPage = () => {
       setLoading(true);
       setErrorMessage("");
+      setNotice("");
+      setActionError("");
+      setConfirmingReleaseId(null);
 
       setOffset((currentOffset) => currentOffset + PAGE_SIZE);
    };
@@ -165,6 +182,66 @@ function OrganizationWorkloadPanel({ organizationId, organizationName }) {
 
    const rangeEnd = Math.min(offset + workload.results.length, workload.count);
 
+   const removeReleasedAssignmentFromWorkload = (assignmentId) => {
+      const remainingResults = workload.results.filter((assignment) => assignment.id !== assignmentId);
+
+      setWorkload((current) => ({
+         ...current,
+         count: Math.max(0, Number(current.count ?? 0) - 1),
+         results: current.results.filter((assignment) => assignment.id !== assignmentId),
+      }));
+
+      // If releasing the final investigation on
+      // a later page makes that page invalid,
+      // move to the previous valid page.
+      if (offset > 0 && remainingResults.length === 0) {
+         setLoading(true);
+
+         setOffset((currentOffset) => Math.max(0, currentOffset - PAGE_SIZE));
+      }
+   };
+
+   const handleRelease = async (assignmentId) => {
+      if (!assignmentId || !canReleaseInvestigation) {
+         return;
+      }
+
+      setReleasingId(assignmentId);
+      setActionError("");
+      setNotice("");
+
+      try {
+         await authFetch(resolveApiEndpoint("VERIFICATION_ASSIGNMENT_RELEASE", assignmentId), {
+            method: "POST",
+         });
+
+         setConfirmingReleaseId(null);
+
+         removeReleasedAssignmentFromWorkload(assignmentId);
+
+         setNotice(
+            `Investigation released by ${
+               organizationName || "your organization"
+            }. It has returned to shared Verification Intake.`,
+         );
+      } catch (error) {
+         setConfirmingReleaseId(null);
+
+         if (error?.status === 409) {
+            setActionError(error?.message || "This investigation can no longer be released.");
+
+            // Reconcile silently with the server.
+            // Do not replace the whole workload with
+            // another loading screen.
+            setRequestVersion((current) => current + 1);
+         } else {
+            setActionError(error?.message || "Unable to release this investigation.");
+         }
+      } finally {
+         setReleasingId(null);
+      }
+   };
+
    return (
       <div className="organization-workload">
          <div className="workload-toolbar">
@@ -182,6 +259,26 @@ function OrganizationWorkloadPanel({ organizationId, organizationName }) {
             </button>
          </div>
 
+         {notice && (
+            <div className="workload-notice" role="status" aria-live="polite">
+               <Icons name="info" size={17} />
+
+               <span>{notice}</span>
+            </div>
+         )}
+
+         {actionError && (
+            <div className="workload-action-error" role="alert">
+               <Icons name="alert-circle" size={17} />
+
+               <div>
+                  <strong>Release unavailable</strong>
+
+                  <span>{actionError}</span>
+               </div>
+            </div>
+         )}
+
          {workload.results.length === 0 ? (
             <div className="workload-state">
                <Icons name="inbox" size={25} />
@@ -197,6 +294,9 @@ function OrganizationWorkloadPanel({ organizationId, organizationName }) {
                <div className="workload-list">
                   {workload.results.map((assignment) => {
                      const claim = assignment?.claim ?? {};
+                     const isConfirmingRelease = confirmingReleaseId === assignment.id;
+
+                     const isReleasing = releasingId === assignment.id;
 
                      return (
                         <article key={assignment.id} className="workload-card">
@@ -235,6 +335,59 @@ function OrganizationWorkloadPanel({ organizationId, organizationName }) {
                                  <strong>{formatDateTime(claim.last_updated)}</strong>
                               </div>
                            </div>
+                           {canReleaseInvestigation && (
+                              <div className="workload-card-actions">
+                                 {isConfirmingRelease ? (
+                                    <div className="workload-release-confirm">
+                                       <div className="workload-release-warning">
+                                          <Icons name="alert-triangle" size={17} />
+
+                                          <span>
+                                             Release this investigation back to shared intake? This is only permitted
+                                             before authoritative review work begins.
+                                          </span>
+                                       </div>
+
+                                       <div className="workload-release-controls">
+                                          <button
+                                             type="button"
+                                             className="workload-action-button secondary"
+                                             disabled={isReleasing}
+                                             onClick={() => setConfirmingReleaseId(null)}
+                                          >
+                                             Cancel
+                                          </button>
+
+                                          <button
+                                             type="button"
+                                             className="workload-action-button primary"
+                                             disabled={isReleasing}
+                                             onClick={() => handleRelease(assignment.id)}
+                                          >
+                                             {isReleasing ? (
+                                                <>
+                                                   <Icons name="loader" size={14} className="workload-spinner" />
+                                                   Releasing...
+                                                </>
+                                             ) : (
+                                                "Confirm release"
+                                             )}
+                                          </button>
+                                       </div>
+                                    </div>
+                                 ) : (
+                                    <button
+                                       type="button"
+                                       className="workload-release-button"
+                                       disabled={Boolean(releasingId)}
+                                       onClick={() => setConfirmingReleaseId(assignment.id)}
+                                    >
+                                       <Icons name="logout" size={15} />
+                                       Release investigation
+                                    </button>
+                                 )}
+                              </div>
+                           )}
                         </article>
                      );
                   })}

@@ -315,3 +315,142 @@
       flex-direction: column;
    }
 }
+
+.workload-notice,
+.workload-action-error {
+   display: flex;
+   align-items: flex-start;
+   gap: 10px;
+   margin-bottom: 16px;
+   padding: 12px 14px;
+   border-radius: 9px;
+   font-size: 0.82rem;
+   line-height: 1.5;
+}
+
+.workload-notice {
+   border: 1px solid var(--border-default);
+   background: var(--bg-subtle);
+   color: var(--text-body);
+}
+
+.workload-action-error {
+   border: 1px solid var(--verdict-fake-border);
+   background: var(--verdict-fake-bg);
+   color: var(--verdict-fake-text);
+}
+
+.workload-action-error > div {
+   display: flex;
+   flex-direction: column;
+   gap: 2px;
+}
+
+.workload-card-actions {
+   display: flex;
+   justify-content: flex-end;
+   margin-top: 16px;
+   padding-top: 14px;
+   border-top: 1px solid var(--border-light);
+}
+
+.workload-release-button,
+.workload-action-button {
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   gap: 7px;
+   min-height: 36px;
+   padding: 0 12px;
+   border-radius: 8px;
+   font: inherit;
+   font-size: 0.78rem;
+   font-weight: 650;
+   cursor: pointer;
+}
+
+.workload-release-button {
+   border: 1px solid var(--border-default);
+   background: var(--bg-surface);
+   color: var(--text-body);
+}
+
+.workload-release-button:hover:not(:disabled) {
+   border-color: var(--verdict-misleading-border);
+   background: var(--verdict-misleading-bg);
+   color: var(--verdict-misleading-text);
+}
+
+.workload-release-confirm {
+   width: 100%;
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 16px;
+   padding: 12px;
+   border: 1px solid var(--verdict-misleading-border);
+   border-radius: 9px;
+   background: var(--verdict-misleading-bg);
+}
+
+.workload-release-warning {
+   min-width: 0;
+   display: flex;
+   align-items: flex-start;
+   gap: 8px;
+   color: var(--verdict-misleading-text);
+   font-size: 0.78rem;
+   line-height: 1.5;
+}
+
+.workload-release-warning svg {
+   flex: 0 0 auto;
+   margin-top: 1px;
+}
+
+.workload-release-controls {
+   flex: 0 0 auto;
+   display: flex;
+   gap: 8px;
+}
+
+.workload-action-button.secondary {
+   border: 1px solid var(--border-default);
+   background: var(--bg-surface);
+   color: var(--text-body);
+}
+
+.workload-action-button.primary {
+   border: 1px solid var(--brand-primary);
+   background: var(--brand-primary);
+   color: var(--text-inverse);
+}
+
+.workload-release-button:disabled,
+.workload-action-button:disabled {
+   cursor: not-allowed;
+   opacity: 0.6;
+}
+
+@media (max-width: 760px) {
+   .workload-card-actions {
+      justify-content: stretch;
+   }
+
+   .workload-release-button {
+      width: 100%;
+   }
+
+   .workload-release-confirm {
+      align-items: stretch;
+      flex-direction: column;
+   }
+
+   .workload-release-controls {
+      width: 100%;
+   }
+
+   .workload-release-controls button {
+      flex: 1;
+   }
+}

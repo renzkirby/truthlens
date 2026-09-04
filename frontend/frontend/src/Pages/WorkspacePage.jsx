@@ -311,6 +311,9 @@ function WorkspacePage() {
                               key={selectedOrganizationId ?? "no-organization"}
                               organizationId={selectedOrganizationId}
                               organizationName={selectedOrganization?.name}
+                              canReleaseInvestigation={organizationCapabilities.includes(
+                                 WorkspaceCapability.CLAIM_VERIFICATION_WORK,
+                              )}
                            />
                         ) : (
                            <div className="workspace-placeholder">
