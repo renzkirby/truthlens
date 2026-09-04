@@ -9,6 +9,7 @@ from .models import (
     Vote,
     Organization,
     OrganizationMembership,
+    VerificationAssignment,
 )
 
 # Register your models here.
@@ -21,3 +22,4 @@ admin.site.register(ThreadComment)
 admin.site.register(ThreadFlag)
 admin.site.register(Organization)
 admin.site.register(OrganizationMembership)
+admin.site.register(VerificationAssignment)

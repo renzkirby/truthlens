@@ -13,6 +13,7 @@ import {
 } from "../utils/workspace";
 
 import "./WorkspacePage.css";
+import VerificationIntakePanel from "../components/workspace/VerificationIntakePanel.jsx";
 
 const WORKSPACE_SECTIONS = [
    {
@@ -278,19 +279,27 @@ function WorkspacePage() {
                            </div>
                         </div>
 
-                        <div className="workspace-placeholder">
-                           <div className="workspace-placeholder-icon">
-                              <Icons name={activeSection.icon} size={24} />
+                        {activeSection.id === "intake" ? (
+                           <VerificationIntakePanel
+                              key={selectedOrganizationId ?? "no-organization"}
+                              organizationId={selectedOrganizationId}
+                              organizationName={selectedOrganization?.name}
+                           />
+                        ) : (
+                           <div className="workspace-placeholder">
+                              <div className="workspace-placeholder-icon">
+                                 <Icons name={activeSection.icon} size={24} />
+                              </div>
+
+                              <div>
+                                 <strong>Workspace foundation ready</strong>
+
+                                 <p>This section is authorized and ready for its workflow integration.</p>
+
+                                 <code>{activeSection.capability}</code>
+                              </div>
                            </div>
-
-                           <div>
-                              <strong>Workspace foundation ready</strong>
-
-                              <p>This section is authorized and ready for its workflow integration.</p>
-
-                              <code>{activeSection.capability}</code>
-                           </div>
-                        </div>
+                        )}
                      </>
                   ) : (
                      <div className="workspace-empty-state">

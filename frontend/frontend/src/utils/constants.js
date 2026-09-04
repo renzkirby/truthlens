@@ -116,6 +116,10 @@ export const API_ENDPOINTS = {
    MOD_VERDICT_QUEUE: "moderation/verdict-queue/",
    MOD_RESOLVE_THREAD: (threadId) => `moderation/threads/${threadId}/resolve/`,
 
+   // Verification Workspace
+   VERIFICATION_INTAKE: "verification/intake/",
+   VERIFICATION_ASSIGNMENT_CLAIM: (assignmentId) => `verification/assignments/${assignmentId}/claim/`,
+
    // Other
    POLLING: "polling/",
 };
