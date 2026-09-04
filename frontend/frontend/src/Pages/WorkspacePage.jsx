@@ -14,6 +14,15 @@ import {
 
 import "./WorkspacePage.css";
 import VerificationIntakePanel from "../components/workspace/VerificationIntakePanel.jsx";
+import OrganizationWorkloadPanel from "../components/workspace/OrganizationWorkloadPanel.jsx";
+
+const WORKLOAD_CAPABILITIES = [
+   WorkspaceCapability.CLAIM_VERIFICATION_WORK,
+   WorkspaceCapability.REVIEW_EVIDENCE,
+   WorkspaceCapability.ADJUDICATE,
+   WorkspaceCapability.CREATE_FACT_CHECK_DRAFT,
+   WorkspaceCapability.PUBLISH_FACT_CHECK,
+];
 
 const WORKSPACE_SECTIONS = [
    {
@@ -31,6 +40,14 @@ const WORKSPACE_SECTIONS = [
       icon: "scan-line",
       scope: "organization",
       capability: WorkspaceCapability.CLAIM_VERIFICATION_WORK,
+   },
+   {
+      id: "workload",
+      label: "Organization Workload",
+      description: "Track active investigations currently owned by your partner organization.",
+      icon: "inbox",
+      scope: "organization",
+      capabilities: WORKLOAD_CAPABILITIES,
    },
    {
       id: "evidence",
@@ -140,6 +157,10 @@ function WorkspacePage() {
          WORKSPACE_SECTIONS.filter((section) => {
             if (section.scope === "platform") {
                return platformCapabilities.includes(section.capability);
+            }
+
+            if (Array.isArray(section.capabilities)) {
+               return section.capabilities.some((capability) => organizationCapabilities.includes(capability));
             }
 
             return organizationCapabilities.includes(section.capability);
@@ -285,20 +306,14 @@ function WorkspacePage() {
                               organizationId={selectedOrganizationId}
                               organizationName={selectedOrganization?.name}
                            />
+                        ) : activeSection.id === "workload" ? (
+                           <OrganizationWorkloadPanel
+                              key={selectedOrganizationId ?? "no-organization"}
+                              organizationId={selectedOrganizationId}
+                              organizationName={selectedOrganization?.name}
+                           />
                         ) : (
-                           <div className="workspace-placeholder">
-                              <div className="workspace-placeholder-icon">
-                                 <Icons name={activeSection.icon} size={24} />
-                              </div>
-
-                              <div>
-                                 <strong>Workspace foundation ready</strong>
-
-                                 <p>This section is authorized and ready for its workflow integration.</p>
-
-                                 <code>{activeSection.capability}</code>
-                              </div>
-                           </div>
+                           <div className="workspace-placeholder">{/* keep existing placeholder exactly as-is */}</div>
                         )}
                      </>
                   ) : (

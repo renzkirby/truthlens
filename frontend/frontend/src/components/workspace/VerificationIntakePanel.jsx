@@ -188,6 +188,26 @@ function VerificationIntakePanel({ organizationId, organizationName }) {
       setOffset(offset + PAGE_SIZE);
    };
 
+   const removeClaimedAssignmentFromIntake = (assignmentId) => {
+      const remainingResults = intake.results.filter((assignment) => assignment.id !== assignmentId);
+
+      setIntake((current) => ({
+         ...current,
+         count: Math.max(0, Number(current.count ?? 0) - 1),
+         results: current.results.filter((assignment) => assignment.id !== assignmentId),
+      }));
+
+      // If the claimed investigation was the only
+      // item on a later page, return to the previous
+      // valid page instead of displaying a false
+      // "Intake is clear" state.
+      if (offset > 0 && remainingResults.length === 0) {
+         setLoading(true);
+
+         setOffset((currentOffset) => Math.max(0, currentOffset - PAGE_SIZE));
+      }
+   };
+
    const handleClaim = async (assignmentId) => {
       if (!assignmentId || !organizationId) {
          return;
@@ -210,13 +230,13 @@ function VerificationIntakePanel({ organizationId, organizationName }) {
 
          setConfirmingId(null);
 
+         removeClaimedAssignmentFromIntake(assignmentId);
+
          setNotice(
             `Investigation claimed for ${
                organizationName || "your organization"
             }. It is now part of the organization workload.`,
          );
-
-         refreshFromFirstPage();
       } catch (error) {
          setConfirmingId(null);
 
