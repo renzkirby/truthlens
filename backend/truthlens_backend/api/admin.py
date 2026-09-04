@@ -10,6 +10,7 @@ from .models import (
     Organization,
     OrganizationMembership,
     VerificationAssignment,
+    OrganizationInvitation,
 )
 
 # Register your models here.
@@ -23,3 +24,4 @@ admin.site.register(ThreadFlag)
 admin.site.register(Organization)
 admin.site.register(OrganizationMembership)
 admin.site.register(VerificationAssignment)
+admin.site.register(OrganizationInvitation)
