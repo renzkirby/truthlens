@@ -18,9 +18,10 @@ import Icons from "../components/Icons.jsx";
 import { useGoogleLogin } from "@react-oauth/google";
 import AuthShell from "../components/auth/AuthShell.jsx";
 import { useNotification } from "../hooks/useNotification";
-
 // ── Utilities & Constants ──
 import { resolveApiEndpoint } from "../utils/api";
+import { canAccessWorkspace } from "../utils/workspace";
+import { resolveAuthDestination } from "../utils/authNavigation";
 
 // ── Styles ──
 import "./LoginPage.css";
@@ -34,7 +35,7 @@ function LoginPage() {
    const [justLoggedIn, setJustLoggedIn] = useState(false);
    const loginEndpoint = resolveApiEndpoint("LOGIN");
    const googleLoginEndpoint = resolveApiEndpoint("GOOGLE_LOGIN");
-   const from = location.state?.from ? location.state.from.pathname + location.state.from.search : null;
+   const from = resolveAuthDestination(location.state?.from, null);
 
    const [error, setError] = useState(null);
    const [formValues, setFormValues] = useState({
@@ -56,9 +57,7 @@ function LoginPage() {
             duration: 3000,
          });
 
-         const isModerator = user.role === "MOD" || user.role === "MODERATOR";
-
-         const destination = from || (isModerator ? "/moderation" : "/community");
+         const destination = from || (canAccessWorkspace(user) ? "/workspace" : "/community");
 
          navigate(destination, {
             replace: true,
@@ -285,7 +284,7 @@ function LoginPage() {
 
                   <div className="signup-prompt">
                      Don't have an account?{" "}
-                     <Link to="/register" state={{ from: location.state?.from }}>
+                     <Link to="/register" state={from ? { from } : undefined}>
                         Create Account
                      </Link>
                   </div>

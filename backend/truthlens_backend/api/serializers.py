@@ -13,11 +13,16 @@ from .models import (
     OfficialFactCheck,
     OfficialFactCheckSource,
     VerificationAssignment,
+    OrganizationMembership,
+    OrganizationInvitation,
 )
 from .services import validate_public_url, check_url_threat_reputation
 from .trust_service import calculate_trust_components
 from django.contrib.auth.password_validation import validate_password
 import json, ast
+from .organization_service import (
+    get_workspace_access_context,
+)
 
 
 class PublicIdentityProfileSerializer(serializers.ModelSerializer):
@@ -271,8 +276,13 @@ class UserWithTrustBreakdownSerializer(UserSerializer):
 
 
 class CurrentUserSerializer(UserWithTrustBreakdownSerializer):
+    workspace = serializers.SerializerMethodField()
+
+    def get_workspace(self, obj):
+        return get_workspace_access_context(obj)
+
     class Meta(UserWithTrustBreakdownSerializer.Meta):
-        fields = UserWithTrustBreakdownSerializer.Meta.fields
+        fields = UserWithTrustBreakdownSerializer.Meta.fields + ["workspace"]
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -467,6 +477,12 @@ class VerificationIntakeClaimSerializer(serializers.ModelSerializer):
     assignments at once.
     """
 
+    community_threads = PublicThreadSummarySerializer(
+        source="threads",
+        many=True,
+        read_only=True,
+    )
+
     class Meta:
         model = Claim
 
@@ -483,6 +499,7 @@ class VerificationIntakeClaimSerializer(serializers.ModelSerializer):
             "source_link",
             "media_url",
             "last_updated",
+            "community_threads",
         ]
 
         read_only_fields = fields
@@ -495,6 +512,188 @@ class VerificationAssignmentUserSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "username",
+        ]
+
+        read_only_fields = fields
+
+
+class OrganizationAdminUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+
+        fields = [
+            "id",
+            "username",
+            "email",
+        ]
+
+        read_only_fields = fields
+
+
+class OrganizationInvitationActorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+
+        fields = [
+            "id",
+            "username",
+        ]
+
+        read_only_fields = fields
+
+
+class OrganizationInvitationCreateSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    invited_role = serializers.ChoiceField(
+        choices=(OrganizationMembership.Role.choices),
+    )
+
+
+class OrganizationInvitationAdminSerializer(serializers.ModelSerializer):
+    organization = serializers.SerializerMethodField()
+
+    invited_by = OrganizationInvitationActorSerializer(
+        read_only=True,
+    )
+
+    accepted_by = OrganizationInvitationActorSerializer(
+        read_only=True,
+    )
+
+    cancelled_by = OrganizationInvitationActorSerializer(
+        read_only=True,
+    )
+
+    def get_organization(
+        self,
+        obj,
+    ):
+        return {
+            "id": str(obj.organization.id),
+            "name": obj.organization.name,
+            "slug": obj.organization.slug,
+        }
+
+    class Meta:
+        model = OrganizationInvitation
+
+        fields = [
+            "id",
+            "organization",
+            "email",
+            "invited_role",
+            "status",
+            "invited_by",
+            "expires_at",
+            "last_sent_at",
+            "send_count",
+            "accepted_by",
+            "accepted_at",
+            "cancelled_by",
+            "cancelled_at",
+            "created_at",
+            "updated_at",
+        ]
+
+        read_only_fields = fields
+
+
+class OrganizationInvitationPublicSerializer(serializers.ModelSerializer):
+    organization = serializers.SerializerMethodField()
+
+    invited_by = OrganizationInvitationActorSerializer(
+        read_only=True,
+    )
+
+    invited_role_label = serializers.CharField(
+        source="get_invited_role_display",
+        read_only=True,
+    )
+
+    def get_organization(
+        self,
+        obj,
+    ):
+        return {
+            "id": str(obj.organization.id),
+            "name": obj.organization.name,
+            "slug": obj.organization.slug,
+            "logo_url": obj.organization.logo_url,
+        }
+
+    class Meta:
+        model = OrganizationInvitation
+
+        fields = [
+            "organization",
+            "invited_role",
+            "invited_role_label",
+            "status",
+            "expires_at",
+            "invited_by",
+        ]
+
+        read_only_fields = fields
+
+
+class OrganizationMembershipRoleUpdateSerializer(serializers.Serializer):
+    role = serializers.ChoiceField(
+        choices=[
+            (
+                OrganizationMembership.Role.ADMIN,
+                "Administrator",
+            ),
+            (
+                OrganizationMembership.Role.LEAD_VERIFIER,
+                "Lead Verifier",
+            ),
+            (
+                OrganizationMembership.Role.MODERATOR,
+                "Moderator",
+            ),
+            (
+                OrganizationMembership.Role.RESEARCHER,
+                "Researcher",
+            ),
+            (
+                OrganizationMembership.Role.CONTRIBUTOR,
+                "Contributor",
+            ),
+        ],
+    )
+
+
+class OrganizationMembershipAdminSerializer(serializers.ModelSerializer):
+    user = OrganizationAdminUserSerializer(
+        read_only=True,
+    )
+
+    approved_by = serializers.SerializerMethodField()
+
+    def get_approved_by(
+        self,
+        obj,
+    ):
+        if not obj.approved_by:
+            return None
+
+        return {
+            "id": obj.approved_by.id,
+            "username": obj.approved_by.username,
+        }
+
+    class Meta:
+        model = OrganizationMembership
+
+        fields = [
+            "id",
+            "user",
+            "role",
+            "status",
+            "joined_at",
+            "approved_at",
+            "approved_by",
         ]
 
         read_only_fields = fields

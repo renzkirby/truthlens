@@ -77,6 +77,40 @@ CASE_TYPE_CAPABILITIES = {
     },
 }
 
+OWNER_MANAGEABLE_MEMBERSHIP_ROLES = frozenset(
+    {
+        OrganizationMembership.Role.ADMIN,
+        OrganizationMembership.Role.LEAD_VERIFIER,
+        OrganizationMembership.Role.MODERATOR,
+        OrganizationMembership.Role.RESEARCHER,
+        OrganizationMembership.Role.CONTRIBUTOR,
+    }
+)
+
+ADMIN_MANAGEABLE_MEMBERSHIP_ROLES = frozenset(
+    {
+        OrganizationMembership.Role.LEAD_VERIFIER,
+        OrganizationMembership.Role.MODERATOR,
+        OrganizationMembership.Role.RESEARCHER,
+        OrganizationMembership.Role.CONTRIBUTOR,
+    }
+)
+
+
+def get_manageable_membership_roles(
+    membership,
+):
+    if not membership or membership.status != OrganizationMembership.Status.ACTIVE:
+        return set()
+
+    if membership.role == OrganizationMembership.Role.OWNER:
+        return set(OWNER_MANAGEABLE_MEMBERSHIP_ROLES)
+
+    if membership.role == OrganizationMembership.Role.ADMIN:
+        return set(ADMIN_MANAGEABLE_MEMBERSHIP_ROLES)
+
+    return set()
+
 
 def _has_system_moderator_role(user):
     if not user or not user.is_authenticated:
@@ -242,3 +276,100 @@ def has_case_capability(
         capability,
         organization=case.organization,
     )
+
+
+WORKSPACE_CAPABILITIES = {
+    PartnerCapability.REVIEW_SAFETY,
+    PartnerCapability.CLAIM_VERIFICATION_WORK,
+    PartnerCapability.REVIEW_EVIDENCE,
+    PartnerCapability.ADJUDICATE,
+    PartnerCapability.CREATE_FACT_CHECK_DRAFT,
+    PartnerCapability.PUBLISH_FACT_CHECK,
+    PartnerCapability.MANAGE_ORGANIZATION,
+}
+
+
+def get_workspace_access_context(user):
+    """
+    Build the authorization context used by the
+    verification workspace frontend.
+
+    Platform Safety authority remains separate from
+    organization-scoped factual verification authority.
+    """
+
+    if not user or not user.is_authenticated:
+        return {
+            "can_access": False,
+            "is_platform_safety_moderator": False,
+            "platform_capabilities": [],
+            "memberships": [],
+            "default_organization_id": None,
+        }
+
+    is_platform_safety_moderator = _has_system_moderator_role(user)
+
+    platform_capabilities = []
+
+    if is_platform_safety_moderator:
+        platform_capabilities = sorted(
+            capability
+            for capability in SYSTEM_MODERATOR_CAPABILITIES
+            if capability in WORKSPACE_CAPABILITIES
+        )
+
+    memberships = (
+        OrganizationMembership.objects.filter(
+            user=user,
+            status=(OrganizationMembership.Status.ACTIVE),
+        )
+        .select_related("organization")
+        .order_by(
+            "organization__name",
+            "joined_at",
+            "id",
+        )
+    )
+
+    membership_contexts = []
+
+    for membership in memberships:
+        capabilities = sorted(
+            capability
+            for capability in get_membership_capabilities(membership)
+            if capability in WORKSPACE_CAPABILITIES
+        )
+
+        if not capabilities:
+            continue
+
+        organization = membership.organization
+
+        membership_contexts.append(
+            {
+                "organization": {
+                    "id": str(organization.id),
+                    "name": organization.name,
+                    "slug": organization.slug,
+                    "verification_status": (organization.verification_status),
+                    "partner_status": (organization.partner_status),
+                },
+                "role": membership.role,
+                "capabilities": capabilities,
+            }
+        )
+
+    default_organization_id = None
+
+    if membership_contexts:
+        default_organization_id = membership_contexts[0]["organization"]["id"]
+
+    can_access = bool(platform_capabilities or membership_contexts)
+
+    return {
+        "can_access": can_access,
+        "is_platform_safety_moderator": (is_platform_safety_moderator),
+        "platform_capabilities": (platform_capabilities),
+        "memberships": membership_contexts,
+        "default_organization_id": (default_organization_id),
+    }

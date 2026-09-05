@@ -6,19 +6,13 @@ import "./NavigationBar.css";
 import NotificationPopup from "./NotificationPopup.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { buildApiUrl, resolveApiEndpoint } from "../utils/api";
+import { canAccessWorkspace } from "../utils/workspace";
 
 /**
  *
  * @param {Object} user - User object from auth context
  * @returns {string} Dashboard path (/moderation or /dashboard)
  */
-
-const getDashboardPath = (user) => {
-   if (user?.role === "MOD" || user?.role === "MODERATOR") {
-      return "/moderation";
-   }
-   return "/dashboard";
-};
 
 const isModeratorRole = (role) => role === "MOD" || role === "MODERATOR";
 
@@ -403,12 +397,20 @@ function NavigationBar() {
                                  My Public Profile
                               </button>
                            </Link>
-                           <Link to={getDashboardPath(user)} className="link" role="menuitem">
+                           <Link to="/dashboard" className="link" role="menuitem">
                               <button className="dropdown-item" onClick={() => setIsOpen(false)}>
                                  <Icons name={isModeratorUser ? "shield" : "dashboard"} />
                                  Dashboard
                               </button>
                            </Link>
+                           {canAccessWorkspace(user) && (
+                              <Link to="/workspace" className="link">
+                                 <button className="dropdown-item" onClick={() => setIsOpen(false)}>
+                                    <Icons name="shield-check" />
+                                    Verification Workspace
+                                 </button>
+                              </Link>
+                           )}
                            <Link to="/settings" className="link" role="menuitem">
                               <button className="dropdown-item" onClick={() => setIsOpen(false)}>
                                  <Icons name="settings" />

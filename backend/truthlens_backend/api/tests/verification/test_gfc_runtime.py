@@ -4,7 +4,7 @@ import requests
 
 from django.test import SimpleTestCase
 
-from .tasks import (
+from api.tasks import (
     GFC_HTTP_TIMEOUT_SEC,
     _retrieve_and_ingest_gfc,
     execute_core_text_pipeline,
@@ -12,9 +12,7 @@ from .tasks import (
 )
 
 
-class GoogleFactCheckRuntimeBridgeTests(
-    SimpleTestCase
-):
+class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
     def test_retrieval_uses_one_provider_call_and_ingests_evidence(
         self,
     ):
@@ -35,34 +33,22 @@ class GoogleFactCheckRuntimeBridgeTests(
         ]
 
         with (
-            patch(
-                "api.tasks.GoogleFactCheckProvider"
-            ) as provider_class,
-            patch(
-                "api.tasks.ingest_raw_evidence"
-            ) as ingest,
-            patch(
-                "api.tasks._log_stage"
-            ),
+            patch("api.tasks.GoogleFactCheckProvider") as provider_class,
+            patch("api.tasks.ingest_raw_evidence") as ingest,
+            patch("api.tasks._log_stage"),
         ):
-            provider = (
-                provider_class.return_value
-            )
+            provider = provider_class.return_value
 
             provider.search_with_payload.return_value = (
                 payload,
                 raw_evidence_items,
             )
 
-            ingest.return_value = (
-                persisted_sources
-            )
+            ingest.return_value = persisted_sources
 
-            returned_payload = (
-                _retrieve_and_ingest_gfc(
-                    "example claim",
-                    "claim-id",
-                )
+            returned_payload = _retrieve_and_ingest_gfc(
+                "example claim",
+                "claim-id",
             )
 
         self.assertIs(
@@ -79,9 +65,7 @@ class GoogleFactCheckRuntimeBridgeTests(
             limit=5,
         )
 
-        ingest.assert_called_once_with(
-            raw_evidence_items
-        )
+        ingest.assert_called_once_with(raw_evidence_items)
 
     def test_ingestion_failure_does_not_discard_gfc_payload(
         self,
@@ -99,33 +83,23 @@ class GoogleFactCheckRuntimeBridgeTests(
         ]
 
         with (
-            patch(
-                "api.tasks.GoogleFactCheckProvider"
-            ) as provider_class,
+            patch("api.tasks.GoogleFactCheckProvider") as provider_class,
             patch(
                 "api.tasks.ingest_raw_evidence",
-                side_effect=RuntimeError(
-                    "database unavailable"
-                ),
+                side_effect=RuntimeError("database unavailable"),
             ),
-            patch(
-                "api.tasks._log_stage"
-            ),
+            patch("api.tasks._log_stage"),
         ):
-            provider = (
-                provider_class.return_value
-            )
+            provider = provider_class.return_value
 
             provider.search_with_payload.return_value = (
                 payload,
                 raw_evidence_items,
             )
 
-            returned_payload = (
-                _retrieve_and_ingest_gfc(
-                    "example claim",
-                    "claim-id",
-                )
+            returned_payload = _retrieve_and_ingest_gfc(
+                "example claim",
+                "claim-id",
             )
 
         self.assertIs(
@@ -137,26 +111,16 @@ class GoogleFactCheckRuntimeBridgeTests(
         self,
     ):
         with (
-            patch(
-                "api.tasks.GoogleFactCheckProvider"
-            ) as provider_class,
-            patch(
-                "api.tasks.ingest_raw_evidence"
-            ) as ingest,
+            patch("api.tasks.GoogleFactCheckProvider") as provider_class,
+            patch("api.tasks.ingest_raw_evidence") as ingest,
         ):
-            provider = (
-                provider_class.return_value
+            provider = provider_class.return_value
+
+            provider.search_with_payload.side_effect = requests.HTTPError(
+                "Google unavailable"
             )
 
-            provider.search_with_payload.side_effect = (
-                requests.HTTPError(
-                    "Google unavailable"
-                )
-            )
-
-            with self.assertRaises(
-                requests.HTTPError
-            ):
+            with self.assertRaises(requests.HTTPError):
                 _retrieve_and_ingest_gfc(
                     "example claim",
                     "claim-id",
@@ -169,34 +133,21 @@ class GoogleFactCheckRuntimeBridgeTests(
     ):
         claim_id = "claim-id"
 
-        cleaned_claim = (
-            "Example public claim."
-        )
+        cleaned_claim = "Example public claim."
 
-        search_query = (
-            "example public claim"
-        )
+        search_query = "example public claim"
 
         gfc_payload = {
             "claims": [
                 {
-                    "text": (
-                        "Example public claim."
-                    ),
+                    "text": ("Example public claim."),
                     "claimReview": [
                         {
                             "publisher": {
-                                "name": (
-                                    "Example Checker"
-                                ),
+                                "name": ("Example Checker"),
                             },
-                            "url": (
-                                "https://example.com/"
-                                "fact-check"
-                            ),
-                            "textualRating": (
-                                "False"
-                            ),
+                            "url": ("https://example.com/" "fact-check"),
+                            "textualRating": ("False"),
                         }
                     ],
                 }
@@ -210,9 +161,7 @@ class GoogleFactCheckRuntimeBridgeTests(
         }
 
         claim_queryset = Mock()
-        claim_queryset.first.return_value = (
-            Mock()
-        )
+        claim_queryset.first.return_value = Mock()
 
         with (
             patch(
@@ -251,18 +200,10 @@ class GoogleFactCheckRuntimeBridgeTests(
                 "api.tasks.evaluate_image_claim_with_gfc",
                 return_value=ai_verdict,
             ) as evaluate_gfc,
-            patch(
-                "api.tasks._save_claim"
-            ) as save_claim,
-            patch(
-                "api.tasks.TavilyClient"
-            ) as tavily_class,
-            patch(
-                "api.tasks.requests.get"
-            ) as requests_get,
-            patch(
-                "api.tasks._log_stage"
-            ),
+            patch("api.tasks._save_claim") as save_claim,
+            patch("api.tasks.TavilyClient") as tavily_class,
+            patch("api.tasks.requests.get") as requests_get,
+            patch("api.tasks._log_stage"),
         ):
             execute_core_text_pipeline(
                 "Raw submitted claim.",
@@ -290,12 +231,7 @@ class GoogleFactCheckRuntimeBridgeTests(
             ai_verdict,
             "Official Fact Check",
             cleaned_claim,
-            [
-                (
-                    "https://example.com/"
-                    "fact-check"
-                )
-            ],
+            ["https://example.com/" "fact-check"],
         )
 
         tavily_class.assert_not_called()
@@ -307,25 +243,17 @@ class GoogleFactCheckRuntimeBridgeTests(
     ):
         claim_id = "claim-id"
 
-        cleaned_claim = (
-            "Example public claim."
-        )
+        cleaned_claim = "Example public claim."
 
-        search_query = (
-            "example public claim"
-        )
+        search_query = "example public claim"
 
         tavily_response = {
             "answer": "Web evidence answer.",
             "results": [
                 {
                     "title": "Web Result",
-                    "url": (
-                        "https://example.com/web"
-                    ),
-                    "content": (
-                        "Relevant web evidence."
-                    ),
+                    "url": ("https://example.com/web"),
+                    "content": ("Relevant web evidence."),
                 }
             ],
         }
@@ -337,9 +265,7 @@ class GoogleFactCheckRuntimeBridgeTests(
         }
 
         claim_queryset = Mock()
-        claim_queryset.first.return_value = (
-            Mock()
-        )
+        claim_queryset.first.return_value = Mock()
 
         with (
             patch(
@@ -368,33 +294,18 @@ class GoogleFactCheckRuntimeBridgeTests(
             ),
             patch(
                 "api.tasks._retrieve_and_ingest_gfc",
-                side_effect=requests.HTTPError(
-                    "Google unavailable"
-                ),
+                side_effect=requests.HTTPError("Google unavailable"),
             ) as retrieve_gfc,
             patch(
                 "api.tasks.evaluate_image_claim_with_tavily",
                 return_value=ai_verdict,
             ),
-            patch(
-                "api.tasks._save_claim"
-            ) as save_claim,
-            patch(
-                "api.tasks.TavilyClient"
-            ) as tavily_class,
-            patch(
-                "api.tasks.requests.get"
-            ) as requests_get,
-            patch(
-                "api.tasks._log_stage"
-            ),
+            patch("api.tasks._save_claim") as save_claim,
+            patch("api.tasks.TavilyClient") as tavily_class,
+            patch("api.tasks.requests.get") as requests_get,
+            patch("api.tasks._log_stage"),
         ):
-            (
-                tavily_class
-                .return_value
-                .search
-                .return_value
-            ) = tavily_response
+            tavily_class.return_value.search.return_value = tavily_response
 
             execute_core_text_pipeline(
                 "Raw submitted claim.",
@@ -406,12 +317,7 @@ class GoogleFactCheckRuntimeBridgeTests(
             claim_id,
         )
 
-        (
-            tavily_class
-            .return_value
-            .search
-            .assert_called_once()
-        )
+        (tavily_class.return_value.search.assert_called_once())
 
         self.assertEqual(
             save_claim.call_args.args[2],
@@ -435,9 +341,7 @@ class GoogleFactCheckRuntimeBridgeTests(
         extraction_response.json.return_value = {
             "results": [
                 {
-                    "raw_content": (
-                        "Raw article content."
-                    ),
+                    "raw_content": ("Raw article content."),
                 }
             ]
         }
@@ -451,10 +355,7 @@ class GoogleFactCheckRuntimeBridgeTests(
                             "publisher": {
                                 "name": "Example Checker",
                             },
-                            "url": (
-                                "https://example.com/"
-                                "fact-check"
-                            ),
+                            "url": ("https://example.com/" "fact-check"),
                             "textualRating": "False",
                         }
                     ],
@@ -476,9 +377,7 @@ class GoogleFactCheckRuntimeBridgeTests(
                 "api.tasks.requests.post",
                 return_value=extraction_response,
             ) as requests_post,
-            patch(
-                "api.tasks.requests.get"
-            ) as requests_get,
+            patch("api.tasks.requests.get") as requests_get,
             patch(
                 "api.tasks.clean_extracted_text",
                 return_value=cleaned_text,
@@ -511,15 +410,9 @@ class GoogleFactCheckRuntimeBridgeTests(
                 "api.tasks.evaluate_url_claim_with_gfc",
                 return_value=ai_verdict,
             ) as evaluate_gfc,
-            patch(
-                "api.tasks._save_claim"
-            ) as save_claim,
-            patch(
-                "api.tasks.TavilyClient"
-            ) as tavily_class,
-            patch(
-                "api.tasks._log_stage"
-            ),
+            patch("api.tasks._save_claim") as save_claim,
+            patch("api.tasks.TavilyClient") as tavily_class,
+            patch("api.tasks._log_stage"),
         ):
             url_fact_check_process.run(
                 source_url,
@@ -548,12 +441,7 @@ class GoogleFactCheckRuntimeBridgeTests(
             ai_verdict,
             "Official Fact Check",
             cleaned_text,
-            [
-                (
-                    "https://example.com/"
-                    "fact-check"
-                )
-            ],
+            ["https://example.com/" "fact-check"],
         )
 
         requests_post.assert_called_once()
@@ -575,9 +463,7 @@ class GoogleFactCheckRuntimeBridgeTests(
         extraction_response.json.return_value = {
             "results": [
                 {
-                    "raw_content": (
-                        "Raw article content."
-                    ),
+                    "raw_content": ("Raw article content."),
                 }
             ]
         }
@@ -588,9 +474,7 @@ class GoogleFactCheckRuntimeBridgeTests(
                 {
                     "title": "Web Result",
                     "url": "https://example.com/web",
-                    "content": (
-                        "Relevant web evidence."
-                    ),
+                    "content": ("Relevant web evidence."),
                 }
             ],
         }
@@ -609,9 +493,7 @@ class GoogleFactCheckRuntimeBridgeTests(
                 "api.tasks.requests.post",
                 return_value=extraction_response,
             ),
-            patch(
-                "api.tasks.requests.get"
-            ) as requests_get,
+            patch("api.tasks.requests.get") as requests_get,
             patch(
                 "api.tasks.clean_extracted_text",
                 return_value=cleaned_text,
@@ -634,30 +516,17 @@ class GoogleFactCheckRuntimeBridgeTests(
             ),
             patch(
                 "api.tasks._retrieve_and_ingest_gfc",
-                side_effect=requests.HTTPError(
-                    "Google unavailable"
-                ),
+                side_effect=requests.HTTPError("Google unavailable"),
             ) as retrieve_gfc,
             patch(
                 "api.tasks.evaluate_url_claim_with_tavily",
                 return_value=ai_verdict,
             ),
-            patch(
-                "api.tasks._save_claim"
-            ) as save_claim,
-            patch(
-                "api.tasks.TavilyClient"
-            ) as tavily_class,
-            patch(
-                "api.tasks._log_stage"
-            ),
+            patch("api.tasks._save_claim") as save_claim,
+            patch("api.tasks.TavilyClient") as tavily_class,
+            patch("api.tasks._log_stage"),
         ):
-            (
-                tavily_class
-                .return_value
-                .search
-                .return_value
-            ) = tavily_response
+            tavily_class.return_value.search.return_value = tavily_response
 
             url_fact_check_process.run(
                 source_url,
@@ -670,12 +539,7 @@ class GoogleFactCheckRuntimeBridgeTests(
             stage_prefix="url_",
         )
 
-        (
-            tavily_class
-            .return_value
-            .search
-            .assert_called_once()
-        )
+        (tavily_class.return_value.search.assert_called_once())
 
         self.assertEqual(
             save_claim.call_args.args[2],

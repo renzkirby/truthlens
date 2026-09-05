@@ -10,7 +10,7 @@ import CreateThreadPage from "./Pages/CreateThreadPage";
 import UserProfile from "./Pages/UserProfile.jsx";
 import ThreadDetailPage from "./Pages/ThreadDetailPage";
 import VerifyPage from "./Pages/VerifyPage.jsx";
-import ModerationPage from "./Pages/ModerationPage.jsx";
+import WorkspacePage from "./Pages/WorkspacePage.jsx";
 import VerifyEmailPage from "./Pages/VerifyEmailPage.jsx";
 import Toast from "./components/Toast";
 import UserHub from "./Pages/UserHub.jsx";
@@ -21,6 +21,7 @@ import OnboardingPage from "./Pages/OnboardingPage.jsx";
 import ForgotPasswordPage from "./Pages/ForgotPasswordPage.jsx";
 import ResetPasswordPage from "./Pages/ResetPasswordPage.jsx";
 import RootRedirect from "./components/RootRedirect";
+import OrganizationInvitationPage from "./Pages/OrganizationInvitationPage.jsx";
 
 function App() {
    return (
@@ -36,10 +37,13 @@ function App() {
                <Route path="/" element={<RootRedirect />} />
                <Route path="/wireframes" element={<TruthLensWireframes />} />
                <Route path="/verify-email" element={<VerifyEmailPage />} />
+               <Route path="/organization-invitations/:token" element={<OrganizationInvitationPage />} />
 
-               {/* Protected Moderator Page */}
-               <Route element={<PrivateRoute requiredRole="MOD" />}>
-                  <Route path="/moderation" element={<ModerationPage />} />
+               {/* Capability-driven operational workspace */}
+               <Route element={<PrivateRoute requireWorkspace />}>
+                  <Route path="/workspace" element={<WorkspacePage />} />
+
+                  <Route path="/moderation" element={<Navigate to="/workspace" replace />} />
                </Route>
 
                {/* Protected Routes - accessible to any authenticated user */}

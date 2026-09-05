@@ -1,0 +1,1067 @@
+.organization-admin-panel {
+   margin-top: 24px;
+}
+
+.org-admin-toolbar {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 16px;
+   margin-bottom: 18px;
+}
+
+.org-admin-toolbar > div {
+   display: flex;
+   flex-direction: column;
+   gap: 3px;
+}
+
+.org-admin-toolbar strong {
+   color: var(--text-main);
+   font-size: 0.94rem;
+}
+
+.org-admin-toolbar span {
+   color: var(--text-muted);
+   font-size: 0.8rem;
+}
+
+.org-admin-toolbar button,
+.org-admin-error button {
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   gap: 7px;
+   min-height: 36px;
+   padding: 0 12px;
+   border: 1px solid var(--border-default);
+   border-radius: 8px;
+   background: var(--bg-surface);
+   color: var(--text-body);
+   font: inherit;
+   font-size: 0.78rem;
+   font-weight: 650;
+   cursor: pointer;
+}
+
+.org-admin-toolbar button:hover,
+.org-admin-error button:hover {
+   background: var(--bg-subtle);
+}
+
+.org-admin-summary {
+   display: grid;
+   grid-template-columns: repeat(4, minmax(0, 1fr));
+   gap: 10px;
+   margin-bottom: 18px;
+}
+
+.org-admin-summary > div {
+   min-width: 0;
+   padding: 14px;
+   border: 1px solid var(--border-default);
+   border-radius: 10px;
+   background: var(--bg-surface);
+}
+
+.org-admin-summary span {
+   display: block;
+   margin-bottom: 5px;
+   color: var(--text-muted);
+   font-size: 0.72rem;
+   font-weight: 600;
+}
+
+.org-admin-summary strong {
+   color: var(--text-main);
+   font-size: 1.25rem;
+}
+
+.org-member-list {
+   display: flex;
+   flex-direction: column;
+   gap: 10px;
+}
+
+.org-member-card {
+   position: relative;
+   display: grid;
+   grid-template-columns:
+      minmax(200px, 0.9fr)
+      minmax(0, 2fr)
+      128px;
+   gap: 18px;
+   align-items: center;
+   padding: 16px 18px;
+   border: 1px solid var(--border-default);
+   border-radius: 11px;
+   background: var(--bg-surface);
+   transition:
+      border-color 150ms ease,
+      opacity 150ms ease;
+}
+
+.org-member-card.is-busy {
+   border-color: var(--brand-primary);
+}
+
+.org-member-identity {
+   min-width: 0;
+   display: flex;
+   align-items: center;
+   gap: 11px;
+}
+
+.org-member-avatar {
+   width: 38px;
+   height: 38px;
+   flex: 0 0 auto;
+   display: grid;
+   place-items: center;
+   border: 1px solid var(--border-default);
+   border-radius: 50%;
+   background: var(--bg-subtle);
+   color: var(--text-muted);
+}
+
+.org-member-identity > div:last-child {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   gap: 3px;
+}
+
+.org-member-identity strong {
+   overflow: hidden;
+   color: var(--text-main);
+   font-size: 0.86rem;
+   text-overflow: ellipsis;
+   white-space: nowrap;
+}
+
+.org-member-identity span {
+   overflow: hidden;
+   color: var(--text-muted);
+   font-size: 0.74rem;
+   text-overflow: ellipsis;
+   white-space: nowrap;
+}
+
+.org-member-details {
+   min-width: 0;
+   display: grid;
+   grid-template-columns: repeat(4, minmax(0, 1fr));
+   gap: 14px;
+}
+
+.org-member-details > div {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   align-items: flex-start;
+   gap: 5px;
+}
+
+.org-member-details > div > span:first-child {
+   color: var(--text-muted);
+   font-size: 0.68rem;
+   font-weight: 600;
+}
+
+.org-member-details strong {
+   max-width: 100%;
+   overflow: hidden;
+   color: var(--text-body);
+   font-size: 0.78rem;
+   font-weight: 650;
+   text-overflow: ellipsis;
+   white-space: nowrap;
+}
+
+.org-member-status {
+   display: inline-flex;
+   align-items: center;
+   gap: 5px;
+   min-height: 24px;
+   padding: 0 8px;
+   border: 1px solid var(--border-default);
+   border-radius: 999px;
+   font-size: 0.7rem;
+   font-weight: 700;
+}
+
+.org-member-status.active {
+   border-color: var(--verdict-fact-border);
+   background: var(--verdict-fact-bg);
+   color: var(--verdict-fact-text);
+}
+
+.org-member-status.pending {
+   border-color: var(--verdict-misleading-border);
+   background: var(--verdict-misleading-bg);
+   color: var(--verdict-misleading-text);
+}
+
+.org-member-status.suspended {
+   border-color: var(--verdict-fake-border);
+   background: var(--verdict-fake-bg);
+   color: var(--verdict-fake-text);
+}
+
+.org-member-actions {
+   position: relative;
+   min-width: 0;
+   display: flex;
+   justify-content: flex-end;
+   align-items: center;
+}
+
+.org-member-manage-button {
+   width: 118px;
+   min-height: 36px;
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   gap: 6px;
+   padding: 0 10px;
+   border: 1px solid var(--border-default);
+   border-radius: 8px;
+   background: var(--bg-surface);
+   color: var(--text-body);
+   font: inherit;
+   font-size: 0.76rem;
+   font-weight: 650;
+   cursor: pointer;
+   white-space: nowrap;
+}
+
+.org-member-manage-button:hover:not(:disabled) {
+   border-color: var(--brand-primary);
+   background: rgba(79, 70, 229, 0.05);
+   color: var(--brand-primary);
+}
+
+.org-member-manage-button:disabled {
+   opacity: 0.55;
+   cursor: not-allowed;
+}
+
+.org-member-manage-button svg {
+   flex: 0 0 auto;
+}
+
+.org-member-menu {
+   position: absolute;
+   top: calc(100% + 7px);
+   right: 0;
+   z-index: 40;
+   width: 224px;
+   padding: 6px;
+   border: 1px solid var(--border-default);
+   border-radius: 10px;
+   background: var(--bg-surface);
+   box-shadow: 0 16px 36px rgba(15, 23, 42, 0.14);
+}
+
+.org-member-menu button {
+   width: 100%;
+   min-height: 36px;
+   display: flex;
+   align-items: center;
+   gap: 9px;
+   padding: 0 10px;
+   border: 0;
+   border-radius: 7px;
+   background: transparent;
+   color: var(--text-body);
+   font: inherit;
+   font-size: 0.76rem;
+   font-weight: 600;
+   text-align: left;
+   cursor: pointer;
+}
+
+.org-member-menu button:hover,
+.org-member-menu button:focus-visible {
+   background: var(--bg-subtle);
+   outline: none;
+}
+
+.org-member-menu button.danger {
+   color: var(--verdict-fake-text);
+}
+
+.org-member-menu button.danger:hover,
+.org-member-menu button.danger:focus-visible {
+   background: var(--verdict-fake-bg);
+}
+
+.org-member-protected-label {
+   color: var(--text-muted);
+   font-size: 0.72rem;
+   font-weight: 600;
+   text-align: right;
+   line-height: 1.35;
+}
+
+.org-admin-state {
+   min-height: 220px;
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   justify-content: center;
+   text-align: center;
+   color: var(--text-muted);
+}
+
+.org-admin-state h3 {
+   margin: 11px 0 5px;
+   color: var(--text-main);
+   font-size: 1rem;
+}
+
+.org-admin-state p {
+   max-width: 440px;
+   margin: 0;
+   font-size: 0.82rem;
+   line-height: 1.6;
+}
+
+.org-admin-error {
+   display: flex;
+   align-items: flex-start;
+   gap: 10px;
+   padding: 14px;
+   border: 1px solid var(--verdict-fake-border);
+   border-radius: 9px;
+   background: var(--verdict-fake-bg);
+   color: var(--verdict-fake-text);
+}
+
+.org-admin-error > div {
+   display: flex;
+   flex-direction: column;
+   align-items: flex-start;
+   gap: 5px;
+}
+
+.org-admin-error span {
+   font-size: 0.8rem;
+   line-height: 1.5;
+}
+
+.org-admin-error button {
+   min-height: 32px;
+   margin-top: 4px;
+}
+
+@keyframes org-admin-spin {
+   to {
+      transform: rotate(360deg);
+   }
+}
+
+.org-admin-spinner {
+   animation: org-admin-spin 0.8s linear infinite;
+}
+
+/* ── Organization administration extensions ──────────────────── */
+
+.org-admin-toolbar-actions {
+   display: flex;
+   align-items: center;
+   gap: 8px;
+}
+
+.org-admin-toolbar-actions button {
+   width: 132px;
+}
+
+.org-admin-toolbar-actions button,
+.org-invitation-actions button,
+.org-invite-admin-form-actions button {
+   min-height: 36px;
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   gap: 7px;
+   padding: 0 12px;
+   border: 1px solid var(--border-default);
+   border-radius: 8px;
+   background: var(--bg-surface);
+   color: var(--text-body);
+   font: inherit;
+   font-size: 0.78rem;
+   font-weight: 650;
+   line-height: 1;
+   white-space: nowrap;
+   cursor: pointer;
+   transition:
+      background-color 150ms ease,
+      border-color 150ms ease,
+      color 150ms ease,
+      box-shadow 150ms ease;
+}
+
+.org-admin-toolbar-actions button:hover:not(:disabled),
+.org-invitation-actions button:hover:not(:disabled),
+.org-invite-admin-form-actions button:hover:not(:disabled) {
+   background: var(--bg-subtle);
+   border-color: var(--border-strong, var(--border-default));
+}
+
+.org-admin-toolbar-actions button:focus-visible,
+.org-invitation-actions button:focus-visible,
+.org-invite-admin-form-actions button:focus-visible,
+.org-invite-admin-close:focus-visible,
+.org-invite-admin-fields input:focus-visible,
+.org-invite-admin-fields select:focus-visible,
+.org-member-manage-button:focus-visible,
+.org-admin-role-field select:focus-visible {
+   outline: 3px solid rgba(79, 70, 229, 0.18);
+   outline-offset: 2px;
+}
+
+.org-admin-toolbar-actions button:disabled,
+.org-invitation-actions button:disabled,
+.org-invite-admin-form-actions button:disabled {
+   opacity: 0.55;
+   cursor: not-allowed;
+}
+
+.org-admin-toolbar-actions .org-admin-invite-button,
+.org-invite-admin-form-actions .primary {
+   border-color: var(--brand-primary);
+   background: var(--brand-primary);
+   color: #fff;
+}
+
+.org-admin-toolbar-actions .org-admin-invite-button:hover:not(:disabled),
+.org-invite-admin-form-actions .primary:hover:not(:disabled) {
+   border-color: var(--brand-primary);
+   background: var(--brand-primary);
+   filter: brightness(0.95);
+}
+
+.org-invite-admin-form {
+   margin-bottom: 20px;
+   padding: 18px;
+   border: 1px solid var(--border-default);
+   border-radius: 12px;
+   background: var(--bg-surface);
+}
+
+.org-invite-admin-form-header,
+.org-invitation-admin-heading {
+   display: flex;
+   align-items: flex-start;
+   justify-content: space-between;
+   gap: 16px;
+}
+
+.org-invite-admin-form-header > div,
+.org-invitation-admin-heading > div {
+   display: flex;
+   flex-direction: column;
+   gap: 4px;
+}
+
+.org-invite-admin-form-header strong,
+.org-invitation-admin-heading strong {
+   color: var(--text-main);
+   font-size: 0.94rem;
+   font-weight: 700;
+}
+
+.org-invite-admin-form-header span,
+.org-invitation-admin-heading span {
+   color: var(--text-muted);
+   font-size: 0.78rem;
+}
+
+.org-invite-admin-close {
+   width: 34px;
+   height: 34px;
+   flex: 0 0 auto;
+   display: grid;
+   place-items: center;
+   padding: 0;
+   border: 1px solid transparent;
+   border-radius: 8px;
+   background: transparent;
+   color: var(--text-muted);
+   cursor: pointer;
+}
+
+.org-invite-admin-close:hover {
+   border-color: var(--border-default);
+   background: var(--bg-subtle);
+   color: var(--text-main);
+}
+
+.org-invite-admin-fields {
+   display: grid;
+   grid-template-columns: 1fr 1fr;
+   gap: 14px;
+   margin-top: 16px;
+}
+
+.org-invite-admin-fields > div {
+   display: flex;
+   flex-direction: column;
+   gap: 6px;
+}
+
+.org-invite-admin-fields label {
+   color: var(--text-body);
+   font-size: 0.76rem;
+   font-weight: 650;
+}
+
+.org-invite-admin-fields input,
+.org-invite-admin-fields select {
+   min-height: 42px;
+   padding: 0 11px;
+   border: 1px solid var(--border-default);
+   border-radius: 8px;
+   background: var(--bg-surface);
+   color: var(--text-main);
+   font: inherit;
+}
+
+.org-invite-admin-notice {
+   display: flex;
+   align-items: flex-start;
+   gap: 8px;
+   margin-top: 14px;
+   padding: 11px;
+   border-radius: 8px;
+   background: var(--bg-subtle);
+   color: var(--text-muted);
+   font-size: 0.76rem;
+   line-height: 1.5;
+}
+
+.org-invite-admin-form-actions {
+   display: flex;
+   justify-content: flex-end;
+   gap: 8px;
+   margin-top: 16px;
+}
+
+.org-invitation-admin-section {
+   margin-top: 30px;
+   padding-top: 24px;
+   border-top: 1px solid var(--border-default);
+}
+
+.org-invitation-list {
+   display: flex;
+   flex-direction: column;
+   gap: 10px;
+   margin-top: 16px;
+}
+
+.org-invitation-card {
+   display: grid;
+   grid-template-columns:
+      minmax(200px, 0.9fr)
+      minmax(0, 2fr)
+      182px;
+   gap: 18px;
+   align-items: center;
+   padding: 16px 18px;
+   border: 1px solid var(--border-default);
+   border-radius: 11px;
+   background: var(--bg-surface);
+}
+
+.org-invitation-identity {
+   min-width: 0;
+   display: flex;
+   align-items: center;
+   gap: 11px;
+}
+
+.org-invitation-icon {
+   width: 38px;
+   height: 38px;
+   flex: 0 0 auto;
+   display: grid;
+   place-items: center;
+   border: 1px solid var(--border-default);
+   border-radius: 50%;
+   background: var(--bg-subtle);
+   color: var(--text-muted);
+}
+
+.org-invitation-identity > div:last-child {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   gap: 3px;
+}
+
+.org-invitation-identity strong {
+   overflow: hidden;
+   color: var(--text-main);
+   font-size: 0.86rem;
+   text-overflow: ellipsis;
+   white-space: nowrap;
+}
+
+.org-invitation-identity span {
+   overflow: hidden;
+   color: var(--text-muted);
+   font-size: 0.74rem;
+   text-overflow: ellipsis;
+   white-space: nowrap;
+}
+
+.org-invitation-details {
+   min-width: 0;
+   display: grid;
+   grid-template-columns: repeat(4, minmax(0, 1fr));
+   gap: 14px;
+}
+
+.org-invitation-details > div {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   align-items: flex-start;
+   gap: 5px;
+}
+
+.org-invitation-details > div > span:first-child:not(.org-invitation-status) {
+   color: var(--text-muted);
+   font-size: 0.68rem;
+   font-weight: 600;
+}
+
+.org-invitation-details strong {
+   max-width: 100%;
+   overflow: hidden;
+   color: var(--text-body);
+   font-size: 0.78rem;
+   font-weight: 650;
+   text-overflow: ellipsis;
+   white-space: nowrap;
+}
+
+.org-invitation-status {
+   display: inline-flex;
+   align-items: center;
+   align-self: flex-start;
+   min-height: 24px;
+   padding: 0 8px;
+   border: 1px solid var(--border-default);
+   border-radius: 999px;
+   font-size: 0.7rem;
+   font-weight: 700;
+   white-space: nowrap;
+}
+
+.org-invitation-status.pending {
+   border-color: var(--verdict-misleading-border);
+   background: var(--verdict-misleading-bg);
+   color: var(--verdict-misleading-text);
+}
+
+.org-invitation-status.accepted {
+   border-color: var(--verdict-fact-border);
+   background: var(--verdict-fact-bg);
+   color: var(--verdict-fact-text);
+}
+
+.org-invitation-status.cancelled {
+   border-color: var(--verdict-fake-border);
+   background: var(--verdict-fake-bg);
+   color: var(--verdict-fake-text);
+}
+
+.org-invitation-status.expired {
+   border-color: var(--border-default);
+   background: var(--bg-subtle);
+   color: var(--text-muted);
+}
+
+.org-invitation-actions {
+   width: 182px;
+   display: flex;
+   align-items: center;
+   justify-content: flex-end;
+   gap: 8px;
+}
+
+.org-invitation-actions button {
+   min-width: 0;
+   min-height: 34px;
+   flex: 1 1 0;
+   padding-inline: 10px;
+}
+
+.org-invitation-actions button svg {
+   width: 14px;
+   height: 14px;
+   flex: 0 0 14px;
+}
+
+.org-invitation-actions button:not(.danger) {
+   color: var(--text-body);
+}
+
+.org-invitation-actions button:not(.danger):hover:not(:disabled) {
+   border-color: var(--brand-primary);
+   background: rgba(79, 70, 229, 0.06);
+   color: var(--brand-primary);
+}
+
+.org-invitation-actions .danger {
+   border-color: var(--verdict-fake-border);
+   background: var(--bg-surface);
+   color: var(--verdict-fake-text);
+}
+
+.org-invitation-actions .danger:hover:not(:disabled) {
+   border-color: var(--verdict-fake-border);
+   background: var(--verdict-fake-bg);
+   color: var(--verdict-fake-text);
+}
+
+/* ── Confirmation and membership action dialogs ─────────────── */
+
+.org-admin-modal-backdrop {
+   position: fixed;
+   inset: 0;
+   z-index: 1400;
+   display: grid;
+   place-items: center;
+   padding: 20px;
+   background: rgba(15, 23, 42, 0.48);
+   backdrop-filter: blur(2px);
+}
+
+.org-admin-confirm-modal {
+   width: min(100%, 460px);
+   max-height: calc(100vh - 40px);
+   overflow-y: auto;
+   padding: 22px;
+   border: 1px solid var(--border-default);
+   border-radius: 14px;
+   background: var(--bg-surface);
+   box-shadow: 0 24px 64px rgba(15, 23, 42, 0.2);
+}
+
+.org-admin-role-modal {
+   width: min(100%, 500px);
+}
+
+.org-admin-confirm-icon {
+   width: 40px;
+   height: 40px;
+   display: grid;
+   place-items: center;
+   margin-bottom: 14px;
+   border-radius: 10px;
+   background: var(--bg-subtle);
+   color: var(--brand-primary);
+}
+
+.org-admin-confirm-icon.danger {
+   background: var(--verdict-fake-bg);
+   color: var(--verdict-fake-text);
+}
+
+.org-admin-confirm-icon.warning {
+   background: var(--bg-subtle);
+   color: var(--brand-primary);
+}
+
+.org-admin-confirm-icon.neutral {
+   background: rgba(79, 70, 229, 0.08);
+   color: var(--brand-primary);
+}
+
+.org-admin-confirm-copy h3 {
+   margin: 0;
+   color: var(--text-main);
+   font-size: 1rem;
+}
+
+.org-admin-confirm-copy p {
+   margin: 8px 0 0;
+   color: var(--text-muted);
+   font-size: 0.82rem;
+   line-height: 1.6;
+}
+
+.org-admin-confirm-copy strong {
+   color: var(--text-main);
+   overflow-wrap: anywhere;
+}
+
+.org-admin-role-field {
+   display: flex;
+   flex-direction: column;
+   gap: 7px;
+   margin-top: 18px;
+}
+
+.org-admin-role-field label {
+   color: var(--text-body);
+   font-size: 0.76rem;
+   font-weight: 650;
+}
+
+.org-admin-role-field select {
+   min-height: 42px;
+   padding: 0 11px;
+   border: 1px solid var(--border-default);
+   border-radius: 8px;
+   background: var(--bg-surface);
+   color: var(--text-main);
+   font: inherit;
+}
+
+.org-admin-authority-note {
+   display: flex;
+   align-items: flex-start;
+   gap: 9px;
+   margin-top: 14px;
+   padding: 11px 12px;
+   border-radius: 9px;
+   background: var(--bg-subtle);
+   color: var(--text-muted);
+   font-size: 0.76rem;
+   line-height: 1.5;
+}
+
+.org-admin-authority-note svg {
+   flex: 0 0 auto;
+   margin-top: 1px;
+   color: var(--brand-primary);
+}
+
+.org-admin-confirm-actions {
+   display: flex;
+   justify-content: flex-end;
+   gap: 8px;
+   margin-top: 20px;
+}
+
+.org-admin-confirm-actions button {
+   min-height: 38px;
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   gap: 7px;
+   padding: 0 13px;
+   border: 1px solid var(--border-default);
+   border-radius: 8px;
+   background: var(--bg-surface);
+   color: var(--text-body);
+   font: inherit;
+   font-size: 0.78rem;
+   font-weight: 650;
+   cursor: pointer;
+}
+
+.org-admin-confirm-actions button:hover:not(:disabled) {
+   background: var(--bg-subtle);
+}
+
+.org-admin-confirm-actions button:focus-visible {
+   outline: 3px solid rgba(79, 70, 229, 0.18);
+   outline-offset: 2px;
+}
+
+.org-admin-confirm-actions button.primary {
+   border-color: var(--brand-primary);
+   background: var(--brand-primary);
+   color: #fff;
+}
+
+.org-admin-confirm-actions button.primary:hover:not(:disabled) {
+   border-color: var(--brand-primary);
+   background: var(--brand-primary);
+   filter: brightness(0.95);
+}
+
+.org-admin-confirm-actions button.danger {
+   border-color: var(--verdict-fake-border);
+   background: var(--verdict-fake-bg);
+   color: var(--verdict-fake-text);
+}
+
+.org-admin-confirm-actions button.danger:hover:not(:disabled) {
+   filter: brightness(0.97);
+}
+
+.org-admin-confirm-actions button:disabled {
+   opacity: 0.55;
+   cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+   .org-admin-spinner {
+      animation: none;
+   }
+
+   .org-member-card,
+   .org-admin-toolbar-actions button,
+   .org-invitation-actions button,
+   .org-invite-admin-form-actions button {
+      transition: none;
+   }
+}
+
+@media (max-width: 1100px) {
+   .org-member-card {
+      grid-template-columns:
+         minmax(190px, 0.9fr)
+         minmax(0, 1.7fr)
+         118px;
+   }
+
+   .org-member-details {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+   }
+}
+
+@media (max-width: 980px) {
+   .org-member-card,
+   .org-invitation-card {
+      grid-template-columns: 1fr;
+   }
+
+   .org-member-actions {
+      justify-content: flex-start;
+   }
+
+   .org-member-protected-label {
+      text-align: left;
+   }
+
+   .org-member-menu {
+      right: auto;
+      left: 0;
+   }
+
+   .org-invitation-details {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+   }
+
+   .org-invitation-actions {
+      width: auto;
+      justify-content: flex-start;
+   }
+
+   .org-invitation-actions button {
+      flex: 0 0 auto;
+   }
+}
+
+@media (max-width: 760px) {
+   .org-admin-toolbar {
+      align-items: stretch;
+      flex-direction: column;
+   }
+
+   .org-admin-toolbar-actions {
+      width: 100%;
+      flex-wrap: wrap;
+   }
+
+   .org-admin-toolbar-actions button {
+      width: auto;
+      flex: 1 1 auto;
+      align-self: auto;
+   }
+
+   .org-admin-summary {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+   }
+
+   .org-invite-admin-fields {
+      grid-template-columns: 1fr;
+   }
+}
+
+@media (max-width: 520px) {
+   .org-member-details,
+   .org-invitation-details {
+      grid-template-columns: 1fr;
+   }
+
+   .org-member-manage-button {
+      width: 100%;
+   }
+
+   .org-member-actions {
+      width: 100%;
+   }
+
+   .org-member-menu {
+      width: 100%;
+      min-width: 0;
+   }
+
+   .org-invite-admin-form-actions,
+   .org-admin-confirm-actions {
+      flex-direction: column-reverse;
+   }
+
+   .org-invite-admin-form-actions button,
+   .org-admin-confirm-actions button {
+      width: 100%;
+   }
+}
+
+/* ── 4D.5D.2B accessibility hardening ───────────────────────── */
+
+.org-admin-confirm-modal:focus {
+   outline: none;
+}
+
+.org-member-menu {
+   max-width: min(224px, calc(100vw - 32px));
+}
+
+.org-member-menu button:focus-visible {
+   outline: 2px solid var(--brand-primary);
+   outline-offset: -2px;
+}
+
+@media (max-width: 375px) {
+   .organization-admin-panel,
+   .org-member-card,
+   .org-invitation-card,
+   .org-invite-admin-form,
+   .org-admin-confirm-modal {
+      min-width: 0;
+   }
+
+   .org-member-card,
+   .org-invitation-card {
+      padding-inline: 14px;
+   }
+
+   .org-admin-modal-backdrop {
+      padding: 12px;
+   }
+
+   .org-admin-confirm-modal {
+      max-height: calc(100vh - 24px);
+      padding: 18px;
+   }
+
+   .org-admin-toolbar-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+   }
+
+   .org-admin-toolbar-actions button {
+      width: 100%;
+   }
+}

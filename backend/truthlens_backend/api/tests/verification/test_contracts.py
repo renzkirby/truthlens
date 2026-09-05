@@ -1,11 +1,11 @@
 from datetime import datetime, timezone
 from unittest import TestCase
 
-from .verification.contracts import (
+from api.verification.contracts import (
     NormalizedEvidence,
     RawEvidence,
 )
-from .verification.normalizers import (
+from api.verification.normalizers import (
     canonicalize_url,
     compute_content_hash,
     normalize_evidence,
@@ -85,12 +85,11 @@ class EvidenceContractTests(TestCase):
             "a" * 64,
         )
 
+
 class EvidenceNormalizerTests(TestCase):
 
     def test_normalize_text_collapses_whitespace(self):
-        result = normalize_text(
-            "  Example   evidence\ncontent.  "
-        )
+        result = normalize_text("  Example   evidence\ncontent.  ")
 
         self.assertEqual(
             result,
@@ -98,15 +97,11 @@ class EvidenceNormalizerTests(TestCase):
         )
 
     def test_normalize_text_returns_none_for_empty_text(self):
-        self.assertIsNone(
-            normalize_text("   ")
-        )
+        self.assertIsNone(normalize_text("   "))
 
     def test_canonicalize_url_removes_tracking_and_fragment(self):
         result = canonicalize_url(
-            "HTTPS://Example.COM/article"
-            "?utm_source=test&id=42"
-            "#section"
+            "HTTPS://Example.COM/article" "?utm_source=test&id=42" "#section"
         )
 
         self.assertEqual(
@@ -115,9 +110,7 @@ class EvidenceNormalizerTests(TestCase):
         )
 
     def test_canonicalize_url_removes_default_https_port(self):
-        result = canonicalize_url(
-            "https://example.com:443/article"
-        )
+        result = canonicalize_url("https://example.com:443/article")
 
         self.assertEqual(
             result,
@@ -125,13 +118,9 @@ class EvidenceNormalizerTests(TestCase):
         )
 
     def test_content_hash_is_stable_after_whitespace_normalization(self):
-        first = compute_content_hash(
-            "Example   evidence"
-        )
+        first = compute_content_hash("Example   evidence")
 
-        second = compute_content_hash(
-            " Example evidence "
-        )
+        second = compute_content_hash(" Example evidence ")
 
         self.assertEqual(
             first,
@@ -146,24 +135,17 @@ class EvidenceNormalizerTests(TestCase):
     def test_normalize_evidence_builds_internal_representation(self):
         raw = RawEvidence(
             provider="tavily",
-            url=(
-                "https://Example.com/article"
-                "?utm_source=test"
-            ),
+            url=("https://Example.com/article" "?utm_source=test"),
             title="  Example   Article ",
             publisher=" Example News ",
             source_type="news",
-            content=(
-                "Example   evidence\ncontent."
-            ),
+            content=("Example   evidence\ncontent."),
             raw_reference={
                 "result_index": 2,
             },
         )
 
-        normalized = normalize_evidence(
-            raw
-        )
+        normalized = normalize_evidence(raw)
 
         self.assertEqual(
             normalized.provider,

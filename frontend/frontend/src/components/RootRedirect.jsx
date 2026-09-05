@@ -1,5 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { canAccessWorkspace } from "../utils/workspace";
 import AuthRouteLoader from "./AuthRouteLoader";
 
 function RootRedirect() {
@@ -13,9 +14,9 @@ function RootRedirect() {
       return <Navigate to="/login" replace />;
    }
 
-   const isModerator = user?.role === "MOD" || user?.role === "MODERATOR";
+   const destination = canAccessWorkspace(user) ? "/workspace" : "/community";
 
-   return <Navigate to={isModerator ? "/moderation" : "/community"} replace />;
+   return <Navigate to={destination} replace />;
 }
 
 export default RootRedirect;

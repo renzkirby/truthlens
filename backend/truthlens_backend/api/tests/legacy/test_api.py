@@ -16,7 +16,7 @@ from django.core.management import (
 )
 from io import StringIO
 
-from .models import (
+from api.models import (
     Claim,
     ClaimCheckHistory,
     EvidenceSubmission,
@@ -39,13 +39,13 @@ from .models import (
     OfficialFactCheckSource,
     KnowledgeReuseEvent,
 )
-from .throttles import FactCheckRateThrottle
-from .trust_service import (
+from api.throttles import FactCheckRateThrottle
+from api.trust_service import (
     calculate_trust_components,
     get_reputation_progression,
     recompute_user_trust_score,
 )
-from .moderation_service import (
+from api.moderation_service import (
     DuplicateActiveModerationCase,
     InvalidModerationCaseTarget,
     InvalidModerationTransition,
@@ -54,19 +54,19 @@ from .moderation_service import (
     transition_moderation_case,
     unassign_moderation_case,
 )
-from .organization_service import (
+from api.organization_service import (
     PartnerCapability,
     get_user_capabilities,
     has_capability,
     has_case_capability,
 )
-from .evidence_review_service import (
+from api.evidence_review_service import (
     EvidenceReviewConflict,
     InvalidEvidenceDecision,
     ensure_evidence_case,
     review_evidence_submission,
 )
-from .adjudication_service import (
+from api.adjudication_service import (
     AdjudicationConflict,
     InvalidAdjudicationDecision,
     ensure_adjudication_case,
@@ -74,11 +74,11 @@ from .adjudication_service import (
     is_claim_ready_for_adjudication,
     issue_adjudication_decision,
 )
-from .verification_assignment_service import (
+from api.verification_assignment_service import (
     claim_verification_assignment,
     ensure_verification_assignment,
 )
-from .publishing_service import (
+from api.publishing_service import (
     InvalidFactCheckContent,
     InvalidPublicationTransition,
     PublishingAuthorizationError,
@@ -88,7 +88,7 @@ from .publishing_service import (
     submit_fact_check_for_review,
     update_fact_check_draft,
 )
-from .knowledge_reuse_service import (
+from api.knowledge_reuse_service import (
     InvalidKnowledgeReuse,
     build_published_fact_check_payload,
     build_query_fingerprint,
@@ -96,16 +96,16 @@ from .knowledge_reuse_service import (
     record_knowledge_reuse,
     index_published_fact_check,
 )
-from .services import (
+from api.services import (
     search_official_vault,
 )
-from .claim_matching import (
+from api.claim_matching import (
     compute_fingerprint,
     find_matching_claim,
     get_match_result,
 )
-from .serializers import ClaimMatchSerializer
-from .tasks import execute_core_text_pipeline
+from api.serializers import ClaimMatchSerializer
+from api.tasks import execute_core_text_pipeline
 
 
 def assign_claim_to_partner(
@@ -1053,7 +1053,7 @@ class ModerationCaseFoundationTests(APITestCase):
             event.delete()
 
     def test_ensure_safety_case_reuses_active_case(self):
-        from .moderation_service import ensure_safety_case
+        from api.moderation_service import ensure_safety_case
 
         first = ensure_safety_case(
             thread=self.thread,
@@ -1079,7 +1079,7 @@ class ModerationCaseFoundationTests(APITestCase):
         )
 
     def test_escalating_safety_case_does_not_close_thread(self):
-        from .moderation_service import (
+        from api.moderation_service import (
             ensure_safety_case,
             escalate_safety_case,
         )
@@ -1122,7 +1122,7 @@ class ModerationCaseFoundationTests(APITestCase):
         )
 
     def test_dismiss_preserves_report_history(self):
-        from .moderation_service import (
+        from api.moderation_service import (
             ensure_safety_case,
             resolve_safety_case,
         )
@@ -1177,7 +1177,7 @@ class ModerationCaseFoundationTests(APITestCase):
         self.assertFalse(log.is_valid_report)
 
     def test_remove_resolves_case_and_hides_thread(self):
-        from .moderation_service import (
+        from api.moderation_service import (
             ensure_safety_case,
             resolve_safety_case,
         )
@@ -1220,7 +1220,7 @@ class ModerationCaseFoundationTests(APITestCase):
         self.assertTrue(log.is_valid_report)
 
     def test_same_user_can_report_again_after_resolution(self):
-        from .moderation_service import (
+        from api.moderation_service import (
             ensure_safety_case,
             resolve_safety_case,
         )

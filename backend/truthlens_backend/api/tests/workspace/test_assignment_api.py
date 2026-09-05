@@ -7,7 +7,7 @@ from rest_framework.test import (
     APITestCase,
 )
 
-from .models import (
+from api.models import (
     Claim,
     EvidenceSubmission,
     Organization,
@@ -17,7 +17,7 @@ from .models import (
     VerificationAssignment,
 )
 
-from .verification_assignment_service import (
+from api.verification_assignment_service import (
     claim_verification_assignment,
     ensure_verification_assignment,
 )
@@ -387,6 +387,56 @@ class VerificationAssignmentApiTests(APITestCase):
             len(response.data["results"]),
             1,
         )
+
+    def test_intake_includes_community_thread_context(
+        self,
+    ):
+        fixture = self._create_available_assignment(
+            suffix="community-context",
+        )
+
+        second_thread = Thread.objects.create(
+            claim=fixture["claim"],
+            author=self.community_user,
+            caption=("Second community discussion."),
+            status=Thread.Status.OPEN,
+        )
+
+        response = self.lead_a_client.get(
+            reverse("verification_intake"),
+            {
+                "organization_id": str(self.organization_a.id),
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        assignment = next(
+            item
+            for item in response.data["results"]
+            if item["id"] == str(fixture["assignment"].id)
+        )
+
+        threads = assignment["claim"]["community_threads"]
+
+        returned_thread_ids = {str(thread["id"]) for thread in threads}
+
+        self.assertEqual(
+            returned_thread_ids,
+            {
+                str(fixture["thread"].id),
+                str(second_thread.id),
+            },
+        )
+
+        for thread in threads:
+            self.assertEqual(
+                str(thread["claim_id"]),
+                str(fixture["claim"].id),
+            )
 
     # =====================================
     # Claim

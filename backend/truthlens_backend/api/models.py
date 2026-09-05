@@ -324,6 +324,165 @@ class OrganizationMembership(models.Model):
         return f"{self.user.username} - " f"{self.organization.name} " f"({self.role})"
 
 
+class OrganizationInvitation(models.Model):
+    class Status(models.TextChoices):
+        PENDING = (
+            "PENDING",
+            "Pending",
+        )
+        ACCEPTED = (
+            "ACCEPTED",
+            "Accepted",
+        )
+        CANCELLED = (
+            "CANCELLED",
+            "Cancelled",
+        )
+        EXPIRED = (
+            "EXPIRED",
+            "Expired",
+        )
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="invitations",
+    )
+
+    email = models.EmailField(
+        max_length=254,
+        db_index=True,
+    )
+
+    invited_role = models.CharField(
+        max_length=30,
+        choices=(OrganizationMembership.Role.choices),
+    )
+
+    invited_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name=("sent_organization_invitations"),
+    )
+
+    # Store only the digest. The raw invitation
+    # token must never be persisted.
+    token_digest = models.CharField(
+        max_length=64,
+        unique=True,
+        editable=False,
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+
+    expires_at = models.DateTimeField(
+        db_index=True,
+    )
+
+    last_sent_at = models.DateTimeField()
+
+    send_count = models.PositiveIntegerField(
+        default=1,
+    )
+
+    accepted_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name=("accepted_organization_invitations"),
+    )
+
+    accepted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    cancelled_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name=("cancelled_organization_invitations"),
+    )
+
+    cancelled_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    class Meta:
+        ordering = [
+            "-created_at",
+        ]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "organization",
+                    "email",
+                ],
+                condition=Q(
+                    status="PENDING",
+                ),
+                name=("unique_pending_org_" "invitation_email"),
+            ),
+        ]
+
+        indexes = [
+            models.Index(
+                fields=[
+                    "organization",
+                    "status",
+                ],
+                name=("org_invite_org_status_idx"),
+            ),
+            models.Index(
+                fields=[
+                    "email",
+                    "status",
+                ],
+                name=("org_invite_email_status_idx"),
+            ),
+        ]
+
+    def save(
+        self,
+        *args,
+        **kwargs,
+    ):
+        self.email = str(self.email or "").strip().lower()
+
+        super().save(
+            *args,
+            **kwargs,
+        )
+
+    def __str__(self):
+        return f"{self.email} → " f"{self.organization.name} " f"({self.invited_role})"
+
+
 class Claim(models.Model):
     class VerificationSource(models.TextChoices):
         AI_EXTENSION = "AI_EXTENSION", "AI Extension"

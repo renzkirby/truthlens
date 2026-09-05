@@ -125,6 +125,9 @@ def get_available_verification_assignments():
             "organization",
             "claimed_by",
         )
+        .prefetch_related(
+            "claim__threads",
+        )
         .order_by("-created_at")
     )
 
@@ -147,7 +150,13 @@ def get_organization_verification_workload(
             "organization",
             "claimed_by",
         )
-        .order_by("-claimed_at", "-created_at")
+        .prefetch_related(
+            "claim__threads",
+        )
+        .order_by(
+            "-claimed_at",
+            "-created_at",
+        )
     )
 
 

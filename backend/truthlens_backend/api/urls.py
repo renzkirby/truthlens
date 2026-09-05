@@ -20,7 +20,7 @@ urlpatterns = [
     path("auth/login/", views.login_user),
     path("auth/refresh/", TokenRefreshView.as_view()),
     path("auth/register/", views.register_user),
-    path("auth/me/", views.get_current_user),
+    path("auth/me/", views.get_current_user, name="auth_me"),
     path("auth/profile/update/", views.update_profile),
     path("auth/guest-scan-sync/", views.sync_guest_scan),
     path("users/search/", views.search_users),
@@ -93,6 +93,82 @@ urlpatterns = [
         name="verification_workload",
     ),
     path(
+        "organizations/" "<uuid:organization_id>/members/",
+        views.organization_members,
+        name="organization_members",
+    ),
+    path(
+        (
+            "organizations/"
+            "<uuid:organization_id>/"
+            "members/"
+            "<uuid:membership_id>/"
+            "role/"
+        ),
+        views.organization_membership_role_update,
+        name="organization_membership_role_update",
+    ),
+    path(
+        (
+            "organizations/"
+            "<uuid:organization_id>/"
+            "members/"
+            "<uuid:membership_id>/"
+            "suspend/"
+        ),
+        views.organization_membership_suspend,
+        name="organization_membership_suspend",
+    ),
+    path(
+        (
+            "organizations/"
+            "<uuid:organization_id>/"
+            "members/"
+            "<uuid:membership_id>/"
+            "restore/"
+        ),
+        views.organization_membership_restore,
+        name="organization_membership_restore",
+    ),
+    path(
+        (
+            "organizations/"
+            "<uuid:organization_id>/"
+            "members/"
+            "<uuid:membership_id>/"
+            "remove/"
+        ),
+        views.organization_membership_remove,
+        name="organization_membership_remove",
+    ),
+    path(
+        ("organizations/" "<uuid:organization_id>/" "invitations/"),
+        views.organization_invitations,
+        name="organization_invitations",
+    ),
+    path(
+        (
+            "organizations/"
+            "<uuid:organization_id>/"
+            "invitations/"
+            "<uuid:invitation_id>/"
+            "resend/"
+        ),
+        views.organization_invitation_resend,
+        name="organization_invitation_resend",
+    ),
+    path(
+        (
+            "organizations/"
+            "<uuid:organization_id>/"
+            "invitations/"
+            "<uuid:invitation_id>/"
+            "cancel/"
+        ),
+        views.organization_invitation_cancel,
+        name="organization_invitation_cancel",
+    ),
+    path(
         "moderation/threads/<uuid:thread_id>/resolve/",
         views.moderation_resolve_thread,
         name="moderation_resolve_thread",
@@ -126,6 +202,16 @@ urlpatterns = [
         "moderation/fact-checks/" "<uuid:fact_check_id>/publish/",
         views.fact_check_publish,
         name=("moderation_fact_check_publish"),
+    ),
+    path(
+        ("organization-invitations/" "<str:token>/"),
+        views.organization_invitation_detail,
+        name="organization_invitation_detail",
+    ),
+    path(
+        ("organization-invitations/" "<str:token>/" "accept/"),
+        views.organization_invitation_accept,
+        name="organization_invitation_accept",
     ),
     # GoogleLogin URL
     path("auth/google/", views.GoogleLogin.as_view(), name="google_login"),
