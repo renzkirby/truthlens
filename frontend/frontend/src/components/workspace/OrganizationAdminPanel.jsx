@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../hooks/useNotification";
 import Icons from "../Icons.jsx";
+import OrganizationPublicProfilePanel from "./OrganizationPublicProfilePanel.jsx";
 
 import { resolveApiEndpoint } from "../../utils/api";
 
@@ -1194,6 +1195,8 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
 
    return (
       <div className="organization-admin-panel">
+         <OrganizationPublicProfilePanel organizationId={organizationId} requestVersion={requestVersion} />
+
          <div className="org-admin-toolbar">
             <div>
                <strong>Organization members</strong>

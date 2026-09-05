@@ -122,6 +122,7 @@ export const API_ENDPOINTS = {
    VERIFICATION_ASSIGNMENT_CLAIM: (assignmentId) => `verification/assignments/${assignmentId}/claim/`,
    VERIFICATION_ASSIGNMENT_RELEASE: (assignmentId) => `verification/assignments/${assignmentId}/release/`,
    ORGANIZATION_MEMBERS: (organizationId) => `organizations/${organizationId}/members/`,
+   ORGANIZATION_PUBLIC_PROFILE: (organizationId) => `organizations/${organizationId}/public-profile/`,
    ORGANIZATION_MEMBER_ROLE: (organizationId, membershipId) =>
       `organizations/${organizationId}/members/${membershipId}/role/`,
    ORGANIZATION_MEMBER_SUSPEND: (organizationId, membershipId) =>
