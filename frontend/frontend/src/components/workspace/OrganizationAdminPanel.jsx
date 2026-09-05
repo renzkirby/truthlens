@@ -171,7 +171,17 @@ function getFocusableElements(container) {
    ).filter((element) => !element.hasAttribute("hidden") && element.getAttribute("aria-hidden") !== "true");
 }
 
-function InvitationAdminCard({ invitation, busy, onResend, onCancel }) {
+function focusElement(element) {
+   if (!element || !document.contains(element) || element.matches(":disabled")) {
+      return false;
+   }
+
+   element.focus();
+
+   return document.activeElement === element;
+}
+
+function InvitationAdminCard({ invitation, busy, onResend, onCancel, cancelButtonRef }) {
    const isPending = invitation.status === "PENDING";
    const actionsDisabled = busy || invitation._optimistic === true;
 
@@ -225,6 +235,7 @@ function InvitationAdminCard({ invitation, busy, onResend, onCancel }) {
                </button>
 
                <button
+                  ref={cancelButtonRef}
                   type="button"
                   className="danger"
                   onClick={(event) => onCancel(invitation, event)}
@@ -302,9 +313,12 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
 
    const dialogRef = useRef(null);
    const dialogReturnFocusRef = useRef(null);
+   const dialogDefersFocusRef = useRef(false);
+   const pendingFocusReturnRef = useRef(null);
    const refreshButtonRef = useRef(null);
    const memberMenuRef = useRef(null);
    const memberManageButtonRefs = useRef(new Map());
+   const invitationCancelButtonRefs = useRef(new Map());
 
    const [requestVersion, setRequestVersion] = useState(0);
 
@@ -583,18 +597,59 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
          document.removeEventListener("keydown", handleDialogKeyDown);
          document.body.style.overflow = previousBodyOverflow;
 
+         const shouldDeferFocus = dialogDefersFocusRef.current;
+
+         dialogDefersFocusRef.current = false;
+
+         if (shouldDeferFocus) {
+            return;
+         }
+
          requestAnimationFrame(() => {
-            if (returnTarget && document.contains(returnTarget)) {
-               returnTarget.focus();
+            if (focusElement(returnTarget)) {
                return;
             }
 
-            if (refreshButton && document.contains(refreshButton)) {
-               refreshButton.focus();
-            }
+            focusElement(refreshButton);
          });
       };
    }, [dialogOpen, invitationActionId, memberActionId]);
+
+   useEffect(() => {
+      const pendingTarget = pendingFocusReturnRef.current;
+
+      if (!pendingTarget) {
+         return undefined;
+      }
+
+      const actionStillPending =
+         pendingTarget.type === "member"
+            ? memberActionId === pendingTarget.id
+            : invitationActionId === pendingTarget.id;
+
+      if (actionStillPending) {
+         return undefined;
+      }
+
+      const animationFrame = requestAnimationFrame(() => {
+         const target =
+            pendingTarget.type === "member"
+               ? memberManageButtonRefs.current.get(pendingTarget.id)
+               : invitationCancelButtonRefs.current.get(pendingTarget.id);
+
+         if (!focusElement(target)) {
+            focusElement(refreshButtonRef.current);
+         }
+
+         if (pendingFocusReturnRef.current === pendingTarget) {
+            pendingFocusReturnRef.current = null;
+         }
+      });
+
+      return () => {
+         cancelAnimationFrame(animationFrame);
+      };
+   }, [invitationActionId, memberActionId]);
 
    const refresh = () => {
       setLoading(true);
@@ -674,6 +729,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
 
    const rememberMemberDialogTrigger = (membershipId) => {
       dialogReturnFocusRef.current = memberManageButtonRefs.current.get(membershipId) || null;
+      dialogDefersFocusRef.current = false;
    };
 
    const openRoleDialog = (membership) => {
@@ -703,6 +759,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
 
    const openInvitationCancelDialog = (invitation, event) => {
       dialogReturnFocusRef.current = event?.currentTarget || null;
+      dialogDefersFocusRef.current = false;
       setCancelTarget(invitation);
    };
 
@@ -851,6 +908,11 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
          status: "CANCELLED",
       };
 
+      dialogDefersFocusRef.current = true;
+      pendingFocusReturnRef.current = {
+         type: "invitation",
+         id: invitation.id,
+      };
       setCancelTarget(null);
       setInvitationActionId(invitation.id);
       setInvitations((current) => current.map((item) => (item.id === invitation.id ? optimisticInvitation : item)));
@@ -897,6 +959,11 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
       const snapshot = membership;
       const requestedRole = roleValue;
 
+      dialogDefersFocusRef.current = true;
+      pendingFocusReturnRef.current = {
+         type: "member",
+         id: membership.id,
+      };
       setRoleTarget(null);
       setRoleValue("");
       setMemberActionId(membership.id);
@@ -949,6 +1016,11 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
 
       const snapshot = membership;
 
+      dialogDefersFocusRef.current = true;
+      pendingFocusReturnRef.current = {
+         type: "member",
+         id: membership.id,
+      };
       setSuspendTarget(null);
       setMemberActionId(membership.id);
 
@@ -994,6 +1066,11 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
 
       const snapshot = membership;
 
+      dialogDefersFocusRef.current = true;
+      pendingFocusReturnRef.current = {
+         type: "member",
+         id: membership.id,
+      };
       setRestoreTarget(null);
       setMemberActionId(membership.id);
 
@@ -1040,6 +1117,11 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
       const snapshot = membership;
       const originalIndex = roster.results.findIndex((item) => item.id === membership.id);
 
+      dialogDefersFocusRef.current = true;
+      pendingFocusReturnRef.current = {
+         type: "member",
+         id: membership.id,
+      };
       setRemoveTarget(null);
       setMemberActionId(membership.id);
       removeRosterMembership(membership.id);
@@ -1505,6 +1587,13 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                         busy={invitationActionId === invitation.id}
                         onResend={handleResendInvitation}
                         onCancel={openInvitationCancelDialog}
+                        cancelButtonRef={(node) => {
+                           if (node) {
+                              invitationCancelButtonRefs.current.set(invitation.id, node);
+                           } else {
+                              invitationCancelButtonRefs.current.delete(invitation.id);
+                           }
+                        }}
                      />
                   ))}
                </div>
