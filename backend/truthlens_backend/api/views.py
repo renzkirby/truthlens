@@ -150,6 +150,17 @@ from .organization_invitation_service import (
     get_organization_invitations,
     resend_organization_invitation,
 )
+from .organization_membership_service import (
+    InvalidOrganizationMembershipRole,
+    OrganizationMembershipAuthorizationError,
+    OrganizationMembershipConflict,
+    OrganizationMembershipManagementError,
+    OrganizationMembershipNotFound,
+    change_organization_membership_role,
+    remove_organization_membership,
+    restore_organization_membership,
+    suspend_organization_membership,
+)
 from .throttles import (
     FactCheckRateThrottle,
     PasswordResetRateThrottle,
@@ -188,6 +199,7 @@ from .serializers import (
     OrganizationInvitationAdminSerializer,
     OrganizationInvitationCreateSerializer,
     OrganizationInvitationPublicSerializer,
+    OrganizationMembershipRoleUpdateSerializer,
 )
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
@@ -3698,6 +3710,61 @@ def _get_managed_organization(
     return organization
 
 
+def _organization_membership_error_response(
+    error,
+):
+    if isinstance(
+        error,
+        OrganizationMembershipNotFound,
+    ):
+        return Response(
+            {
+                "detail": str(error),
+            },
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if isinstance(
+        error,
+        OrganizationMembershipAuthorizationError,
+    ):
+        return Response(
+            {
+                "detail": str(error),
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    if isinstance(
+        error,
+        OrganizationMembershipConflict,
+    ):
+        return Response(
+            {
+                "detail": str(error),
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    if isinstance(
+        error,
+        InvalidOrganizationMembershipRole,
+    ):
+        return Response(
+            {
+                "detail": str(error),
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    return Response(
+        {
+            "detail": str(error),
+        },
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def organization_invitation_detail(
@@ -3758,5 +3825,142 @@ def organization_invitation_accept(
                 "status": membership.status,
             },
         },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def organization_membership_role_update(
+    request,
+    organization_id,
+    membership_id,
+):
+    organization = _get_managed_organization(
+        request,
+        organization_id,
+    )
+
+    serializer = OrganizationMembershipRoleUpdateSerializer(
+        data=request.data,
+    )
+
+    serializer.is_valid(
+        raise_exception=True,
+    )
+
+    try:
+        membership = change_organization_membership_role(
+            organization=organization,
+            membership_id=membership_id,
+            role=serializer.validated_data["role"],
+            actor=request.user,
+        )
+
+    except OrganizationMembershipManagementError as error:
+        return _organization_membership_error_response(
+            error,
+        )
+
+    return Response(
+        OrganizationMembershipAdminSerializer(
+            membership,
+        ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def organization_membership_suspend(
+    request,
+    organization_id,
+    membership_id,
+):
+    organization = _get_managed_organization(
+        request,
+        organization_id,
+    )
+
+    try:
+        membership = suspend_organization_membership(
+            organization=organization,
+            membership_id=membership_id,
+            actor=request.user,
+        )
+
+    except OrganizationMembershipManagementError as error:
+        return _organization_membership_error_response(
+            error,
+        )
+
+    return Response(
+        OrganizationMembershipAdminSerializer(
+            membership,
+        ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def organization_membership_restore(
+    request,
+    organization_id,
+    membership_id,
+):
+    organization = _get_managed_organization(
+        request,
+        organization_id,
+    )
+
+    try:
+        membership = restore_organization_membership(
+            organization=organization,
+            membership_id=membership_id,
+            actor=request.user,
+        )
+
+    except OrganizationMembershipManagementError as error:
+        return _organization_membership_error_response(
+            error,
+        )
+
+    return Response(
+        OrganizationMembershipAdminSerializer(
+            membership,
+        ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def organization_membership_remove(
+    request,
+    organization_id,
+    membership_id,
+):
+    organization = _get_managed_organization(
+        request,
+        organization_id,
+    )
+
+    try:
+        membership = remove_organization_membership(
+            organization=organization,
+            membership_id=membership_id,
+            actor=request.user,
+        )
+
+    except OrganizationMembershipManagementError as error:
+        return _organization_membership_error_response(
+            error,
+        )
+
+    return Response(
+        OrganizationMembershipAdminSerializer(
+            membership,
+        ).data,
         status=status.HTTP_200_OK,
     )

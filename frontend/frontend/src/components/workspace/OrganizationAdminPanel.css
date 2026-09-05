@@ -84,16 +84,25 @@
 }
 
 .org-member-card {
+   position: relative;
    display: grid;
    grid-template-columns:
       minmax(200px, 0.9fr)
-      minmax(0, 2fr);
+      minmax(0, 2fr)
+      128px;
    gap: 18px;
    align-items: center;
    padding: 16px 18px;
    border: 1px solid var(--border-default);
    border-radius: 11px;
    background: var(--bg-surface);
+   transition:
+      border-color 150ms ease,
+      opacity 150ms ease;
+}
+
+.org-member-card.is-busy {
+   border-color: var(--brand-primary);
 }
 
 .org-member-identity {
@@ -199,6 +208,102 @@
    color: var(--verdict-fake-text);
 }
 
+.org-member-actions {
+   position: relative;
+   min-width: 0;
+   display: flex;
+   justify-content: flex-end;
+   align-items: center;
+}
+
+.org-member-manage-button {
+   width: 118px;
+   min-height: 36px;
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   gap: 6px;
+   padding: 0 10px;
+   border: 1px solid var(--border-default);
+   border-radius: 8px;
+   background: var(--bg-surface);
+   color: var(--text-body);
+   font: inherit;
+   font-size: 0.76rem;
+   font-weight: 650;
+   cursor: pointer;
+   white-space: nowrap;
+}
+
+.org-member-manage-button:hover:not(:disabled) {
+   border-color: var(--brand-primary);
+   background: rgba(79, 70, 229, 0.05);
+   color: var(--brand-primary);
+}
+
+.org-member-manage-button:disabled {
+   opacity: 0.55;
+   cursor: not-allowed;
+}
+
+.org-member-manage-button svg {
+   flex: 0 0 auto;
+}
+
+.org-member-menu {
+   position: absolute;
+   top: calc(100% + 7px);
+   right: 0;
+   z-index: 40;
+   width: 224px;
+   padding: 6px;
+   border: 1px solid var(--border-default);
+   border-radius: 10px;
+   background: var(--bg-surface);
+   box-shadow: 0 16px 36px rgba(15, 23, 42, 0.14);
+}
+
+.org-member-menu button {
+   width: 100%;
+   min-height: 36px;
+   display: flex;
+   align-items: center;
+   gap: 9px;
+   padding: 0 10px;
+   border: 0;
+   border-radius: 7px;
+   background: transparent;
+   color: var(--text-body);
+   font: inherit;
+   font-size: 0.76rem;
+   font-weight: 600;
+   text-align: left;
+   cursor: pointer;
+}
+
+.org-member-menu button:hover,
+.org-member-menu button:focus-visible {
+   background: var(--bg-subtle);
+   outline: none;
+}
+
+.org-member-menu button.danger {
+   color: var(--verdict-fake-text);
+}
+
+.org-member-menu button.danger:hover,
+.org-member-menu button.danger:focus-visible {
+   background: var(--verdict-fake-bg);
+}
+
+.org-member-protected-label {
+   color: var(--text-muted);
+   font-size: 0.72rem;
+   font-weight: 600;
+   text-align: right;
+   line-height: 1.35;
+}
+
 .org-admin-state {
    min-height: 220px;
    display: flex;
@@ -260,43 +365,6 @@
    animation: org-admin-spin 0.8s linear infinite;
 }
 
-@media (prefers-reduced-motion: reduce) {
-   .org-admin-spinner {
-      animation: none;
-   }
-}
-
-@media (max-width: 980px) {
-   .org-member-card {
-      grid-template-columns: 1fr;
-   }
-
-   .org-member-details {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-   }
-}
-
-@media (max-width: 760px) {
-   .org-admin-toolbar {
-      align-items: stretch;
-      flex-direction: column;
-   }
-
-   .org-admin-toolbar button {
-      align-self: flex-start;
-   }
-
-   .org-admin-summary {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-   }
-}
-
-@media (max-width: 520px) {
-   .org-member-details {
-      grid-template-columns: 1fr;
-   }
-}
-
 /* ── Organization administration extensions ──────────────────── */
 
 .org-admin-toolbar-actions {
@@ -347,7 +415,9 @@
 .org-invite-admin-form-actions button:focus-visible,
 .org-invite-admin-close:focus-visible,
 .org-invite-admin-fields input:focus-visible,
-.org-invite-admin-fields select:focus-visible {
+.org-invite-admin-fields select:focus-visible,
+.org-member-manage-button:focus-visible,
+.org-admin-role-field select:focus-visible {
    outline: 3px solid rgba(79, 70, 229, 0.18);
    outline-offset: 2px;
 }
@@ -659,61 +729,7 @@
    color: var(--verdict-fake-text);
 }
 
-@media (max-width: 980px) {
-   .org-invitation-card {
-      grid-template-columns: 1fr;
-   }
-
-   .org-invitation-details {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-   }
-
-   .org-invitation-actions {
-      width: auto;
-      justify-content: flex-start;
-   }
-
-   .org-invitation-actions button {
-      flex: 0 0 auto;
-   }
-}
-
-@media (max-width: 760px) {
-   .org-admin-toolbar {
-      align-items: stretch;
-      flex-direction: column;
-   }
-
-   .org-admin-toolbar-actions {
-      width: 100%;
-      flex-wrap: wrap;
-   }
-
-   .org-admin-toolbar-actions button {
-      flex: 1 1 auto;
-      align-self: auto;
-   }
-
-   .org-invite-admin-fields {
-      grid-template-columns: 1fr;
-   }
-}
-
-@media (max-width: 520px) {
-   .org-invitation-details {
-      grid-template-columns: 1fr;
-   }
-
-   .org-invite-admin-form-actions {
-      flex-direction: column-reverse;
-   }
-
-   .org-invite-admin-form-actions button {
-      width: 100%;
-   }
-}
-
-/* ── Invitation cancellation confirmation ───────────────────── */
+/* ── Confirmation and membership action dialogs ─────────────── */
 
 .org-admin-modal-backdrop {
    position: fixed;
@@ -727,12 +743,18 @@
 }
 
 .org-admin-confirm-modal {
-   width: min(100%, 440px);
+   width: min(100%, 460px);
+   max-height: calc(100vh - 40px);
+   overflow-y: auto;
    padding: 22px;
    border: 1px solid var(--border-default);
    border-radius: 14px;
    background: var(--bg-surface);
    box-shadow: 0 24px 64px rgba(15, 23, 42, 0.2);
+}
+
+.org-admin-role-modal {
+   width: min(100%, 500px);
 }
 
 .org-admin-confirm-icon {
@@ -742,8 +764,23 @@
    place-items: center;
    margin-bottom: 14px;
    border-radius: 10px;
+   background: var(--bg-subtle);
+   color: var(--brand-primary);
+}
+
+.org-admin-confirm-icon.danger {
    background: var(--verdict-fake-bg);
    color: var(--verdict-fake-text);
+}
+
+.org-admin-confirm-icon.warning {
+   background: var(--bg-subtle);
+   color: var(--brand-primary);
+}
+
+.org-admin-confirm-icon.neutral {
+   background: rgba(79, 70, 229, 0.08);
+   color: var(--brand-primary);
 }
 
 .org-admin-confirm-copy h3 {
@@ -762,6 +799,48 @@
 .org-admin-confirm-copy strong {
    color: var(--text-main);
    overflow-wrap: anywhere;
+}
+
+.org-admin-role-field {
+   display: flex;
+   flex-direction: column;
+   gap: 7px;
+   margin-top: 18px;
+}
+
+.org-admin-role-field label {
+   color: var(--text-body);
+   font-size: 0.76rem;
+   font-weight: 650;
+}
+
+.org-admin-role-field select {
+   min-height: 42px;
+   padding: 0 11px;
+   border: 1px solid var(--border-default);
+   border-radius: 8px;
+   background: var(--bg-surface);
+   color: var(--text-main);
+   font: inherit;
+}
+
+.org-admin-authority-note {
+   display: flex;
+   align-items: flex-start;
+   gap: 9px;
+   margin-top: 14px;
+   padding: 11px 12px;
+   border-radius: 9px;
+   background: var(--bg-subtle);
+   color: var(--text-muted);
+   font-size: 0.76rem;
+   line-height: 1.5;
+}
+
+.org-admin-authority-note svg {
+   flex: 0 0 auto;
+   margin-top: 1px;
+   color: var(--brand-primary);
 }
 
 .org-admin-confirm-actions {
@@ -797,6 +876,18 @@
    outline-offset: 2px;
 }
 
+.org-admin-confirm-actions button.primary {
+   border-color: var(--brand-primary);
+   background: var(--brand-primary);
+   color: #fff;
+}
+
+.org-admin-confirm-actions button.primary:hover:not(:disabled) {
+   border-color: var(--brand-primary);
+   background: var(--brand-primary);
+   filter: brightness(0.95);
+}
+
 .org-admin-confirm-actions button.danger {
    border-color: var(--verdict-fake-border);
    background: var(--verdict-fake-bg);
@@ -812,18 +903,165 @@
    cursor: not-allowed;
 }
 
+@media (prefers-reduced-motion: reduce) {
+   .org-admin-spinner {
+      animation: none;
+   }
+
+   .org-member-card,
+   .org-admin-toolbar-actions button,
+   .org-invitation-actions button,
+   .org-invite-admin-form-actions button {
+      transition: none;
+   }
+}
+
+@media (max-width: 1100px) {
+   .org-member-card {
+      grid-template-columns:
+         minmax(190px, 0.9fr)
+         minmax(0, 1.7fr)
+         118px;
+   }
+
+   .org-member-details {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+   }
+}
+
+@media (max-width: 980px) {
+   .org-member-card,
+   .org-invitation-card {
+      grid-template-columns: 1fr;
+   }
+
+   .org-member-actions {
+      justify-content: flex-start;
+   }
+
+   .org-member-protected-label {
+      text-align: left;
+   }
+
+   .org-member-menu {
+      right: auto;
+      left: 0;
+   }
+
+   .org-invitation-details {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+   }
+
+   .org-invitation-actions {
+      width: auto;
+      justify-content: flex-start;
+   }
+
+   .org-invitation-actions button {
+      flex: 0 0 auto;
+   }
+}
+
 @media (max-width: 760px) {
+   .org-admin-toolbar {
+      align-items: stretch;
+      flex-direction: column;
+   }
+
+   .org-admin-toolbar-actions {
+      width: 100%;
+      flex-wrap: wrap;
+   }
+
    .org-admin-toolbar-actions button {
       width: auto;
+      flex: 1 1 auto;
+      align-self: auto;
+   }
+
+   .org-admin-summary {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+   }
+
+   .org-invite-admin-fields {
+      grid-template-columns: 1fr;
    }
 }
 
 @media (max-width: 520px) {
+   .org-member-details,
+   .org-invitation-details {
+      grid-template-columns: 1fr;
+   }
+
+   .org-member-manage-button {
+      width: 100%;
+   }
+
+   .org-member-actions {
+      width: 100%;
+   }
+
+   .org-member-menu {
+      width: 100%;
+      min-width: 0;
+   }
+
+   .org-invite-admin-form-actions,
    .org-admin-confirm-actions {
       flex-direction: column-reverse;
    }
 
+   .org-invite-admin-form-actions button,
    .org-admin-confirm-actions button {
+      width: 100%;
+   }
+}
+
+/* ── 4D.5D.2B accessibility hardening ───────────────────────── */
+
+.org-admin-confirm-modal:focus {
+   outline: none;
+}
+
+.org-member-menu {
+   max-width: min(224px, calc(100vw - 32px));
+}
+
+.org-member-menu button:focus-visible {
+   outline: 2px solid var(--brand-primary);
+   outline-offset: -2px;
+}
+
+@media (max-width: 375px) {
+   .organization-admin-panel,
+   .org-member-card,
+   .org-invitation-card,
+   .org-invite-admin-form,
+   .org-admin-confirm-modal {
+      min-width: 0;
+   }
+
+   .org-member-card,
+   .org-invitation-card {
+      padding-inline: 14px;
+   }
+
+   .org-admin-modal-backdrop {
+      padding: 12px;
+   }
+
+   .org-admin-confirm-modal {
+      max-height: calc(100vh - 24px);
+      padding: 18px;
+   }
+
+   .org-admin-toolbar-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+   }
+
+   .org-admin-toolbar-actions button {
       width: 100%;
    }
 }

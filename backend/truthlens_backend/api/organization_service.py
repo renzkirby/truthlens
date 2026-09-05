@@ -77,6 +77,40 @@ CASE_TYPE_CAPABILITIES = {
     },
 }
 
+OWNER_MANAGEABLE_MEMBERSHIP_ROLES = frozenset(
+    {
+        OrganizationMembership.Role.ADMIN,
+        OrganizationMembership.Role.LEAD_VERIFIER,
+        OrganizationMembership.Role.MODERATOR,
+        OrganizationMembership.Role.RESEARCHER,
+        OrganizationMembership.Role.CONTRIBUTOR,
+    }
+)
+
+ADMIN_MANAGEABLE_MEMBERSHIP_ROLES = frozenset(
+    {
+        OrganizationMembership.Role.LEAD_VERIFIER,
+        OrganizationMembership.Role.MODERATOR,
+        OrganizationMembership.Role.RESEARCHER,
+        OrganizationMembership.Role.CONTRIBUTOR,
+    }
+)
+
+
+def get_manageable_membership_roles(
+    membership,
+):
+    if not membership or membership.status != OrganizationMembership.Status.ACTIVE:
+        return set()
+
+    if membership.role == OrganizationMembership.Role.OWNER:
+        return set(OWNER_MANAGEABLE_MEMBERSHIP_ROLES)
+
+    if membership.role == OrganizationMembership.Role.ADMIN:
+        return set(ADMIN_MANAGEABLE_MEMBERSHIP_ROLES)
+
+    return set()
+
 
 def _has_system_moderator_role(user):
     if not user or not user.is_authenticated:

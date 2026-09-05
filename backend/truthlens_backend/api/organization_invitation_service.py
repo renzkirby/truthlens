@@ -22,7 +22,10 @@ from .models import (
     OrganizationMembership,
 )
 from .organization_service import (
+    ADMIN_MANAGEABLE_MEMBERSHIP_ROLES,
+    OWNER_MANAGEABLE_MEMBERSHIP_ROLES,
     PartnerCapability,
+    get_manageable_membership_roles,
     has_capability,
 )
 from django.core.exceptions import (
@@ -61,21 +64,9 @@ class InvalidOrganizationInvitationRole(OrganizationInvitationError):
     pass
 
 
-OWNER_INVITABLE_ROLES = {
-    OrganizationMembership.Role.ADMIN,
-    OrganizationMembership.Role.LEAD_VERIFIER,
-    OrganizationMembership.Role.MODERATOR,
-    OrganizationMembership.Role.RESEARCHER,
-    OrganizationMembership.Role.CONTRIBUTOR,
-}
+OWNER_INVITABLE_ROLES = set(OWNER_MANAGEABLE_MEMBERSHIP_ROLES)
 
-
-ADMIN_INVITABLE_ROLES = {
-    OrganizationMembership.Role.LEAD_VERIFIER,
-    OrganizationMembership.Role.MODERATOR,
-    OrganizationMembership.Role.RESEARCHER,
-    OrganizationMembership.Role.CONTRIBUTOR,
-}
+ADMIN_INVITABLE_ROLES = set(ADMIN_MANAGEABLE_MEMBERSHIP_ROLES)
 
 
 def normalize_invitation_email(
@@ -464,16 +455,9 @@ def send_organization_invitation_email(
 def get_invitable_roles(
     membership,
 ):
-    if not membership or membership.status != OrganizationMembership.Status.ACTIVE:
-        return set()
-
-    if membership.role == OrganizationMembership.Role.OWNER:
-        return set(OWNER_INVITABLE_ROLES)
-
-    if membership.role == OrganizationMembership.Role.ADMIN:
-        return set(ADMIN_INVITABLE_ROLES)
-
-    return set()
+    return get_manageable_membership_roles(
+        membership,
+    )
 
 
 def expire_stale_invitations(

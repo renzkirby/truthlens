@@ -637,6 +637,33 @@ class OrganizationInvitationPublicSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class OrganizationMembershipRoleUpdateSerializer(serializers.Serializer):
+    role = serializers.ChoiceField(
+        choices=[
+            (
+                OrganizationMembership.Role.ADMIN,
+                "Administrator",
+            ),
+            (
+                OrganizationMembership.Role.LEAD_VERIFIER,
+                "Lead Verifier",
+            ),
+            (
+                OrganizationMembership.Role.MODERATOR,
+                "Moderator",
+            ),
+            (
+                OrganizationMembership.Role.RESEARCHER,
+                "Researcher",
+            ),
+            (
+                OrganizationMembership.Role.CONTRIBUTOR,
+                "Contributor",
+            ),
+        ],
+    )
+
+
 class OrganizationMembershipAdminSerializer(serializers.ModelSerializer):
     user = OrganizationAdminUserSerializer(
         read_only=True,

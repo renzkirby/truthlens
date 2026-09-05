@@ -98,6 +98,50 @@ urlpatterns = [
         name="organization_members",
     ),
     path(
+        (
+            "organizations/"
+            "<uuid:organization_id>/"
+            "members/"
+            "<uuid:membership_id>/"
+            "role/"
+        ),
+        views.organization_membership_role_update,
+        name="organization_membership_role_update",
+    ),
+    path(
+        (
+            "organizations/"
+            "<uuid:organization_id>/"
+            "members/"
+            "<uuid:membership_id>/"
+            "suspend/"
+        ),
+        views.organization_membership_suspend,
+        name="organization_membership_suspend",
+    ),
+    path(
+        (
+            "organizations/"
+            "<uuid:organization_id>/"
+            "members/"
+            "<uuid:membership_id>/"
+            "restore/"
+        ),
+        views.organization_membership_restore,
+        name="organization_membership_restore",
+    ),
+    path(
+        (
+            "organizations/"
+            "<uuid:organization_id>/"
+            "members/"
+            "<uuid:membership_id>/"
+            "remove/"
+        ),
+        views.organization_membership_remove,
+        name="organization_membership_remove",
+    ),
+    path(
         ("organizations/" "<uuid:organization_id>/" "invitations/"),
         views.organization_invitations,
         name="organization_invitations",
