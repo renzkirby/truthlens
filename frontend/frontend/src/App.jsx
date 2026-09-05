@@ -21,6 +21,7 @@ import OnboardingPage from "./Pages/OnboardingPage.jsx";
 import ForgotPasswordPage from "./Pages/ForgotPasswordPage.jsx";
 import ResetPasswordPage from "./Pages/ResetPasswordPage.jsx";
 import RootRedirect from "./components/RootRedirect";
+import OrganizationInvitationPage from "./Pages/OrganizationInvitationPage.jsx";
 
 function App() {
    return (
@@ -36,6 +37,7 @@ function App() {
                <Route path="/" element={<RootRedirect />} />
                <Route path="/wireframes" element={<TruthLensWireframes />} />
                <Route path="/verify-email" element={<VerifyEmailPage />} />
+               <Route path="/organization-invitations/:token" element={<OrganizationInvitationPage />} />
 
                {/* Capability-driven operational workspace */}
                <Route element={<PrivateRoute requireWorkspace />}>

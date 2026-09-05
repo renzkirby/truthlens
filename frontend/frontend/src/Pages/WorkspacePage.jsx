@@ -320,7 +320,7 @@ function WorkspacePage() {
                            <OrganizationAdminPanel
                               key={selectedOrganizationId ?? "no-organization"}
                               organizationId={selectedOrganizationId}
-                              organizationName={selectedOrganization?.name}
+                              membershipRole={selectedMembership?.role}
                            />
                         ) : (
                            <div className="workspace-placeholder">
