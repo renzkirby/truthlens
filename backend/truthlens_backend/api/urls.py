@@ -33,6 +33,12 @@ urlpatterns = [
     path("users/<str:username>/following/", views.get_user_following),
     path("users/<str:username>/claims/", views.public_user_claims),
     path("users/<str:username>/moderation-stats/", views.moderator_transparency_stats),
+    path("partners/", views.public_partner_directory, name="public_partner_directory"),
+    path(
+        "partners/<slug:slug>/",
+        views.public_partner_detail,
+        name="public_partner_detail",
+    ),
     path("auth/my-claims/", views.my_claims),
     path("auth/send-verification/", views.send_verification_email),
     path("auth/verify-email/", views.verify_email),

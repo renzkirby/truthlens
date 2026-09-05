@@ -13,6 +13,7 @@ from .models import (
     OfficialFactCheck,
     OfficialFactCheckSource,
     VerificationAssignment,
+    Organization,
     OrganizationMembership,
     OrganizationInvitation,
 )
@@ -542,6 +543,59 @@ class OrganizationInvitationActorSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class PublicPartnerDirectoryQuerySerializer(serializers.Serializer):
+    search = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+    )
+
+    type = serializers.ChoiceField(
+        choices=Organization.OrganizationType.choices,
+        required=False,
+        allow_blank=True,
+    )
+
+
+class PublicPartnerSummarySerializer(serializers.ModelSerializer):
+    logo_url = serializers.SerializerMethodField()
+
+    organization_type_label = serializers.CharField(
+        source="get_organization_type_display",
+        read_only=True,
+    )
+
+    def get_logo_url(
+        self,
+        obj,
+    ):
+        if not obj.public_logo_enabled:
+            return None
+
+        return obj.logo_url
+
+    class Meta:
+        model = Organization
+
+        fields = [
+            "id",
+            "name",
+            "slug",
+            "description",
+            "website",
+            "logo_url",
+            "organization_type",
+            "organization_type_label",
+            "expertise_areas",
+        ]
+
+        read_only_fields = fields
+
+
+class PublicPartnerDetailSerializer(PublicPartnerSummarySerializer):
+    pass
+
+
 class OrganizationInvitationCreateSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
@@ -619,7 +673,11 @@ class OrganizationInvitationPublicSerializer(serializers.ModelSerializer):
             "id": str(obj.organization.id),
             "name": obj.organization.name,
             "slug": obj.organization.slug,
-            "logo_url": obj.organization.logo_url,
+            "logo_url": (
+                obj.organization.logo_url
+                if obj.organization.public_logo_enabled
+                else None
+            ),
         }
 
     class Meta:

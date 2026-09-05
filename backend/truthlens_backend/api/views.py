@@ -94,6 +94,10 @@ from .organization_service import (
     has_capability,
     has_case_capability,
 )
+from .organization_public_presence_service import (
+    get_public_partner_by_slug,
+    get_public_partner_directory,
+)
 from .evidence_review_service import (
     EvidenceReviewAuthorizationError,
     EvidenceReviewConflict,
@@ -200,6 +204,9 @@ from .serializers import (
     OrganizationInvitationCreateSerializer,
     OrganizationInvitationPublicSerializer,
     OrganizationMembershipRoleUpdateSerializer,
+    PublicPartnerDetailSerializer,
+    PublicPartnerDirectoryQuerySerializer,
+    PublicPartnerSummarySerializer,
 )
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
@@ -3423,6 +3430,55 @@ def complete_onboarding(request):
         {
             "has_completed_onboarding": True,
         },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def public_partner_directory(request):
+    query_serializer = PublicPartnerDirectoryQuerySerializer(
+        data=request.query_params,
+    )
+
+    query_serializer.is_valid(
+        raise_exception=True,
+    )
+
+    organizations = get_public_partner_directory(
+        search=query_serializer.validated_data.get("search", ""),
+        organization_type=query_serializer.validated_data.get("type", ""),
+    )
+
+    serializer = PublicPartnerSummarySerializer(
+        organizations,
+        many=True,
+    )
+
+    return Response(
+        {
+            "count": organizations.count(),
+            "results": serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def public_partner_detail(
+    request,
+    slug,
+):
+    organization = get_public_partner_by_slug(slug)
+
+    if organization is None:
+        raise NotFound()
+
+    return Response(
+        PublicPartnerDetailSerializer(
+            organization,
+        ).data,
         status=status.HTTP_200_OK,
     )
 
