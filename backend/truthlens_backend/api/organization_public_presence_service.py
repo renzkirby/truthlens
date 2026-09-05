@@ -3,17 +3,27 @@ from django.db.models import Q
 from .models import Organization
 
 
+PUBLIC_PARTNER_ELIGIBILITY = {
+    "public_profile_enabled": True,
+    "verification_status": Organization.VerificationStatus.VERIFIED,
+    "partner_status": Organization.PartnerStatus.ACTIVE,
+}
+
+
+def is_public_partner_eligible(organization):
+    return all(
+        getattr(organization, field_name) == expected_value
+        for field_name, expected_value in PUBLIC_PARTNER_ELIGIBILITY.items()
+    )
+
+
 def get_public_partner_organizations():
     """
     Return organizations that have explicitly opted in to public
     presence and currently satisfy partner eligibility.
     """
 
-    return Organization.objects.filter(
-        public_profile_enabled=True,
-        verification_status=Organization.VerificationStatus.VERIFIED,
-        partner_status=Organization.PartnerStatus.ACTIVE,
-    ).order_by(
+    return Organization.objects.filter(**PUBLIC_PARTNER_ELIGIBILITY).order_by(
         "name",
         "id",
     )

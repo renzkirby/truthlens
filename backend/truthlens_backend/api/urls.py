@@ -99,6 +99,11 @@ urlpatterns = [
         name="verification_workload",
     ),
     path(
+        "organizations/" "<uuid:organization_id>/" "public-profile/",
+        views.organization_public_profile,
+        name="organization_public_profile",
+    ),
+    path(
         "organizations/" "<uuid:organization_id>/members/",
         views.organization_members,
         name="organization_members",

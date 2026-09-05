@@ -98,6 +98,12 @@ from .organization_public_presence_service import (
     get_public_partner_by_slug,
     get_public_partner_directory,
 )
+from .organization_public_profile_service import (
+    InvalidOrganizationPublicProfileChanges,
+    OrganizationPublicProfileAuthorizationError,
+    ensure_can_manage_organization_public_profile,
+    update_organization_public_profile,
+)
 from .evidence_review_service import (
     EvidenceReviewAuthorizationError,
     EvidenceReviewConflict,
@@ -207,6 +213,8 @@ from .serializers import (
     PublicPartnerDetailSerializer,
     PublicPartnerDirectoryQuerySerializer,
     PublicPartnerSummarySerializer,
+    OrganizationPublicProfileAdminSerializer,
+    OrganizationPublicProfileUpdateSerializer,
 )
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
@@ -3477,6 +3485,93 @@ def public_partner_detail(
 
     return Response(
         PublicPartnerDetailSerializer(
+            organization,
+        ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+def _organization_public_profile_error_response(error):
+    if isinstance(
+        error,
+        OrganizationPublicProfileAuthorizationError,
+    ):
+        return Response(
+            {
+                "detail": str(error),
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    if isinstance(
+        error,
+        InvalidOrganizationPublicProfileChanges,
+    ):
+        return Response(
+            {
+                "detail": str(error),
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    return Response(
+        {
+            "detail": str(error),
+        },
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
+@api_view(
+    [
+        "GET",
+        "PATCH",
+    ]
+)
+@permission_classes([IsAuthenticated])
+def organization_public_profile(
+    request,
+    organization_id,
+):
+    organization = get_object_or_404(
+        Organization,
+        id=organization_id,
+    )
+
+    try:
+        ensure_can_manage_organization_public_profile(
+            organization=organization,
+            actor=request.user,
+        )
+
+    except OrganizationPublicProfileAuthorizationError as error:
+        return _organization_public_profile_error_response(error)
+
+    if request.method == "PATCH":
+        update_serializer = OrganizationPublicProfileUpdateSerializer(
+            data=request.data,
+            partial=True,
+        )
+
+        update_serializer.is_valid(
+            raise_exception=True,
+        )
+
+        try:
+            organization = update_organization_public_profile(
+                organization=organization,
+                actor=request.user,
+                changes=update_serializer.validated_data,
+            )
+
+        except (
+            OrganizationPublicProfileAuthorizationError,
+            InvalidOrganizationPublicProfileChanges,
+        ) as error:
+            return _organization_public_profile_error_response(error)
+
+    return Response(
+        OrganizationPublicProfileAdminSerializer(
             organization,
         ).data,
         status=status.HTTP_200_OK,

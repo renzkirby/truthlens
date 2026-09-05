@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
+from django.core.validators import URLValidator
 from .models import (
     Claim,
     Thread,
@@ -23,6 +24,9 @@ from django.contrib.auth.password_validation import validate_password
 import json, ast
 from .organization_service import (
     get_workspace_access_context,
+)
+from .organization_public_presence_service import (
+    is_public_partner_eligible,
 )
 
 
@@ -594,6 +598,169 @@ class PublicPartnerSummarySerializer(serializers.ModelSerializer):
 
 class PublicPartnerDetailSerializer(PublicPartnerSummarySerializer):
     pass
+
+
+class StrictBooleanField(serializers.BooleanField):
+    def to_internal_value(
+        self,
+        data,
+    ):
+        if type(data) is not bool:
+            self.fail("invalid", input=data)
+
+        return data
+
+
+class StrictCharField(serializers.CharField):
+    def to_internal_value(
+        self,
+        data,
+    ):
+        if not isinstance(data, str):
+            self.fail("invalid")
+
+        return super().to_internal_value(data)
+
+
+class OrganizationPublicProfileUpdateSerializer(serializers.Serializer):
+    description = StrictCharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+    )
+
+    website = serializers.URLField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        max_length=2000,
+        validators=[
+            URLValidator(
+                schemes=[
+                    "http",
+                    "https",
+                ]
+            ),
+        ],
+    )
+
+    logo_url = serializers.URLField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        max_length=2000,
+        validators=[
+            URLValidator(
+                schemes=[
+                    "http",
+                    "https",
+                ]
+            ),
+        ],
+    )
+
+    expertise_areas = serializers.ListField(
+        required=False,
+        max_length=20,
+        child=StrictCharField(
+            allow_blank=False,
+            max_length=100,
+            trim_whitespace=True,
+        ),
+    )
+
+    public_profile_enabled = StrictBooleanField(
+        required=False,
+    )
+
+    public_logo_enabled = StrictBooleanField(
+        required=False,
+    )
+
+    def to_internal_value(
+        self,
+        data,
+    ):
+        if hasattr(data, "keys"):
+            unsupported_fields = set(data.keys()) - set(self.fields)
+
+            if unsupported_fields:
+                field_list = ", ".join(sorted(unsupported_fields))
+
+                raise serializers.ValidationError(
+                    {
+                        "detail": f"Unsupported public-profile fields: {field_list}."
+                    }
+                )
+
+        return super().to_internal_value(data)
+
+    def validate_website(
+        self,
+        value,
+    ):
+        return value or None
+
+    def validate_logo_url(
+        self,
+        value,
+    ):
+        return value or None
+
+    def validate_expertise_areas(
+        self,
+        values,
+    ):
+        normalized_values = []
+        seen_values = set()
+
+        for value in values:
+            comparison_value = value.casefold()
+
+            if comparison_value in seen_values:
+                continue
+
+            seen_values.add(comparison_value)
+            normalized_values.append(value)
+
+        return normalized_values
+
+
+class OrganizationPublicProfileAdminSerializer(serializers.ModelSerializer):
+    organization_type_label = serializers.CharField(
+        source="get_organization_type_display",
+        read_only=True,
+    )
+
+    publicly_visible = serializers.SerializerMethodField()
+
+    def get_publicly_visible(
+        self,
+        obj,
+    ):
+        return is_public_partner_eligible(obj)
+
+    class Meta:
+        model = Organization
+
+        fields = [
+            "id",
+            "name",
+            "slug",
+            "organization_type",
+            "organization_type_label",
+            "verification_status",
+            "partner_status",
+            "description",
+            "website",
+            "logo_url",
+            "expertise_areas",
+            "public_profile_enabled",
+            "public_logo_enabled",
+            "publicly_visible",
+        ]
+
+        read_only_fields = fields
 
 
 class OrganizationInvitationCreateSerializer(serializers.Serializer):
