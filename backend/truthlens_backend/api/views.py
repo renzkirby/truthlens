@@ -17,6 +17,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q, Count, F, Max
 from rest_framework.decorators import (
     api_view,
+    parser_classes,
     permission_classes,
     action,
     throttle_classes,
@@ -36,6 +37,10 @@ from rest_framework.exceptions import (
 )
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.pagination import CursorPagination
+from rest_framework.parsers import (
+    FormParser,
+    MultiPartParser,
+)
 from rest_framework.views import APIView
 from datetime import timedelta
 from django.shortcuts import get_object_or_404
@@ -103,6 +108,12 @@ from .organization_public_profile_service import (
     OrganizationPublicProfileAuthorizationError,
     ensure_can_manage_organization_public_profile,
     update_organization_public_profile,
+)
+from .organization_logo_service import (
+    OrganizationLogoStorageError,
+    OrganizationLogoValidationError,
+    remove_organization_logo,
+    upload_organization_logo,
 )
 from .evidence_review_service import (
     EvidenceReviewAuthorizationError,
@@ -210,6 +221,7 @@ from .serializers import (
     OrganizationInvitationCreateSerializer,
     OrganizationInvitationPublicSerializer,
     OrganizationMembershipRoleUpdateSerializer,
+    OrganizationLogoUploadSerializer,
     PublicPartnerDetailSerializer,
     PublicPartnerDirectoryQuerySerializer,
     PublicPartnerSummarySerializer,
@@ -3569,6 +3581,106 @@ def organization_public_profile(
             InvalidOrganizationPublicProfileChanges,
         ) as error:
             return _organization_public_profile_error_response(error)
+
+    return Response(
+        OrganizationPublicProfileAdminSerializer(
+            organization,
+        ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+def _organization_logo_error_response(error):
+    if isinstance(
+        error,
+        OrganizationPublicProfileAuthorizationError,
+    ):
+        return _organization_public_profile_error_response(error)
+
+    if isinstance(
+        error,
+        OrganizationLogoStorageError,
+    ):
+        return Response(
+            {
+                "detail": str(error),
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    return Response(
+        {
+            "detail": str(error),
+        },
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
+@api_view(
+    [
+        "POST",
+        "DELETE",
+    ]
+)
+@permission_classes([IsAuthenticated])
+@parser_classes(
+    [
+        MultiPartParser,
+        FormParser,
+    ]
+)
+def organization_public_profile_logo(
+    request,
+    organization_id,
+):
+    organization = get_object_or_404(
+        Organization,
+        id=organization_id,
+    )
+
+    try:
+        ensure_can_manage_organization_public_profile(
+            organization=organization,
+            actor=request.user,
+        )
+
+    except OrganizationPublicProfileAuthorizationError as error:
+        return _organization_logo_error_response(error)
+
+    if request.method == "POST":
+        upload_serializer = OrganizationLogoUploadSerializer(
+            data=request.data,
+        )
+        upload_serializer.is_valid(
+            raise_exception=True,
+        )
+
+        try:
+            organization = upload_organization_logo(
+                organization=organization,
+                actor=request.user,
+                uploaded_file=upload_serializer.validated_data["logo"],
+            )
+
+        except (
+            OrganizationPublicProfileAuthorizationError,
+            OrganizationLogoStorageError,
+            OrganizationLogoValidationError,
+        ) as error:
+            return _organization_logo_error_response(error)
+
+    else:
+        try:
+            organization = remove_organization_logo(
+                organization=organization,
+                actor=request.user,
+            )
+
+        except (
+            OrganizationPublicProfileAuthorizationError,
+            OrganizationLogoStorageError,
+        ) as error:
+            return _organization_logo_error_response(error)
 
     return Response(
         OrganizationPublicProfileAdminSerializer(

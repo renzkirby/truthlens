@@ -11,7 +11,6 @@ PUBLIC_PROFILE_MUTABLE_FIELDS = frozenset(
     {
         "description",
         "website",
-        "logo_url",
         "expertise_areas",
         "public_profile_enabled",
         "public_logo_enabled",

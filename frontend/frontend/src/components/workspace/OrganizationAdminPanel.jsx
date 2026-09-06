@@ -322,6 +322,8 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
    const invitationCancelButtonRefs = useRef(new Map());
 
    const [requestVersion, setRequestVersion] = useState(0);
+   const [activeAdminView, setActiveAdminView] = useState("members");
+   const [hasOpenedPublicPresence, setHasOpenedPublicPresence] = useState(false);
 
    const [roster, setRoster] = useState({
       organization: null,
@@ -1195,9 +1197,34 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
 
    return (
       <div className="organization-admin-panel">
-         <OrganizationPublicProfilePanel organizationId={organizationId} requestVersion={requestVersion} />
+         <div className="org-admin-view-switcher" aria-label="Organization administration sections">
+            <button
+               type="button"
+               aria-pressed={activeAdminView === "members"}
+               aria-controls="organization-admin-members-view"
+               onClick={() => setActiveAdminView("members")}
+            >
+               Members &amp; invitations
+            </button>
+            <button
+               type="button"
+               aria-pressed={activeAdminView === "public-presence"}
+               aria-controls="organization-admin-public-presence-view"
+               onClick={() => {
+                  setHasOpenedPublicPresence(true);
+                  setActiveAdminView("public-presence");
+               }}
+            >
+               Public presence
+            </button>
+         </div>
 
-         <div className="org-admin-toolbar">
+         <div
+            id="organization-admin-members-view"
+            className="org-admin-view-region"
+            hidden={activeAdminView !== "members"}
+         >
+            <div className="org-admin-toolbar">
             <div>
                <strong>Organization members</strong>
 
@@ -1815,6 +1842,17 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                   organization invitation.
                </p>
             </AdminConfirmDialog>
+         )}
+         </div>
+
+         {hasOpenedPublicPresence && (
+            <div
+               id="organization-admin-public-presence-view"
+               className="org-admin-view-region"
+               hidden={activeAdminView !== "public-presence"}
+            >
+               <OrganizationPublicProfilePanel organizationId={organizationId} requestVersion={requestVersion} />
+            </div>
          )}
       </div>
    );

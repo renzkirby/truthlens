@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../hooks/useNotification";
@@ -10,7 +10,6 @@ import "./OrganizationPublicProfilePanel.css";
 const EMPTY_DRAFT = {
    description: "",
    website: "",
-   logo_url: "",
    expertise_areas: "",
    public_profile_enabled: false,
    public_logo_enabled: false,
@@ -19,11 +18,13 @@ const EMPTY_DRAFT = {
 const EDITABLE_FIELDS = [
    "description",
    "website",
-   "logo_url",
    "expertise_areas",
    "public_profile_enabled",
    "public_logo_enabled",
 ];
+
+const MAX_LOGO_BYTES = 2 * 1024 * 1024;
+const SUPPORTED_LOGO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 function formatStatus(value) {
    if (!value) {
@@ -40,7 +41,6 @@ function profileToDraft(profile) {
    return {
       description: profile?.description ?? "",
       website: profile?.website ?? "",
-      logo_url: profile?.logo_url ?? "",
       expertise_areas: Array.isArray(profile?.expertise_areas) ? profile.expertise_areas.join("\n") : "",
       public_profile_enabled: profile?.public_profile_enabled === true,
       public_logo_enabled: profile?.public_logo_enabled === true,
@@ -113,7 +113,6 @@ function normalizeProfileValues(draft) {
       values: {
          description: draft.description.trim(),
          website: draft.website.trim() || null,
-         logo_url: draft.logo_url.trim() || null,
          expertise_areas: expertise.value,
          public_profile_enabled: draft.public_profile_enabled,
          public_logo_enabled: draft.public_logo_enabled,
@@ -126,11 +125,25 @@ function normalizeSavedValues(profile) {
    return {
       description: profile?.description ?? "",
       website: profile?.website || null,
-      logo_url: profile?.logo_url || null,
       expertise_areas: Array.isArray(profile?.expertise_areas) ? profile.expertise_areas : [],
       public_profile_enabled: profile?.public_profile_enabled === true,
       public_logo_enabled: profile?.public_logo_enabled === true,
    };
+}
+
+function OrganizationLogoPreview({ source, alt }) {
+   const [failed, setFailed] = useState(false);
+
+   if (!source || failed) {
+      return (
+         <div className="org-public-logo-placeholder">
+            <Icons name="image" size={24} />
+            <span>No logo uploaded</span>
+         </div>
+      );
+   }
+
+   return <img src={source} alt={alt} onError={() => setFailed(true)} />;
 }
 
 function valuesMatch(left, right) {
@@ -190,7 +203,14 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
    const [saveError, setSaveError] = useState("");
    const [fieldErrors, setFieldErrors] = useState({});
    const [retryVersion, setRetryVersion] = useState(0);
+   const [selectedLogo, setSelectedLogo] = useState(null);
+   const [logoBusy, setLogoBusy] = useState("");
+   const [logoError, setLogoError] = useState("");
+   const [confirmLogoRemoval, setConfirmLogoRemoval] = useState(false);
    const profileRequestIdRef = useRef(0);
+   const logoRequestIdRef = useRef(0);
+   const selectedLogoRef = useRef(null);
+   const logoFileInputRef = useRef(null);
 
    const endpoint = useMemo(() => {
       if (!organizationId) {
@@ -200,9 +220,35 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
       return resolveApiEndpoint("ORGANIZATION_PUBLIC_PROFILE", organizationId);
    }, [organizationId]);
 
+   const logoEndpoint = useMemo(() => {
+      if (!organizationId) {
+         return null;
+      }
+
+      return resolveApiEndpoint("ORGANIZATION_PUBLIC_PROFILE_LOGO", organizationId);
+   }, [organizationId]);
+
+   const clearSelectedLogo = useCallback(() => {
+      if (selectedLogoRef.current?.previewUrl) {
+         URL.revokeObjectURL(selectedLogoRef.current.previewUrl);
+      }
+
+      selectedLogoRef.current = null;
+      setSelectedLogo(null);
+
+      if (logoFileInputRef.current) {
+         logoFileInputRef.current.value = "";
+      }
+   }, []);
+
    useEffect(
       () => () => {
          profileRequestIdRef.current += 1;
+         logoRequestIdRef.current += 1;
+
+         if (selectedLogoRef.current?.previewUrl) {
+            URL.revokeObjectURL(selectedLogoRef.current.previewUrl);
+         }
       },
       [],
    );
@@ -219,6 +265,10 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
       setSaveError("");
       setFieldErrors({});
       setSaving(false);
+      clearSelectedLogo();
+      setLogoBusy("");
+      setLogoError("");
+      setConfirmLogoRemoval(false);
 
       if (!endpoint) {
          setLoading(false);
@@ -254,7 +304,7 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
       return () => {
          cancelled = true;
       };
-   }, [authFetch, endpoint, requestVersion, retryVersion]);
+   }, [authFetch, clearSelectedLogo, endpoint, requestVersion, retryVersion]);
 
    const dirty = useMemo(() => {
       if (!savedProfile) {
@@ -292,14 +342,13 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
    const handleSubmit = async (event) => {
       event.preventDefault();
 
-      if (!savedProfile || !endpoint || saving) {
+      if (!savedProfile || !endpoint || saving || logoBusy) {
          return;
       }
 
       const { values, expertiseError } = normalizeProfileValues(draft);
       const nextFieldErrors = {
          website: validateOptionalHttpUrl(draft.website, "Website"),
-         logo_url: validateOptionalHttpUrl(draft.logo_url, "Logo URL"),
          expertise_areas: expertiseError,
       };
 
@@ -386,13 +435,156 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
       }
    };
 
+   const handleLogoSelection = (event) => {
+      const file = event.target.files?.[0];
+
+      clearSelectedLogo();
+      setLogoError("");
+      setConfirmLogoRemoval(false);
+
+      if (!file) {
+         return;
+      }
+
+      if (!SUPPORTED_LOGO_TYPES.has(file.type)) {
+         setLogoError("Choose a PNG, JPEG, or WebP image.");
+         return;
+      }
+
+      if (file.size > MAX_LOGO_BYTES) {
+         setLogoError("Logo images must be 2 MiB or smaller.");
+         return;
+      }
+
+      const selection = {
+         file,
+         previewUrl: URL.createObjectURL(file),
+      };
+
+      selectedLogoRef.current = selection;
+      setSelectedLogo(selection);
+   };
+
+   const handleLogoUpload = async () => {
+      if (!selectedLogo || !logoEndpoint || saving || logoBusy) {
+         return;
+      }
+
+      const requestId = logoRequestIdRef.current + 1;
+      const preserveDraft = dirty;
+      const formData = new FormData();
+
+      logoRequestIdRef.current = requestId;
+      formData.append("logo", selectedLogo.file);
+      setLogoBusy("upload");
+      setLogoError("");
+
+      try {
+         const profile = await authFetch(logoEndpoint, {
+            method: "POST",
+            body: formData,
+         });
+
+         if (logoRequestIdRef.current !== requestId) {
+            return;
+         }
+
+         setSavedProfile(profile);
+
+         if (!preserveDraft) {
+            setDraft(profileToDraft(profile));
+         }
+
+         clearSelectedLogo();
+         setConfirmLogoRemoval(false);
+
+         addToast({
+            type: "success",
+            title: savedProfile.logo_url ? "Organization logo replaced" : "Organization logo uploaded",
+            message: "The managed organization logo was saved.",
+         });
+      } catch (error) {
+         if (logoRequestIdRef.current !== requestId) {
+            return;
+         }
+
+         const logoDetail = Array.isArray(error?.logo) ? error.logo.join(" ") : error?.logo;
+         const message = error?.detail || logoDetail || error?.message || "Unable to upload the organization logo.";
+         setLogoError(message);
+
+         addToast({
+            type: "error",
+            title: "Logo not uploaded",
+            message,
+         });
+      } finally {
+         if (logoRequestIdRef.current === requestId) {
+            setLogoBusy("");
+         }
+      }
+   };
+
+   const handleLogoRemoval = async () => {
+      if (!savedProfile?.logo_url || !logoEndpoint || saving || logoBusy) {
+         return;
+      }
+
+      const requestId = logoRequestIdRef.current + 1;
+      const preserveDraft = dirty;
+
+      logoRequestIdRef.current = requestId;
+      setLogoBusy("remove");
+      setLogoError("");
+
+      try {
+         const profile = await authFetch(logoEndpoint, {
+            method: "DELETE",
+         });
+
+         if (logoRequestIdRef.current !== requestId) {
+            return;
+         }
+
+         setSavedProfile(profile);
+
+         if (!preserveDraft) {
+            setDraft(profileToDraft(profile));
+         }
+
+         clearSelectedLogo();
+         setConfirmLogoRemoval(false);
+
+         addToast({
+            type: "success",
+            title: "Organization logo removed",
+            message: "The stored organization logo was removed. Logo display consent was not changed.",
+         });
+      } catch (error) {
+         if (logoRequestIdRef.current !== requestId) {
+            return;
+         }
+
+         const message = error?.detail || error?.message || "Unable to remove the organization logo.";
+         setLogoError(message);
+
+         addToast({
+            type: "error",
+            title: "Logo not removed",
+            message,
+         });
+      } finally {
+         if (logoRequestIdRef.current === requestId) {
+            setLogoBusy("");
+         }
+      }
+   };
+
    return (
       <section className="org-public-profile-panel" aria-labelledby="org-public-profile-heading">
          <div className="org-public-profile-heading">
             <div>
-               <span className="org-public-profile-eyebrow">Organization presentation</span>
-               <h3 id="org-public-profile-heading">Public partner presence</h3>
-               <p>Control what TruthLens may show publicly about this organization.</p>
+               <h3 id="org-public-profile-heading">Public presence</h3>
+               <p>Manage how this organization may appear publicly on TruthLens.</p>
             </div>
          </div>
 
@@ -455,7 +647,11 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
                   })()}
                </div>
 
-               <form className="org-public-profile-form" onSubmit={handleSubmit} aria-busy={saving ? "true" : undefined}>
+               <form
+                  className="org-public-profile-form"
+                  onSubmit={handleSubmit}
+                  aria-busy={saving || logoBusy ? "true" : undefined}
+               >
                   <div className="org-public-profile-fields">
                      <div className="org-public-profile-field org-public-profile-field-wide">
                         <label htmlFor="org-public-profile-description">Public description</label>
@@ -465,7 +661,7 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
                            onChange={(event) => updateDraft("description", event.target.value)}
                            aria-describedby="org-public-profile-description-help"
                            rows={5}
-                           disabled={saving}
+                           disabled={saving || Boolean(logoBusy)}
                         />
                         <span id="org-public-profile-description-help" className="org-public-profile-help">
                            Describe the organization for its public TruthLens partner profile. Blank is allowed.
@@ -483,7 +679,7 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
                            aria-invalid={fieldErrors.website ? "true" : undefined}
                            maxLength={2000}
                            placeholder="https://example.org"
-                           disabled={saving}
+                           disabled={saving || Boolean(logoBusy)}
                         />
                         <span id="org-public-profile-website-help" className="org-public-profile-help">
                            Optional public organization website. Include http:// or https://.
@@ -495,28 +691,134 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
                         )}
                      </div>
 
-                     <div className="org-public-profile-field">
-                        <label htmlFor="org-public-profile-logo-url">Logo URL</label>
-                        <input
-                           id="org-public-profile-logo-url"
-                           type="url"
-                           value={draft.logo_url}
-                           onChange={(event) => updateDraft("logo_url", event.target.value)}
-                           aria-describedby={`org-public-profile-logo-help${fieldErrors.logo_url ? " org-public-profile-logo-error" : ""}`}
-                           aria-invalid={fieldErrors.logo_url ? "true" : undefined}
-                           maxLength={2000}
-                           placeholder="https://example.org/logo.png"
-                           disabled={saving}
-                        />
-                        <span id="org-public-profile-logo-help" className="org-public-profile-help">
-                           Saving a logo URL does not make it public. Display also requires separate logo consent and
-                           public eligibility.
+                     <div className="org-public-logo-manager">
+                        <label id="org-public-logo-label" htmlFor="org-public-logo-file">
+                           Organization logo
+                        </label>
+                        <span id="org-public-logo-help" className="org-public-profile-help">
+                           Upload a PNG, JPEG, or WebP image up to 2 MiB. Logo display still requires separate consent
+                           and public eligibility.
                         </span>
-                        {fieldErrors.logo_url && (
-                           <span id="org-public-profile-logo-error" className="org-public-profile-field-error" role="alert">
-                              {fieldErrors.logo_url}
-                           </span>
-                        )}
+
+                        <div className="org-public-logo-content">
+                           <div className="org-public-logo-preview">
+                              <OrganizationLogoPreview
+                                 key={selectedLogo?.previewUrl || savedProfile.logo_url || "empty-logo"}
+                                 source={selectedLogo?.previewUrl || savedProfile.logo_url}
+                                 alt={
+                                    selectedLogo
+                                       ? "Preview of the selected organization logo"
+                                       : `Current logo for ${savedProfile.name}`
+                                 }
+                              />
+                           </div>
+
+                           <div className="org-public-logo-controls">
+                              {selectedLogo ? (
+                                 <div className="org-public-logo-selection" aria-live="polite">
+                                    <strong>{selectedLogo.file.name}</strong>
+                                    <span>Not uploaded yet</span>
+                                 </div>
+                              ) : (
+                                 <div className="org-public-logo-selection">
+                                    <strong>{savedProfile.logo_url ? "Current logo stored" : "No logo stored"}</strong>
+                                    <span>
+                                       {savedProfile.logo_url
+                                          ? "Choose a file to preview a replacement before uploading."
+                                          : "Choose a local image to preview it before uploading."}
+                                    </span>
+                                 </div>
+                              )}
+
+                              <input
+                                 ref={logoFileInputRef}
+                                 id="org-public-logo-file"
+                                 className="org-public-logo-file-input"
+                                 type="file"
+                                 accept="image/png,image/jpeg,image/webp"
+                                 onChange={handleLogoSelection}
+                                 aria-labelledby="org-public-logo-label"
+                                 aria-describedby="org-public-logo-help"
+                                 disabled={saving || Boolean(logoBusy)}
+                                 tabIndex={-1}
+                              />
+
+                              <div className="org-public-logo-actions">
+                                 {selectedLogo ? (
+                                    <>
+                                       <button
+                                          type="button"
+                                          onClick={clearSelectedLogo}
+                                          disabled={saving || Boolean(logoBusy)}
+                                       >
+                                          Cancel selection
+                                       </button>
+                                       <button
+                                          type="button"
+                                          className="primary"
+                                          onClick={handleLogoUpload}
+                                          disabled={saving || Boolean(logoBusy)}
+                                       >
+                                          {logoBusy === "upload"
+                                             ? "Uploading…"
+                                             : savedProfile.logo_url
+                                               ? "Replace logo"
+                                               : "Upload logo"}
+                                       </button>
+                                    </>
+                                 ) : (
+                                    <>
+                                       <button
+                                          type="button"
+                                          onClick={() => logoFileInputRef.current?.click()}
+                                          disabled={saving || Boolean(logoBusy)}
+                                       >
+                                          {savedProfile.logo_url ? "Replace logo" : "Choose logo"}
+                                       </button>
+                                       {savedProfile.logo_url && (
+                                          <button
+                                             type="button"
+                                             className="danger"
+                                             onClick={() => setConfirmLogoRemoval(true)}
+                                             disabled={saving || Boolean(logoBusy)}
+                                          >
+                                             Remove logo
+                                          </button>
+                                       )}
+                                    </>
+                                 )}
+                              </div>
+
+                              {confirmLogoRemoval && !selectedLogo && (
+                                 <div className="org-public-logo-remove-confirmation" role="group" aria-label="Remove logo confirmation">
+                                    <strong>Remove this logo?</strong>
+                                    <div>
+                                       <button
+                                          type="button"
+                                          onClick={() => setConfirmLogoRemoval(false)}
+                                          disabled={Boolean(logoBusy)}
+                                       >
+                                          Cancel
+                                       </button>
+                                       <button
+                                          type="button"
+                                          className="danger"
+                                          onClick={handleLogoRemoval}
+                                          disabled={Boolean(logoBusy)}
+                                       >
+                                          {logoBusy === "remove" ? "Removing…" : "Remove logo"}
+                                       </button>
+                                    </div>
+                                 </div>
+                              )}
+
+                              {logoError && (
+                                 <div className="org-public-profile-field-error" role="alert">
+                                    {logoError}
+                                 </div>
+                              )}
+                           </div>
+                        </div>
                      </div>
 
                      <div className="org-public-profile-field org-public-profile-field-wide">
@@ -529,7 +831,7 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
                            aria-invalid={fieldErrors.expertise_areas ? "true" : undefined}
                            rows={5}
                            placeholder={"Election verification\nMedia literacy\nPublic policy"}
-                           disabled={saving}
+                           disabled={saving || Boolean(logoBusy)}
                         />
                         <span id="org-public-profile-expertise-help" className="org-public-profile-help">
                            One area per line. Up to 20 areas and 100 characters per area; duplicates are removed when
@@ -547,7 +849,7 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
                      </div>
                   </div>
 
-                  <fieldset className="org-public-profile-consent" disabled={saving}>
+                  <fieldset className="org-public-profile-consent" disabled={saving || Boolean(logoBusy)}>
                      <legend>Public presence consent</legend>
 
                      <label className="org-public-profile-consent-option">
@@ -593,10 +895,10 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
                   )}
 
                   <div className="org-public-profile-actions">
-                     <button type="button" onClick={resetChanges} disabled={!dirty || saving}>
+                     <button type="button" onClick={resetChanges} disabled={!dirty || saving || Boolean(logoBusy)}>
                         Reset changes
                      </button>
-                     <button type="submit" className="primary" disabled={!dirty || saving}>
+                     <button type="submit" className="primary" disabled={!dirty || saving || Boolean(logoBusy)}>
                         {saving ? (
                            <>
                               <Icons name="loader" size={14} className="org-admin-spinner" />

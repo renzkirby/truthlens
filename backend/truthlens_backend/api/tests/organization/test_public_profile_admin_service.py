@@ -123,7 +123,6 @@ class OrganizationPublicProfileAdminServiceTests(TestCase):
             {
                 "description": "Public partner profile",
                 "website": "https://example.com/profile",
-                "logo_url": "https://example.com/logo.png",
                 "expertise_areas": ["Elections", "Media literacy"],
                 "public_profile_enabled": True,
                 "public_logo_enabled": True,
@@ -132,7 +131,6 @@ class OrganizationPublicProfileAdminServiceTests(TestCase):
 
         self.assertEqual(updated.description, "Public partner profile")
         self.assertEqual(updated.website, "https://example.com/profile")
-        self.assertEqual(updated.logo_url, "https://example.com/logo.png")
         self.assertEqual(updated.expertise_areas, ["Elections", "Media literacy"])
         self.assertTrue(updated.public_profile_enabled)
         self.assertTrue(updated.public_logo_enabled)
@@ -283,10 +281,17 @@ class OrganizationPublicProfileAdminServiceTests(TestCase):
         )
 
     def test_service_rejects_unsupported_changes(self):
-        with self.assertRaises(InvalidOrganizationPublicProfileChanges):
-            self.update_as(
-                self.owner,
-                {
-                    "verification_status": Organization.VerificationStatus.VERIFIED,
-                },
-            )
+        for changes in [
+            {
+                "verification_status": Organization.VerificationStatus.VERIFIED,
+            },
+            {
+                "logo_url": "https://example.com/logo.png",
+            },
+        ]:
+            with self.subTest(changes=changes):
+                with self.assertRaises(InvalidOrganizationPublicProfileChanges):
+                    self.update_as(
+                        self.owner,
+                        changes,
+                    )

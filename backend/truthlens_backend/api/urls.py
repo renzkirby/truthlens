@@ -104,6 +104,11 @@ urlpatterns = [
         name="organization_public_profile",
     ),
     path(
+        "organizations/" "<uuid:organization_id>/" "public-profile/logo/",
+        views.organization_public_profile_logo,
+        name="organization_public_profile_logo",
+    ),
+    path(
         "organizations/" "<uuid:organization_id>/members/",
         views.organization_members,
         name="organization_members",

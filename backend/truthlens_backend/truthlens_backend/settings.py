@@ -25,6 +25,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv()
 
+SUPABASE_ORGANIZATION_LOGOS_BUCKET = os.getenv(
+    "SUPABASE_ORGANIZATION_LOGOS_BUCKET",
+    "organization-logos",
+) or "organization-logos"
+
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv("SECRET_KEY")
 

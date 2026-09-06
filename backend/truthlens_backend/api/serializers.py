@@ -644,21 +644,6 @@ class OrganizationPublicProfileUpdateSerializer(serializers.Serializer):
         ],
     )
 
-    logo_url = serializers.URLField(
-        required=False,
-        allow_blank=True,
-        allow_null=True,
-        max_length=2000,
-        validators=[
-            URLValidator(
-                schemes=[
-                    "http",
-                    "https",
-                ]
-            ),
-        ],
-    )
-
     expertise_areas = serializers.ListField(
         required=False,
         max_length=20,
@@ -696,12 +681,6 @@ class OrganizationPublicProfileUpdateSerializer(serializers.Serializer):
         return super().to_internal_value(data)
 
     def validate_website(
-        self,
-        value,
-    ):
-        return value or None
-
-    def validate_logo_url(
         self,
         value,
     ):
@@ -761,6 +740,10 @@ class OrganizationPublicProfileAdminSerializer(serializers.ModelSerializer):
         ]
 
         read_only_fields = fields
+
+
+class OrganizationLogoUploadSerializer(serializers.Serializer):
+    logo = serializers.FileField()
 
 
 class OrganizationInvitationCreateSerializer(serializers.Serializer):

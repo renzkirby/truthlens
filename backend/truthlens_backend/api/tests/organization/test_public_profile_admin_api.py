@@ -245,7 +245,6 @@ class OrganizationPublicProfileAdminApiTests(APITestCase):
             {
                 "description": "Updated public description",
                 "website": "https://example.org/updated",
-                "logo_url": "https://example.org/updated-logo.png",
                 "expertise_areas": ["Elections", "Health"],
                 "public_profile_enabled": True,
                 "public_logo_enabled": True,
@@ -263,7 +262,7 @@ class OrganizationPublicProfileAdminApiTests(APITestCase):
         self.assertEqual(self.organization.website, "https://example.org/updated")
         self.assertEqual(
             self.organization.logo_url,
-            "https://example.org/updated-logo.png",
+            "https://example.com/original-logo.png",
         )
         self.assertEqual(self.organization.expertise_areas, ["Elections", "Health"])
         self.assertTrue(self.organization.public_profile_enabled)
@@ -376,11 +375,11 @@ class OrganizationPublicProfileAdminApiTests(APITestCase):
             status.HTTP_400_BAD_REQUEST,
         )
 
-    def test_malformed_logo_url_is_rejected(self):
+    def test_direct_logo_url_mutation_is_rejected(self):
         response = self.client_for(self.owner).patch(
             self.url,
             {
-                "logo_url": "not-a-url",
+                "logo_url": "https://example.org/replacement.png",
             },
             format="json",
         )
@@ -488,12 +487,11 @@ class OrganizationPublicProfileAdminApiTests(APITestCase):
             ],
         )
 
-    def test_blank_urls_are_normalized_to_null(self):
+    def test_blank_website_is_normalized_to_null(self):
         response = self.client_for(self.owner).patch(
             self.url,
             {
                 "website": "",
-                "logo_url": "",
             },
             format="json",
         )
@@ -503,7 +501,10 @@ class OrganizationPublicProfileAdminApiTests(APITestCase):
             status.HTTP_200_OK,
         )
         self.assertIsNone(response.data["website"])
-        self.assertIsNone(response.data["logo_url"])
+        self.assertEqual(
+            response.data["logo_url"],
+            "https://example.com/original-logo.png",
+        )
 
     def test_description_is_trimmed_and_may_be_blank(self):
         response = self.client_for(self.owner).patch(
