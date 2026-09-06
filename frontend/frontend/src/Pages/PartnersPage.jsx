@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { Search, SlidersHorizontal } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { resolveApiEndpoint } from "../utils/api";
 import PublicSiteHeader from "../components/public/PublicSiteHeader";
 import PartnerLogo from "../components/partners/PartnerLogo";
@@ -35,7 +36,7 @@ function PartnerCard({ partner, directorySearch }) {
          </div>
 
          <div className="partner-directory-card__body">
-            <h2>{partner.name}</h2>
+            <h3>{partner.name}</h3>
             <p className="partner-directory-card__description">
                {partner.description || "No public description provided."}
             </p>
@@ -71,6 +72,8 @@ function DirectorySkeleton() {
 }
 
 function PartnersPage() {
+   useDocumentTitle("TruthLens Partners");
+
    const { authFetch } = useAuth();
    const location = useLocation();
    const [searchParams, setSearchParams] = useSearchParams();
@@ -154,7 +157,7 @@ function PartnersPage() {
    return (
       <div className="partners-page">
          <PublicSiteHeader />
-         <main>
+         <main id="main-content" tabIndex={-1}>
             <section className="partners-hero" aria-labelledby="partners-heading">
                <div className="partners-page__container partners-hero__content">
                   <p className="partners-eyebrow">Public partner directory</p>
@@ -220,7 +223,7 @@ function PartnersPage() {
 
                      {error && (
                         <div className="partners-state" role="alert">
-                           <h2>Partner directory unavailable</h2>
+                           <h3>Partner directory unavailable</h3>
                            <p>We could not load public partner profiles. Please try again.</p>
                            <button type="button" onClick={() => setRetryVersion((value) => value + 1)}>
                               Retry
@@ -230,7 +233,7 @@ function PartnersPage() {
 
                      {!error && directory && directory.results.length === 0 && !isLoading && (
                         <div className="partners-state">
-                           <h2>{hasFilters ? "No partners match these filters." : "No public partners are available yet."}</h2>
+                           <h3>{hasFilters ? "No partners match these filters." : "No public partners are available yet."}</h3>
                            <p>
                               {hasFilters
                                  ? "Try a different search or organization type."

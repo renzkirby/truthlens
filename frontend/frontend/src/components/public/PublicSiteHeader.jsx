@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import LogoImage from "../../assets/truthlens_logo.png";
@@ -8,14 +8,32 @@ function PublicSiteHeader() {
    const { pathname } = useLocation();
    const { user } = useAuth();
    const [isMenuOpen, setIsMenuOpen] = useState(false);
+   const menuToggleRef = useRef(null);
    const isLandingPage = pathname === "/landing-page";
    const featuresHref = isLandingPage ? "#features" : "/landing-page#features";
    const aboutHref = isLandingPage ? "#about" : "/landing-page#about";
 
    const closeMenu = () => setIsMenuOpen(false);
 
+   useEffect(() => {
+      if (!isMenuOpen) return undefined;
+
+      const handleEscape = (event) => {
+         if (event.key !== "Escape") return;
+
+         setIsMenuOpen(false);
+         menuToggleRef.current?.focus();
+      };
+
+      document.addEventListener("keydown", handleEscape);
+      return () => document.removeEventListener("keydown", handleEscape);
+   }, [isMenuOpen]);
+
    return (
       <header className="public-site-header">
+         <a className="public-site-skip-link" href="#main-content">
+            Skip to main content
+         </a>
          <nav className="public-site-header__inner" aria-label="Public navigation">
             <Link
                to="/landing-page"
@@ -50,6 +68,7 @@ function PublicSiteHeader() {
             </div>
 
             <button
+               ref={menuToggleRef}
                type="button"
                className={`public-site-header__menu-toggle${isMenuOpen ? " is-open" : ""}`}
                aria-label={isMenuOpen ? "Close navigation menu" : "Open navigation menu"}

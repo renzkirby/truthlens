@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ExternalLink, Info } from "lucide-react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { resolveApiEndpoint } from "../utils/api";
 import PublicSiteHeader from "../components/public/PublicSiteHeader";
 import PartnerLogo from "../components/partners/PartnerLogo";
@@ -14,6 +15,11 @@ function PartnerProfileContent({ slug }) {
    const [error, setError] = useState(null);
    const [retryVersion, setRetryVersion] = useState(0);
    const requestIdRef = useRef(0);
+   let documentTitle = "Partner Profile | TruthLens";
+   if (partner?.name) documentTitle = `${partner.name} | TruthLens Partners`;
+   if (error) documentTitle = "Partner Profile Unavailable | TruthLens";
+
+   useDocumentTitle(documentTitle);
 
    useEffect(() => {
       const requestId = ++requestIdRef.current;
@@ -144,7 +150,7 @@ function PartnerProfilePage() {
    return (
       <div className="partner-profile-page">
          <PublicSiteHeader />
-         <main className="partner-profile-main">
+         <main id="main-content" className="partner-profile-main" tabIndex={-1}>
             <Link to={partnersPath} className="partner-profile-back">
                <ArrowLeft aria-hidden="true" />
                Back to partners

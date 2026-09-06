@@ -23,6 +23,13 @@ body {
    line-height: 1.5;
 }
 
+.features-section,
+.how-it-works,
+.trust-section,
+.about-section {
+   scroll-margin-top: 96px;
+}
+
 /* =========================================================
    HERO
    ========================================================= */
@@ -1897,6 +1904,35 @@ body {
    line-height: 1.65;
 }
 
+.trust-partners-link {
+   width: fit-content;
+   margin-top: 22px;
+   display: inline-flex;
+   align-items: center;
+   gap: 8px;
+   color: rgba(226, 232, 240, 0.82);
+   font-size: 0.86rem;
+   font-weight: 650;
+   text-decoration: underline;
+   text-decoration-color: rgba(165, 180, 252, 0.48);
+   text-underline-offset: 4px;
+   transition: color 0.2s ease;
+}
+
+.trust-partners-link:hover {
+   color: #ffffff;
+}
+
+.trust-partners-link:focus-visible {
+   border-radius: 4px;
+   outline: 2px solid #10b981;
+   outline-offset: 5px;
+}
+
+.trust-partners-link svg {
+   flex: 0 0 auto;
+}
+
 /* =========================================================
    TRUST GRID
    ========================================================= */
@@ -2140,7 +2176,8 @@ body {
    ========================================================= */
 
 @media (prefers-reduced-motion: reduce) {
-   .trust-card {
+   .trust-card,
+   .trust-partners-link {
       transition: none;
    }
 

@@ -203,6 +203,39 @@
    line-height: 1.5;
 }
 
+.org-public-profile-link {
+   margin-top: 10px;
+   padding-top: 10px;
+   display: flex;
+   flex-direction: column;
+   align-items: flex-start;
+   gap: 4px;
+   border-top: 1px solid var(--border-light);
+}
+
+.org-public-profile-link a {
+   color: var(--brand-primary);
+   font-size: 0.76rem;
+   font-weight: 700;
+   text-underline-offset: 3px;
+}
+
+.org-public-profile-link a:hover {
+   color: var(--brand-primary-hover);
+}
+
+.org-public-profile-link a:focus-visible {
+   border-radius: 3px;
+   outline: 3px solid rgba(79, 70, 229, 0.18);
+   outline-offset: 2px;
+}
+
+.org-public-profile-link span {
+   color: var(--text-muted);
+   font-size: 0.68rem;
+   line-height: 1.45;
+}
+
 .org-public-visibility.visible {
    border-color: var(--verdict-fact-border);
    color: var(--verdict-fact-text);
@@ -351,6 +384,10 @@
 .org-public-logo-placeholder span {
    font-size: 0.68rem;
    line-height: 1.35;
+}
+
+.org-public-logo-placeholder-icon {
+   display: inline-flex;
 }
 
 .org-public-logo-controls,

@@ -206,7 +206,7 @@
    margin-top: 22px;
 }
 
-.partner-directory-card h2 {
+.partner-directory-card h3 {
    margin: 0;
    overflow-wrap: anywhere;
    font-size: 1.25rem;
@@ -294,7 +294,7 @@
    text-align: center;
 }
 
-.partners-state h2 {
+.partners-state h3 {
    margin: 0;
    font-size: 1.2rem;
 }

@@ -137,7 +137,9 @@ function OrganizationLogoPreview({ source, alt }) {
    if (!source || failed) {
       return (
          <div className="org-public-logo-placeholder">
-            <Icons name="image" size={24} />
+            <span className="org-public-logo-placeholder-icon" aria-hidden="true">
+               <Icons name="image" size={24} />
+            </span>
             <span>No logo uploaded</span>
          </div>
       );
@@ -642,6 +644,18 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
                               <strong>{visibility.label}</strong>
                            </div>
                            <p>{visibility.description}</p>
+                           {savedProfile.publicly_visible === true && savedProfile.slug && (
+                              <div className="org-public-profile-link">
+                                 <a
+                                    href={`/partners/${encodeURIComponent(savedProfile.slug)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                 >
+                                    View public profile
+                                 </a>
+                                 <span>Opens the currently published public profile in a new tab.</span>
+                              </div>
+                           )}
                         </div>
                      );
                   })()}

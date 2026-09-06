@@ -3,6 +3,7 @@ import "./LandingPage.css";
 import PublicSiteHeader from "../components/public/PublicSiteHeader";
 import LogoImage from "../assets/truthlens_logo.png";
 import { Link } from "react-router-dom";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import {
    Shield,
    ShieldCheck,
@@ -28,10 +29,13 @@ import {
 } from "lucide-react";
 
 const TruthLens = () => {
+   useDocumentTitle("TruthLens — AI-Assisted Media Verification");
+
    return (
       <div className="landing-page">
          <PublicSiteHeader />
 
+         <main id="main-content" tabIndex={-1}>
          {/* Hero Section */}
          <section className="hero-section">
             <div className="hero-container">
@@ -184,10 +188,10 @@ const TruthLens = () => {
                            </div>
                         </div>
 
-                        <button type="button" className="extension-snip-button" aria-label="Start snipping">
+                        <div className="extension-snip-button" aria-hidden="true">
                            <Scissors size={17} strokeWidth={2} aria-hidden="true" />
                            Start Snipping
-                        </button>
+                        </div>
 
                         {/* Other Extension Capabilities */}
                         <div className="extension-tools">
@@ -442,6 +446,11 @@ const TruthLens = () => {
                         claim needs closer review.
                      </p>
                   </div>
+
+                  <Link to="/partners" className="trust-partners-link">
+                     Explore public partner organizations
+                     <ArrowRight size={17} strokeWidth={2} aria-hidden="true" />
+                  </Link>
                </div>
 
                {/* Transparency Principles */}
@@ -647,6 +656,7 @@ const TruthLens = () => {
                </div>
             </div>
          </section>
+         </main>
 
          {/* Footer */}
          <footer className="footer">
@@ -677,6 +687,8 @@ const TruthLens = () => {
                         <a href="#how-it-works">How it works</a>
 
                         <a href="#trust">Trust & Transparency</a>
+
+                        <Link to="/partners">Public partners</Link>
 
                         <a href="#about">About</a>
                      </div>
