@@ -154,6 +154,14 @@ class Organization(models.Model):
         null=True,
     )
 
+    public_profile_enabled = models.BooleanField(
+        default=False,
+    )
+
+    public_logo_enabled = models.BooleanField(
+        default=False,
+    )
+
     organization_type = models.CharField(
         max_length=30,
         choices=OrganizationType.choices,

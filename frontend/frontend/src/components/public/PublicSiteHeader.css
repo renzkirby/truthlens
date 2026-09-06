@@ -1,0 +1,381 @@
+.public-site-header {
+   position: sticky;
+   top: 0;
+   z-index: 1000;
+   width: 100%;
+   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+   background: rgba(8, 15, 13, 0.88);
+   backdrop-filter: blur(16px);
+   -webkit-backdrop-filter: blur(16px);
+   transition:
+      background-color 0.25s ease,
+      border-color 0.25s ease;
+}
+
+.public-site-skip-link {
+   position: fixed;
+   top: 12px;
+   left: 12px;
+   z-index: 1100;
+   padding: 10px 14px;
+   border-radius: 8px;
+   color: var(--brand-dark);
+   background: #ffffff;
+   font-size: 0.88rem;
+   font-weight: 700;
+   text-decoration: none;
+   transform: translateY(calc(-100% - 20px));
+   transition: transform 0.18s ease;
+}
+
+.public-site-skip-link:focus-visible {
+   outline: 3px solid #10b981;
+   outline-offset: 3px;
+   transform: translateY(0);
+}
+
+.public-site-header__inner {
+   width: min(1180px, calc(100% - 48px));
+   min-height: 76px;
+   margin: 0 auto;
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 32px;
+}
+
+.public-site-header__brand {
+   display: inline-flex;
+   align-items: center;
+   gap: 10px;
+   flex-shrink: 0;
+   color: #ffffff;
+   font-size: 1.05rem;
+   font-weight: 700;
+   letter-spacing: -0.02em;
+   text-decoration: none;
+   transition:
+      opacity 0.2s ease,
+      transform 0.2s ease;
+}
+
+.public-site-header__brand:hover {
+   opacity: 0.9;
+}
+
+.public-site-header__brand:focus-visible {
+   border-radius: 6px;
+   outline: 2px solid #10b981;
+   outline-offset: 5px;
+}
+
+.public-site-header__logo {
+   width: 34px;
+   height: 34px;
+   display: block;
+   object-fit: contain;
+}
+
+.public-site-header__brand-name {
+   line-height: 1;
+}
+
+.public-site-header__links {
+   margin-right: 8px;
+   margin-left: auto;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   gap: 32px;
+}
+
+.public-site-header__links a {
+   position: relative;
+   padding: 8px 0;
+   color: rgba(255, 255, 255, 0.72);
+   font-size: 0.9rem;
+   font-weight: 500;
+   text-decoration: none;
+   transition: color 0.2s ease;
+}
+
+.public-site-header__links a::after {
+   content: "";
+   position: absolute;
+   bottom: 1px;
+   left: 0;
+   width: 100%;
+   height: 2px;
+   border-radius: 999px;
+   background: #10b981;
+   transform: scaleX(0);
+   transform-origin: center;
+   transition: transform 0.2s ease;
+}
+
+.public-site-header__links a:hover {
+   color: #ffffff;
+}
+
+.public-site-header__links a:hover::after {
+   transform: scaleX(1);
+}
+
+.public-site-header__links a:focus-visible {
+   border-radius: 4px;
+   color: #ffffff;
+   outline: 2px solid #10b981;
+   outline-offset: 5px;
+}
+
+.public-site-header__actions {
+   display: flex;
+   align-items: center;
+   flex-shrink: 0;
+   gap: 10px;
+}
+
+.public-site-header__secondary-action,
+.public-site-header__primary-action {
+   min-height: 42px;
+   padding: 0 18px;
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   border-radius: 8px;
+   font-family: inherit;
+   font-size: 0.88rem;
+   font-weight: 600;
+   text-decoration: none;
+   transition:
+      color 0.2s ease,
+      background-color 0.2s ease,
+      border-color 0.2s ease,
+      transform 0.2s ease,
+      box-shadow 0.2s ease;
+}
+
+.public-site-header__secondary-action {
+   border: 1px solid transparent;
+   color: rgba(255, 255, 255, 0.82);
+   background: transparent;
+}
+
+.public-site-header__secondary-action:hover {
+   color: #ffffff;
+   background: rgba(255, 255, 255, 0.06);
+}
+
+.public-site-header__secondary-action:focus-visible {
+   outline: 2px solid #10b981;
+   outline-offset: 3px;
+}
+
+.public-site-header__primary-action {
+   border: 1px solid #10b981;
+   color: #ffffff;
+   background: #10b981;
+   box-shadow: 0 4px 14px rgba(16, 185, 129, 0.16);
+}
+
+.public-site-header__primary-action:hover {
+   border-color: #059669;
+   background: #059669;
+   box-shadow: 0 6px 18px rgba(16, 185, 129, 0.22);
+   transform: translateY(-1px);
+}
+
+.public-site-header__primary-action:active {
+   transform: translateY(0);
+}
+
+.public-site-header__primary-action:focus-visible {
+   outline: 2px solid #ffffff;
+   outline-offset: 3px;
+}
+
+.public-site-header__menu-toggle {
+   width: 44px;
+   height: 44px;
+   padding: 0;
+   display: none;
+   align-items: center;
+   justify-content: center;
+   flex-direction: column;
+   gap: 5px;
+   border: 1px solid rgba(255, 255, 255, 0.12);
+   border-radius: 8px;
+   background: transparent;
+   cursor: pointer;
+   transition:
+      background-color 0.2s ease,
+      border-color 0.2s ease;
+}
+
+.public-site-header__menu-toggle:hover {
+   border-color: rgba(255, 255, 255, 0.22);
+   background: rgba(255, 255, 255, 0.06);
+}
+
+.public-site-header__menu-toggle:focus-visible {
+   outline: 2px solid #10b981;
+   outline-offset: 3px;
+}
+
+.public-site-header__menu-toggle span {
+   width: 18px;
+   height: 1.5px;
+   display: block;
+   border-radius: 999px;
+   background: #ffffff;
+   transition:
+      transform 0.2s ease,
+      opacity 0.2s ease;
+}
+
+.public-site-header__menu-toggle.is-open span:nth-child(1) {
+   transform: translateY(6.5px) rotate(45deg);
+}
+
+.public-site-header__menu-toggle.is-open span:nth-child(2) {
+   opacity: 0;
+}
+
+.public-site-header__menu-toggle.is-open span:nth-child(3) {
+   transform: translateY(-6.5px) rotate(-45deg);
+}
+
+.public-site-header__mobile-navigation {
+   display: none;
+}
+
+@media (max-width: 900px) {
+   .public-site-header__inner {
+      width: min(100% - 32px, 760px);
+      min-height: 70px;
+   }
+
+   .public-site-header__links,
+   .public-site-header__actions {
+      display: none;
+   }
+
+   .public-site-header__menu-toggle {
+      display: flex;
+   }
+
+   .public-site-header__mobile-navigation {
+      position: absolute;
+      top: calc(100% + 1px);
+      right: 0;
+      left: 0;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(8, 15, 13, 0.97);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-8px);
+      pointer-events: none;
+      transition:
+         opacity 0.2s ease,
+         transform 0.2s ease,
+         visibility 0.2s ease;
+   }
+
+   .public-site-header__mobile-navigation.is-open {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+      pointer-events: auto;
+   }
+
+   .public-site-header__mobile-navigation > a {
+      min-height: 48px;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      border-radius: 8px;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 0.95rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition:
+         color 0.2s ease,
+         background-color 0.2s ease;
+   }
+
+   .public-site-header__mobile-navigation > a:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.06);
+   }
+
+   .public-site-header__mobile-navigation > a:focus-visible {
+      color: #ffffff;
+      outline: 2px solid #10b981;
+      outline-offset: -2px;
+   }
+
+   .public-site-header__mobile-actions {
+      margin-top: 8px;
+      padding: 16px 12px 4px;
+      display: flex;
+      gap: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+   }
+
+   .public-site-header__mobile-actions .public-site-header__secondary-action,
+   .public-site-header__mobile-actions .public-site-header__primary-action {
+      flex: 1;
+   }
+}
+
+@media (max-width: 480px) {
+   .public-site-header__inner {
+      width: calc(100% - 24px);
+      min-height: 64px;
+   }
+
+   .public-site-header__logo {
+      width: 30px;
+      height: 30px;
+   }
+
+   .public-site-header__brand-name {
+      font-size: 0.98rem;
+   }
+
+   .public-site-header__mobile-actions {
+      flex-direction: column;
+   }
+
+   .public-site-header__mobile-actions .public-site-header__secondary-action,
+   .public-site-header__mobile-actions .public-site-header__primary-action {
+      width: 100%;
+   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+   .public-site-header,
+   .public-site-header__brand,
+   .public-site-header__links a,
+   .public-site-header__links a::after,
+   .public-site-header__secondary-action,
+   .public-site-header__primary-action,
+   .public-site-header__menu-toggle,
+   .public-site-header__menu-toggle span,
+   .public-site-header__mobile-navigation {
+      transition: none;
+   }
+
+   .public-site-skip-link {
+      transition: none;
+   }
+
+   .public-site-header__primary-action:hover {
+      transform: none;
+   }
+}

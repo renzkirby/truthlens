@@ -122,6 +122,8 @@ export const API_ENDPOINTS = {
    VERIFICATION_ASSIGNMENT_CLAIM: (assignmentId) => `verification/assignments/${assignmentId}/claim/`,
    VERIFICATION_ASSIGNMENT_RELEASE: (assignmentId) => `verification/assignments/${assignmentId}/release/`,
    ORGANIZATION_MEMBERS: (organizationId) => `organizations/${organizationId}/members/`,
+   ORGANIZATION_PUBLIC_PROFILE: (organizationId) => `organizations/${organizationId}/public-profile/`,
+   ORGANIZATION_PUBLIC_PROFILE_LOGO: (organizationId) => `organizations/${organizationId}/public-profile/logo/`,
    ORGANIZATION_MEMBER_ROLE: (organizationId, membershipId) =>
       `organizations/${organizationId}/members/${membershipId}/role/`,
    ORGANIZATION_MEMBER_SUSPEND: (organizationId, membershipId) =>
@@ -137,6 +139,10 @@ export const API_ENDPOINTS = {
       `organizations/${organizationId}/invitations/${invitationId}/resend/`,
    ORGANIZATION_INVITATION_CANCEL: (organizationId, invitationId) =>
       `organizations/${organizationId}/invitations/${invitationId}/cancel/`,
+
+   // Public Partner Presence
+   PUBLIC_PARTNERS: "partners/",
+   PUBLIC_PARTNER_DETAIL: (slug) => `partners/${encodeURIComponent(slug)}/`,
 
    // Other
    POLLING: "polling/",

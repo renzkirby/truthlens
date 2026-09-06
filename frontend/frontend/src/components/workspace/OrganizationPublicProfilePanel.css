@@ -1,0 +1,679 @@
+.org-public-profile-panel {
+   min-width: 0;
+   margin-bottom: 30px;
+   padding: 22px;
+   border: 1px solid var(--border-default);
+   border-radius: 14px;
+   background: var(--bg-surface);
+}
+
+.org-public-profile-heading {
+   display: flex;
+   align-items: flex-start;
+   justify-content: space-between;
+   gap: 16px;
+   margin-bottom: 18px;
+}
+
+.org-public-profile-heading > div {
+   min-width: 0;
+}
+
+.org-public-profile-heading h3 {
+   margin: 0;
+   color: var(--text-main);
+   font-size: 1.05rem;
+}
+
+.org-public-profile-heading p {
+   margin: 5px 0 0;
+   color: var(--text-muted);
+   font-size: 0.8rem;
+   line-height: 1.55;
+}
+
+.org-public-profile-state {
+   min-height: 150px;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   gap: 9px;
+   color: var(--text-muted);
+   font-size: 0.82rem;
+}
+
+.org-public-profile-error {
+   display: flex;
+   align-items: flex-start;
+   gap: 10px;
+   padding: 13px;
+   border: 1px solid var(--verdict-fake-border);
+   border-radius: 9px;
+   background: var(--verdict-fake-bg);
+   color: var(--verdict-fake-text);
+}
+
+.org-public-profile-error > div {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   align-items: flex-start;
+   gap: 5px;
+}
+
+.org-public-profile-error span {
+   overflow-wrap: anywhere;
+   font-size: 0.78rem;
+   line-height: 1.5;
+}
+
+.org-public-profile-error button,
+.org-public-profile-actions button {
+   min-height: 36px;
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   gap: 7px;
+   padding: 0 12px;
+   border: 1px solid var(--border-default);
+   border-radius: 8px;
+   background: var(--bg-surface);
+   color: var(--text-body);
+   font: inherit;
+   font-size: 0.78rem;
+   font-weight: 650;
+   cursor: pointer;
+}
+
+.org-public-profile-error button {
+   margin-top: 4px;
+}
+
+.org-public-profile-error button:hover:not(:disabled),
+.org-public-profile-actions button:hover:not(:disabled) {
+   border-color: var(--border-strong, var(--border-default));
+   background: var(--bg-subtle);
+}
+
+.org-public-profile-overview {
+   min-width: 0;
+   display: grid;
+   grid-template-columns: minmax(180px, 0.9fr) minmax(180px, 0.8fr) minmax(240px, 1.25fr);
+   gap: 14px;
+   margin-bottom: 22px;
+   padding: 15px;
+   border: 1px solid var(--border-default);
+   border-radius: 11px;
+   background: var(--bg-subtle);
+}
+
+.org-public-profile-identity {
+   min-width: 0;
+   display: flex;
+   align-items: flex-start;
+   gap: 10px;
+}
+
+.org-public-profile-identity-icon {
+   width: 38px;
+   height: 38px;
+   flex: 0 0 auto;
+   display: grid;
+   place-items: center;
+   border: 1px solid var(--border-default);
+   border-radius: 10px;
+   background: var(--bg-surface);
+   color: var(--brand-primary);
+}
+
+.org-public-profile-identity > div:last-child {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   gap: 3px;
+}
+
+.org-public-profile-identity strong,
+.org-public-profile-identity span,
+.org-public-profile-identity code {
+   max-width: 100%;
+   overflow-wrap: anywhere;
+}
+
+.org-public-profile-identity strong {
+   color: var(--text-main);
+   font-size: 0.86rem;
+}
+
+.org-public-profile-identity span,
+.org-public-profile-identity code {
+   color: var(--text-muted);
+   font-size: 0.72rem;
+}
+
+.org-public-profile-statuses {
+   min-width: 0;
+   display: grid;
+   grid-template-columns: repeat(2, minmax(0, 1fr));
+   gap: 10px;
+   margin: 0;
+}
+
+.org-public-profile-statuses div {
+   min-width: 0;
+}
+
+.org-public-profile-statuses dt {
+   margin-bottom: 5px;
+   color: var(--text-muted);
+   font-size: 0.67rem;
+   font-weight: 650;
+}
+
+.org-public-profile-statuses dd {
+   margin: 0;
+   overflow-wrap: anywhere;
+   color: var(--text-body);
+   font-size: 0.77rem;
+   font-weight: 700;
+}
+
+.org-public-visibility {
+   min-width: 0;
+   padding: 11px 12px;
+   border: 1px solid var(--border-default);
+   border-radius: 9px;
+   background: var(--bg-surface);
+}
+
+.org-public-visibility > div {
+   display: flex;
+   align-items: center;
+   gap: 7px;
+}
+
+.org-public-visibility strong {
+   font-size: 0.78rem;
+}
+
+.org-public-visibility p {
+   margin: 6px 0 0;
+   color: var(--text-muted);
+   font-size: 0.72rem;
+   line-height: 1.5;
+}
+
+.org-public-profile-link {
+   margin-top: 10px;
+   padding-top: 10px;
+   display: flex;
+   flex-direction: column;
+   align-items: flex-start;
+   gap: 4px;
+   border-top: 1px solid var(--border-light);
+}
+
+.org-public-profile-link a {
+   color: var(--brand-primary);
+   font-size: 0.76rem;
+   font-weight: 700;
+   text-underline-offset: 3px;
+}
+
+.org-public-profile-link a:hover {
+   color: var(--brand-primary-hover);
+}
+
+.org-public-profile-link a:focus-visible {
+   border-radius: 3px;
+   outline: 3px solid rgba(79, 70, 229, 0.18);
+   outline-offset: 2px;
+}
+
+.org-public-profile-link span {
+   color: var(--text-muted);
+   font-size: 0.68rem;
+   line-height: 1.45;
+}
+
+.org-public-visibility.visible {
+   border-color: var(--verdict-fact-border);
+   color: var(--verdict-fact-text);
+}
+
+.org-public-visibility.disabled {
+   color: var(--text-muted);
+}
+
+.org-public-visibility.unavailable {
+   border-color: var(--verdict-misleading-border);
+   color: var(--verdict-misleading-text);
+}
+
+.org-public-profile-form {
+   min-width: 0;
+}
+
+.org-public-profile-fields {
+   display: grid;
+   grid-template-columns: repeat(2, minmax(0, 1fr));
+   gap: 16px;
+}
+
+.org-public-profile-field {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   gap: 6px;
+}
+
+.org-public-profile-field-wide {
+   grid-column: 1 / -1;
+}
+
+.org-public-profile-field label,
+.org-public-profile-consent legend {
+   color: var(--text-body);
+   font-size: 0.76rem;
+   font-weight: 700;
+}
+
+.org-public-profile-field input,
+.org-public-profile-field textarea {
+   width: 100%;
+   min-width: 0;
+   border: 1px solid var(--border-default);
+   border-radius: 8px;
+   background: var(--bg-surface);
+   color: var(--text-main);
+   font: inherit;
+}
+
+.org-public-profile-field input {
+   min-height: 42px;
+   padding: 0 11px;
+}
+
+.org-public-profile-field textarea {
+   padding: 10px 11px;
+   line-height: 1.55;
+   resize: vertical;
+}
+
+.org-public-profile-field input:disabled,
+.org-public-profile-field textarea:disabled {
+   opacity: 0.68;
+   cursor: not-allowed;
+}
+
+.org-public-profile-field input[aria-invalid="true"],
+.org-public-profile-field textarea[aria-invalid="true"] {
+   border-color: var(--verdict-fake-border);
+}
+
+.org-public-profile-help,
+.org-public-profile-field-error {
+   font-size: 0.71rem;
+   line-height: 1.5;
+}
+
+.org-public-profile-help {
+   color: var(--text-muted);
+}
+
+.org-public-profile-field-error {
+   color: var(--verdict-fake-text);
+   font-weight: 650;
+}
+
+.org-public-logo-manager {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   gap: 6px;
+}
+
+.org-public-logo-manager > label {
+   color: var(--text-body);
+   font-size: 0.76rem;
+   font-weight: 700;
+}
+
+.org-public-logo-content {
+   min-width: 0;
+   display: grid;
+   grid-template-columns: 132px minmax(0, 1fr);
+   gap: 14px;
+   align-items: stretch;
+   margin-top: 2px;
+   padding: 13px;
+   border: 1px solid var(--border-default);
+   border-radius: 10px;
+   background: var(--bg-subtle);
+}
+
+.org-public-logo-preview {
+   width: 132px;
+   height: 104px;
+   overflow: hidden;
+   border: 1px solid var(--border-default);
+   border-radius: 9px;
+   background: var(--bg-surface);
+}
+
+.org-public-logo-preview img {
+   width: 100%;
+   height: 100%;
+   display: block;
+   object-fit: contain;
+}
+
+.org-public-logo-placeholder {
+   width: 100%;
+   height: 100%;
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   justify-content: center;
+   gap: 6px;
+   padding: 8px;
+   color: var(--text-muted);
+   text-align: center;
+}
+
+.org-public-logo-placeholder span {
+   font-size: 0.68rem;
+   line-height: 1.35;
+}
+
+.org-public-logo-placeholder-icon {
+   display: inline-flex;
+}
+
+.org-public-logo-controls,
+.org-public-logo-selection {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+}
+
+.org-public-logo-controls {
+   justify-content: center;
+   gap: 10px;
+}
+
+.org-public-logo-selection {
+   gap: 3px;
+}
+
+.org-public-logo-selection strong,
+.org-public-logo-selection span {
+   overflow-wrap: anywhere;
+}
+
+.org-public-logo-selection strong {
+   color: var(--text-main);
+   font-size: 0.77rem;
+}
+
+.org-public-logo-selection span {
+   color: var(--text-muted);
+   font-size: 0.7rem;
+   line-height: 1.45;
+}
+
+.org-public-logo-file-input {
+   position: absolute;
+   width: 1px;
+   height: 1px;
+   overflow: hidden;
+   clip: rect(0 0 0 0);
+   clip-path: inset(50%);
+   white-space: nowrap;
+}
+
+.org-public-logo-actions,
+.org-public-logo-remove-confirmation > div {
+   display: flex;
+   flex-wrap: wrap;
+   gap: 8px;
+}
+
+.org-public-logo-actions button,
+.org-public-logo-remove-confirmation button {
+   min-height: 34px;
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   padding: 0 11px;
+   border: 1px solid var(--border-default);
+   border-radius: 8px;
+   background: var(--bg-surface);
+   color: var(--text-body);
+   font: inherit;
+   font-size: 0.73rem;
+   font-weight: 650;
+   cursor: pointer;
+}
+
+.org-public-logo-actions button:hover:not(:disabled),
+.org-public-logo-remove-confirmation button:hover:not(:disabled) {
+   background: var(--bg-surface);
+   border-color: var(--border-strong, var(--border-default));
+}
+
+.org-public-logo-actions button.primary {
+   border-color: var(--brand-primary);
+   background: var(--brand-primary);
+   color: #fff;
+}
+
+.org-public-logo-actions button.danger,
+.org-public-logo-remove-confirmation button.danger {
+   border-color: var(--verdict-fake-border);
+   color: var(--verdict-fake-text);
+}
+
+.org-public-logo-actions button:disabled,
+.org-public-logo-remove-confirmation button:disabled {
+   opacity: 0.55;
+   cursor: not-allowed;
+}
+
+.org-public-logo-remove-confirmation {
+   display: flex;
+   flex-direction: column;
+   gap: 8px;
+   padding: 10px;
+   border: 1px solid var(--verdict-fake-border);
+   border-radius: 8px;
+   background: var(--verdict-fake-bg);
+   color: var(--verdict-fake-text);
+}
+
+.org-public-logo-remove-confirmation > strong {
+   font-size: 0.74rem;
+}
+
+.org-public-profile-consent {
+   min-width: 0;
+   display: grid;
+   grid-template-columns: repeat(2, minmax(0, 1fr));
+   gap: 12px;
+   margin: 22px 0 0;
+   padding: 0;
+   border: 0;
+}
+
+.org-public-profile-consent legend {
+   grid-column: 1 / -1;
+   margin-bottom: 1px;
+}
+
+.org-public-profile-consent-option {
+   min-width: 0;
+   display: flex;
+   align-items: flex-start;
+   gap: 10px;
+   padding: 13px;
+   border: 1px solid var(--border-default);
+   border-radius: 10px;
+   background: var(--bg-subtle);
+   cursor: pointer;
+}
+
+.org-public-profile-consent-option input {
+   width: 18px;
+   height: 18px;
+   flex: 0 0 auto;
+   margin: 1px 0 0;
+   accent-color: var(--brand-primary);
+}
+
+.org-public-profile-consent-option > span {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   gap: 4px;
+}
+
+.org-public-profile-consent-option strong {
+   color: var(--text-main);
+   font-size: 0.78rem;
+}
+
+.org-public-profile-consent-option small {
+   color: var(--text-muted);
+   font-size: 0.71rem;
+   line-height: 1.5;
+}
+
+.org-public-profile-unsaved {
+   margin: 14px 0 0;
+   color: var(--text-muted);
+   font-size: 0.73rem;
+   font-weight: 650;
+}
+
+.org-public-profile-save-error {
+   margin-top: 14px;
+}
+
+.org-public-profile-actions {
+   display: flex;
+   justify-content: flex-end;
+   gap: 8px;
+   margin-top: 16px;
+}
+
+.org-public-profile-actions button.primary {
+   min-width: 154px;
+   border-color: var(--brand-primary);
+   background: var(--brand-primary);
+   color: #fff;
+}
+
+.org-public-profile-actions button.primary:hover:not(:disabled) {
+   border-color: var(--brand-primary);
+   background: var(--brand-primary);
+   filter: brightness(0.95);
+}
+
+.org-public-profile-actions button:disabled {
+   opacity: 0.55;
+   cursor: not-allowed;
+}
+
+.org-public-profile-error button:focus-visible,
+.org-public-profile-actions button:focus-visible,
+.org-public-logo-actions button:focus-visible,
+.org-public-logo-remove-confirmation button:focus-visible,
+.org-public-profile-field input:focus-visible,
+.org-public-profile-field textarea:focus-visible,
+.org-public-profile-consent-option input:focus-visible {
+   outline: 3px solid rgba(79, 70, 229, 0.18);
+   outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+   .org-public-profile-error button,
+   .org-public-profile-actions button,
+   .org-public-logo-actions button,
+   .org-public-logo-remove-confirmation button {
+      transition: none;
+   }
+}
+
+@media (max-width: 980px) {
+   .org-public-profile-overview {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+   }
+
+   .org-public-visibility {
+      grid-column: 1 / -1;
+   }
+}
+
+@media (max-width: 760px) {
+   .org-public-profile-panel {
+      padding: 18px;
+   }
+
+   .org-public-profile-fields,
+   .org-public-profile-consent {
+      grid-template-columns: 1fr;
+   }
+
+   .org-public-profile-field-wide,
+   .org-public-profile-consent legend {
+      grid-column: auto;
+   }
+}
+
+@media (max-width: 520px) {
+   .org-public-profile-overview {
+      grid-template-columns: 1fr;
+   }
+
+   .org-public-visibility {
+      grid-column: auto;
+   }
+
+   .org-public-profile-actions {
+      flex-direction: column-reverse;
+   }
+
+   .org-public-profile-actions button,
+   .org-public-profile-actions button.primary {
+      width: 100%;
+   }
+
+   .org-public-logo-content {
+      grid-template-columns: 1fr;
+   }
+
+   .org-public-logo-preview {
+      width: 100%;
+      height: 150px;
+   }
+}
+
+@media (max-width: 375px) {
+   .org-public-profile-panel {
+      padding: 15px;
+   }
+
+   .org-public-profile-statuses {
+      grid-template-columns: 1fr;
+   }
+
+   .org-public-logo-actions,
+   .org-public-logo-remove-confirmation > div {
+      flex-direction: column;
+   }
+
+   .org-public-logo-actions button,
+   .org-public-logo-remove-confirmation button {
+      width: 100%;
+   }
+}

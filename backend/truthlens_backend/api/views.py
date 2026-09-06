@@ -17,6 +17,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q, Count, F, Max
 from rest_framework.decorators import (
     api_view,
+    parser_classes,
     permission_classes,
     action,
     throttle_classes,
@@ -36,6 +37,10 @@ from rest_framework.exceptions import (
 )
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.pagination import CursorPagination
+from rest_framework.parsers import (
+    FormParser,
+    MultiPartParser,
+)
 from rest_framework.views import APIView
 from datetime import timedelta
 from django.shortcuts import get_object_or_404
@@ -93,6 +98,22 @@ from .organization_service import (
     PartnerCapability,
     has_capability,
     has_case_capability,
+)
+from .organization_public_presence_service import (
+    get_public_partner_by_slug,
+    get_public_partner_directory,
+)
+from .organization_public_profile_service import (
+    InvalidOrganizationPublicProfileChanges,
+    OrganizationPublicProfileAuthorizationError,
+    ensure_can_manage_organization_public_profile,
+    update_organization_public_profile,
+)
+from .organization_logo_service import (
+    OrganizationLogoStorageError,
+    OrganizationLogoValidationError,
+    remove_organization_logo,
+    upload_organization_logo,
 )
 from .evidence_review_service import (
     EvidenceReviewAuthorizationError,
@@ -165,6 +186,7 @@ from .throttles import (
     FactCheckRateThrottle,
     PasswordResetRateThrottle,
     EmailVerificationRateThrottle,
+    PublicPartnerRateThrottle,
 )
 from .serializers import (
     RegisterSerializer,
@@ -200,6 +222,12 @@ from .serializers import (
     OrganizationInvitationCreateSerializer,
     OrganizationInvitationPublicSerializer,
     OrganizationMembershipRoleUpdateSerializer,
+    OrganizationLogoUploadSerializer,
+    PublicPartnerDetailSerializer,
+    PublicPartnerDirectoryQuerySerializer,
+    PublicPartnerSummarySerializer,
+    OrganizationPublicProfileAdminSerializer,
+    OrganizationPublicProfileUpdateSerializer,
 )
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
@@ -3423,6 +3451,244 @@ def complete_onboarding(request):
         {
             "has_completed_onboarding": True,
         },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@throttle_classes([PublicPartnerRateThrottle])
+def public_partner_directory(request):
+    query_serializer = PublicPartnerDirectoryQuerySerializer(
+        data=request.query_params,
+    )
+
+    query_serializer.is_valid(
+        raise_exception=True,
+    )
+
+    organizations = get_public_partner_directory(
+        search=query_serializer.validated_data.get("search", ""),
+        organization_type=query_serializer.validated_data.get("type", ""),
+    )
+
+    serializer = PublicPartnerSummarySerializer(
+        organizations,
+        many=True,
+    )
+
+    return Response(
+        {
+            "count": organizations.count(),
+            "results": serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@throttle_classes([PublicPartnerRateThrottle])
+def public_partner_detail(
+    request,
+    slug,
+):
+    organization = get_public_partner_by_slug(slug)
+
+    if organization is None:
+        raise NotFound()
+
+    return Response(
+        PublicPartnerDetailSerializer(
+            organization,
+        ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+def _organization_public_profile_error_response(error):
+    if isinstance(
+        error,
+        OrganizationPublicProfileAuthorizationError,
+    ):
+        return Response(
+            {
+                "detail": str(error),
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    if isinstance(
+        error,
+        InvalidOrganizationPublicProfileChanges,
+    ):
+        return Response(
+            {
+                "detail": str(error),
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    return Response(
+        {
+            "detail": str(error),
+        },
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
+@api_view(
+    [
+        "GET",
+        "PATCH",
+    ]
+)
+@permission_classes([IsAuthenticated])
+def organization_public_profile(
+    request,
+    organization_id,
+):
+    organization = get_object_or_404(
+        Organization,
+        id=organization_id,
+    )
+
+    try:
+        ensure_can_manage_organization_public_profile(
+            organization=organization,
+            actor=request.user,
+        )
+
+    except OrganizationPublicProfileAuthorizationError as error:
+        return _organization_public_profile_error_response(error)
+
+    if request.method == "PATCH":
+        update_serializer = OrganizationPublicProfileUpdateSerializer(
+            data=request.data,
+            partial=True,
+        )
+
+        update_serializer.is_valid(
+            raise_exception=True,
+        )
+
+        try:
+            organization = update_organization_public_profile(
+                organization=organization,
+                actor=request.user,
+                changes=update_serializer.validated_data,
+            )
+
+        except (
+            OrganizationPublicProfileAuthorizationError,
+            InvalidOrganizationPublicProfileChanges,
+        ) as error:
+            return _organization_public_profile_error_response(error)
+
+    return Response(
+        OrganizationPublicProfileAdminSerializer(
+            organization,
+        ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+def _organization_logo_error_response(error):
+    if isinstance(
+        error,
+        OrganizationPublicProfileAuthorizationError,
+    ):
+        return _organization_public_profile_error_response(error)
+
+    if isinstance(
+        error,
+        OrganizationLogoStorageError,
+    ):
+        return Response(
+            {
+                "detail": str(error),
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    return Response(
+        {
+            "detail": str(error),
+        },
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
+@api_view(
+    [
+        "POST",
+        "DELETE",
+    ]
+)
+@permission_classes([IsAuthenticated])
+@parser_classes(
+    [
+        MultiPartParser,
+        FormParser,
+    ]
+)
+def organization_public_profile_logo(
+    request,
+    organization_id,
+):
+    organization = get_object_or_404(
+        Organization,
+        id=organization_id,
+    )
+
+    try:
+        ensure_can_manage_organization_public_profile(
+            organization=organization,
+            actor=request.user,
+        )
+
+    except OrganizationPublicProfileAuthorizationError as error:
+        return _organization_logo_error_response(error)
+
+    if request.method == "POST":
+        upload_serializer = OrganizationLogoUploadSerializer(
+            data=request.data,
+        )
+        upload_serializer.is_valid(
+            raise_exception=True,
+        )
+
+        try:
+            organization = upload_organization_logo(
+                organization=organization,
+                actor=request.user,
+                uploaded_file=upload_serializer.validated_data["logo"],
+            )
+
+        except (
+            OrganizationPublicProfileAuthorizationError,
+            OrganizationLogoStorageError,
+            OrganizationLogoValidationError,
+        ) as error:
+            return _organization_logo_error_response(error)
+
+    else:
+        try:
+            organization = remove_organization_logo(
+                organization=organization,
+                actor=request.user,
+            )
+
+        except (
+            OrganizationPublicProfileAuthorizationError,
+            OrganizationLogoStorageError,
+        ) as error:
+            return _organization_logo_error_response(error)
+
+    return Response(
+        OrganizationPublicProfileAdminSerializer(
+            organization,
+        ).data,
         status=status.HTTP_200_OK,
     )
 
