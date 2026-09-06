@@ -41,6 +41,7 @@ def get_safety_case_queryset(*, include_events=False):
     unresolved_reports = ThreadFlag.objects.filter(
         resolved_at__isnull=True,
     ).order_by("flagged_at", "id")
+    case_linked_reports = ThreadFlag.objects.order_by("flagged_at", "id")
 
     queryset = (
         ModerationCase.objects.filter(
@@ -57,7 +58,12 @@ def get_safety_case_queryset(*, include_events=False):
                 "thread__flags",
                 queryset=unresolved_reports,
                 to_attr="unresolved_safety_reports",
-            )
+            ),
+            Prefetch(
+                "reports",
+                queryset=case_linked_reports,
+                to_attr="case_linked_safety_reports",
+            ),
         )
     )
 

@@ -29,6 +29,7 @@ from .organization_service import (
 from .organization_public_presence_service import (
     is_public_partner_eligible,
 )
+from .moderation_service import ACTIVE_CASE_STATUSES
 
 
 class PublicIdentityProfileSerializer(serializers.ModelSerializer):
@@ -1174,9 +1175,12 @@ class SafetyCaseSummarySerializer(serializers.ModelSerializer):
 
     @staticmethod
     def _reports(obj):
-        if not obj.thread:
-            return []
-        return getattr(obj.thread, "unresolved_safety_reports", [])
+        if obj.status in ACTIVE_CASE_STATUSES:
+            if not obj.thread:
+                return []
+            return getattr(obj.thread, "unresolved_safety_reports", [])
+
+        return getattr(obj, "case_linked_safety_reports", [])
 
     def get_report_count(self, obj):
         return len(self._reports(obj))

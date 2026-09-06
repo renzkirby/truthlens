@@ -328,6 +328,83 @@ class SafetyCaseApiTests(APITestCase):
         )
         self.assertIsNone(created_event["actor"])
 
+    @patch("api.tasks.recompute_user_trust_score_task.delay")
+    def test_case_reports_and_actions_remain_isolated_across_review_cycles(
+        self,
+        delay,
+    ):
+        self._claim_case()
+        with self.captureOnCommitCallbacks(execute=True):
+            resolved_response = self._client_for(self.moderator).post(
+                self._url("safety_case_action", self.case),
+                {"action": "DISMISS"},
+                format="json",
+            )
+
+        original_report_ids = {
+            str(self.report_one.id),
+            str(self.report_two.id),
+        }
+        self.assertEqual(resolved_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            {report["id"] for report in resolved_response.data["reports"]},
+            original_report_ids,
+        )
+
+        new_reporter = self._user("safety-later-reporter")
+        later_report = ThreadFlag.objects.create(
+            thread=self.thread,
+            flagged_by=new_reporter,
+            reason=ThreadFlag.Reason.OTHER,
+            notes="A report from the later review cycle.",
+        )
+        later_case = create_moderation_case(
+            case_type=ModerationCase.CaseType.SAFETY,
+            actor=new_reporter,
+            source=ModerationCase.Source.USER_REPORT,
+            thread=self.thread,
+        )
+
+        client = self._client_for(self.moderator)
+        old_detail = client.get(self._url("safety_case_detail", self.case))
+        new_detail = client.get(self._url("safety_case_detail", later_case))
+
+        self.assertEqual(old_detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(new_detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            {report["id"] for report in old_detail.data["reports"]},
+            original_report_ids,
+        )
+        self.assertNotIn(
+            str(later_report.id),
+            {report["id"] for report in old_detail.data["reports"]},
+        )
+        self.assertEqual(
+            {report["id"] for report in new_detail.data["reports"]},
+            {str(later_report.id)},
+        )
+
+        for response in [old_detail, new_detail]:
+            for report in response.data["reports"]:
+                self.assertEqual(
+                    set(report),
+                    {"id", "reason", "reason_label", "notes", "flagged_at"},
+                )
+
+        stale_action = client.post(
+            self._url("safety_case_action", self.case),
+            {"action": "DISMISS"},
+            format="json",
+        )
+
+        later_case.refresh_from_db()
+        later_report.refresh_from_db()
+        self.assertEqual(stale_action.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(later_case.status, ModerationCase.Status.OPEN)
+        self.assertIsNone(later_case.assigned_to_id)
+        self.assertIsNone(later_report.resolved_at)
+        self.assertIsNone(later_report.resolution_case_id)
+
     def test_detail_returns_404_for_unknown_or_non_safety_case(self):
         evidence_case = create_moderation_case(
             case_type=ModerationCase.CaseType.EVIDENCE,
