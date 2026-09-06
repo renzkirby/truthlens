@@ -9,7 +9,6 @@ function PublicSiteHeader() {
    const { user } = useAuth();
    const [isMenuOpen, setIsMenuOpen] = useState(false);
    const isLandingPage = pathname === "/landing-page";
-   const isPartnersSection = pathname === "/partners" || pathname.startsWith("/partners/");
    const featuresHref = isLandingPage ? "#features" : "/landing-page#features";
    const aboutHref = isLandingPage ? "#about" : "/landing-page#about";
 
@@ -30,13 +29,6 @@ function PublicSiteHeader() {
 
             <div className="public-site-header__links">
                <a href={featuresHref}>Features</a>
-               <Link
-                  to="/partners"
-                  className={isPartnersSection ? "is-active" : undefined}
-                  aria-current={isPartnersSection ? "page" : undefined}
-               >
-                  Partners
-               </Link>
                <a href={aboutHref}>About</a>
             </div>
 
@@ -74,16 +66,12 @@ function PublicSiteHeader() {
                id="public-site-mobile-navigation"
                className={`public-site-header__mobile-navigation${isMenuOpen ? " is-open" : ""}`}
             >
-               <a href={featuresHref} onClick={closeMenu}>Features</a>
-               <Link
-                  to="/partners"
-                  className={isPartnersSection ? "is-active" : undefined}
-                  aria-current={isPartnersSection ? "page" : undefined}
-                  onClick={closeMenu}
-               >
-                  Partners
-               </Link>
-               <a href={aboutHref} onClick={closeMenu}>About</a>
+               <a href={featuresHref} onClick={closeMenu}>
+                  Features
+               </a>
+               <a href={aboutHref} onClick={closeMenu}>
+                  About
+               </a>
 
                <div className="public-site-header__mobile-actions">
                   {user ? (
