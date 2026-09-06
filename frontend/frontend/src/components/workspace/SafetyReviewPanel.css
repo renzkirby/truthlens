@@ -275,7 +275,8 @@
 }
 
 .safety-status,
-.safety-priority {
+.safety-priority,
+.safety-selected-label {
    display: inline-flex;
    align-items: center;
    min-height: 23px;
@@ -286,6 +287,12 @@
    color: var(--text-muted);
    font-size: 0.66rem;
    font-weight: 700;
+}
+
+.safety-selected-label {
+   margin-left: auto;
+   border-color: var(--brand-primary);
+   color: var(--brand-primary);
 }
 
 .safety-status.status-in_review,
@@ -737,9 +744,16 @@
    outline-offset: 2px;
 }
 
+.safety-section-heading h3:focus,
+.safety-detail:focus,
 .safety-detail-header h3:focus {
    outline: 2px solid var(--brand-primary);
    outline-offset: 4px;
+}
+
+.safety-contained-error:focus {
+   outline: 2px solid var(--brand-primary);
+   outline-offset: 3px;
 }
 
 @media (max-width: 1180px) {

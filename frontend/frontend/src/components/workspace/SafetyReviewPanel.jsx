@@ -19,7 +19,7 @@ const ASSIGNMENT_OPTIONS = [
 
 const ACTION_DETAILS = {
    DISMISS: {
-      label: "Dismiss report",
+      label: "Dismiss case",
       confirmation: "No policy violation found",
       consequence: "The case will be resolved, its reports closed, and the thread will remain visible.",
       notesRequired: false,
@@ -92,6 +92,10 @@ function requiresServerReconciliation(error) {
    return error?.status === 404 || error?.status === 409;
 }
 
+function formatCaseReference(caseId) {
+   return String(caseId || "").slice(0, 8);
+}
+
 function SafetyReviewPanel() {
    const { authFetch, user } = useAuth();
 
@@ -109,6 +113,7 @@ function SafetyReviewPanel() {
    const [detail, setDetail] = useState(null);
    const [detailLoading, setDetailLoading] = useState(false);
    const [detailError, setDetailError] = useState("");
+   const [detailUnavailable, setDetailUnavailable] = useState(false);
    const [detailRequestVersion, setDetailRequestVersion] = useState(0);
 
    const [notice, setNotice] = useState("");
@@ -121,9 +126,21 @@ function SafetyReviewPanel() {
    const queueRequestIdRef = useRef(0);
    const detailRequestIdRef = useRef(0);
    const selectedCaseIdRef = useRef(null);
+   const queueHeadingRef = useRef(null);
+   const detailRegionRef = useRef(null);
    const detailHeadingRef = useRef(null);
    const focusDetailAfterLoadRef = useRef(false);
+   const focusDetailAfterMutationRef = useRef(false);
+   const focusDetailErrorRef = useRef(false);
+   const detailErrorRef = useRef(null);
    const decisionNotesRef = useRef(null);
+   const dismissActionRef = useRef(null);
+   const removeActionRef = useRef(null);
+   const escalateActionRef = useRef(null);
+   const decisionReturnFocusRef = useRef(null);
+   const releaseTriggerRef = useRef(null);
+   const releaseCancelRef = useRef(null);
+   const restoreReleaseFocusRef = useRef(false);
 
    const queueUrl = useMemo(() => {
       const query = new URLSearchParams();
@@ -200,21 +217,30 @@ function SafetyReviewPanel() {
 
             setDetail(data);
             setDetailError("");
+            setDetailUnavailable(false);
          })
          .catch((error) => {
             if (cancelled || detailRequestIdRef.current !== requestId) {
                return;
             }
 
+            const isUnavailable = error?.status === 404;
+
             setDetail(null);
             focusDetailAfterLoadRef.current = false;
+            focusDetailAfterMutationRef.current = false;
+            focusDetailErrorRef.current = true;
             setDetailError(
-               error?.status === 404
+               isUnavailable
                   ? "This Safety case is no longer available. The queue has been refreshed."
                   : (error?.message || "Unable to load this Safety case."),
             );
+            setDetailUnavailable(isUnavailable);
 
-            if (error?.status === 404) {
+            if (isUnavailable) {
+               selectedCaseIdRef.current = null;
+               setSelectedCaseId(null);
+               setActionError("");
                setQueueLoading(true);
                setQueueRequestVersion((current) => current + 1);
             }
@@ -231,7 +257,18 @@ function SafetyReviewPanel() {
    }, [authFetch, detailRequestVersion, selectedCaseId]);
 
    useEffect(() => {
-      if (!detail || !focusDetailAfterLoadRef.current) {
+      if (!detail) {
+         return;
+      }
+
+      if (focusDetailAfterMutationRef.current) {
+         focusDetailAfterMutationRef.current = false;
+         focusDetailAfterLoadRef.current = false;
+         detailHeadingRef.current?.focus();
+         return;
+      }
+
+      if (!focusDetailAfterLoadRef.current) {
          return;
       }
 
@@ -245,8 +282,44 @@ function SafetyReviewPanel() {
    useEffect(() => {
       if (decisionAction) {
          decisionNotesRef.current?.focus();
+         return;
+      }
+
+      const returnAction = decisionReturnFocusRef.current;
+
+      if (!returnAction) {
+         return;
+      }
+
+      decisionReturnFocusRef.current = null;
+
+      if (returnAction === "DISMISS") {
+         dismissActionRef.current?.focus();
+      } else if (returnAction === "REMOVE") {
+         removeActionRef.current?.focus();
+      } else if (returnAction === "ESCALATE") {
+         escalateActionRef.current?.focus();
       }
    }, [decisionAction]);
+
+   useEffect(() => {
+      if (confirmingRelease) {
+         releaseCancelRef.current?.focus();
+         return;
+      }
+
+      if (restoreReleaseFocusRef.current) {
+         restoreReleaseFocusRef.current = false;
+         releaseTriggerRef.current?.focus();
+      }
+   }, [confirmingRelease]);
+
+   useEffect(() => {
+      if (detailError && focusDetailErrorRef.current) {
+         focusDetailErrorRef.current = false;
+         detailErrorRef.current?.focus();
+      }
+   }, [detailError]);
 
    const requestQueueRefresh = ({ clearMessages = false } = {}) => {
       setQueueLoading(true);
@@ -268,7 +341,24 @@ function SafetyReviewPanel() {
       setDetail(null);
       setDetailLoading(true);
       setDetailError("");
+      setDetailUnavailable(false);
       setDetailRequestVersion((current) => current + 1);
+   };
+
+   const handleQueueRetry = () => {
+      requestQueueRefresh();
+      queueHeadingRef.current?.focus();
+   };
+
+   const handleDetailRetry = () => {
+      requestDetailRefresh(selectedCaseId);
+      detailRegionRef.current?.focus();
+   };
+
+   const handleReturnToQueue = () => {
+      setDetailError("");
+      setDetailUnavailable(false);
+      queueHeadingRef.current?.focus();
    };
 
    const reconcileConflict = (caseId, error) => {
@@ -278,10 +368,25 @@ function SafetyReviewPanel() {
       if (selectedCaseIdRef.current === caseId) {
          setActionError(error?.message || "This Safety case changed before the request completed.");
          setConfirmingRelease(false);
+         decisionReturnFocusRef.current = null;
+         restoreReleaseFocusRef.current = false;
+         focusDetailAfterMutationRef.current = true;
          setDecisionAction(null);
          requestDetailRefresh(caseId);
       } else {
-         setNotice(error?.message || "A Safety case changed before the request completed.");
+         setNotice(
+            `Case ${formatCaseReference(caseId)}: ${
+               error?.message || "The case changed before the request completed."
+            }`,
+         );
+      }
+   };
+
+   const reportMutationFailure = (caseId, message) => {
+      if (selectedCaseIdRef.current === caseId) {
+         setActionError(message);
+      } else {
+         setNotice(`Case ${formatCaseReference(caseId)}: ${message}`);
       }
    };
 
@@ -306,25 +411,70 @@ function SafetyReviewPanel() {
    };
 
    const handleFilterChange = (filterName, value) => {
+      queueRequestIdRef.current += 1;
+      detailRequestIdRef.current += 1;
+      selectedCaseIdRef.current = null;
+      focusDetailAfterLoadRef.current = false;
+      focusDetailAfterMutationRef.current = false;
+      focusDetailErrorRef.current = false;
+      decisionReturnFocusRef.current = null;
+      restoreReleaseFocusRef.current = false;
+
       setFilters((current) => ({ ...current, [filterName]: value }));
+      setQueue({ count: 0, results: [] });
       setQueueLoading(true);
       setQueueError("");
-      setNotice("");
-      setActionError("");
-   };
-
-   const handleSelectCase = (caseId) => {
-      selectedCaseIdRef.current = caseId;
-      focusDetailAfterLoadRef.current = true;
-      setSelectedCaseId(caseId);
+      setSelectedCaseId(null);
       setDetail(null);
-      setDetailLoading(true);
+      setDetailLoading(false);
       setDetailError("");
+      setDetailUnavailable(false);
       setNotice("");
       setActionError("");
       setConfirmingRelease(false);
       setDecisionAction(null);
       setDecisionNotes("");
+   };
+
+   const handleSelectCase = (caseId) => {
+      selectedCaseIdRef.current = caseId;
+      focusDetailAfterLoadRef.current = true;
+      focusDetailAfterMutationRef.current = false;
+      focusDetailErrorRef.current = false;
+      decisionReturnFocusRef.current = null;
+      restoreReleaseFocusRef.current = false;
+      setSelectedCaseId(caseId);
+      setDetail(null);
+      setDetailLoading(true);
+      setDetailError("");
+      setDetailUnavailable(false);
+      setNotice("");
+      setActionError("");
+      setConfirmingRelease(false);
+      setDecisionAction(null);
+      setDecisionNotes("");
+   };
+
+   const handleOpenReleaseConfirmation = () => {
+      restoreReleaseFocusRef.current = false;
+      setConfirmingRelease(true);
+   };
+
+   const handleCancelReleaseConfirmation = () => {
+      restoreReleaseFocusRef.current = true;
+      setConfirmingRelease(false);
+   };
+
+   const handleOpenDecision = (action) => {
+      decisionReturnFocusRef.current = action;
+      setActionError("");
+      setDecisionAction(action);
+   };
+
+   const handleCancelDecision = () => {
+      setDecisionAction(null);
+      setDecisionNotes("");
+      setActionError("");
    };
 
    const handleClaim = async () => {
@@ -345,16 +495,17 @@ function SafetyReviewPanel() {
          updateQueueCase(updatedCase);
 
          if (selectedCaseIdRef.current === caseId) {
+            focusDetailAfterMutationRef.current = true;
             setDetail(updatedCase);
          }
 
-         setNotice("Case claimed. It is now assigned to you.");
+         setNotice(`Case ${formatCaseReference(caseId)} claimed. It is now assigned to you.`);
          requestQueueRefresh();
       } catch (error) {
          if (requiresServerReconciliation(error)) {
             reconcileConflict(caseId, error);
          } else {
-            setActionError(error?.message || "Unable to claim this Safety case.");
+            reportMutationFailure(caseId, error?.message || "Unable to claim this Safety case.");
          }
       } finally {
          setPendingOperation(null);
@@ -379,17 +530,21 @@ function SafetyReviewPanel() {
          updateQueueCase(updatedCase);
 
          if (selectedCaseIdRef.current === caseId) {
+            focusDetailAfterMutationRef.current = true;
             setDetail(updatedCase);
          }
 
+         restoreReleaseFocusRef.current = false;
          setConfirmingRelease(false);
-         setNotice("Case released. It is available for another Safety moderator to claim.");
+         setNotice(
+            `Case ${formatCaseReference(caseId)} released. It is available for another Safety moderator to claim.`,
+         );
          requestQueueRefresh();
       } catch (error) {
          if (requiresServerReconciliation(error)) {
             reconcileConflict(caseId, error);
          } else {
-            setActionError(error?.message || "Unable to release this Safety case.");
+            reportMutationFailure(caseId, error?.message || "Unable to release this Safety case.");
          }
       } finally {
          setPendingOperation(null);
@@ -427,22 +582,25 @@ function SafetyReviewPanel() {
          });
 
          if (selectedCaseIdRef.current === caseId) {
+            focusDetailAfterMutationRef.current = true;
             setDetail(updatedCase);
          }
 
+         decisionReturnFocusRef.current = null;
+         restoreReleaseFocusRef.current = false;
          setDecisionAction(null);
          setDecisionNotes("");
          setConfirmingRelease(false);
 
          if (action === "ESCALATE") {
             updateQueueCase(updatedCase);
-            setNotice("Case escalated for further Platform Safety review.");
+            setNotice(`Case ${formatCaseReference(caseId)} escalated for further Platform Safety review.`);
          } else {
             removeCompletedQueueCase(caseId);
             setNotice(
                action === "REMOVE"
-                  ? "Review completed. The reported content was removed from active circulation."
-                  : "Review completed. No policy violation was found and the thread remains visible.",
+                  ? `Case ${formatCaseReference(caseId)} completed. The reported content was removed from active circulation.`
+                  : `Case ${formatCaseReference(caseId)} completed. No policy violation was found and the thread remains visible.`,
             );
          }
 
@@ -451,7 +609,7 @@ function SafetyReviewPanel() {
          if (requiresServerReconciliation(error)) {
             reconcileConflict(caseId, error);
          } else {
-            setActionError(error?.message || "Unable to complete this Safety action.");
+            reportMutationFailure(caseId, error?.message || "Unable to complete this Safety action.");
          }
       } finally {
          setPendingOperation(null);
@@ -559,7 +717,9 @@ function SafetyReviewPanel() {
             <section className="safety-queue" aria-labelledby="safety-queue-heading" aria-busy={queueLoading}>
                <div className="safety-section-heading">
                   <div>
-                     <h3 id="safety-queue-heading">Active cases</h3>
+                     <h3 id="safety-queue-heading" ref={queueHeadingRef} tabIndex="-1">
+                        Active cases
+                     </h3>
                      <p>Select a case to load its reports, history, and available actions.</p>
                   </div>
                </div>
@@ -568,7 +728,7 @@ function SafetyReviewPanel() {
                   <div className="safety-contained-error" role="alert">
                      <strong>Safety queue unavailable</strong>
                      <span>{queueError}</span>
-                     <button type="button" onClick={() => requestQueueRefresh()}>
+                     <button type="button" onClick={handleQueueRetry}>
                         Retry
                      </button>
                   </div>
@@ -609,6 +769,7 @@ function SafetyReviewPanel() {
                                  <span className={`safety-priority priority-${String(caseItem.priority).toLowerCase()}`}>
                                     {formatLabel(caseItem.priority)} priority
                                  </span>
+                                 {isSelected && <span className="safety-selected-label">Selected</span>}
                               </span>
 
                               <strong>{getCaseTitle(caseItem)}</strong>
@@ -638,8 +799,40 @@ function SafetyReviewPanel() {
                )}
             </section>
 
-            <section id="safety-case-detail" className="safety-detail" aria-busy={detailLoading}>
-               {!selectedCaseId ? (
+            <section
+               ref={detailRegionRef}
+               id="safety-case-detail"
+               className="safety-detail"
+               aria-label="Safety case detail"
+               aria-busy={detailLoading}
+               tabIndex="-1"
+            >
+               {detailError ? (
+                  <div
+                     ref={detailErrorRef}
+                     className="safety-contained-error"
+                     role="alert"
+                     tabIndex="-1"
+                  >
+                     <strong>Case detail unavailable</strong>
+                     <span>{detailError}</span>
+                     {detailUnavailable ? (
+                        <button
+                           type="button"
+                           onClick={handleReturnToQueue}
+                        >
+                           Return to queue
+                        </button>
+                     ) : (
+                        <button
+                           type="button"
+                           onClick={handleDetailRetry}
+                        >
+                           Retry
+                        </button>
+                     )}
+                  </div>
+               ) : !selectedCaseId ? (
                   <div className="safety-state safety-detail-empty">
                      <Icons name="shield" size={24} />
                      <h3>No case selected</h3>
@@ -650,23 +843,12 @@ function SafetyReviewPanel() {
                      <Icons name="loader" size={20} className="safety-spinner" />
                      <span>Loading Safety case detail…</span>
                   </div>
-               ) : detailError ? (
-                  <div className="safety-contained-error" role="alert">
-                     <strong>Case detail unavailable</strong>
-                     <span>{detailError}</span>
-                     <button
-                        type="button"
-                        onClick={() => requestDetailRefresh(selectedCaseId)}
-                     >
-                        Retry
-                     </button>
-                  </div>
                ) : detail ? (
                   <div className="safety-detail-content">
                      <header className="safety-detail-header">
                         <div className="safety-detail-heading-copy">
                            <span className="safety-detail-eyebrow">Platform Safety case</span>
-                           <h3 ref={detailHeadingRef} tabIndex="-1">
+                           <h3 id="safety-case-detail-heading" ref={detailHeadingRef} tabIndex="-1">
                               {getCaseTitle(detail)}
                            </h3>
                            <span className="safety-case-id">Case {detail.id}</span>
@@ -827,10 +1009,11 @@ function SafetyReviewPanel() {
                                     <div className="safety-release-confirm">
                                        <span>Release this case?</span>
                                        <button
+                                          ref={releaseCancelRef}
                                           type="button"
                                           className="secondary"
                                           disabled={isBusy}
-                                          onClick={() => setConfirmingRelease(false)}
+                                          onClick={handleCancelReleaseConfirmation}
                                        >
                                           Cancel
                                        </button>
@@ -840,10 +1023,11 @@ function SafetyReviewPanel() {
                                     </div>
                                  ) : (
                                     <button
+                                       ref={releaseTriggerRef}
                                        type="button"
                                        className="safety-release-trigger"
                                        disabled={isBusy || Boolean(decisionAction)}
-                                       onClick={() => setConfirmingRelease(true)}
+                                       onClick={handleOpenReleaseConfirmation}
                                     >
                                        Release case
                                     </button>
@@ -853,26 +1037,29 @@ function SafetyReviewPanel() {
                               {!decisionAction ? (
                                  <div className="safety-decision-options">
                                     <button
+                                       ref={dismissActionRef}
                                        type="button"
                                        disabled={isBusy || confirmingRelease}
-                                       onClick={() => setDecisionAction("DISMISS")}
+                                       onClick={() => handleOpenDecision("DISMISS")}
                                     >
-                                       Dismiss report
+                                       Dismiss case
                                     </button>
                                     <button
+                                       ref={removeActionRef}
                                        type="button"
                                        className="danger"
                                        disabled={isBusy || confirmingRelease}
-                                       onClick={() => setDecisionAction("REMOVE")}
+                                       onClick={() => handleOpenDecision("REMOVE")}
                                     >
                                        Remove content
                                     </button>
                                     {detail.status !== "ESCALATED" && (
                                        <button
+                                          ref={escalateActionRef}
                                           type="button"
                                           className="warning"
                                           disabled={isBusy || confirmingRelease}
-                                          onClick={() => setDecisionAction("ESCALATE")}
+                                          onClick={() => handleOpenDecision("ESCALATE")}
                                        >
                                           Escalate review
                                        </button>
@@ -882,7 +1069,7 @@ function SafetyReviewPanel() {
                                  <form className="safety-decision-form" onSubmit={handleDecisionSubmit}>
                                     <div className="safety-decision-summary">
                                        <strong>{selectedActionDetail.confirmation}</strong>
-                                       <p>{selectedActionDetail.consequence}</p>
+                                       <p id="safety-decision-consequence">{selectedActionDetail.consequence}</p>
                                     </div>
 
                                     <label htmlFor="safety-moderator-notes">
@@ -894,22 +1081,21 @@ function SafetyReviewPanel() {
                                        value={decisionNotes}
                                        maxLength={2000}
                                        required={selectedActionDetail.notesRequired}
+                                       aria-describedby="safety-decision-consequence safety-notes-count"
                                        disabled={isBusy}
                                        rows={5}
                                        onChange={(event) => setDecisionNotes(event.target.value)}
                                     />
-                                    <span className="safety-notes-count">{decisionNotes.length}/2000</span>
+                                    <span id="safety-notes-count" className="safety-notes-count">
+                                       {decisionNotes.length}/2000
+                                    </span>
 
                                     <div className="safety-decision-controls">
                                        <button
                                           type="button"
                                           className="secondary"
                                           disabled={isBusy}
-                                          onClick={() => {
-                                             setDecisionAction(null);
-                                             setDecisionNotes("");
-                                             setActionError("");
-                                          }}
+                                          onClick={handleCancelDecision}
                                        >
                                           Cancel
                                        </button>
