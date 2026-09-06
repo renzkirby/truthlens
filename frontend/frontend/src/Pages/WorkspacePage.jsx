@@ -16,6 +16,7 @@ import "./WorkspacePage.css";
 import VerificationIntakePanel from "../components/workspace/VerificationIntakePanel.jsx";
 import OrganizationWorkloadPanel from "../components/workspace/OrganizationWorkloadPanel.jsx";
 import OrganizationAdminPanel from "../components/workspace/OrganizationAdminPanel.jsx";
+import SafetyReviewPanel from "../components/workspace/SafetyReviewPanel.jsx";
 
 const WORKLOAD_CAPABILITIES = [
    WorkspaceCapability.CLAIM_VERIFICATION_WORK,
@@ -183,6 +184,8 @@ function WorkspacePage() {
 
    const activeSection = visibleSections.find((section) => section.id === activeSectionId) ?? null;
 
+   const isPlatformSection = activeSection?.scope === "platform";
+
    const selectedOrganization = selectedMembership?.organization ?? null;
 
    return (
@@ -209,7 +212,13 @@ function WorkspacePage() {
                   </p>
                </div>
 
-               {memberships.length > 0 ? (
+               {isPlatformSection ? (
+                  <div className="workspace-platform-context">
+                     <Icons name="shield" size={15} />
+
+                     <span>Platform Safety · Platform-wide</span>
+                  </div>
+               ) : memberships.length > 0 ? (
                   <div className="workspace-organization-control">
                      <label htmlFor="workspace-organization">Organization</label>
 
@@ -246,15 +255,17 @@ function WorkspacePage() {
                </div>
 
                <div>
-                  <span className="workspace-context-label">Organization permissions</span>
+                  <span className="workspace-context-label">
+                     {isPlatformSection ? "Safety scope" : "Organization permissions"}
+                  </span>
 
-                  <strong>{organizationCapabilities.length}</strong>
+                  <strong>{isPlatformSection ? "Platform-wide" : organizationCapabilities.length}</strong>
                </div>
 
                <div>
                   <span className="workspace-context-label">Active organization</span>
 
-                  <strong>{selectedOrganization?.name ?? "None"}</strong>
+                  <strong>{isPlatformSection ? "Not applicable" : (selectedOrganization?.name ?? "None")}</strong>
                </div>
             </section>
 
@@ -301,7 +312,9 @@ function WorkspacePage() {
                            </div>
                         </div>
 
-                        {activeSection.id === "intake" ? (
+                        {activeSection.id === "safety" ? (
+                           <SafetyReviewPanel />
+                        ) : activeSection.id === "intake" ? (
                            <VerificationIntakePanel
                               key={selectedOrganizationId ?? "no-organization"}
                               organizationId={selectedOrganizationId}

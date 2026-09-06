@@ -115,6 +115,11 @@ export const API_ENDPOINTS = {
    MOD_QUEUE: "moderation/queue/",
    MOD_VERDICT_QUEUE: "moderation/verdict-queue/",
    MOD_RESOLVE_THREAD: (threadId) => `moderation/threads/${threadId}/resolve/`,
+   SAFETY_CASES: "moderation/safety/cases/",
+   SAFETY_CASE_DETAIL: (caseId) => `moderation/safety/cases/${encodeURIComponent(caseId)}/`,
+   SAFETY_CASE_CLAIM: (caseId) => `moderation/safety/cases/${encodeURIComponent(caseId)}/claim/`,
+   SAFETY_CASE_RELEASE: (caseId) => `moderation/safety/cases/${encodeURIComponent(caseId)}/release/`,
+   SAFETY_CASE_ACTION: (caseId) => `moderation/safety/cases/${encodeURIComponent(caseId)}/action/`,
 
    // Verification Workspace
    VERIFICATION_INTAKE: "verification/intake/",
