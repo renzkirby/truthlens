@@ -22,6 +22,8 @@ import ForgotPasswordPage from "./Pages/ForgotPasswordPage.jsx";
 import ResetPasswordPage from "./Pages/ResetPasswordPage.jsx";
 import RootRedirect from "./components/RootRedirect";
 import OrganizationInvitationPage from "./Pages/OrganizationInvitationPage.jsx";
+import PartnersPage from "./Pages/PartnersPage.jsx";
+import PartnerProfilePage from "./Pages/PartnerProfilePage.jsx";
 
 function App() {
    return (
@@ -38,6 +40,8 @@ function App() {
                <Route path="/wireframes" element={<TruthLensWireframes />} />
                <Route path="/verify-email" element={<VerifyEmailPage />} />
                <Route path="/organization-invitations/:token" element={<OrganizationInvitationPage />} />
+               <Route path="/partners" element={<PartnersPage />} />
+               <Route path="/partners/:slug" element={<PartnerProfilePage />} />
 
                {/* Capability-driven operational workspace */}
                <Route element={<PrivateRoute requireWorkspace />}>

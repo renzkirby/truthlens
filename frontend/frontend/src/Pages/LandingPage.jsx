@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React from "react";
 import "./LandingPage.css";
+import PublicSiteHeader from "../components/public/PublicSiteHeader";
 import LogoImage from "../assets/truthlens_logo.png";
 import { Link } from "react-router-dom";
-
 import {
    Shield,
    ShieldCheck,
@@ -28,99 +28,9 @@ import {
 } from "lucide-react";
 
 const TruthLens = () => {
-   const [isMenuOpen, setIsMenuOpen] = useState(false);
-
    return (
       <div className="landing-page">
-         {/* Navbar */}
-         <nav className="navbar" aria-label="Main navigation">
-            <div className="navbar-content">
-               {/* Brand */}
-               <Link
-                  to="/landing-page"
-                  className="navbar-brand"
-                  aria-label="TruthLens home"
-               >
-                  <img src={LogoImage} alt="" className="navbar-logo" />
-
-                  <span className="navbar-brand-name">TruthLens</span>
-               </Link>
-
-               {/* Desktop Navigation */}
-               <div className="nav-links">
-                  <a href="#features">Features</a>
-
-                  <Link to="/community">Community</Link>
-
-                  <a href="#about">About</a>
-               </div>
-
-               {/* Desktop Actions */}
-               <div className="nav-actions">
-                  <Link to="/login" className="login-btn">
-                     Login
-                  </Link>
-
-                  <Link to="/register" className="get-started-btn">
-                     Get Started
-                  </Link>
-               </div>
-
-               {/* Mobile Menu Button */}
-               <button
-                  type="button"
-                  className={`mobile-menu-toggle ${isMenuOpen ? "is-open" : ""}`}
-                  aria-label={
-                     isMenuOpen
-                        ? "Close navigation menu"
-                        : "Open navigation menu"
-                  }
-                  aria-expanded={isMenuOpen}
-                  aria-controls="mobile-navigation"
-                  onClick={() => setIsMenuOpen((prev) => !prev)}
-               >
-                  <span></span>
-                  <span></span>
-                  <span></span>
-               </button>
-
-               {/* Mobile Navigation */}
-               <div
-                  id="mobile-navigation"
-                  className={`mobile-navigation ${isMenuOpen ? "is-open" : ""}`}
-               >
-                  <a href="#features" onClick={() => setIsMenuOpen(false)}>
-                     Features
-                  </a>
-
-                  <Link to="/community" onClick={() => setIsMenuOpen(false)}>
-                     Community
-                  </Link>
-
-                  <a href="#about" onClick={() => setIsMenuOpen(false)}>
-                     About
-                  </a>
-
-                  <div className="mobile-nav-actions">
-                     <Link
-                        to="/login"
-                        className="login-btn"
-                        onClick={() => setIsMenuOpen(false)}
-                     >
-                        Login
-                     </Link>
-
-                     <Link
-                        to="/register"
-                        className="get-started-btn"
-                        onClick={() => setIsMenuOpen(false)}
-                     >
-                        Get Started
-                     </Link>
-                  </div>
-               </div>
-            </div>
-         </nav>
+         <PublicSiteHeader />
 
          {/* Hero Section */}
          <section className="hero-section">
@@ -134,15 +44,12 @@ const TruthLens = () => {
 
                   <h1 className="hero-title">
                      Verify what you see.
-                     <span className="hero-highlight">
-                        Understand what you share.
-                     </span>
+                     <span className="hero-highlight">Understand what you share.</span>
                   </h1>
 
                   <p className="hero-subtitle">
-                     TruthLens helps you investigate suspicious images, claims,
-                     and online content directly from your browser using
-                     AI-assisted analysis and supporting evidence.
+                     TruthLens helps you investigate suspicious images, claims, and online content directly from your
+                     browser using AI-assisted analysis and supporting evidence.
                   </p>
 
                   {/* Primary Actions */}
@@ -153,20 +60,12 @@ const TruthLens = () => {
                         target="_blank"
                         rel="noopener noreferrer"
                      >
-                        <Download
-                           size={18}
-                           strokeWidth={2}
-                           aria-hidden="true"
-                        />
+                        <Download size={18} strokeWidth={2} aria-hidden="true" />
                         Add to Chrome
                      </a>
 
                      <a href="#how-it-works" className="demo-btn">
-                        <ArrowDown
-                           size={18}
-                           strokeWidth={2}
-                           aria-hidden="true"
-                        />
+                        <ArrowDown size={18} strokeWidth={2} aria-hidden="true" />
                         See how it works
                      </a>
                   </div>
@@ -251,11 +150,7 @@ const TruthLens = () => {
                      {/* Extension Header */}
                      <div className="extension-header">
                         <div className="extension-brand">
-                           <img
-                              src={LogoImage}
-                              alt=""
-                              className="extension-logo"
-                           />
+                           <img src={LogoImage} alt="" className="extension-logo" />
 
                            <span>TruthLens</span>
                         </div>
@@ -269,26 +164,17 @@ const TruthLens = () => {
                      {/* Extension Content */}
                      <div className="extension-body">
                         <div className="extension-intro">
-                           <span className="extension-eyebrow">
-                              VERIFY IMAGE
-                           </span>
+                           <span className="extension-eyebrow">VERIFY IMAGE</span>
 
                            <h2>Check what you're seeing.</h2>
 
-                           <p>
-                              Select a suspicious image or claim on the page to
-                              start an investigation.
-                           </p>
+                           <p>Select a suspicious image or claim on the page to start an investigation.</p>
                         </div>
 
                         {/* Snipping Action */}
                         <div className="verification-card">
                            <div className="verification-icon">
-                              <Image
-                                 size={26}
-                                 strokeWidth={1.8}
-                                 aria-hidden="true"
-                              />
+                              <Image size={26} strokeWidth={1.8} aria-hidden="true" />
                            </div>
 
                            <div className="verification-copy">
@@ -298,16 +184,8 @@ const TruthLens = () => {
                            </div>
                         </div>
 
-                        <button
-                           type="button"
-                           className="extension-snip-button"
-                           aria-label="Start snipping"
-                        >
-                           <Scissors
-                              size={17}
-                              strokeWidth={2}
-                              aria-hidden="true"
-                           />
+                        <button type="button" className="extension-snip-button" aria-label="Start snipping">
+                           <Scissors size={17} strokeWidth={2} aria-hidden="true" />
                            Start Snipping
                         </button>
 
@@ -315,11 +193,7 @@ const TruthLens = () => {
                         <div className="extension-tools">
                            <div className="extension-tool">
                               <span className="tool-icon">
-                                 <Search
-                                    size={15}
-                                    strokeWidth={2}
-                                    aria-hidden="true"
-                                 />
+                                 <Search size={15} strokeWidth={2} aria-hidden="true" />
                               </span>
 
                               <span>Analyze URL</span>
@@ -329,11 +203,7 @@ const TruthLens = () => {
 
                            <div className="extension-tool">
                               <span className="tool-icon">
-                                 <FileText
-                                    size={15}
-                                    strokeWidth={2}
-                                    aria-hidden="true"
-                                 />
+                                 <FileText size={15} strokeWidth={2} aria-hidden="true" />
                               </span>
 
                               <span>Upload File</span>
@@ -343,11 +213,7 @@ const TruthLens = () => {
 
                            <div className="extension-tool">
                               <span className="tool-icon">
-                                 <ScanSearch
-                                    size={15}
-                                    strokeWidth={2}
-                                    aria-hidden="true"
-                                 />
+                                 <ScanSearch size={15} strokeWidth={2} aria-hidden="true" />
                               </span>
 
                               <span>Deepfake Detection</span>
@@ -384,15 +250,11 @@ const TruthLens = () => {
                <div className="features-header">
                   <span className="section-label">FEATURES</span>
 
-                  <h2 className="features-title">
-                     Built to help you question what you see online.
-                  </h2>
+                  <h2 className="features-title">Built to help you question what you see online.</h2>
 
                   <p className="features-description">
-                     TruthLens combines AI-assisted analysis, supporting
-                     evidence, community participation, and browser-based tools
-                     to help you investigate questionable content with more
-                     context.
+                     TruthLens combines AI-assisted analysis, supporting evidence, community participation, and
+                     browser-based tools to help you investigate questionable content with more context.
                   </p>
                </div>
 
@@ -401,11 +263,7 @@ const TruthLens = () => {
                   <article className="feature-card">
                      <div className="feature-card-header">
                         <div className="feature-icon">
-                           <BrainCircuit
-                              size={27}
-                              strokeWidth={1.8}
-                              aria-hidden="true"
-                           />
+                           <BrainCircuit size={27} strokeWidth={1.8} aria-hidden="true" />
                         </div>
 
                         <span className="feature-index">01</span>
@@ -414,8 +272,8 @@ const TruthLens = () => {
                      <h3 className="feature-title">Claim Analysis</h3>
 
                      <p className="feature-description">
-                        Investigate suspicious claims, images, URLs, and other
-                        supported content using AI-assisted verification.
+                        Investigate suspicious claims, images, URLs, and other supported content using AI-assisted
+                        verification.
                      </p>
 
                      <div className="feature-meta">
@@ -429,11 +287,7 @@ const TruthLens = () => {
                   <article className="feature-card">
                      <div className="feature-card-header">
                         <div className="feature-icon">
-                           <BookOpenCheck
-                              size={27}
-                              strokeWidth={1.8}
-                              aria-hidden="true"
-                           />
+                           <BookOpenCheck size={27} strokeWidth={1.8} aria-hidden="true" />
                         </div>
 
                         <span className="feature-index">02</span>
@@ -442,9 +296,8 @@ const TruthLens = () => {
                      <h3 className="feature-title">Evidence & Context</h3>
 
                      <p className="feature-description">
-                        Go beyond a simple verdict by reviewing supporting
-                        sources, explanations, and additional context behind an
-                        analysis.
+                        Go beyond a simple verdict by reviewing supporting sources, explanations, and additional context
+                        behind an analysis.
                      </p>
 
                      <div className="feature-meta">
@@ -458,11 +311,7 @@ const TruthLens = () => {
                   <article className="feature-card">
                      <div className="feature-card-header">
                         <div className="feature-icon">
-                           <MessagesSquare
-                              size={27}
-                              strokeWidth={1.8}
-                              aria-hidden="true"
-                           />
+                           <MessagesSquare size={27} strokeWidth={1.8} aria-hidden="true" />
                         </div>
 
                         <span className="feature-index">03</span>
@@ -471,9 +320,8 @@ const TruthLens = () => {
                      <h3 className="feature-title">Community Verification</h3>
 
                      <p className="feature-description">
-                        Participate in investigations, contribute evidence, and
-                        help provide additional context when claims need human
-                        review.
+                        Participate in investigations, contribute evidence, and help provide additional context when
+                        claims need human review.
                      </p>
 
                      <div className="feature-meta">
@@ -487,11 +335,7 @@ const TruthLens = () => {
                   <article className="feature-card feature-card-highlight">
                      <div className="feature-card-header">
                         <div className="feature-icon">
-                           <PanelsTopLeft
-                              size={27}
-                              strokeWidth={1.8}
-                              aria-hidden="true"
-                           />
+                           <PanelsTopLeft size={27} strokeWidth={1.8} aria-hidden="true" />
                         </div>
 
                         <span className="feature-index">04</span>
@@ -500,8 +344,8 @@ const TruthLens = () => {
                      <h3 className="feature-title">Browser Extension</h3>
 
                      <p className="feature-description">
-                        Start an investigation directly from the content you're
-                        browsing without leaving the page to begin the process.
+                        Start an investigation directly from the content you're browsing without leaving the page to
+                        begin the process.
                      </p>
 
                      <div className="feature-meta">
@@ -519,13 +363,11 @@ const TruthLens = () => {
             <div className="section-header">
                <span className="section-label">HOW IT WORKS</span>
 
-               <h2 className="section-title">
-                  Three steps to better-informed decisions
-               </h2>
+               <h2 className="section-title">Three steps to better-informed decisions</h2>
 
                <p className="section-description">
-                  TruthLens helps you move from suspicious content to clearer
-                  context through a simple verification workflow.
+                  TruthLens helps you move from suspicious content to clearer context through a simple verification
+                  workflow.
                </p>
             </div>
 
@@ -541,8 +383,7 @@ const TruthLens = () => {
                   <h3 className="step-title">Select the content</h3>
 
                   <p className="step-desc">
-                     Capture a suspicious image or claim directly from the page
-                     using the TruthLens browser extension.
+                     Capture a suspicious image or claim directly from the page using the TruthLens browser extension.
                   </p>
                </article>
 
@@ -557,8 +398,7 @@ const TruthLens = () => {
                   <h3 className="step-title">Analyze the evidence</h3>
 
                   <p className="step-desc">
-                     TruthLens evaluates the submitted content using AI-assisted
-                     analysis and supporting evidence.
+                     TruthLens evaluates the submitted content using AI-assisted analysis and supporting evidence.
                   </p>
                </article>
 
@@ -573,8 +413,8 @@ const TruthLens = () => {
                   <h3 className="step-title">Review the context</h3>
 
                   <p className="step-desc">
-                     Examine the result, supporting context, and community
-                     activity before deciding what to trust or share.
+                     Examine the result, supporting context, and community activity before deciding what to trust or
+                     share.
                   </p>
                </article>
             </div>
@@ -587,28 +427,19 @@ const TruthLens = () => {
                <div className="trust-intro">
                   <span className="section-label">TRUST & TRANSPARENCY</span>
 
-                  <h2 className="trust-title">
-                     Trust the process, not just the verdict.
-                  </h2>
+                  <h2 className="trust-title">Trust the process, not just the verdict.</h2>
 
                   <p className="trust-description">
-                     TruthLens is designed to give you more than a label.
-                     Analysis is supported by context, evidence, and
-                     opportunities for human review so you can better understand
-                     how a result was reached.
+                     TruthLens is designed to give you more than a label. Analysis is supported by context, evidence,
+                     and opportunities for human review so you can better understand how a result was reached.
                   </p>
 
                   <div className="trust-principle">
-                     <ShieldCheck
-                        size={20}
-                        strokeWidth={1.8}
-                        aria-hidden="true"
-                     />
+                     <ShieldCheck size={20} strokeWidth={1.8} aria-hidden="true" />
 
                      <p>
-                        AI assists the investigation. Evidence and human
-                        judgment provide additional context when a claim needs
-                        closer review.
+                        AI assists the investigation. Evidence and human judgment provide additional context when a
+                        claim needs closer review.
                      </p>
                   </div>
                </div>
@@ -618,11 +449,7 @@ const TruthLens = () => {
                   {/* Evidence */}
                   <article className="trust-card">
                      <div className="trust-card-icon">
-                        <SearchCheck
-                           size={25}
-                           strokeWidth={1.8}
-                           aria-hidden="true"
-                        />
+                        <SearchCheck size={25} strokeWidth={1.8} aria-hidden="true" />
                      </div>
 
                      <div className="trust-card-content">
@@ -631,9 +458,8 @@ const TruthLens = () => {
                         <h3>Evidence-first results</h3>
 
                         <p>
-                           Supporting sources and relevant context help you look
-                           beyond the verdict and examine the information behind
-                           it.
+                           Supporting sources and relevant context help you look beyond the verdict and examine the
+                           information behind it.
                         </p>
                      </div>
                   </article>
@@ -641,11 +467,7 @@ const TruthLens = () => {
                   {/* Explainability */}
                   <article className="trust-card">
                      <div className="trust-card-icon">
-                        <BrainCircuit
-                           size={25}
-                           strokeWidth={1.8}
-                           aria-hidden="true"
-                        />
+                        <BrainCircuit size={25} strokeWidth={1.8} aria-hidden="true" />
                      </div>
 
                      <div className="trust-card-content">
@@ -654,9 +476,8 @@ const TruthLens = () => {
                         <h3>Understand the analysis</h3>
 
                         <p>
-                           TruthLens provides explanations and context so
-                           results are easier to evaluate instead of presenting
-                           a verdict as a black box.
+                           TruthLens provides explanations and context so results are easier to evaluate instead of
+                           presenting a verdict as a black box.
                         </p>
                      </div>
                   </article>
@@ -664,11 +485,7 @@ const TruthLens = () => {
                   {/* Community */}
                   <article className="trust-card">
                      <div className="trust-card-icon">
-                        <MessagesSquare
-                           size={25}
-                           strokeWidth={1.8}
-                           aria-hidden="true"
-                        />
+                        <MessagesSquare size={25} strokeWidth={1.8} aria-hidden="true" />
                      </div>
 
                      <div className="trust-card-content">
@@ -677,8 +494,8 @@ const TruthLens = () => {
                         <h3>More perspectives when needed</h3>
 
                         <p>
-                           Users can contribute evidence and discussion when a
-                           claim needs additional context or closer examination.
+                           Users can contribute evidence and discussion when a claim needs additional context or closer
+                           examination.
                         </p>
                      </div>
                   </article>
@@ -695,9 +512,8 @@ const TruthLens = () => {
                         <h3>Moderator-reviewed resolutions</h3>
 
                         <p>
-                           Moderation provides an additional review layer for
-                           disputed investigations and verified community
-                           evidence.
+                           Moderation provides an additional review layer for disputed investigations and verified
+                           community evidence.
                         </p>
                      </div>
                   </article>
@@ -712,21 +528,17 @@ const TruthLens = () => {
                <div className="about-content">
                   <span className="section-label">OUR MISSION</span>
 
-                  <h2 className="about-title">
-                     Better information starts with better questions.
-                  </h2>
+                  <h2 className="about-title">Better information starts with better questions.</h2>
 
                   <p className="about-lead">
-                     TruthLens was created to help people slow down, investigate
-                     questionable content, and make more informed decisions
-                     before believing or sharing what they encounter online.
+                     TruthLens was created to help people slow down, investigate questionable content, and make more
+                     informed decisions before believing or sharing what they encounter online.
                   </p>
 
                   <p className="about-description">
-                     We believe verification should provide more than a verdict.
-                     People should be able to examine context, supporting
-                     evidence, and different perspectives while understanding
-                     the role AI plays in the analysis.
+                     We believe verification should provide more than a verdict. People should be able to examine
+                     context, supporting evidence, and different perspectives while understanding the role AI plays in
+                     the analysis.
                   </p>
                </div>
 
@@ -743,56 +555,41 @@ const TruthLens = () => {
                         <h3>Look beyond the first impression</h3>
 
                         <p>
-                           Suspicious content deserves examination before it
-                           becomes something we accept or pass along.
+                           Suspicious content deserves examination before it becomes something we accept or pass along.
                         </p>
                      </div>
                   </div>
 
                   <div className="about-principle">
                      <div className="about-principle-icon">
-                        <Target
-                           size={24}
-                           strokeWidth={1.8}
-                           aria-hidden="true"
-                        />
+                        <Target size={24} strokeWidth={1.8} aria-hidden="true" />
                      </div>
 
                      <div>
-                        <span className="about-principle-label">
-                           UNDERSTAND
-                        </span>
+                        <span className="about-principle-label">UNDERSTAND</span>
 
                         <h3>Context matters</h3>
 
                         <p>
-                           A useful verification process should help explain
-                           what is known, what is uncertain, and what evidence
-                           supports the result.
+                           A useful verification process should help explain what is known, what is uncertain, and what
+                           evidence supports the result.
                         </p>
                      </div>
                   </div>
 
                   <div className="about-principle">
                      <div className="about-principle-icon">
-                        <UsersRound
-                           size={24}
-                           strokeWidth={1.8}
-                           aria-hidden="true"
-                        />
+                        <UsersRound size={24} strokeWidth={1.8} aria-hidden="true" />
                      </div>
 
                      <div>
-                        <span className="about-principle-label">
-                           PARTICIPATE
-                        </span>
+                        <span className="about-principle-label">PARTICIPATE</span>
 
                         <h3>Verification is not only automated</h3>
 
                         <p>
-                           AI can assist the process, while community
-                           participation and human review can provide additional
-                           perspective when needed.
+                           AI can assist the process, while community participation and human review can provide
+                           additional perspective when needed.
                         </p>
                      </div>
                   </div>
@@ -821,9 +618,8 @@ const TruthLens = () => {
                   </h2>
 
                   <p className="final-cta-description">
-                     Add TruthLens to Chrome to start investigating questionable
-                     content directly from your browser, or create an account to
-                     participate in the wider verification community.
+                     Add TruthLens to Chrome to start investigating questionable content directly from your browser, or
+                     create an account to participate in the wider verification community.
                   </p>
 
                   <div className="final-cta-actions">
@@ -833,35 +629,20 @@ const TruthLens = () => {
                         target="_blank"
                         rel="noopener noreferrer"
                      >
-                        <Download
-                           size={18}
-                           strokeWidth={2}
-                           aria-hidden="true"
-                        />
+                        <Download size={18} strokeWidth={2} aria-hidden="true" />
                         Add to Chrome
                      </a>
 
                      <Link to="/register" className="final-cta-secondary">
                         Create an account
-                        <ArrowRight
-                           size={18}
-                           strokeWidth={2}
-                           aria-hidden="true"
-                        />
+                        <ArrowRight size={18} strokeWidth={2} aria-hidden="true" />
                      </Link>
                   </div>
 
                   <div className="final-cta-note">
-                     <ShieldCheck
-                        size={16}
-                        strokeWidth={1.8}
-                        aria-hidden="true"
-                     />
+                     <ShieldCheck size={16} strokeWidth={1.8} aria-hidden="true" />
 
-                     <span>
-                        AI-assisted verification with supporting evidence and
-                        human review.
-                     </span>
+                     <span>AI-assisted verification with supporting evidence and human review.</span>
                   </div>
                </div>
             </div>
@@ -874,20 +655,15 @@ const TruthLens = () => {
                <div className="footer-main">
                   {/* Brand */}
                   <div className="footer-brand">
-                     <Link
-                        to="/landing-page"
-                        className="footer-brand-link"
-                        aria-label="TruthLens home"
-                     >
+                     <Link to="/landing-page" className="footer-brand-link" aria-label="TruthLens home">
                         <img src={LogoImage} alt="" className="footer-logo" />
 
                         <span className="footer-brand-name">TruthLens</span>
                      </Link>
 
                      <p className="footer-description">
-                        AI-assisted verification built to help you investigate
-                        questionable content, examine supporting evidence, and
-                        make better-informed decisions online.
+                        AI-assisted verification built to help you investigate questionable content, examine supporting
+                        evidence, and make better-informed decisions online.
                      </p>
                   </div>
 
@@ -927,14 +703,9 @@ const TruthLens = () => {
 
                {/* Footer Bottom */}
                <div className="footer-bottom">
-                  <span>
-                     © {new Date().getFullYear()} TruthLens. Investigate before
-                     you amplify.
-                  </span>
+                  <span>© {new Date().getFullYear()} TruthLens. Investigate before you amplify.</span>
 
-                  <span className="footer-status">
-                     AI-assisted verification • Evidence-aware results
-                  </span>
+                  <span className="footer-status">AI-assisted verification • Evidence-aware results</span>
                </div>
             </div>
          </footer>

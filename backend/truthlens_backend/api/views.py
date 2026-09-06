@@ -186,6 +186,7 @@ from .throttles import (
     FactCheckRateThrottle,
     PasswordResetRateThrottle,
     EmailVerificationRateThrottle,
+    PublicPartnerRateThrottle,
 )
 from .serializers import (
     RegisterSerializer,
@@ -3456,6 +3457,7 @@ def complete_onboarding(request):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
+@throttle_classes([PublicPartnerRateThrottle])
 def public_partner_directory(request):
     query_serializer = PublicPartnerDirectoryQuerySerializer(
         data=request.query_params,
@@ -3486,6 +3488,7 @@ def public_partner_directory(request):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
+@throttle_classes([PublicPartnerRateThrottle])
 def public_partner_detail(
     request,
     slug,

@@ -140,6 +140,10 @@ export const API_ENDPOINTS = {
    ORGANIZATION_INVITATION_CANCEL: (organizationId, invitationId) =>
       `organizations/${organizationId}/invitations/${invitationId}/cancel/`,
 
+   // Public Partner Presence
+   PUBLIC_PARTNERS: "partners/",
+   PUBLIC_PARTNER_DETAIL: (slug) => `partners/${encodeURIComponent(slug)}/`,
+
    // Other
    POLLING: "polling/",
 };

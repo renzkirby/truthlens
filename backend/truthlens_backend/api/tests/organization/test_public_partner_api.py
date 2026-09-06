@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.conf import settings
 from django.core.cache import cache
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -15,6 +16,11 @@ from api.models import (
     Organization,
     OrganizationInvitation,
     OrganizationMembership,
+)
+from api.throttles import PublicPartnerRateThrottle
+from api.views import (
+    public_partner_detail,
+    public_partner_directory,
 )
 
 
@@ -33,6 +39,7 @@ class PublicPartnerApiTests(APITestCase):
 
     def setUp(self):
         cache.clear()
+        self.original_throttle_rates = PublicPartnerRateThrottle.THROTTLE_RATES
 
         self.alpha = self.create_organization(
             name="Alpha Verification",
@@ -68,6 +75,11 @@ class PublicPartnerApiTests(APITestCase):
         )
 
         self.directory_url = reverse("public_partner_directory")
+
+    def tearDown(self):
+        PublicPartnerRateThrottle.THROTTLE_RATES = self.original_throttle_rates
+        cache.clear()
+        super().tearDown()
 
     def create_organization(
         self,
@@ -376,5 +388,108 @@ class PublicPartnerApiTests(APITestCase):
 
         self.assertEqual(
             response.status_code,
+            status.HTTP_200_OK,
+        )
+
+    def test_directory_uses_public_partner_throttle(self):
+        self.assertEqual(
+            public_partner_directory.cls.throttle_classes,
+            [PublicPartnerRateThrottle],
+        )
+
+    def test_detail_uses_public_partner_throttle(self):
+        self.assertEqual(
+            public_partner_detail.cls.throttle_classes,
+            [PublicPartnerRateThrottle],
+        )
+
+    def test_public_partner_rate_is_independent_from_global_anonymous_rate(self):
+        throttle_rates = settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]
+
+        self.assertEqual(
+            throttle_rates["anon"],
+            "5/minute",
+        )
+        self.assertIn(
+            "public_partner",
+            throttle_rates,
+        )
+        self.assertEqual(
+            PublicPartnerRateThrottle.scope,
+            "public_partner",
+        )
+        self.assertNotEqual(
+            PublicPartnerRateThrottle.scope,
+            "anon",
+        )
+
+    def test_anonymous_public_requests_are_allowed_beyond_five_requests(self):
+        PublicPartnerRateThrottle.THROTTLE_RATES = {
+            "public_partner": "10/minute",
+        }
+        cache.clear()
+
+        responses = [
+            APIClient().get(self.directory_url)
+            for _ in range(6)
+        ]
+
+        self.assertTrue(
+            all(
+                response.status_code == status.HTTP_200_OK
+                for response in responses
+            ),
+        )
+
+    def test_public_partner_throttle_eventually_rejects_requests(self):
+        PublicPartnerRateThrottle.THROTTLE_RATES = {
+            "public_partner": "2/minute",
+        }
+        cache.clear()
+        client = APIClient()
+
+        self.assertEqual(
+            client.get(self.directory_url).status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(
+            client.get(self.detail_url(self.alpha)).status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(
+            client.get(self.directory_url).status_code,
+            status.HTTP_429_TOO_MANY_REQUESTS,
+        )
+
+    def test_authenticated_public_requests_are_throttled_by_user_id(self):
+        PublicPartnerRateThrottle.THROTTLE_RATES = {
+            "public_partner": "1/minute",
+        }
+        cache.clear()
+        first_user = User.objects.create_user(
+            username="first-public-reader",
+            email="first-public-reader@example.com",
+            password="test-password",
+        )
+        second_user = User.objects.create_user(
+            username="second-public-reader",
+            email="second-public-reader@example.com",
+            password="test-password",
+        )
+        first_client = APIClient()
+        first_client.force_authenticate(first_user)
+        second_client = APIClient()
+        second_client.force_authenticate(second_user)
+
+        self.assertEqual(
+            first_client.get(self.directory_url).status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(
+            first_client.get(self.directory_url).status_code,
+            status.HTTP_429_TOO_MANY_REQUESTS,
+        )
+        self.assertEqual(
+            second_client.get(self.directory_url).status_code,
             status.HTTP_200_OK,
         )

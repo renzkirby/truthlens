@@ -83,6 +83,10 @@ REST_FRAMEWORK = {
         'fact_check': os.getenv('DRF_FACT_CHECK_THROTTLE_RATE', '5/minute'),
         "password_reset": "3/hour",
         "email_verification": "3/hour",
+        "public_partner": os.getenv(
+            "DRF_PUBLIC_PARTNER_THROTTLE_RATE",
+            "60/minute",
+        ),
     }
 }
 
