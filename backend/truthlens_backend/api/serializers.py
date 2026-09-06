@@ -9,6 +9,7 @@ from .models import (
     Vote,
     ThreadComment,
     ThreadFlag,
+    ModerationEvent,
     AdjudicationDecision,
     ModerationCase,
     OfficialFactCheck,
@@ -1040,6 +1041,186 @@ class ThreadFlagSerializer(serializers.ModelSerializer):
             "flagged_at",
         ]
         read_only_fields = ["id", "flagged_by", "thread"]
+
+
+class SafetyCaseQueueFilterSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(
+        choices=[
+            ModerationCase.Status.OPEN,
+            ModerationCase.Status.IN_REVIEW,
+            ModerationCase.Status.ESCALATED,
+            ModerationCase.Status.REOPENED,
+        ],
+        required=False,
+        allow_blank=True,
+    )
+    priority = serializers.ChoiceField(
+        choices=ModerationCase.Priority.choices,
+        required=False,
+        allow_blank=True,
+    )
+    assigned = serializers.ChoiceField(
+        choices=["me", "unassigned"],
+        required=False,
+        allow_blank=True,
+    )
+
+
+class SafetyCaseActionSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(
+        choices=["DISMISS", "REMOVE", "ESCALATE"],
+    )
+    notes = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        max_length=2000,
+        default="",
+    )
+
+    def validate(self, attrs):
+        unsupported_fields = set(self.initial_data) - {"action", "notes"}
+        if unsupported_fields:
+            raise serializers.ValidationError(
+                {
+                    field: "This field is not supported."
+                    for field in sorted(unsupported_fields)
+                }
+            )
+
+        if attrs["action"] in {"REMOVE", "ESCALATE"} and not attrs["notes"]:
+            raise serializers.ValidationError(
+                {
+                    "notes": (
+                        "Notes are required when removing content or "
+                        "escalating a Safety case."
+                    )
+                }
+            )
+
+        return attrs
+
+
+class SafetyUserSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["id", "username"]
+        read_only_fields = fields
+
+
+class SafetyClaimSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Claim
+        fields = ["id", "claim_type", "context_text"]
+        read_only_fields = fields
+
+
+class SafetyThreadSummarySerializer(serializers.ModelSerializer):
+    author = SafetyUserSummarySerializer(read_only=True)
+    claim = SafetyClaimSummarySerializer(read_only=True)
+
+    class Meta:
+        model = Thread
+        fields = ["id", "caption", "created_at", "claim", "author"]
+        read_only_fields = fields
+
+
+class SafetyReportDetailSerializer(serializers.ModelSerializer):
+    reason_label = serializers.CharField(
+        source="get_reason_display",
+        read_only=True,
+    )
+
+    class Meta:
+        model = ThreadFlag
+        fields = ["id", "reason", "reason_label", "notes", "flagged_at"]
+        read_only_fields = fields
+
+
+class SafetyModerationEventSerializer(serializers.ModelSerializer):
+    actor = serializers.SerializerMethodField()
+
+    def get_actor(self, obj):
+        if (
+            obj.event_type == ModerationEvent.EventType.CASE_CREATED
+            and obj.case.source == ModerationCase.Source.USER_REPORT
+        ):
+            return None
+
+        if not obj.actor:
+            return None
+
+        return SafetyUserSummarySerializer(obj.actor).data
+
+    class Meta:
+        model = ModerationEvent
+        fields = [
+            "event_type",
+            "actor",
+            "from_status",
+            "to_status",
+            "reason_code",
+            "notes",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class SafetyCaseSummarySerializer(serializers.ModelSerializer):
+    assigned_to = SafetyUserSummarySerializer(read_only=True)
+    thread = SafetyThreadSummarySerializer(read_only=True)
+    report_count = serializers.SerializerMethodField()
+    report_reason_summary = serializers.SerializerMethodField()
+
+    @staticmethod
+    def _reports(obj):
+        if not obj.thread:
+            return []
+        return getattr(obj.thread, "unresolved_safety_reports", [])
+
+    def get_report_count(self, obj):
+        return len(self._reports(obj))
+
+    def get_report_reason_summary(self, obj):
+        from .safety_review_service import summarize_report_reasons
+
+        return summarize_report_reasons(self._reports(obj))
+
+    class Meta:
+        model = ModerationCase
+        fields = [
+            "id",
+            "status",
+            "priority",
+            "source",
+            "created_at",
+            "updated_at",
+            "assigned_at",
+            "assigned_to",
+            "report_count",
+            "report_reason_summary",
+            "thread",
+        ]
+        read_only_fields = fields
+
+
+class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
+    reports = serializers.SerializerMethodField()
+    events = serializers.SerializerMethodField()
+
+    def get_reports(self, obj):
+        return SafetyReportDetailSerializer(
+            self._reports(obj),
+            many=True,
+        ).data
+
+    def get_events(self, obj):
+        events = getattr(obj, "recent_safety_events", [])[:50]
+        return SafetyModerationEventSerializer(events, many=True).data
+
+    class Meta(SafetyCaseSummarySerializer.Meta):
+        fields = SafetyCaseSummarySerializer.Meta.fields + ["reports", "events"]
+        read_only_fields = fields
 
 
 class ThreadCommentSerializer(serializers.ModelSerializer):

@@ -68,6 +68,31 @@ urlpatterns = [
     path("moderation/stats/", views.moderation_stats_view, name="moderation_stats"),
     path("moderation/queue/", views.moderation_queue, name="moderation_queue"),
     path(
+        "moderation/safety/cases/",
+        views.safety_case_queue,
+        name="safety_case_queue",
+    ),
+    path(
+        "moderation/safety/cases/<uuid:case_id>/",
+        views.safety_case_detail,
+        name="safety_case_detail",
+    ),
+    path(
+        "moderation/safety/cases/<uuid:case_id>/claim/",
+        views.safety_case_claim,
+        name="safety_case_claim",
+    ),
+    path(
+        "moderation/safety/cases/<uuid:case_id>/release/",
+        views.safety_case_release,
+        name="safety_case_release",
+    ),
+    path(
+        "moderation/safety/cases/<uuid:case_id>/action/",
+        views.safety_case_action,
+        name="safety_case_action",
+    ),
+    path(
         "moderation/evidence-queue/",
         views.evidence_moderation_queue,
         name="moderation_evidence_queue",

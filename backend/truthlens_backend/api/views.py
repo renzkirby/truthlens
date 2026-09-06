@@ -94,6 +94,16 @@ from .moderation_service import (
     escalate_safety_case,
     resolve_safety_case,
 )
+from .safety_review_service import (
+    SafetyCaseConflict,
+    SafetyReviewAuthorizationError,
+    claim_safety_case,
+    get_safety_case_queue,
+    get_safety_case_queryset,
+    perform_safety_case_action,
+    release_safety_case,
+    schedule_safety_resolution_trust_updates,
+)
 from .organization_service import (
     PartnerCapability,
     has_capability,
@@ -228,6 +238,10 @@ from .serializers import (
     PublicPartnerSummarySerializer,
     OrganizationPublicProfileAdminSerializer,
     OrganizationPublicProfileUpdateSerializer,
+    SafetyCaseActionSerializer,
+    SafetyCaseDetailSerializer,
+    SafetyCaseQueueFilterSerializer,
+    SafetyCaseSummarySerializer,
 )
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
@@ -924,6 +938,121 @@ def moderation_queue(request):
         serializer.data,
         status=status.HTTP_200_OK,
     )
+
+
+def _get_safety_case_or_404(case_id, *, include_events=False):
+    return get_object_or_404(
+        get_safety_case_queryset(include_events=include_events),
+        pk=case_id,
+    )
+
+
+def _safety_case_conflict_response(error):
+    return Response(
+        {"detail": str(error)},
+        status=status.HTTP_409_CONFLICT,
+    )
+
+
+def _safety_case_detail_response(case_id):
+    case = _get_safety_case_or_404(
+        case_id,
+        include_events=True,
+    )
+    return Response(
+        SafetyCaseDetailSerializer(case).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsModerator])
+def safety_case_queue(request):
+    filters = SafetyCaseQueueFilterSerializer(data=request.query_params)
+    filters.is_valid(raise_exception=True)
+
+    try:
+        queryset = get_safety_case_queue(
+            actor=request.user,
+            filters=filters.validated_data,
+        )
+    except SafetyReviewAuthorizationError as error:
+        raise PermissionDenied(str(error)) from error
+
+    data = SafetyCaseSummarySerializer(queryset, many=True).data
+    return Response(
+        {
+            "count": len(data),
+            "results": data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsModerator])
+def safety_case_detail(request, case_id):
+    return _safety_case_detail_response(case_id)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsModerator])
+def safety_case_claim(request, case_id):
+    case = _get_safety_case_or_404(case_id)
+
+    try:
+        claim_safety_case(
+            case=case,
+            actor=request.user,
+        )
+    except SafetyReviewAuthorizationError as error:
+        raise PermissionDenied(str(error)) from error
+    except (SafetyCaseConflict, ModerationCaseError) as error:
+        return _safety_case_conflict_response(error)
+
+    return _safety_case_detail_response(case_id)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsModerator])
+def safety_case_release(request, case_id):
+    case = _get_safety_case_or_404(case_id)
+
+    try:
+        release_safety_case(
+            case=case,
+            actor=request.user,
+        )
+    except SafetyReviewAuthorizationError as error:
+        raise PermissionDenied(str(error)) from error
+    except (SafetyCaseConflict, ModerationCaseError) as error:
+        return _safety_case_conflict_response(error)
+
+    return _safety_case_detail_response(case_id)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsModerator])
+def safety_case_action(request, case_id):
+    payload = SafetyCaseActionSerializer(data=request.data)
+    payload.is_valid(raise_exception=True)
+    case = _get_safety_case_or_404(case_id)
+
+    try:
+        result = perform_safety_case_action(
+            case=case,
+            actor=request.user,
+            **payload.validated_data,
+        )
+    except SafetyReviewAuthorizationError as error:
+        raise PermissionDenied(str(error)) from error
+    except (SafetyCaseConflict, ModerationCaseError) as error:
+        return _safety_case_conflict_response(error)
+
+    if payload.validated_data["action"] != "ESCALATE":
+        schedule_safety_resolution_trust_updates(result)
+
+    return _safety_case_detail_response(case_id)
 
 
 @api_view(["GET"])
@@ -1646,14 +1775,10 @@ def moderation_resolve_safety_thread(
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    for reporter_id in result["reporter_ids"]:
-        recompute_user_trust_score_task.delay(reporter_id)
-
-    if action == "REMOVE":
-        recompute_user_trust_score_task.delay(result["author_id"])
-
-    for contributor_id in result["contributor_ids"]:
-        recompute_user_trust_score_task.delay(contributor_id)
+    schedule_safety_resolution_trust_updates(
+        result,
+        action=action,
+    )
 
     return Response(
         ThreadSerializer(
