@@ -72,6 +72,17 @@ function formatDateTime(value, fallback = "Not recorded") {
    }).format(date);
 }
 
+function FormattedDateTime({ value, fallback = "Not recorded" }) {
+   const formattedValue = formatDateTime(value, fallback);
+   const date = value ? new Date(value) : null;
+
+   if (!date || Number.isNaN(date.getTime())) {
+      return formattedValue;
+   }
+
+   return <time dateTime={date.toISOString()}>{formattedValue}</time>;
+}
+
 function formatCaseReference(caseId) {
    return String(caseId || "").slice(0, 8);
 }
@@ -217,16 +228,19 @@ function EvidenceReviewContent({
    const detailHeadingRef = useRef(null);
    const detailErrorRef = useRef(null);
    const actionErrorRef = useRef(null);
+   const authorityErrorRef = useRef(null);
    const queueHeadingRef = useRef(null);
    const decisionTriggerRef = useRef(null);
    const decisionNotesRef = useRef(null);
    const rejectionReasonRef = useRef(null);
    const focusDetailAfterLoadRef = useRef(false);
+   const focusDetailAfterRetryRef = useRef(false);
    const focusDetailAfterMutationRef = useRef(false);
    const focusDetailErrorRef = useRef(false);
    const focusActionErrorRef = useRef(false);
    const restoreDecisionFocusRef = useRef(false);
    const focusQueueAfterReturnRef = useRef(false);
+   const focusQueueAfterAuthorityRetryRef = useRef(false);
 
    const isAuthorityGenerationCurrent = useCallback(
       (generation) =>
@@ -243,11 +257,13 @@ function EvidenceReviewContent({
       detailRequestIdRef.current += 1;
       selectedCaseIdRef.current = null;
       focusDetailAfterLoadRef.current = false;
+      focusDetailAfterRetryRef.current = false;
       focusDetailAfterMutationRef.current = false;
       focusDetailErrorRef.current = false;
       focusActionErrorRef.current = false;
       restoreDecisionFocusRef.current = false;
       focusQueueAfterReturnRef.current = false;
+      focusQueueAfterAuthorityRetryRef.current = false;
 
       setQueue({ count: 0, limit: PAGE_SIZE, offset: 0, results: [] });
       setQueueLoading(false);
@@ -410,6 +426,7 @@ function EvidenceReviewContent({
             setDecision(null);
             setActionError("");
             focusDetailAfterLoadRef.current = false;
+            focusDetailAfterRetryRef.current = false;
             focusDetailErrorRef.current = true;
 
             if (unavailable) {
@@ -443,9 +460,16 @@ function EvidenceReviewContent({
          return;
       }
 
+      if (focusDetailAfterRetryRef.current) {
+         focusDetailAfterRetryRef.current = false;
+         focusDetailAfterLoadRef.current = false;
+         detailHeadingRef.current?.focus();
+         return;
+      }
+
       if (focusDetailAfterLoadRef.current) {
          focusDetailAfterLoadRef.current = false;
-         if (window.matchMedia("(max-width: 760px)").matches) {
+         if (window.matchMedia("(max-width: 1180px)").matches) {
             detailHeadingRef.current?.focus();
          }
       }
@@ -488,10 +512,23 @@ function EvidenceReviewContent({
       }
    }, [selectedCaseId]);
 
+   useEffect(() => {
+      if (authorityError) {
+         authorityErrorRef.current?.focus();
+         return;
+      }
+
+      if (focusQueueAfterAuthorityRetryRef.current) {
+         focusQueueAfterAuthorityRetryRef.current = false;
+         queueHeadingRef.current?.focus();
+      }
+   }, [authorityError]);
+
    const clearSelection = ({ restoreQueueFocus = false } = {}) => {
       detailRequestIdRef.current += 1;
       selectedCaseIdRef.current = null;
       focusDetailAfterLoadRef.current = false;
+      focusDetailAfterRetryRef.current = false;
       focusDetailAfterMutationRef.current = false;
       focusDetailErrorRef.current = false;
       focusActionErrorRef.current = false;
@@ -569,6 +606,7 @@ function EvidenceReviewContent({
       detailRequestIdRef.current += 1;
       selectedCaseIdRef.current = caseId;
       focusDetailAfterLoadRef.current = true;
+      focusDetailAfterRetryRef.current = false;
       setSelectedCaseId(caseId);
       setDetail(null);
       setDetailLoading(true);
@@ -724,6 +762,7 @@ function EvidenceReviewContent({
    const handleAuthorityRetry = () => {
       authorityGenerationRef.current += 1;
       authorityRevokedRef.current = false;
+      focusQueueAfterAuthorityRetryRef.current = true;
       queueRequestIdRef.current += 1;
       detailRequestIdRef.current += 1;
       selectedCaseIdRef.current = null;
@@ -778,7 +817,12 @@ function EvidenceReviewContent({
          </div>
 
          {authorityError ? (
-            <div className="evidence-contained-error evidence-authority-error" role="alert">
+            <div
+               className="evidence-contained-error evidence-authority-error"
+               ref={authorityErrorRef}
+               tabIndex="-1"
+               role="alert"
+            >
                <strong>Evidence Review unavailable</strong>
                <span>{authorityError}</span>
                <button type="button" onClick={handleAuthorityRetry}>
@@ -841,7 +885,13 @@ function EvidenceReviewContent({
                   <div className="evidence-contained-error" role="alert">
                      <strong>Evidence queue unavailable</strong>
                      <span>{queueError}</span>
-                     <button type="button" onClick={() => requestQueueRefresh({ preserveRows: false })}>
+                     <button
+                        type="button"
+                        onClick={() => {
+                           queueHeadingRef.current?.focus();
+                           requestQueueRefresh({ preserveRows: false });
+                        }}
+                     >
                         Retry
                      </button>
                   </div>
@@ -882,7 +932,9 @@ function EvidenceReviewContent({
                               <span className="evidence-type">{caseItem.evidence?.evidence_type_label || "Evidence type unavailable"}</span>
                               <span className="evidence-claim-preview">{getClaimContext(caseItem)}</span>
                               <span className="evidence-case-row-meta">
-                                 <span>Submitted {formatDateTime(caseItem.evidence?.submitted_at)}</span>
+                                 <span>
+                                    Submitted <FormattedDateTime value={caseItem.evidence?.submitted_at} />
+                                 </span>
                                  <span>
                                     {caseItem.evidence?.contributor?.username
                                        ? `Contributor @${caseItem.evidence.contributor.username}`
@@ -950,7 +1002,13 @@ function EvidenceReviewContent({
                      <span>{detailError}</span>
                      <div className="evidence-error-actions">
                         {!detailUnavailable && (
-                           <button type="button" onClick={() => requestDetailRefresh(selectedCaseId)}>
+                           <button
+                              type="button"
+                              onClick={() => {
+                                 focusDetailAfterRetryRef.current = true;
+                                 requestDetailRefresh(selectedCaseId);
+                              }}
+                           >
                               Retry detail
                            </button>
                         )}
@@ -1006,7 +1064,7 @@ function EvidenceReviewContent({
                            </div>
                            <div>
                               <dt>Submitted</dt>
-                              <dd>{formatDateTime(evidence?.submitted_at)}</dd>
+                              <dd><FormattedDateTime value={evidence?.submitted_at} /></dd>
                            </div>
                            <div>
                               <dt>Contributor</dt>
@@ -1075,7 +1133,12 @@ function EvidenceReviewContent({
                            </div>
                            <div>
                               <dt>Review date</dt>
-                              <dd>{formatDateTime(detail.verified_at, "Review date not recorded")}</dd>
+                              <dd>
+                                 <FormattedDateTime
+                                    value={detail.verified_at}
+                                    fallback="Review date not recorded"
+                                 />
+                              </dd>
                            </div>
                            {evidence?.evidence_status === "REJECTED" && (
                               <div>
@@ -1105,7 +1168,7 @@ function EvidenceReviewContent({
                                     <div>
                                        <div className="evidence-event-heading">
                                           <strong>{formatLabel(event.event_type)}</strong>
-                                          <time dateTime={event.created_at}>{formatDateTime(event.created_at)}</time>
+                                          <FormattedDateTime value={event.created_at} />
                                        </div>
                                        <p>Actor: {event.actor?.username ? `@${event.actor.username}` : "Actor not displayed"}</p>
                                        {(event.from_status || event.to_status) && (
@@ -1197,7 +1260,12 @@ function EvidenceReviewContent({
                                        value={rejectionReason}
                                        required
                                        disabled={isMutatingSelectedCase}
-                                       aria-describedby="evidence-decision-consequence"
+                                       aria-invalid={Boolean(validationError)}
+                                       aria-describedby={
+                                          validationError
+                                             ? "evidence-decision-consequence evidence-rejection-reason-error"
+                                             : "evidence-decision-consequence"
+                                       }
                                        onChange={(event) => {
                                           setRejectionReason(event.target.value);
                                           setValidationError("");
@@ -1226,7 +1294,15 @@ function EvidenceReviewContent({
                               </label>
                               <span id="evidence-notes-count" className="evidence-notes-count">{moderatorNotes.length}/2000</span>
 
-                              {validationError && <p className="evidence-form-error" role="alert">{validationError}</p>}
+                              {validationError && (
+                                 <p
+                                    id="evidence-rejection-reason-error"
+                                    className="evidence-form-error"
+                                    role="alert"
+                                 >
+                                    {validationError}
+                                 </p>
+                              )}
 
                               <div className="evidence-decision-controls">
                                  <button type="button" className="secondary" disabled={isMutatingSelectedCase} onClick={handleCancelDecision}>

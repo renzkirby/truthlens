@@ -280,6 +280,7 @@ function WorkspacePage() {
                            key={section.id}
                            type="button"
                            className={`workspace-nav-item ${activeSectionId === section.id ? "active" : ""}`}
+                           aria-pressed={activeSectionId === section.id}
                            onClick={() => setRequestedSectionId(section.id)}
                         >
                            <span className="workspace-nav-icon">

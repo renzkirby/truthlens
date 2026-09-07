@@ -791,12 +791,26 @@
 
 @media (max-width: 1180px) {
    .evidence-workspace-grid {
-      grid-template-columns: minmax(260px, 0.78fr) minmax(0, 1.22fr);
-      gap: 18px;
+      grid-template-columns: 1fr;
    }
 
    .evidence-queue {
-      padding-right: 18px;
+      padding-right: 0;
+      padding-bottom: 22px;
+      border-right: 0;
+      border-bottom: 1px solid var(--border-default);
+   }
+
+   .evidence-workspace-grid.has-selection .evidence-queue {
+      display: none;
+   }
+
+   .evidence-workspace-grid:not(.has-selection) .evidence-detail {
+      display: none;
+   }
+
+   .evidence-return-to-queue {
+      display: inline-flex;
    }
 }
 
@@ -815,32 +829,9 @@
    .evidence-toolbar-actions {
       justify-content: space-between;
    }
-
-   .evidence-workspace-grid {
-      grid-template-columns: 1fr;
-   }
-
-   .evidence-queue {
-      padding-right: 0;
-      padding-bottom: 22px;
-      border-right: 0;
-      border-bottom: 1px solid var(--border-default);
-   }
 }
 
 @media (max-width: 760px) {
-   .evidence-workspace-grid.has-selection .evidence-queue {
-      display: none;
-   }
-
-   .evidence-workspace-grid:not(.has-selection) .evidence-detail {
-      display: none;
-   }
-
-   .evidence-return-to-queue {
-      display: inline-flex;
-   }
-
    .evidence-detail-header,
    .evidence-subheading-row {
       align-items: flex-start;
