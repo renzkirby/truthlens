@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useAuth } from "../../hooks/useAuth";
@@ -9,6 +9,7 @@ import "./EvidenceReviewPanel.css";
 
 const PAGE_SIZE = 20;
 const ACTIVE_CASE_STATUSES = new Set(["OPEN", "IN_REVIEW", "ESCALATED", "REOPENED"]);
+const RECORDED_DISPOSITIONS = new Set(["VERIFIED", "REJECTED"]);
 
 const DISPOSITION_OPTIONS = [
    { value: "UNVERIFIED", label: "Pending" },
@@ -96,6 +97,32 @@ function safeExternalUrl(value) {
    }
 }
 
+function getAuthIdentity(user, token) {
+   if (!token) {
+      return "session:anonymous";
+   }
+
+   try {
+      const encodedPayload = token.split(".")[1];
+      const normalizedPayload = encodedPayload.replaceAll("-", "+").replaceAll("_", "/");
+      const paddedPayload = normalizedPayload.padEnd(Math.ceil(normalizedPayload.length / 4) * 4, "=");
+      const payload = JSON.parse(window.atob(paddedPayload));
+      const tokenUserId = payload?.user_id ?? payload?.sub;
+
+      if (tokenUserId !== undefined && tokenUserId !== null) {
+         return `user:${tokenUserId}`;
+      }
+   } catch {
+      // Fall through to the authenticated user or opaque-token identity.
+   }
+
+   if (user?.id !== undefined && user?.id !== null) {
+      return `user:${user.id}:token:${token}`;
+   }
+
+   return `token:${token}`;
+}
+
 function getDispositionLabel(evidence) {
    if (evidence?.evidence_status_label) {
       return evidence.evidence_status_label;
@@ -129,8 +156,34 @@ function getQueueEmptyCopy(disposition) {
    };
 }
 
-function EvidenceReviewPanel({ organizationId, organizationName, canReviewEvidence }) {
-   const { authFetch } = useAuth();
+function getReadOnlyDecisionState(caseDetail, evidence) {
+   if (caseDetail?.status === "CANCELLED") {
+      return {
+         heading: "Case cancelled",
+         body: "This case was cancelled without recording an Evidence Review disposition.",
+      };
+   }
+
+   if (!RECORDED_DISPOSITIONS.has(evidence?.evidence_status)) {
+      return {
+         heading: "Historical review outcome unavailable",
+         body: "This case is read-only, but a recorded evidence disposition is not available.",
+      };
+   }
+
+   return {
+      heading: "Review recorded",
+      body: "This case is read-only and retains its case-specific historical outcome.",
+   };
+}
+
+function EvidenceReviewContent({
+   authFetch,
+   authIdentity,
+   organizationId,
+   organizationName,
+   canReviewEvidence,
+}) {
 
    const [disposition, setDisposition] = useState("UNVERIFIED");
    const [offset, setOffset] = useState(0);
@@ -153,7 +206,11 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
    const [mutation, setMutation] = useState(null);
    const [notice, setNotice] = useState("");
    const [actionError, setActionError] = useState("");
+   const [authorityError, setAuthorityError] = useState("");
 
+   const mountedRef = useRef(true);
+   const authorityGenerationRef = useRef(0);
+   const authorityRevokedRef = useRef(false);
    const queueRequestIdRef = useRef(0);
    const detailRequestIdRef = useRef(0);
    const selectedCaseIdRef = useRef(null);
@@ -171,6 +228,60 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
    const restoreDecisionFocusRef = useRef(false);
    const focusQueueAfterReturnRef = useRef(false);
 
+   const isAuthorityGenerationCurrent = useCallback(
+      (generation) =>
+         mountedRef.current &&
+         !authorityRevokedRef.current &&
+         authorityGenerationRef.current === generation,
+      [],
+   );
+
+   const revokeAuthority = useCallback((error) => {
+      authorityRevokedRef.current = true;
+      authorityGenerationRef.current += 1;
+      queueRequestIdRef.current += 1;
+      detailRequestIdRef.current += 1;
+      selectedCaseIdRef.current = null;
+      focusDetailAfterLoadRef.current = false;
+      focusDetailAfterMutationRef.current = false;
+      focusDetailErrorRef.current = false;
+      focusActionErrorRef.current = false;
+      restoreDecisionFocusRef.current = false;
+      focusQueueAfterReturnRef.current = false;
+
+      setQueue({ count: 0, limit: PAGE_SIZE, offset: 0, results: [] });
+      setQueueLoading(false);
+      setQueueError("");
+      setSelectedCaseId(null);
+      setDetail(null);
+      setDetailLoading(false);
+      setDetailError("");
+      setDetailUnavailable(false);
+      setDecision(null);
+      setModeratorNotes("");
+      setRejectionReason("");
+      setValidationError("");
+      setMutation(null);
+      setNotice("");
+      setActionError("");
+      setAuthorityError(
+         error?.status === 401
+            ? "Your session is no longer available. Sign in again or retry after authentication is restored."
+            : "You no longer have Evidence Review permission for this organization.",
+      );
+   }, []);
+
+   useEffect(() => {
+      mountedRef.current = true;
+
+      return () => {
+         mountedRef.current = false;
+         authorityGenerationRef.current += 1;
+         queueRequestIdRef.current += 1;
+         detailRequestIdRef.current += 1;
+      };
+   }, []);
+
    const queueUrl = useMemo(() => {
       const query = new URLSearchParams({
          organization_id: organizationId,
@@ -185,11 +296,16 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
    useEffect(() => {
       let cancelled = false;
       const requestId = queueRequestIdRef.current + 1;
+      const authorityGeneration = authorityGenerationRef.current;
       queueRequestIdRef.current = requestId;
 
       authFetch(queueUrl, { method: "GET" })
          .then((data) => {
-            if (cancelled || queueRequestIdRef.current !== requestId) {
+            if (
+               cancelled ||
+               queueRequestIdRef.current !== requestId ||
+               !isAuthorityGenerationCurrent(authorityGeneration)
+            ) {
                return;
             }
 
@@ -218,13 +334,12 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
 
             const authorityLost = error?.status === 401 || error?.status === 403;
             if (authorityLost) {
-               selectedCaseIdRef.current = null;
-               detailRequestIdRef.current += 1;
-               setQueue({ count: 0, limit: PAGE_SIZE, offset: 0, results: [] });
-               setSelectedCaseId(null);
-               setDetail(null);
-               setDetailError("");
-               setDecision(null);
+               revokeAuthority(error);
+               return;
+            }
+
+            if (!isAuthorityGenerationCurrent(authorityGeneration)) {
+               return;
             }
 
             setQueueError(
@@ -238,7 +353,7 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
       return () => {
          cancelled = true;
       };
-   }, [authFetch, offset, queueRequestVersion, queueUrl]);
+   }, [authFetch, isAuthorityGenerationCurrent, offset, queueRequestVersion, queueUrl, revokeAuthority]);
 
    useEffect(() => {
       if (!selectedCaseId) {
@@ -247,6 +362,7 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
 
       let cancelled = false;
       const requestId = detailRequestIdRef.current + 1;
+      const authorityGeneration = authorityGenerationRef.current;
       detailRequestIdRef.current = requestId;
       const query = new URLSearchParams({ organization_id: organizationId });
       const url = `${resolveApiEndpoint("EVIDENCE_CASE_DETAIL", selectedCaseId)}?${query.toString()}`;
@@ -256,7 +372,8 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
             if (
                cancelled ||
                detailRequestIdRef.current !== requestId ||
-               selectedCaseIdRef.current !== selectedCaseId
+               selectedCaseIdRef.current !== selectedCaseId ||
+               !isAuthorityGenerationCurrent(authorityGeneration)
             ) {
                return;
             }
@@ -278,15 +395,22 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
             const unavailable = error?.status === 404;
             const authorityLost = error?.status === 401 || error?.status === 403;
 
+            if (authorityLost) {
+               revokeAuthority(error);
+               return;
+            }
+
+            if (!isAuthorityGenerationCurrent(authorityGeneration)) {
+               return;
+            }
+
             setDetail(null);
             setDetailLoading(false);
-            setDetailUnavailable(unavailable || authorityLost);
+            setDetailUnavailable(unavailable);
             setDetailError(
                unavailable
                   ? "This Evidence case is no longer available."
-                  : error?.status === 403
-                    ? "You no longer have permission to view this Evidence case."
-                    : (error?.message || "Unable to load this Evidence case."),
+                  : (error?.message || "Unable to load this Evidence case."),
             );
             setDecision(null);
             setActionError("");
@@ -298,15 +422,19 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
                setQueueRequestVersion((current) => current + 1);
             }
 
-            if (authorityLost) {
-               setQueue({ count: 0, limit: PAGE_SIZE, offset: 0, results: [] });
-            }
          });
 
       return () => {
          cancelled = true;
       };
-   }, [authFetch, detailRequestVersion, organizationId, selectedCaseId]);
+   }, [
+      authFetch,
+      detailRequestVersion,
+      isAuthorityGenerationCurrent,
+      organizationId,
+      revokeAuthority,
+      selectedCaseId,
+   ]);
 
    useEffect(() => {
       if (!detail) {
@@ -387,6 +515,10 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
    };
 
    const requestQueueRefresh = ({ preserveRows = true } = {}) => {
+      if (authorityRevokedRef.current) {
+         return;
+      }
+
       queueRequestIdRef.current += 1;
       if (!preserveRows) {
          setQueue({ count: 0, limit: PAGE_SIZE, offset, results: [] });
@@ -397,7 +529,7 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
    };
 
    const requestDetailRefresh = (caseId) => {
-      if (!caseId || selectedCaseIdRef.current !== caseId) {
+      if (authorityRevokedRef.current || !caseId || selectedCaseIdRef.current !== caseId) {
          return;
       }
 
@@ -496,7 +628,7 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
    const handleDecisionSubmit = async (event) => {
       event.preventDefault();
 
-      if (!detail?.id || !decision || mutation) {
+      if (authorityRevokedRef.current || !detail?.id || !decision || mutation) {
          return;
       }
 
@@ -510,6 +642,8 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
          organizationId,
          caseId: detail.id,
          decision,
+         authIdentity,
+         authorityGeneration: authorityGenerationRef.current,
       };
       const payload = {
          decision,
@@ -531,6 +665,13 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
          const url = `${resolveApiEndpoint("EVIDENCE_CASE_ACTION", operation.caseId)}?${query.toString()}`;
          const updatedCase = await authFetch(url, { method: "POST", body: payload });
 
+         if (
+            operation.authIdentity !== authIdentity ||
+            !isAuthorityGenerationCurrent(operation.authorityGeneration)
+         ) {
+            return;
+         }
+
          if (selectedCaseIdRef.current === operation.caseId) {
             focusDetailAfterMutationRef.current = true;
             setDetail(updatedCase);
@@ -548,6 +689,19 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
          );
          requestQueueRefresh();
       } catch (error) {
+         if (!mountedRef.current || operation.authIdentity !== authIdentity) {
+            return;
+         }
+
+         if (error?.status === 401 || error?.status === 403) {
+            revokeAuthority(error);
+            return;
+         }
+
+         if (!isAuthorityGenerationCurrent(operation.authorityGeneration)) {
+            return;
+         }
+
          if (error?.status === 409) {
             reconcileMutationConflict(operation.caseId, error);
          } else if (error?.status === 404) {
@@ -558,26 +712,41 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
             setDetailError("This Evidence case is no longer available.");
             focusDetailErrorRef.current = true;
             requestQueueRefresh();
-         } else if (error?.status === 401 || error?.status === 403) {
-            selectedCaseIdRef.current = null;
-            detailRequestIdRef.current += 1;
-            setQueue({ count: 0, limit: PAGE_SIZE, offset: 0, results: [] });
-            setSelectedCaseId(null);
-            setDetail(null);
-            setDecision(null);
-            setActionError("");
-            setQueueError(
-               error?.status === 403
-                  ? "You no longer have permission to review evidence for this organization."
-                  : "Your session is no longer available. Sign in again to continue.",
-            );
          } else {
             focusActionErrorRef.current = true;
             setActionError(error?.message || `Unable to ${DECISION_COPY[operation.decision].label.toLowerCase()}.`);
          }
       } finally {
-         setMutation(null);
+         if (
+            mountedRef.current &&
+            operation.authIdentity === authIdentity &&
+            isAuthorityGenerationCurrent(operation.authorityGeneration)
+         ) {
+            setMutation(null);
+         }
       }
+   };
+
+   const handleAuthorityRetry = () => {
+      authorityGenerationRef.current += 1;
+      authorityRevokedRef.current = false;
+      queueRequestIdRef.current += 1;
+      detailRequestIdRef.current += 1;
+      selectedCaseIdRef.current = null;
+      setAuthorityError("");
+      setQueue({ count: 0, limit: PAGE_SIZE, offset: 0, results: [] });
+      setQueueLoading(true);
+      setQueueError("");
+      setSelectedCaseId(null);
+      setDetail(null);
+      setDetailLoading(false);
+      setDetailError("");
+      setDetailUnavailable(false);
+      setDecision(null);
+      setMutation(null);
+      setNotice("");
+      setActionError("");
+      setQueueRequestVersion((current) => current + 1);
    };
 
    const evidence = detail?.evidence;
@@ -594,6 +763,7 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
    const mediaUrl = safeExternalUrl(claim?.media_url);
    const selectedDecisionCopy = decision ? DECISION_COPY[decision] : null;
    const isMutatingSelectedCase = mutation?.caseId === detail?.id;
+   const readOnlyDecisionState = detail ? getReadOnlyDecisionState(detail, evidence) : null;
 
    return (
       <div className="evidence-review-panel">
@@ -613,7 +783,17 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
             </p>
          </div>
 
-         <div className="evidence-toolbar">
+         {authorityError ? (
+            <div className="evidence-contained-error evidence-authority-error" role="alert">
+               <strong>Evidence Review unavailable</strong>
+               <span>{authorityError}</span>
+               <button type="button" onClick={handleAuthorityRetry}>
+                  Retry access
+               </button>
+            </div>
+         ) : (
+            <>
+               <div className="evidence-toolbar">
             <label htmlFor="evidence-disposition-filter">
                Review history
                <select
@@ -652,7 +832,7 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
             </div>
          )}
 
-         <div className={`evidence-workspace-grid ${selectedCaseId ? "has-selection" : ""}`}>
+               <div className={`evidence-workspace-grid ${selectedCaseId ? "has-selection" : ""}`}>
             <section className="evidence-queue" aria-labelledby="evidence-queue-heading" aria-busy={queueLoading}>
                <div className="evidence-section-heading">
                   <div>
@@ -958,10 +1138,18 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
 
                         {!isActiveCase || evidence?.evidence_status !== "UNVERIFIED" ? (
                            <div className="evidence-readonly-state" role="status">
-                              <Icons name="check-circle" size={18} aria-hidden="true" />
+                              <Icons
+                                 name={
+                                    detail.status === "CANCELLED" || !evidence?.evidence_status
+                                       ? "alert-circle"
+                                       : "check-circle"
+                                 }
+                                 size={18}
+                                 aria-hidden="true"
+                              />
                               <div>
-                                 <strong>Review recorded</strong>
-                                 <span>This case is read-only and retains its case-specific historical outcome.</span>
+                                 <strong>{readOnlyDecisionState.heading}</strong>
+                                 <span>{readOnlyDecisionState.body}</span>
                               </div>
                            </div>
                         ) : evidence?.is_self_submission ? (
@@ -1060,8 +1248,24 @@ function EvidenceReviewPanel({ organizationId, organizationName, canReviewEviden
                   </div>
                ) : null}
             </section>
-         </div>
+               </div>
+            </>
+         )}
       </div>
+   );
+}
+
+function EvidenceReviewPanel(props) {
+   const { authFetch, token, user } = useAuth();
+   const authIdentity = getAuthIdentity(user, token);
+
+   return (
+      <EvidenceReviewContent
+         key={`${props.organizationId}:${authIdentity}`}
+         {...props}
+         authFetch={authFetch}
+         authIdentity={authIdentity}
+      />
    );
 }
 

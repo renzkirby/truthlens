@@ -216,6 +216,10 @@
    color: inherit;
 }
 
+.evidence-authority-error {
+   margin-top: 18px;
+}
+
 .evidence-error-actions {
    display: flex;
    flex-wrap: wrap;
