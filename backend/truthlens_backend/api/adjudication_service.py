@@ -8,6 +8,9 @@ from .models import (
     ModerationCase,
     ModerationEvent,
 )
+from .adjudication_provenance import (
+    get_current_adjudication_decision,
+)
 
 from .moderation_service import (
     ACTIVE_CASE_STATUSES,
@@ -39,22 +42,6 @@ class InvalidAdjudicationDecision(AdjudicationError):
 
 class AdjudicationConflict(AdjudicationError):
     pass
-
-
-def get_current_adjudication_decision(
-    claim,
-    *,
-    lock=False,
-):
-    queryset = AdjudicationDecision.objects.filter(
-        claim=claim,
-        is_current=True,
-    )
-
-    if lock:
-        queryset = queryset.select_for_update()
-
-    return queryset.first()
 
 
 def get_active_adjudication_case(

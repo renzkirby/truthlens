@@ -30,6 +30,7 @@ from .organization_public_presence_service import (
     is_public_partner_eligible,
 )
 from .moderation_service import ACTIVE_CASE_STATUSES
+from .adjudication_provenance import get_claim_adjudication_provenance
 
 
 class PublicIdentityProfileSerializer(serializers.ModelSerializer):
@@ -311,6 +312,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 
 class ClaimSerializer(serializers.ModelSerializer):
+    final_verdict = serializers.SerializerMethodField()
     effective_verdict = serializers.SerializerMethodField()
     has_moderator_verdict = serializers.SerializerMethodField()
     verified_evidence_count = serializers.SerializerMethodField()
@@ -408,13 +410,27 @@ class ClaimSerializer(serializers.ModelSerializer):
 
         return None
 
+    def _get_adjudication_provenance(self, obj):
+        cache = getattr(self, "_adjudication_provenance_cache", None)
+
+        if cache is None:
+            cache = {}
+            self._adjudication_provenance_cache = cache
+
+        if obj.pk not in cache:
+            cache[obj.pk] = get_claim_adjudication_provenance(obj)
+
+        return cache[obj.pk]
+
+    def get_final_verdict(self, obj):
+        return self._get_adjudication_provenance(obj)["verdict"]
+
     def get_effective_verdict(self, obj):
-        return obj.final_verdict or obj.ai_verdict
+        return self.get_final_verdict(obj) or obj.ai_verdict
 
     def get_has_moderator_verdict(self, obj):
-        """Check if moderators have set a final verdict on this claim"""
-        # Direct check: final_verdict is only set when moderators have verified evidence
-        return bool(obj.final_verdict)
+        """Return whether the current verdict has attributable human provenance."""
+        return self._get_adjudication_provenance(obj)["is_attributable"]
 
     def get_verified_evidence_count(self, obj):
         """Get count of verified evidence for this claim"""
@@ -425,10 +441,12 @@ class ClaimSerializer(serializers.ModelSerializer):
         ).count()
 
     def get_moderator_verdict_info(self, obj):
-        """Return moderator verdict status and supporting evidence"""
-        if obj.final_verdict:
+        """Return only a verdict backed by attributable adjudication provenance."""
+        provenance = self._get_adjudication_provenance(obj)
+
+        if provenance["is_attributable"]:
             return {
-                "verdict": obj.final_verdict,
+                "verdict": provenance["verdict"],
                 "source": "MODERATORS",
                 "verified_evidence_count": self.get_verified_evidence_count(obj),
             }
@@ -489,6 +507,10 @@ class VerificationIntakeClaimSerializer(serializers.ModelSerializer):
         many=True,
         read_only=True,
     )
+    final_verdict = serializers.SerializerMethodField()
+
+    def get_final_verdict(self, obj):
+        return get_claim_adjudication_provenance(obj)["verdict"]
 
     class Meta:
         model = Claim
@@ -1644,6 +1666,12 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
     def get_thread(self, obj):
         """Return full thread with nested claim for moderation queue display."""
         if obj.thread:
+            claim_provenance = (
+                get_claim_adjudication_provenance(obj.thread.claim)
+                if obj.thread.claim
+                else None
+            )
+
             return {
                 "id": str(obj.thread.id),
                 "caption": obj.thread.caption,
@@ -1653,7 +1681,7 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
                     {
                         "id": str(obj.thread.claim.id),
                         "context_text": obj.thread.claim.context_text,
-                        "verdict": obj.thread.claim.final_verdict
+                        "verdict": claim_provenance["verdict"]
                         or obj.thread.claim.ai_verdict,
                     }
                     if obj.thread.claim

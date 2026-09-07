@@ -553,12 +553,19 @@ class Claim(models.Model):
     )
 
     def __str__(self):
-        return f"Claim {self.id} - Type: {self.claim_type} - Final Verdict: {self.final_verdict or self.ai_verdict}"
+        return (
+            f"Claim {self.id} - Type: {self.claim_type} - "
+            f"Cached Final Verdict: {self.final_verdict or 'None'} - "
+            f"AI Verdict: {self.ai_verdict or 'None'}"
+        )
 
     def compute_final_verdict(self):
         """
-        Compute final verdict based on verified evidence in all threads for this claim.
-        Returns the verdict that should be set as final_verdict.
+        Legacy evidence-consensus calculation retained for compatibility.
+
+        This result is not an authoritative claim adjudication and must not be
+        written to final_verdict.  Only the adjudication service establishes a
+        human claim verdict.
 
         Logic:
         - If all verified evidence SUPPORTS → FACT

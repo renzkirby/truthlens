@@ -146,6 +146,10 @@ from .adjudication_service import (
     has_adjudication_conflict,
     issue_adjudication_decision,
 )
+from .adjudication_provenance import (
+    annotate_claim_authoritative_verdict,
+    prefetch_claim_adjudication_provenance,
+)
 from .trust_service import (
     calculate_trust_components,
     get_reputation_progression,
@@ -507,7 +511,13 @@ def claim_polling_endpoint(request, claim_id):
                 "is_ai_generated": (match_result["is_ai_generated"]),
                 "thread_id": (match_result["thread_id"]),
                 # Temporary compatibility name.
-                "has_community_verdict": (bool(claim.final_verdict)),
+                "has_community_verdict": (
+                    match_result["resolution_source"]
+                    in {
+                        "OFFICIAL_FACT_CHECK",
+                        "ADJUDICATION",
+                    }
+                ),
                 "score_context": (match_result["score_context"]),
                 "resolution_source": (match_result["resolution_source"]),
                 "official_fact_check": (match_result["official_fact_check"]),
@@ -639,6 +649,10 @@ def my_claims(request):
         Claim.objects.filter(check_history__user=request.user)
         .annotate(last_checked_at=Max("check_history__checked_at"))
         .order_by("-last_checked_at", "-last_updated")
+    )
+    claims = prefetch_claim_adjudication_provenance(
+        claims,
+        include_legacy_threads=True,
     )
     serializer = ClaimSerializer(claims, many=True)
     return Response(serializer.data)
@@ -1351,6 +1365,11 @@ def verdict_queue(request):
             "-priority",
             "-created_at",
         )
+    )
+    queryset = prefetch_claim_adjudication_provenance(
+        queryset,
+        claim_path="claim",
+        include_legacy_threads=True,
     )
 
     total_count = queryset.count()
@@ -2075,6 +2094,11 @@ def evidence_moderation_queue(request):
         .distinct()
         .order_by("-submitted_at")
     )
+    evidence_query = prefetch_claim_adjudication_provenance(
+        evidence_query,
+        claim_path="thread__claim",
+        include_legacy_threads=True,
+    )
 
     total_count = evidence_query.count()
 
@@ -2415,9 +2439,17 @@ class ThreadViewSet(viewsets.ModelViewSet):
             .select_related("claim", "author", "author__profile")
             .order_by(order_field)
         )
-
+        queryset = prefetch_claim_adjudication_provenance(
+            queryset,
+            claim_path="claim",
+            include_legacy_threads=True,
+        )
         search_query = self.request.query_params.get("search", "").strip()[:120]
         if search_query:
+            queryset = annotate_claim_authoritative_verdict(
+                queryset,
+                claim_id_field="claim_id",
+            )
             queryset = queryset.filter(
                 Q(caption__icontains=search_query)
                 | Q(author__username__icontains=search_query)
@@ -2425,7 +2457,7 @@ class ThreadViewSet(viewsets.ModelViewSet):
                 | Q(claim__ai_summary__icontains=search_query)
                 | Q(claim__source_link__icontains=search_query)
                 | Q(claim__ai_verdict__icontains=search_query)
-                | Q(claim__final_verdict__icontains=search_query)
+                | Q(authoritative_final_verdict__icontains=search_query)
             )
 
         claim_id = self.request.query_params.get("claim_id")
@@ -3035,6 +3067,10 @@ def public_user_claims(request, username):
         .annotate(last_checked_at=Max("check_history__checked_at"))
         .order_by("-last_checked_at", "-last_updated")
     )
+    claims = prefetch_claim_adjudication_provenance(
+        claims,
+        include_legacy_threads=True,
+    )
 
     serializer = ClaimSerializer(claims, many=True)
     return Response(serializer.data)
@@ -3360,12 +3396,14 @@ class UserFactCheckLibraryView(APIView):
                     "-id",
                 )
 
+        queryset = annotate_claim_authoritative_verdict(queryset)
+
         if search_query:
             queryset = queryset.filter(
                 Q(context_text__icontains=search_query)
                 | Q(ai_summary__icontains=search_query)
                 | Q(ai_verdict__icontains=search_query)
-                | Q(final_verdict__icontains=search_query)
+                | Q(authoritative_final_verdict__icontains=search_query)
                 | Q(source_link__icontains=search_query)
                 | Q(top_verdict_source__icontains=search_query)
                 | Q(url_link__icontains=search_query)
@@ -3379,13 +3417,9 @@ class UserFactCheckLibraryView(APIView):
                 )
 
             queryset = queryset.filter(
-                Q(final_verdict=verdict)
+                Q(authoritative_final_verdict=verdict)
                 | Q(
-                    final_verdict__isnull=True,
-                    ai_verdict=verdict,
-                )
-                | Q(
-                    final_verdict="",
+                    authoritative_final_verdict__isnull=True,
                     ai_verdict=verdict,
                 )
             )
@@ -3399,7 +3433,10 @@ class UserFactCheckLibraryView(APIView):
 
             queryset = queryset.filter(claim_type=claim_type)
 
-        queryset = queryset.order_by(*ordering)
+        queryset = prefetch_claim_adjudication_provenance(
+            queryset.order_by(*ordering),
+            include_legacy_threads=True,
+        )
 
         paginator = Paginator(
             queryset,

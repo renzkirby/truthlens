@@ -224,3 +224,23 @@ class VerificationAssignmentPublicationTests(TestCase):
         self.assertIsNotNone(self.assignment.completed_at)
 
         self.assertIsNone(self.assignment.released_at)
+
+    def test_published_legacy_fact_check_is_not_returned_to_intake(self):
+        historical_claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Published historical claim",
+            final_verdict=AdjudicationDecision.Verdict.FACT,
+        )
+        OfficialFactCheck.objects.create(
+            claim=historical_claim,
+            canonical_claim="Published historical claim",
+            verdict=AdjudicationDecision.Verdict.FACT,
+            summary="Existing published institutional knowledge.",
+            publication_status=OfficialFactCheck.PublicationStatus.PUBLISHED,
+        )
+
+        self.assertIsNone(
+            ensure_verification_assignment(
+                claim=historical_claim,
+            )
+        )

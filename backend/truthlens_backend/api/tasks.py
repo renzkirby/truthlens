@@ -298,9 +298,9 @@ def execute_core_text_pipeline(raw_text, claim_id):
 
         try:
             current_claim = Claim.objects.get(id=claim_id)
-            # Instantly copy the verdict data from the matched claim to the new one
+            # Reuse prior automated analysis without copying an
+            # authoritative human decision onto a distinct Claim.
             current_claim.ai_verdict = matched_claim.ai_verdict
-            current_claim.final_verdict = matched_claim.final_verdict
             current_claim.ai_summary = matched_claim.ai_summary
             current_claim.consensus_score = matched_claim.consensus_score
             current_claim.source_type = matched_claim.source_type
@@ -309,9 +309,22 @@ def execute_core_text_pipeline(raw_text, claim_id):
             current_claim.ai_sources = matched_claim.ai_sources
             current_claim.is_ai_generated = matched_claim.is_ai_generated
             current_claim.score_context = (
-                "This result was instantly matched from a previously verified claim."
+                "This result was matched from a prior analysis of the same claim."
             )
-            current_claim.save()
+            current_claim.save(
+                update_fields=[
+                    "ai_verdict",
+                    "ai_summary",
+                    "consensus_score",
+                    "source_type",
+                    "source_link",
+                    "top_verdict_source",
+                    "ai_sources",
+                    "is_ai_generated",
+                    "score_context",
+                    "last_updated",
+                ]
+            )
         except Claim.DoesNotExist:
             pass
 
@@ -602,10 +615,14 @@ def execute_core_text_pipeline(raw_text, claim_id):
         try:
             claim = Claim.objects.get(id=claim_id)
             claim.ai_verdict = "UNVERIFIED"
-            # Keep moderator verdict channel empty until moderator or consensus sets it.
-            claim.final_verdict = None
             claim.ai_summary = "An error occurred during analysis."
-            claim.save()
+            claim.save(
+                update_fields=[
+                    "ai_verdict",
+                    "ai_summary",
+                    "last_updated",
+                ]
+            )
         except Claim.DoesNotExist:
             pass
     finally:
@@ -946,7 +963,7 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
         claim = Claim.objects.get(id=claim_id)
         ai_verdict_value = verdict.get("verdict")
         claim.ai_verdict = ai_verdict_value
-        # Keep final_verdict reserved for moderator or verified-evidence consensus decisions.
+        # Keep final_verdict reserved for the authoritative adjudication service.
         claim.ai_summary = verdict.get("summary")
         claim.ai_reasoning = verdict.get("reasoning")
         claim.score_context = verdict.get("score_context")

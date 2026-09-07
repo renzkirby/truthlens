@@ -5629,6 +5629,18 @@ class KnowledgeReuseFoundationTests(APITestCase):
             moderated_at=timezone.now(),
         )
 
+        AdjudicationDecision.objects.create(
+            claim=unpublished_claim,
+            verdict=AdjudicationDecision.Verdict.FAKE,
+            canonical_claim=unpublished_claim.context_text,
+            rationale=("Human adjudication without " "a published article."),
+            decided_by=self.moderator,
+            organization=self.organization,
+            decision_source=(
+                AdjudicationDecision.DecisionSource.LEGACY_MIGRATION
+            ),
+        )
+
         result = get_match_result(unpublished_claim)
 
         self.assertEqual(

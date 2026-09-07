@@ -2,6 +2,10 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from .adjudication_provenance import (
+    get_claim_adjudication_provenance,
+    prefetch_claim_adjudication_provenance,
+)
 from .models import (
     AdjudicationDecision,
     Claim,
@@ -115,7 +119,7 @@ def get_available_verification_assignments():
     any partner organization.
     """
 
-    return (
+    queryset = (
         VerificationAssignment.objects.filter(
             status=(VerificationAssignment.Status.AVAILABLE),
             organization__isnull=True,
@@ -131,6 +135,11 @@ def get_available_verification_assignments():
         .order_by("-created_at")
     )
 
+    return prefetch_claim_adjudication_provenance(
+        queryset,
+        claim_path="claim",
+    )
+
 
 def get_organization_verification_workload(
     organization,
@@ -140,7 +149,7 @@ def get_organization_verification_workload(
     owned by one partner organization.
     """
 
-    return (
+    queryset = (
         VerificationAssignment.objects.filter(
             organization=organization,
             status=(VerificationAssignment.Status.ACTIVE),
@@ -157,6 +166,11 @@ def get_organization_verification_workload(
             "-claimed_at",
             "-created_at",
         )
+    )
+
+    return prefetch_claim_adjudication_provenance(
+        queryset,
+        claim_path="claim",
     )
 
 
@@ -186,10 +200,17 @@ def ensure_verification_assignment(
         if existing:
             return existing
 
-        # Finalized claims require an explicit future
-        # revision/reopen workflow rather than silently
-        # returning to the public intake queue.
-        if locked_claim.final_verdict:
+        provenance = get_claim_adjudication_provenance(locked_claim)
+
+        has_published_fact_check = OfficialFactCheck.objects.filter(
+            claim=locked_claim,
+            publication_status=(OfficialFactCheck.PublicationStatus.PUBLISHED),
+        ).exists()
+
+        # Attributable adjudications and published institutional knowledge
+        # require an explicit future correction/reopen workflow. A raw cache
+        # value without that authority must not exclude a claim from intake.
+        if provenance["is_attributable"] or has_published_fact_check:
             return None
 
         try:
