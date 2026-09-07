@@ -129,9 +129,13 @@ from .evidence_review_service import (
     EvidenceReviewAuthorizationError,
     EvidenceReviewConflict,
     EvidenceReviewError,
+    ensure_can_review_evidence,
     ensure_evidence_case,
+    get_evidence_case_queue,
+    get_evidence_case_queryset,
     get_latest_evidence_case,
     review_evidence_submission,
+    schedule_evidence_review_trust_updates,
 )
 from .adjudication_service import (
     AdjudicationAuthorizationError,
@@ -242,6 +246,12 @@ from .serializers import (
     SafetyCaseDetailSerializer,
     SafetyCaseQueueFilterSerializer,
     SafetyCaseSummarySerializer,
+    EvidenceCaseActionSerializer,
+    EvidenceCaseDetailSerializer,
+    EvidenceCaseOrganizationQuerySerializer,
+    EvidenceCaseQueueFilterSerializer,
+    EvidenceCaseSummarySerializer,
+    EvidenceReviewOrganizationSerializer,
 )
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
@@ -1053,6 +1063,153 @@ def safety_case_action(request, case_id):
         schedule_safety_resolution_trust_updates(result)
 
     return _safety_case_detail_response(case_id)
+
+
+def _get_evidence_review_organization(organization_id):
+    return get_object_or_404(
+        Organization,
+        id=organization_id,
+    )
+
+
+def _ensure_evidence_review_access(request, organization):
+    try:
+        ensure_can_review_evidence(request.user, organization)
+    except EvidenceReviewAuthorizationError as error:
+        raise PermissionDenied(str(error)) from error
+
+
+def _get_evidence_case_or_404(
+    case_id,
+    *,
+    organization,
+    include_events=False,
+):
+    return get_object_or_404(
+        get_evidence_case_queryset(include_events=include_events),
+        pk=case_id,
+        organization=organization,
+        evidence_submission__isnull=False,
+    )
+
+
+def _evidence_case_detail_response(case_id, *, organization, request):
+    case = _get_evidence_case_or_404(
+        case_id,
+        organization=organization,
+        include_events=True,
+    )
+    return Response(
+        EvidenceCaseDetailSerializer(
+            case,
+            context={"request": request},
+        ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def evidence_case_queue(request):
+    filters = EvidenceCaseQueueFilterSerializer(data=request.query_params)
+    filters.is_valid(raise_exception=True)
+    data = filters.validated_data
+
+    organization = _get_evidence_review_organization(data["organization_id"])
+
+    try:
+        queryset = get_evidence_case_queue(
+            actor=request.user,
+            organization=organization,
+            evidence_status=data["evidence_status"],
+        )
+    except EvidenceReviewAuthorizationError as error:
+        raise PermissionDenied(str(error)) from error
+    total_count = queryset.count()
+    cases = queryset[data["offset"] : data["offset"] + data["limit"]]
+
+    return Response(
+        {
+            "count": total_count,
+            "limit": data["limit"],
+            "offset": data["offset"],
+            "organization": EvidenceReviewOrganizationSerializer(
+                organization
+            ).data,
+            "results": EvidenceCaseSummarySerializer(
+                cases,
+                many=True,
+                context={"request": request},
+            ).data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def evidence_case_detail(request, case_id):
+    query = EvidenceCaseOrganizationQuerySerializer(data=request.query_params)
+    query.is_valid(raise_exception=True)
+    organization = _get_evidence_review_organization(
+        query.validated_data["organization_id"]
+    )
+    _ensure_evidence_review_access(request, organization)
+    return _evidence_case_detail_response(
+        case_id,
+        organization=organization,
+        request=request,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def evidence_case_action(request, case_id):
+    query = EvidenceCaseOrganizationQuerySerializer(data=request.query_params)
+    query.is_valid(raise_exception=True)
+    organization = _get_evidence_review_organization(
+        query.validated_data["organization_id"]
+    )
+    _ensure_evidence_review_access(request, organization)
+
+    payload = EvidenceCaseActionSerializer(data=request.data)
+    payload.is_valid(raise_exception=True)
+    case = _get_evidence_case_or_404(
+        case_id,
+        organization=organization,
+    )
+
+    try:
+        result = review_evidence_submission(
+            evidence=case.evidence_submission,
+            actor=request.user,
+            evidence_status=payload.validated_data["decision"],
+            expected_status=payload.validated_data["expected_status"],
+            moderator_notes=payload.validated_data["moderator_notes"],
+            rejection_reason=payload.validated_data.get("rejection_reason"),
+            expected_case_id=case.id,
+            expected_organization_id=organization.id,
+            allow_reopen=False,
+        )
+    except EvidenceReviewAuthorizationError as error:
+        raise PermissionDenied(str(error)) from error
+    except (EvidenceReviewConflict, ModerationCaseError) as error:
+        return Response(
+            {"detail": str(error)},
+            status=status.HTTP_409_CONFLICT,
+        )
+    except EvidenceReviewError as error:
+        return Response(
+            {"detail": str(error)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    schedule_evidence_review_trust_updates(result)
+    return _evidence_case_detail_response(
+        case_id,
+        organization=organization,
+        request=request,
+    )
 
 
 @api_view(["GET"])
@@ -2469,15 +2626,7 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
 
         reviewed_evidence = result["evidence"]
 
-        contributor_id = result["contributor_id"]
-
-        # The review transaction has completed before
-        # reputation is recomputed.
-        recompute_user_trust_score(contributor_id)
-
-        transaction.on_commit(
-            lambda: (recompute_user_trust_score_task.delay(contributor_id))
-        )
+        schedule_evidence_review_trust_updates(result)
 
         serializer = EvidenceSubmissionSerializer(
             reviewed_evidence,

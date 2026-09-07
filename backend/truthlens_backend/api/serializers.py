@@ -1227,6 +1227,289 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
         read_only_fields = fields
 
 
+class EvidenceCaseOrganizationQuerySerializer(serializers.Serializer):
+    organization_id = serializers.UUIDField()
+
+    def validate(self, attrs):
+        unsupported_fields = set(self.initial_data) - {"organization_id"}
+        if unsupported_fields:
+            raise serializers.ValidationError(
+                {
+                    field: "This query parameter is not supported."
+                    for field in sorted(unsupported_fields)
+                }
+            )
+        return attrs
+
+
+class EvidenceCaseQueueFilterSerializer(serializers.Serializer):
+    organization_id = serializers.UUIDField()
+    evidence_status = serializers.ChoiceField(
+        choices=EvidenceSubmission.EvidenceStatus.choices,
+        required=False,
+        default=EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+    )
+    limit = serializers.IntegerField(
+        required=False,
+        default=20,
+        min_value=1,
+        max_value=100,
+    )
+    offset = serializers.IntegerField(
+        required=False,
+        default=0,
+        min_value=0,
+    )
+
+    def validate(self, attrs):
+        supported_fields = {
+            "organization_id",
+            "evidence_status",
+            "limit",
+            "offset",
+        }
+        unsupported_fields = set(self.initial_data) - supported_fields
+        if unsupported_fields:
+            raise serializers.ValidationError(
+                {
+                    field: "This query parameter is not supported."
+                    for field in sorted(unsupported_fields)
+                }
+            )
+        return attrs
+
+
+class EvidenceCaseActionSerializer(serializers.Serializer):
+    decision = serializers.ChoiceField(
+        choices=[
+            EvidenceSubmission.EvidenceStatus.VERIFIED,
+            EvidenceSubmission.EvidenceStatus.REJECTED,
+        ]
+    )
+    expected_status = serializers.ChoiceField(
+        choices=[EvidenceSubmission.EvidenceStatus.UNVERIFIED],
+    )
+    moderator_notes = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        max_length=2000,
+        default="",
+    )
+    rejection_reason = serializers.ChoiceField(
+        choices=EvidenceSubmission.RejectionReason.choices,
+        required=False,
+        allow_null=True,
+    )
+
+    def validate(self, attrs):
+        supported_fields = {
+            "decision",
+            "expected_status",
+            "moderator_notes",
+            "rejection_reason",
+        }
+        unsupported_fields = set(self.initial_data) - supported_fields
+        if unsupported_fields:
+            raise serializers.ValidationError(
+                {
+                    field: "This field is not supported."
+                    for field in sorted(unsupported_fields)
+                }
+            )
+
+        decision = attrs["decision"]
+        rejection_reason = attrs.get("rejection_reason")
+        if (
+            decision == EvidenceSubmission.EvidenceStatus.REJECTED
+            and not rejection_reason
+        ):
+            raise serializers.ValidationError(
+                {
+                    "rejection_reason": (
+                        "A rejection reason is required when rejecting evidence."
+                    )
+                }
+            )
+        if (
+            decision == EvidenceSubmission.EvidenceStatus.VERIFIED
+            and rejection_reason is not None
+        ):
+            raise serializers.ValidationError(
+                {
+                    "rejection_reason": (
+                        "A rejection reason cannot be supplied when verifying "
+                        "evidence."
+                    )
+                }
+            )
+        return attrs
+
+
+class EvidenceReviewOrganizationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Organization
+        fields = ["id", "name", "slug"]
+        read_only_fields = fields
+
+
+class EvidenceReviewUserSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["id", "username"]
+        read_only_fields = fields
+
+
+class EvidenceReviewClaimSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Claim
+        fields = [
+            "id",
+            "claim_type",
+            "context_text",
+            "url_link",
+            "source_link",
+            "media_url",
+        ]
+        read_only_fields = fields
+
+
+class EvidenceReviewThreadSummarySerializer(serializers.ModelSerializer):
+    claim = EvidenceReviewClaimSummarySerializer(read_only=True)
+
+    class Meta:
+        model = Thread
+        fields = ["id", "caption", "created_at", "claim"]
+        read_only_fields = fields
+
+
+class EvidenceReviewEvidenceSerializer(serializers.ModelSerializer):
+    contributor = EvidenceReviewUserSummarySerializer(read_only=True)
+    evidence_type_label = serializers.CharField(
+        source="get_evidence_type_display",
+        read_only=True,
+    )
+    evidence_status_label = serializers.CharField(
+        source="get_evidence_status_display",
+        read_only=True,
+    )
+    is_self_submission = serializers.SerializerMethodField()
+
+    def get_is_self_submission(self, obj):
+        request = self.context.get("request")
+        return bool(
+            request
+            and request.user
+            and request.user.is_authenticated
+            and obj.contributor_id == request.user.id
+        )
+
+    class Meta:
+        model = EvidenceSubmission
+        fields = [
+            "id",
+            "evidence_caption",
+            "evidence_url",
+            "evidence_type",
+            "evidence_type_label",
+            "evidence_verdict",
+            "evidence_status",
+            "evidence_status_label",
+            "submitted_at",
+            "contributor",
+            "is_self_submission",
+        ]
+        read_only_fields = fields
+
+
+class EvidenceModerationEventSerializer(serializers.ModelSerializer):
+    actor = EvidenceReviewUserSummarySerializer(read_only=True)
+
+    class Meta:
+        model = ModerationEvent
+        fields = [
+            "event_type",
+            "actor",
+            "from_status",
+            "to_status",
+            "reason_code",
+            "notes",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class EvidenceCaseSummarySerializer(serializers.ModelSerializer):
+    evidence = EvidenceReviewEvidenceSerializer(
+        source="evidence_submission",
+        read_only=True,
+    )
+    thread = EvidenceReviewThreadSummarySerializer(
+        source="evidence_submission.thread",
+        read_only=True,
+    )
+    organization = EvidenceReviewOrganizationSerializer(read_only=True)
+
+    class Meta:
+        model = ModerationCase
+        fields = [
+            "id",
+            "status",
+            "priority",
+            "source",
+            "created_at",
+            "updated_at",
+            "evidence",
+            "thread",
+            "organization",
+        ]
+        read_only_fields = fields
+
+
+class EvidenceCaseDetailSerializer(EvidenceCaseSummarySerializer):
+    verified_by = EvidenceReviewUserSummarySerializer(
+        source="evidence_submission.verified_by",
+        read_only=True,
+    )
+    verified_at = serializers.DateTimeField(
+        source="evidence_submission.verified_at",
+        read_only=True,
+    )
+    moderator_notes = serializers.CharField(
+        source="evidence_submission.moderator_notes",
+        read_only=True,
+    )
+    rejection_reason = serializers.CharField(
+        source="evidence_submission.rejection_reason",
+        read_only=True,
+    )
+    rejection_reason_label = serializers.CharField(
+        source="evidence_submission.get_rejection_reason_display",
+        read_only=True,
+    )
+    resolved_by = EvidenceReviewUserSummarySerializer(read_only=True)
+    events = serializers.SerializerMethodField()
+
+    def get_events(self, obj):
+        events = getattr(obj, "recent_evidence_events", [])[:50]
+        return EvidenceModerationEventSerializer(events, many=True).data
+
+    class Meta(EvidenceCaseSummarySerializer.Meta):
+        fields = EvidenceCaseSummarySerializer.Meta.fields + [
+            "verified_by",
+            "verified_at",
+            "moderator_notes",
+            "rejection_reason",
+            "rejection_reason_label",
+            "resolved_by",
+            "resolved_at",
+            "resolution_code",
+            "resolution_summary",
+            "events",
+        ]
+        read_only_fields = fields
+
+
 class ThreadCommentSerializer(serializers.ModelSerializer):
     commenter = UserSerializer(read_only=True)
     thread_id = serializers.UUIDField(write_only=True)
