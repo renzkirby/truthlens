@@ -1,3 +1,4 @@
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -280,7 +281,8 @@ class EvidenceCaseApiTests(APITestCase):
         self.evidence.evidence_status = EvidenceSubmission.EvidenceStatus.VERIFIED
         self.evidence.save(update_fields=["evidence_status"])
         self.case.status = ModerationCase.Status.RESOLVED
-        self.case.save(update_fields=["status"])
+        self.case.resolution_code = EvidenceSubmission.EvidenceStatus.VERIFIED
+        self.case.save(update_fields=["status", "resolution_code"])
 
         rejected = EvidenceSubmission.objects.create(
             thread=self.thread,
@@ -292,6 +294,7 @@ class EvidenceCaseApiTests(APITestCase):
             evidence_submission=rejected,
             organization=self.organization,
             status=ModerationCase.Status.RESOLVED,
+            resolution_code=EvidenceSubmission.EvidenceStatus.REJECTED,
         )
         cancelled = EvidenceSubmission.objects.create(
             thread=self.thread,
@@ -303,6 +306,7 @@ class EvidenceCaseApiTests(APITestCase):
             evidence_submission=cancelled,
             organization=self.organization,
             status=ModerationCase.Status.CANCELLED,
+            resolution_code=EvidenceSubmission.EvidenceStatus.REJECTED,
         )
 
         self._authenticate(self.lead)
@@ -320,6 +324,187 @@ class EvidenceCaseApiTests(APITestCase):
         self.assertEqual(
             [item["id"] for item in rejected_response.data["results"]],
             [str(rejected_case.id)],
+        )
+
+    def test_successive_resolved_cases_keep_case_specific_history(self):
+        first_reviewed_at = timezone.now() - timedelta(hours=1)
+        second_reviewed_at = timezone.now()
+
+        self.case.status = ModerationCase.Status.RESOLVED
+        self.case.resolution_code = EvidenceSubmission.EvidenceStatus.VERIFIED
+        self.case.resolution_summary = "First review accepted the evidence."
+        self.case.resolved_by = self.lead
+        self.case.resolved_at = first_reviewed_at
+        self.case.save(
+            update_fields=[
+                "status",
+                "resolution_code",
+                "resolution_summary",
+                "resolved_by",
+                "resolved_at",
+            ]
+        )
+        ModerationEvent.objects.create(
+            case=self.case,
+            actor=self.lead,
+            event_type=ModerationEvent.EventType.EVIDENCE_VERIFIED,
+            reason_code=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            notes="First-case verification notes.",
+        )
+
+        second_case = ModerationCase.objects.create(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=self.evidence,
+            organization=self.organization,
+            status=ModerationCase.Status.RESOLVED,
+            source=ModerationCase.Source.EVIDENCE_SUBMISSION,
+            resolution_code=EvidenceSubmission.EvidenceStatus.REJECTED,
+            resolution_summary="Later review rejected the evidence.",
+            resolved_by=self.partner_moderator,
+            resolved_at=second_reviewed_at,
+        )
+        ModerationEvent.objects.create(
+            case=second_case,
+            actor=self.partner_moderator,
+            event_type=ModerationEvent.EventType.EVIDENCE_REJECTED,
+            reason_code=EvidenceSubmission.RejectionReason.OUTDATED,
+            notes="Second-case rejection notes.",
+        )
+
+        self.evidence.evidence_status = EvidenceSubmission.EvidenceStatus.REJECTED
+        self.evidence.verified_by = self.partner_moderator
+        self.evidence.verified_at = second_reviewed_at
+        self.evidence.moderator_notes = "Second-case rejection notes."
+        self.evidence.rejection_reason = EvidenceSubmission.RejectionReason.OUTDATED
+        self.evidence.save(
+            update_fields=[
+                "evidence_status",
+                "verified_by",
+                "verified_at",
+                "moderator_notes",
+                "rejection_reason",
+            ]
+        )
+
+        cross_organization_case = ModerationCase.objects.create(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=self.evidence,
+            organization=self.other_organization,
+            status=ModerationCase.Status.RESOLVED,
+            resolution_code=EvidenceSubmission.EvidenceStatus.VERIFIED,
+        )
+
+        self._authenticate(self.lead)
+        verified_history = self.client.get(
+            self._queue_url(evidence_status="VERIFIED")
+        )
+        rejected_history = self.client.get(
+            self._queue_url(evidence_status="REJECTED")
+        )
+        first_detail = self.client.get(self._detail_url(case=self.case))
+        second_detail = self.client.get(self._detail_url(case=second_case))
+
+        self.assertEqual(
+            [item["id"] for item in verified_history.data["results"]],
+            [str(self.case.id)],
+        )
+        self.assertNotIn(
+            str(cross_organization_case.id),
+            [item["id"] for item in verified_history.data["results"]],
+        )
+        self.assertEqual(
+            [item["id"] for item in rejected_history.data["results"]],
+            [str(second_case.id)],
+        )
+
+        self.assertEqual(
+            first_detail.data["evidence"]["evidence_status"],
+            EvidenceSubmission.EvidenceStatus.VERIFIED,
+        )
+        self.assertEqual(first_detail.data["verified_by"]["id"], self.lead.id)
+        self.assertNotEqual(
+            first_detail.data["verified_at"],
+            second_detail.data["verified_at"],
+        )
+        self.assertEqual(
+            first_detail.data["moderator_notes"],
+            "First-case verification notes.",
+        )
+        self.assertIsNone(first_detail.data["rejection_reason"])
+
+        self.assertEqual(
+            second_detail.data["evidence"]["evidence_status"],
+            EvidenceSubmission.EvidenceStatus.REJECTED,
+        )
+        self.assertEqual(
+            second_detail.data["verified_by"]["id"],
+            self.partner_moderator.id,
+        )
+        self.assertEqual(
+            second_detail.data["moderator_notes"],
+            "Second-case rejection notes.",
+        )
+        self.assertEqual(
+            second_detail.data["rejection_reason"],
+            EvidenceSubmission.RejectionReason.OUTDATED,
+        )
+
+        stale_action = self.client.post(
+            self._action_url(case=self.case),
+            {
+                "decision": EvidenceSubmission.EvidenceStatus.VERIFIED,
+                "expected_status": EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+            },
+            format="json",
+        )
+        self.assertEqual(stale_action.status_code, status.HTTP_409_CONFLICT)
+        second_case.refresh_from_db()
+        self.evidence.refresh_from_db()
+        self.assertEqual(second_case.status, ModerationCase.Status.RESOLVED)
+        self.assertEqual(
+            second_case.resolution_code,
+            EvidenceSubmission.EvidenceStatus.REJECTED,
+        )
+        self.assertEqual(
+            self.evidence.evidence_status,
+            EvidenceSubmission.EvidenceStatus.REJECTED,
+        )
+
+    def test_missing_historical_provenance_does_not_use_current_review_fields(self):
+        self.case.status = ModerationCase.Status.RESOLVED
+        self.case.save(update_fields=["status"])
+        self.evidence.evidence_status = EvidenceSubmission.EvidenceStatus.REJECTED
+        self.evidence.verified_by = self.partner_moderator
+        self.evidence.verified_at = timezone.now()
+        self.evidence.moderator_notes = "Later mutable review notes."
+        self.evidence.rejection_reason = EvidenceSubmission.RejectionReason.FABRICATED
+        self.evidence.save(
+            update_fields=[
+                "evidence_status",
+                "verified_by",
+                "verified_at",
+                "moderator_notes",
+                "rejection_reason",
+            ]
+        )
+
+        self._authenticate(self.lead)
+        detail = self.client.get(self._detail_url())
+        rejected_history = self.client.get(
+            self._queue_url(evidence_status="REJECTED")
+        )
+
+        self.assertEqual(detail.status_code, status.HTTP_200_OK)
+        self.assertIsNone(detail.data["evidence"]["evidence_status"])
+        self.assertIsNone(detail.data["evidence"]["evidence_status_label"])
+        self.assertIsNone(detail.data["verified_by"])
+        self.assertIsNone(detail.data["verified_at"])
+        self.assertIsNone(detail.data["resolved_by"])
+        self.assertIsNone(detail.data["moderator_notes"])
+        self.assertIsNone(detail.data["rejection_reason"])
+        self.assertNotIn(
+            str(self.case.id),
+            [item["id"] for item in rejected_history.data["results"]],
         )
 
     def test_queue_pagination_is_deterministic(self):

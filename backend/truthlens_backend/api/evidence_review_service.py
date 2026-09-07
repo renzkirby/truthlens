@@ -67,6 +67,7 @@ def get_evidence_case_queryset(*, include_events=False):
         case_type=ModerationCase.CaseType.EVIDENCE,
     ).select_related(
         "organization",
+        "resolved_by",
         "evidence_submission",
         "evidence_submission__contributor",
         "evidence_submission__verified_by",
@@ -96,13 +97,18 @@ def get_evidence_case_queue(*, actor, organization, evidence_status):
 
     queryset = get_evidence_case_queryset().filter(
         organization=organization,
-        evidence_submission__evidence_status=evidence_status,
     )
 
     if evidence_status == EvidenceSubmission.EvidenceStatus.UNVERIFIED:
-        queryset = queryset.filter(status__in=ACTIVE_CASE_STATUSES)
+        queryset = queryset.filter(
+            status__in=ACTIVE_CASE_STATUSES,
+            evidence_submission__evidence_status=evidence_status,
+        )
     else:
-        queryset = queryset.filter(status=ModerationCase.Status.RESOLVED)
+        queryset = queryset.filter(
+            status=ModerationCase.Status.RESOLVED,
+            resolution_code=evidence_status,
+        )
 
     return queryset.order_by(
         "-evidence_submission__submitted_at",
