@@ -328,7 +328,11 @@ function EvidenceReviewContent({
             setQueueLoading(false);
          })
          .catch((error) => {
-            if (cancelled || queueRequestIdRef.current !== requestId) {
+            if (
+               cancelled ||
+               queueRequestIdRef.current !== requestId ||
+               !isAuthorityGenerationCurrent(authorityGeneration)
+            ) {
                return;
             }
 
@@ -337,11 +341,6 @@ function EvidenceReviewContent({
                revokeAuthority(error);
                return;
             }
-
-            if (!isAuthorityGenerationCurrent(authorityGeneration)) {
-               return;
-            }
-
             setQueueError(
                error?.status === 403
                   ? "You no longer have permission to review evidence for this organization."
@@ -387,7 +386,8 @@ function EvidenceReviewContent({
             if (
                cancelled ||
                detailRequestIdRef.current !== requestId ||
-               selectedCaseIdRef.current !== selectedCaseId
+               selectedCaseIdRef.current !== selectedCaseId ||
+               !isAuthorityGenerationCurrent(authorityGeneration)
             ) {
                return;
             }
@@ -399,11 +399,6 @@ function EvidenceReviewContent({
                revokeAuthority(error);
                return;
             }
-
-            if (!isAuthorityGenerationCurrent(authorityGeneration)) {
-               return;
-            }
-
             setDetail(null);
             setDetailLoading(false);
             setDetailUnavailable(unavailable);
@@ -689,7 +684,11 @@ function EvidenceReviewContent({
          );
          requestQueueRefresh();
       } catch (error) {
-         if (!mountedRef.current || operation.authIdentity !== authIdentity) {
+         if (
+            !mountedRef.current ||
+            operation.authIdentity !== authIdentity ||
+            !isAuthorityGenerationCurrent(operation.authorityGeneration)
+         ) {
             return;
          }
 
@@ -697,11 +696,6 @@ function EvidenceReviewContent({
             revokeAuthority(error);
             return;
          }
-
-         if (!isAuthorityGenerationCurrent(operation.authorityGeneration)) {
-            return;
-         }
-
          if (error?.status === 409) {
             reconcileMutationConflict(operation.caseId, error);
          } else if (error?.status === 404) {
