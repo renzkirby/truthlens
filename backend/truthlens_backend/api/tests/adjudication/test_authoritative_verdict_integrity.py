@@ -29,7 +29,7 @@ from api.models import (
     VerificationAssignment,
 )
 from api.serializers import ClaimSerializer
-from api.tasks import execute_core_text_pipeline
+from api.tasks import _save_claim, execute_core_text_pipeline
 
 
 class AuthoritativeVerdictIntegrityTests(TestCase):
@@ -236,6 +236,63 @@ class AuthoritativeVerdictIntegrityTests(TestCase):
             AdjudicationDecision.Verdict.MISLEADING,
         )
         self.assertEqual(claim.ai_verdict, "UNVERIFIED")
+
+    def test_stale_ai_save_cannot_overwrite_adjudication_cache(self):
+        claim, _thread = self._create_claim(
+            "Stale AI persistence isolation",
+            ai_verdict="UNVERIFIED",
+        )
+        stale_ai_instance = Claim.objects.get(pk=claim.pk)
+        self._issue_decision(claim, AdjudicationDecision.Verdict.FACT)
+
+        with patch(
+            "api.tasks.Claim.objects.get",
+            return_value=stale_ai_instance,
+        ), patch(
+            "api.embedding_service.generate_embedding",
+            return_value=None,
+        ):
+            _save_claim(
+                claim.id,
+                {
+                    "verdict": "MISLEADING",
+                    "summary": "New automated analysis.",
+                    "reasoning": "AI-owned reasoning.",
+                    "score_context": "AI-owned score context.",
+                    "confidence_score": 73,
+                },
+                "Live Web Search",
+                "Updated AI context",
+                ["https://example.com/ai-source"],
+            )
+
+        claim.refresh_from_db()
+
+        self.assertEqual(
+            claim.final_verdict,
+            AdjudicationDecision.Verdict.FACT,
+        )
+        self.assertEqual(claim.ai_verdict, "MISLEADING")
+        self.assertEqual(claim.ai_summary, "New automated analysis.")
+        self.assertEqual(claim.ai_reasoning, "AI-owned reasoning.")
+        self.assertEqual(claim.consensus_score, 73)
+        self.assertEqual(claim.score_context, "AI-owned score context.")
+        self.assertEqual(claim.source_type, "Live Web Search")
+        self.assertEqual(claim.context_text, "Updated AI context")
+        self.assertEqual(claim.source_link, "https://example.com/ai-source")
+        self.assertEqual(
+            claim.top_verdict_source,
+            "https://example.com/ai-source",
+        )
+        self.assertEqual(
+            claim.ai_sources,
+            ["https://example.com/ai-source"],
+        )
+        self.assertEqual(
+            claim.verified_via,
+            Claim.VerificationSource.AI_EXTENSION,
+        )
+        self.assertIsNotNone(claim.claim_fingerprint)
 
     def test_cache_only_verdict_is_not_presented_as_human_adjudication(self):
         claim, _thread = self._create_claim(

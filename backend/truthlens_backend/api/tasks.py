@@ -1004,12 +1004,28 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
                     e,
                 )
 
-        claim.save()
+        claim.save(
+            update_fields=[
+                "ai_verdict",
+                "ai_summary",
+                "ai_reasoning",
+                "score_context",
+                "consensus_score",
+                "source_type",
+                "context_text",
+                "source_link",
+                "top_verdict_source",
+                "ai_sources",
+                "verified_via",
+                "claim_fingerprint",
+                "claim_embedding",
+                "last_updated",
+            ]
+        )
         logger.info(
-            "Claim %s saved — ai_verdict: %s, final_verdict: %s, fingerprint: %s",
+            "Claim %s AI analysis saved — ai_verdict: %s, fingerprint: %s",
             claim_id,
             claim.ai_verdict,
-            claim.final_verdict,
             claim.claim_fingerprint,
         )
     except Claim.DoesNotExist:
