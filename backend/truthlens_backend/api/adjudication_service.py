@@ -468,6 +468,19 @@ def issue_adjudication_decision(
                 "correction workflow is required before it can change."
             )
 
+        historical_decision = (
+            AdjudicationDecision.objects.select_for_update(of=("self",))
+            .filter(claim=locked_claim)
+            .order_by("revision_number", "pk")
+            .first()
+        )
+        if historical_decision is not None:
+            raise AdjudicationConflict(
+                "This claim already has adjudication history without a current "
+                "decision. An explicit correction workflow is required before "
+                "another decision can be issued."
+            )
+
         _ensure_locked_readiness(context)
 
         if any(thread.author_id == actor.id for thread in context["threads"]):

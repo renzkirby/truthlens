@@ -27,6 +27,7 @@ from api.models import (
     VerificationAssignment,
     VerificationRun,
 )
+from api.verification_assignment_service import release_verification_assignment
 
 
 class AdjudicationContractFixtures:
@@ -540,6 +541,64 @@ class AdjudicationActionApiContractTests(
         self.assertEqual(second.status_code, status.HTTP_409_CONFLICT)
         schedule.assert_not_called()
 
+    def test_historical_only_revision_conflicts_without_mutating_state(self):
+        context = self.make_context(
+            evidence_statuses=[EvidenceSubmission.EvidenceStatus.VERIFIED]
+        )
+        historical_case = ModerationCase.objects.create(
+            case_type=ModerationCase.CaseType.ADJUDICATION,
+            claim=context["claim"],
+            organization=self.organization,
+            source=ModerationCase.Source.MODERATOR,
+            status=ModerationCase.Status.RESOLVED,
+            resolution_code=AdjudicationDecision.Verdict.FACT,
+        )
+        historical_decision = AdjudicationDecision.objects.create(
+            claim=context["claim"],
+            moderation_case=historical_case,
+            verdict=AdjudicationDecision.Verdict.FACT,
+            canonical_claim="A historical canonical claim.",
+            rationale="A historical review rationale.",
+            decided_by=self.moderator,
+            organization=self.organization,
+            revision_number=1,
+            is_current=False,
+        )
+        original_cache = context["claim"].final_verdict
+        original_case_status = context["case"].status
+        original_event_count = ModerationEvent.objects.filter(
+            case__claim=context["claim"]
+        ).count()
+
+        with patch("api.views.schedule_adjudication_trust_updates") as schedule:
+            response = self.client.post(
+                self.action_url(context),
+                self.action_payload(),
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        schedule.assert_not_called()
+        context["claim"].refresh_from_db()
+        context["case"].refresh_from_db()
+        historical_decision.refresh_from_db()
+        self.assertEqual(
+            AdjudicationDecision.objects.filter(claim=context["claim"]).count(),
+            1,
+        )
+        self.assertEqual(historical_decision.revision_number, 1)
+        self.assertFalse(historical_decision.is_current)
+        self.assertEqual(
+            historical_decision.verdict,
+            AdjudicationDecision.Verdict.FACT,
+        )
+        self.assertEqual(context["claim"].final_verdict, original_cache)
+        self.assertEqual(context["case"].status, original_case_status)
+        self.assertEqual(
+            ModerationEvent.objects.filter(case__claim=context["claim"]).count(),
+            original_event_count,
+        )
+
     def test_rolled_back_action_does_not_schedule_trust_work(self):
         context = self.make_context(
             evidence_statuses=[EvidenceSubmission.EvidenceStatus.VERIFIED]
@@ -722,6 +781,85 @@ class AdjudicationPostgresConcurrencyTests(
         self.assertEqual(
             AdjudicationDecision.objects.filter(claim=context["claim"]).count(),
             1,
+        )
+
+    def test_assignment_release_and_adjudication_share_claim_first_lock_order(self):
+        self.require_postgres()
+        context = self.make_context()
+        barrier = threading.Barrier(2)
+        outcomes = []
+
+        def release_assignment():
+            close_old_connections()
+            try:
+                assignment = VerificationAssignment.objects.get(
+                    pk=context["assignment"].id
+                )
+                actor = User.objects.get(pk=self.lead.id)
+                barrier.wait(timeout=10)
+                release_verification_assignment(
+                    assignment=assignment,
+                    actor=actor,
+                )
+            except Exception as error:  # pragma: no cover - asserted below
+                outcomes.append(f"release-error:{type(error).__name__}")
+            else:
+                outcomes.append("release-success")
+            finally:
+                close_old_connections()
+
+        def adjudicate():
+            close_old_connections()
+            try:
+                actor = User.objects.get(pk=self.lead.id)
+                barrier.wait(timeout=10)
+                issue_adjudication_decision(
+                    case_id=context["case"].id,
+                    organization_id=self.organization.id,
+                    actor=actor,
+                    verdict=AdjudicationDecision.Verdict.FAKE,
+                    canonical_claim="The reviewed claim is false.",
+                    rationale="No reviewed evidence is available.",
+                    expected_revision=0,
+                )
+            except AdjudicationConflict:
+                outcomes.append("adjudication-conflict")
+            except Exception as error:  # pragma: no cover - asserted below
+                outcomes.append(f"adjudication-error:{type(error).__name__}")
+            else:  # pragma: no cover - readiness must reject this fixture
+                outcomes.append("adjudication-success")
+            finally:
+                close_old_connections()
+
+        workers = [
+            threading.Thread(target=release_assignment),
+            threading.Thread(target=adjudicate),
+        ]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join(timeout=10)
+
+        self.assertFalse(any(worker.is_alive() for worker in workers))
+        self.assertCountEqual(
+            outcomes,
+            ["release-success", "adjudication-conflict"],
+        )
+        context["assignment"].refresh_from_db()
+        context["case"].refresh_from_db()
+        self.assertEqual(
+            context["assignment"].status,
+            VerificationAssignment.Status.RELEASED,
+        )
+        self.assertIsNone(context["case"].organization_id)
+        self.assertTrue(
+            VerificationAssignment.objects.filter(
+                claim=context["claim"],
+                status=VerificationAssignment.Status.AVAILABLE,
+            ).exists()
+        )
+        self.assertFalse(
+            AdjudicationDecision.objects.filter(claim=context["claim"]).exists()
         )
 
     def test_evidence_creation_commits_before_readiness_or_is_serialized_after(self):
