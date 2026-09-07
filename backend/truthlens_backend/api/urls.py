@@ -98,6 +98,21 @@ urlpatterns = [
         name="moderation_evidence_queue",
     ),
     path(
+        "moderation/evidence/cases/",
+        views.evidence_case_queue,
+        name="evidence_case_queue",
+    ),
+    path(
+        "moderation/evidence/cases/<uuid:case_id>/",
+        views.evidence_case_detail,
+        name="evidence_case_detail",
+    ),
+    path(
+        "moderation/evidence/cases/<uuid:case_id>/action/",
+        views.evidence_case_action,
+        name="evidence_case_action",
+    ),
+    path(
         "moderation/verdict-queue/",
         views.verdict_queue,
         name="moderation_verdict_queue",

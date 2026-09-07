@@ -17,6 +17,7 @@ import VerificationIntakePanel from "../components/workspace/VerificationIntakeP
 import OrganizationWorkloadPanel from "../components/workspace/OrganizationWorkloadPanel.jsx";
 import OrganizationAdminPanel from "../components/workspace/OrganizationAdminPanel.jsx";
 import SafetyReviewPanel from "../components/workspace/SafetyReviewPanel.jsx";
+import EvidenceReviewPanel from "../components/workspace/EvidenceReviewPanel.jsx";
 
 const WORKLOAD_CAPABILITIES = [
    WorkspaceCapability.CLAIM_VERIFICATION_WORK,
@@ -279,6 +280,7 @@ function WorkspacePage() {
                            key={section.id}
                            type="button"
                            className={`workspace-nav-item ${activeSectionId === section.id ? "active" : ""}`}
+                           aria-pressed={activeSectionId === section.id}
                            onClick={() => setRequestedSectionId(section.id)}
                         >
                            <span className="workspace-nav-icon">
@@ -328,6 +330,15 @@ function WorkspacePage() {
                               canReleaseInvestigation={organizationCapabilities.includes(
                                  WorkspaceCapability.CLAIM_VERIFICATION_WORK,
                               )}
+                           />
+                        ) : activeSection.id === "evidence" && organizationCapabilities.includes(
+                             WorkspaceCapability.REVIEW_EVIDENCE,
+                          ) ? (
+                           <EvidenceReviewPanel
+                              key={selectedOrganizationId ?? "no-organization"}
+                              organizationId={selectedOrganizationId}
+                              organizationName={selectedOrganization?.name}
+                              canReviewEvidence
                            />
                         ) : activeSection.id === "organization" ? (
                            <OrganizationAdminPanel
