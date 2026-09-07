@@ -84,18 +84,27 @@ class AuthoritativeVerdictIntegrityTests(TestCase):
         return claim, thread
 
     def _issue_decision(self, claim, verdict=AdjudicationDecision.Verdict.FACT):
-        ensure_adjudication_case(
+        thread = claim.threads.first()
+        if not EvidenceSubmission.objects.filter(thread__claim=claim).exists():
+            EvidenceSubmission.objects.create(
+                thread=thread,
+                contributor=self.contributor,
+                evidence_caption="Reviewed evidence for adjudication.",
+                evidence_type=EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
+                evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            )
+        case = ensure_adjudication_case(
             claim=claim,
             actor=self.reviewer,
             organization=self.organization,
         )
         return issue_adjudication_decision(
-            claim=claim,
+            case_id=case.id,
+            organization_id=self.organization.id,
             actor=self.reviewer,
             verdict=verdict,
             canonical_claim=claim.context_text,
             rationale="A human adjudicator reviewed the available evidence.",
-            organization=self.organization,
             expected_revision=0,
         )
 

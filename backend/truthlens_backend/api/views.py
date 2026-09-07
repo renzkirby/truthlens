@@ -83,7 +83,6 @@ from .models import (
     OrganizationInvitation,
     OrganizationMembership,
     AdjudicationDecision,
-    VerificationRun,
     OfficialFactCheck,
     VerificationAssignment,
 )
@@ -141,10 +140,9 @@ from .adjudication_service import (
     AdjudicationAuthorizationError,
     AdjudicationConflict,
     AdjudicationError,
-    ensure_adjudication_case,
-    get_latest_adjudication_case,
-    has_adjudication_conflict,
+    AdjudicationNotFound,
     issue_adjudication_decision,
+    schedule_adjudication_trust_updates,
 )
 from .adjudication_provenance import (
     annotate_claim_authoritative_verdict,
@@ -224,6 +222,8 @@ from .serializers import (
     ThreadDetailSerializer,
     VoteSerializer,
     ThreadFlagSerializer,
+    AdjudicationActionSerializer,
+    AdjudicationOrganizationQuerySerializer,
     ModerationDecisionSerializer,
     ClaimMatchSerializer,
     UserWithTrustBreakdownSerializer,
@@ -1459,95 +1459,91 @@ def _organization_invitation_error_response(
     )
 
 
-def _execute_claim_adjudication(
-    request,
-    claim,
-):
-    serializer = ModerationDecisionSerializer(data=request.data)
+def _adjudication_organization_id(request):
+    serializer = AdjudicationOrganizationQuerySerializer(
+        data=request.query_params,
+    )
+    serializer.is_valid(raise_exception=True)
+    return serializer.validated_data["organization_id"]
 
+
+def _adjudication_error_response(error):
+    if isinstance(error, AdjudicationNotFound):
+        response_status = status.HTTP_404_NOT_FOUND
+    elif isinstance(error, AdjudicationAuthorizationError):
+        response_status = status.HTTP_403_FORBIDDEN
+    elif isinstance(error, (AdjudicationConflict, ModerationCaseError)):
+        response_status = status.HTTP_409_CONFLICT
+    else:
+        response_status = status.HTTP_400_BAD_REQUEST
+
+    return Response(
+        {"detail": str(error)},
+        status=response_status,
+    )
+
+
+def _ensure_legacy_adjudication_identity(
+    *,
+    case_id,
+    organization_id,
+    claim_id,
+):
+    case_matches = ModerationCase.objects.filter(
+        pk=case_id,
+        case_type=ModerationCase.CaseType.ADJUDICATION,
+        claim_id=claim_id,
+        organization_id=organization_id,
+    ).exists()
+    if not case_matches:
+        raise NotFound("Adjudication case not found.")
+
+
+def _execute_claim_adjudication(
+    *,
+    actor,
+    case_id,
+    organization_id,
+    validated_data,
+):
+    result = issue_adjudication_decision(
+        case_id=case_id,
+        organization_id=organization_id,
+        actor=actor,
+        verdict=validated_data["moderator_verdict"],
+        canonical_claim=validated_data["canonical_claim"],
+        rationale=validated_data["moderator_notes"],
+        expected_revision=validated_data["expected_revision"],
+        verification_run_id=validated_data.get("verification_run_id"),
+    )
+    schedule_adjudication_trust_updates(result)
+    return result["decision"]
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def adjudication_case_action(request, case_id):
+    organization_id = _adjudication_organization_id(request)
+    serializer = AdjudicationActionSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
 
-    case = get_latest_adjudication_case(claim)
-
-    if case is None:
-        raise PermissionDenied("No adjudication case is available " "for this claim.")
-
-    if not has_case_capability(
-        request.user,
-        case,
-        PartnerCapability.ADJUDICATE,
-    ):
-        raise PermissionDenied(
-            "You do not have permission " "to adjudicate this claim."
-        )
-
-    if has_adjudication_conflict(
-        request.user,
-        claim,
-    ):
-        raise PermissionDenied(
-            "You cannot adjudicate a claim "
-            "in which you have a direct "
-            "contribution."
-        )
-
-    verification_run = None
-
-    verification_run_id = serializer.validated_data.get("verification_run_id")
-
-    if verification_run_id:
-        verification_run = get_object_or_404(
-            VerificationRun,
-            id=verification_run_id,
-            claim=claim,
-        )
-
-    contributor_ids = list(
-        EvidenceSubmission.objects.filter(thread__claim=claim)
-        .values_list(
-            "contributor_id",
-            flat=True,
-        )
-        .distinct()
-    )
-
     try:
-        result = issue_adjudication_decision(
-            claim=claim,
+        decision = _execute_claim_adjudication(
             actor=request.user,
-            verdict=(serializer.validated_data["moderator_verdict"]),
-            canonical_claim=(serializer.validated_data["canonical_claim"]),
-            rationale=(serializer.validated_data["moderator_notes"]),
-            organization=case.organization,
-            verification_run=verification_run,
-            expected_revision=(serializer.validated_data.get("expected_revision")),
+            case_id=case_id,
+            organization_id=organization_id,
+            validated_data=serializer.validated_data,
         )
+    except (AdjudicationError, ModerationCaseError) as error:
+        return _adjudication_error_response(error)
 
-    except AdjudicationAuthorizationError as error:
-        raise PermissionDenied(str(error)) from error
-
-    decision = result["decision"]
-
-    # Compatibility mirror only.
-    Thread.objects.filter(
-        claim=claim,
-    ).exclude(
-        status=Thread.Status.REJECTED,
-    ).update(
-        moderator_verdict=decision.verdict,
-        moderator_notes=decision.rationale,
-        moderated_by=request.user,
-        moderated_at=decision.decided_at,
+    return Response(
+        AdjudicationDecisionSerializer(
+            decision,
+            context={"request": request},
+        ).data,
+        status=status.HTTP_200_OK,
     )
-
-    for contributor_id in contributor_ids:
-        transaction.on_commit(
-            lambda user_id=contributor_id: (
-                recompute_user_trust_score_task.delay(user_id)
-            )
-        )
-
-    return decision
 
 
 @api_view(["POST"])
@@ -1571,38 +1567,31 @@ def moderation_resolve_thread(
     Publication is intentionally not performed here.
     """
 
+    organization_id = _adjudication_organization_id(request)
+    serializer = ModerationDecisionSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
     thread = get_object_or_404(
         Thread.objects.select_related("claim"),
         id=thread_id,
     )
-
     claim = thread.claim
 
+    _ensure_legacy_adjudication_identity(
+        case_id=serializer.validated_data["case_id"],
+        organization_id=organization_id,
+        claim_id=claim.id,
+    )
+
     try:
-        with transaction.atomic():
-            decision = _execute_claim_adjudication(
-                request,
-                claim,
-            )
-
-    except AdjudicationConflict as error:
-        return Response(
-            {
-                "detail": str(error),
-            },
-            status=(status.HTTP_409_CONFLICT),
+        decision = _execute_claim_adjudication(
+            actor=request.user,
+            case_id=serializer.validated_data["case_id"],
+            organization_id=organization_id,
+            validated_data=serializer.validated_data,
         )
-
-    except (
-        AdjudicationError,
-        ModerationCaseError,
-    ) as error:
-        return Response(
-            {
-                "detail": str(error),
-            },
-            status=(status.HTTP_400_BAD_REQUEST),
-        )
+    except (AdjudicationError, ModerationCaseError) as error:
+        return _adjudication_error_response(error)
 
     thread.refresh_from_db()
 
@@ -1638,32 +1627,30 @@ def adjudicate_claim(
     request,
     claim_id,
 ):
+    organization_id = _adjudication_organization_id(request)
+    serializer = ModerationDecisionSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
     claim = get_object_or_404(
         Claim,
         id=claim_id,
     )
 
+    _ensure_legacy_adjudication_identity(
+        case_id=serializer.validated_data["case_id"],
+        organization_id=organization_id,
+        claim_id=claim.id,
+    )
+
     try:
-        with transaction.atomic():
-            decision = _execute_claim_adjudication(
-                request,
-                claim,
-            )
-
-    except AdjudicationConflict as error:
-        return Response(
-            {"detail": str(error)},
-            status=status.HTTP_409_CONFLICT,
+        decision = _execute_claim_adjudication(
+            actor=request.user,
+            case_id=serializer.validated_data["case_id"],
+            organization_id=organization_id,
+            validated_data=serializer.validated_data,
         )
-
-    except (
-        AdjudicationError,
-        ModerationCaseError,
-    ) as error:
-        return Response(
-            {"detail": str(error)},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    except (AdjudicationError, ModerationCaseError) as error:
+        return _adjudication_error_response(error)
 
     return Response(
         AdjudicationDecisionSerializer(
@@ -2572,8 +2559,12 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
             raise NotFound("Thread not found.")
 
         with transaction.atomic():
+            # Coordinate new evidence with action-time adjudication readiness.
+            locked_claim = Claim.objects.select_for_update().get(
+                pk=thread.claim_id,
+            )
             organization = get_claim_verification_organization(
-                thread.claim,
+                locked_claim,
                 lock=True,
             )
 

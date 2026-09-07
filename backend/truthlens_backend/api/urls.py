@@ -113,6 +113,11 @@ urlpatterns = [
         name="evidence_case_action",
     ),
     path(
+        "moderation/adjudication/cases/<uuid:case_id>/action/",
+        views.adjudication_case_action,
+        name="adjudication_case_action",
+    ),
+    path(
         "moderation/verdict-queue/",
         views.verdict_queue,
         name="moderation_verdict_queue",

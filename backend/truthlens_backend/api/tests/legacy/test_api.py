@@ -34,7 +34,7 @@ from api.models import (
     Organization,
     OrganizationMembership,
     AdjudicationDecision,
-    VerificationRun,
+    VerificationAssignment,
     OfficialFactCheck,
     OfficialFactCheckSource,
     KnowledgeReuseEvent,
@@ -68,11 +68,12 @@ from api.evidence_review_service import (
 )
 from api.adjudication_service import (
     AdjudicationConflict,
+    AdjudicationNotFound,
     InvalidAdjudicationDecision,
     ensure_adjudication_case,
     ensure_claim_adjudication_readiness,
     is_claim_ready_for_adjudication,
-    issue_adjudication_decision,
+    issue_adjudication_decision as issue_adjudication_decision_service,
 )
 from api.verification_assignment_service import (
     claim_verification_assignment,
@@ -123,6 +124,103 @@ def assign_claim_to_partner(
         organization=organization,
         actor=actor,
     )
+
+
+def issue_adjudication_decision(
+    *,
+    claim,
+    actor,
+    verdict,
+    canonical_claim,
+    rationale,
+    expected_revision,
+    organization=None,
+    verification_run=None,
+):
+    """Adapt legacy domain fixtures to the canonical case-centric service."""
+
+    assignment = (
+        claim.verification_assignments.filter(
+            status=VerificationAssignment.Status.ACTIVE,
+        )
+        .select_related("organization")
+        .first()
+    )
+    selected_organization = organization or (
+        assignment.organization if assignment is not None else None
+    )
+    if selected_organization is None:
+        raise AssertionError("The test claim needs an active organization assignment.")
+
+    case = ensure_adjudication_case(
+        claim=claim,
+        actor=actor,
+        organization=selected_organization,
+    )
+    return issue_adjudication_decision_service(
+        case_id=case.id,
+        organization_id=selected_organization.id,
+        actor=actor,
+        verdict=verdict,
+        canonical_claim=canonical_claim,
+        rationale=rationale,
+        expected_revision=expected_revision,
+        verification_run_id=(verification_run.id if verification_run else None),
+    )
+
+
+def _create_historical_adjudication_revision(
+    *,
+    claim,
+    actor,
+    verdict,
+    canonical_claim,
+    rationale,
+):
+    """Build historical revision state without reopening the production workflow."""
+
+    current = AdjudicationDecision.objects.get(
+        claim=claim,
+        is_current=True,
+    )
+    current.is_current = False
+    current.save(update_fields=["is_current"])
+
+    case = current.moderation_case
+    case.resolution_code = verdict
+    case.resolution_summary = rationale
+    case.resolved_by = actor
+    case.resolved_at = timezone.now()
+    case.save(
+        update_fields=[
+            "resolution_code",
+            "resolution_summary",
+            "resolved_by",
+            "resolved_at",
+            "updated_at",
+        ]
+    )
+
+    decision = AdjudicationDecision.objects.create(
+        claim=claim,
+        moderation_case=case,
+        verdict=verdict,
+        canonical_claim=canonical_claim,
+        rationale=rationale,
+        decided_by=actor,
+        organization=current.organization,
+        revision_number=current.revision_number + 1,
+        supersedes=current,
+        is_current=True,
+    )
+    claim.final_verdict = verdict
+    claim.save(update_fields=["final_verdict", "last_updated"])
+    return {
+        "claim": claim,
+        "case": case,
+        "decision": decision,
+        "contributor_ids": (),
+    }
 
 
 class ThreadEvidenceCommentAuthorizationTests(APITestCase):
@@ -2368,6 +2466,12 @@ class AdjudicationFoundationTests(APITestCase):
             password="pass1234",
         )
 
+        self.contributor = User.objects.create_user(
+            username="adjudicationcontributor",
+            email="adjudicationcontributor@test.com",
+            password="pass1234",
+        )
+
         self.organization = Organization.objects.create(
             name="Adjudication Foundation Partner",
             slug="adjudication-foundation-partner",
@@ -2406,6 +2510,23 @@ class AdjudicationFoundationTests(APITestCase):
             claim=self.claim,
             organization=self.organization,
             actor=self.moderator,
+        )
+
+        self.thread = Thread.objects.create(
+            claim=self.claim,
+            author=self.contributor,
+            caption="Community thread with reviewed evidence.",
+            status=Thread.Status.OPEN,
+        )
+        EvidenceSubmission.objects.create(
+            thread=self.thread,
+            contributor=self.contributor,
+            evidence_caption="Reviewed adjudication evidence.",
+            evidence_url="https://example.com/adjudication-evidence",
+            evidence_type=EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
+            evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            verified_by=self.moderator,
+            verified_at=timezone.now(),
         )
 
     def test_ensure_adjudication_case_creates_and_reuses_active_case(
@@ -2545,7 +2666,7 @@ class AdjudicationFoundationTests(APITestCase):
 
         self.assertTrue(decision.ai_agrees)
 
-    def test_second_decision_supersedes_first_and_increments_revision(
+    def test_second_decision_requires_explicit_correction_workflow(
         self,
     ):
         first_result = issue_adjudication_decision(
@@ -2559,20 +2680,21 @@ class AdjudicationFoundationTests(APITestCase):
 
         first_decision = first_result["decision"]
 
-        second_result = issue_adjudication_decision(
-            claim=self.claim,
-            actor=self.second_moderator,
-            verdict=(AdjudicationDecision.Verdict.MISLEADING),
-            canonical_claim=("The reviewed claim contains " "misleading context."),
-            rationale=(
-                "A second review found that "
-                "the claim is better classified "
-                "as misleading."
-            ),
-            expected_revision=1,
-        )
-
-        second_decision = second_result["decision"]
+        with self.assertRaises(AdjudicationConflict):
+            issue_adjudication_decision(
+                claim=self.claim,
+                actor=self.second_moderator,
+                verdict=(AdjudicationDecision.Verdict.MISLEADING),
+                canonical_claim=(
+                    "The reviewed claim contains " "misleading context."
+                ),
+                rationale=(
+                    "A second review found that "
+                    "the claim is better classified "
+                    "as misleading."
+                ),
+                expected_revision=1,
+            )
 
         first_decision.refresh_from_db()
 
@@ -2581,29 +2703,16 @@ class AdjudicationFoundationTests(APITestCase):
             1,
         )
 
-        self.assertFalse(first_decision.is_current)
-
+        self.assertTrue(first_decision.is_current)
         self.assertEqual(
-            second_decision.revision_number,
-            2,
+            AdjudicationDecision.objects.filter(claim=self.claim).count(),
+            1,
         )
 
-        self.assertTrue(second_decision.is_current)
-
-        self.assertEqual(
-            second_decision.supersedes_id,
-            first_decision.id,
-        )
-
-        self.assertEqual(
-            first_decision.superseded_by.id,
-            second_decision.id,
-        )
-
-    def test_only_one_current_decision_exists_after_revision(
+    def test_resolved_case_cannot_be_reused_for_another_decision(
         self,
     ):
-        issue_adjudication_decision(
+        first_result = issue_adjudication_decision(
             claim=self.claim,
             actor=self.moderator,
             verdict=(AdjudicationDecision.Verdict.FAKE),
@@ -2612,20 +2721,21 @@ class AdjudicationFoundationTests(APITestCase):
             expected_revision=0,
         )
 
-        issue_adjudication_decision(
-            claim=self.claim,
-            actor=self.second_moderator,
-            verdict=(AdjudicationDecision.Verdict.FACT),
-            canonical_claim=("The reviewed claim is accurate."),
-            rationale=("New authoritative evidence " "supports the claim."),
-            expected_revision=1,
-        )
+        with self.assertRaises(AdjudicationConflict):
+            issue_adjudication_decision(
+                claim=self.claim,
+                actor=self.second_moderator,
+                verdict=(AdjudicationDecision.Verdict.FACT),
+                canonical_claim=("The reviewed claim is accurate."),
+                rationale=("New authoritative evidence " "supports the claim."),
+                expected_revision=1,
+            )
 
         decisions = AdjudicationDecision.objects.filter(claim=self.claim)
 
         self.assertEqual(
             decisions.count(),
-            2,
+            1,
         )
 
         self.assertEqual(
@@ -2637,15 +2747,20 @@ class AdjudicationFoundationTests(APITestCase):
 
         self.assertEqual(
             current.revision_number,
-            2,
+            1,
         )
 
         self.assertEqual(
             current.verdict,
-            AdjudicationDecision.Verdict.FACT,
+            AdjudicationDecision.Verdict.FAKE,
+        )
+        first_result["case"].refresh_from_db()
+        self.assertEqual(
+            first_result["case"].status,
+            ModerationCase.Status.RESOLVED,
         )
 
-    def test_revision_records_reopen_and_revised_events(
+    def test_rejected_revision_does_not_record_reopen_or_revised_events(
         self,
     ):
         first_result = issue_adjudication_decision(
@@ -2659,22 +2774,25 @@ class AdjudicationFoundationTests(APITestCase):
 
         case = first_result["case"]
 
-        issue_adjudication_decision(
-            claim=self.claim,
-            actor=self.second_moderator,
-            verdict=(AdjudicationDecision.Verdict.MISLEADING),
-            canonical_claim=("The reviewed claim is misleading."),
-            rationale=("Additional context requires " "revision of the verdict."),
-            expected_revision=1,
-        )
+        with self.assertRaises(AdjudicationConflict):
+            issue_adjudication_decision(
+                claim=self.claim,
+                actor=self.second_moderator,
+                verdict=(AdjudicationDecision.Verdict.MISLEADING),
+                canonical_claim=("The reviewed claim is misleading."),
+                rationale=(
+                    "Additional context requires " "revision of the verdict."
+                ),
+                expected_revision=1,
+            )
 
-        self.assertTrue(
+        self.assertFalse(
             case.events.filter(
                 event_type=(ModerationEvent.EventType.VERDICT_REOPENED)
             ).exists()
         )
 
-        self.assertTrue(
+        self.assertFalse(
             case.events.filter(
                 event_type=(ModerationEvent.EventType.VERDICT_REVISED)
             ).exists()
@@ -2691,7 +2809,7 @@ class AdjudicationFoundationTests(APITestCase):
             case.events.filter(
                 event_type=(ModerationEvent.EventType.VERDICT_REVISED)
             ).count(),
-            1,
+            0,
         )
 
     def test_stale_expected_revision_is_rejected(
@@ -2772,7 +2890,7 @@ class AdjudicationFoundationTests(APITestCase):
             pipeline_version=("wrong-1.0.0"),
         )
 
-        with self.assertRaises(InvalidAdjudicationDecision):
+        with self.assertRaises(AdjudicationNotFound):
             issue_adjudication_decision(
                 claim=self.claim,
                 actor=self.moderator,
@@ -2867,7 +2985,18 @@ class AdjudicationApiFoundationTests(APITestCase):
             actor=self.moderator,
         )
 
-        ensure_adjudication_case(
+        EvidenceSubmission.objects.create(
+            thread=self.thread,
+            contributor=self.author,
+            evidence_caption="Reviewed API evidence.",
+            evidence_url="https://example.com/adjudication-api-evidence",
+            evidence_type=EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
+            evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            verified_by=self.moderator,
+            verified_at=timezone.now(),
+        )
+
+        self.case = ensure_adjudication_case(
             claim=self.claim,
             actor=self.moderator,
             organization=self.organization,
@@ -2876,11 +3005,14 @@ class AdjudicationApiFoundationTests(APITestCase):
         self.client = APIClient()
         self.client.force_authenticate(user=self.moderator)
 
-        self.url = reverse(
-            "moderation_resolve_thread",
-            kwargs={
-                "thread_id": self.thread.id,
-            },
+        self.url = (
+            reverse(
+                "moderation_resolve_thread",
+                kwargs={
+                    "thread_id": self.thread.id,
+                },
+            )
+            + f"?organization_id={self.organization.id}"
         )
 
     def _valid_payload(
@@ -2888,8 +3020,10 @@ class AdjudicationApiFoundationTests(APITestCase):
         *,
         verdict=None,
         expected_revision=0,
+        case_id=None,
     ):
         return {
+            "case_id": str(case_id or self.case.id),
             "moderator_verdict": (verdict or AdjudicationDecision.Verdict.FAKE),
             "moderator_notes": ("Verified sources contradict " "the claim."),
             "canonical_claim": ("The reviewed claim is false."),
@@ -3150,16 +3284,30 @@ class AdjudicationApiFoundationTests(APITestCase):
             organization=self.organization,
         )
 
-        url = reverse(
-            "moderation_resolve_thread",
-            kwargs={
-                "thread_id": conflicted_thread.id,
-            },
+        EvidenceSubmission.objects.create(
+            thread=conflicted_thread,
+            contributor=self.author,
+            evidence_caption="Reviewed conflict evidence.",
+            evidence_url="https://example.com/conflict-evidence",
+            evidence_type=EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
+            evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            verified_by=self.moderator,
+            verified_at=timezone.now(),
+        )
+
+        url = (
+            reverse(
+                "moderation_resolve_thread",
+                kwargs={
+                    "thread_id": conflicted_thread.id,
+                },
+            )
+            + f"?organization_id={self.organization.id}"
         )
 
         response = self.client.post(
             url,
-            self._valid_payload(),
+            self._valid_payload(case_id=case.id),
             format="json",
         )
 
@@ -3772,8 +3920,10 @@ class AdjudicationReadinessAndQueueTests(APITestCase):
                 kwargs={
                     "claim_id": claim.id,
                 },
-            ),
+            )
+            + f"?organization_id={self.organization.id}",
             {
+                "case_id": str(ready["case"].id),
                 "moderator_verdict": (AdjudicationDecision.Verdict.FAKE),
                 "moderator_notes": ("The reviewed evidence " "contradicts the claim."),
                 "canonical_claim": ("The reviewed claim " "is false."),
@@ -4148,13 +4298,12 @@ class PublishingFoundationTests(APITestCase):
     ):
         draft = self._create_complete_draft(suffix="stale")
 
-        revised_result = issue_adjudication_decision(
+        revised_result = _create_historical_adjudication_revision(
             claim=self.claim,
             actor=self.moderator,
             verdict=(AdjudicationDecision.Verdict.MISLEADING),
             canonical_claim=("The reviewed claim " "is misleading."),
             rationale=("Additional review " "changed the verdict."),
-            expected_revision=1,
         )
 
         self.assertEqual(
@@ -4391,13 +4540,12 @@ class PublishingFoundationTests(APITestCase):
             OfficialFactCheck.PublicationStatus.IN_REVIEW,
         )
 
-        revised = issue_adjudication_decision(
+        revised = _create_historical_adjudication_revision(
             claim=self.claim,
             actor=self.moderator,
             verdict=(AdjudicationDecision.Verdict.MISLEADING),
             canonical_claim=("The revised reviewed claim " "is misleading."),
             rationale=("Additional review changed " "the authoritative verdict."),
-            expected_revision=1,
         )
 
         fresh_draft = create_fact_check_draft(
@@ -4597,11 +4745,22 @@ class PublishingApiAuthorizationTests(APITestCase):
             consensus_score=82.0,
         )
 
-        Thread.objects.create(
+        thread = Thread.objects.create(
             claim=claim,
             author=self.author,
             caption=(f"Publishing API thread " f"{suffix}."),
             status=Thread.Status.OPEN,
+        )
+
+        EvidenceSubmission.objects.create(
+            thread=thread,
+            contributor=self.author,
+            evidence_caption=f"Reviewed publication evidence {suffix}.",
+            evidence_url=f"https://example.com/publishing-{suffix}",
+            evidence_type=EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
+            evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            verified_by=actor,
+            verified_at=timezone.now(),
         )
 
         assign_claim_to_partner(
@@ -4911,14 +5070,12 @@ class PublishingApiAuthorizationTests(APITestCase):
 
         fact_check_id = create_response.data["id"]
 
-        revised = issue_adjudication_decision(
+        revised = _create_historical_adjudication_revision(
             claim=self.partner_claim,
             actor=self.lead_verifier,
             verdict=(AdjudicationDecision.Verdict.MISLEADING),
             canonical_claim=("The reviewed partner " "claim is misleading."),
             rationale=("Additional evidence " "changed the decision."),
-            organization=(self.organization),
-            expected_revision=1,
         )
 
         self.assertEqual(
@@ -5059,14 +5216,12 @@ class PublishingApiAuthorizationTests(APITestCase):
     def test_create_draft_rejects_stale_expected_revision(
         self,
     ):
-        issue_adjudication_decision(
+        _create_historical_adjudication_revision(
             claim=self.partner_claim,
             actor=self.lead_verifier,
             verdict=(AdjudicationDecision.Verdict.MISLEADING),
             canonical_claim=("The newer canonical " "claim is misleading."),
             rationale=("The decision changed."),
-            organization=(self.organization),
-            expected_revision=1,
         )
 
         response = self.lead_client.post(
@@ -5112,14 +5267,12 @@ class PublishingApiAuthorizationTests(APITestCase):
 
         stale_draft_id = first_response.data["id"]
 
-        revised = issue_adjudication_decision(
+        revised = _create_historical_adjudication_revision(
             claim=self.partner_claim,
             actor=self.lead_verifier,
             verdict=(AdjudicationDecision.Verdict.MISLEADING),
             canonical_claim=("The revised claim is " "misleading."),
             rationale=("New evidence changed " "the authoritative result."),
-            organization=(self.organization),
-            expected_revision=1,
         )
 
         second_response = self.lead_client.post(
@@ -5193,6 +5346,28 @@ class KnowledgeReuseFoundationTests(APITestCase):
             claim=self.claim,
             organization=self.organization,
             actor=self.moderator,
+        )
+
+        reuse_contributor = User.objects.create_user(
+            username="reuse-contributor",
+            email="reuse-contributor@test.com",
+            password="pass1234",
+        )
+        thread = Thread.objects.create(
+            claim=self.claim,
+            author=reuse_contributor,
+            caption="Knowledge reuse evidence context.",
+            status=Thread.Status.OPEN,
+        )
+        EvidenceSubmission.objects.create(
+            thread=thread,
+            contributor=reuse_contributor,
+            evidence_caption="Reviewed knowledge reuse evidence.",
+            evidence_url="https://example.com/reuse-evidence",
+            evidence_type=EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
+            evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            verified_by=self.moderator,
+            verified_at=timezone.now(),
         )
 
         ensure_adjudication_case(

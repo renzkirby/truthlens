@@ -1839,7 +1839,27 @@ class ThreadDetailSerializer(serializers.ModelSerializer):
         ]
 
 
-class ModerationDecisionSerializer(serializers.Serializer):
+class _RejectUnsupportedAdjudicationFieldsMixin:
+    def validate(self, attrs):
+        unsupported_fields = set(self.initial_data) - set(self.fields)
+        if unsupported_fields:
+            raise serializers.ValidationError(
+                {
+                    field: "This field is not supported."
+                    for field in sorted(unsupported_fields)
+                }
+            )
+        return attrs
+
+
+class AdjudicationOrganizationQuerySerializer(serializers.Serializer):
+    organization_id = serializers.UUIDField(required=True)
+
+
+class AdjudicationActionSerializer(
+    _RejectUnsupportedAdjudicationFieldsMixin,
+    serializers.Serializer,
+):
     moderator_verdict = serializers.ChoiceField(
         choices=(AdjudicationDecision.Verdict.choices)
     )
@@ -1857,7 +1877,7 @@ class ModerationDecisionSerializer(serializers.Serializer):
     )
 
     expected_revision = serializers.IntegerField(
-        required=False,
+        required=True,
         min_value=0,
     )
 
@@ -1865,6 +1885,10 @@ class ModerationDecisionSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
     )
+
+
+class ModerationDecisionSerializer(AdjudicationActionSerializer):
+    case_id = serializers.UUIDField(required=True)
 
     # Temporary compatibility with the
     # existing moderation frontend.

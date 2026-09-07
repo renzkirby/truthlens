@@ -183,18 +183,21 @@ class VerificationAssignmentServiceTests(TestCase):
         self,
     ):
         assignment = self._claim_for_organization_a()
-        ensure_adjudication_case(
+        self._create_evidence(
+            status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+        )
+        case = ensure_adjudication_case(
             claim=self.claim,
             actor=self.lead_a,
             organization=self.organization_a,
         )
         issue_adjudication_decision(
-            claim=self.claim,
+            case_id=case.id,
+            organization_id=self.organization_a.id,
             actor=self.lead_a,
             verdict=AdjudicationDecision.Verdict.FACT,
             canonical_claim="The adjudicated claim is accurate.",
             rationale="Reviewed evidence supports the claim.",
-            organization=self.organization_a,
             expected_revision=0,
         )
         assignment.status = VerificationAssignment.Status.COMPLETED
@@ -206,18 +209,21 @@ class VerificationAssignmentServiceTests(TestCase):
         self,
     ):
         assignment = self._claim_for_organization_a()
-        ensure_adjudication_case(
+        self._create_evidence(
+            status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+        )
+        case = ensure_adjudication_case(
             claim=self.claim,
             actor=self.lead_a,
             organization=self.organization_a,
         )
         issue_adjudication_decision(
-            claim=self.claim,
+            case_id=case.id,
+            organization_id=self.organization_a.id,
             actor=self.lead_a,
             verdict=AdjudicationDecision.Verdict.FACT,
             canonical_claim="The adjudicated claim is accurate.",
             rationale="Reviewed evidence supports the claim.",
-            organization=self.organization_a,
             expected_revision=0,
         )
         Claim.objects.filter(pk=self.claim.pk).update(final_verdict="FAKE")
