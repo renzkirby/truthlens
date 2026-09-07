@@ -30,6 +30,13 @@ from .verification.ingestion import ingest_raw_evidence
 from .verification.providers.google_fact_check import (
     GoogleFactCheckProvider,
 )
+from .verification.runs import (
+    abstain_verification_run,
+    complete_verification_run,
+    create_verification_run,
+    fail_verification_run,
+    start_verification_run,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -280,338 +287,394 @@ def execute_core_text_pipeline(raw_text, claim_id):
 
     pipeline_started_at = time.perf_counter()
 
-    from .claim_matching import compute_fingerprint, find_matching_claim
+    # Missing claims retain the existing runtime path without a lifecycle record.
+    run_claim = Claim.objects.filter(id=claim_id).first()
+    run = None
+    if run_claim is not None:
+        run = create_verification_run(run_claim)
+        run = start_verification_run(run)
 
-    text_fingerprint = compute_fingerprint("TEXT", raw_text)
-    matched_claim = find_matching_claim(
-        text_fingerprint,
-        "TEXT",
-        context_text=raw_text,
-        allow_semantic_fallback=False,
-    )
-
-    if matched_claim and str(matched_claim.id) != str(claim_id):
-        logger.info(
-            "Second-chance deduplication hit! OCR text matches existing claim %s ",
-            matched_claim.id,
-        )
-
-        try:
-            current_claim = Claim.objects.get(id=claim_id)
-            # Instantly copy the verdict data from the matched claim to the new one
-            current_claim.ai_verdict = matched_claim.ai_verdict
-            current_claim.final_verdict = matched_claim.final_verdict
-            current_claim.ai_summary = matched_claim.ai_summary
-            current_claim.consensus_score = matched_claim.consensus_score
-            current_claim.source_type = matched_claim.source_type
-            current_claim.source_link = matched_claim.source_link
-            current_claim.top_verdict_source = matched_claim.top_verdict_source
-            current_claim.ai_sources = matched_claim.ai_sources
-            current_claim.is_ai_generated = matched_claim.is_ai_generated
-            current_claim.score_context = (
-                "This result was instantly matched from a previously verified claim."
-            )
-            current_claim.save()
-        except Claim.DoesNotExist:
-            pass
-
-        # ABORT the pipeline so we don't waste LLM/Tavily API calls!
-        return
-    # -------------------------------------------
-
-    outcome = "completed"
-
+    selected_verdict = None
+    pipeline_error = None
+    runtime_error_propagating = False
     try:
-        clean_started_at = time.perf_counter()
-        cleaned = clean_ocr_text(raw_text)
-        _log_stage(
-            claim_id,
-            "clean_ocr_text",
-            clean_started_at,
-            text_length=len(raw_text or ""),
+        from .claim_matching import compute_fingerprint, find_matching_claim
+
+        text_fingerprint = compute_fingerprint("TEXT", raw_text)
+        matched_claim = find_matching_claim(
+            text_fingerprint,
+            "TEXT",
+            context_text=raw_text,
+            allow_semantic_fallback=False,
         )
 
-        cleaned_claim = cleaned.get("cleaned_claim")
-        search_query = cleaned.get("search_query")
-        article_stance = cleaned.get("article_stance", "NEUTRAL")
+        if matched_claim and str(matched_claim.id) != str(claim_id):
+            logger.info(
+                "Second-chance deduplication hit! OCR text matches existing claim %s ",
+                matched_claim.id,
+            )
 
-        if cleaned_claim == "OUT_OF_SCOPE":
-            _save_claim(
-                claim_id,
-                {
-                    "verdict": "OUT_OF_SCOPE",
-                    "summary": "This content appears to be a personal statement, opinion, greeting, or non-factual text. TruthLens can only verify objective claims, news, and rumors.",
-                    "confidence_score": 0,
-                    "score_context": "No verifiable factual claim detected.",
-                },
-                "System Filter",
-                raw_text,
-                [],
-            )
-            outcome = "completed_out_of_scope"
-            _log_stage(
-                claim_id,
-                "core_text_pipeline_total",
-                pipeline_started_at,
-                outcome=outcome,
-            )
+            try:
+                current_claim = Claim.objects.get(id=claim_id)
+                # Instantly copy the verdict data from the matched claim to the new one
+                current_claim.ai_verdict = matched_claim.ai_verdict
+                current_claim.final_verdict = matched_claim.final_verdict
+                current_claim.ai_summary = matched_claim.ai_summary
+                current_claim.consensus_score = matched_claim.consensus_score
+                current_claim.source_type = matched_claim.source_type
+                current_claim.source_link = matched_claim.source_link
+                current_claim.top_verdict_source = matched_claim.top_verdict_source
+                current_claim.ai_sources = matched_claim.ai_sources
+                current_claim.is_ai_generated = matched_claim.is_ai_generated
+                current_claim.score_context = (
+                    "This result was instantly matched from a previously verified claim."
+                )
+                current_claim.save()
+            except Claim.DoesNotExist:
+                pass
+
+            selected_verdict = matched_claim.final_verdict or matched_claim.ai_verdict
+
+            # ABORT the pipeline so we don't waste LLM/Tavily API calls!
             return
+        # -------------------------------------------
 
-        if article_stance == "SATIRE":
-            _save_claim(
-                claim_id,
-                {
-                    "verdict": "SATIRE",
-                    "summary": "This content originates from a known satire or parody publication and is not intended to be factual.",
-                    "confidence_score": 99,
-                },
-                "Satire Detection",
-                cleaned_claim,
-                [],
-            )
-            outcome = "satire_stance_shortcut"
-            _log_stage(
-                claim_id,
-                "core_text_pipeline_total",
-                pipeline_started_at,
-                outcome=outcome,
-            )
-            return
-
-        vault_started_at = time.perf_counter()
-        target_claim = Claim.objects.filter(id=claim_id).first()
-
-        vault_match = search_official_vault(
-            cleaned_claim,
-            target_claim=target_claim,
-        )
-
-        if vault_match:
-            logger.info("Vault match found for claim %s!", claim_id)
-
-            # We found a highly similar past rumor. Now we ask Gemini to evaluate the NEW claim
-            # against the VERIFIED vault context to avoid the "Negation Trap".
-            vault_eval_started_at = time.perf_counter()
-            ai_verdict = evaluate_image_claim_with_gfc(
-                cleaned_claim,
-                {
-                    "claims": [
-                        {
-                            "text": vault_match["canonical_claim"],
-                            "claimReview": [
-                                {
-                                    "textualRating": vault_match["verdict"],
-                                    "publisher": {"name": "TruthLens Official Vault"},
-                                }
-                            ],
-                        }
-                    ]
-                },
-                article_stance,
-            )
-
-            _save_claim(
-                claim_id,
-                ai_verdict,
-                "TruthLens Verified Vault",
-                vault_match["summary"],
-                vault_match.get("sources", []),
-            )
-
-            _log_stage(claim_id, "vault_search_success", vault_started_at)
-            outcome = "completed_vault"
-            return
-
-        # Try GFC first — return early if relevant result found
-        gfc_started_at = time.perf_counter()
+        outcome = "completed"
 
         try:
-            gfc_data = _retrieve_and_ingest_gfc(
-                search_query,
-                claim_id,
-            )
-
-            gfc_claims = gfc_data.get(
-                "claims",
-                [],
-            )
+            clean_started_at = time.perf_counter()
+            cleaned = clean_ocr_text(raw_text)
             _log_stage(
                 claim_id,
-                "gfc_search",
-                gfc_started_at,
-                claims=len(gfc_claims),
+                "clean_ocr_text",
+                clean_started_at,
+                text_length=len(raw_text or ""),
             )
 
-            if gfc_claims:
-                first_claim_text = gfc_claims[0].get("text", "")
-                relevance_started_at = time.perf_counter()
-                is_relevant = is_fact_check_relevant(cleaned_claim, first_claim_text)
+            cleaned_claim = cleaned.get("cleaned_claim")
+            search_query = cleaned.get("search_query")
+            article_stance = cleaned.get("article_stance", "NEUTRAL")
+
+            if cleaned_claim == "OUT_OF_SCOPE":
+                _save_claim(
+                    claim_id,
+                    {
+                        "verdict": "OUT_OF_SCOPE",
+                        "summary": "This content appears to be a personal statement, opinion, greeting, or non-factual text. TruthLens can only verify objective claims, news, and rumors.",
+                        "confidence_score": 0,
+                        "score_context": "No verifiable factual claim detected.",
+                    },
+                    "System Filter",
+                    raw_text,
+                    [],
+                )
+                outcome = "completed_out_of_scope"
+                selected_verdict = "OUT_OF_SCOPE"
                 _log_stage(
                     claim_id,
-                    "gfc_relevance_check",
-                    relevance_started_at,
-                    relevant=is_relevant,
+                    "core_text_pipeline_total",
+                    pipeline_started_at,
+                    outcome=outcome,
                 )
-                if is_relevant:
-                    gfc_eval_started_at = time.perf_counter()
-                    ai_verdict = evaluate_image_claim_with_gfc(
-                        cleaned_claim, gfc_data, article_stance
-                    )
-                    _log_stage(
-                        claim_id,
-                        "gfc_llm_evaluation",
-                        gfc_eval_started_at,
-                        verdict=ai_verdict.get("verdict"),
-                    )
-                    source_urls = []
-                    for c in gfc_claims[:3]:
-                        review_url = c.get("claimReview", [{}])[0].get("url", "")
-                        if review_url:
-                            source_urls.append(review_url)
+                return
 
-                    save_started_at = time.perf_counter()
-                    _save_claim(
-                        claim_id,
-                        ai_verdict,
-                        "Official Fact Check",
-                        cleaned_claim,
-                        source_urls,
-                    )
-                    _log_stage(
-                        claim_id,
-                        "save_claim",
-                        save_started_at,
-                        source_type="Official Fact Check",
-                    )
-                    outcome = "completed_gfc"
-                    return
+            if article_stance == "SATIRE":
+                _save_claim(
+                    claim_id,
+                    {
+                        "verdict": "SATIRE",
+                        "summary": "This content originates from a known satire or parody publication and is not intended to be factual.",
+                        "confidence_score": 99,
+                    },
+                    "Satire Detection",
+                    cleaned_claim,
+                    [],
+                )
+                outcome = "satire_stance_shortcut"
+                selected_verdict = "SATIRE"
+                _log_stage(
+                    claim_id,
+                    "core_text_pipeline_total",
+                    pipeline_started_at,
+                    outcome=outcome,
+                )
+                return
 
-        except Exception as e:
-            _log_stage(
-                claim_id, "gfc_search_failed", gfc_started_at, error=str(e)[:120]
-            )
-            logger.error("GFC error for claim %s: %s", claim_id, e)
+            vault_started_at = time.perf_counter()
+            target_claim = Claim.objects.filter(id=claim_id).first()
 
-        # Fallback — Tavily web search
-        tavily_started_at = time.perf_counter()
-        try:
-            tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
-            tavily_response = tavily_client.search(
-                query=search_query,
-                search_depth="advanced",
-                topic="general",
-                include_answer=True,
-                include_domains=[
-                    # Philippine News & Fact Checkers
-                    "gmanetwork.com",
-                    "rappler.com",
-                    "philstar.com",
-                    "inquirer.net",
-                    "news.abs-cbn.com",
-                    "manilabulletin.com",
-                    "bworldonline.com",
-                    "pna.gov.ph",
-                    "verafiles.org",
-                    # International News & Wires
-                    "reuters.com",
-                    "apnews.com",
-                    "bbc.com",
-                    "cnn.com",
-                    "aljazeera.com",
-                    "nytimes.com",
-                    "theguardian.com",
-                    # Global Fact-Checkers
-                    "snopes.com",
-                    "politifact.com",
-                    "factcheck.org",
-                    "afp.com",
-                ],
-                request_timeout=DEFAULT_HTTP_TIMEOUT_SEC,
-            )
-            tavily_results = tavily_response.get("results", [])
-            tavily_answer = tavily_response.get(
-                "answer", "No additional web context found."
-            )
-            _log_stage(
-                claim_id,
-                "tavily_search",
-                tavily_started_at,
-                results=len(tavily_results),
-            )
-
-            # BUILD RICHER CONTEXT: Give the AI the top 3 actual articles to read
-            results_context = ""
-            for i, res in enumerate(tavily_results[:3]):
-                results_context += f"Source {i+1}: {res.get('title', 'No Title')}\nURL: {res.get('url', '')}\nContent: {res.get('content', '')}\n\n"
-
-            combined_context = f"Text Extracted From Image (Do NOT use this as evidence to prove itself):\n{raw_text}\n\nWeb Search Answer:\n{tavily_answer}\n\nTop Search Results:\n{results_context}"
-
-            tavily_eval_started_at = time.perf_counter()
-            ai_verdict = evaluate_image_claim_with_tavily(
-                cleaned_claim, combined_context, article_stance
-            )
-            _log_stage(
-                claim_id,
-                "tavily_llm_evaluation",
-                tavily_eval_started_at,
-                verdict=ai_verdict.get("verdict"),
-            )
-
-            source_urls = [
-                {
-                    "url": res.get("url"),
-                    "title": res.get("title", "External Source"),
-                    "snippet": res.get("content", "")[:250]
-                    + "...",  # Grab the first 250 characters
-                }
-                for res in tavily_results[:3]
-                if res.get("url")
-            ]
-
-            save_started_at = time.perf_counter()
-            _save_claim(
-                claim_id, ai_verdict, "Live Web Search", cleaned_claim, source_urls
-            )
-            _log_stage(
-                claim_id, "save_claim", save_started_at, source_type="Live Web Search"
-            )
-            outcome = "completed_tavily"
-
-        except Exception as e:
-            _log_stage(
-                claim_id, "tavily_search_failed", tavily_started_at, error=str(e)[:120]
-            )
-            logger.error("Tavily error for claim %s: %s", claim_id, e)
-            _save_claim(
-                claim_id,
-                {
-                    "verdict": "UNVERIFIED",
-                    "summary": "Could not retrieve relevant information to verify the claim.",
-                    "confidence_score": 0,
-                },
-                "Live Web Search",
+            vault_match = search_official_vault(
                 cleaned_claim,
-                [],
+                target_claim=target_claim,
             )
-            outcome = "completed_tavily_fallback_unverified"
 
-    # This catches catastrophic errors (like Groq going down completely)
-    except Exception as e:
-        outcome = "fatal_error"
-        logger.error("Core Fact Check Fatal Error for claim %s: %s", claim_id, e)
-        try:
-            claim = Claim.objects.get(id=claim_id)
-            claim.ai_verdict = "UNVERIFIED"
-            # Keep moderator verdict channel empty until moderator or consensus sets it.
-            claim.final_verdict = None
-            claim.ai_summary = "An error occurred during analysis."
-            claim.save()
-        except Claim.DoesNotExist:
-            pass
+            if vault_match:
+                logger.info("Vault match found for claim %s!", claim_id)
+
+                # We found a highly similar past rumor. Now we ask Gemini to evaluate the NEW claim
+                # against the VERIFIED vault context to avoid the "Negation Trap".
+                vault_eval_started_at = time.perf_counter()
+                ai_verdict = evaluate_image_claim_with_gfc(
+                    cleaned_claim,
+                    {
+                        "claims": [
+                            {
+                                "text": vault_match["canonical_claim"],
+                                "claimReview": [
+                                    {
+                                        "textualRating": vault_match["verdict"],
+                                        "publisher": {"name": "TruthLens Official Vault"},
+                                    }
+                                ],
+                            }
+                        ]
+                    },
+                    article_stance,
+                )
+
+                _save_claim(
+                    claim_id,
+                    ai_verdict,
+                    "TruthLens Verified Vault",
+                    vault_match["summary"],
+                    vault_match.get("sources", []),
+                )
+
+                _log_stage(claim_id, "vault_search_success", vault_started_at)
+                outcome = "completed_vault"
+                selected_verdict = (
+                    ai_verdict.get("verdict") if isinstance(ai_verdict, dict) else None
+                )
+                return
+
+            # Try GFC first — return early if relevant result found
+            gfc_started_at = time.perf_counter()
+
+            try:
+                gfc_data = _retrieve_and_ingest_gfc(
+                    search_query,
+                    claim_id,
+                )
+
+                gfc_claims = gfc_data.get(
+                    "claims",
+                    [],
+                )
+                _log_stage(
+                    claim_id,
+                    "gfc_search",
+                    gfc_started_at,
+                    claims=len(gfc_claims),
+                )
+
+                if gfc_claims:
+                    first_claim_text = gfc_claims[0].get("text", "")
+                    relevance_started_at = time.perf_counter()
+                    is_relevant = is_fact_check_relevant(cleaned_claim, first_claim_text)
+                    _log_stage(
+                        claim_id,
+                        "gfc_relevance_check",
+                        relevance_started_at,
+                        relevant=is_relevant,
+                    )
+                    if is_relevant:
+                        gfc_eval_started_at = time.perf_counter()
+                        ai_verdict = evaluate_image_claim_with_gfc(
+                            cleaned_claim, gfc_data, article_stance
+                        )
+                        _log_stage(
+                            claim_id,
+                            "gfc_llm_evaluation",
+                            gfc_eval_started_at,
+                            verdict=ai_verdict.get("verdict"),
+                        )
+                        source_urls = []
+                        for c in gfc_claims[:3]:
+                            review_url = c.get("claimReview", [{}])[0].get("url", "")
+                            if review_url:
+                                source_urls.append(review_url)
+
+                        save_started_at = time.perf_counter()
+                        _save_claim(
+                            claim_id,
+                            ai_verdict,
+                            "Official Fact Check",
+                            cleaned_claim,
+                            source_urls,
+                        )
+                        _log_stage(
+                            claim_id,
+                            "save_claim",
+                            save_started_at,
+                            source_type="Official Fact Check",
+                        )
+                        outcome = "completed_gfc"
+                        selected_verdict = (
+                            ai_verdict.get("verdict") if isinstance(ai_verdict, dict) else None
+                        )
+                        return
+
+            except Exception as e:
+                _log_stage(
+                    claim_id, "gfc_search_failed", gfc_started_at, error=str(e)[:120]
+                )
+                logger.error("GFC error for claim %s: %s", claim_id, e)
+
+            # Fallback — Tavily web search
+            tavily_started_at = time.perf_counter()
+            try:
+                tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
+                tavily_response = tavily_client.search(
+                    query=search_query,
+                    search_depth="advanced",
+                    topic="general",
+                    include_answer=True,
+                    include_domains=[
+                        # Philippine News & Fact Checkers
+                        "gmanetwork.com",
+                        "rappler.com",
+                        "philstar.com",
+                        "inquirer.net",
+                        "news.abs-cbn.com",
+                        "manilabulletin.com",
+                        "bworldonline.com",
+                        "pna.gov.ph",
+                        "verafiles.org",
+                        # International News & Wires
+                        "reuters.com",
+                        "apnews.com",
+                        "bbc.com",
+                        "cnn.com",
+                        "aljazeera.com",
+                        "nytimes.com",
+                        "theguardian.com",
+                        # Global Fact-Checkers
+                        "snopes.com",
+                        "politifact.com",
+                        "factcheck.org",
+                        "afp.com",
+                    ],
+                    request_timeout=DEFAULT_HTTP_TIMEOUT_SEC,
+                )
+                tavily_results = tavily_response.get("results", [])
+                tavily_answer = tavily_response.get(
+                    "answer", "No additional web context found."
+                )
+                _log_stage(
+                    claim_id,
+                    "tavily_search",
+                    tavily_started_at,
+                    results=len(tavily_results),
+                )
+
+                # BUILD RICHER CONTEXT: Give the AI the top 3 actual articles to read
+                results_context = ""
+                for i, res in enumerate(tavily_results[:3]):
+                    results_context += f"Source {i+1}: {res.get('title', 'No Title')}\nURL: {res.get('url', '')}\nContent: {res.get('content', '')}\n\n"
+
+                combined_context = f"Text Extracted From Image (Do NOT use this as evidence to prove itself):\n{raw_text}\n\nWeb Search Answer:\n{tavily_answer}\n\nTop Search Results:\n{results_context}"
+
+                tavily_eval_started_at = time.perf_counter()
+                ai_verdict = evaluate_image_claim_with_tavily(
+                    cleaned_claim, combined_context, article_stance
+                )
+                _log_stage(
+                    claim_id,
+                    "tavily_llm_evaluation",
+                    tavily_eval_started_at,
+                    verdict=ai_verdict.get("verdict"),
+                )
+
+                source_urls = [
+                    {
+                        "url": res.get("url"),
+                        "title": res.get("title", "External Source"),
+                        "snippet": res.get("content", "")[:250]
+                        + "...",  # Grab the first 250 characters
+                    }
+                    for res in tavily_results[:3]
+                    if res.get("url")
+                ]
+
+                save_started_at = time.perf_counter()
+                _save_claim(
+                    claim_id, ai_verdict, "Live Web Search", cleaned_claim, source_urls
+                )
+                _log_stage(
+                    claim_id, "save_claim", save_started_at, source_type="Live Web Search"
+                )
+                outcome = "completed_tavily"
+                selected_verdict = (
+                    ai_verdict.get("verdict") if isinstance(ai_verdict, dict) else None
+                )
+
+            except Exception as e:
+                _log_stage(
+                    claim_id, "tavily_search_failed", tavily_started_at, error=str(e)[:120]
+                )
+                logger.error("Tavily error for claim %s: %s", claim_id, e)
+                _save_claim(
+                    claim_id,
+                    {
+                        "verdict": "UNVERIFIED",
+                        "summary": "Could not retrieve relevant information to verify the claim.",
+                        "confidence_score": 0,
+                    },
+                    "Live Web Search",
+                    cleaned_claim,
+                    [],
+                )
+                outcome = "completed_tavily_fallback_unverified"
+                selected_verdict = "UNVERIFIED"
+
+        # This catches catastrophic errors (like Groq going down completely)
+        except Exception as e:
+            pipeline_error = e
+            outcome = "fatal_error"
+            logger.error("Core Fact Check Fatal Error for claim %s: %s", claim_id, e)
+            try:
+                claim = Claim.objects.get(id=claim_id)
+                claim.ai_verdict = "UNVERIFIED"
+                # Keep moderator verdict channel empty until moderator or consensus sets it.
+                claim.final_verdict = None
+                claim.ai_summary = "An error occurred during analysis."
+                claim.save()
+            except Claim.DoesNotExist:
+                pass
+        finally:
+            _log_stage(
+                claim_id, "core_text_pipeline_total", pipeline_started_at, outcome=outcome
+            )
+    except BaseException as exc:
+        # Dedup errors historically propagate; retain that behavior and their cause.
+        if pipeline_error is None:
+            pipeline_error = exc
+        runtime_error_propagating = True
+        raise
     finally:
-        _log_stage(
-            claim_id, "core_text_pipeline_total", pipeline_started_at, outcome=outcome
-        )
+        # Keep lifecycle storage errors outside all provider fallback handlers.
+        # This is the only terminal dispatch, including for early cache returns.
+        if run is not None:
+            try:
+                if pipeline_error is not None:
+                    fail_verification_run(
+                        run,
+                        failure_stage="core_text_pipeline",
+                        failure_code="UNHANDLED_EXCEPTION",
+                        failure_message=str(pipeline_error),
+                    )
+                elif selected_verdict in ("FACT", "FAKE", "MISLEADING", "SATIRE"):
+                    complete_verification_run(run)
+                else:
+                    abstain_verification_run(run)
+            except Exception:
+                if not runtime_error_propagating:
+                    raise
+                logger.exception(
+                    "VerificationRun finalization failed for claim %s; "
+                    "preserving the original runtime exception",
+                    claim_id,
+                )
 
 
 # URL PIPELINE
