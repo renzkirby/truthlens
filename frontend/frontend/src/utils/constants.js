@@ -120,6 +120,9 @@ export const API_ENDPOINTS = {
    SAFETY_CASE_CLAIM: (caseId) => `moderation/safety/cases/${encodeURIComponent(caseId)}/claim/`,
    SAFETY_CASE_RELEASE: (caseId) => `moderation/safety/cases/${encodeURIComponent(caseId)}/release/`,
    SAFETY_CASE_ACTION: (caseId) => `moderation/safety/cases/${encodeURIComponent(caseId)}/action/`,
+   EVIDENCE_CASES: "moderation/evidence/cases/",
+   EVIDENCE_CASE_DETAIL: (caseId) => `moderation/evidence/cases/${encodeURIComponent(caseId)}/`,
+   EVIDENCE_CASE_ACTION: (caseId) => `moderation/evidence/cases/${encodeURIComponent(caseId)}/action/`,
 
    // Verification Workspace
    VERIFICATION_INTAKE: "verification/intake/",
