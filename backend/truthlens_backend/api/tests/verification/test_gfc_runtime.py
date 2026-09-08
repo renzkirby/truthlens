@@ -2,7 +2,13 @@ from unittest.mock import Mock, patch
 
 import requests
 
-from django.test import SimpleTestCase
+from django.db import IntegrityError
+from django.test import SimpleTestCase, TestCase
+
+from api.models import Claim, EvidenceSource, VerificationEvidence
+from api.verification.contracts import RawEvidence
+from api.verification.ingestion import ingest_raw_evidence
+from api.verification.runs import create_verification_run, start_verification_run
 
 from api.tasks import (
     GFC_HTTP_TIMEOUT_SEC,
@@ -165,7 +171,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
 
         with (
             patch("api.tasks.create_verification_run"),
-            patch("api.tasks.start_verification_run"),
+            patch("api.tasks.start_verification_run") as start_run,
             patch("api.tasks.complete_verification_run"),
             patch("api.tasks.abstain_verification_run"),
             patch("api.tasks.fail_verification_run"),
@@ -218,6 +224,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         retrieve_gfc.assert_called_once_with(
             search_query,
             claim_id,
+            verification_run=start_run.return_value,
         )
 
         relevance_check.assert_called_once_with(
@@ -274,7 +281,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
 
         with (
             patch("api.tasks.create_verification_run"),
-            patch("api.tasks.start_verification_run"),
+            patch("api.tasks.start_verification_run") as start_run,
             patch("api.tasks.complete_verification_run"),
             patch("api.tasks.abstain_verification_run"),
             patch("api.tasks.fail_verification_run"),
@@ -325,6 +332,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         retrieve_gfc.assert_called_once_with(
             search_query,
             claim_id,
+            verification_run=start_run.return_value,
         )
 
         (tavily_class.return_value.search.assert_called_once())
@@ -557,3 +565,124 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         )
 
         requests_get.assert_not_called()
+
+
+class GoogleFactCheckEvidenceLinkingTests(TestCase):
+    def setUp(self):
+        self.claim = Claim.objects.create(context_text="Example claim.")
+        self.run = start_verification_run(create_verification_run(self.claim))
+        self.payload = {"claims": [{"text": "Example claim."}]}
+        self.raw_sources = [RawEvidence(
+            provider="GOOGLE_FACT_CHECK", url="https://example.com/first",
+            title="First fact check", content="Rating: False", source_type="FACT_CHECK",
+        )]
+        provider_class = self.enterContext(patch("api.tasks.GoogleFactCheckProvider"))
+        self.provider = provider_class.return_value
+        self.provider.search_with_payload.return_value = (self.payload, self.raw_sources)
+        self.log_stage = self.enterContext(patch("api.tasks._log_stage"))
+
+    def _retrieve(self, **kwargs):
+        return _retrieve_and_ingest_gfc("example query", self.claim.pk, **kwargs)
+
+    def _stages(self):
+        return [call.args[1] for call in self.log_stage.call_args_list]
+
+    def test_no_run_preserves_payload_and_ingestion_without_links(self):
+        with patch("api.tasks.link_evidence_sources_to_run") as link_sources:
+            returned = self._retrieve(stage_prefix="url_")
+        self.assertIs(returned, self.payload)
+        link_sources.assert_not_called()
+        self.provider.search_with_payload.assert_called_once_with("example query", limit=5)
+        self.assertEqual(EvidenceSource.objects.count(), 1)
+        self.assertEqual(VerificationEvidence.objects.count(), 0)
+        self.assertEqual(self._stages(), ["url_gfc_evidence_ingestion"])
+
+    def test_successful_ingestion_links_sources_to_supplied_run(self):
+        returned = self._retrieve(verification_run=self.run)
+        self.assertIs(returned, self.payload)
+        link = VerificationEvidence.objects.get()
+        self.assertEqual(link.verification_run_id, self.run.pk)
+        self.assertEqual(link.evidence_source_id, EvidenceSource.objects.get().pk)
+        self.assertEqual(link.evidence_role, VerificationEvidence.EvidenceRole.FACT_CHECK)
+        self.assertEqual(link.stance, VerificationEvidence.Stance.UNKNOWN)
+        self.assertIsNone(link.relevance_score)
+        self.assertIsNone(link.directness_score)
+        self.assertIsNone(link.recency_score)
+        self.provider.search_with_payload.assert_called_once_with("example query", limit=5)
+        self.assertEqual(self._stages(), ["gfc_evidence_ingestion", "gfc_evidence_linking"])
+
+    def test_ingestion_failure_skips_linking_and_preserves_payload(self):
+        with (
+            patch("api.tasks.ingest_raw_evidence", side_effect=IntegrityError("Ingestion failed")),
+            patch("api.tasks.link_evidence_sources_to_run") as link_sources,
+        ):
+            returned = self._retrieve(verification_run=self.run)
+        self.assertIs(returned, self.payload)
+        link_sources.assert_not_called()
+        self.assertEqual(EvidenceSource.objects.count(), 0)
+        self.assertEqual(VerificationEvidence.objects.count(), 0)
+        self.assertEqual(self._stages(), ["gfc_evidence_ingestion_failed"])
+
+    def test_linking_failure_preserves_sources_and_payload(self):
+        self.raw_sources.append(RawEvidence(
+            provider="GOOGLE_FACT_CHECK", url="https://example.com/second",
+            content="Second fact check", source_type="FACT_CHECK",
+        ))
+        get_or_create = VerificationEvidence.objects.get_or_create
+
+        def fail_second_link(**kwargs):
+            if kwargs["evidence_source"].url == "https://example.com/second":
+                self.assertEqual(VerificationEvidence.objects.count(), 1)
+                raise IntegrityError("Second link failed")
+            return get_or_create(**kwargs)
+
+        with patch(
+            "api.verification.linking.VerificationEvidence.objects.get_or_create",
+            side_effect=fail_second_link,
+        ) as create_link:
+            returned = self._retrieve(verification_run=self.run)
+
+        self.assertIs(returned, self.payload)
+        self.assertEqual(create_link.call_count, 2)
+        self.assertEqual(EvidenceSource.objects.count(), 2)
+        self.assertEqual(VerificationEvidence.objects.count(), 0)
+        self.assertEqual(self._stages(), ["gfc_evidence_ingestion", "gfc_evidence_linking_failed"])
+        self.assertEqual(self.log_stage.call_args.kwargs["verification_run_id"], self.run.pk)
+        self.assertEqual(self.log_stage.call_args.kwargs["error"], "Second link failed")
+        self.run.refresh_from_db()
+        self.assertEqual(self.run.status, "RUNNING")
+        self.assertIsNone(self.run.failure_code)
+
+    def test_provider_failure_skips_ingestion_and_linking(self):
+        self.provider.search_with_payload.side_effect = requests.HTTPError("Provider unavailable")
+        with (
+            patch("api.tasks.ingest_raw_evidence") as ingest,
+            patch("api.tasks.link_evidence_sources_to_run") as link_sources,
+        ):
+            with self.assertRaisesMessage(requests.HTTPError, "Provider unavailable"):
+                self._retrieve(verification_run=self.run)
+        ingest.assert_not_called()
+        link_sources.assert_not_called()
+        self.assertEqual(EvidenceSource.objects.count(), 0)
+        self.assertEqual(VerificationEvidence.objects.count(), 0)
+
+    def test_reused_evidence_source_links_without_source_duplication(self):
+        existing = ingest_raw_evidence(self.raw_sources)[0]
+        before = EvidenceSource.objects.values().get(pk=existing.pk)
+        for _ in range(2):
+            self.assertIs(self._retrieve(verification_run=self.run), self.payload)
+        self.assertEqual(EvidenceSource.objects.count(), 1)
+        self.assertEqual(EvidenceSource.objects.values().get(pk=existing.pk), before)
+        self.assertEqual(VerificationEvidence.objects.get().evidence_source_id, existing.pk)
+
+    def test_stage_prefix_applies_to_linking_success_and_failure(self):
+        self._retrieve(verification_run=self.run, stage_prefix="test_")
+        with patch("api.tasks.link_evidence_sources_to_run", side_effect=RuntimeError("Link failed")):
+            self.assertIs(
+                self._retrieve(verification_run=self.run, stage_prefix="test_"), self.payload,
+            )
+        self.assertEqual(self._stages(), [
+            "test_gfc_evidence_ingestion", "test_gfc_evidence_linking",
+            "test_gfc_evidence_ingestion", "test_gfc_evidence_linking_failed",
+        ])
+        self.assertEqual(VerificationEvidence.objects.count(), 1)

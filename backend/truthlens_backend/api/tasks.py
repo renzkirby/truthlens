@@ -24,9 +24,11 @@ from .models import (
     Claim,
     OfficialFactCheck,
     UserProfile,
+    VerificationEvidence,
 )
 from .trust_service import recompute_user_trust_score
 from .verification.ingestion import ingest_raw_evidence
+from .verification.linking import link_evidence_sources_to_run
 from .verification.providers.google_fact_check import (
     GoogleFactCheckProvider,
 )
@@ -65,6 +67,7 @@ def _retrieve_and_ingest_gfc(
     claim_id,
     *,
     stage_prefix="",
+    verification_run=None,
 ):
     """
     Retrieve Google Fact Check data once and persist the parsed
@@ -119,6 +122,37 @@ def _retrieve_and_ingest_gfc(
             claim_id,
             exc,
         )
+    else:
+        if verification_run is not None:
+            linking_started_at = time.perf_counter()
+            linking_stage = f"{stage_prefix}gfc_evidence_linking"
+            try:
+                links = link_evidence_sources_to_run(
+                    verification_run,
+                    evidence_sources,
+                    evidence_role=VerificationEvidence.EvidenceRole.FACT_CHECK,
+                )
+                _log_stage(
+                    claim_id,
+                    linking_stage,
+                    linking_started_at,
+                    verification_run_id=verification_run.pk,
+                    evidence_links=len(links),
+                )
+            except Exception as exc:
+                _log_stage(
+                    claim_id,
+                    f"{linking_stage}_failed",
+                    linking_started_at,
+                    verification_run_id=verification_run.pk,
+                    error=str(exc)[:120],
+                )
+                logger.error(
+                    "GFC evidence linking failed for claim %s, run %s: %s",
+                    claim_id,
+                    verification_run.pk,
+                    exc,
+                )
 
     return payload
 
@@ -467,6 +501,7 @@ def execute_core_text_pipeline(raw_text, claim_id):
                 gfc_data = _retrieve_and_ingest_gfc(
                     search_query,
                     claim_id,
+                    verification_run=run,
                 )
 
                 gfc_claims = gfc_data.get(

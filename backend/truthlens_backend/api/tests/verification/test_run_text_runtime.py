@@ -4,7 +4,8 @@ import requests
 from django.test import TestCase
 
 from api import tasks
-from api.models import Claim, VerificationEvidence, VerificationRun
+from api.models import Claim, EvidenceSource, VerificationEvidence, VerificationRun
+from api.verification.contracts import RawEvidence
 from api.verification import runs
 
 
@@ -260,7 +261,10 @@ class VerificationRunTextRuntimeTests(TestCase):
 
     def test_gfc_substantive_verdict_completes(self):
         self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
-        self.retrieve_gfc.assert_called_once_with(self.cleaned["search_query"], self.claim.id)
+        self.retrieve_gfc.assert_called_once_with(
+            self.cleaned["search_query"], self.claim.id,
+            verification_run=self.claim.verification_runs.get(),
+        )
         self.evaluate_gfc.assert_called_once_with(
             self.cleaned["cleaned_claim"], self.gfc_payload, "NEUTRAL"
         )
@@ -421,3 +425,144 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.assertIn("VerificationRun finalization failed", "\n".join(logs.output))
         self.assertIn(str(lifecycle_error), "\n".join(logs.output))
         self.assertEqual(self.fail_run.call_args.kwargs["failure_message"], str(original_error))
+
+
+class VerificationEvidenceTextRuntimeTests(TestCase):
+    def setUp(self):
+        self.claim = Claim.objects.create(context_text="Raw submitted claim.")
+        self.cleaned = {
+            "cleaned_claim": "Example public claim.",
+            "search_query": "example public claim",
+            "article_stance": "NEUTRAL",
+        }
+        self.verdict = {"verdict": "FAKE", "summary": "Fact check summary.", "confidence_score": 95}
+        self.payload = {"claims": [{
+            "text": self.cleaned["cleaned_claim"],
+            "claimReview": [{"url": "https://example.com/fact-check", "textualRating": "False"}],
+        }]}
+        self.raw_sources = [RawEvidence(
+            provider="GOOGLE_FACT_CHECK", url="https://example.com/fact-check",
+            content="Rating: False", source_type="FACT_CHECK",
+        )]
+        self.enterContext(patch("api.claim_matching.compute_fingerprint", return_value="txt:vel-1"))
+        self.enterContext(patch("api.claim_matching.find_matching_claim", return_value=None))
+        self.enterContext(patch("api.tasks.clean_ocr_text", return_value=self.cleaned))
+        self.enterContext(patch("api.tasks.search_official_vault", return_value=None))
+        self.enterContext(patch("api.embedding_service.generate_embedding", return_value=None))
+        self.enterContext(patch("api.tasks._log_stage"))
+        self.relevance = self.enterContext(patch("api.tasks.is_fact_check_relevant", return_value=True))
+        self.evaluate_gfc = self.enterContext(patch(
+            "api.tasks.evaluate_image_claim_with_gfc", return_value=self.verdict,
+        ))
+        self.enterContext(patch("api.tasks.evaluate_image_claim_with_tavily", return_value=self.verdict))
+        self.provider = self.enterContext(patch("api.tasks.GoogleFactCheckProvider")).return_value
+        self.provider.search_with_payload.return_value = (self.payload, self.raw_sources)
+        self.tavily = self.enterContext(patch("api.tasks.TavilyClient")).return_value
+        self.tavily_response = {
+            "answer": "Web evidence.",
+            "results": [{"url": "https://example.com/web", "title": "Web source", "content": "Evidence."}],
+        }
+        self.tavily.search.return_value = self.tavily_response
+        self.terminals = [self.enterContext(patch(
+            f"api.tasks.{name}_verification_run", wraps=getattr(runs, f"{name}_verification_run"),
+        )) for name in ("complete", "abstain", "fail")]
+
+        real_bridge = tasks._retrieve_and_ingest_gfc
+        self.observed_runs = []
+
+        def record_running_run(*args, **kwargs):
+            run = kwargs["verification_run"]
+            persisted = VerificationRun.objects.get(pk=run.pk)
+            self.observed_runs.append((run.pk, run.status, persisted.status))
+            return real_bridge(*args, **kwargs)
+
+        self.bridge = self.enterContext(patch(
+            "api.tasks._retrieve_and_ingest_gfc", side_effect=record_running_run,
+        ))
+
+    def _execute(self):
+        before = sum(helper.call_count for helper in self.terminals)
+        observations_before = len(self.observed_runs)
+        tasks.execute_core_text_pipeline(self.claim.context_text, self.claim.pk)
+        run = self.claim.verification_runs.latest("created_at")
+        self.assertEqual(sum(helper.call_count for helper in self.terminals) - before, 1)
+        self.assertEqual(self.observed_runs[observations_before:], [
+            (run.pk, VerificationRun.Status.RUNNING, VerificationRun.Status.RUNNING),
+        ])
+        self.assertIsNone(run.failure_stage)
+        self.assertIsNone(run.failure_code)
+        self.assertIsNone(run.failure_message)
+        return run
+
+    def _record_links_at_fallback(self, **kwargs):
+        self.links_at_fallback = list(VerificationEvidence.objects.values_list("evidence_source_id", flat=True))
+        return self.tavily_response
+
+    def test_text_runtime_passes_active_running_run_to_gfc_bridge(self):
+        run = self._execute()
+        self.bridge.assert_called_once_with(
+            self.cleaned["search_query"], self.claim.pk, verification_run=run,
+        )
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        self.assertEqual(VerificationEvidence.objects.get().verification_run_id, run.pk)
+
+    def test_text_gfc_success_links_evidence_and_preserves_completion(self):
+        run = self._execute()
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        link = VerificationEvidence.objects.get()
+        self.assertEqual(link.verification_run_id, run.pk)
+        self.assertEqual(link.evidence_source_id, EvidenceSource.objects.get().pk)
+        self.assertEqual(link.evidence_role, VerificationEvidence.EvidenceRole.FACT_CHECK)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "FAKE")
+        self.assertIsNone(self.claim.final_verdict)
+        self.assertEqual(self.claim.source_type, "Official Fact Check")
+        self.assertEqual(self.claim.ai_sources, ["https://example.com/fact-check"])
+        self.tavily.search.assert_not_called()
+
+    def test_irrelevant_gfc_evidence_remains_linked_before_tavily_fallback(self):
+        self.relevance.return_value = False
+        self.tavily.search.side_effect = self._record_links_at_fallback
+        run = self._execute()
+        self.tavily.search.assert_called_once()
+        self.assertEqual(self.links_at_fallback, [EvidenceSource.objects.get().pk])
+        self.assertEqual(VerificationEvidence.objects.get().verification_run_id, run.pk)
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        self.evaluate_gfc.assert_not_called()
+
+    def test_gfc_evaluation_failure_keeps_links_before_tavily_fallback(self):
+        self.evaluate_gfc.side_effect = RuntimeError("Evaluator unavailable")
+        self.tavily.search.side_effect = self._record_links_at_fallback
+        run = self._execute()
+        self.tavily.search.assert_called_once()
+        self.assertEqual(self.links_at_fallback, [EvidenceSource.objects.get().pk])
+        self.assertEqual(VerificationEvidence.objects.get().verification_run_id, run.pk)
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+
+    def test_gfc_provider_failure_falls_back_without_links(self):
+        self.provider.search_with_payload.side_effect = requests.HTTPError("Provider unavailable")
+        run = self._execute()
+        self.tavily.search.assert_called_once()
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        self.assertEqual(EvidenceSource.objects.count(), 0)
+        self.assertEqual(VerificationEvidence.objects.count(), 0)
+
+    def test_linking_failure_preserves_vrt1_terminal_status(self):
+        for verdict, expected in (
+            ("FACT", VerificationRun.Status.COMPLETED),
+            ("UNVERIFIED", VerificationRun.Status.ABSTAINED),
+            ("OUT_OF_SCOPE", VerificationRun.Status.ABSTAINED),
+        ):
+            with self.subTest(verdict=verdict):
+                self.verdict["verdict"] = verdict
+                with patch(
+                    "api.tasks.link_evidence_sources_to_run", side_effect=RuntimeError("Link storage failed"),
+                ):
+                    run = self._execute()
+                self.assertEqual(run.status, expected)
+                self.assertEqual(EvidenceSource.objects.count(), 1)
+                self.assertEqual(VerificationEvidence.objects.count(), 0)
+                self.claim.refresh_from_db()
+                self.assertEqual(self.claim.ai_verdict, verdict)
+        self.tavily.search.assert_not_called()
+        self.terminals[2].assert_not_called()
