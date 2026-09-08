@@ -1,5 +1,4 @@
 import logging
-import uuid
 
 from django.core.exceptions import (
     ValidationError,
@@ -9,6 +8,11 @@ from django.core.validators import (
 )
 from django.db import transaction
 from django.utils import timezone
+
+from .evidence_snapshot_schema import (
+    EvidenceSnapshotSchemaError,
+    validate_evidence_snapshot,
+)
 
 from .models import (
     AdjudicationDecision,
@@ -378,48 +382,16 @@ def _validate_decision_snapshot(snapshot, *, decision, claim):
         snapshot is None
         or snapshot.decision_id != decision.id
         or str(snapshot.claim_id) != str(claim.id)
-        or snapshot.schema_version
-        != AdjudicationDecisionEvidenceSnapshot.CURRENT_SCHEMA_VERSION
-        or not isinstance(snapshot.evidence_records, list)
-        or not snapshot.evidence_records
     ):
         raise _snapshot_conflict()
 
-    records = []
-    evidence_ids = set()
-    for record in snapshot.evidence_records:
-        if (
-            not isinstance(record, dict)
-            or set(record)
-            != AdjudicationDecisionEvidenceSnapshot.EVIDENCE_RECORD_FIELDS
-        ):
-            raise _snapshot_conflict()
-        try:
-            evidence_id = uuid.UUID(str(record["id"]))
-        except (TypeError, ValueError, AttributeError) as error:
-            raise _snapshot_conflict() from error
-        if str(evidence_id) != record["id"]:
-            raise _snapshot_conflict()
-        if evidence_id in evidence_ids:
-            raise _snapshot_conflict()
-        if record["evidence_status"] not in {"VERIFIED", "REJECTED"}:
-            raise _snapshot_conflict()
-        if record["evidence_url"] is not None and not isinstance(
-            record["evidence_url"], str
-        ):
-            raise _snapshot_conflict()
-        if record["evidence_caption"] is not None and not isinstance(
-            record["evidence_caption"], str
-        ):
-            raise _snapshot_conflict()
-        if record["submitted_at"] is not None and not isinstance(
-            record["submitted_at"], str
-        ):
-            raise _snapshot_conflict()
-        evidence_ids.add(evidence_id)
-        records.append(record)
-
-    return records
+    try:
+        return validate_evidence_snapshot(
+            schema_version=snapshot.schema_version,
+            evidence_records=snapshot.evidence_records,
+        )
+    except EvidenceSnapshotSchemaError as error:
+        raise _snapshot_conflict() from error
 
 
 def _normalize_snapshot_source_url(raw_url):

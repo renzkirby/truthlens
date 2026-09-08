@@ -11,6 +11,13 @@ from pgvector.django import VectorField, HnswIndex
 from django.utils import timezone
 import uuid
 
+from .evidence_snapshot_schema import (
+    CURRENT_SCHEMA_VERSION as EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
+    EVIDENCE_RECORD_FIELDS as EVIDENCE_SNAPSHOT_RECORD_FIELDS,
+    EvidenceSnapshotSchemaError,
+    validate_evidence_snapshot,
+)
+
 
 def _claim_vector_indexes():
     engine = settings.DATABASES.get("default", {}).get("ENGINE", "")
@@ -1866,23 +1873,8 @@ class AdjudicationDecision(models.Model):
 
 
 class AdjudicationDecisionEvidenceSnapshot(models.Model):
-    CURRENT_SCHEMA_VERSION = 1
-    EVIDENCE_RECORD_FIELDS = frozenset(
-        {
-            "id",
-            "thread_id",
-            "evidence_status",
-            "evidence_type",
-            "evidence_caption",
-            "evidence_url",
-            "contributor_id",
-            "reviewer_id",
-            "submitted_at",
-            "reviewed_at",
-            "moderator_notes",
-            "rejection_reason",
-        }
-    )
+    CURRENT_SCHEMA_VERSION = EVIDENCE_SNAPSHOT_SCHEMA_VERSION
+    EVIDENCE_RECORD_FIELDS = EVIDENCE_SNAPSHOT_RECORD_FIELDS
 
     id = models.UUIDField(
         primary_key=True,
@@ -2441,18 +2433,20 @@ class OfficialFactCheckSourceEvidenceLink(models.Model):
             errors["snapshot"] = (
                 "Snapshot claim identity must match the fact-check claim."
             )
-        if snapshot.schema_version != snapshot.CURRENT_SCHEMA_VERSION:
-            errors["snapshot"] = "The evidence snapshot schema is not supported."
-
         record = None
-        if isinstance(snapshot.evidence_records, list):
+        try:
+            evidence_records = validate_evidence_snapshot(
+                schema_version=snapshot.schema_version,
+                evidence_records=snapshot.evidence_records,
+            )
+        except EvidenceSnapshotSchemaError as error:
+            errors["snapshot"] = str(error)
+        else:
             record = next(
                 (
                     item
-                    for item in snapshot.evidence_records
-                    if isinstance(item, dict)
-                    and set(item) == snapshot.EVIDENCE_RECORD_FIELDS
-                    and str(item.get("id")) == str(self.captured_evidence_id)
+                    for item in evidence_records
+                    if item["id"] == str(self.captured_evidence_id)
                 ),
                 None,
             )

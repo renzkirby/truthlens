@@ -49,6 +49,12 @@ class PublicationSourceLineageTests(
             source_urls=source_urls,
         )
 
+    def replace_snapshot_records(self, context, records):
+        AdjudicationDecisionEvidenceSnapshot.objects.filter(
+            pk=context["snapshot"].pk
+        ).update(evidence_records=records)
+        context["snapshot"].refresh_from_db()
+
     def test_draft_sources_use_the_decision_snapshot(self):
         context = self.make_decided_context()
         evidence = context["evidence"][0]
@@ -139,6 +145,136 @@ class PublicationSourceLineageTests(
         self.assertFalse(draft.source_items.exists())
         draft.refresh_from_db()
         self.assertEqual(draft.sources, [])
+
+    def test_valid_nullable_fields_and_invalid_url_keep_snapshot_usable(self):
+        context = self.make_decided_context()
+        records = [
+            dict(record) for record in context["snapshot"].evidence_records
+        ]
+        records[0].update(
+            {
+                "evidence_type": None,
+                "evidence_caption": None,
+                "evidence_url": "javascript:alert(1)",
+                "reviewer_id": None,
+                "submitted_at": None,
+                "reviewed_at": None,
+                "moderator_notes": None,
+                "rejection_reason": None,
+            }
+        )
+        self.replace_snapshot_records(context, records)
+
+        draft = self.make_draft(context, suffix="nullable-invalid-url")
+
+        self.assertFalse(draft.source_items.exists())
+        draft.refresh_from_db()
+        self.assertEqual(draft.sources, [])
+
+    def test_publication_rejects_malformed_snapshot_field_values(self):
+        malformed_values = (
+            ("evidence-id", "id", "not-a-uuid"),
+            ("thread-id", "thread_id", "not-a-uuid"),
+            (
+                "contributor-id",
+                "contributor_id",
+                "00000000-0000-0000-0000-000000000001",
+            ),
+            ("missing-contributor-id", "contributor_id", None),
+            (
+                "reviewer-id",
+                "reviewer_id",
+                "00000000-0000-0000-0000-000000000002",
+            ),
+            ("reviewer-id-type", "reviewer_id", 123),
+            ("submitted-at", "submitted_at", "not-a-datetime"),
+            ("reviewed-at", "reviewed_at", "not-a-datetime"),
+            ("status-type", "evidence_status", ["VERIFIED"]),
+            ("url-type", "evidence_url", {"url": "https://example.com"}),
+            ("nullable-text-type", "moderator_notes", ["not", "text"]),
+        )
+
+        for label, field, value in malformed_values:
+            with self.subTest(label=label):
+                context = self.make_decided_context()
+                records = [
+                    dict(record) for record in context["snapshot"].evidence_records
+                ]
+                records[0][field] = value
+                self.replace_snapshot_records(context, records)
+
+                with self.assertRaises(PublishingConflict):
+                    self.make_draft(context, suffix=f"malformed-{label}")
+
+                self.assertFalse(
+                    OfficialFactCheck.objects.filter(
+                        claim=context["claim"]
+                    ).exists()
+                )
+
+    def test_publication_rejects_duplicate_captured_evidence_ids(self):
+        context = self.make_decided_context(
+            evidence_statuses=[
+                EvidenceSubmission.EvidenceStatus.VERIFIED,
+                EvidenceSubmission.EvidenceStatus.REJECTED,
+            ]
+        )
+        records = [
+            dict(record) for record in context["snapshot"].evidence_records
+        ]
+        records[1]["id"] = records[0]["id"]
+        self.replace_snapshot_records(context, records)
+
+        with self.assertRaises(PublishingConflict):
+            self.make_draft(context, suffix="duplicate-evidence-id")
+
+        self.assertFalse(
+            OfficialFactCheck.objects.filter(claim=context["claim"]).exists()
+        )
+
+    def test_publication_and_direct_lineage_use_the_same_schema_validation(self):
+        context = self.make_decided_context(
+            evidence_statuses=[
+                EvidenceSubmission.EvidenceStatus.VERIFIED,
+                EvidenceSubmission.EvidenceStatus.VERIFIED,
+            ]
+        )
+        records = [
+            dict(record) for record in context["snapshot"].evidence_records
+        ]
+        records[1]["reviewed_at"] = "malformed"
+        self.replace_snapshot_records(context, records)
+
+        with self.assertRaises(PublishingConflict):
+            self.make_draft(context, suffix="shared-validation")
+
+        draft = OfficialFactCheck.objects.create(
+            claim=context["claim"],
+            adjudication_decision=context["decision"],
+            organization=self.organization,
+            canonical_claim=context["decision"].canonical_claim,
+            verdict=context["decision"].verdict,
+            headline="Direct lineage validation draft",
+            summary="A draft used to validate the model boundary.",
+            article_body="The article contains a documented analysis.",
+            publication_status=OfficialFactCheck.PublicationStatus.DRAFT,
+            version=1,
+            drafted_by=self.lead,
+        )
+        source = OfficialFactCheckSource.objects.create(
+            fact_check=draft,
+            url=records[0]["evidence_url"],
+            source_type=OfficialFactCheckSource.SourceType.VERIFIED_EVIDENCE,
+            is_editorially_selected=False,
+        )
+
+        with self.assertRaises(ValidationError):
+            OfficialFactCheckSourceEvidenceLink.objects.create(
+                source=source,
+                snapshot=context["snapshot"],
+                captured_evidence_id=records[0]["id"],
+            )
+        self.assertFalse(source.evidence_links.exists())
 
     def test_later_live_evidence_changes_do_not_change_source_lineage(self):
         context = self.make_decided_context()
