@@ -1346,6 +1346,10 @@ function AdjudicationReviewContent({
       detailIdentity.requestId === detailRequestIdRef.current;
    const readyForFirstDecision = firstDecisionContract.ready && Boolean(detailIdentityIsCurrent);
    const actionBlockers = Array.isArray(actionState.blockers) ? actionState.blockers : [];
+   const isResolvedCase = detail?.status === "RESOLVED";
+   const viewingOutsideCurrentQueue = Boolean(
+      selectedCaseId && detail && !queueLoading && !queueError && !selectedCase,
+   );
 
    if (!canAdjudicate || !organizationId) {
       return (
@@ -1362,8 +1366,8 @@ function AdjudicationReviewContent({
       <div className="adjudication-review-panel" ref={panelRef}>
          <div className="adjudication-panel-intro">
             <div>
-               <h3>Adjudication queue</h3>
-               <p>Review organization-scoped Adjudication work and case history.</p>
+               <h3>Adjudication review</h3>
+               <p>Select a case from the filtered queue, examine its evidence and provenance, then record an authorized human conclusion when the backend permits it.</p>
             </div>
             <span className="adjudication-organization-context">
                Organization: {organizationName || "Unavailable"}
@@ -1372,10 +1376,15 @@ function AdjudicationReviewContent({
 
          <div className="adjudication-boundary-note">
             <Icons name="info" size={17} aria-hidden="true" />
-            <p>
-               Evidence counts support triage only. They do not determine claim truth or whether a case is ready for a
-               decision.
-            </p>
+            <div className="adjudication-boundary-copy">
+               <strong>Where Adjudication fits</strong>
+               <p>
+                  Verification Intake establishes the work. Evidence Review assesses source suitability. Adjudication records the authorized human claim-level conclusion.
+               </p>
+               <p>
+                  Evidence counts support triage only; they do not determine claim truth or readiness. Fact-check drafting and publication remain separate workflows.
+               </p>
+            </div>
          </div>
 
          {authorityError ? (
@@ -1508,9 +1517,9 @@ function AdjudicationReviewContent({
                      <div className="adjudication-section-heading">
                         <div>
                            <h4 id="adjudication-queue-heading" ref={queueHeadingRef} tabIndex="-1">
-                              {activeStatusLabel}
+                              Filtered case queue
                            </h4>
-                           <p>Cases are scoped to {organizationName || "the selected organization"}.</p>
+                           <p>{activeStatusLabel} · Scoped to {organizationName || "the selected organization"}.</p>
                         </div>
                      </div>
 
@@ -1662,7 +1671,7 @@ function AdjudicationReviewContent({
 
                            <header className="adjudication-detail-header">
                               <div className="adjudication-selection-heading">
-                                 <span>Adjudication case {formatCaseReference(selectedCaseId)}</span>
+                                 <span>Selected case · {formatCaseReference(selectedCaseId)}</span>
                                  <h4
                                     id="adjudication-selection-heading"
                                     ref={selectedCaseHeadingRef}
@@ -1680,6 +1689,13 @@ function AdjudicationReviewContent({
                                  </div>
                               )}
                            </header>
+
+                           {viewingOutsideCurrentQueue && (
+                              <p className="adjudication-outside-queue-note">
+                                 <Icons name="info" size={15} aria-hidden="true" />
+                                 Viewing a selected case outside the current queue results. Use the case-status filters to find active or resolved history when applicable.
+                              </p>
+                           )}
 
                            {detailLoading && !detail ? (
                               <div className="adjudication-state adjudication-detail-loading" role="status">
@@ -1729,7 +1745,10 @@ function AdjudicationReviewContent({
                                           <h5 id="adjudication-case-context-heading">Case and claim context</h5>
                                           <p>Review the full claim context before interpreting evidence or decision history.</p>
                                        </div>
-                                       <span className="adjudication-full-id">Case ID: {detail.id}</span>
+                                       <details className="adjudication-full-id">
+                                          <summary>Full case ID</summary>
+                                          <span>{detail.id}</span>
+                                       </details>
                                     </div>
 
                                     <dl className="adjudication-detail-facts">
@@ -1822,13 +1841,6 @@ function AdjudicationReviewContent({
                                        </div>
                                     </div>
 
-                                    <dl className="adjudication-detail-facts compact">
-                                       <div><dt>Assignment status</dt><dd>{detail.assignment?.status ? formatLabel(detail.assignment.status) : "No active assignment"}</dd></div>
-                                       <div><dt>Claimed by</dt><dd><MinimalUser user={detail.assignment?.claimed_by} fallback="Not assigned" /></dd></div>
-                                       <div><dt>Expected revision</dt><dd>{actionState.expected_revision ?? "Unavailable"}</dd></div>
-                                       <div><dt>Selected case precondition</dt><dd>{actionPreconditionsAreValid ? "Confirmed" : "Unavailable"}</dd></div>
-                                    </dl>
-
                                     <div className={`adjudication-readiness-state ${readyForFirstDecision ? "ready" : "blocked"}`}>
                                        <Icons name={readyForFirstDecision ? "check-circle" : "alert-circle"} size={18} aria-hidden="true" />
                                        <div>
@@ -1847,16 +1859,38 @@ function AdjudicationReviewContent({
                                        </p>
                                     )}
 
-                                    {actionBlockers.length > 0 && (
-                                       <ul className="adjudication-blocker-list">
-                                          {actionBlockers.map((blocker, index) => (
-                                             <li key={`${blocker.code || "BLOCKER"}-${index}`}>
-                                                <strong>{formatLabel(blocker.code, "Decision blocker")}</strong>
-                                                <span>{blocker.message || "This case is not currently eligible for a first decision."}</span>
-                                             </li>
-                                          ))}
-                                       </ul>
+                                    {isResolvedCase && (
+                                       <div className="adjudication-read-only-state">
+                                          <Icons name="check-circle" size={18} aria-hidden="true" />
+                                          <div>
+                                             <strong>Review completed · Read-only</strong>
+                                             <span>
+                                                What happens next: the decision remains recorded for this case. Fact-check drafting and publication are separate processes; this workbench does not correct, revise, or reopen it.
+                                             </span>
+                                          </div>
+                                       </div>
                                     )}
+
+                                    {actionBlockers.length > 0 && (
+                                       <div className="adjudication-blocker-group">
+                                          <h6>Decision blockers</h6>
+                                          <ul className="adjudication-blocker-list">
+                                             {actionBlockers.map((blocker, index) => (
+                                                <li key={`${blocker.code || "BLOCKER"}-${index}`}>
+                                                   <strong>{formatLabel(blocker.code, "Decision blocker")}</strong>
+                                                   <span>{blocker.message || "This case is not currently eligible for a first decision."}</span>
+                                                </li>
+                                             ))}
+                                          </ul>
+                                       </div>
+                                    )}
+
+                                    <dl className="adjudication-detail-facts compact adjudication-readiness-meta">
+                                       <div><dt>Assignment status</dt><dd>{detail.assignment?.status ? formatLabel(detail.assignment.status) : "No active assignment"}</dd></div>
+                                       <div><dt>Claimed by</dt><dd><MinimalUser user={detail.assignment?.claimed_by} fallback="Not assigned" /></dd></div>
+                                       <div><dt>Expected revision</dt><dd>{actionState.expected_revision ?? "Unavailable"}</dd></div>
+                                       <div><dt>Selected case precondition</dt><dd>{actionPreconditionsAreValid ? "Confirmed" : "Unavailable"}</dd></div>
+                                    </dl>
 
                                     {readyForFirstDecision && !decisionFormOpen && !confirmation && !confirmationChecking && (
                                        <div className="adjudication-decision-entry">
@@ -1944,7 +1978,7 @@ function AdjudicationReviewContent({
                                                 required
                                              />
                                              <small id="adjudication-canonical-claim-help">
-                                                State the wording this decision will formally adjudicate. It starts blank by design.
+                                                The precise, neutral statement this decision formally evaluates. It starts blank by design.
                                              </small>
                                           </label>
                                           {decisionErrors.canonicalClaim && (
@@ -1970,7 +2004,7 @@ function AdjudicationReviewContent({
                                                 required
                                              />
                                              <small id="adjudication-rationale-help">
-                                                Explain the evidence-based reasoning. A nonblank rationale is required.
+                                                Explain why the reviewed evidence supports the selected verdict. A nonblank rationale is required.
                                              </small>
                                           </label>
                                           {decisionErrors.rationale && (

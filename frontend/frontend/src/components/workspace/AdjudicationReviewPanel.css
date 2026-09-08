@@ -68,10 +68,27 @@
    color: var(--brand-primary);
 }
 
+.adjudication-boundary-copy {
+   flex: 1 1 auto;
+   min-width: 0;
+}
+
+.adjudication-boundary-copy strong {
+   display: block;
+   margin-bottom: 3px;
+   color: var(--text-main);
+   font-size: 0.76rem;
+}
+
 .adjudication-boundary-note p {
    margin: 0;
    font-size: 0.78rem;
    line-height: 1.55;
+}
+
+.adjudication-boundary-note p + p {
+   margin-top: 3px;
+   color: var(--text-muted);
 }
 
 .adjudication-toolbar {
@@ -449,6 +466,26 @@
    justify-content: flex-end;
 }
 
+.adjudication-outside-queue-note {
+   display: flex;
+   align-items: flex-start;
+   gap: 8px;
+   margin: 0;
+   padding: 9px 11px;
+   border-left: 3px solid var(--brand-primary);
+   border-radius: 0 7px 7px 0;
+   background: var(--bg-subtle);
+   color: var(--text-body);
+   font-size: 0.74rem;
+   line-height: 1.5;
+}
+
+.adjudication-outside-queue-note svg {
+   flex: 0 0 auto;
+   margin-top: 2px;
+   color: var(--brand-primary);
+}
+
 .adjudication-detail-content {
    min-width: 0;
 }
@@ -530,6 +567,22 @@
    font-weight: 650;
    overflow-wrap: anywhere;
    text-align: right;
+}
+
+.adjudication-full-id summary {
+   cursor: pointer;
+   list-style-position: inside;
+}
+
+.adjudication-full-id span {
+   display: block;
+   max-width: 34ch;
+   margin-top: 5px;
+   color: var(--text-body);
+   font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+   font-weight: 500;
+   line-height: 1.45;
+   overflow-wrap: anywhere;
 }
 
 .adjudication-detail-facts {
@@ -733,7 +786,7 @@
    display: flex;
    align-items: flex-start;
    gap: 9px;
-   margin-top: 16px;
+   margin-top: 0;
    padding: 12px;
    border: 1px solid var(--border-default);
    border-radius: 9px;
@@ -770,10 +823,57 @@
    line-height: 1.5;
 }
 
+.adjudication-read-only-state {
+   display: flex;
+   align-items: flex-start;
+   gap: 9px;
+   margin-top: 13px;
+   padding: 12px;
+   border: 1px solid var(--border-default);
+   border-radius: 9px;
+   background: var(--bg-subtle);
+   color: var(--text-body);
+}
+
+.adjudication-read-only-state svg {
+   flex: 0 0 auto;
+   margin-top: 1px;
+   color: var(--brand-primary);
+}
+
+.adjudication-read-only-state strong,
+.adjudication-read-only-state span {
+   display: block;
+}
+
+.adjudication-read-only-state strong {
+   color: var(--text-main);
+   font-size: 0.78rem;
+}
+
+.adjudication-read-only-state span {
+   margin-top: 3px;
+   color: var(--text-muted);
+   font-size: 0.73rem;
+   line-height: 1.5;
+}
+
+.adjudication-blocker-group {
+   margin-top: 16px;
+}
+
+.adjudication-blocker-group h6 {
+   margin: 0;
+   color: var(--text-main);
+   font-size: 0.75rem;
+}
+
 .adjudication-blocker-list {
    display: flex;
    flex-direction: column;
    gap: 8px;
+   margin: 8px 0 0;
+   padding-left: 18px;
 }
 
 .adjudication-blocker-list li {
@@ -792,6 +892,12 @@
    color: var(--text-body);
    font-size: 0.75rem;
    line-height: 1.5;
+}
+
+.adjudication-readiness-meta {
+   margin-top: 16px;
+   padding-top: 15px;
+   border-top: 1px solid var(--border-light);
 }
 
 .adjudication-action-message {
@@ -1183,7 +1289,8 @@
 .adjudication-verdict-options input:focus-visible,
 .adjudication-form-heading:focus,
 .adjudication-section-heading h4:focus,
-.adjudication-selection h4:focus {
+.adjudication-selection h4:focus,
+.adjudication-full-id summary:focus-visible {
    outline: 2px solid var(--brand-primary);
    outline-offset: 3px;
 }
@@ -1266,6 +1373,19 @@
       width: 100%;
    }
 
+   .adjudication-filter-grid select,
+   .adjudication-toolbar button,
+   .adjudication-pagination button,
+   .adjudication-contained-error button,
+   .adjudication-return-to-queue,
+   .adjudication-detail-actions > button,
+   .adjudication-action-message button,
+   .adjudication-decision-entry button,
+   .adjudication-decision-form-actions button,
+   .adjudication-verdict-options label {
+      min-height: 44px;
+   }
+
    .adjudication-pagination > span {
       order: -1;
    }
@@ -1307,6 +1427,10 @@
 
    .adjudication-selected-label {
       margin-left: 0;
+   }
+
+   .adjudication-outside-queue-note {
+      padding: 9px;
    }
 
    .adjudication-decision-entry,
