@@ -52,8 +52,8 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.evaluate_tavily = self._patch(
             "api.tasks.evaluate_url_claim_with_tavily", return_value=self.verdict,
         )
-        self.tavily = self._patch("api.tasks.TavilyClient").return_value
-        self.tavily.search.return_value = {
+        self.retrieve_tavily = self._patch("api.tasks._retrieve_and_ingest_tavily")
+        self.retrieve_tavily.return_value = {
             "answer": "Web evidence answer.",
             "results": [{
                 "url": "https://example.com/web", "title": "Web result",
@@ -92,10 +92,16 @@ class VerificationRunURLRuntimeTests(TestCase):
 
     def _execute(self):
         before = self._terminal_count()
+        tavily_before = self.retrieve_tavily.call_count
         try:
             self._invoke()
         finally:
             self.assertEqual(self._terminal_count() - before, 1)
+            if self.retrieve_tavily.call_count > tavily_before:
+                self.assertEqual(self.retrieve_tavily.call_count - tavily_before, 1)
+                self.retrieve_tavily.assert_called_with(
+                    self.cleaned["search_query"][:300], self.claim.pk, stage_prefix="url_",
+                )
         return self.claim.verification_runs.latest("created_at")
 
     def _assert_terminal(self, run, status):
@@ -114,7 +120,7 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assertEqual(self._terminal_count(), 0)
         self.vault.assert_not_called()
         self.bridge.assert_not_called()
-        self.tavily.search.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
         self.save_claim.assert_not_called()
 
     def test_extraction_no_results_deletes_claim_without_run(self):
@@ -173,7 +179,7 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assertEqual(self.claim.ai_verdict, "OUT_OF_SCOPE")
         self.vault.assert_not_called()
         self.bridge.assert_not_called()
-        self.tavily.search.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
 
     def test_satire_completes(self):
         self.cleaned["article_stance"] = "SATIRE"
@@ -195,7 +201,7 @@ class VerificationRunURLRuntimeTests(TestCase):
             "Verified summary.", ["https://example.com/vault"],
         )
         self.bridge.assert_not_called()
-        self.tavily.search.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
 
     def test_gfc_receives_active_running_run_and_completes(self):
         observed = []
@@ -224,7 +230,7 @@ class VerificationRunURLRuntimeTests(TestCase):
             self.claim.pk, self.verdict, "Official Fact Check",
             self.cleaned_text, ["https://example.com/fact-check"],
         )
-        self.tavily.search.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
         self.assertEqual(VerificationEvidence.objects.count(), 0)
 
     def test_gfc_persisted_evidence_links_through_existing_bridge(self):
@@ -258,7 +264,7 @@ class VerificationRunURLRuntimeTests(TestCase):
         self._assert_terminal(run, VerificationRun.Status.COMPLETED)
         self.assertEqual(observed, [run.pk])
         self.assertEqual(self.claim.verification_runs.count(), 1)
-        self.tavily.search.assert_called_once()
+        self.retrieve_tavily.assert_called_once()
         self.fail_run.assert_not_called()
         self.assertEqual(VerificationEvidence.objects.count(), 0)
 
@@ -284,9 +290,23 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.verdict.pop("verdict")
         self._assert_terminal(self._execute(), VerificationRun.Status.ABSTAINED)
 
+    def test_tavily_missing_verdict_abstains(self):
+        self.bridge.return_value = {"claims": []}
+        self.verdict.pop("verdict")
+        self._assert_terminal(self._execute(), VerificationRun.Status.ABSTAINED)
+        self.retrieve_tavily.assert_called_once()
+
+    def test_tavily_query_is_truncated_before_bridge_call(self):
+        self.bridge.return_value = {"claims": []}
+        self.cleaned["search_query"] = "Long search query " * 30
+        self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
+        self.retrieve_tavily.assert_called_once_with(
+            self.cleaned["search_query"][:300], self.claim.pk, stage_prefix="url_",
+        )
+
     def test_handled_tavily_failure_abstains(self):
         self.bridge.return_value = {"claims": []}
-        self.tavily.search.side_effect = requests.Timeout("Tavily timed out")
+        self.retrieve_tavily.side_effect = requests.Timeout("Tavily timed out")
         self._assert_terminal(self._execute(), VerificationRun.Status.ABSTAINED)
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
@@ -339,7 +359,7 @@ class VerificationRunURLRuntimeTests(TestCase):
                 finally:
                     helper.side_effect = None
         self.fail_run.assert_not_called()
-        self.tavily.search.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
 
     def test_create_failure_prevents_verification(self):
         error = RuntimeError("Create unavailable")

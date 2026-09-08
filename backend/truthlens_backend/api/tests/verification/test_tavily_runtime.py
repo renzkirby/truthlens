@@ -31,8 +31,8 @@ class TavilyRuntimeBridgeTests(TestCase):
         self.provider.search_with_payload.return_value = (self.payload, self.raw_items)
         self.log_stage = self.enterContext(patch("api.tasks._log_stage"))
 
-    def _retrieve(self):
-        return tasks._retrieve_and_ingest_tavily("example query", "claim-id")
+    def _retrieve(self, **kwargs):
+        return tasks._retrieve_and_ingest_tavily("example query", "claim-id", **kwargs)
 
     def test_bridge_searches_once_and_ingests_without_links(self):
         before = deepcopy(self.payload)
@@ -89,6 +89,20 @@ class TavilyRuntimeBridgeTests(TestCase):
         self.assertEqual(EvidenceSource.objects.count(), 0)
         self.assertEqual(VerificationEvidence.objects.count(), 0)
         self.provider.search_with_payload.assert_called_once()
+
+    def test_url_stage_prefix_preserves_payload_on_ingestion_success_and_failure(self):
+        before = deepcopy(self.payload)
+        self.assertIs(self._retrieve(stage_prefix="url_"), self.payload)
+        self.assertEqual(self.log_stage.call_args.args[1], "url_tavily_evidence_ingestion")
+        with patch("api.tasks.ingest_raw_evidence", side_effect=IntegrityError("Storage failed")):
+            self.assertIs(self._retrieve(stage_prefix="url_"), self.payload)
+        self.assertEqual(
+            self.log_stage.call_args.args[1], "url_tavily_evidence_ingestion_failed",
+        )
+        self.assertEqual(self.payload, before)
+        self.assertEqual(self.provider.search_with_payload.call_count, 2)
+        self.assertEqual(EvidenceSource.objects.count(), 1)
+        self.assertEqual(VerificationEvidence.objects.count(), 0)
 
     def test_provider_failure_propagates_without_ingestion(self):
         error = requests.Timeout("Tavily unavailable")
@@ -207,6 +221,9 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         self.assertFalse(EvidenceSource.objects.exclude(canonical_source=None).exists())
         self.relevance.assert_not_called()
         self.evaluate_gfc.assert_not_called()
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("tavily_evidence_ingestion", stages)
+        self.assertNotIn("url_tavily_evidence_ingestion", stages)
         self._assert_original_evaluation_and_sources()
 
     def test_irrelevant_gfc_uses_tavily_bridge_after_relevance(self):
@@ -261,32 +278,112 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         self.assertEqual(self.claim.source_type, "Live Web Search")
         self.assertEqual(EvidenceSource.objects.count(), 0)
 
-    def test_url_runtime_keeps_legacy_client_and_does_not_use_text_bridge(self):
+    def _execute_url(self, status=VerificationRun.Status.COMPLETED):
         url = "https://example.com/article"
         self.claim.claim_type = Claim.ClaimType.URL
         self.claim.save(update_fields=["claim_type"])
+        self.cleaned["search_query"] = "q" * 300 + " query suffix excluded"
+        self.url_cleaned_text = "Cleaned article content. " * 100
         response = Mock(status_code=200)
         response.json.return_value = {"results": [{"raw_content": "Article content."}]}
-        self.bridge.side_effect = AssertionError("URL must not call the text Tavily bridge")
         with (
             patch("api.tasks.requests.post", return_value=response),
-            patch("api.tasks.clean_extracted_text", return_value="Cleaned article."),
+            patch("api.tasks.clean_extracted_text", return_value=self.url_cleaned_text),
             patch("api.tasks.extract_search_query", return_value=self.cleaned),
-            patch("api.tasks.TavilyClient") as legacy_client,
             patch("api.tasks.evaluate_url_claim_with_tavily", return_value=self.verdict) as evaluate_url,
         ):
-            legacy_client.return_value.search.return_value = self.payload
             tasks.url_fact_check_process.run(url, self.claim.pk)
-        self.bridge.assert_not_called()
-        self.provider_class.assert_not_called()
-        self.client.search.assert_not_called()
-        legacy_client.return_value.search.assert_called_once()
-        self.assertEqual(
-            legacy_client.return_value.search.call_args.kwargs["request_timeout"],
-            tasks.DEFAULT_HTTP_TIMEOUT_SEC,
+        self.bridge.assert_called_once_with(
+            self.cleaned["search_query"][:300], self.claim.pk, stage_prefix="url_",
         )
-        evaluate_url.assert_called_once()
+        self.provider_class.assert_called_once_with(timeout=tasks.DEFAULT_HTTP_TIMEOUT_SEC)
+        self.client.search.assert_called_once()
+        self.assertEqual(self.client.search.call_args.kwargs["query"], "q" * 300)
+        self.assertEqual(
+            self.client.search.call_args.kwargs["timeout"], tasks.DEFAULT_HTTP_TIMEOUT_SEC,
+        )
+        self.assertNotIn("request_timeout", self.client.search.call_args.kwargs)
         self.evaluate_tavily.assert_not_called()
-        self.assertEqual(EvidenceSource.objects.count(), 0)
         self.assertEqual(VerificationEvidence.objects.count(), 0)
-        self.assertEqual(self.claim.verification_runs.get().status, VerificationRun.Status.COMPLETED)
+        run = self.claim.verification_runs.get()
+        self.assertEqual(run.status, status)
+        self.assertEqual(sum(helper.call_count for helper in self.terminals), 1)
+        self.assertIsNone(run.failure_stage)
+        self.assertIsNone(run.failure_code)
+        self.assertIsNone(run.failure_message)
+        return evaluate_url
+
+    def _assert_original_url_evaluation_and_sources(self, evaluate_url):
+        expected_context = (
+            "Original URL Content to Verify (Do NOT use this as evidence to prove itself):\n"
+            f"{self.url_cleaned_text[:1500]}\n\n"
+            "Web Search Answer:\nOriginal provider answer.\n\n"
+            "Top Search Results:\nSource 1: First result\nURL: https://example.com/first\n"
+            f"Content: {self.payload_before['results'][0]['content']}\n\n"
+            "Source 2: No Title\nURL: https://example.com/second\n"
+            "Content: Second source content.\n\n"
+            "Source 3: No Title\nURL: \nContent: Third source without URL.\n\n"
+        )
+        evaluate_url.assert_called_once_with(
+            self.cleaned["cleaned_claim"], expected_context, "NEUTRAL",
+        )
+        expected_sources = [
+            {"url": "https://example.com/first", "title": "First result",
+             "snippet": self.payload_before["results"][0]["content"][:250] + "..."},
+            {"url": "https://example.com/second", "title": "External Source",
+             "snippet": "Second source content...."},
+        ]
+        self.save_claim.assert_called_once_with(
+            self.claim.pk, self.verdict, "Live Web Search",
+            self.url_cleaned_text, expected_sources,
+        )
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, self.verdict["verdict"])
+        self.assertEqual(self.claim.ai_sources, expected_sources)
+        self.assertEqual(self.claim.context_text, self.url_cleaned_text)
+        self.assertEqual(self.payload, self.payload_before)
+
+    def test_url_runtime_uses_bridge_and_preserves_payload_evaluation_and_sources(self):
+        evaluate_url = self._execute_url()
+        self._assert_original_url_evaluation_and_sources(evaluate_url)
+        self.assertEqual(EvidenceSource.objects.filter(provider="TAVILY").count(), 4)
+        self.assertFalse(EvidenceSource.objects.exclude(authority_score=None).exists())
+        self.assertFalse(EvidenceSource.objects.exclude(canonical_source=None).exists())
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("url_tavily_evidence_ingestion", stages)
+        self.assertNotIn("tavily_evidence_ingestion", stages)
+
+    def test_url_ingestion_failure_preserves_completion_and_evaluation(self):
+        with patch("api.tasks.ingest_raw_evidence", side_effect=IntegrityError("Storage failed")):
+            with self.assertLogs("api.tasks", level="ERROR") as logs:
+                evaluate_url = self._execute_url()
+        self._assert_original_url_evaluation_and_sources(evaluate_url)
+        self.assertEqual(EvidenceSource.objects.count(), 0)
+        self.assertIn("Tavily evidence ingestion failed", "\n".join(logs.output))
+        self.assertIn("Storage failed", "\n".join(logs.output))
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("url_tavily_evidence_ingestion_failed", stages)
+        self.assertNotIn("tavily_evidence_ingestion_failed", stages)
+
+    def test_url_ingestion_failure_preserves_abstention_and_evaluation(self):
+        self.verdict["verdict"] = "UNVERIFIED"
+        with patch("api.tasks.ingest_raw_evidence", side_effect=IntegrityError("Storage failed")):
+            evaluate_url = self._execute_url(VerificationRun.Status.ABSTAINED)
+        self._assert_original_url_evaluation_and_sources(evaluate_url)
+        self.assertEqual(EvidenceSource.objects.count(), 0)
+
+    def test_url_provider_failure_reaches_existing_unverified_fallback(self):
+        self.client.search.side_effect = requests.Timeout("Provider unavailable")
+        with patch("api.tasks.ingest_raw_evidence") as ingest:
+            evaluate_url = self._execute_url(VerificationRun.Status.ABSTAINED)
+        ingest.assert_not_called()
+        evaluate_url.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
+        self.assertEqual(self.claim.ai_sources, [])
+        self.assertEqual(self.claim.source_type, "Live Web Search")
+        self.assertEqual(EvidenceSource.objects.count(), 0)
+        self.assertFalse(any(
+            "tavily_evidence_ingestion" in call.args[1]
+            for call in self.log_stage.call_args_list
+        ))

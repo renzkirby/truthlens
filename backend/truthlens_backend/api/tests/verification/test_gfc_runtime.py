@@ -212,7 +212,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
                 return_value=ai_verdict,
             ) as evaluate_gfc,
             patch("api.tasks._save_claim") as save_claim,
-            patch("api.tasks.TavilyClient") as tavily_class,
+            patch("api.tasks._retrieve_and_ingest_tavily") as retrieve_tavily,
             patch("api.tasks.requests.get") as requests_get,
             patch("api.tasks._log_stage"),
         ):
@@ -246,7 +246,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             ["https://example.com/" "fact-check"],
         )
 
-        tavily_class.assert_not_called()
+        retrieve_tavily.assert_not_called()
 
         requests_get.assert_not_called()
 
@@ -434,7 +434,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
                 return_value=ai_verdict,
             ) as evaluate_gfc,
             patch("api.tasks._save_claim") as save_claim,
-            patch("api.tasks.TavilyClient") as tavily_class,
+            patch("api.tasks._retrieve_and_ingest_tavily") as retrieve_tavily,
             patch("api.tasks._log_stage"),
         ):
             url_fact_check_process.run(
@@ -470,7 +470,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
 
         requests_post.assert_called_once()
         requests_get.assert_not_called()
-        tavily_class.assert_not_called()
+        retrieve_tavily.assert_not_called()
 
     def test_url_pipeline_provider_failure_still_falls_back_to_tavily(
         self,
@@ -552,10 +552,10 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
                 return_value=ai_verdict,
             ),
             patch("api.tasks._save_claim") as save_claim,
-            patch("api.tasks.TavilyClient") as tavily_class,
+            patch("api.tasks._retrieve_and_ingest_tavily") as retrieve_tavily,
             patch("api.tasks._log_stage"),
         ):
-            tavily_class.return_value.search.return_value = tavily_response
+            retrieve_tavily.return_value = tavily_response
 
             url_fact_check_process.run(
                 source_url,
@@ -569,7 +569,9 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             verification_run=start_run.return_value,
         )
 
-        (tavily_class.return_value.search.assert_called_once())
+        retrieve_tavily.assert_called_once_with(
+            search_query[:300], claim_id, stage_prefix="url_",
+        )
 
         self.assertEqual(
             save_claim.call_args.args[2],
