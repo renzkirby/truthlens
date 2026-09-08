@@ -27,6 +27,20 @@ const PRIORITY_OPTIONS = [
    { value: "URGENT", label: "Urgent" },
 ];
 
+const VERDICT_OPTIONS = [
+   { value: "FACT", label: "Fact" },
+   { value: "FAKE", label: "Fake" },
+   { value: "MISLEADING", label: "Misleading" },
+   { value: "SATIRE", label: "Satire" },
+   { value: "UNVERIFIED", label: "Unverified" },
+];
+
+const EMPTY_DECISION_DRAFT = {
+   verdict: "",
+   canonicalClaim: "",
+   rationale: "",
+};
+
 const EMPTY_QUEUE_COPY = {
    RESOLVED: {
       heading: "No resolved Adjudication cases",
@@ -305,6 +319,67 @@ function normalizeNonnegativeNumber(value, fallback = 0) {
    return Number.isFinite(number) && number >= 0 ? number : fallback;
 }
 
+function buildAdjudicationCaseUrl(caseId, organizationId, suffix = "") {
+   const query = new URLSearchParams({ organization_id: organizationId });
+   return `${resolveApiEndpoint("ADJUDICATION_CASES")}${encodeURIComponent(caseId)}/${suffix}?${query.toString()}`;
+}
+
+function getFirstDecisionContract(caseDetail, organizationId) {
+   const actionState = caseDetail?.action_state || {};
+   const preconditions = actionState.preconditions || {};
+   const expectedRevisionIsValid = Number.isInteger(actionState.expected_revision) && actionState.expected_revision >= 0;
+   const preconditionsAreValid =
+      expectedRevisionIsValid &&
+      identifiersMatch(preconditions.case_id, caseDetail?.id) &&
+      identifiersMatch(preconditions.organization_id, organizationId) &&
+      preconditions.expected_revision === actionState.expected_revision;
+
+   return {
+      actionState,
+      preconditions,
+      expectedRevision: actionState.expected_revision,
+      preconditionsAreValid,
+      ready: actionState.can_issue_first_decision === true && preconditionsAreValid,
+   };
+}
+
+function normalizeServerMessage(value) {
+   if (Array.isArray(value)) {
+      return value.map(normalizeServerMessage).filter(Boolean).join(" ");
+   }
+   if (typeof value === "string") {
+      return value;
+   }
+   if (value && typeof value === "object" && typeof value.detail === "string") {
+      return value.detail;
+   }
+   return "";
+}
+
+function getActionValidationErrors(error) {
+   const fieldErrors = {};
+   const fieldMap = {
+      moderator_verdict: "verdict",
+      canonical_claim: "canonicalClaim",
+      moderator_notes: "rationale",
+   };
+
+   Object.entries(fieldMap).forEach(([serverField, localField]) => {
+      const message = normalizeServerMessage(error?.[serverField]);
+      if (message) {
+         fieldErrors[localField] = message;
+      }
+   });
+
+   const generalMessage =
+      normalizeServerMessage(error?.expected_revision) ||
+      normalizeServerMessage(error?.non_field_errors) ||
+      error?.message ||
+      "The decision could not be submitted. Review the fields and try again.";
+
+   return { fieldErrors, generalMessage };
+}
+
 function AdjudicationReviewContent({
    authFetch,
    authIdentity,
@@ -330,7 +405,17 @@ function AdjudicationReviewContent({
    const [detailError, setDetailError] = useState("");
    const [detailUnavailable, setDetailUnavailable] = useState(false);
    const [detailRequestVersion, setDetailRequestVersion] = useState(0);
+   const [detailIdentity, setDetailIdentity] = useState(null);
    const [authorityError, setAuthorityError] = useState("");
+   const [decisionDraft, setDecisionDraft] = useState(EMPTY_DECISION_DRAFT);
+   const [decisionErrors, setDecisionErrors] = useState({});
+   const [decisionFormOpen, setDecisionFormOpen] = useState(false);
+   const [confirmation, setConfirmation] = useState(null);
+   const [confirmationChecking, setConfirmationChecking] = useState(false);
+   const [mutation, setMutation] = useState(null);
+   const [actionNotice, setActionNotice] = useState(null);
+   const [actionError, setActionError] = useState("");
+   const [reconciliationPending, setReconciliationPending] = useState(null);
 
    const mountedRef = useRef(true);
    const panelRef = useRef(null);
@@ -338,6 +423,7 @@ function AdjudicationReviewContent({
    const authorityRevokedRef = useRef(false);
    const queueRequestIdRef = useRef(0);
    const detailRequestIdRef = useRef(0);
+   const reconciliationRequestIdRef = useRef(0);
    const selectedCaseIdRef = useRef(null);
    const originatingQueueCaseIdRef = useRef(null);
    const returnFocusCaseIdRef = useRef(null);
@@ -350,6 +436,19 @@ function AdjudicationReviewContent({
    const focusDetailErrorRef = useRef(false);
    const focusQueueAfterReturnRef = useRef(false);
    const focusQueueAfterAuthorityRetryRef = useRef(false);
+   const decisionTriggerRef = useRef(null);
+   const firstVerdictRef = useRef(null);
+   const canonicalClaimRef = useRef(null);
+   const rationaleRef = useRef(null);
+   const decisionFocusTargetRef = useRef("verdict");
+   const confirmationHeadingRef = useRef(null);
+   const actionMessageRef = useRef(null);
+   const confirmationCandidateRef = useRef(null);
+   const focusDecisionFormRef = useRef(false);
+   const focusConfirmationRef = useRef(false);
+   const focusActionMessageRef = useRef(false);
+   const focusDetailAfterMutationRef = useRef(false);
+   const restoreDecisionTriggerFocusRef = useRef(false);
 
    const isAuthorityGenerationCurrent = useCallback(
       (generation) =>
@@ -364,6 +463,7 @@ function AdjudicationReviewContent({
       authorityGenerationRef.current += 1;
       queueRequestIdRef.current += 1;
       detailRequestIdRef.current += 1;
+      reconciliationRequestIdRef.current += 1;
       selectedCaseIdRef.current = null;
       originatingQueueCaseIdRef.current = null;
       returnFocusCaseIdRef.current = null;
@@ -371,6 +471,12 @@ function AdjudicationReviewContent({
       focusDetailErrorRef.current = false;
       focusQueueAfterReturnRef.current = false;
       focusQueueAfterAuthorityRetryRef.current = false;
+      confirmationCandidateRef.current = null;
+      focusDecisionFormRef.current = false;
+      focusConfirmationRef.current = false;
+      focusActionMessageRef.current = false;
+      focusDetailAfterMutationRef.current = false;
+      restoreDecisionTriggerFocusRef.current = false;
 
       setQueue({ count: 0, limit: PAGE_SIZE, offset: 0, results: [] });
       setQueueLoading(false);
@@ -380,6 +486,16 @@ function AdjudicationReviewContent({
       setDetailLoading(false);
       setDetailError("");
       setDetailUnavailable(false);
+      setDetailIdentity(null);
+      setDecisionDraft(EMPTY_DECISION_DRAFT);
+      setDecisionErrors({});
+      setDecisionFormOpen(false);
+      setConfirmation(null);
+      setConfirmationChecking(false);
+      setMutation(null);
+      setActionNotice(null);
+      setActionError("");
+      setReconciliationPending(null);
       setAuthorityError(
          error?.status === 401
             ? "Your session is no longer available. Sign in again or retry after authentication is restored."
@@ -395,6 +511,7 @@ function AdjudicationReviewContent({
          authorityGenerationRef.current += 1;
          queueRequestIdRef.current += 1;
          detailRequestIdRef.current += 1;
+         reconciliationRequestIdRef.current += 1;
       };
    }, []);
 
@@ -501,8 +618,7 @@ function AdjudicationReviewContent({
       const requestOrganizationId = organizationId;
       const requestCaseId = selectedCaseId;
       const requestPrincipal = authIdentity;
-      const query = new URLSearchParams({ organization_id: requestOrganizationId });
-      const detailUrl = `${resolveApiEndpoint("ADJUDICATION_CASES")}${encodeURIComponent(requestCaseId)}/?${query.toString()}`;
+      const detailUrl = buildAdjudicationCaseUrl(requestCaseId, requestOrganizationId);
       detailRequestIdRef.current = requestId;
 
       authFetch(detailUrl, { method: "GET" })
@@ -522,18 +638,54 @@ function AdjudicationReviewContent({
                !identifiersMatch(data?.id, requestCaseId) ||
                !identifiersMatch(data?.organization?.id, requestOrganizationId)
             ) {
+               confirmationCandidateRef.current = null;
                focusDetailErrorRef.current = true;
                setDetail(null);
+               setDetailIdentity(null);
                setDetailError("The selected case response did not match the requested organization and case.");
                setDetailUnavailable(false);
                setDetailLoading(false);
+               setConfirmationChecking(false);
                return;
             }
 
+            const nextDetailIdentity = {
+               principal: requestPrincipal,
+               organizationId: requestOrganizationId,
+               caseId: requestCaseId,
+               authorityGeneration,
+               requestId,
+            };
+            const candidate = confirmationCandidateRef.current;
             setDetail(data);
+            setDetailIdentity(nextDetailIdentity);
             setDetailError("");
             setDetailUnavailable(false);
             setDetailLoading(false);
+
+            if (candidate) {
+               confirmationCandidateRef.current = null;
+               setConfirmationChecking(false);
+               const freshContract = getFirstDecisionContract(data, requestOrganizationId);
+               const candidateIsCurrent =
+                  candidate.principal === requestPrincipal &&
+                  candidate.authorityGeneration === authorityGeneration &&
+                  identifiersMatch(candidate.organizationId, requestOrganizationId) &&
+                  identifiersMatch(candidate.caseId, requestCaseId) &&
+                  candidate.expectedRevision === freshContract.expectedRevision;
+
+               if (candidateIsCurrent && freshContract.ready) {
+                  setConfirmation({ ...candidate, detailRequestId: requestId });
+                  focusConfirmationRef.current = true;
+               } else {
+                  setDecisionFormOpen(false);
+                  setConfirmation(null);
+                  focusActionMessageRef.current = true;
+                  setActionError(
+                     "This case changed while the decision was being prepared. Review the refreshed readiness and begin again.",
+                  );
+               }
+            }
          })
          .catch((error) => {
             if (
@@ -553,7 +705,10 @@ function AdjudicationReviewContent({
             }
 
             const unavailable = error?.status === 404;
+            const confirmationAttempt = confirmationCandidateRef.current;
+            confirmationCandidateRef.current = null;
             focusDetailErrorRef.current = true;
+            setDetailIdentity(null);
             setDetailError(
                unavailable
                   ? "This Adjudication case is no longer available for the selected organization."
@@ -561,6 +716,16 @@ function AdjudicationReviewContent({
             );
             setDetailUnavailable(unavailable);
             setDetailLoading(false);
+            setConfirmationChecking(false);
+            setConfirmation(null);
+            if (confirmationAttempt && !unavailable) {
+               setDecisionFormOpen(true);
+               setDecisionErrors({
+                  general: "Canonical detail could not be refreshed. Retry the case refresh before reviewing this decision again.",
+               });
+            } else if (unavailable) {
+               setDecisionFormOpen(false);
+            }
 
             if (unavailable) {
                setDetail(null);
@@ -623,6 +788,67 @@ function AdjudicationReviewContent({
       }
    }, [detailError]);
 
+   useEffect(() => {
+      if (decisionFormOpen && focusDecisionFormRef.current) {
+         focusDecisionFormRef.current = false;
+         const focusTargets = {
+            verdict: firstVerdictRef,
+            canonicalClaim: canonicalClaimRef,
+            rationale: rationaleRef,
+         };
+         (focusTargets[decisionFocusTargetRef.current] || firstVerdictRef).current?.focus();
+      }
+   }, [decisionFormOpen]);
+
+   useEffect(() => {
+      if (confirmation && focusConfirmationRef.current) {
+         focusConfirmationRef.current = false;
+         confirmationHeadingRef.current?.focus();
+      }
+   }, [confirmation]);
+
+   useEffect(() => {
+      if (
+         !decisionFormOpen &&
+         !confirmation &&
+         !confirmationChecking &&
+         restoreDecisionTriggerFocusRef.current
+      ) {
+         restoreDecisionTriggerFocusRef.current = false;
+         decisionTriggerRef.current?.focus();
+      }
+   }, [confirmation, confirmationChecking, decisionFormOpen]);
+
+   useEffect(() => {
+      if ((actionError || actionNotice) && focusActionMessageRef.current) {
+         focusActionMessageRef.current = false;
+         actionMessageRef.current?.focus();
+      }
+   }, [actionError, actionNotice]);
+
+   useEffect(() => {
+      if (detail && focusDetailAfterMutationRef.current) {
+         focusDetailAfterMutationRef.current = false;
+         selectedCaseHeadingRef.current?.focus();
+      }
+   }, [detail]);
+
+   const resetDecisionWorkflow = ({ clearMessages = true } = {}) => {
+      confirmationCandidateRef.current = null;
+      focusDecisionFormRef.current = false;
+      focusConfirmationRef.current = false;
+      setDecisionDraft(EMPTY_DECISION_DRAFT);
+      setDecisionErrors({});
+      setDecisionFormOpen(false);
+      setConfirmation(null);
+      setConfirmationChecking(false);
+      if (clearMessages) {
+         setActionNotice(null);
+         setActionError("");
+         setReconciliationPending(null);
+      }
+   };
+
    const clearSelection = ({ restoreQueueFocus = false } = {}) => {
       const caseId = originatingQueueCaseIdRef.current || selectedCaseIdRef.current;
       detailRequestIdRef.current += 1;
@@ -637,6 +863,8 @@ function AdjudicationReviewContent({
       setDetailLoading(false);
       setDetailError("");
       setDetailUnavailable(false);
+      setDetailIdentity(null);
+      resetDecisionWorkflow({ clearMessages: false });
    };
 
    const requestQueueRefresh = ({ preserveRows = true } = {}) => {
@@ -651,6 +879,345 @@ function AdjudicationReviewContent({
       setQueueLoading(true);
       setQueueError("");
       setQueueRequestVersion((current) => current + 1);
+   };
+
+   const isOperationContextCurrent = (operation) =>
+      operation &&
+      operation.principal === authIdentity &&
+      identifiersMatch(operation.organizationId, organizationId) &&
+      isAuthorityGenerationCurrent(operation.authorityGeneration);
+
+   const reconcileDecisionOperation = async (operation, outcome, serverMessage = "") => {
+      if (!isOperationContextCurrent(operation)) {
+         return;
+      }
+
+      const reconciliationId = reconciliationRequestIdRef.current + 1;
+      reconciliationRequestIdRef.current = reconciliationId;
+      let selectedDetailRequestId = null;
+
+      if (identifiersMatch(selectedCaseIdRef.current, operation.caseId)) {
+         selectedDetailRequestId = detailRequestIdRef.current + 1;
+         detailRequestIdRef.current = selectedDetailRequestId;
+         setDetailIdentity(null);
+         setDetailLoading(true);
+         setDetailError("");
+         setDetailUnavailable(false);
+      }
+
+      setReconciliationPending(null);
+
+      try {
+         const canonicalDetail = await authFetch(
+            buildAdjudicationCaseUrl(operation.caseId, operation.organizationId),
+            { method: "GET" },
+         );
+
+         if (
+            reconciliationRequestIdRef.current !== reconciliationId ||
+            !isOperationContextCurrent(operation)
+         ) {
+            return;
+         }
+
+         if (
+            !identifiersMatch(canonicalDetail?.id, operation.caseId) ||
+            !identifiersMatch(canonicalDetail?.organization?.id, operation.organizationId)
+         ) {
+            throw new Error("The canonical case response did not match the submitted decision identity.");
+         }
+
+         const selectedCaseIsSubmittedCase =
+            identifiersMatch(selectedCaseIdRef.current, operation.caseId) &&
+            detailRequestIdRef.current === selectedDetailRequestId;
+
+         if (selectedCaseIsSubmittedCase) {
+            setDetail(canonicalDetail);
+            setDetailIdentity({
+               principal: operation.principal,
+               organizationId: operation.organizationId,
+               caseId: operation.caseId,
+               authorityGeneration: operation.authorityGeneration,
+               requestId: selectedDetailRequestId,
+            });
+            setDetailLoading(false);
+            setDetailError("");
+            setDetailUnavailable(false);
+            focusDetailAfterMutationRef.current = true;
+         }
+
+         requestQueueRefresh();
+
+         if (outcome === "success") {
+            setActionError("");
+            setActionNotice({
+               kind: "success",
+               caseId: operation.caseId,
+               message: selectedCaseIsSubmittedCase
+                  ? "The authoritative decision was recorded and the canonical case detail is current."
+                  : "The authoritative decision was recorded for the submitted case. Your current selection was not changed.",
+               inspectable: !selectedCaseIsSubmittedCase,
+            });
+         } else if (outcome === "conflict") {
+            setActionNotice(null);
+            setActionError(
+               `Case ${formatCaseReference(operation.caseId)} changed before the decision was submitted. ${serverMessage || "Review its current state before continuing."}`,
+            );
+         } else {
+            const recordedDecisionExists = Boolean(canonicalDetail?.current_decision) || canonicalDetail?.status === "RESOLVED";
+            if (recordedDecisionExists) {
+               setActionError("");
+               setActionNotice({
+                  kind: "reconciled",
+                  caseId: operation.caseId,
+                  message: "The request outcome was initially unclear, but the fresh canonical case now contains a recorded decision.",
+                  inspectable: !selectedCaseIsSubmittedCase,
+               });
+            } else {
+               setActionNotice(null);
+               setActionError(
+                  `The outcome for case ${formatCaseReference(operation.caseId)} was unclear. Fresh canonical detail shows no recorded decision; review it fully before beginning a new attempt.`,
+               );
+            }
+         }
+         focusActionMessageRef.current = !selectedCaseIsSubmittedCase;
+      } catch (error) {
+         if (
+            reconciliationRequestIdRef.current !== reconciliationId ||
+            !isOperationContextCurrent(operation)
+         ) {
+            return;
+         }
+
+         if (error?.status === 401 || error?.status === 403) {
+            revokeAuthority(error);
+            return;
+         }
+
+         const selectedCaseIsSubmittedCase =
+            identifiersMatch(selectedCaseIdRef.current, operation.caseId) &&
+            detailRequestIdRef.current === selectedDetailRequestId;
+         const pendingMessage =
+            outcome === "success"
+               ? "The action endpoint recorded the decision, but canonical reconciliation is pending. Do not resubmit the decision."
+               : "The request outcome is not confirmed because canonical reconciliation failed. Do not resubmit until the case is reconciled.";
+
+         if (selectedCaseIsSubmittedCase) {
+            setDetailIdentity(null);
+            setDetailLoading(false);
+            setDetailUnavailable(error?.status === 404);
+            setDetailError(
+               error?.status === 404
+                  ? "The submitted Adjudication case is no longer available in this organization."
+                  : (error?.message || "Unable to reconcile the submitted case with canonical detail."),
+            );
+         }
+
+         setReconciliationPending({ operation, outcome, serverMessage });
+         setActionNotice(null);
+         setActionError(`${pendingMessage} Case ${formatCaseReference(operation.caseId)}.`);
+         focusActionMessageRef.current = true;
+         requestQueueRefresh();
+      }
+   };
+
+   const handleBeginDecision = () => {
+      if (!readyForFirstDecision || detailLoading || detailError || mutation || reconciliationPending) {
+         return;
+      }
+
+      setDecisionDraft(EMPTY_DECISION_DRAFT);
+      setDecisionErrors({});
+      setActionError("");
+      setActionNotice(null);
+      setConfirmation(null);
+      setDecisionFormOpen(true);
+      decisionFocusTargetRef.current = "verdict";
+      focusDecisionFormRef.current = true;
+   };
+
+   const handleDecisionDraftChange = (field, value) => {
+      setDecisionDraft((current) => ({ ...current, [field]: value }));
+      setDecisionErrors((current) => ({ ...current, [field]: "", general: "" }));
+   };
+
+   const handleDecisionReview = (event) => {
+      event.preventDefault();
+      const errors = {};
+      const canonicalClaim = decisionDraft.canonicalClaim.trim();
+      const rationale = decisionDraft.rationale.trim();
+
+      if (!VERDICT_OPTIONS.some((option) => option.value === decisionDraft.verdict)) {
+         errors.verdict = "Choose one adjudication verdict.";
+      }
+      if (!canonicalClaim) {
+         errors.canonicalClaim = "Enter the canonical claim wording to record.";
+      }
+      if (!rationale) {
+         errors.rationale = "Enter a nonblank rationale for this adjudication.";
+      }
+
+      if (Object.keys(errors).length > 0) {
+         errors.general = "Review the required decision fields before continuing.";
+         setDecisionErrors(errors);
+         const firstInvalidField = ["verdict", "canonicalClaim", "rationale"].find((field) => errors[field]);
+         const focusTargets = {
+            verdict: firstVerdictRef,
+            canonicalClaim: canonicalClaimRef,
+            rationale: rationaleRef,
+         };
+         focusTargets[firstInvalidField]?.current?.focus();
+         return;
+      }
+
+      if (!readyForFirstDecision || !detailIdentityIsCurrent || detailLoading || detailError) {
+         setDecisionErrors({ general: "This detail is no longer fresh. Refresh the case and review its readiness again." });
+         return;
+      }
+
+      confirmationCandidateRef.current = {
+         principal: authIdentity,
+         organizationId,
+         caseId: detail.id,
+         authorityGeneration: authorityGenerationRef.current,
+         sourceDetailRequestId: detailIdentity.requestId,
+         expectedRevision: firstDecisionContract.expectedRevision,
+         payload: {
+            moderator_verdict: decisionDraft.verdict,
+            canonical_claim: canonicalClaim,
+            moderator_notes: rationale,
+            expected_revision: firstDecisionContract.expectedRevision,
+         },
+      };
+      detailRequestIdRef.current += 1;
+      setDetailIdentity(null);
+      setDecisionErrors({});
+      setDecisionFormOpen(false);
+      setConfirmationChecking(true);
+      setDetailLoading(true);
+      setDetailError("");
+      setDetailUnavailable(false);
+      setDetailRequestVersion((current) => current + 1);
+   };
+
+   const handleCancelDecision = () => {
+      restoreDecisionTriggerFocusRef.current = true;
+      resetDecisionWorkflow({ clearMessages: false });
+   };
+
+   const handleCancelConfirmation = () => {
+      setConfirmation(null);
+      setDecisionFormOpen(true);
+      decisionFocusTargetRef.current = "verdict";
+      focusDecisionFormRef.current = true;
+   };
+
+   const handleDecisionSubmit = async () => {
+      const operation = confirmation;
+      if (!operation || mutation || reconciliationPending) {
+         return;
+      }
+
+      const contract = getFirstDecisionContract(detail, organizationId);
+      const isFreshConfirmation =
+         detailIdentityIsCurrent &&
+         detailIdentity.requestId === operation.detailRequestId &&
+         operation.principal === authIdentity &&
+         operation.authorityGeneration === authorityGenerationRef.current &&
+         identifiersMatch(operation.organizationId, organizationId) &&
+         identifiersMatch(operation.caseId, detail?.id) &&
+         operation.expectedRevision === contract.expectedRevision &&
+         contract.ready;
+
+      if (!isFreshConfirmation) {
+         setConfirmation(null);
+         focusActionMessageRef.current = true;
+         setActionError("This case changed before confirmation. Refresh and review the current decision preconditions.");
+         return;
+      }
+
+      setMutation(operation);
+      setConfirmation(null);
+      setActionError("");
+      setActionNotice(null);
+
+      try {
+         await authFetch(buildAdjudicationCaseUrl(operation.caseId, operation.organizationId, "action/"), {
+            method: "POST",
+            body: operation.payload,
+         });
+
+         if (!isOperationContextCurrent(operation)) {
+            return;
+         }
+         await reconcileDecisionOperation(operation, "success");
+      } catch (error) {
+         if (!isOperationContextCurrent(operation)) {
+            return;
+         }
+
+         if (error?.status === 401 || error?.status === 403) {
+            revokeAuthority(error);
+            return;
+         }
+
+         if (error?.status === 400) {
+            const validation = getActionValidationErrors(error);
+            if (identifiersMatch(selectedCaseIdRef.current, operation.caseId)) {
+               setDecisionDraft({
+                  verdict: operation.payload.moderator_verdict,
+                  canonicalClaim: operation.payload.canonical_claim,
+                  rationale: operation.payload.moderator_notes,
+               });
+               setDecisionErrors({ ...validation.fieldErrors, general: validation.generalMessage });
+               setDecisionFormOpen(true);
+               decisionFocusTargetRef.current =
+                  ["verdict", "canonicalClaim", "rationale"].find((field) => validation.fieldErrors[field]) || "verdict";
+               focusDecisionFormRef.current = true;
+            } else {
+               setActionError(
+                  `The decision for case ${formatCaseReference(operation.caseId)} was not accepted: ${validation.generalMessage}`,
+               );
+               focusActionMessageRef.current = true;
+            }
+         } else if (error?.status === 404) {
+            if (identifiersMatch(selectedCaseIdRef.current, operation.caseId)) {
+               detailRequestIdRef.current += 1;
+               setDetail(null);
+               setDetailIdentity(null);
+               setDetailLoading(false);
+               setDetailUnavailable(true);
+               setDetailError("This Adjudication case is no longer available for the selected organization.");
+               focusDetailErrorRef.current = true;
+            } else {
+               focusActionMessageRef.current = true;
+            }
+            setActionError(`Case ${formatCaseReference(operation.caseId)} is no longer available.`);
+            requestQueueRefresh();
+         } else if (error?.status === 409) {
+            await reconcileDecisionOperation(operation, "conflict", error?.message);
+         } else {
+            await reconcileDecisionOperation(operation, "ambiguous", error?.message);
+         }
+      } finally {
+         if (isOperationContextCurrent(operation)) {
+            setMutation((current) => (current === operation ? null : current));
+         }
+      }
+   };
+
+   const handleRetryReconciliation = () => {
+      if (!reconciliationPending || mutation) {
+         return;
+      }
+      const { operation, outcome, serverMessage } = reconciliationPending;
+      setMutation(operation);
+      setActionError("");
+      reconcileDecisionOperation(operation, outcome, serverMessage).finally(() => {
+         if (isOperationContextCurrent(operation)) {
+            setMutation((current) => (current === operation ? null : current));
+         }
+      });
    };
 
    const replaceQueueScope = ({ status = statusFilter, priority = priorityFilter, nextOffset = 0 }) => {
@@ -673,6 +1240,8 @@ function AdjudicationReviewContent({
       setDetailLoading(false);
       setDetailError("");
       setDetailUnavailable(false);
+      setDetailIdentity(null);
+      resetDecisionWorkflow({ clearMessages: false });
    };
 
    const handleSelectCase = (caseId) => {
@@ -691,6 +1260,17 @@ function AdjudicationReviewContent({
       setDetailLoading(true);
       setDetailError("");
       setDetailUnavailable(false);
+      setDetailIdentity(null);
+      resetDecisionWorkflow({ clearMessages: false });
+   };
+
+   const handleInspectSubmittedCase = (caseId) => {
+      if (!caseId) {
+         return;
+      }
+      handleSelectCase(caseId);
+      setActionNotice(null);
+      setActionError("");
    };
 
    const requestDetailRefresh = () => {
@@ -699,7 +1279,11 @@ function AdjudicationReviewContent({
       }
 
       detailRequestIdRef.current += 1;
+      confirmationCandidateRef.current = null;
       focusDetailErrorRef.current = false;
+      setDetailIdentity(null);
+      setConfirmation(null);
+      setConfirmationChecking(false);
       setDetailLoading(true);
       setDetailError("");
       setDetailUnavailable(false);
@@ -711,6 +1295,7 @@ function AdjudicationReviewContent({
       authorityRevokedRef.current = false;
       queueRequestIdRef.current += 1;
       detailRequestIdRef.current += 1;
+      reconciliationRequestIdRef.current += 1;
       selectedCaseIdRef.current = null;
       originatingQueueCaseIdRef.current = null;
       returnFocusCaseIdRef.current = null;
@@ -727,6 +1312,8 @@ function AdjudicationReviewContent({
       setDetailLoading(false);
       setDetailError("");
       setDetailUnavailable(false);
+      setDetailIdentity(null);
+      resetDecisionWorkflow();
       setQueueRequestVersion((current) => current + 1);
    };
 
@@ -748,16 +1335,16 @@ function AdjudicationReviewContent({
    const decisionHistoryItems = Array.isArray(decisionHistory.results) ? decisionHistory.results : [];
    const detailEvents = detail?.events || {};
    const eventItems = Array.isArray(detailEvents.results) ? detailEvents.results : [];
-   const actionState = detail?.action_state || {};
-   const actionPreconditions = actionState.preconditions || {};
-   const expectedRevisionIsValid = Number.isInteger(actionState.expected_revision) && actionState.expected_revision >= 0;
-   const actionPreconditionsAreValid =
-      expectedRevisionIsValid &&
-      identifiersMatch(actionPreconditions.case_id, detail?.id) &&
-      identifiersMatch(actionPreconditions.organization_id, organizationId) &&
-      actionPreconditions.expected_revision === actionState.expected_revision;
-   const readyForFirstDecision =
-      actionState.can_issue_first_decision === true && actionPreconditionsAreValid;
+   const firstDecisionContract = getFirstDecisionContract(detail, organizationId);
+   const { actionState, preconditionsAreValid: actionPreconditionsAreValid } = firstDecisionContract;
+   const detailIdentityIsCurrent =
+      detailIdentity &&
+      detailIdentity.principal === authIdentity &&
+      detailIdentity.authorityGeneration === authorityGenerationRef.current &&
+      identifiersMatch(detailIdentity.organizationId, organizationId) &&
+      identifiersMatch(detailIdentity.caseId, selectedCaseId) &&
+      detailIdentity.requestId === detailRequestIdRef.current;
+   const readyForFirstDecision = firstDecisionContract.ready && Boolean(detailIdentityIsCurrent);
    const actionBlockers = Array.isArray(actionState.blockers) ? actionState.blockers : [];
 
    if (!canAdjudicate || !organizationId) {
@@ -859,6 +1446,58 @@ function AdjudicationReviewContent({
                      </button>
                   </div>
                </div>
+
+               {actionNotice && (
+                  <div
+                      className="adjudication-action-message success"
+                      ref={actionMessageRef}
+                      tabIndex="-1"
+                      role="status"
+                  >
+                     <Icons name="check-circle" size={18} aria-hidden="true" />
+                     <div>
+                        <strong>Decision status · Case {formatCaseReference(actionNotice.caseId)}</strong>
+                        <span>{actionNotice.message}</span>
+                        {actionNotice.inspectable && (
+                           <button type="button" onClick={() => handleInspectSubmittedCase(actionNotice.caseId)}>
+                              Inspect recorded case
+                           </button>
+                        )}
+                     </div>
+                  </div>
+               )}
+
+               {actionError && (
+                  <div
+                      className="adjudication-action-message error"
+                      ref={actionMessageRef}
+                      tabIndex="-1"
+                      role="alert"
+                  >
+                     <Icons name="alert-circle" size={18} aria-hidden="true" />
+                     <div>
+                        <strong>Decision workflow needs attention</strong>
+                        <span>{actionError}</span>
+                        {reconciliationPending && (
+                           <button type="button" disabled={Boolean(mutation)} onClick={handleRetryReconciliation}>
+                              {mutation ? "Reconciling…" : "Retry canonical reconciliation"}
+                           </button>
+                        )}
+                     </div>
+                  </div>
+               )}
+
+               {mutation && (
+                  <div className="adjudication-action-message pending" role="status">
+                     <Icons name="loader" size={18} className="adjudication-spinner" aria-hidden="true" />
+                     <div>
+                        <strong>Recording case {formatCaseReference(mutation.caseId)}</strong>
+                        <span>
+                           The submitted request remains in progress even if you inspect another case. It will not be retried automatically.
+                        </span>
+                     </div>
+                  </div>
+               )}
 
                <div className={`adjudication-workspace-grid ${selectedCaseId ? "has-selection" : ""}`}>
                   <section
@@ -1196,7 +1835,7 @@ function AdjudicationReviewContent({
                                           <strong>{readyForFirstDecision ? "Ready for a first decision" : "First decision unavailable"}</strong>
                                           <span>
                                              {readyForFirstDecision
-                                                ? "The backend reports valid selected-case, organization, and revision preconditions. No decision control is available in this checkpoint."
+                                                ? "The backend reports valid selected-case, organization, and revision preconditions. Refreshing the case will revalidate them."
                                                 : "Review the authoritative blockers below. Refresh before relying on this advisory state."}
                                           </span>
                                        </div>
@@ -1218,6 +1857,178 @@ function AdjudicationReviewContent({
                                           ))}
                                        </ul>
                                     )}
+
+                                    {readyForFirstDecision && !decisionFormOpen && !confirmation && !confirmationChecking && (
+                                       <div className="adjudication-decision-entry">
+                                          <button
+                                             type="button"
+                                             ref={decisionTriggerRef}
+                                             disabled={Boolean(mutation) || Boolean(reconciliationPending) || detailLoading || Boolean(detailError)}
+                                             onClick={handleBeginDecision}
+                                          >
+                                             Begin decision
+                                          </button>
+                                          <p>
+                                             This begins a deliberate first-decision review. It does not draft or publish a fact-check.
+                                          </p>
+                                       </div>
+                                    )}
+
+                                    {confirmationChecking && (
+                                       <div className="adjudication-decision-checking" role="status">
+                                          <Icons name="loader" size={17} className="adjudication-spinner" aria-hidden="true" />
+                                          <span>Refreshing canonical detail before confirmation…</span>
+                                       </div>
+                                    )}
+
+                                    {decisionFormOpen && (
+                                       <form className="adjudication-decision-form" onSubmit={handleDecisionReview} noValidate>
+                                          <div className="adjudication-form-heading">
+                                             <div>
+                                                <h6>Prepare first decision</h6>
+                                                <p>
+                                                   Case {formatCaseReference(detail.id)} · Enter the institutional wording and rationale intentionally.
+                                                </p>
+                                             </div>
+                                          </div>
+
+                                          {decisionErrors.general && (
+                                             <p className="adjudication-form-error summary" role="alert">
+                                                {decisionErrors.general}
+                                             </p>
+                                          )}
+
+                                          <fieldset
+                                             className="adjudication-verdict-options"
+                                             aria-describedby={decisionErrors.verdict ? "adjudication-verdict-error" : undefined}
+                                          >
+                                             <legend>Adjudication verdict <span aria-hidden="true">*</span></legend>
+                                             <p>Choose the claim-level human decision. Evidence dispositions remain separate.</p>
+                                             <div>
+                                                {VERDICT_OPTIONS.map((option, index) => (
+                                                   <label key={option.value}>
+                                                      <input
+                                                         ref={index === 0 ? firstVerdictRef : undefined}
+                                                         type="radio"
+                                                         name="adjudication-verdict"
+                                                         value={option.value}
+                                                         checked={decisionDraft.verdict === option.value}
+                                                         onChange={(event) => handleDecisionDraftChange("verdict", event.target.value)}
+                                                         required
+                                                      />
+                                                      <span>{option.label}</span>
+                                                   </label>
+                                                ))}
+                                             </div>
+                                          </fieldset>
+                                          {decisionErrors.verdict && (
+                                             <p id="adjudication-verdict-error" className="adjudication-form-error">
+                                                {decisionErrors.verdict}
+                                             </p>
+                                          )}
+
+                                          <label className="adjudication-decision-field" htmlFor="adjudication-canonical-claim">
+                                             <span>Canonical claim wording <span aria-hidden="true">*</span></span>
+                                             <textarea
+                                                id="adjudication-canonical-claim"
+                                                ref={canonicalClaimRef}
+                                                value={decisionDraft.canonicalClaim}
+                                                onChange={(event) => handleDecisionDraftChange("canonicalClaim", event.target.value)}
+                                                aria-invalid={Boolean(decisionErrors.canonicalClaim)}
+                                                aria-describedby={
+                                                   decisionErrors.canonicalClaim
+                                                      ? "adjudication-canonical-claim-help adjudication-canonical-claim-error"
+                                                      : "adjudication-canonical-claim-help"
+                                                }
+                                                rows={3}
+                                                required
+                                             />
+                                             <small id="adjudication-canonical-claim-help">
+                                                State the wording this decision will formally adjudicate. It starts blank by design.
+                                             </small>
+                                          </label>
+                                          {decisionErrors.canonicalClaim && (
+                                             <p id="adjudication-canonical-claim-error" className="adjudication-form-error">
+                                                {decisionErrors.canonicalClaim}
+                                             </p>
+                                          )}
+
+                                          <label className="adjudication-decision-field" htmlFor="adjudication-rationale">
+                                             <span>Decision rationale <span aria-hidden="true">*</span></span>
+                                             <textarea
+                                                id="adjudication-rationale"
+                                                ref={rationaleRef}
+                                                value={decisionDraft.rationale}
+                                                onChange={(event) => handleDecisionDraftChange("rationale", event.target.value)}
+                                                aria-invalid={Boolean(decisionErrors.rationale)}
+                                                aria-describedby={
+                                                   decisionErrors.rationale
+                                                      ? "adjudication-rationale-help adjudication-rationale-error"
+                                                      : "adjudication-rationale-help"
+                                                }
+                                                rows={5}
+                                                required
+                                             />
+                                             <small id="adjudication-rationale-help">
+                                                Explain the evidence-based reasoning. A nonblank rationale is required.
+                                             </small>
+                                          </label>
+                                          {decisionErrors.rationale && (
+                                             <p id="adjudication-rationale-error" className="adjudication-form-error">
+                                                {decisionErrors.rationale}
+                                             </p>
+                                          )}
+
+                                          <div className="adjudication-decision-form-actions">
+                                             <button type="button" onClick={handleCancelDecision}>Cancel</button>
+                                             <button type="submit">Review decision</button>
+                                          </div>
+                                       </form>
+                                    )}
+
+                                    {confirmation && (
+                                       <div className="adjudication-decision-confirmation">
+                                          <div
+                                             className="adjudication-form-heading"
+                                             ref={confirmationHeadingRef}
+                                             tabIndex="-1"
+                                          >
+                                             <div>
+                                                <h6>Confirm authoritative adjudication</h6>
+                                                <p>Case {formatCaseReference(confirmation.caseId)} · Revision {confirmation.expectedRevision}</p>
+                                             </div>
+                                          </div>
+
+                                          <p className="adjudication-confirmation-consequence">
+                                             Confirming records an authoritative human adjudication and resolves this case. Fact-check drafting and publication remain separate workflows. This is not a correction or reopen action.
+                                          </p>
+
+                                          <dl className="adjudication-confirmation-summary">
+                                             <div>
+                                                <dt>Verdict</dt>
+                                                <dd>{VERDICT_OPTIONS.find((option) => option.value === confirmation.payload.moderator_verdict)?.label}</dd>
+                                             </div>
+                                             <div>
+                                                <dt>Canonical wording</dt>
+                                                <dd>{confirmation.payload.canonical_claim}</dd>
+                                             </div>
+                                             <div>
+                                                <dt>Rationale</dt>
+                                                <dd>{confirmation.payload.moderator_notes}</dd>
+                                             </div>
+                                          </dl>
+
+                                          <div className="adjudication-decision-form-actions">
+                                             <button type="button" disabled={Boolean(mutation)} onClick={handleCancelConfirmation}>
+                                                Back to edit
+                                             </button>
+                                             <button type="button" disabled={Boolean(mutation)} onClick={handleDecisionSubmit}>
+                                                {mutation ? "Recording decision…" : "Confirm and record decision"}
+                                             </button>
+                                          </div>
+                                       </div>
+                                    )}
+
                                  </section>
 
                                  <section className="adjudication-detail-section" aria-labelledby="adjudication-decisions-heading">

@@ -794,6 +794,307 @@
    line-height: 1.5;
 }
 
+.adjudication-action-message {
+   display: flex;
+   align-items: flex-start;
+   gap: 10px;
+   margin: -3px 0 18px;
+   padding: 12px 14px;
+   border: 1px solid var(--border-default);
+   border-radius: 9px;
+   color: var(--text-body);
+   overflow-wrap: anywhere;
+}
+
+.adjudication-action-message.success {
+   border-color: var(--verdict-fact-border);
+   background: var(--verdict-fact-bg);
+   color: var(--verdict-fact-text);
+}
+
+.adjudication-action-message.error {
+   border-color: var(--verdict-fake-border);
+   background: var(--verdict-fake-bg);
+   color: var(--verdict-fake-text);
+}
+
+.adjudication-action-message.pending {
+   background: var(--bg-subtle);
+}
+
+.adjudication-action-message > svg {
+   flex: 0 0 auto;
+   margin-top: 2px;
+}
+
+.adjudication-action-message > div {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   align-items: flex-start;
+   gap: 4px;
+}
+
+.adjudication-action-message strong {
+   font-size: 0.78rem;
+}
+
+.adjudication-action-message span {
+   font-size: 0.75rem;
+   line-height: 1.5;
+}
+
+.adjudication-action-message button,
+.adjudication-decision-entry button,
+.adjudication-decision-form-actions button {
+   min-height: 36px;
+   padding: 0 12px;
+   border: 1px solid currentColor;
+   border-radius: 8px;
+   background: var(--bg-surface);
+   color: inherit;
+   font: inherit;
+   font-size: 0.74rem;
+   font-weight: 700;
+   cursor: pointer;
+}
+
+.adjudication-action-message button {
+   margin-top: 4px;
+}
+
+.adjudication-action-message button:disabled,
+.adjudication-decision-entry button:disabled,
+.adjudication-decision-form-actions button:disabled {
+   cursor: not-allowed;
+   opacity: 0.58;
+}
+
+.adjudication-action-message button:hover:not(:disabled),
+.adjudication-decision-form-actions button:first-child:hover:not(:disabled) {
+   background: var(--bg-subtle);
+}
+
+.adjudication-decision-entry button:hover:not(:disabled),
+.adjudication-decision-form-actions button:last-child:hover:not(:disabled) {
+   border-color: var(--brand-primary-hover);
+   background: var(--brand-primary-hover);
+}
+
+.adjudication-decision-entry {
+   display: flex;
+   align-items: center;
+   gap: 12px;
+   margin-top: 16px;
+}
+
+.adjudication-decision-entry button,
+.adjudication-decision-form-actions button:last-child {
+   border-color: var(--brand-primary);
+   background: var(--brand-primary);
+   color: var(--text-inverse);
+}
+
+.adjudication-decision-entry p {
+   max-width: 58ch;
+   margin: 0;
+   color: var(--text-muted);
+   font-size: 0.72rem;
+   line-height: 1.5;
+}
+
+.adjudication-decision-checking {
+   display: flex;
+   align-items: flex-start;
+   gap: 8px;
+   margin: 14px 0 0;
+   color: var(--text-body);
+   font-size: 0.75rem;
+   line-height: 1.5;
+}
+
+.adjudication-decision-form,
+.adjudication-decision-confirmation {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   gap: 16px;
+   margin-top: 18px;
+   padding-top: 18px;
+   border-top: 1px solid var(--border-default);
+}
+
+.adjudication-form-heading {
+   min-width: 0;
+}
+
+.adjudication-form-heading h6,
+.adjudication-form-heading p {
+   margin: 0;
+}
+
+.adjudication-form-heading h6 {
+   color: var(--text-main);
+   font-size: 0.86rem;
+}
+
+.adjudication-form-heading p {
+   margin-top: 4px;
+   color: var(--text-muted);
+   font-size: 0.72rem;
+   line-height: 1.5;
+   overflow-wrap: anywhere;
+}
+
+.adjudication-verdict-options {
+   min-width: 0;
+   margin: 0;
+   padding: 0;
+   border: 0;
+}
+
+.adjudication-verdict-options legend,
+.adjudication-decision-field > span {
+   color: var(--text-main);
+   font-size: 0.75rem;
+   font-weight: 700;
+}
+
+.adjudication-verdict-options > p {
+   margin: 4px 0 9px;
+   color: var(--text-muted);
+   font-size: 0.7rem;
+   line-height: 1.45;
+}
+
+.adjudication-verdict-options > div {
+   display: grid;
+   grid-template-columns: repeat(5, minmax(0, 1fr));
+   gap: 7px;
+}
+
+.adjudication-verdict-options label {
+   min-width: 0;
+   display: flex;
+   align-items: center;
+   gap: 6px;
+   padding: 9px;
+   border: 1px solid var(--border-default);
+   border-radius: 8px;
+   color: var(--text-body);
+   font-size: 0.72rem;
+   cursor: pointer;
+}
+
+.adjudication-verdict-options label:has(input:checked) {
+   border-color: var(--brand-primary);
+   background: var(--bg-subtle);
+   color: var(--text-main);
+   font-weight: 700;
+}
+
+.adjudication-verdict-options input {
+   flex: 0 0 auto;
+   accent-color: var(--brand-primary);
+}
+
+.adjudication-decision-field {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   gap: 6px;
+}
+
+.adjudication-decision-field textarea {
+   width: 100%;
+   min-width: 0;
+   resize: vertical;
+   padding: 10px 11px;
+   border: 1px solid var(--border-default);
+   border-radius: 8px;
+   background: var(--bg-surface);
+   color: var(--text-main);
+   font: inherit;
+   font-size: 0.78rem;
+   line-height: 1.55;
+   overflow-wrap: anywhere;
+}
+
+.adjudication-decision-field textarea[aria-invalid="true"] {
+   border-color: var(--verdict-fake-border);
+}
+
+.adjudication-decision-field textarea:hover {
+   border-color: var(--brand-primary);
+}
+
+.adjudication-decision-field small {
+   color: var(--text-muted);
+   font-size: 0.68rem;
+   line-height: 1.45;
+}
+
+.adjudication-form-error {
+   margin: -10px 0 0;
+   color: var(--verdict-fake-text);
+   font-size: 0.72rem;
+   line-height: 1.45;
+}
+
+.adjudication-form-error.summary {
+   margin: 0;
+   padding: 10px 11px;
+   border-left: 3px solid var(--verdict-fake-border);
+   background: var(--verdict-fake-bg);
+}
+
+.adjudication-decision-form-actions {
+   display: flex;
+   flex-wrap: wrap;
+   justify-content: flex-end;
+   gap: 8px;
+}
+
+.adjudication-confirmation-consequence {
+   margin: 0;
+   padding: 11px 12px;
+   border: 1px solid var(--border-default);
+   border-radius: 8px;
+   background: var(--bg-subtle);
+   color: var(--text-body);
+   font-size: 0.76rem;
+   line-height: 1.55;
+}
+
+.adjudication-confirmation-summary {
+   display: grid;
+   gap: 12px;
+   margin: 0;
+}
+
+.adjudication-confirmation-summary > div {
+   min-width: 0;
+   display: grid;
+   gap: 3px;
+}
+
+.adjudication-confirmation-summary dt {
+   color: var(--text-muted);
+   font-size: 0.68rem;
+   font-weight: 700;
+   text-transform: uppercase;
+   letter-spacing: 0.04em;
+}
+
+.adjudication-confirmation-summary dd {
+   margin: 0;
+   color: var(--text-main);
+   font-size: 0.77rem;
+   line-height: 1.55;
+   overflow-wrap: anywhere;
+   white-space: pre-wrap;
+}
+
 .adjudication-history-heading {
    align-items: baseline;
    margin-top: 20px;
@@ -874,6 +1175,13 @@
 .adjudication-context-links a:focus-visible,
 .adjudication-external-link:focus-visible,
 .adjudication-thread-context a:focus-visible,
+.adjudication-action-message:focus,
+.adjudication-action-message button:focus-visible,
+.adjudication-decision-entry button:focus-visible,
+.adjudication-decision-form-actions button:focus-visible,
+.adjudication-decision-field textarea:focus-visible,
+.adjudication-verdict-options input:focus-visible,
+.adjudication-form-heading:focus,
 .adjudication-section-heading h4:focus,
 .adjudication-selection h4:focus {
    outline: 2px solid var(--brand-primary);
@@ -935,6 +1243,10 @@
    .adjudication-source-row .adjudication-external-link {
       align-self: flex-start;
    }
+
+   .adjudication-verdict-options > div {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+   }
 }
 
 @container adjudication-panel (max-width: 520px) {
@@ -995,6 +1307,21 @@
 
    .adjudication-selected-label {
       margin-left: 0;
+   }
+
+   .adjudication-decision-entry,
+   .adjudication-decision-form-actions {
+      align-items: stretch;
+      flex-direction: column;
+   }
+
+   .adjudication-decision-entry button,
+   .adjudication-decision-form-actions button {
+      width: 100%;
+   }
+
+   .adjudication-verdict-options > div {
+      grid-template-columns: 1fr;
    }
 }
 
