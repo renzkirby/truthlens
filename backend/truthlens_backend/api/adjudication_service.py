@@ -20,6 +20,7 @@ from .adjudication_provenance import (
 )
 from .models import (
     AdjudicationDecision,
+    AdjudicationDecisionEvidenceSnapshot,
     Claim,
     EvidenceSubmission,
     ModerationCase,
@@ -832,6 +833,40 @@ def _resolve_completed_verification_run(*, verification_run_id, claim):
     return run
 
 
+def _snapshot_timestamp(value):
+    return value.isoformat() if value is not None else None
+
+
+def _build_decision_evidence_records(evidence):
+    """Serialize the already-locked evidence basis using recorded values only."""
+
+    return [
+        {
+            "id": str(item.pk),
+            "thread_id": str(item.thread_id),
+            "evidence_status": item.evidence_status,
+            "evidence_type": item.evidence_type,
+            "evidence_caption": item.evidence_caption,
+            "evidence_url": item.evidence_url,
+            "contributor_id": (
+                str(item.contributor_id)
+                if item.contributor_id is not None
+                else None
+            ),
+            "reviewer_id": (
+                str(item.verified_by_id)
+                if item.verified_by_id is not None
+                else None
+            ),
+            "submitted_at": _snapshot_timestamp(item.submitted_at),
+            "reviewed_at": _snapshot_timestamp(item.verified_at),
+            "moderator_notes": item.moderator_notes,
+            "rejection_reason": item.rejection_reason,
+        }
+        for item in evidence
+    ]
+
+
 def issue_adjudication_decision(
     *,
     case_id,
@@ -944,6 +979,14 @@ def issue_adjudication_decision(
             revision_number=1,
             supersedes=None,
             is_current=True,
+        )
+
+        AdjudicationDecisionEvidenceSnapshot.objects.create(
+            decision=decision,
+            claim_id=locked_claim.pk,
+            evidence_records=_build_decision_evidence_records(
+                context["evidence"]
+            ),
         )
 
         locked_claim.final_verdict = verdict

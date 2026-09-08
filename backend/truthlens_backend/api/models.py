@@ -1864,6 +1864,58 @@ class AdjudicationDecision(models.Model):
         )
 
 
+class AdjudicationDecisionEvidenceSnapshot(models.Model):
+    CURRENT_SCHEMA_VERSION = 1
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    decision = models.OneToOneField(
+        AdjudicationDecision,
+        on_delete=models.PROTECT,
+        related_name="evidence_snapshot",
+    )
+    claim_id = models.UUIDField(
+        editable=False,
+    )
+    schema_version = models.PositiveSmallIntegerField(
+        default=CURRENT_SCHEMA_VERSION,
+        editable=False,
+    )
+    captured_at = models.DateTimeField(
+        auto_now_add=True,
+        editable=False,
+    )
+    evidence_records = models.JSONField(
+        default=list,
+        editable=False,
+    )
+
+    class Meta:
+        ordering = ["-captured_at"]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError(
+                "Decision evidence snapshots are immutable and cannot be modified."
+            )
+        if str(self.claim_id) != str(self.decision.claim_id):
+            raise ValidationError(
+                "Snapshot claim identity must match its adjudication decision."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            "Decision evidence snapshots cannot be deleted directly."
+        )
+
+    def __str__(self):
+        return f"Evidence snapshot for decision {self.decision_id}"
+
+
 class Vote(models.Model):
     class Meta:
         constraints = [
