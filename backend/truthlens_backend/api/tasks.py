@@ -1,5 +1,4 @@
 from celery import shared_task
-from tavily import TavilyClient
 import os
 import logging
 import time
@@ -158,7 +157,7 @@ def _retrieve_and_ingest_gfc(
     return payload
 
 
-def _retrieve_and_ingest_tavily(search_query, claim_id):
+def _retrieve_and_ingest_tavily(search_query, claim_id, *, stage_prefix=""):
     """Retrieve once, preserving usable payloads if evidence persistence fails."""
     provider = TavilyProvider(timeout=DEFAULT_HTTP_TIMEOUT_SEC)
     payload, raw_evidence_items = provider.search_with_payload(search_query, limit=5)
@@ -169,7 +168,7 @@ def _retrieve_and_ingest_tavily(search_query, claim_id):
     except Exception as exc:
         _log_stage(
             claim_id,
-            "tavily_evidence_ingestion_failed",
+            f"{stage_prefix}tavily_evidence_ingestion_failed",
             ingestion_started_at,
             error=str(exc)[:120],
         )
@@ -181,7 +180,7 @@ def _retrieve_and_ingest_tavily(search_query, claim_id):
     else:
         _log_stage(
             claim_id,
-            "tavily_evidence_ingestion",
+            f"{stage_prefix}tavily_evidence_ingestion",
             ingestion_started_at,
             evidence_sources=len(evidence_sources),
         )
@@ -958,38 +957,10 @@ def url_fact_check_process(url, claim_id):
         # Step 4 — Fallback to Tavily web search
         tavily_search_started_at = time.perf_counter()
         try:
-            tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
-            search_response = tavily_client.search(
-                query=search_query[:300],
-                search_depth="advanced",
-                topic="general",
-                include_answer=True,
-                include_domains=[
-                    # Philippine News & Fact Checkers
-                    "gmanetwork.com",
-                    "rappler.com",
-                    "philstar.com",
-                    "inquirer.net",
-                    "news.abs-cbn.com",
-                    "manilabulletin.com",
-                    "bworldonline.com",
-                    "pna.gov.ph",
-                    "verafiles.org",
-                    # International News & Wires
-                    "reuters.com",
-                    "apnews.com",
-                    "bbc.com",
-                    "cnn.com",
-                    "aljazeera.com",
-                    "nytimes.com",
-                    "theguardian.com",
-                    # Global Fact-Checkers
-                    "snopes.com",
-                    "politifact.com",
-                    "factcheck.org",
-                    "afp.com",
-                ],
-                request_timeout=DEFAULT_HTTP_TIMEOUT_SEC,
+            search_response = _retrieve_and_ingest_tavily(
+                search_query[:300],
+                claim_id,
+                stage_prefix="url_",
             )
 
             tavily_results = search_response.get("results", [])
