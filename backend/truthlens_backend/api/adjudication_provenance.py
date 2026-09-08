@@ -157,6 +157,14 @@ def annotate_claim_authoritative_verdict(
 
 
 def _legacy_decision_has_historical_review(claim, decision):
+    annotated_match = getattr(
+        decision,
+        "has_matching_legacy_thread",
+        None,
+    )
+    if annotated_match is not None:
+        return annotated_match
+
     provenance_threads = getattr(
         claim,
         "_adjudication_provenance_threads",
@@ -187,27 +195,10 @@ def _legacy_decision_has_historical_review(claim, decision):
     ).exists()
 
 
-def get_claim_adjudication_provenance(claim):
-    """
-    Resolve whether a cached Claim verdict has attributable adjudication
-    provenance without rewriting historical data.
+def get_adjudication_decision_provenance(claim, decision):
+    """Classify one stored decision from its own historical provenance."""
 
-    HUMAN_REVIEW records are attributable only when they retain the resolved
-    Adjudication case created by the canonical service. A migrated legacy
-    decision additionally requires an identifiable historical reviewer and a
-    matching moderated Thread record. Cache values and incomplete records are
-    never promoted into human adjudications.
-    """
-
-    decision = get_current_adjudication_decision(claim)
-
-    if decision is None:
-        status = (
-            AdjudicationProvenance.UNATTRIBUTED_CACHE
-            if claim.final_verdict
-            else AdjudicationProvenance.NO_ADJUDICATION
-        )
-    elif (
+    if (
         decision.decision_source
         == AdjudicationDecision.DecisionSource.HUMAN_REVIEW
     ):
@@ -237,6 +228,43 @@ def get_claim_adjudication_provenance(claim):
         status = AdjudicationProvenance.LEGACY_PROVENANCE_UNAVAILABLE
     else:
         status = AdjudicationProvenance.PROVENANCE_UNAVAILABLE
+
+    return {
+        "status": status,
+        "decision": decision,
+        "is_attributable": (
+            status in AdjudicationProvenance.ATTRIBUTABLE_STATUSES
+        ),
+        "verdict": (
+            decision.verdict
+            if status in AdjudicationProvenance.ATTRIBUTABLE_STATUSES
+            else None
+        ),
+    }
+
+
+def get_claim_adjudication_provenance(claim):
+    """
+    Resolve whether a cached Claim verdict has attributable adjudication
+    provenance without rewriting historical data.
+
+    HUMAN_REVIEW records are attributable only when they retain the resolved
+    Adjudication case created by the canonical service. A migrated legacy
+    decision additionally requires an identifiable historical reviewer and a
+    matching moderated Thread record. Cache values and incomplete records are
+    never promoted into human adjudications.
+    """
+
+    decision = get_current_adjudication_decision(claim)
+
+    if decision is None:
+        status = (
+            AdjudicationProvenance.UNATTRIBUTED_CACHE
+            if claim.final_verdict
+            else AdjudicationProvenance.NO_ADJUDICATION
+        )
+    else:
+        return get_adjudication_decision_provenance(claim, decision)
 
     return {
         "status": status,

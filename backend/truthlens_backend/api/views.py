@@ -141,6 +141,7 @@ from .adjudication_service import (
     AdjudicationConflict,
     AdjudicationError,
     AdjudicationNotFound,
+    get_adjudication_case_detail,
     get_adjudication_case_queue,
     issue_adjudication_decision,
     schedule_adjudication_trust_updates,
@@ -224,6 +225,8 @@ from .serializers import (
     VoteSerializer,
     ThreadFlagSerializer,
     AdjudicationActionSerializer,
+    AdjudicationCaseDetailQuerySerializer,
+    AdjudicationCaseDetailSerializer,
     AdjudicationCaseQueueFilterSerializer,
     AdjudicationCaseQueueOrganizationSerializer,
     AdjudicationCaseQueueSerializer,
@@ -1438,6 +1441,39 @@ def adjudication_case_queue(request):
                 context={"organization": organization},
             ).data,
         },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def adjudication_case_detail(request, case_id):
+    query = AdjudicationCaseDetailQuerySerializer(data=request.query_params)
+    query.is_valid(raise_exception=True)
+    organization = get_object_or_404(
+        Organization,
+        id=query.validated_data["organization_id"],
+    )
+
+    try:
+        case = get_adjudication_case_detail(
+            actor=request.user,
+            organization=organization,
+            case_id=case_id,
+        )
+    except AdjudicationAuthorizationError as error:
+        raise PermissionDenied(str(error)) from error
+    except AdjudicationNotFound as error:
+        return Response(
+            {"detail": str(error)},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    return Response(
+        AdjudicationCaseDetailSerializer(
+            case,
+            context={"request": request},
+        ).data,
         status=status.HTTP_200_OK,
     )
 

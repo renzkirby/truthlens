@@ -14,6 +14,7 @@ from django.db.models import (
 from django.utils import timezone
 
 from .adjudication_provenance import (
+    get_adjudication_decision_provenance,
     get_current_adjudication_decision,
     prefetch_claim_adjudication_provenance,
 )
@@ -43,6 +44,44 @@ from .verification_assignment_service import get_active_verification_assignment
 
 
 logger = logging.getLogger(__name__)
+
+
+ADJUDICATION_ACTION_BLOCKER_MESSAGES = {
+    "CASE_RESOLVED": "This Adjudication case has already been resolved.",
+    "CASE_CANCELLED": "This Adjudication case was cancelled.",
+    "CORRECTION_WORKFLOW_REQUIRED": (
+        "A reopened Adjudication case requires the future correction workflow."
+    ),
+    "NO_ACTIVE_ASSIGNMENT": (
+        "This claim no longer has an active organization verification assignment."
+    ),
+    "ASSIGNMENT_ORGANIZATION_CHANGED": (
+        "The organization responsible for this claim changed after the review "
+        "was opened."
+    ),
+    "NO_EVIDENCE": (
+        "At least one reviewed evidence submission is required before adjudication."
+    ),
+    "UNREVIEWED_EVIDENCE": (
+        "Every evidence submission must be reviewed before adjudication."
+    ),
+    "ACTIVE_EVIDENCE_CASE": "An Evidence case is still active for this claim.",
+    "DIRECT_CONTRIBUTION_CONFLICT": (
+        "You cannot adjudicate a claim in which you have a direct contribution."
+    ),
+    "CURRENT_DECISION_EXISTS": (
+        "This claim already has a current adjudication record. An explicit "
+        "correction workflow is required before it can change."
+    ),
+    "HISTORICAL_DECISION_STATE": (
+        "This claim already has adjudication history without a current decision. "
+        "An explicit correction workflow is required before another decision can "
+        "be issued."
+    ),
+    "EXISTING_ADJUDICATION_HISTORY": (
+        "Existing adjudication history prevents an ordinary first decision."
+    ),
+}
 
 
 class AdjudicationError(Exception):
@@ -202,6 +241,242 @@ def get_adjudication_case_queue(
         claim_path="claim",
         include_legacy_threads=True,
     )
+
+
+def _adjudication_blocker(code):
+    return {
+        "code": code,
+        "message": ADJUDICATION_ACTION_BLOCKER_MESSAGES[code],
+    }
+
+
+def get_adjudication_case_detail(
+    *,
+    actor,
+    organization,
+    case_id,
+):
+    if not has_capability(
+        actor,
+        PartnerCapability.ADJUDICATE,
+        organization=organization,
+    ):
+        raise AdjudicationAuthorizationError(
+            "You do not have permission to adjudicate for this organization."
+        )
+
+    case = (
+        ModerationCase.objects.select_related(
+            "claim",
+            "organization",
+            "resolved_by",
+        )
+        .filter(
+            pk=case_id,
+            case_type=ModerationCase.CaseType.ADJUDICATION,
+            organization=organization,
+            claim__isnull=False,
+        )
+        .first()
+    )
+    if case is None:
+        raise AdjudicationNotFound("Adjudication case not found.")
+
+    claim = case.claim
+    threads = list(
+        Thread.objects.filter(claim=claim)
+        .only(
+            "id",
+            "claim_id",
+            "author_id",
+            "caption",
+            "created_at",
+        )
+        .order_by("created_at", "id")
+    )
+    evidence = list(
+        EvidenceSubmission.objects.filter(thread__claim=claim)
+        .select_related("contributor", "verified_by")
+        .only(
+            "id",
+            "thread_id",
+            "contributor_id",
+            "contributor__id",
+            "contributor__username",
+            "verified_by_id",
+            "verified_by__id",
+            "verified_by__username",
+            "evidence_caption",
+            "evidence_url",
+            "evidence_type",
+            "evidence_status",
+            "submitted_at",
+            "verified_at",
+            "moderator_notes",
+            "rejection_reason",
+        )
+        .order_by("submitted_at", "id")
+    )
+    active_evidence_case_count = ModerationCase.objects.filter(
+        case_type=ModerationCase.CaseType.EVIDENCE,
+        evidence_submission__thread__claim=claim,
+        status__in=ACTIVE_CASE_STATUSES,
+    ).count()
+    assignment = get_active_verification_assignment(claim)
+
+    matching_legacy_thread = Thread.objects.filter(
+        claim_id=OuterRef("claim_id"),
+        moderated_by_id=OuterRef("decided_by_id"),
+        moderator_verdict=OuterRef("verdict"),
+    )
+    all_decisions = AdjudicationDecision.objects.filter(claim=claim)
+    visible_decision_filter = Q(organization=organization) & (
+        Q(moderation_case__isnull=True)
+        | Q(moderation_case__organization=organization)
+    )
+    visible_decision_queryset = (
+        all_decisions.filter(visible_decision_filter)
+        .select_related(
+            "decided_by",
+            "organization",
+            "moderation_case",
+        )
+        .annotate(
+            has_matching_legacy_thread=Exists(matching_legacy_thread),
+        )
+        .order_by(
+            "-revision_number",
+            "-decided_at",
+            "id",
+        )
+    )
+    visible_current_decision = visible_decision_queryset.filter(
+        is_current=True
+    ).first()
+    visible_history_queryset = visible_decision_queryset.filter(
+        is_current=False
+    )
+    visible_history_count = visible_history_queryset.count()
+    visible_history = list(visible_history_queryset[:50])
+    visible_decisions = (
+        [visible_current_decision] if visible_current_decision else []
+    ) + visible_history
+    raw_current_decision = (
+        all_decisions.filter(is_current=True)
+        .only(
+            "id",
+            "revision_number",
+        )
+        .first()
+    )
+    has_restricted_decision_history = all_decisions.exclude(
+        visible_decision_filter
+    ).exists()
+
+    visible_decision_ids = {decision.id for decision in visible_decisions}
+    for decision in visible_decisions:
+        decision.adjudication_provenance = (
+            get_adjudication_decision_provenance(claim, decision)
+        )
+
+    event_queryset = case.events.select_related("actor").order_by(
+        "-created_at",
+        "-id",
+    )
+    event_count = event_queryset.count()
+    recent_events = list(event_queryset[:50])
+    recent_events.reverse()
+
+    blockers = []
+    if case.status == ModerationCase.Status.RESOLVED:
+        blockers.append(_adjudication_blocker("CASE_RESOLVED"))
+    elif case.status == ModerationCase.Status.CANCELLED:
+        blockers.append(_adjudication_blocker("CASE_CANCELLED"))
+    elif case.status == ModerationCase.Status.REOPENED:
+        blockers.append(
+            _adjudication_blocker("CORRECTION_WORKFLOW_REQUIRED")
+        )
+
+    if assignment is None:
+        blockers.append(_adjudication_blocker("NO_ACTIVE_ASSIGNMENT"))
+    elif assignment.organization_id != organization.id:
+        blockers.append(
+            _adjudication_blocker("ASSIGNMENT_ORGANIZATION_CHANGED")
+        )
+
+    unreviewed_count = sum(
+        item.evidence_status == EvidenceSubmission.EvidenceStatus.UNVERIFIED
+        for item in evidence
+    )
+    if not evidence:
+        blockers.append(_adjudication_blocker("NO_EVIDENCE"))
+    elif unreviewed_count:
+        blockers.append(_adjudication_blocker("UNREVIEWED_EVIDENCE"))
+    if active_evidence_case_count:
+        blockers.append(_adjudication_blocker("ACTIVE_EVIDENCE_CASE"))
+
+    if any(thread.author_id == actor.id for thread in threads) or any(
+        item.contributor_id == actor.id for item in evidence
+    ):
+        blockers.append(
+            _adjudication_blocker("DIRECT_CONTRIBUTION_CONFLICT")
+        )
+
+    has_any_decision_history = bool(
+        visible_decisions or has_restricted_decision_history
+    )
+    if raw_current_decision is not None:
+        if visible_current_decision is not None:
+            blockers.append(_adjudication_blocker("CURRENT_DECISION_EXISTS"))
+        else:
+            blockers.append(
+                _adjudication_blocker("EXISTING_ADJUDICATION_HISTORY")
+            )
+    elif has_any_decision_history:
+        if visible_decisions and not has_restricted_decision_history:
+            blockers.append(
+                _adjudication_blocker("HISTORICAL_DECISION_STATE")
+            )
+        else:
+            blockers.append(
+                _adjudication_blocker("EXISTING_ADJUDICATION_HISTORY")
+            )
+
+    expected_revision = 0
+    if raw_current_decision is not None:
+        expected_revision = (
+            visible_current_decision.revision_number
+            if visible_current_decision is not None
+            else None
+        )
+
+    case.adjudication_threads = threads
+    case.adjudication_evidence = evidence
+    case.adjudication_active_evidence_case_count = active_evidence_case_count
+    case.adjudication_assignment = (
+        assignment
+        if assignment is not None
+        and assignment.organization_id == organization.id
+        else None
+    )
+    case.adjudication_visible_decisions = visible_decisions
+    case.adjudication_visible_history_count = visible_history_count
+    case.adjudication_visible_decision_ids = visible_decision_ids
+    case.adjudication_current_decision = visible_current_decision
+    case.adjudication_has_restricted_history = has_restricted_decision_history
+    case.adjudication_events = recent_events
+    case.adjudication_event_count = event_count
+    case.adjudication_action_state = {
+        "can_issue_first_decision": not blockers,
+        "expected_revision": expected_revision,
+        "preconditions": {
+            "case_id": case.id,
+            "organization_id": organization.id,
+            "expected_revision": expected_revision,
+        },
+        "blockers": blockers,
+    }
+    return case
 
 
 def get_active_adjudication_case(
