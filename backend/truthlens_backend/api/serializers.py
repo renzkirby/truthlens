@@ -2311,6 +2311,10 @@ class AdjudicationCaseDetailDecisionSerializer(serializers.ModelSerializer):
     decided_by = serializers.SerializerMethodField()
     organization = serializers.SerializerMethodField()
     moderation_case_id = serializers.SerializerMethodField()
+    verification_run_id = serializers.UUIDField(
+        read_only=True,
+        allow_null=True,
+    )
     supersedes_id = serializers.SerializerMethodField()
     provenance = serializers.SerializerMethodField()
 
@@ -2359,6 +2363,7 @@ class AdjudicationCaseDetailDecisionSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "moderation_case_id",
+            "verification_run_id",
             "verdict",
             "verdict_label",
             "canonical_claim",

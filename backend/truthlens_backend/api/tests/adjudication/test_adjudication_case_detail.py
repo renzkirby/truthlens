@@ -20,6 +20,7 @@ from api.models import (
     OrganizationMembership,
     Thread,
     VerificationAssignment,
+    VerificationRun,
 )
 
 
@@ -209,6 +210,7 @@ class AdjudicationCaseDetailApiTests(APITestCase):
         is_current=True,
         source=AdjudicationDecision.DecisionSource.HUMAN_REVIEW,
         decided_by=None,
+        verification_run=None,
         supersedes=None,
         canonical_claim="Historical canonical wording.",
         rationale="Historical human rationale.",
@@ -220,6 +222,7 @@ class AdjudicationCaseDetailApiTests(APITestCase):
             canonical_claim=canonical_claim,
             rationale=rationale,
             decided_by=decided_by or self.lead,
+            verification_run=verification_run,
             organization=(
                 organization
                 if organization is not None
@@ -535,6 +538,14 @@ class AdjudicationCaseDetailApiTests(APITestCase):
 
     def test_decision_history_uses_each_records_own_outcome_and_provenance(self):
         context = self.context
+        historical_run = VerificationRun.objects.create(
+            claim=context["claim"],
+            status=VerificationRun.Status.COMPLETED,
+        )
+        current_run = VerificationRun.objects.create(
+            claim=context["claim"],
+            status=VerificationRun.Status.COMPLETED,
+        )
         case_a = ModerationCase.objects.create(
             case_type=ModerationCase.CaseType.ADJUDICATION,
             claim=context["claim"],
@@ -550,6 +561,7 @@ class AdjudicationCaseDetailApiTests(APITestCase):
             verdict=AdjudicationDecision.Verdict.FACT,
             revision_number=1,
             is_current=False,
+            verification_run=historical_run,
             canonical_claim="Case A wording.",
             rationale="Case A rationale.",
         )
@@ -569,6 +581,7 @@ class AdjudicationCaseDetailApiTests(APITestCase):
             revision_number=2,
             supersedes=first,
             decided_by=self.partner_moderator,
+            verification_run=current_run,
             canonical_claim="Case B wording.",
             rationale="Case B rationale.",
         )
@@ -581,6 +594,7 @@ class AdjudicationCaseDetailApiTests(APITestCase):
         current = response.data["current_decision"]
         history = response.data["decision_history"]["results"]
         self.assertEqual(current["id"], str(second.id))
+        self.assertEqual(current["verification_run_id"], str(current_run.id))
         self.assertEqual(current["verdict"], AdjudicationDecision.Verdict.FAKE)
         self.assertEqual(current["canonical_claim"], "Case B wording.")
         self.assertEqual(
@@ -591,7 +605,29 @@ class AdjudicationCaseDetailApiTests(APITestCase):
         self.assertEqual(response.data["decision_history"]["count"], 1)
         self.assertFalse(response.data["decision_history"]["truncated"])
         self.assertEqual(history[0]["verdict"], AdjudicationDecision.Verdict.FACT)
+        self.assertEqual(
+            history[0]["verification_run_id"],
+            str(historical_run.id),
+        )
         self.assertEqual(history[0]["canonical_claim"], "Case A wording.")
+        expected_decision_fields = {
+            "id",
+            "moderation_case_id",
+            "verification_run_id",
+            "verdict",
+            "verdict_label",
+            "canonical_claim",
+            "rationale",
+            "decided_by",
+            "organization",
+            "revision_number",
+            "supersedes_id",
+            "is_current",
+            "decided_at",
+            "provenance",
+        }
+        self.assertEqual(set(current), expected_decision_fields)
+        self.assertEqual(set(history[0]), expected_decision_fields)
         self.assertEqual(history[0]["supersedes_id"], None)
         self.assertEqual(current["supersedes_id"], str(first.id))
         self.assertEqual(
@@ -630,6 +666,11 @@ class AdjudicationCaseDetailApiTests(APITestCase):
         self.assertEqual(
             response.data["decision_history"]["results"][0]["id"],
             str(historical.id),
+        )
+        self.assertIsNone(
+            response.data["decision_history"]["results"][0][
+                "verification_run_id"
+            ]
         )
         self.assertEqual(response.data["action_state"]["expected_revision"], 0)
         self.assertIn(
@@ -685,6 +726,13 @@ class AdjudicationCaseDetailApiTests(APITestCase):
         organizationless_data = self.client.get(
             self._detail_url(organizationless)
         ).data
+        queue_response = self.client.get(
+            reverse("adjudication_case_queue")
+            + f"?organization_id={self.organization.id}"
+        )
+        queue_by_id = {
+            item["id"]: item for item in queue_response.data["results"]
+        }
 
         self.assertEqual(
             genuine_data["current_decision"]["provenance"]["status"],
@@ -693,6 +741,9 @@ class AdjudicationCaseDetailApiTests(APITestCase):
         self.assertEqual(
             genuine_data["current_decision"]["decided_by"]["id"],
             self.lead.id,
+        )
+        self.assertIsNone(
+            genuine_data["current_decision"]["verification_run_id"]
         )
         self.assertEqual(
             uncertain_data["current_decision"]["provenance"]["status"],
@@ -707,7 +758,10 @@ class AdjudicationCaseDetailApiTests(APITestCase):
             missing_canonical_data["current_decision"]["decided_by"]
         )
 
-        for data in (restricted_data, organizationless_data):
+        for context, data in (
+            (restricted, restricted_data),
+            (organizationless, organizationless_data),
+        ):
             self.assertIsNone(data["current_decision"])
             self.assertEqual(data["decision_history"]["results"], [])
             self.assertTrue(
@@ -717,6 +771,9 @@ class AdjudicationCaseDetailApiTests(APITestCase):
                 "EXISTING_ADJUDICATION_HISTORY",
                 {item["code"] for item in data["action_state"]["blockers"]},
             )
+            queue_item = queue_by_id[str(context["case"].id)]
+            self.assertIsNone(queue_item["current_decision"])
+            self.assertTrue(queue_item["adjudication_blocked"])
 
     def test_cache_only_verdict_is_not_a_decision_or_action_blocker(self):
         self.context["claim"].final_verdict = AdjudicationDecision.Verdict.FACT
@@ -825,16 +882,99 @@ class AdjudicationCaseDetailApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertLessEqual(len(captured), 15)
 
+    def test_authority_loss_is_enforced_across_queue_detail_and_action(self):
+        self._authenticate()
+        queue_url = (
+            reverse("adjudication_case_queue")
+            + f"?organization_id={self.organization.id}"
+        )
+        action_url = (
+            reverse(
+                "adjudication_case_action",
+                kwargs={"case_id": self.context["case"].id},
+            )
+            + f"?organization_id={self.organization.id}"
+        )
+        self.assertEqual(
+            self.client.get(queue_url).status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(
+            self.client.get(self._detail_url()).status_code,
+            status.HTTP_200_OK,
+        )
+
+        membership = OrganizationMembership.objects.get(
+            organization=self.organization,
+            user=self.lead,
+        )
+        membership.status = OrganizationMembership.Status.SUSPENDED
+        membership.save(update_fields=["status"])
+
+        self.assertEqual(
+            self.client.get(queue_url).status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+        self.assertEqual(
+            self.client.get(self._detail_url()).status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+        action_response = self.client.post(
+            action_url,
+            {
+                "moderator_verdict": AdjudicationDecision.Verdict.FAKE,
+                "canonical_claim": "The reviewed claim is false.",
+                "moderator_notes": "Human-reviewed rationale.",
+                "expected_revision": 0,
+            },
+            format="json",
+        )
+        self.assertEqual(action_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(
+            AdjudicationDecision.objects.filter(
+                claim=self.context["claim"]
+            ).exists()
+        )
+
     @patch("api.views.schedule_adjudication_trust_updates")
     def test_success_and_conflict_are_followed_by_fresh_action_state(
         self,
         schedule_trust_updates,
     ):
         self._authenticate()
+        verification_run = VerificationRun.objects.create(
+            claim=self.context["claim"],
+            status=VerificationRun.Status.COMPLETED,
+        )
+        initial_queue = self.client.get(
+            reverse("adjudication_case_queue")
+            + f"?organization_id={self.organization.id}"
+        )
+        self.assertEqual(initial_queue.status_code, status.HTTP_200_OK)
+        selected_case_id = initial_queue.data["results"][0]["id"]
+        self.assertEqual(selected_case_id, str(self.context["case"].id))
+        selected_detail_url = (
+            reverse(
+                "adjudication_case_detail",
+                kwargs={"case_id": selected_case_id},
+            )
+            + f"?organization_id={self.organization.id}"
+        )
+        selected_detail = self.client.get(selected_detail_url)
+        self.assertEqual(selected_detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(selected_detail.data["id"], selected_case_id)
+        self.assertEqual(
+            selected_detail.data["action_state"]["preconditions"],
+            {
+                "case_id": selected_case_id,
+                "organization_id": str(self.organization.id),
+                "expected_revision": 0,
+            },
+        )
         action_url = (
             reverse(
                 "adjudication_case_action",
-                kwargs={"case_id": self.context["case"].id},
+                kwargs={"case_id": selected_case_id},
             )
             + f"?organization_id={self.organization.id}"
         )
@@ -860,6 +1000,7 @@ class AdjudicationCaseDetailApiTests(APITestCase):
                 "canonical_claim": "The reviewed claim is false.",
                 "moderator_notes": "Human-reviewed rationale.",
                 "expected_revision": 0,
+                "verification_run_id": str(verification_run.id),
             },
             format="json",
         )
@@ -881,6 +1022,12 @@ class AdjudicationCaseDetailApiTests(APITestCase):
             resolved["current_decision"]["provenance"]["status"],
             AdjudicationProvenance.HUMAN_ADJUDICATION,
         )
+        self.assertEqual(
+            resolved["current_decision"]["verification_run_id"],
+            str(verification_run.id),
+        )
+        self.assertEqual(resolved["decision_history"]["count"], 0)
+        self.assertEqual(resolved["decision_history"]["results"], [])
         self.assertEqual(resolved["action_state"]["expected_revision"], 1)
         self.assertIn(
             "CASE_RESOLVED",
