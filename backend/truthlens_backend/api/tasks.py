@@ -781,263 +781,315 @@ def url_fact_check_process(url, claim_id):
         _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
         return
 
-    # Step 2 — OUT_OF_SCOPE check
-    if cleaned_claim == "OUT_OF_SCOPE":
-        logger.info("Claim is out of scope. Saving rejection verdict.")
-        _save_claim(
-            claim_id,
-            {
-                "verdict": "OUT_OF_SCOPE",
-                "summary": "This content appears to be a personal statement, opinion, greeting, or non-factual text. TruthLens can only verify objective claims, news, and rumors.",
-                "confidence_score": 0,
-                "score_context": "No verifiable factual claim detected.",
-            },
-            "System Filter",
-            cleaned_text,
-            [],
-        )
-        outcome = "completed_out_of_scope"
-        _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
-        return
+    # Extraction failures above delete the claim and must not create a run.
+    run_claim = Claim.objects.filter(id=claim_id).first()
+    run = None
+    if run_claim is not None:
+        run = create_verification_run(run_claim)
+        run = start_verification_run(run)
 
-    if article_stance == "SATIRE":
-        _save_claim(
-            claim_id,
-            {
-                "verdict": "SATIRE",
-                "summary": "This content originates from a known satire or parody publication and is not intended to be factual.",
-                "confidence_score": 99,
-            },
-            "Satire Detection",
-            cleaned_claim,
-            url,
-        )
-        outcome = "satire_stance_shortcut"
-        _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
-        return
-
-    vault_started_at = time.perf_counter()
-    target_claim = Claim.objects.filter(id=claim_id).first()
-
-    vault_match = search_official_vault(
-        cleaned_claim,
-        target_claim=target_claim,
-    )
-
-    if vault_match:
-        logger.info("Vault match found for URL claim %s!", claim_id)
-
-        # We inject the vault data into the Gemini prompt to avoid the Negation Trap
-        vault_eval_started_at = time.perf_counter()
-        ai_verdict = evaluate_url_claim_with_gfc(
-            cleaned_claim,
-            {
-                "claims": [
-                    {
-                        "text": vault_match["canonical_claim"],
-                        "claimReview": [
-                            {
-                                "textualRating": vault_match["verdict"],
-                                "publisher": {"name": "TruthLens Official Vault"},
-                            }
-                        ],
-                    }
-                ]
-            },
-            article_stance,
-        )
-
-        _save_claim(
-            claim_id,
-            ai_verdict,
-            "TruthLens Verified Vault",
-            vault_match["summary"],
-            vault_match.get("sources", []),
-        )
-
-        _log_stage(claim_id, "url_vault_search_success", vault_started_at)
-        outcome = "completed_vault"
-        _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
-        return
-
-    # Step 3 — Try GFC first, return early if relevant
-    gfc_started_at = time.perf_counter()
-
+    selected_verdict = None
+    pipeline_error = None
+    runtime_error_propagating = False
     try:
-        gfc_data = _retrieve_and_ingest_gfc(
-            search_query,
-            claim_id,
-            stage_prefix="url_",
-        )
-
-        gfc_claims = gfc_data.get(
-            "claims",
-            [],
-        )
-        _log_stage(
-            claim_id,
-            "url_gfc_search",
-            gfc_started_at,
-            claims=len(gfc_claims),
-        )
-
-        if gfc_claims:
-            first_claim_text = gfc_claims[0].get("text", "")
-            relevance_started_at = time.perf_counter()
-            is_relevant = is_fact_check_relevant(cleaned_claim, first_claim_text)
-            _log_stage(
-                claim_id,
-                "url_gfc_relevance_check",
-                relevance_started_at,
-                relevant=is_relevant,
-            )
-            if is_relevant:
-                gfc_eval_started_at = time.perf_counter()
-                ai_verdict = evaluate_url_claim_with_gfc(
-                    cleaned_claim, gfc_data, article_stance
-                )
-                _log_stage(
-                    claim_id,
-                    "url_gfc_llm_evaluation",
-                    gfc_eval_started_at,
-                    verdict=ai_verdict.get("verdict"),
-                )
-
-                source_urls = []
-                for c in gfc_claims[:3]:
-                    review_url = c.get("claimReview", [{}])[0].get("url", "")
-                    if review_url:
-                        source_urls.append(review_url)
-
-                save_started_at = time.perf_counter()
-                _save_claim(
-                    claim_id,
-                    ai_verdict,
-                    "Official Fact Check",
-                    cleaned_text,
-                    source_urls,
-                )
-                _log_stage(
-                    claim_id,
-                    "save_claim",
-                    save_started_at,
-                    source_type="Official Fact Check",
-                )
-                outcome = "completed_gfc"
-                _log_stage(
-                    claim_id, "url_task_total", pipeline_started_at, outcome=outcome
-                )
-                return
-
-    except Exception as e:
-        _log_stage(claim_id, "url_gfc_failed", gfc_started_at, error=str(e)[:120])
-        logger.error("GFC error for claim %s: %s", claim_id, e)
-
-    # Step 4 — Fallback to Tavily web search
-    tavily_search_started_at = time.perf_counter()
-    try:
-        tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
-        search_response = tavily_client.search(
-            query=search_query[:300],
-            search_depth="advanced",
-            topic="general",
-            include_answer=True,
-            include_domains=[
-                # Philippine News & Fact Checkers
-                "gmanetwork.com",
-                "rappler.com",
-                "philstar.com",
-                "inquirer.net",
-                "news.abs-cbn.com",
-                "manilabulletin.com",
-                "bworldonline.com",
-                "pna.gov.ph",
-                "verafiles.org",
-                # International News & Wires
-                "reuters.com",
-                "apnews.com",
-                "bbc.com",
-                "cnn.com",
-                "aljazeera.com",
-                "nytimes.com",
-                "theguardian.com",
-                # Global Fact-Checkers
-                "snopes.com",
-                "politifact.com",
-                "factcheck.org",
-                "afp.com",
-            ],
-            request_timeout=DEFAULT_HTTP_TIMEOUT_SEC,
-        )
-
-        tavily_results = search_response.get("results", [])
-        tavily_answer = search_response.get(
-            "answer", "No additional web context found."
-        )
-        _log_stage(
-            claim_id,
-            "url_tavily_search",
-            tavily_search_started_at,
-            results=len(tavily_results),
-        )
-
-        # BUILD RICHER CONTEXT: Give the AI the top 3 actual articles to read
-        results_context = ""
-        for i, res in enumerate(tavily_results[:3]):
-            results_context += f"Source {i+1}: {res.get('title', 'No Title')}\nURL: {res.get('url', '')}\nContent: {res.get('content', '')}\n\n"
-
-        # FIXED: Renamed the label to prevent circular reasoning
-        combined_context = f"Original URL Content to Verify (Do NOT use this as evidence to prove itself):\n{cleaned_text[:1500]}\n\nWeb Search Answer:\n{tavily_answer}\n\nTop Search Results:\n{results_context}"
-        tavily_eval_started_at = time.perf_counter()
-        ai_verdict = evaluate_url_claim_with_tavily(
-            cleaned_claim, combined_context, article_stance
-        )
-        _log_stage(
-            claim_id,
-            "url_tavily_llm_evaluation",
-            tavily_eval_started_at,
-            verdict=ai_verdict.get("verdict"),
-        )
-
-        source_urls = [
-            {
-                "url": res.get("url"),
-                "title": res.get("title", "External Source"),
-                "snippet": res.get("content", "")[:250] + "...",
-            }
-            for res in tavily_results[:3]
-            if res.get("url")
-        ]
-
-        save_started_at = time.perf_counter()
-        _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_text, source_urls)
-        _log_stage(
-            claim_id, "save_claim", save_started_at, source_type="Live Web Search"
-        )
-        outcome = "completed_tavily"
-
-    except Exception as e:
-        _log_stage(
-            claim_id, "url_tavily_failed", tavily_search_started_at, error=str(e)[:120]
-        )
-        logger.error("Tavily search error for claim %s: %s", claim_id, e)
-        try:
+        # Step 2 — OUT_OF_SCOPE check
+        if cleaned_claim == "OUT_OF_SCOPE":
+            logger.info("Claim is out of scope. Saving rejection verdict.")
             _save_claim(
                 claim_id,
                 {
-                    "verdict": "UNVERIFIED",
-                    "summary": "Could not retrieve relevant information to verify the claim.",
+                    "verdict": "OUT_OF_SCOPE",
+                    "summary": "This content appears to be a personal statement, opinion, greeting, or non-factual text. TruthLens can only verify objective claims, news, and rumors.",
                     "confidence_score": 0,
+                    "score_context": "No verifiable factual claim detected.",
                 },
-                "Live Web Search",
+                "System Filter",
                 cleaned_text,
                 [],
             )
-        except Exception as save_err:
-            logger.error("_save_claim also failed for claim %s: %s", claim_id, save_err)
-        outcome = "completed_tavily_fallback_unverified"
+            outcome = "completed_out_of_scope"
+            selected_verdict = "OUT_OF_SCOPE"
+            _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
+            return
+
+        if article_stance == "SATIRE":
+            _save_claim(
+                claim_id,
+                {
+                    "verdict": "SATIRE",
+                    "summary": "This content originates from a known satire or parody publication and is not intended to be factual.",
+                    "confidence_score": 99,
+                },
+                "Satire Detection",
+                cleaned_claim,
+                url,
+            )
+            outcome = "satire_stance_shortcut"
+            selected_verdict = "SATIRE"
+            _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
+            return
+
+        vault_started_at = time.perf_counter()
+        target_claim = Claim.objects.filter(id=claim_id).first()
+
+        vault_match = search_official_vault(
+            cleaned_claim,
+            target_claim=target_claim,
+        )
+
+        if vault_match:
+            logger.info("Vault match found for URL claim %s!", claim_id)
+
+            # We inject the vault data into the Gemini prompt to avoid the Negation Trap
+            vault_eval_started_at = time.perf_counter()
+            ai_verdict = evaluate_url_claim_with_gfc(
+                cleaned_claim,
+                {
+                    "claims": [
+                        {
+                            "text": vault_match["canonical_claim"],
+                            "claimReview": [
+                                {
+                                    "textualRating": vault_match["verdict"],
+                                    "publisher": {"name": "TruthLens Official Vault"},
+                                }
+                            ],
+                        }
+                    ]
+                },
+                article_stance,
+            )
+
+            _save_claim(
+                claim_id,
+                ai_verdict,
+                "TruthLens Verified Vault",
+                vault_match["summary"],
+                vault_match.get("sources", []),
+            )
+
+            _log_stage(claim_id, "url_vault_search_success", vault_started_at)
+            outcome = "completed_vault"
+            selected_verdict = (
+                ai_verdict.get("verdict") if isinstance(ai_verdict, dict) else None
+            )
+            _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
+            return
+
+        # Step 3 — Try GFC first, return early if relevant
+        gfc_started_at = time.perf_counter()
+
+        try:
+            gfc_data = _retrieve_and_ingest_gfc(
+                search_query,
+                claim_id,
+                stage_prefix="url_",
+                verification_run=run,
+            )
+
+            gfc_claims = gfc_data.get(
+                "claims",
+                [],
+            )
+            _log_stage(
+                claim_id,
+                "url_gfc_search",
+                gfc_started_at,
+                claims=len(gfc_claims),
+            )
+
+            if gfc_claims:
+                first_claim_text = gfc_claims[0].get("text", "")
+                relevance_started_at = time.perf_counter()
+                is_relevant = is_fact_check_relevant(cleaned_claim, first_claim_text)
+                _log_stage(
+                    claim_id,
+                    "url_gfc_relevance_check",
+                    relevance_started_at,
+                    relevant=is_relevant,
+                )
+                if is_relevant:
+                    gfc_eval_started_at = time.perf_counter()
+                    ai_verdict = evaluate_url_claim_with_gfc(
+                        cleaned_claim, gfc_data, article_stance
+                    )
+                    _log_stage(
+                        claim_id,
+                        "url_gfc_llm_evaluation",
+                        gfc_eval_started_at,
+                        verdict=ai_verdict.get("verdict"),
+                    )
+
+                    source_urls = []
+                    for c in gfc_claims[:3]:
+                        review_url = c.get("claimReview", [{}])[0].get("url", "")
+                        if review_url:
+                            source_urls.append(review_url)
+
+                    save_started_at = time.perf_counter()
+                    _save_claim(
+                        claim_id,
+                        ai_verdict,
+                        "Official Fact Check",
+                        cleaned_text,
+                        source_urls,
+                    )
+                    _log_stage(
+                        claim_id,
+                        "save_claim",
+                        save_started_at,
+                        source_type="Official Fact Check",
+                    )
+                    outcome = "completed_gfc"
+                    selected_verdict = (
+                        ai_verdict.get("verdict") if isinstance(ai_verdict, dict) else None
+                    )
+                    _log_stage(
+                        claim_id, "url_task_total", pipeline_started_at, outcome=outcome
+                    )
+                    return
+
+        except Exception as e:
+            _log_stage(claim_id, "url_gfc_failed", gfc_started_at, error=str(e)[:120])
+            logger.error("GFC error for claim %s: %s", claim_id, e)
+
+        # Step 4 — Fallback to Tavily web search
+        tavily_search_started_at = time.perf_counter()
+        try:
+            tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
+            search_response = tavily_client.search(
+                query=search_query[:300],
+                search_depth="advanced",
+                topic="general",
+                include_answer=True,
+                include_domains=[
+                    # Philippine News & Fact Checkers
+                    "gmanetwork.com",
+                    "rappler.com",
+                    "philstar.com",
+                    "inquirer.net",
+                    "news.abs-cbn.com",
+                    "manilabulletin.com",
+                    "bworldonline.com",
+                    "pna.gov.ph",
+                    "verafiles.org",
+                    # International News & Wires
+                    "reuters.com",
+                    "apnews.com",
+                    "bbc.com",
+                    "cnn.com",
+                    "aljazeera.com",
+                    "nytimes.com",
+                    "theguardian.com",
+                    # Global Fact-Checkers
+                    "snopes.com",
+                    "politifact.com",
+                    "factcheck.org",
+                    "afp.com",
+                ],
+                request_timeout=DEFAULT_HTTP_TIMEOUT_SEC,
+            )
+
+            tavily_results = search_response.get("results", [])
+            tavily_answer = search_response.get(
+                "answer", "No additional web context found."
+            )
+            _log_stage(
+                claim_id,
+                "url_tavily_search",
+                tavily_search_started_at,
+                results=len(tavily_results),
+            )
+
+            # BUILD RICHER CONTEXT: Give the AI the top 3 actual articles to read
+            results_context = ""
+            for i, res in enumerate(tavily_results[:3]):
+                results_context += f"Source {i+1}: {res.get('title', 'No Title')}\nURL: {res.get('url', '')}\nContent: {res.get('content', '')}\n\n"
+
+            # FIXED: Renamed the label to prevent circular reasoning
+            combined_context = f"Original URL Content to Verify (Do NOT use this as evidence to prove itself):\n{cleaned_text[:1500]}\n\nWeb Search Answer:\n{tavily_answer}\n\nTop Search Results:\n{results_context}"
+            tavily_eval_started_at = time.perf_counter()
+            ai_verdict = evaluate_url_claim_with_tavily(
+                cleaned_claim, combined_context, article_stance
+            )
+            _log_stage(
+                claim_id,
+                "url_tavily_llm_evaluation",
+                tavily_eval_started_at,
+                verdict=ai_verdict.get("verdict"),
+            )
+
+            source_urls = [
+                {
+                    "url": res.get("url"),
+                    "title": res.get("title", "External Source"),
+                    "snippet": res.get("content", "")[:250] + "...",
+                }
+                for res in tavily_results[:3]
+                if res.get("url")
+            ]
+
+            save_started_at = time.perf_counter()
+            _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_text, source_urls)
+            _log_stage(
+                claim_id, "save_claim", save_started_at, source_type="Live Web Search"
+            )
+            outcome = "completed_tavily"
+            selected_verdict = (
+                ai_verdict.get("verdict") if isinstance(ai_verdict, dict) else None
+            )
+
+        except Exception as e:
+            _log_stage(
+                claim_id, "url_tavily_failed", tavily_search_started_at, error=str(e)[:120]
+            )
+            logger.error("Tavily search error for claim %s: %s", claim_id, e)
+            try:
+                _save_claim(
+                    claim_id,
+                    {
+                        "verdict": "UNVERIFIED",
+                        "summary": "Could not retrieve relevant information to verify the claim.",
+                        "confidence_score": 0,
+                    },
+                    "Live Web Search",
+                    cleaned_text,
+                    [],
+                )
+            except Exception as save_err:
+                logger.error("_save_claim also failed for claim %s: %s", claim_id, save_err)
+            outcome = "completed_tavily_fallback_unverified"
+            selected_verdict = "UNVERIFIED"
+        finally:
+            _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
+
+    except BaseException as exc:
+        pipeline_error = exc
+        runtime_error_propagating = True
+        raise
     finally:
-        _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
+        # Finalize once, outside provider fallback handlers and across early returns.
+        if run is not None:
+            try:
+                if pipeline_error is not None:
+                    fail_verification_run(
+                        run,
+                        failure_stage="url_fact_check_pipeline",
+                        failure_code="UNHANDLED_EXCEPTION",
+                        failure_message=str(pipeline_error),
+                    )
+                elif selected_verdict in ("FACT", "FAKE", "MISLEADING", "SATIRE"):
+                    complete_verification_run(run)
+                else:
+                    abstain_verification_run(run)
+            except Exception:
+                if not runtime_error_propagating:
+                    raise
+                logger.exception(
+                    "VerificationRun finalization failed for URL claim %s; "
+                    "preserving the original runtime exception",
+                    claim_id,
+                )
 
 
 def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
