@@ -32,6 +32,7 @@ from .verification.linking import link_evidence_sources_to_run
 from .verification.providers.google_fact_check import (
     GoogleFactCheckProvider,
 )
+from .verification.providers.tavily import TavilyProvider
 from .verification.runs import (
     abstain_verification_run,
     complete_verification_run,
@@ -153,6 +154,37 @@ def _retrieve_and_ingest_gfc(
                     verification_run.pk,
                     exc,
                 )
+
+    return payload
+
+
+def _retrieve_and_ingest_tavily(search_query, claim_id):
+    """Retrieve once, preserving usable payloads if evidence persistence fails."""
+    provider = TavilyProvider(timeout=DEFAULT_HTTP_TIMEOUT_SEC)
+    payload, raw_evidence_items = provider.search_with_payload(search_query, limit=5)
+
+    ingestion_started_at = time.perf_counter()
+    try:
+        evidence_sources = ingest_raw_evidence(raw_evidence_items)
+    except Exception as exc:
+        _log_stage(
+            claim_id,
+            "tavily_evidence_ingestion_failed",
+            ingestion_started_at,
+            error=str(exc)[:120],
+        )
+        logger.error(
+            "Tavily evidence ingestion failed for claim %s: %s",
+            claim_id,
+            exc,
+        )
+    else:
+        _log_stage(
+            claim_id,
+            "tavily_evidence_ingestion",
+            ingestion_started_at,
+            evidence_sources=len(evidence_sources),
+        )
 
     return payload
 
@@ -571,38 +603,8 @@ def execute_core_text_pipeline(raw_text, claim_id):
             # Fallback — Tavily web search
             tavily_started_at = time.perf_counter()
             try:
-                tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
-                tavily_response = tavily_client.search(
-                    query=search_query,
-                    search_depth="advanced",
-                    topic="general",
-                    include_answer=True,
-                    include_domains=[
-                        # Philippine News & Fact Checkers
-                        "gmanetwork.com",
-                        "rappler.com",
-                        "philstar.com",
-                        "inquirer.net",
-                        "news.abs-cbn.com",
-                        "manilabulletin.com",
-                        "bworldonline.com",
-                        "pna.gov.ph",
-                        "verafiles.org",
-                        # International News & Wires
-                        "reuters.com",
-                        "apnews.com",
-                        "bbc.com",
-                        "cnn.com",
-                        "aljazeera.com",
-                        "nytimes.com",
-                        "theguardian.com",
-                        # Global Fact-Checkers
-                        "snopes.com",
-                        "politifact.com",
-                        "factcheck.org",
-                        "afp.com",
-                    ],
-                    request_timeout=DEFAULT_HTTP_TIMEOUT_SEC,
+                tavily_response = _retrieve_and_ingest_tavily(
+                    search_query, claim_id,
                 )
                 tavily_results = tavily_response.get("results", [])
                 tavily_answer = tavily_response.get(

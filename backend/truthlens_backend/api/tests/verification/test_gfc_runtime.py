@@ -318,11 +318,11 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
                 return_value=ai_verdict,
             ),
             patch("api.tasks._save_claim") as save_claim,
-            patch("api.tasks.TavilyClient") as tavily_class,
+            patch("api.tasks._retrieve_and_ingest_tavily") as retrieve_tavily,
             patch("api.tasks.requests.get") as requests_get,
             patch("api.tasks._log_stage"),
         ):
-            tavily_class.return_value.search.return_value = tavily_response
+            retrieve_tavily.return_value = tavily_response
 
             execute_core_text_pipeline(
                 "Raw submitted claim.",
@@ -335,7 +335,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             verification_run=start_run.return_value,
         )
 
-        (tavily_class.return_value.search.assert_called_once())
+        retrieve_tavily.assert_called_once_with(search_query, claim_id)
 
         self.assertEqual(
             save_claim.call_args.args[2],
