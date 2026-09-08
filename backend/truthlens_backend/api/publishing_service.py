@@ -1,4 +1,5 @@
 import logging
+import uuid
 
 from django.core.exceptions import (
     ValidationError,
@@ -11,11 +12,12 @@ from django.utils import timezone
 
 from .models import (
     AdjudicationDecision,
+    AdjudicationDecisionEvidenceSnapshot,
     Claim,
-    EvidenceSubmission,
     ModerationEvent,
     OfficialFactCheck,
     OfficialFactCheckSource,
+    OfficialFactCheckSourceEvidenceLink,
     Organization,
     OrganizationMembership,
     VerificationAssignment,
@@ -185,9 +187,10 @@ def _lock_publication_context(*, identity, actor, capability):
     """Lock a publication mutation using the shared Claim-first protocol.
 
     The canonical order is Claim, open Assignment, Organization, actor
-    Membership, current AdjudicationDecision, all claim fact-checks, then
-    their source rows. All service mutation paths use this helper, and the
-    nested assignment-completion helper reacquires only Claim then Assignment.
+    Membership, current AdjudicationDecision, its evidence snapshot, all claim
+    fact-checks, their source rows, then their evidence-lineage rows. All
+    service mutation paths use this helper, and the nested
+    assignment-completion helper reacquires only Claim then Assignment.
     """
 
     try:
@@ -242,6 +245,19 @@ def _lock_publication_context(*, identity, actor, capability):
             "current. Create a new draft from the latest decision."
         )
 
+    decision_snapshot = (
+        AdjudicationDecisionEvidenceSnapshot.objects.select_for_update(
+            of=("self",)
+        )
+        .filter(decision=current_decision)
+        .first()
+    )
+    snapshot_records = _validate_decision_snapshot(
+        decision_snapshot,
+        decision=current_decision,
+        claim=locked_claim,
+    )
+
     fact_checks = list(
         OfficialFactCheck.objects.select_for_update(of=("self",))
         .filter(claim=locked_claim)
@@ -257,6 +273,17 @@ def _lock_publication_context(*, identity, actor, capability):
         .order_by(
             "fact_check_id",
             "created_at",
+            "id",
+        )
+    )
+    list(
+        OfficialFactCheckSourceEvidenceLink.objects.select_for_update(
+            of=("self",)
+        )
+        .filter(source__fact_check__claim=locked_claim)
+        .order_by(
+            "source_id",
+            "captured_evidence_id",
             "id",
         )
     )
@@ -284,6 +311,8 @@ def _lock_publication_context(*, identity, actor, capability):
         "assignment": assignment,
         "organization": organization,
         "decision": current_decision,
+        "decision_snapshot": decision_snapshot,
+        "snapshot_records": snapshot_records,
         "fact_checks": fact_checks,
         "fact_check": locked_fact_check,
     }
@@ -337,65 +366,148 @@ def _normalize_source_urls(
     return normalized
 
 
-def _sync_verified_evidence_sources(
+def _snapshot_conflict():
+    return PublishingConflict(
+        "The current adjudication decision does not have a valid decision-time "
+        "evidence snapshot. Publication cannot continue."
+    )
+
+
+def _validate_decision_snapshot(snapshot, *, decision, claim):
+    if (
+        snapshot is None
+        or snapshot.decision_id != decision.id
+        or str(snapshot.claim_id) != str(claim.id)
+        or snapshot.schema_version
+        != AdjudicationDecisionEvidenceSnapshot.CURRENT_SCHEMA_VERSION
+        or not isinstance(snapshot.evidence_records, list)
+        or not snapshot.evidence_records
+    ):
+        raise _snapshot_conflict()
+
+    records = []
+    evidence_ids = set()
+    for record in snapshot.evidence_records:
+        if (
+            not isinstance(record, dict)
+            or set(record)
+            != AdjudicationDecisionEvidenceSnapshot.EVIDENCE_RECORD_FIELDS
+        ):
+            raise _snapshot_conflict()
+        try:
+            evidence_id = uuid.UUID(str(record["id"]))
+        except (TypeError, ValueError, AttributeError) as error:
+            raise _snapshot_conflict() from error
+        if str(evidence_id) != record["id"]:
+            raise _snapshot_conflict()
+        if evidence_id in evidence_ids:
+            raise _snapshot_conflict()
+        if record["evidence_status"] not in {"VERIFIED", "REJECTED"}:
+            raise _snapshot_conflict()
+        if record["evidence_url"] is not None and not isinstance(
+            record["evidence_url"], str
+        ):
+            raise _snapshot_conflict()
+        if record["evidence_caption"] is not None and not isinstance(
+            record["evidence_caption"], str
+        ):
+            raise _snapshot_conflict()
+        if record["submitted_at"] is not None and not isinstance(
+            record["submitted_at"], str
+        ):
+            raise _snapshot_conflict()
+        evidence_ids.add(evidence_id)
+        records.append(record)
+
+    return records
+
+
+def _normalize_snapshot_source_url(raw_url):
+    if not isinstance(raw_url, str):
+        return None
+    url = raw_url.strip()
+    if not url or len(url) > 2000:
+        return None
+    try:
+        _url_validator(url)
+    except ValidationError:
+        return None
+    return url
+
+
+def _snapshot_record_sort_key(record):
+    submitted_at = record["submitted_at"]
+    return (
+        submitted_at is None,
+        submitted_at or "",
+        str(record["id"]),
+    )
+
+
+def _sync_snapshot_evidence_sources(
     fact_check,
     *,
     actor,
+    snapshot,
+    snapshot_records,
 ):
-    evidence_items = (
-        EvidenceSubmission.objects.filter(
-            thread__claim=(fact_check.claim),
-            evidence_status=(EvidenceSubmission.EvidenceStatus.VERIFIED),
-        )
-        .exclude(evidence_url__isnull=True)
-        .exclude(evidence_url="")
-        .select_related(
-            "thread",
-        )
-        .order_by("submitted_at")
-    )
-
-    for evidence in evidence_items:
-        url = (evidence.evidence_url or "").strip()
-
-        if not url:
+    records_by_url = {}
+    for record in sorted(snapshot_records, key=_snapshot_record_sort_key):
+        if record["evidence_status"] != "VERIFIED":
             continue
+        url = _normalize_snapshot_source_url(record["evidence_url"])
+        if url is not None:
+            records_by_url.setdefault(url, []).append(record)
 
+    for url, records in records_by_url.items():
+        title = next(
+            (
+                record["evidence_caption"]
+                for record in records
+                if isinstance(record["evidence_caption"], str)
+                and record["evidence_caption"].strip()
+            ),
+            None,
+        )
+        source, _created = OfficialFactCheckSource.objects.get_or_create(
+            fact_check=fact_check,
+            url=url,
+            defaults={
+                "title": title,
+                "added_by": actor,
+                "source_type": (
+                    OfficialFactCheckSource.SourceType.VERIFIED_EVIDENCE
+                ),
+                "is_editorially_selected": False,
+            },
+        )
+        for record in records:
+            OfficialFactCheckSourceEvidenceLink.objects.get_or_create(
+                source=source,
+                snapshot=snapshot,
+                captured_evidence_id=record["id"],
+            )
+
+
+def _add_editorial_sources(
+    fact_check,
+    *,
+    actor,
+    normalized_urls,
+):
+    for url in normalized_urls:
         source, created = OfficialFactCheckSource.objects.get_or_create(
             fact_check=fact_check,
             url=url,
             defaults={
-                "title": (evidence.evidence_caption),
-                "evidence_submission": evidence,
                 "added_by": actor,
-                "source_type": (OfficialFactCheckSource.SourceType.VERIFIED_EVIDENCE),
+                "source_type": OfficialFactCheckSource.SourceType.MODERATOR_ADDED,
+                "is_editorially_selected": True,
             },
         )
-
-        if not created:
-            changed_fields = []
-
-            if source.evidence_submission_id is None:
-                source.evidence_submission = evidence
-
-                changed_fields.append("evidence_submission")
-
-            if source.source_type != (
-                OfficialFactCheckSource.SourceType.VERIFIED_EVIDENCE
-            ):
-                source.source_type = (
-                    OfficialFactCheckSource.SourceType.VERIFIED_EVIDENCE
-                )
-
-                changed_fields.append("source_type")
-
-            if not source.title and evidence.evidence_caption:
-                source.title = evidence.evidence_caption
-
-                changed_fields.append("title")
-
-            if changed_fields:
-                source.save(update_fields=(changed_fields))
+        if not created and source.is_editorially_selected is not True:
+            source.is_editorially_selected = True
+            source.save(update_fields=["is_editorially_selected"])
 
 
 def _replace_moderator_sources(
@@ -405,24 +517,27 @@ def _replace_moderator_sources(
     source_urls,
 ):
     normalized_urls = _normalize_source_urls(source_urls)
-
-    (
-        fact_check.source_items.filter(
-            source_type=(OfficialFactCheckSource.SourceType.MODERATOR_ADDED)
-        ).delete()
+    requested_urls = set(normalized_urls)
+    lineage_source_ids = set(
+        OfficialFactCheckSourceEvidenceLink.objects.filter(
+            source__fact_check=fact_check
+        ).values_list("source_id", flat=True)
     )
 
-    for url in normalized_urls:
-        (
-            OfficialFactCheckSource.objects.get_or_create(
-                fact_check=fact_check,
-                url=url,
-                defaults={
-                    "added_by": actor,
-                    "source_type": (OfficialFactCheckSource.SourceType.MODERATOR_ADDED),
-                },
-            )
-        )
+    for source in fact_check.source_items.filter(is_editorially_selected=True):
+        if source.url in requested_urls:
+            continue
+        if source.id in lineage_source_ids:
+            source.is_editorially_selected = False
+            source.save(update_fields=["is_editorially_selected"])
+        else:
+            source.delete()
+
+    _add_editorial_sources(
+        fact_check,
+        actor=actor,
+        normalized_urls=normalized_urls,
+    )
 
 
 def _sync_sources_cache(
@@ -452,12 +567,16 @@ def _sync_fact_check_sources(
     fact_check,
     *,
     actor,
+    snapshot,
+    snapshot_records,
     source_urls=None,
     replace_moderator_sources=False,
 ):
-    _sync_verified_evidence_sources(
+    _sync_snapshot_evidence_sources(
         fact_check,
         actor=actor,
+        snapshot=snapshot,
+        snapshot_records=snapshot_records,
     )
 
     if replace_moderator_sources:
@@ -468,19 +587,11 @@ def _sync_fact_check_sources(
         )
 
     elif source_urls:
-        for url in _normalize_source_urls(source_urls):
-            (
-                OfficialFactCheckSource.objects.get_or_create(
-                    fact_check=(fact_check),
-                    url=url,
-                    defaults={
-                        "added_by": actor,
-                        "source_type": (
-                            OfficialFactCheckSource.SourceType.MODERATOR_ADDED
-                        ),
-                    },
-                )
-            )
+        _add_editorial_sources(
+            fact_check,
+            actor=actor,
+            normalized_urls=_normalize_source_urls(source_urls),
+        )
 
     _sync_sources_cache(fact_check)
 
@@ -646,6 +757,8 @@ def create_fact_check_draft(
         _sync_fact_check_sources(
             draft,
             actor=actor,
+            snapshot=context["decision_snapshot"],
+            snapshot_records=context["snapshot_records"],
             source_urls=source_urls,
         )
 
@@ -719,6 +832,8 @@ def update_fact_check_draft(
         _sync_fact_check_sources(
             locked_fact_check,
             actor=actor,
+            snapshot=context["decision_snapshot"],
+            snapshot_records=context["snapshot_records"],
             source_urls=source_urls,
             replace_moderator_sources=(source_urls is not None),
         )
@@ -751,6 +866,8 @@ def submit_fact_check_for_review(
         _sync_fact_check_sources(
             locked_fact_check,
             actor=actor,
+            snapshot=context["decision_snapshot"],
+            snapshot_records=context["snapshot_records"],
         )
 
         _validate_publication_content(locked_fact_check)
@@ -834,6 +951,8 @@ def publish_fact_check(
         _sync_fact_check_sources(
             locked_fact_check,
             actor=actor,
+            snapshot=context["decision_snapshot"],
+            snapshot_records=context["snapshot_records"],
         )
 
         _validate_publication_content(locked_fact_check)

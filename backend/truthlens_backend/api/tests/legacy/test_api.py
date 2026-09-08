@@ -34,9 +34,11 @@ from api.models import (
     Organization,
     OrganizationMembership,
     AdjudicationDecision,
+    AdjudicationDecisionEvidenceSnapshot,
     VerificationAssignment,
     OfficialFactCheck,
     OfficialFactCheckSource,
+    OfficialFactCheckSourceEvidenceLink,
     KnowledgeReuseEvent,
 )
 from api.throttles import FactCheckRateThrottle
@@ -4161,10 +4163,11 @@ class PublishingFoundationTests(APITestCase):
             OfficialFactCheckSource.SourceType.VERIFIED_EVIDENCE,
         )
 
-        self.assertEqual(
-            source.evidence_submission,
-            self.evidence,
-        )
+        self.assertIsNone(source.evidence_submission_id)
+        self.assertFalse(source.is_editorially_selected)
+        lineage = OfficialFactCheckSourceEvidenceLink.objects.get(source=source)
+        self.assertEqual(lineage.snapshot_id, self.decision.evidence_snapshot.id)
+        self.assertEqual(lineage.captured_evidence_id, self.evidence.id)
 
         draft.refresh_from_db()
 
@@ -4544,6 +4547,11 @@ class PublishingFoundationTests(APITestCase):
             verdict=(AdjudicationDecision.Verdict.MISLEADING),
             canonical_claim=("The revised reviewed claim " "is misleading."),
             rationale=("Additional review changed " "the authoritative verdict."),
+        )
+        AdjudicationDecisionEvidenceSnapshot.objects.create(
+            decision=revised["decision"],
+            claim_id=self.claim.id,
+            evidence_records=self.decision.evidence_snapshot.evidence_records,
         )
 
         fresh_draft = create_fact_check_draft(

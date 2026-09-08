@@ -2,6 +2,7 @@ from django.db import models
 from django.db.models import Q
 from django.db.models.functions import Lower
 from django.core.exceptions import ValidationError
+from django.core.validators import URLValidator
 from django.contrib.auth.models import User
 from django.conf import settings
 from django.contrib.postgres.search import SearchVectorField, SearchVector
@@ -1866,6 +1867,22 @@ class AdjudicationDecision(models.Model):
 
 class AdjudicationDecisionEvidenceSnapshot(models.Model):
     CURRENT_SCHEMA_VERSION = 1
+    EVIDENCE_RECORD_FIELDS = frozenset(
+        {
+            "id",
+            "thread_id",
+            "evidence_status",
+            "evidence_type",
+            "evidence_caption",
+            "evidence_url",
+            "contributor_id",
+            "reviewer_id",
+            "submitted_at",
+            "reviewed_at",
+            "moderator_notes",
+            "rejection_reason",
+        }
+    )
 
     id = models.UUIDField(
         primary_key=True,
@@ -2322,6 +2339,16 @@ class OfficialFactCheckSource(models.Model):
         default=SourceType.MODERATOR_ADDED,
     )
 
+    is_editorially_selected = models.BooleanField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text=(
+            "Whether an editor explicitly selected this source. Null preserves "
+            "unknown provenance for records created before this field existed."
+        ),
+    )
+
     created_at = models.DateTimeField(
         auto_now_add=True,
     )
@@ -2367,6 +2394,114 @@ class OfficialFactCheckSource(models.Model):
 
     def __str__(self):
         return self.url
+
+
+class OfficialFactCheckSourceEvidenceLink(models.Model):
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    source = models.ForeignKey(
+        OfficialFactCheckSource,
+        on_delete=models.CASCADE,
+        related_name="evidence_links",
+        editable=False,
+    )
+    snapshot = models.ForeignKey(
+        AdjudicationDecisionEvidenceSnapshot,
+        on_delete=models.PROTECT,
+        related_name="source_links",
+        editable=False,
+    )
+    captured_evidence_id = models.UUIDField(
+        editable=False,
+    )
+
+    class Meta:
+        ordering = ["source_id", "captured_evidence_id", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source", "captured_evidence_id"],
+                name="unique_source_captured_evidence",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        errors = {}
+
+        source_fact_check = self.source.fact_check
+        snapshot = self.snapshot
+        if source_fact_check.adjudication_decision_id != snapshot.decision_id:
+            errors["snapshot"] = (
+                "Source and snapshot must belong to the same adjudication decision."
+            )
+        if str(source_fact_check.claim_id) != str(snapshot.claim_id):
+            errors["snapshot"] = (
+                "Snapshot claim identity must match the fact-check claim."
+            )
+        if snapshot.schema_version != snapshot.CURRENT_SCHEMA_VERSION:
+            errors["snapshot"] = "The evidence snapshot schema is not supported."
+
+        record = None
+        if isinstance(snapshot.evidence_records, list):
+            record = next(
+                (
+                    item
+                    for item in snapshot.evidence_records
+                    if isinstance(item, dict)
+                    and set(item) == snapshot.EVIDENCE_RECORD_FIELDS
+                    and str(item.get("id")) == str(self.captured_evidence_id)
+                ),
+                None,
+            )
+        if record is None:
+            errors["captured_evidence_id"] = (
+                "The captured evidence record is not present in the snapshot."
+            )
+        else:
+            if record.get("evidence_status") != (
+                EvidenceSubmission.EvidenceStatus.VERIFIED
+            ):
+                errors["captured_evidence_id"] = (
+                    "Only captured VERIFIED evidence may be linked as a source."
+                )
+            captured_url = record.get("evidence_url")
+            captured_url = (
+                captured_url.strip() if isinstance(captured_url, str) else ""
+            )
+            source_url = (self.source.url or "").strip()
+            validator = URLValidator(schemes=["http", "https"])
+            try:
+                if len(captured_url) > 2000:
+                    raise ValidationError("The captured URL is too long.")
+                validator(captured_url)
+            except ValidationError:
+                captured_url = ""
+            if not captured_url or captured_url != source_url:
+                errors["captured_evidence_id"] = (
+                    "The captured evidence URL must match the source URL."
+                )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError(
+                "Evidence source lineage links are immutable and cannot be modified."
+            )
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            "Evidence source lineage links cannot be deleted directly."
+        )
+
+    def __str__(self):
+        return f"{self.source_id}: evidence {self.captured_evidence_id}"
 
 
 class KnowledgeReuseEvent(models.Model):
