@@ -123,6 +123,7 @@ export const API_ENDPOINTS = {
    EVIDENCE_CASES: "moderation/evidence/cases/",
    EVIDENCE_CASE_DETAIL: (caseId) => `moderation/evidence/cases/${encodeURIComponent(caseId)}/`,
    EVIDENCE_CASE_ACTION: (caseId) => `moderation/evidence/cases/${encodeURIComponent(caseId)}/action/`,
+   ADJUDICATION_CASES: "moderation/adjudication/cases/",
 
    // Verification Workspace
    VERIFICATION_INTAKE: "verification/intake/",

@@ -4,11 +4,13 @@ from django.test import TestCase
 from api.adjudication_service import (
     ensure_adjudication_case,
     ensure_claim_adjudication_readiness,
+    issue_adjudication_decision,
 )
 from api.evidence_review_service import (
     ensure_evidence_case,
 )
 from api.models import (
+    AdjudicationDecision,
     Claim,
     EvidenceSubmission,
     ModerationCase,
@@ -27,6 +29,7 @@ from api.verification_assignment_service import (
     VerificationAssignmentReleaseBlocked,
     claim_verification_assignment,
     ensure_verification_assignment,
+    get_available_verification_assignments,
     get_claim_verification_organization,
     release_verification_assignment,
 )
@@ -162,7 +165,7 @@ class VerificationAssignmentServiceTests(TestCase):
             1,
         )
 
-    def test_finalized_claim_is_not_automatically_reopened(
+    def test_cache_only_claim_remains_eligible_for_intake(
         self,
     ):
         self.claim.final_verdict = "FACT"
@@ -170,10 +173,90 @@ class VerificationAssignmentServiceTests(TestCase):
 
         assignment = self._create_assignment()
 
-        self.assertIsNone(assignment)
+        self.assertIsNotNone(assignment)
+        self.assertEqual(
+            assignment.status,
+            VerificationAssignment.Status.AVAILABLE,
+        )
 
-        self.assertFalse(
-            VerificationAssignment.objects.filter(claim=self.claim).exists()
+    def test_current_adjudication_is_not_automatically_reopened(
+        self,
+    ):
+        assignment = self._claim_for_organization_a()
+        self._create_evidence(
+            status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+        )
+        case = ensure_adjudication_case(
+            claim=self.claim,
+            actor=self.lead_a,
+            organization=self.organization_a,
+        )
+        issue_adjudication_decision(
+            case_id=case.id,
+            organization_id=self.organization_a.id,
+            actor=self.lead_a,
+            verdict=AdjudicationDecision.Verdict.FACT,
+            canonical_claim="The adjudicated claim is accurate.",
+            rationale="Reviewed evidence supports the claim.",
+            expected_revision=0,
+        )
+        assignment.status = VerificationAssignment.Status.COMPLETED
+        assignment.save(update_fields=["status"])
+
+        self.assertIsNone(self._create_assignment())
+
+    def test_cache_mismatch_does_not_change_adjudication_authority(
+        self,
+    ):
+        assignment = self._claim_for_organization_a()
+        self._create_evidence(
+            status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+        )
+        case = ensure_adjudication_case(
+            claim=self.claim,
+            actor=self.lead_a,
+            organization=self.organization_a,
+        )
+        issue_adjudication_decision(
+            case_id=case.id,
+            organization_id=self.organization_a.id,
+            actor=self.lead_a,
+            verdict=AdjudicationDecision.Verdict.FACT,
+            canonical_claim="The adjudicated claim is accurate.",
+            rationale="Reviewed evidence supports the claim.",
+            expected_revision=0,
+        )
+        Claim.objects.filter(pk=self.claim.pk).update(final_verdict="FAKE")
+        assignment.status = VerificationAssignment.Status.COMPLETED
+        assignment.save(update_fields=["status"])
+
+        self.assertIsNone(self._create_assignment())
+
+    def test_existing_open_assignment_is_preserved_despite_cache_value(
+        self,
+    ):
+        existing = self._create_assignment()
+        Claim.objects.filter(pk=self.claim.pk).update(final_verdict="FACT")
+
+        ensured = self._create_assignment()
+
+        self.assertEqual(ensured.id, existing.id)
+        self.assertEqual(
+            ensured.status,
+            VerificationAssignment.Status.AVAILABLE,
+        )
+
+    def test_available_intake_prefetches_current_decision_provenance(
+        self,
+    ):
+        assignment = self._create_assignment()
+
+        listed = list(get_available_verification_assignments())
+
+        self.assertEqual([item.id for item in listed], [assignment.id])
+        self.assertEqual(
+            listed[0].claim._current_adjudication_decisions,
+            [],
         )
 
     def test_lead_verifier_can_claim_available_work(

@@ -9,6 +9,7 @@ from api.adjudication_service import (
 from api.models import (
     AdjudicationDecision,
     Claim,
+    EvidenceSubmission,
     OfficialFactCheck,
     Organization,
     OrganizationMembership,
@@ -83,19 +84,26 @@ class VerificationAssignmentPublicationTests(TestCase):
             actor=self.lead_verifier,
         )
 
-        ensure_adjudication_case(
+        EvidenceSubmission.objects.create(
+            thread=self.thread,
+            contributor=self.community_user,
+            evidence_caption="Reviewed source for publication.",
+            evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+        )
+
+        case = ensure_adjudication_case(
             claim=self.claim,
             actor=self.community_user,
             organization=self.organization,
         )
 
         result = issue_adjudication_decision(
-            claim=self.claim,
+            case_id=case.id,
+            organization_id=self.organization.id,
             actor=self.lead_verifier,
             verdict=(AdjudicationDecision.Verdict.FAKE),
             canonical_claim=("The reviewed claim is false."),
             rationale=("The available authoritative " "sources contradict the claim."),
-            organization=self.organization,
             expected_revision=0,
         )
 
@@ -224,3 +232,23 @@ class VerificationAssignmentPublicationTests(TestCase):
         self.assertIsNotNone(self.assignment.completed_at)
 
         self.assertIsNone(self.assignment.released_at)
+
+    def test_published_legacy_fact_check_is_not_returned_to_intake(self):
+        historical_claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Published historical claim",
+            final_verdict=AdjudicationDecision.Verdict.FACT,
+        )
+        OfficialFactCheck.objects.create(
+            claim=historical_claim,
+            canonical_claim="Published historical claim",
+            verdict=AdjudicationDecision.Verdict.FACT,
+            summary="Existing published institutional knowledge.",
+            publication_status=OfficialFactCheck.PublicationStatus.PUBLISHED,
+        )
+
+        self.assertIsNone(
+            ensure_verification_assignment(
+                claim=historical_claim,
+            )
+        )

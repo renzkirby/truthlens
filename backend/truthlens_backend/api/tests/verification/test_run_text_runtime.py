@@ -177,7 +177,7 @@ class VerificationRunTextRuntimeTests(TestCase):
             allow_semantic_fallback=False,
         )
 
-    def test_cached_substantive_verdicts_complete_and_preserve_copied_fields(self):
+    def test_cached_substantive_ai_verdicts_complete_and_preserve_ai_fields(self):
         for verdict in ("FACT", "FAKE", "MISLEADING", "SATIRE"):
             with self.subTest(verdict=verdict):
                 cached = self._cached_claim(verdict)
@@ -185,14 +185,15 @@ class VerificationRunTextRuntimeTests(TestCase):
                 self._assert_terminal(run, VerificationRun.Status.COMPLETED)
                 self.claim.refresh_from_db()
                 for field in (
-                    "ai_verdict", "final_verdict", "ai_summary", "consensus_score",
+                    "ai_verdict", "ai_summary", "consensus_score",
                     "source_type", "source_link", "top_verdict_source", "ai_sources",
                     "is_ai_generated",
                 ):
                     self.assertEqual(getattr(self.claim, field), getattr(cached, field))
+                self.assertIsNone(self.claim.final_verdict)
                 self.assertEqual(
                     self.claim.score_context,
-                    "This result was instantly matched from a previously verified claim.",
+                    "This result was matched from a prior analysis of the same claim.",
                 )
         self.clean.assert_not_called()
         self.retrieve_gfc.assert_not_called()
@@ -207,17 +208,17 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.clean.assert_not_called()
         self.tavily.assert_not_called()
 
-    def test_cached_final_verdict_takes_precedence_over_ai_verdict(self):
+    def test_cached_human_verdict_is_not_copied_or_used_as_run_outcome(self):
         for ai_verdict, final_verdict, status in (
-            ("UNVERIFIED", "FACT", VerificationRun.Status.COMPLETED),
-            ("FACT", "UNVERIFIED", VerificationRun.Status.ABSTAINED),
+            ("UNVERIFIED", "FACT", VerificationRun.Status.ABSTAINED),
+            ("FACT", "UNVERIFIED", VerificationRun.Status.COMPLETED),
         ):
             with self.subTest(final_verdict=final_verdict):
                 self._cached_claim(ai_verdict, final_verdict)
                 self._assert_terminal(self._execute(), status)
                 self.claim.refresh_from_db()
                 self.assertEqual(self.claim.ai_verdict, ai_verdict)
-                self.assertEqual(self.claim.final_verdict, final_verdict)
+                self.assertIsNone(self.claim.final_verdict)
 
     def test_self_match_continues_verification_with_one_run(self):
         self.match.return_value = self.claim

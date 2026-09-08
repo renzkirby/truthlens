@@ -9,9 +9,9 @@ Exact-Match Fingerprinting
   - TEXT claims: normalized text → SHA-256
 
 When a new claim arrives, we compute its fingerprint and check the database
-for existing claims with the same (or near-matching) fingerprint. If a match
-is found that has been resolved by a moderator, we return the cached verdict
-immediately — saving AI/API costs and giving the user an instant answer.
+for existing claims with the same (or near-matching) fingerprint. Cached
+human verdicts are exposed only when an attributable adjudication decision
+exists; published fact checks remain reusable contextual knowledge.
 """
 
 import hashlib
@@ -29,6 +29,7 @@ from .knowledge_reuse_service import (
     get_published_fact_check_for_claim,
     record_knowledge_reuse,
 )
+from .adjudication_provenance import get_claim_adjudication_provenance
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +165,8 @@ def find_semantic_match(embedding, claim_type="TEXT", threshold=0.85):
         .order_by("distance", "-last_updated")
     )
 
-    # Prioritization: resolved -> thread -> any match
+    # Prioritization only: cached verdict -> thread -> any match.
+    # get_match_result validates authority before exposing a human verdict.
     resolved = candidates.filter(final_verdict__isnull=False).first()
     if resolved:
         return resolved
@@ -194,9 +196,12 @@ def find_matching_claim(
       - For TEXT claims: exact fingerprint match OR semantic similarity > threshold
 
     Returns the best matching Claim object, prioritizing:
-      1. Claims with a final_verdict (moderator-resolved) — most recent first
+      1. Claims with a final_verdict compatibility cache — most recent first
       2. Claims with an active community thread — most recent first
       3. Claims with an AI verdict — most recent first
+
+    The cache affects candidate ordering only. Response construction validates
+    authoritative adjudication provenance before exposing a human verdict.
 
     Returns None if no match found.
     """
@@ -211,7 +216,8 @@ def find_matching_claim(
             .order_by("-last_updated")
         )
 
-        # Prioritize: resolved claims first, then claims with threads, then any
+        # Prioritize cached candidates first, then threaded claims, then any.
+        # This does not confer adjudication authority on the selected result.
         resolved = exact_matches.filter(final_verdict__isnull=False).first()
         if resolved:
             return resolved
@@ -306,7 +312,11 @@ def get_match_result(
     official_fact_check = None
     resolution_source = None
 
-    effective_verdict = matched_claim.final_verdict or matched_claim.ai_verdict
+    adjudication_provenance = get_claim_adjudication_provenance(matched_claim)
+
+    effective_verdict = (
+        adjudication_provenance["verdict"] or matched_claim.ai_verdict
+    )
 
     summary = matched_claim.ai_summary
 
@@ -318,10 +328,10 @@ def get_match_result(
     # 1. AUTHORITATIVE RESOLVED CLAIM
     # =====================================
 
-    if matched_claim.final_verdict:
-        match_type = "resolved"
+    published_fact_check = get_published_fact_check_for_claim(matched_claim)
 
-        published_fact_check = get_published_fact_check_for_claim(matched_claim)
+    if published_fact_check or adjudication_provenance["is_attributable"]:
+        match_type = "resolved"
 
         if published_fact_check:
             published_match = PublishedFactCheckMatch(
@@ -446,7 +456,7 @@ def get_match_result(
         "claim_type": (matched_claim.claim_type),
         "verdict": effective_verdict,
         "ai_verdict": (matched_claim.ai_verdict),
-        "final_verdict": (matched_claim.final_verdict),
+        "final_verdict": (adjudication_provenance["verdict"]),
         "summary": summary,
         "confidence_score": (matched_claim.consensus_score),
         "source_type": source_type,

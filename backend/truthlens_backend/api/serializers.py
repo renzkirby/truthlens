@@ -30,6 +30,11 @@ from .organization_public_presence_service import (
     is_public_partner_eligible,
 )
 from .moderation_service import ACTIVE_CASE_STATUSES
+from .adjudication_provenance import (
+    AdjudicationProvenance,
+    get_adjudication_decision_provenance,
+    get_claim_adjudication_provenance,
+)
 
 
 class PublicIdentityProfileSerializer(serializers.ModelSerializer):
@@ -311,6 +316,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 
 class ClaimSerializer(serializers.ModelSerializer):
+    final_verdict = serializers.SerializerMethodField()
     effective_verdict = serializers.SerializerMethodField()
     has_moderator_verdict = serializers.SerializerMethodField()
     verified_evidence_count = serializers.SerializerMethodField()
@@ -408,13 +414,27 @@ class ClaimSerializer(serializers.ModelSerializer):
 
         return None
 
+    def _get_adjudication_provenance(self, obj):
+        cache = getattr(self, "_adjudication_provenance_cache", None)
+
+        if cache is None:
+            cache = {}
+            self._adjudication_provenance_cache = cache
+
+        if obj.pk not in cache:
+            cache[obj.pk] = get_claim_adjudication_provenance(obj)
+
+        return cache[obj.pk]
+
+    def get_final_verdict(self, obj):
+        return self._get_adjudication_provenance(obj)["verdict"]
+
     def get_effective_verdict(self, obj):
-        return obj.final_verdict or obj.ai_verdict
+        return self.get_final_verdict(obj) or obj.ai_verdict
 
     def get_has_moderator_verdict(self, obj):
-        """Check if moderators have set a final verdict on this claim"""
-        # Direct check: final_verdict is only set when moderators have verified evidence
-        return bool(obj.final_verdict)
+        """Return whether the current verdict has attributable human provenance."""
+        return self._get_adjudication_provenance(obj)["is_attributable"]
 
     def get_verified_evidence_count(self, obj):
         """Get count of verified evidence for this claim"""
@@ -425,10 +445,12 @@ class ClaimSerializer(serializers.ModelSerializer):
         ).count()
 
     def get_moderator_verdict_info(self, obj):
-        """Return moderator verdict status and supporting evidence"""
-        if obj.final_verdict:
+        """Return only a verdict backed by attributable adjudication provenance."""
+        provenance = self._get_adjudication_provenance(obj)
+
+        if provenance["is_attributable"]:
             return {
-                "verdict": obj.final_verdict,
+                "verdict": provenance["verdict"],
                 "source": "MODERATORS",
                 "verified_evidence_count": self.get_verified_evidence_count(obj),
             }
@@ -489,6 +511,10 @@ class VerificationIntakeClaimSerializer(serializers.ModelSerializer):
         many=True,
         read_only=True,
     )
+    final_verdict = serializers.SerializerMethodField()
+
+    def get_final_verdict(self, obj):
+        return get_claim_adjudication_provenance(obj)["verdict"]
 
     class Meta:
         model = Claim
@@ -1644,6 +1670,12 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
     def get_thread(self, obj):
         """Return full thread with nested claim for moderation queue display."""
         if obj.thread:
+            claim_provenance = (
+                get_claim_adjudication_provenance(obj.thread.claim)
+                if obj.thread.claim
+                else None
+            )
+
             return {
                 "id": str(obj.thread.id),
                 "caption": obj.thread.caption,
@@ -1653,7 +1685,7 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
                     {
                         "id": str(obj.thread.claim.id),
                         "context_text": obj.thread.claim.context_text,
-                        "verdict": obj.thread.claim.final_verdict
+                        "verdict": claim_provenance["verdict"]
                         or obj.thread.claim.ai_verdict,
                     }
                     if obj.thread.claim
@@ -1811,7 +1843,116 @@ class ThreadDetailSerializer(serializers.ModelSerializer):
         ]
 
 
-class ModerationDecisionSerializer(serializers.Serializer):
+class _RejectUnsupportedAdjudicationFieldsMixin:
+    def validate(self, attrs):
+        unsupported_fields = set(self.initial_data) - set(self.fields)
+        if unsupported_fields:
+            raise serializers.ValidationError(
+                {
+                    field: "This field is not supported."
+                    for field in sorted(unsupported_fields)
+                }
+            )
+        return attrs
+
+
+class AdjudicationOrganizationQuerySerializer(serializers.Serializer):
+    organization_id = serializers.UUIDField(required=True)
+
+
+class AdjudicationCaseQueueFilterSerializer(serializers.Serializer):
+    organization_id = serializers.UUIDField(required=True)
+    status = serializers.ChoiceField(
+        choices=ModerationCase.Status.choices,
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+    priority = serializers.ChoiceField(
+        choices=ModerationCase.Priority.choices,
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+    limit = serializers.IntegerField(
+        required=False,
+        default=20,
+        min_value=1,
+        max_value=100,
+    )
+    offset = serializers.IntegerField(
+        required=False,
+        default=0,
+        min_value=0,
+    )
+
+    def validate(self, attrs):
+        supported_fields = {
+            "organization_id",
+            "status",
+            "priority",
+            "limit",
+            "offset",
+        }
+        unsupported_fields = set(self.initial_data) - supported_fields
+        errors = {
+            field: "This query parameter is not supported."
+            for field in sorted(unsupported_fields)
+        }
+
+        getlist = getattr(self.initial_data, "getlist", None)
+        if getlist is not None:
+            duplicate_fields = {
+                field
+                for field in supported_fields.intersection(self.initial_data)
+                if len(getlist(field)) != 1
+            }
+            errors.update(
+                {
+                    field: "This query parameter may only be supplied once."
+                    for field in sorted(duplicate_fields)
+                }
+            )
+
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
+
+
+class AdjudicationCaseDetailQuerySerializer(serializers.Serializer):
+    organization_id = serializers.UUIDField(required=True)
+
+    def validate(self, attrs):
+        supported_fields = {"organization_id"}
+        unsupported_fields = set(self.initial_data) - supported_fields
+        errors = {
+            field: "This query parameter is not supported."
+            for field in sorted(unsupported_fields)
+        }
+
+        getlist = getattr(self.initial_data, "getlist", None)
+        if getlist is not None:
+            duplicate_fields = {
+                field
+                for field in supported_fields.intersection(self.initial_data)
+                if len(getlist(field)) != 1
+            }
+            errors.update(
+                {
+                    field: "This query parameter may only be supplied once."
+                    for field in sorted(duplicate_fields)
+                }
+            )
+
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
+
+
+class AdjudicationActionSerializer(
+    _RejectUnsupportedAdjudicationFieldsMixin,
+    serializers.Serializer,
+):
     moderator_verdict = serializers.ChoiceField(
         choices=(AdjudicationDecision.Verdict.choices)
     )
@@ -1829,7 +1970,7 @@ class ModerationDecisionSerializer(serializers.Serializer):
     )
 
     expected_revision = serializers.IntegerField(
-        required=False,
+        required=True,
         min_value=0,
     )
 
@@ -1837,6 +1978,10 @@ class ModerationDecisionSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
     )
+
+
+class ModerationDecisionSerializer(AdjudicationActionSerializer):
+    case_id = serializers.UUIDField(required=True)
 
     # Temporary compatibility with the
     # existing moderation frontend.
@@ -1947,6 +2092,509 @@ class AdjudicationQueueCaseSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
+        read_only_fields = fields
+
+
+class AdjudicationCaseQueueOrganizationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Organization
+        fields = ["id", "name"]
+        read_only_fields = fields
+
+
+class AdjudicationCaseQueueClaimSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Claim
+        fields = ["id", "claim_type", "context_text"]
+        read_only_fields = fields
+
+
+class AdjudicationCaseQueueDecisionSerializer(serializers.ModelSerializer):
+    verdict_label = serializers.CharField(
+        source="get_verdict_display",
+        read_only=True,
+    )
+
+    class Meta:
+        model = AdjudicationDecision
+        fields = [
+            "id",
+            "verdict",
+            "verdict_label",
+            "revision_number",
+            "decided_at",
+        ]
+        read_only_fields = fields
+
+
+class AdjudicationCaseQueueSerializer(serializers.ModelSerializer):
+    claim = AdjudicationCaseQueueClaimSerializer(read_only=True)
+    status_label = serializers.CharField(
+        source="get_status_display",
+        read_only=True,
+    )
+    workflow_state = serializers.SerializerMethodField()
+    priority_label = serializers.CharField(
+        source="get_priority_display",
+        read_only=True,
+    )
+    evidence_review = serializers.SerializerMethodField()
+    current_decision = serializers.SerializerMethodField()
+    adjudication_blocked = serializers.BooleanField(
+        source="has_adjudication_history",
+        read_only=True,
+    )
+
+    def get_workflow_state(self, obj):
+        if obj.status == ModerationCase.Status.RESOLVED:
+            return "RESOLVED"
+        if obj.status == ModerationCase.Status.CANCELLED:
+            return "CANCELLED"
+        return "ACTIVE"
+
+    def get_evidence_review(self, obj):
+        return {
+            "total": obj.total_evidence,
+            "verified": obj.verified_evidence,
+            "rejected": obj.rejected_evidence,
+            "unreviewed": obj.unreviewed_evidence,
+            "active_evidence_cases": obj.active_evidence_cases,
+            "all_reviewed": (
+                obj.total_evidence > 0 and obj.unreviewed_evidence == 0
+            ),
+        }
+
+    def get_current_decision(self, obj):
+        provenance = get_claim_adjudication_provenance(obj.claim)
+        decision = provenance["decision"]
+        organization = self.context.get("organization")
+
+        if (
+            decision is None
+            or organization is None
+            or decision.organization_id != organization.id
+            or not provenance["is_attributable"]
+        ):
+            return None
+
+        if (
+            provenance["status"] == AdjudicationProvenance.HUMAN_ADJUDICATION
+            and decision.moderation_case.organization_id != organization.id
+        ):
+            return None
+
+        return AdjudicationCaseQueueDecisionSerializer(decision).data
+
+    class Meta:
+        model = ModerationCase
+        fields = [
+            "id",
+            "status",
+            "status_label",
+            "workflow_state",
+            "priority",
+            "priority_label",
+            "source",
+            "created_at",
+            "updated_at",
+            "resolved_at",
+            "claim",
+            "evidence_review",
+            "current_decision",
+            "adjudication_blocked",
+        ]
+        read_only_fields = fields
+
+
+class AdjudicationCaseDetailUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["id", "username"]
+        read_only_fields = fields
+
+
+class AdjudicationCaseDetailThreadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Thread
+        fields = ["id", "caption", "created_at"]
+        read_only_fields = fields
+
+
+class AdjudicationCaseDetailClaimSerializer(serializers.ModelSerializer):
+    threads = serializers.SerializerMethodField()
+
+    def get_threads(self, obj):
+        return AdjudicationCaseDetailThreadSerializer(
+            self.context["case"].adjudication_threads,
+            many=True,
+        ).data
+
+    class Meta:
+        model = Claim
+        fields = [
+            "id",
+            "claim_type",
+            "context_text",
+            "url_link",
+            "source_link",
+            "media_url",
+            "threads",
+        ]
+        read_only_fields = fields
+
+
+class AdjudicationCaseDetailEvidenceSerializer(serializers.ModelSerializer):
+    evidence_type_label = serializers.CharField(
+        source="get_evidence_type_display",
+        read_only=True,
+    )
+    evidence_status_label = serializers.CharField(
+        source="get_evidence_status_display",
+        read_only=True,
+    )
+    contributor = AdjudicationCaseDetailUserSerializer(read_only=True)
+    reviewed_by = AdjudicationCaseDetailUserSerializer(
+        source="verified_by",
+        read_only=True,
+    )
+    reviewed_at = serializers.DateTimeField(
+        source="verified_at",
+        read_only=True,
+    )
+    review_notes = serializers.CharField(
+        source="moderator_notes",
+        read_only=True,
+    )
+    rejection_reason_label = serializers.CharField(
+        source="get_rejection_reason_display",
+        read_only=True,
+    )
+    is_current_user_contributor = serializers.SerializerMethodField()
+
+    def get_is_current_user_contributor(self, obj):
+        request = self.context.get("request")
+        return bool(
+            request
+            and request.user
+            and request.user.is_authenticated
+            and obj.contributor_id == request.user.id
+        )
+
+    class Meta:
+        model = EvidenceSubmission
+        fields = [
+            "id",
+            "thread_id",
+            "evidence_caption",
+            "evidence_type",
+            "evidence_type_label",
+            "evidence_status",
+            "evidence_status_label",
+            "evidence_url",
+            "submitted_at",
+            "contributor",
+            "reviewed_by",
+            "reviewed_at",
+            "review_notes",
+            "rejection_reason",
+            "rejection_reason_label",
+            "is_current_user_contributor",
+        ]
+        read_only_fields = fields
+
+
+class AdjudicationCaseDetailDecisionSerializer(serializers.ModelSerializer):
+    verdict_label = serializers.CharField(
+        source="get_verdict_display",
+        read_only=True,
+    )
+    decided_by = serializers.SerializerMethodField()
+    organization = serializers.SerializerMethodField()
+    moderation_case_id = serializers.SerializerMethodField()
+    verification_run_id = serializers.UUIDField(
+        read_only=True,
+        allow_null=True,
+    )
+    supersedes_id = serializers.SerializerMethodField()
+    provenance = serializers.SerializerMethodField()
+
+    @staticmethod
+    def _provenance(obj):
+        provenance = getattr(obj, "adjudication_provenance", None)
+        if provenance is None:
+            provenance = get_adjudication_decision_provenance(
+                obj.claim,
+                obj,
+            )
+        return provenance
+
+    def get_decided_by(self, obj):
+        if not self._provenance(obj)["is_attributable"]:
+            return None
+        if obj.decided_by is None:
+            return None
+        return AdjudicationCaseDetailUserSerializer(obj.decided_by).data
+
+    def get_organization(self, obj):
+        if obj.organization is None:
+            return None
+        return AdjudicationCaseQueueOrganizationSerializer(
+            obj.organization
+        ).data
+
+    def get_moderation_case_id(self, obj):
+        return str(obj.moderation_case_id) if obj.moderation_case_id else None
+
+    def get_supersedes_id(self, obj):
+        visible_ids = self.context.get("visible_decision_ids", set())
+        if obj.supersedes_id in visible_ids:
+            return str(obj.supersedes_id)
+        return None
+
+    def get_provenance(self, obj):
+        provenance = self._provenance(obj)
+        return {
+            "status": provenance["status"],
+            "is_attributable": provenance["is_attributable"],
+        }
+
+    class Meta:
+        model = AdjudicationDecision
+        fields = [
+            "id",
+            "moderation_case_id",
+            "verification_run_id",
+            "verdict",
+            "verdict_label",
+            "canonical_claim",
+            "rationale",
+            "decided_by",
+            "organization",
+            "revision_number",
+            "supersedes_id",
+            "is_current",
+            "decided_at",
+            "provenance",
+        ]
+        read_only_fields = fields
+
+
+class AdjudicationCaseDetailEventSerializer(serializers.ModelSerializer):
+    event_type_label = serializers.CharField(
+        source="get_event_type_display",
+        read_only=True,
+    )
+    actor = AdjudicationCaseDetailUserSerializer(read_only=True)
+
+    class Meta:
+        model = ModerationEvent
+        fields = [
+            "event_type",
+            "event_type_label",
+            "actor",
+            "from_status",
+            "to_status",
+            "reason_code",
+            "notes",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class AdjudicationCaseDetailSerializer(serializers.ModelSerializer):
+    status_label = serializers.CharField(
+        source="get_status_display",
+        read_only=True,
+    )
+    workflow_state = serializers.SerializerMethodField()
+    priority_label = serializers.CharField(
+        source="get_priority_display",
+        read_only=True,
+    )
+    source_label = serializers.CharField(
+        source="get_source_display",
+        read_only=True,
+    )
+    organization = AdjudicationCaseQueueOrganizationSerializer(read_only=True)
+    claim = serializers.SerializerMethodField()
+    evidence_review = serializers.SerializerMethodField()
+    assignment = serializers.SerializerMethodField()
+    resolution = serializers.SerializerMethodField()
+    current_decision = serializers.SerializerMethodField()
+    decision_history = serializers.SerializerMethodField()
+    events = serializers.SerializerMethodField()
+    action_state = serializers.SerializerMethodField()
+
+    def get_workflow_state(self, obj):
+        if obj.status == ModerationCase.Status.RESOLVED:
+            return "RESOLVED"
+        if obj.status == ModerationCase.Status.CANCELLED:
+            return "CANCELLED"
+        return "ACTIVE"
+
+    def get_claim(self, obj):
+        return AdjudicationCaseDetailClaimSerializer(
+            obj.claim,
+            context={"case": obj},
+        ).data
+
+    def get_evidence_review(self, obj):
+        evidence = obj.adjudication_evidence
+        verified = sum(
+            item.evidence_status == EvidenceSubmission.EvidenceStatus.VERIFIED
+            for item in evidence
+        )
+        rejected = sum(
+            item.evidence_status == EvidenceSubmission.EvidenceStatus.REJECTED
+            for item in evidence
+        )
+        unreviewed = sum(
+            item.evidence_status == EvidenceSubmission.EvidenceStatus.UNVERIFIED
+            for item in evidence
+        )
+        return {
+            "basis": "CURRENT_EVIDENCE_RECORDS",
+            "total": len(evidence),
+            "verified": verified,
+            "rejected": rejected,
+            "unreviewed": unreviewed,
+            "active_evidence_cases": (
+                obj.adjudication_active_evidence_case_count
+            ),
+            "all_reviewed": bool(evidence and unreviewed == 0),
+            "items": AdjudicationCaseDetailEvidenceSerializer(
+                evidence,
+                many=True,
+                context={"request": self.context.get("request")},
+            ).data,
+        }
+
+    def get_assignment(self, obj):
+        assignment = obj.adjudication_assignment
+        if assignment is None:
+            return None
+        return {
+            "id": str(assignment.id),
+            "status": assignment.status,
+            "claimed_by": (
+                AdjudicationCaseDetailUserSerializer(
+                    assignment.claimed_by
+                ).data
+                if assignment.claimed_by is not None
+                else None
+            ),
+        }
+
+    def get_resolution(self, obj):
+        if not any(
+            [
+                obj.resolution_code,
+                obj.resolution_summary,
+                obj.resolved_by_id,
+                obj.resolved_at,
+            ]
+        ):
+            return None
+        return {
+            "code": obj.resolution_code,
+            "summary": obj.resolution_summary,
+            "resolved_by": (
+                AdjudicationCaseDetailUserSerializer(obj.resolved_by).data
+                if obj.resolved_by is not None
+                else None
+            ),
+            "resolved_at": obj.resolved_at,
+        }
+
+    def _serialize_decision(self, obj, decision):
+        if decision is None:
+            return None
+        return AdjudicationCaseDetailDecisionSerializer(
+            decision,
+            context={
+                "visible_decision_ids": obj.adjudication_visible_decision_ids,
+            },
+        ).data
+
+    def get_current_decision(self, obj):
+        return self._serialize_decision(
+            obj,
+            obj.adjudication_current_decision,
+        )
+
+    def get_decision_history(self, obj):
+        history = [
+            decision
+            for decision in obj.adjudication_visible_decisions
+            if not decision.is_current
+        ]
+        return {
+            "count": obj.adjudication_visible_history_count,
+            "truncated": obj.adjudication_visible_history_count > len(history),
+            "has_restricted_records": obj.adjudication_has_restricted_history,
+            "results": AdjudicationCaseDetailDecisionSerializer(
+                history,
+                many=True,
+                context={
+                    "visible_decision_ids": (
+                        obj.adjudication_visible_decision_ids
+                    ),
+                },
+            ).data,
+        }
+
+    def get_events(self, obj):
+        events = obj.adjudication_events
+        return {
+            "count": obj.adjudication_event_count,
+            "truncated": obj.adjudication_event_count > len(events),
+            "results": AdjudicationCaseDetailEventSerializer(
+                events,
+                many=True,
+            ).data,
+        }
+
+    def get_action_state(self, obj):
+        state = obj.adjudication_action_state
+        return {
+            "can_issue_first_decision": state["can_issue_first_decision"],
+            "expected_revision": state["expected_revision"],
+            "preconditions": {
+                "case_id": str(state["preconditions"]["case_id"]),
+                "organization_id": str(
+                    state["preconditions"]["organization_id"]
+                ),
+                "expected_revision": state["preconditions"][
+                    "expected_revision"
+                ],
+            },
+            "blockers": state["blockers"],
+        }
+
+    class Meta:
+        model = ModerationCase
+        fields = [
+            "id",
+            "status",
+            "status_label",
+            "workflow_state",
+            "priority",
+            "priority_label",
+            "source",
+            "source_label",
+            "created_at",
+            "updated_at",
+            "resolved_at",
+            "organization",
+            "claim",
+            "evidence_review",
+            "assignment",
+            "resolution",
+            "current_decision",
+            "decision_history",
+            "events",
+            "action_state",
+        ]
         read_only_fields = fields
 
 

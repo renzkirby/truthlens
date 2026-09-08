@@ -2,6 +2,10 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from .adjudication_provenance import (
+    get_claim_adjudication_provenance,
+    prefetch_claim_adjudication_provenance,
+)
 from .models import (
     AdjudicationDecision,
     Claim,
@@ -82,6 +86,44 @@ def get_active_verification_assignment(
     return queryset.order_by("-created_at").first()
 
 
+def _lock_assignment_claim_then_assignment(assignment):
+    """Lock an assignment through its current database claim identity."""
+
+    identity = (
+        VerificationAssignment.objects.filter(pk=assignment.pk)
+        .values("claim_id")
+        .first()
+    )
+    if identity is None:
+        raise VerificationAssignmentConflict(
+            "This verification assignment is no longer available."
+        )
+
+    try:
+        locked_claim = Claim.objects.select_for_update().get(
+            pk=identity["claim_id"]
+        )
+    except Claim.DoesNotExist as error:
+        raise VerificationAssignmentConflict(
+            "This verification assignment is no longer available."
+        ) from error
+
+    locked_assignment = (
+        VerificationAssignment.objects.select_for_update(of=("self",))
+        .filter(
+            pk=assignment.pk,
+            claim=locked_claim,
+        )
+        .first()
+    )
+    if locked_assignment is None:
+        raise VerificationAssignmentConflict(
+            "This verification assignment changed while the request was processing."
+        )
+
+    return locked_claim, locked_assignment
+
+
 def get_claim_verification_organization(
     claim,
     *,
@@ -115,7 +157,7 @@ def get_available_verification_assignments():
     any partner organization.
     """
 
-    return (
+    queryset = (
         VerificationAssignment.objects.filter(
             status=(VerificationAssignment.Status.AVAILABLE),
             organization__isnull=True,
@@ -131,6 +173,11 @@ def get_available_verification_assignments():
         .order_by("-created_at")
     )
 
+    return prefetch_claim_adjudication_provenance(
+        queryset,
+        claim_path="claim",
+    )
+
 
 def get_organization_verification_workload(
     organization,
@@ -140,7 +187,7 @@ def get_organization_verification_workload(
     owned by one partner organization.
     """
 
-    return (
+    queryset = (
         VerificationAssignment.objects.filter(
             organization=organization,
             status=(VerificationAssignment.Status.ACTIVE),
@@ -157,6 +204,11 @@ def get_organization_verification_workload(
             "-claimed_at",
             "-created_at",
         )
+    )
+
+    return prefetch_claim_adjudication_provenance(
+        queryset,
+        claim_path="claim",
     )
 
 
@@ -186,10 +238,17 @@ def ensure_verification_assignment(
         if existing:
             return existing
 
-        # Finalized claims require an explicit future
-        # revision/reopen workflow rather than silently
-        # returning to the public intake queue.
-        if locked_claim.final_verdict:
+        provenance = get_claim_adjudication_provenance(locked_claim)
+
+        has_published_fact_check = OfficialFactCheck.objects.filter(
+            claim=locked_claim,
+            publication_status=(OfficialFactCheck.PublicationStatus.PUBLISHED),
+        ).exists()
+
+        # Attributable adjudications and published institutional knowledge
+        # require an explicit future correction/reopen workflow. A raw cache
+        # value without that authority must not exclude a claim from intake.
+        if provenance["is_attributable"] or has_published_fact_check:
             return None
 
         try:
@@ -293,8 +352,8 @@ def claim_verification_assignment(
         )
 
     with transaction.atomic():
-        locked_assignment = VerificationAssignment.objects.select_for_update().get(
-            pk=assignment.pk
+        locked_claim, locked_assignment = _lock_assignment_claim_then_assignment(
+            assignment
         )
 
         # Idempotent response when the same organization
@@ -336,7 +395,7 @@ def claim_verification_assignment(
         )
 
         _attach_active_cases_to_organization(
-            claim=locked_assignment.claim,
+            claim=locked_claim,
             organization=organization,
         )
 
@@ -402,8 +461,8 @@ def release_verification_assignment(
         raise VerificationAssignmentAuthorizationError("Authentication is required.")
 
     with transaction.atomic():
-        locked_assignment = VerificationAssignment.objects.select_for_update().get(
-            pk=assignment.pk
+        claim, locked_assignment = _lock_assignment_claim_then_assignment(
+            assignment
         )
 
         if locked_assignment.status != VerificationAssignment.Status.ACTIVE:
@@ -427,8 +486,6 @@ def release_verification_assignment(
                 "You do not have permission to release "
                 "verification work for this organization."
             )
-
-        claim = locked_assignment.claim
 
         if _claim_has_started_authoritative_work(claim):
             raise VerificationAssignmentReleaseBlocked(
@@ -508,10 +565,11 @@ def complete_verification_assignment(
     """
 
     with transaction.atomic():
+        locked_claim = Claim.objects.select_for_update().get(pk=claim.pk)
         assignment = (
-            VerificationAssignment.objects.select_for_update()
+            VerificationAssignment.objects.select_for_update(of=("self",))
             .filter(
-                claim=claim,
+                claim=locked_claim,
                 status=(VerificationAssignment.Status.ACTIVE),
             )
             .first()
