@@ -1,9 +1,22 @@
 import logging
 
 from django.db import transaction
+from django.db.models import (
+    Case,
+    Count,
+    Exists,
+    F,
+    IntegerField,
+    OuterRef,
+    Q,
+    When,
+)
 from django.utils import timezone
 
-from .adjudication_provenance import get_current_adjudication_decision
+from .adjudication_provenance import (
+    get_current_adjudication_decision,
+    prefetch_claim_adjudication_provenance,
+)
 from .models import (
     AdjudicationDecision,
     Claim,
@@ -24,6 +37,7 @@ from .moderation_service import (
 from .organization_service import (
     PartnerCapability,
     get_membership_capabilities,
+    has_capability,
 )
 from .verification_assignment_service import get_active_verification_assignment
 
@@ -49,6 +63,145 @@ class AdjudicationConflict(AdjudicationError):
 
 class AdjudicationNotFound(AdjudicationError):
     pass
+
+
+def get_adjudication_case_queue(
+    *,
+    actor,
+    organization,
+    case_status=None,
+    priority=None,
+):
+    if not has_capability(
+        actor,
+        PartnerCapability.ADJUDICATE,
+        organization=organization,
+    ):
+        raise AdjudicationAuthorizationError(
+            "You do not have permission to adjudicate for this organization."
+        )
+
+    evidence_path = "claim__threads__evidence_submissions"
+    active_evidence_case_path = f"{evidence_path}__moderation_cases"
+    queryset = (
+        ModerationCase.objects.filter(
+            case_type=ModerationCase.CaseType.ADJUDICATION,
+            organization=organization,
+            claim__isnull=False,
+        )
+        .select_related("claim")
+        .only(
+            "id",
+            "status",
+            "priority",
+            "source",
+            "created_at",
+            "updated_at",
+            "resolved_at",
+            "claim_id",
+            "claim__id",
+            "claim__claim_type",
+            "claim__context_text",
+            "claim__final_verdict",
+        )
+        .annotate(
+            total_evidence=Count(
+                evidence_path,
+                distinct=True,
+            ),
+            verified_evidence=Count(
+                evidence_path,
+                filter=Q(
+                    **{
+                        f"{evidence_path}__evidence_status": (
+                            EvidenceSubmission.EvidenceStatus.VERIFIED
+                        )
+                    }
+                ),
+                distinct=True,
+            ),
+            rejected_evidence=Count(
+                evidence_path,
+                filter=Q(
+                    **{
+                        f"{evidence_path}__evidence_status": (
+                            EvidenceSubmission.EvidenceStatus.REJECTED
+                        )
+                    }
+                ),
+                distinct=True,
+            ),
+            unreviewed_evidence=Count(
+                evidence_path,
+                filter=Q(
+                    **{
+                        f"{evidence_path}__evidence_status": (
+                            EvidenceSubmission.EvidenceStatus.UNVERIFIED
+                        )
+                    }
+                ),
+                distinct=True,
+            ),
+            active_evidence_cases=Count(
+                active_evidence_case_path,
+                filter=Q(
+                    **{
+                        f"{active_evidence_case_path}__case_type": (
+                            ModerationCase.CaseType.EVIDENCE
+                        ),
+                        f"{active_evidence_case_path}__status__in": (
+                            ACTIVE_CASE_STATUSES
+                        ),
+                    }
+                ),
+                distinct=True,
+            ),
+            has_adjudication_history=Exists(
+                AdjudicationDecision.objects.filter(
+                    claim_id=OuterRef("claim_id"),
+                )
+            ),
+        )
+    )
+
+    if case_status is None:
+        queryset = queryset.filter(status__in=ACTIVE_CASE_STATUSES)
+    else:
+        queryset = queryset.filter(status=case_status)
+
+    if priority is not None:
+        queryset = queryset.filter(priority=priority)
+
+    if case_status in {
+        ModerationCase.Status.RESOLVED,
+        ModerationCase.Status.CANCELLED,
+    }:
+        queryset = queryset.order_by(
+            F("resolved_at").desc(nulls_last=True),
+            F("updated_at").desc(),
+            "id",
+        )
+    else:
+        queryset = queryset.annotate(
+            adjudication_priority_order=Case(
+                When(priority=ModerationCase.Priority.URGENT, then=0),
+                When(priority=ModerationCase.Priority.HIGH, then=1),
+                When(priority=ModerationCase.Priority.NORMAL, then=2),
+                When(priority=ModerationCase.Priority.LOW, then=3),
+                default=4,
+                output_field=IntegerField(),
+            )
+        ).order_by(
+            "adjudication_priority_order",
+            "created_at",
+            "id",
+        )
+
+    return prefetch_claim_adjudication_provenance(
+        queryset,
+        claim_path="claim",
+        include_legacy_threads=True,
+    )
 
 
 def get_active_adjudication_case(

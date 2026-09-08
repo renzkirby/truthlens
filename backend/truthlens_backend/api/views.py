@@ -141,6 +141,7 @@ from .adjudication_service import (
     AdjudicationConflict,
     AdjudicationError,
     AdjudicationNotFound,
+    get_adjudication_case_queue,
     issue_adjudication_decision,
     schedule_adjudication_trust_updates,
 )
@@ -223,6 +224,9 @@ from .serializers import (
     VoteSerializer,
     ThreadFlagSerializer,
     AdjudicationActionSerializer,
+    AdjudicationCaseQueueFilterSerializer,
+    AdjudicationCaseQueueOrganizationSerializer,
+    AdjudicationCaseQueueSerializer,
     AdjudicationOrganizationQuerySerializer,
     ModerationDecisionSerializer,
     ClaimMatchSerializer,
@@ -1390,6 +1394,49 @@ def verdict_queue(request):
             "limit": limit,
             "offset": offset,
             "results": serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def adjudication_case_queue(request):
+    filters = AdjudicationCaseQueueFilterSerializer(data=request.query_params)
+    filters.is_valid(raise_exception=True)
+    data = filters.validated_data
+
+    organization = get_object_or_404(
+        Organization,
+        id=data["organization_id"],
+    )
+
+    try:
+        queryset = get_adjudication_case_queue(
+            actor=request.user,
+            organization=organization,
+            case_status=data["status"],
+            priority=data["priority"],
+        )
+    except AdjudicationAuthorizationError as error:
+        raise PermissionDenied(str(error)) from error
+
+    total_count = queryset.count()
+    cases = queryset[data["offset"] : data["offset"] + data["limit"]]
+
+    return Response(
+        {
+            "count": total_count,
+            "limit": data["limit"],
+            "offset": data["offset"],
+            "organization": AdjudicationCaseQueueOrganizationSerializer(
+                organization
+            ).data,
+            "results": AdjudicationCaseQueueSerializer(
+                cases,
+                many=True,
+                context={"organization": organization},
+            ).data,
         },
         status=status.HTTP_200_OK,
     )
