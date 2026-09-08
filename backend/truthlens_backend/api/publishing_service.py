@@ -1,3 +1,5 @@
+import logging
+
 from django.core.exceptions import (
     ValidationError,
 )
@@ -5,7 +7,6 @@ from django.core.validators import (
     URLValidator,
 )
 from django.db import transaction
-from django.db.models import Max
 from django.utils import timezone
 
 from .models import (
@@ -15,16 +16,20 @@ from .models import (
     ModerationEvent,
     OfficialFactCheck,
     OfficialFactCheckSource,
+    Organization,
+    OrganizationMembership,
+    VerificationAssignment,
 )
 
 from .organization_service import (
     PartnerCapability,
-    has_capability,
+    get_membership_capabilities,
 )
 from .verification_assignment_service import (
+    VerificationAssignmentConflict,
     complete_verification_assignment,
+    get_open_verification_assignment,
 )
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -89,17 +94,32 @@ _url_validator = URLValidator(
 )
 
 
-def _require_capability(
-    user,
+def _require_locked_capability(
+    actor,
     capability,
     *,
-    organization=None,
+    organization,
 ):
-    if has_capability(
-        user,
-        capability,
-        organization=organization,
-    ):
+    if not actor or not actor.is_authenticated:
+        raise PublishingAuthorizationError(
+            "You do not have permission to perform this publication action."
+        )
+
+    membership = (
+        OrganizationMembership.objects.select_related("organization")
+        .select_for_update(of=("self",))
+        .filter(
+            user=actor,
+            organization=organization,
+        )
+        .first()
+    )
+    capabilities = (
+        get_membership_capabilities(membership)
+        if membership is not None
+        else set()
+    )
+    if capability in capabilities:
         return
 
     raise PublishingAuthorizationError(
@@ -107,43 +127,166 @@ def _require_capability(
     )
 
 
-def _get_current_decision(
-    claim,
-    *,
-    lock=False,
-):
-    queryset = AdjudicationDecision.objects.filter(
-        claim=claim,
-        is_current=True,
+def _publication_conflict():
+    return PublishingConflict(
+        "The adjudication decision used for this fact-check is no longer "
+        "current. Create a new draft from the latest decision."
     )
 
-    if lock:
-        queryset = queryset.select_for_update()
 
-    return queryset.first()
+def _get_decision_publication_identity(decision):
+    identity = (
+        AdjudicationDecision.objects.filter(pk=getattr(decision, "pk", None))
+        .values(
+            "claim_id",
+            "organization_id",
+        )
+        .first()
+    )
+    if (
+        identity is None
+        or identity["claim_id"] is None
+        or identity["organization_id"] is None
+    ):
+        raise _publication_conflict()
+    return {
+        **identity,
+        "decision_id": decision.pk,
+        "fact_check_id": None,
+    }
 
 
-def _validate_current_decision(
-    decision,
-):
-    current = (
-        AdjudicationDecision.objects.select_for_update()
+def _get_fact_check_publication_identity(fact_check):
+    identity = (
+        OfficialFactCheck.objects.filter(pk=getattr(fact_check, "pk", None))
+        .values(
+            "claim_id",
+            "organization_id",
+            "adjudication_decision_id",
+        )
+        .first()
+    )
+    if (
+        identity is None
+        or identity["claim_id"] is None
+        or identity["organization_id"] is None
+        or identity["adjudication_decision_id"] is None
+    ):
+        raise _publication_conflict()
+    return {
+        "claim_id": identity["claim_id"],
+        "organization_id": identity["organization_id"],
+        "decision_id": identity["adjudication_decision_id"],
+        "fact_check_id": fact_check.pk,
+    }
+
+
+def _lock_publication_context(*, identity, actor, capability):
+    """Lock a publication mutation using the shared Claim-first protocol.
+
+    The canonical order is Claim, open Assignment, Organization, actor
+    Membership, current AdjudicationDecision, all claim fact-checks, then
+    their source rows. All service mutation paths use this helper, and the
+    nested assignment-completion helper reacquires only Claim then Assignment.
+    """
+
+    try:
+        locked_claim = Claim.objects.select_for_update().get(
+            pk=identity["claim_id"]
+        )
+    except Claim.DoesNotExist as error:
+        raise _publication_conflict() from error
+
+    assignment = get_open_verification_assignment(
+        locked_claim,
+        lock=True,
+    )
+
+    try:
+        organization = Organization.objects.select_for_update().get(
+            pk=identity["organization_id"]
+        )
+    except Organization.DoesNotExist as error:
+        raise _publication_conflict() from error
+
+    if assignment is not None and (
+        assignment.status != VerificationAssignment.Status.ACTIVE
+        or assignment.organization_id != organization.id
+    ):
+        raise PublishingConflict(
+            "The organization responsible for this claim changed after the "
+            "publication workflow was opened."
+        )
+
+    _require_locked_capability(
+        actor,
+        capability,
+        organization=organization,
+    )
+
+    current_decision = (
+        AdjudicationDecision.objects.select_for_update(of=("self",))
         .filter(
-            claim_id=decision.claim_id,
+            claim=locked_claim,
             is_current=True,
         )
         .first()
     )
-
-    if not current or current.id != decision.id:
+    if (
+        current_decision is None
+        or current_decision.id != identity["decision_id"]
+        or current_decision.organization_id != organization.id
+    ):
         raise PublishingConflict(
-            "The adjudication decision used "
-            "for this fact-check is no longer "
-            "current. Create a new draft from "
-            "the latest decision."
+            "The adjudication decision used for this fact-check is no longer "
+            "current. Create a new draft from the latest decision."
         )
 
-    return current
+    fact_checks = list(
+        OfficialFactCheck.objects.select_for_update(of=("self",))
+        .filter(claim=locked_claim)
+        .order_by(
+            "version",
+            "created_at",
+            "id",
+        )
+    )
+    list(
+        OfficialFactCheckSource.objects.select_for_update(of=("self",))
+        .filter(fact_check__claim=locked_claim)
+        .order_by(
+            "fact_check_id",
+            "created_at",
+            "id",
+        )
+    )
+
+    locked_fact_check = None
+    if identity["fact_check_id"] is not None:
+        locked_fact_check = next(
+            (
+                item
+                for item in fact_checks
+                if item.id == identity["fact_check_id"]
+            ),
+            None,
+        )
+        if (
+            locked_fact_check is None
+            or locked_fact_check.organization_id != organization.id
+            or locked_fact_check.adjudication_decision_id
+            != current_decision.id
+        ):
+            raise _publication_conflict()
+
+    return {
+        "claim": locked_claim,
+        "assignment": assignment,
+        "organization": organization,
+        "decision": current_decision,
+        "fact_checks": fact_checks,
+        "fact_check": locked_fact_check,
+    }
 
 
 def _normalize_source_urls(
@@ -419,37 +562,22 @@ def create_fact_check_draft(
     if len(headline) > 300:
         raise InvalidFactCheckContent("Headline must be 300 " "characters or fewer.")
 
+    identity = _get_decision_publication_identity(decision)
+
     with transaction.atomic():
-        # Match the adjudication lock order:
-        # Claim first, then AdjudicationDecision.
-        #
-        # Do not combine select_for_update()
-        # with nullable select_related() joins.
-        locked_claim = Claim.objects.select_for_update().get(pk=decision.claim_id)
-
-        locked_decision = AdjudicationDecision.objects.select_for_update().get(
-            pk=decision.pk
+        context = _lock_publication_context(
+            identity=identity,
+            actor=actor,
+            capability=PartnerCapability.CREATE_FACT_CHECK_DRAFT,
         )
+        locked_claim = context["claim"]
+        current_decision = context["decision"]
 
-        current_decision = _validate_current_decision(locked_decision)
-
-        _require_capability(
-            actor,
-            (PartnerCapability.CREATE_FACT_CHECK_DRAFT),
-            organization=(current_decision.organization),
-        )
-
-        active_drafts = list(
-            OfficialFactCheck.objects.select_for_update()
-            .filter(
-                claim=locked_claim,
-                publication_status__in=(ACTIVE_DRAFT_STATUSES),
-            )
-            .order_by(
-                "version",
-                "created_at",
-            )
-        )
+        active_drafts = [
+            item
+            for item in context["fact_checks"]
+            if item.publication_status in ACTIVE_DRAFT_STATUSES
+        ]
 
         same_decision_draft = next(
             (
@@ -489,11 +617,9 @@ def create_fact_check_draft(
                     ]
                 )
 
-        max_version = (
-            OfficialFactCheck.objects.filter(claim=locked_claim).aggregate(
-                maximum=Max("version")
-            )["maximum"]
-            or 0
+        max_version = max(
+            (item.version for item in context["fact_checks"]),
+            default=0,
         )
 
         draft = OfficialFactCheck(
@@ -542,10 +668,15 @@ def update_fact_check_draft(
     article_body=None,
     source_urls=None,
 ):
+    identity = _get_fact_check_publication_identity(fact_check)
+
     with transaction.atomic():
-        locked_fact_check = OfficialFactCheck.objects.select_for_update().get(
-            pk=fact_check.pk
+        context = _lock_publication_context(
+            identity=identity,
+            actor=actor,
+            capability=PartnerCapability.CREATE_FACT_CHECK_DRAFT,
         )
+        locked_fact_check = context["fact_check"]
 
         if locked_fact_check.publication_status != (
             OfficialFactCheck.PublicationStatus.DRAFT
@@ -553,14 +684,6 @@ def update_fact_check_draft(
             raise InvalidPublicationTransition(
                 "Only draft fact-checks " "can be edited."
             )
-
-        _validate_current_decision(locked_fact_check.adjudication_decision)
-
-        _require_capability(
-            actor,
-            (PartnerCapability.CREATE_FACT_CHECK_DRAFT),
-            organization=(locked_fact_check.organization),
-        )
 
         if headline is not None:
             headline = headline.strip()
@@ -608,10 +731,15 @@ def submit_fact_check_for_review(
     fact_check,
     actor,
 ):
+    identity = _get_fact_check_publication_identity(fact_check)
+
     with transaction.atomic():
-        locked_fact_check = OfficialFactCheck.objects.select_for_update().get(
-            pk=fact_check.pk
+        context = _lock_publication_context(
+            identity=identity,
+            actor=actor,
+            capability=PartnerCapability.CREATE_FACT_CHECK_DRAFT,
         )
+        locked_fact_check = context["fact_check"]
 
         if locked_fact_check.publication_status != (
             OfficialFactCheck.PublicationStatus.DRAFT
@@ -619,14 +747,6 @@ def submit_fact_check_for_review(
             raise InvalidPublicationTransition(
                 "Only a draft can be " "submitted for review."
             )
-
-        _validate_current_decision(locked_fact_check.adjudication_decision)
-
-        _require_capability(
-            actor,
-            (PartnerCapability.CREATE_FACT_CHECK_DRAFT),
-            organization=(locked_fact_check.organization),
-        )
 
         _sync_fact_check_sources(
             locked_fact_check,
@@ -667,10 +787,16 @@ def publish_fact_check(
     fact_check,
     actor,
 ):
+    identity = _get_fact_check_publication_identity(fact_check)
+
     with transaction.atomic():
-        locked_fact_check = OfficialFactCheck.objects.select_for_update().get(
-            pk=fact_check.pk
+        context = _lock_publication_context(
+            identity=identity,
+            actor=actor,
+            capability=PartnerCapability.PUBLISH_FACT_CHECK,
         )
+        locked_fact_check = context["fact_check"]
+        current_decision = context["decision"]
 
         if locked_fact_check.publication_status != (
             OfficialFactCheck.PublicationStatus.IN_REVIEW
@@ -678,16 +804,6 @@ def publish_fact_check(
             raise InvalidPublicationTransition(
                 "Only a fact-check in review " "can be published."
             )
-
-        current_decision = _validate_current_decision(
-            locked_fact_check.adjudication_decision
-        )
-
-        _require_capability(
-            actor,
-            (PartnerCapability.PUBLISH_FACT_CHECK),
-            organization=(locked_fact_check.organization),
-        )
 
         if locked_fact_check.verdict != current_decision.verdict or (
             locked_fact_check.canonical_claim != current_decision.canonical_claim
@@ -698,6 +814,23 @@ def publish_fact_check(
                 "adjudication decision."
             )
 
+        previous_published = next(
+            (
+                item
+                for item in context["fact_checks"]
+                if item.publication_status
+                == OfficialFactCheck.PublicationStatus.PUBLISHED
+                and item.id != locked_fact_check.id
+            ),
+            None,
+        )
+        if previous_published:
+            raise PublishingConflict(
+                "This claim already has a published fact-check. An explicit "
+                "correction or revision workflow is required before it can "
+                "be replaced."
+            )
+
         _sync_fact_check_sources(
             locked_fact_check,
             actor=actor,
@@ -706,32 +839,6 @@ def publish_fact_check(
         _validate_publication_content(locked_fact_check)
 
         now = timezone.now()
-
-        previous_published = (
-            OfficialFactCheck.objects.select_for_update()
-            .filter(
-                claim=(locked_fact_check.claim),
-                publication_status=(OfficialFactCheck.PublicationStatus.PUBLISHED),
-            )
-            .exclude(pk=locked_fact_check.pk)
-            .first()
-        )
-
-        if previous_published:
-            previous_published.publication_status = (
-                OfficialFactCheck.PublicationStatus.ARCHIVED
-            )
-
-            previous_published.archived_at = now
-
-            previous_published.save(
-                update_fields=[
-                    "publication_status",
-                    "archived_at",
-                    "updated_at",
-                ]
-            )
-
         previous_status = locked_fact_check.publication_status
 
         locked_fact_check.publication_status = (
@@ -756,32 +863,27 @@ def publish_fact_check(
             ]
         )
 
-        event_type = (
-            ModerationEvent.EventType.ARTICLE_REVISED
-            if previous_published
-            else (ModerationEvent.EventType.ARTICLE_PUBLISHED)
-        )
-
         _record_publication_event(
             locked_fact_check,
             actor=actor,
-            event_type=event_type,
+            event_type=ModerationEvent.EventType.ARTICLE_PUBLISHED,
             from_status=previous_status,
             to_status=(OfficialFactCheck.PublicationStatus.PUBLISHED),
-            metadata={
-                "previous_fact_check_id": (
-                    str(previous_published.id) if previous_published else None
-                ),
-                "previous_version": (
-                    previous_published.version if previous_published else None
-                ),
-            },
         )
 
-        complete_verification_assignment(
-            claim=locked_fact_check.claim,
-            organization=locked_fact_check.organization,
-        )
+        try:
+            completed_assignment = complete_verification_assignment(
+                claim=context["claim"],
+                organization=context["organization"],
+            )
+        except VerificationAssignmentConflict as error:
+            raise PublishingConflict(str(error)) from error
+
+        if context["assignment"] is not None and completed_assignment is None:
+            raise PublishingConflict(
+                "The verification assignment changed before publication "
+                "could be completed."
+            )
 
         published_fact_check_id = locked_fact_check.id
 
