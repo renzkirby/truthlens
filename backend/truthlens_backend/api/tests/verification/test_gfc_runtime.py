@@ -391,6 +391,11 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         claim_queryset.first.return_value = Mock()
 
         with (
+            patch("api.tasks.create_verification_run"),
+            patch("api.tasks.start_verification_run") as start_run,
+            patch("api.tasks.complete_verification_run"),
+            patch("api.tasks.abstain_verification_run"),
+            patch("api.tasks.fail_verification_run"),
             patch(
                 "api.tasks.requests.post",
                 return_value=extraction_response,
@@ -441,6 +446,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             search_query,
             claim_id,
             stage_prefix="url_",
+            verification_run=start_run.return_value,
         )
 
         relevance_check.assert_called_once_with(
@@ -507,6 +513,11 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         claim_queryset.first.return_value = Mock()
 
         with (
+            patch("api.tasks.create_verification_run"),
+            patch("api.tasks.start_verification_run") as start_run,
+            patch("api.tasks.complete_verification_run"),
+            patch("api.tasks.abstain_verification_run"),
+            patch("api.tasks.fail_verification_run"),
             patch(
                 "api.tasks.requests.post",
                 return_value=extraction_response,
@@ -555,6 +566,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             search_query,
             claim_id,
             stage_prefix="url_",
+            verification_run=start_run.return_value,
         )
 
         (tavily_class.return_value.search.assert_called_once())
