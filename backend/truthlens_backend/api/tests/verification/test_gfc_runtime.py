@@ -164,6 +164,11 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         claim_queryset.first.return_value = Mock()
 
         with (
+            patch("api.tasks.create_verification_run"),
+            patch("api.tasks.start_verification_run"),
+            patch("api.tasks.complete_verification_run"),
+            patch("api.tasks.abstain_verification_run"),
+            patch("api.tasks.fail_verification_run"),
             patch(
                 "api.claim_matching.compute_fingerprint",
                 return_value="fingerprint",
@@ -268,6 +273,11 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         claim_queryset.first.return_value = Mock()
 
         with (
+            patch("api.tasks.create_verification_run"),
+            patch("api.tasks.start_verification_run"),
+            patch("api.tasks.complete_verification_run"),
+            patch("api.tasks.abstain_verification_run"),
+            patch("api.tasks.fail_verification_run"),
             patch(
                 "api.claim_matching.compute_fingerprint",
                 return_value="fingerprint",
