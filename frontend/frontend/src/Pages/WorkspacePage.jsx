@@ -18,6 +18,7 @@ import OrganizationWorkloadPanel from "../components/workspace/OrganizationWorkl
 import OrganizationAdminPanel from "../components/workspace/OrganizationAdminPanel.jsx";
 import SafetyReviewPanel from "../components/workspace/SafetyReviewPanel.jsx";
 import EvidenceReviewPanel from "../components/workspace/EvidenceReviewPanel.jsx";
+import AdjudicationReviewPanel from "../components/workspace/AdjudicationReviewPanel.jsx";
 
 const WORKLOAD_CAPABILITIES = [
    WorkspaceCapability.CLAIM_VERIFICATION_WORK,
@@ -339,6 +340,15 @@ function WorkspacePage() {
                               organizationId={selectedOrganizationId}
                               organizationName={selectedOrganization?.name}
                               canReviewEvidence
+                           />
+                        ) : activeSection.id === "adjudication" && organizationCapabilities.includes(
+                             WorkspaceCapability.ADJUDICATE,
+                          ) ? (
+                           <AdjudicationReviewPanel
+                              key={selectedOrganizationId ?? "no-organization"}
+                              organizationId={selectedOrganizationId}
+                              organizationName={selectedOrganization?.name}
+                              canAdjudicate
                            />
                         ) : activeSection.id === "organization" ? (
                            <OrganizationAdminPanel

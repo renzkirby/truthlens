@@ -1,0 +1,509 @@
+.adjudication-review-panel {
+   min-width: 0;
+   margin-top: 24px;
+}
+
+.adjudication-panel-intro,
+.adjudication-toolbar,
+.adjudication-section-heading {
+   display: flex;
+   align-items: flex-start;
+   justify-content: space-between;
+   gap: 16px;
+}
+
+.adjudication-panel-intro h3,
+.adjudication-section-heading h4,
+.adjudication-selection h4 {
+   margin: 0;
+   color: var(--text-main);
+}
+
+.adjudication-panel-intro h3 {
+   font-size: 1.08rem;
+}
+
+.adjudication-panel-intro p,
+.adjudication-section-heading p {
+   margin: 5px 0 0;
+   color: var(--text-muted);
+   font-size: 0.78rem;
+   line-height: 1.55;
+}
+
+.adjudication-panel-intro p {
+   max-width: 640px;
+}
+
+.adjudication-organization-context {
+   flex: 0 0 auto;
+   max-width: 280px;
+   padding: 7px 10px;
+   border: 1px solid var(--border-default);
+   border-radius: 999px;
+   background: var(--bg-subtle);
+   color: var(--text-body);
+   font-size: 0.72rem;
+   font-weight: 650;
+   overflow-wrap: anywhere;
+}
+
+.adjudication-boundary-note {
+   display: flex;
+   align-items: flex-start;
+   gap: 9px;
+   margin-top: 15px;
+   padding: 11px 13px;
+   border: 1px solid var(--border-default);
+   border-radius: 9px;
+   background: var(--bg-subtle);
+   color: var(--text-body);
+}
+
+.adjudication-boundary-note svg {
+   flex: 0 0 auto;
+   margin-top: 2px;
+   color: var(--brand-primary);
+}
+
+.adjudication-boundary-note p {
+   margin: 0;
+   font-size: 0.78rem;
+   line-height: 1.55;
+}
+
+.adjudication-toolbar {
+   align-items: end;
+   margin: 18px 0;
+   padding-bottom: 18px;
+   border-bottom: 1px solid var(--border-default);
+}
+
+.adjudication-filter-grid {
+   min-width: 0;
+   display: grid;
+   grid-template-columns: repeat(2, minmax(150px, 1fr));
+   gap: 10px;
+}
+
+.adjudication-filter-grid label {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   gap: 6px;
+}
+
+.adjudication-filter-grid label > span {
+   color: var(--text-muted);
+   font-size: 0.71rem;
+   font-weight: 700;
+}
+
+.adjudication-filter-grid select,
+.adjudication-toolbar button,
+.adjudication-pagination button,
+.adjudication-contained-error button,
+.adjudication-return-to-queue {
+   min-height: 38px;
+   border: 1px solid var(--border-default);
+   border-radius: 8px;
+   background: var(--bg-surface);
+   color: var(--text-body);
+   font: inherit;
+}
+
+.adjudication-filter-grid select {
+   width: 100%;
+   padding: 0 32px 0 10px;
+   cursor: pointer;
+}
+
+.adjudication-toolbar-actions {
+   display: flex;
+   align-items: center;
+   gap: 12px;
+}
+
+.adjudication-toolbar-actions > span {
+   color: var(--text-muted);
+   font-size: 0.76rem;
+   font-weight: 650;
+   font-variant-numeric: tabular-nums;
+}
+
+.adjudication-toolbar button,
+.adjudication-pagination button,
+.adjudication-contained-error button,
+.adjudication-return-to-queue {
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   gap: 7px;
+   padding: 0 12px;
+   font-size: 0.75rem;
+   font-weight: 700;
+   cursor: pointer;
+}
+
+.adjudication-filter-grid select:hover,
+.adjudication-toolbar button:hover:not(:disabled),
+.adjudication-pagination button:hover:not(:disabled),
+.adjudication-contained-error button:hover:not(:disabled),
+.adjudication-return-to-queue:hover:not(:disabled) {
+   border-color: var(--brand-primary);
+}
+
+.adjudication-toolbar button:disabled,
+.adjudication-pagination button:disabled {
+   cursor: not-allowed;
+   opacity: 0.58;
+}
+
+.adjudication-contained-error {
+   display: flex;
+   flex-direction: column;
+   align-items: flex-start;
+   gap: 5px;
+   padding: 15px;
+   border: 1px solid var(--verdict-fake-border);
+   border-radius: 9px;
+   background: var(--verdict-fake-bg);
+   color: var(--verdict-fake-text);
+   font-size: 0.79rem;
+   line-height: 1.5;
+}
+
+.adjudication-contained-error button {
+   min-height: 34px;
+   margin-top: 4px;
+   border-color: currentColor;
+   color: inherit;
+}
+
+.adjudication-authority-error {
+   margin-top: 18px;
+}
+
+.adjudication-workspace-grid {
+   min-width: 0;
+   display: grid;
+   grid-template-columns: minmax(320px, 0.9fr) minmax(280px, 1.1fr);
+   gap: 24px;
+   align-items: start;
+}
+
+.adjudication-queue,
+.adjudication-selection {
+   min-width: 0;
+}
+
+.adjudication-queue {
+   padding-right: 24px;
+   border-right: 1px solid var(--border-default);
+}
+
+.adjudication-section-heading {
+   margin-bottom: 13px;
+}
+
+.adjudication-section-heading h4,
+.adjudication-selection h4 {
+   font-size: 1rem;
+   line-height: 1.45;
+   overflow-wrap: anywhere;
+}
+
+.adjudication-state {
+   min-height: 210px;
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   justify-content: center;
+   gap: 8px;
+   padding: 28px 16px;
+   color: var(--text-muted);
+   text-align: center;
+}
+
+.adjudication-state h4,
+.adjudication-state h5,
+.adjudication-state p {
+   margin: 0;
+}
+
+.adjudication-state h4,
+.adjudication-state h5 {
+   color: var(--text-main);
+}
+
+.adjudication-state p {
+   max-width: 390px;
+   font-size: 0.78rem;
+   line-height: 1.55;
+}
+
+.adjudication-spinner {
+   animation: adjudication-spin 0.9s linear infinite;
+}
+
+@keyframes adjudication-spin {
+   to {
+      transform: rotate(360deg);
+   }
+}
+
+.adjudication-case-list {
+   display: flex;
+   flex-direction: column;
+   gap: 8px;
+}
+
+.adjudication-case-row {
+   width: 100%;
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   align-items: stretch;
+   gap: 8px;
+   padding: 13px 14px;
+   border: 1px solid var(--border-default);
+   border-radius: 10px;
+   background: var(--bg-surface);
+   color: var(--text-body);
+   font: inherit;
+   text-align: left;
+   cursor: pointer;
+   transition:
+      border-color 0.15s ease,
+      background 0.15s ease;
+}
+
+.adjudication-case-row:hover {
+   border-color: var(--brand-primary);
+   background: var(--bg-subtle);
+}
+
+.adjudication-case-row.selected {
+   border-color: var(--brand-primary);
+   background: var(--bg-subtle);
+}
+
+.adjudication-case-row-top,
+.adjudication-case-row-meta,
+.adjudication-evidence-summary,
+.adjudication-selection-facts {
+   display: flex;
+   align-items: center;
+   flex-wrap: wrap;
+   gap: 6px 10px;
+}
+
+.adjudication-case-status,
+.adjudication-priority,
+.adjudication-selected-label,
+.adjudication-history-indicator,
+.adjudication-selection-facts span {
+   display: inline-flex;
+   align-items: center;
+   min-height: 23px;
+   padding: 3px 7px;
+   border: 1px solid var(--border-default);
+   border-radius: 999px;
+   background: var(--bg-subtle);
+   color: var(--text-body);
+   font-size: 0.67rem;
+   font-weight: 700;
+}
+
+.adjudication-selected-label {
+   margin-left: auto;
+   border-color: var(--brand-primary);
+   background: var(--brand-primary);
+   color: var(--text-inverse);
+}
+
+.adjudication-case-row > strong {
+   display: -webkit-box;
+   overflow: hidden;
+   color: var(--text-main);
+   font-size: 0.86rem;
+   line-height: 1.45;
+   overflow-wrap: anywhere;
+   -webkit-box-orient: vertical;
+   -webkit-line-clamp: 3;
+}
+
+.adjudication-claim-type {
+   color: var(--text-muted);
+   font-size: 0.72rem;
+}
+
+.adjudication-evidence-summary {
+   padding: 8px 0;
+   border-top: 1px solid var(--border-light);
+   border-bottom: 1px solid var(--border-light);
+   color: var(--text-body);
+   font-size: 0.7rem;
+   font-variant-numeric: tabular-nums;
+}
+
+.adjudication-case-row-meta {
+   align-items: flex-start;
+   color: var(--text-muted);
+   font-size: 0.68rem;
+   line-height: 1.45;
+}
+
+.adjudication-history-indicator {
+   align-self: flex-start;
+   gap: 5px;
+   border-radius: 7px;
+}
+
+.adjudication-pagination {
+   display: grid;
+   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+   gap: 10px;
+   align-items: center;
+   margin-top: 16px;
+}
+
+.adjudication-pagination button:last-child {
+   justify-self: end;
+}
+
+.adjudication-pagination > span {
+   color: var(--text-muted);
+   font-size: 0.72rem;
+   font-variant-numeric: tabular-nums;
+   text-align: center;
+}
+
+.adjudication-selection {
+   min-height: 310px;
+}
+
+.adjudication-selection-content {
+   display: flex;
+   flex-direction: column;
+   gap: 14px;
+   padding: 18px;
+   border: 1px solid var(--border-default);
+   border-radius: 12px;
+   background: var(--bg-subtle);
+}
+
+.adjudication-return-to-queue {
+   display: none;
+   align-self: flex-start;
+}
+
+.adjudication-selection-heading > span {
+   display: block;
+   margin-bottom: 5px;
+   color: var(--text-muted);
+   font-size: 0.7rem;
+   font-weight: 700;
+}
+
+.adjudication-selection-content > p {
+   max-width: 58ch;
+   margin: 0;
+   color: var(--text-muted);
+   font-size: 0.78rem;
+   line-height: 1.55;
+}
+
+.adjudication-filter-grid select:focus-visible,
+.adjudication-toolbar button:focus-visible,
+.adjudication-case-row:focus-visible,
+.adjudication-pagination button:focus-visible,
+.adjudication-contained-error:focus,
+.adjudication-contained-error button:focus-visible,
+.adjudication-return-to-queue:focus-visible,
+.adjudication-section-heading h4:focus,
+.adjudication-selection h4:focus {
+   outline: 2px solid var(--brand-primary);
+   outline-offset: 3px;
+}
+
+@media (max-width: 1180px) {
+   .adjudication-workspace-grid {
+      grid-template-columns: 1fr;
+   }
+
+   .adjudication-queue {
+      padding-right: 0;
+      border-right: 0;
+   }
+
+   .adjudication-workspace-grid.has-selection .adjudication-queue {
+      display: none;
+   }
+
+   .adjudication-workspace-grid:not(.has-selection) .adjudication-selection {
+      display: none;
+   }
+
+   .adjudication-return-to-queue {
+      display: inline-flex;
+   }
+}
+
+@media (max-width: 900px) {
+   .adjudication-panel-intro,
+   .adjudication-toolbar {
+      align-items: stretch;
+      flex-direction: column;
+   }
+
+   .adjudication-organization-context {
+      align-self: flex-start;
+      max-width: 100%;
+   }
+
+   .adjudication-toolbar-actions {
+      justify-content: space-between;
+   }
+}
+
+@media (max-width: 560px) {
+   .adjudication-filter-grid {
+      grid-template-columns: 1fr;
+   }
+
+   .adjudication-toolbar-actions,
+   .adjudication-pagination {
+      align-items: stretch;
+      display: flex;
+      flex-direction: column;
+   }
+
+   .adjudication-toolbar-actions button,
+   .adjudication-pagination button {
+      width: 100%;
+   }
+
+   .adjudication-pagination > span {
+      order: -1;
+   }
+
+   .adjudication-case-row,
+   .adjudication-selection-content {
+      padding: 12px;
+   }
+
+   .adjudication-selected-label {
+      margin-left: 0;
+   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+   .adjudication-case-row {
+      transition: none;
+   }
+
+   .adjudication-spinner {
+      animation: none;
+   }
+}
