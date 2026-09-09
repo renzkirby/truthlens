@@ -2508,6 +2508,9 @@ class OfficialFactCheckSource(models.Model):
         self._validate_sealed_write()
         return super().save(*args, **kwargs)
 
+    def __str__(self):
+        return self.url
+
 
 class OfficialFactCheckSourceEvidenceLink(models.Model):
     id = models.UUIDField(
