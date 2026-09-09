@@ -1601,6 +1601,10 @@ class ModerationEvent(models.Model):
             "ARTICLE_REVISED",
             "Article Revised",
         )
+        FACTUAL_CORRECTION_REQUESTED = (
+            "FACTUAL_CORRECTION_REQUESTED",
+            "Factual Correction Requested",
+        )
 
     id = models.UUIDField(
         primary_key=True,
@@ -3244,6 +3248,258 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
 
     def __str__(self):
         return f"Publication snapshot for fact-check {self.fact_check_id}"
+
+
+class FactualCorrectionRequest(models.Model):
+    class Status(models.TextChoices):
+        ACTIVE = "ACTIVE", "Active"
+        COMPLETED = "COMPLETED", "Completed"
+        CANCELLED = "CANCELLED", "Cancelled"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    claim = models.ForeignKey(
+        Claim,
+        on_delete=models.PROTECT,
+        related_name="factual_correction_requests",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.PROTECT,
+        related_name="factual_correction_requests",
+    )
+    predecessor_decision = models.ForeignKey(
+        AdjudicationDecision,
+        on_delete=models.PROTECT,
+        related_name="factual_correction_requests",
+    )
+    predecessor_fact_check = models.ForeignKey(
+        OfficialFactCheck,
+        on_delete=models.PROTECT,
+        related_name="factual_correction_requests",
+    )
+    predecessor_publication_snapshot = models.ForeignKey(
+        OfficialFactCheckPublicationSnapshot,
+        on_delete=models.PROTECT,
+        related_name="factual_correction_requests",
+    )
+    moderation_case = models.OneToOneField(
+        ModerationCase,
+        on_delete=models.PROTECT,
+        related_name="factual_correction_request",
+    )
+    requested_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="factual_correction_requests",
+    )
+    requested_by_snapshot = models.JSONField(
+        editable=False,
+    )
+    organization_snapshot = models.JSONField(
+        editable=False,
+    )
+    correction_reason = models.TextField(
+        max_length=2000,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+        db_index=True,
+    )
+    requested_at = models.DateTimeField(
+        default=timezone.now,
+        editable=False,
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    class Meta:
+        ordering = ["-requested_at", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["claim"],
+                condition=Q(status="ACTIVE"),
+                name="uniq_active_factual_correction_request",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["organization", "status"],
+                name="fact_correction_org_status_idx",
+            ),
+        ]
+
+    IMMUTABLE_FIELDS = (
+        "claim_id",
+        "organization_id",
+        "predecessor_decision_id",
+        "predecessor_fact_check_id",
+        "predecessor_publication_snapshot_id",
+        "moderation_case_id",
+        "requested_by_id",
+        "requested_by_snapshot",
+        "organization_snapshot",
+        "correction_reason",
+        "requested_at",
+    )
+
+    def _validate_immutable_update(self):
+        if self._state.adding or not self.pk:
+            return
+        stored = (
+            FactualCorrectionRequest.objects.filter(pk=self.pk)
+            .values(*self.IMMUTABLE_FIELDS, "status")
+            .first()
+        )
+        if stored is None:
+            return
+        if any(
+            getattr(self, field) != stored[field] for field in self.IMMUTABLE_FIELDS
+        ):
+            raise ValidationError(
+                "Factual correction request provenance cannot be modified."
+            )
+        if self.status != stored["status"] and (
+            stored["status"] != self.Status.ACTIVE
+            or self.status not in {self.Status.COMPLETED, self.Status.CANCELLED}
+        ):
+            raise ValidationError(
+                "A terminal factual correction request cannot be reused."
+            )
+
+    @staticmethod
+    def _validate_identity_snapshot(value, *, expected_fields):
+        return (
+            isinstance(value, dict)
+            and set(value) == expected_fields
+            and all(isinstance(item, str) for item in value.values())
+            and bool(value["id"].strip())
+        )
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        reason = self.correction_reason
+        if (
+            not isinstance(reason, str)
+            or not reason.strip()
+            or reason != reason.strip()
+            or len(reason) > 2000
+        ):
+            errors["correction_reason"] = (
+                "A trimmed correction reason of 2000 characters or fewer is required."
+            )
+
+        actor_fields = {"id", "username"}
+        organization_fields = {"id", "name", "slug"}
+        if not self._validate_identity_snapshot(
+            self.requested_by_snapshot,
+            expected_fields=actor_fields,
+        ):
+            errors["requested_by_snapshot"] = (
+                "The recorded initiating actor identity is invalid."
+            )
+        if not self._validate_identity_snapshot(
+            self.organization_snapshot,
+            expected_fields=organization_fields,
+        ):
+            errors["organization_snapshot"] = (
+                "The recorded organization identity is invalid."
+            )
+
+        if self._state.adding and self.requested_by_id is None:
+            errors["requested_by"] = "An initiating actor is required."
+        if self.requested_by_id is not None and isinstance(
+            self.requested_by_snapshot,
+            dict,
+        ):
+            if self.requested_by_snapshot.get("id") != str(self.requested_by_id):
+                errors["requested_by_snapshot"] = (
+                    "The recorded actor identity does not match the initiator."
+                )
+            elif self._state.adding and self.requested_by_snapshot.get(
+                "username"
+            ) != self.requested_by.username:
+                errors["requested_by_snapshot"] = (
+                    "The recorded actor name does not match the initiator."
+                )
+
+        if isinstance(self.organization_snapshot, dict):
+            if self.organization_snapshot.get("id") != str(self.organization_id):
+                errors["organization_snapshot"] = (
+                    "The recorded organization identity does not match the request."
+                )
+            elif self._state.adding and (
+                self.organization_snapshot.get("name") != self.organization.name
+                or self.organization_snapshot.get("slug") != self.organization.slug
+            ):
+                errors["organization_snapshot"] = (
+                    "The recorded organization identity does not match the request."
+                )
+
+        decision = self.predecessor_decision
+        fact_check = self.predecessor_fact_check
+        publication_snapshot = self.predecessor_publication_snapshot
+        moderation_case = self.moderation_case
+        if (
+            decision.claim_id != self.claim_id
+            or decision.organization_id != self.organization_id
+        ):
+            errors["predecessor_decision"] = (
+                "The predecessor decision does not match the request authority."
+            )
+        if (
+            fact_check.claim_id != self.claim_id
+            or fact_check.organization_id != self.organization_id
+            or fact_check.adjudication_decision_id != decision.id
+        ):
+            errors["predecessor_fact_check"] = (
+                "The predecessor publication does not match the request authority."
+            )
+        if (
+            publication_snapshot.fact_check_id != fact_check.id
+            or publication_snapshot.decision_snapshot.decision_id != decision.id
+            or str(publication_snapshot.decision_snapshot.claim_id)
+            != str(self.claim_id)
+        ):
+            errors["predecessor_publication_snapshot"] = (
+                "The predecessor seal does not match the requested correction."
+            )
+        if (
+            moderation_case.case_type != ModerationCase.CaseType.ADJUDICATION
+            or moderation_case.claim_id != self.claim_id
+            or moderation_case.organization_id != self.organization_id
+        ):
+            errors["moderation_case"] = (
+                "The correction case does not match the request authority."
+            )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self._validate_immutable_update()
+        self.full_clean(
+            validate_unique=False,
+            validate_constraints=False,
+        )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            "Factual correction requests are durable and cannot be deleted directly."
+        )
+
+    def __str__(self):
+        return f"Factual correction request {self.id} for claim {self.claim_id}"
 
 
 class KnowledgeReuseEvent(models.Model):
