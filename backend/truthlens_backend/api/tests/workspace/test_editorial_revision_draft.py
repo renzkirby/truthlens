@@ -3,6 +3,8 @@ from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from api import publishing_service as publishing_module
 from api.models import (
@@ -207,9 +209,7 @@ class EditorialRevisionDraftTests(AdjudicationContractFixtures, TestCase):
             ).exists()
         )
         self.assertFalse(
-            OfficialFactCheck.objects.filter(
-                supersedes=context["published"]
-            ).exists()
+            OfficialFactCheck.objects.filter(supersedes=context["published"]).exists()
         )
 
     def test_completed_assignment_stays_complete_and_open_work_conflicts(self):
@@ -221,9 +221,7 @@ class EditorialRevisionDraftTests(AdjudicationContractFixtures, TestCase):
             VerificationAssignment.Status.COMPLETED,
         )
         self.assertEqual(
-            VerificationAssignment.objects.filter(
-                claim=completed["claim"]
-            ).count(),
+            VerificationAssignment.objects.filter(claim=completed["claim"]).count(),
             1,
         )
         self.assertEqual(revision.drafted_by, self.lead)
@@ -300,9 +298,11 @@ class EditorialRevisionDraftTests(AdjudicationContractFixtures, TestCase):
                 is_editorially_selected=True,
             ).exists()
         )
-        self.assertTrue(predecessor_source_ids.isdisjoint(
-            set(revision_sources.values_list("id", flat=True))
-        ))
+        self.assertTrue(
+            predecessor_source_ids.isdisjoint(
+                set(revision_sources.values_list("id", flat=True))
+            )
+        )
         self.assertTrue(predecessor_link_ids.isdisjoint(revision_link_ids))
         self.assertEqual(
             set(
@@ -364,9 +364,7 @@ class EditorialRevisionDraftTests(AdjudicationContractFixtures, TestCase):
         with self.assertRaises(PublishingConflict):
             self.create_revision(context)
         self.assertFalse(
-            OfficialFactCheck.objects.filter(
-                supersedes=context["published"]
-            ).exists()
+            OfficialFactCheck.objects.filter(supersedes=context["published"]).exists()
         )
 
     def test_explicit_sources_override_inheritance_and_draft_can_progress(self):
@@ -514,11 +512,47 @@ class EditorialRevisionDraftTests(AdjudicationContractFixtures, TestCase):
             fact_check_count,
         )
         self.assertFalse(
-            OfficialFactCheck.objects.filter(
-                supersedes=context["published"]
-            ).exists()
+            OfficialFactCheck.objects.filter(supersedes=context["published"]).exists()
         )
         self.assertEqual(
             ModerationEvent.objects.filter(case=context["case"]).count(),
             event_count,
         )
+
+    def test_historically_published_successor_cannot_branch_after_archival(self):
+        context = self.make_published_context(suffix="historical-successor")
+        revision = self.create_revision(context)
+
+        # Simulate historical publication followed by archival.
+        # This is test-only setup; B2 has not implemented replacement yet.
+        OfficialFactCheck.objects.filter(pk=revision.pk).update(
+            publication_status=OfficialFactCheck.PublicationStatus.ARCHIVED,
+            published_at=timezone.now(),
+        )
+        revision.refresh_from_db()
+
+        # The service must reject another successor from the same predecessor.
+        with self.assertRaises(PublishingConflict):
+            self.create_revision(context)
+
+        # The database must independently reserve the historical relationship.
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                OfficialFactCheck.objects.create(
+                    claim=context["claim"],
+                    adjudication_decision=context["decision"],
+                    organization=self.organization,
+                    canonical_claim=context["decision"].canonical_claim,
+                    verdict=context["decision"].verdict,
+                    headline="Improper second successor",
+                    summary="This must not create a second branch.",
+                    article_body="Regression test.",
+                    publication_status=OfficialFactCheck.PublicationStatus.DRAFT,
+                    version=revision.version + 1,
+                    drafted_by=self.lead,
+                    supersedes=context["published"],
+                    revision_kind=OfficialFactCheck.RevisionKind.EDITORIAL_REVISION,
+                    revision_reason="Attempt another historical branch.",
+                    revision_requested_by=self.lead,
+                    revision_requested_at=timezone.now(),
+                )

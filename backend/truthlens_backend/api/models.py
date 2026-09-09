@@ -2211,15 +2211,18 @@ class OfficialFactCheck(models.Model):
             ),
             models.UniqueConstraint(
                 fields=["supersedes"],
-                condition=Q(
-                    supersedes__isnull=False,
-                    publication_status__in=(
-                        "DRAFT",
-                        "IN_REVIEW",
-                        "PUBLISHED",
-                    ),
+                condition=Q(supersedes__isnull=False)
+                & (
+                    Q(
+                        publication_status__in=(
+                            "DRAFT",
+                            "IN_REVIEW",
+                            "PUBLISHED",
+                        )
+                    )
+                    | Q(published_at__isnull=False)
                 ),
-                name="uniq_active_fact_check_successor",
+                name="uniq_reserved_fact_check_successor",
             ),
             models.CheckConstraint(
                 condition=(
@@ -2316,9 +2319,11 @@ class OfficialFactCheck(models.Model):
     def _validate_revision_metadata_update(self):
         if self._state.adding or not self.pk:
             return
-        stored = OfficialFactCheck.objects.filter(pk=self.pk).values(
-            *self.REVISION_METADATA_FIELDS
-        ).first()
+        stored = (
+            OfficialFactCheck.objects.filter(pk=self.pk)
+            .values(*self.REVISION_METADATA_FIELDS)
+            .first()
+        )
         if stored is None:
             return
         if any(

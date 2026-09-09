@@ -197,16 +197,12 @@ def _parse_uuid_identity(value, field_name):
     try:
         return uuid.UUID(str(value))
     except (ValueError, TypeError, AttributeError) as error:
-        raise InvalidFactCheckContent(
-            f"{field_name} must be a valid UUID."
-        ) from error
+        raise InvalidFactCheckContent(f"{field_name} must be a valid UUID.") from error
 
 
 def _parse_expected_version(value, field_name):
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-        raise InvalidFactCheckContent(
-            f"{field_name} must be a positive integer."
-        )
+        raise InvalidFactCheckContent(f"{field_name} must be a positive integer.")
     return value
 
 
@@ -483,8 +479,7 @@ def _validate_predecessor_publication_snapshot(
         payload["article_version"] != predecessor.version
         or payload["canonical_claim"] != decision.canonical_claim
         or payload["verdict"] != decision.verdict
-        or payload["published_at"]
-        != publication_snapshot.captured_at.isoformat()
+        or payload["published_at"] != publication_snapshot.captured_at.isoformat()
     ):
         raise PublishingConflict(
             "The published predecessor's sealed decision state is inconsistent."
@@ -802,11 +797,13 @@ def create_fact_check_draft(
         locked_claim = context["claim"]
         current_decision = context["decision"]
 
-        if any(
-            item.publication_status
-            == OfficialFactCheck.PublicationStatus.PUBLISHED
-            for item in context["fact_checks"]
-        ) or context["publication_snapshots"]:
+        if (
+            any(
+                item.publication_status == OfficialFactCheck.PublicationStatus.PUBLISHED
+                for item in context["fact_checks"]
+            )
+            or context["publication_snapshots"]
+        ):
             raise PublishingConflict(
                 "A published or sealed fact-check requires an explicit revision "
                 "or correction workflow."
@@ -985,8 +982,7 @@ def create_editorial_revision_draft(
         published = [
             item
             for item in context["fact_checks"]
-            if item.publication_status
-            == OfficialFactCheck.PublicationStatus.PUBLISHED
+            if item.publication_status == OfficialFactCheck.PublicationStatus.PUBLISHED
         ]
         if len(published) != 1 or published[0].id != predecessor.id:
             raise PublishingConflict(
@@ -997,6 +993,21 @@ def create_editorial_revision_draft(
             raise PublishingConflict(
                 "Open verification work must be resolved before an editorial "
                 "revision draft can be created."
+            )
+
+        # A predecessor that already has a historically published successor
+        # cannot be used to create another branch of publication history.
+        sealed_fact_check_ids = {
+            snapshot.fact_check_id for snapshot in context["publication_snapshots"]
+        }
+
+        if any(
+            item.supersedes_id == predecessor.id
+            and (item.published_at is not None or item.id in sealed_fact_check_ids)
+            for item in context["fact_checks"]
+        ):
+            raise PublishingConflict(
+                "This publication already has a historically published successor."
             )
 
         active_successors = [
@@ -1043,9 +1054,7 @@ def create_editorial_revision_draft(
             required=True,
         )
         if len(resolved_headline) > 300:
-            raise InvalidFactCheckContent(
-                "Headline must be 300 characters or fewer."
-            )
+            raise InvalidFactCheckContent("Headline must be 300 characters or fewer.")
         resolved_summary = _revision_content_value(
             summary,
             sealed_payload["summary"],
