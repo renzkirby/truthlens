@@ -24,11 +24,13 @@ from api.factual_correction_service import (
 from api.evidence_review_service import (
     EvidenceReviewAuthorizationError,
     EvidenceReviewConflict,
+    _is_expected_active_evidence_case_conflict,
     review_correction_evidence,
 )
 from api.models import (
     AdjudicationDecision,
     AdjudicationDecisionEvidenceSnapshot,
+    Claim,
     EvidenceSubmission,
     FactualCorrectionRequest,
     ModerationCase,
@@ -41,6 +43,7 @@ from api.models import (
     VerificationAssignment,
 )
 from api.moderation_service import DuplicateActiveModerationCase
+from api.moderation_service import create_moderation_case
 from api.organization_service import PartnerCapability
 from api.publishing_service import (
     PublishingConflict,
@@ -819,11 +822,127 @@ class CorrectionReservationEnforcementTests(
         reservation["case"].refresh_from_db()
         self.assertEqual(reservation["case"].status, ModerationCase.Status.OPEN)
 
+    def test_ordinary_first_decision_case_creation_remains_unchanged(self):
+        claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Ordinary first-decision behavior remains available.",
+        )
+
+        case = ensure_adjudication_case(
+            claim=claim,
+            actor=self.lead,
+            organization=self.organization,
+        )
+
+        self.assertEqual(case.case_type, ModerationCase.CaseType.ADJUDICATION)
+        self.assertEqual(case.status, ModerationCase.Status.OPEN)
+        self.assertEqual(case.organization, self.organization)
+        self.assertTrue(
+            ModerationEvent.objects.filter(
+                case=case,
+                event_type=ModerationEvent.EventType.CASE_CREATED,
+            ).exists()
+        )
+
 
 class CorrectionEvidenceReviewTests(
     FactualCorrectionRequestFixtures,
     TestCase,
 ):
+    def test_genuine_active_evidence_case_uniqueness_is_recognized_narrowly(self):
+        context = self.make_correction_review_context(
+            suffix="genuine-evidence-uniqueness"
+        )
+        ModerationCase.objects.filter(pk=context["evidence_case"].pk).update(
+            status=ModerationCase.Status.CANCELLED
+        )
+        create_moderation_case(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            actor=self.moderator,
+            source=ModerationCase.Source.EVIDENCE_SUBMISSION,
+            evidence_submission=context["evidence"][0],
+            organization=self.organization,
+        )
+
+        with self.assertRaises(DuplicateActiveModerationCase) as raised:
+            create_moderation_case(
+                case_type=ModerationCase.CaseType.EVIDENCE,
+                actor=self.moderator,
+                source=ModerationCase.Source.EVIDENCE_SUBMISSION,
+                evidence_submission=context["evidence"][0],
+                organization=self.organization,
+            )
+
+        self.assertTrue(_is_expected_active_evidence_case_conflict(raised.exception))
+
+    def test_unrelated_case_and_case_created_integrity_failures_propagate_cleanly(self):
+        for failure_target in ("case", "case_created_event"):
+            with self.subTest(failure_target=failure_target):
+                context = self.make_correction_review_context(
+                    suffix=f"unrelated-{failure_target}"
+                )
+                ModerationCase.objects.filter(pk=context["evidence_case"].pk).update(
+                    status=ModerationCase.Status.CANCELLED
+                )
+                existing_case_ids = set(
+                    ModerationCase.objects.filter(
+                        evidence_submission=context["evidence"][0]
+                    ).values_list("id", flat=True)
+                )
+                existing_event_count = ModerationEvent.objects.filter(
+                    case__evidence_submission=context["evidence"][0]
+                ).count()
+                if failure_target == "case":
+                    patcher = patch.object(
+                        ModerationCase,
+                        "save",
+                        side_effect=IntegrityError("unrelated case constraint"),
+                    )
+                else:
+                    original_create = ModerationEvent.objects.create
+
+                    def create_event(*args, **kwargs):
+                        if kwargs.get("event_type") == ModerationEvent.EventType.CASE_CREATED:
+                            raise IntegrityError("unrelated CASE_CREATED constraint")
+                        return original_create(*args, **kwargs)
+
+                    patcher = patch.object(
+                        ModerationEvent.objects,
+                        "create",
+                        side_effect=create_event,
+                    )
+
+                with patcher, self.assertRaises(IntegrityError):
+                    self.review_correction(context, expected_case_id=None)
+
+                self.assertEqual(
+                    set(
+                        ModerationCase.objects.filter(
+                            evidence_submission=context["evidence"][0]
+                        ).values_list("id", flat=True)
+                    ),
+                    existing_case_ids,
+                )
+                self.assertEqual(
+                    ModerationEvent.objects.filter(
+                        case__evidence_submission=context["evidence"][0]
+                    ).count(),
+                    existing_event_count,
+                )
+
+    def test_causeless_duplicate_active_evidence_case_propagates(self):
+        context = self.make_correction_review_context(
+            suffix="causeless-evidence-duplicate"
+        )
+        ModerationCase.objects.filter(pk=context["evidence_case"].pk).update(
+            status=ModerationCase.Status.CANCELLED
+        )
+        with patch(
+            "api.evidence_review_service.create_moderation_case",
+            side_effect=DuplicateActiveModerationCase("causeless failure"),
+        ), self.assertRaises(DuplicateActiveModerationCase):
+            self.review_correction(context, expected_case_id=None)
+
     def test_review_evidence_capability_is_the_only_required_factual_capability(self):
         context = self.make_correction_review_context(
             suffix="review-capability-contract"
@@ -1203,6 +1322,101 @@ class FactualCorrectionRequestPostgresTests(
     FactualCorrectionRequestFixtures,
     TransactionTestCase,
 ):
+    def test_reservation_and_ordinary_ensure_have_one_active_case_winner(self):
+        if connection.vendor != "postgresql":
+            self.skipTest("Row-lock concurrency coverage requires PostgreSQL.")
+
+        context = self.make_published_context(suffix="reservation-ordinary-race")
+        ModerationCase.objects.filter(pk=context["case"].pk).update(
+            status=ModerationCase.Status.CANCELLED
+        )
+        barrier = threading.Barrier(2)
+        outcomes = {}
+        errors = {}
+
+        def reserve():
+            outcome = None
+            try:
+                close_old_connections()
+                actor = User.objects.get(pk=self.lead.pk)
+                barrier.wait(timeout=10)
+                request_factual_correction(
+                    predecessor_id=context["published"].id,
+                    actor=actor,
+                    organization_id=self.organization.id,
+                    expected_predecessor_version=context["published"].version,
+                    expected_decision_revision=context["decision"].revision_number,
+                    correction_reason="Competing with ordinary ensure.",
+                )
+            except FactualCorrectionConflict:
+                outcome = "conflict"
+            except Exception as error:  # pragma: no cover - asserted below
+                outcome = f"error:{type(error).__name__}"
+                errors["reservation"] = repr(error)
+            else:
+                outcome = "reservation"
+            finally:
+                connections["default"].close()
+                outcomes["reservation"] = outcome
+
+        def ensure_ordinary():
+            outcome = None
+            try:
+                close_old_connections()
+                actor = User.objects.get(pk=self.lead.pk)
+                claim = Claim.objects.get(pk=context["claim"].pk)
+                organization = Organization.objects.get(pk=self.organization.pk)
+                barrier.wait(timeout=10)
+                ensure_adjudication_case(
+                    claim=claim,
+                    actor=actor,
+                    organization=organization,
+                )
+            except AdjudicationConflict:
+                outcome = "conflict"
+            except Exception as error:  # pragma: no cover - asserted below
+                outcome = f"error:{type(error).__name__}"
+                errors["ordinary"] = repr(error)
+            else:
+                outcome = "ordinary"
+            finally:
+                connections["default"].close()
+                outcomes["ordinary"] = outcome
+
+        workers = [
+            threading.Thread(target=reserve, name="correction-reservation"),
+            threading.Thread(target=ensure_ordinary, name="ordinary-ensure"),
+        ]
+        for worker in workers:
+            worker.start()
+        deadline = time.monotonic() + 90.0
+        for worker in workers:
+            worker.join(timeout=max(0.0, deadline - time.monotonic()))
+
+        self.assertFalse(
+            any(worker.is_alive() for worker in workers),
+            "Reservation/ordinary workers exceeded the shared 90-second deadline.",
+        )
+        self.assertFalse(errors, str(errors))
+        self.assertEqual(list(outcomes.values()).count("conflict"), 1)
+        self.assertEqual(
+            len({"reservation", "ordinary"}.intersection(outcomes.values())),
+            1,
+        )
+        self.assertEqual(
+            ModerationCase.objects.filter(
+                claim=context["claim"],
+                case_type=ModerationCase.CaseType.ADJUDICATION,
+                status__in={
+                    ModerationCase.Status.OPEN,
+                    ModerationCase.Status.IN_REVIEW,
+                    ModerationCase.Status.ESCALATED,
+                    ModerationCase.Status.REOPENED,
+                },
+            ).count(),
+            1,
+        )
+
     def test_competing_requests_serialize_to_one_valid_winner(self):
         if connection.vendor != "postgresql":
             self.skipTest("Row-lock concurrency coverage requires PostgreSQL.")

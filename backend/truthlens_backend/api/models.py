@@ -24,6 +24,11 @@ from .publication_snapshot_schema import (
     PublicationSnapshotSchemaError,
     validate_publication_snapshot,
 )
+from .factual_correction_proposal_schema import (
+    CURRENT_SCHEMA_VERSION as FACTUAL_CORRECTION_PROPOSAL_SCHEMA_VERSION,
+    FactualCorrectionProposalSchemaError,
+    validate_factual_correction_proposal,
+)
 
 
 def _claim_vector_indexes():
@@ -1604,6 +1609,10 @@ class ModerationEvent(models.Model):
         FACTUAL_CORRECTION_REQUESTED = (
             "FACTUAL_CORRECTION_REQUESTED",
             "Factual Correction Requested",
+        )
+        FACTUAL_CORRECTION_PROPOSAL_PREPARED = (
+            "FACTUAL_CORRECTION_PROPOSAL_PREPARED",
+            "Factual Correction Proposal Prepared",
         )
 
     id = models.UUIDField(
@@ -3500,6 +3509,298 @@ class FactualCorrectionRequest(models.Model):
 
     def __str__(self):
         return f"Factual correction request {self.id} for claim {self.claim_id}"
+
+
+class FactualCorrectionProposal(models.Model):
+    """Durable non-authoritative replacement proposal for one correction."""
+
+    class Status(models.TextChoices):
+        DRAFT = "DRAFT", "Draft"
+        PREPARED = "PREPARED", "Prepared"
+
+    CURRENT_SCHEMA_VERSION = FACTUAL_CORRECTION_PROPOSAL_SCHEMA_VERSION
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    correction_request = models.OneToOneField(
+        FactualCorrectionRequest,
+        on_delete=models.PROTECT,
+        related_name="proposal",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+    version = models.PositiveIntegerField(default=1)
+    verdict = models.CharField(
+        max_length=20,
+        choices=AdjudicationDecision.Verdict.choices,
+    )
+    canonical_claim = models.TextField()
+    rationale = models.TextField()
+    headline = models.CharField(max_length=300)
+    summary = models.TextField()
+    article_body = models.TextField()
+    source_urls = models.JSONField(default=list)
+    verification_run = models.ForeignKey(
+        VerificationRun,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="factual_correction_proposals",
+    )
+    prepared_payload_schema_version = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        editable=False,
+    )
+    prepared_payload = models.JSONField(null=True, blank=True, editable=False)
+    prepared_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="prepared_factual_correction_proposals",
+    )
+    prepared_by_snapshot = models.JSONField(null=True, blank=True, editable=False)
+    organization_snapshot = models.JSONField(null=True, blank=True, editable=False)
+    prepared_at = models.DateTimeField(null=True, blank=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True, editable=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(version__gte=1),
+                name="fact_correction_proposal_version_positive",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(
+                        status="DRAFT",
+                        prepared_payload_schema_version__isnull=True,
+                        prepared_payload__isnull=True,
+                        prepared_by__isnull=True,
+                        prepared_by_snapshot__isnull=True,
+                        organization_snapshot__isnull=True,
+                        prepared_at__isnull=True,
+                    )
+                    | Q(
+                        status="PREPARED",
+                        prepared_payload_schema_version__isnull=False,
+                        prepared_payload__isnull=False,
+                        prepared_by_snapshot__isnull=False,
+                        organization_snapshot__isnull=False,
+                        prepared_at__isnull=False,
+                    )
+                ),
+                name="fact_correction_proposal_lifecycle_payload",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["status", "-created_at"],
+                name="fact_corr_proposal_status_idx",
+            ),
+        ]
+
+    CONTENT_FIELDS = (
+        "verdict",
+        "canonical_claim",
+        "rationale",
+        "headline",
+        "summary",
+        "article_body",
+        "source_urls",
+        "verification_run_id",
+    )
+    PREPARED_FIELDS = (
+        "prepared_payload_schema_version",
+        "prepared_payload",
+        "prepared_by_id",
+        "prepared_by_snapshot",
+        "organization_snapshot",
+        "prepared_at",
+    )
+
+    def _stored_state(self):
+        if self._state.adding or not self.pk:
+            return None
+        return FactualCorrectionProposal.objects.filter(pk=self.pk).values(
+            "correction_request_id",
+            "status",
+            "version",
+            *self.CONTENT_FIELDS,
+            *self.PREPARED_FIELDS,
+        ).first()
+
+    def _validate_immutable_update(self):
+        stored = self._stored_state()
+        if stored is None:
+            return
+        if self.correction_request_id != stored["correction_request_id"]:
+            raise ValidationError("A correction proposal cannot change requests.")
+        if stored["status"] == self.Status.PREPARED:
+            fields = (
+                "status",
+                "version",
+                *self.CONTENT_FIELDS,
+                *self.PREPARED_FIELDS,
+            )
+            if any(getattr(self, field) != stored[field] for field in fields):
+                raise ValidationError(
+                    "A prepared factual correction proposal is immutable."
+                )
+        elif self.status not in {self.Status.DRAFT, self.Status.PREPARED}:
+            raise ValidationError("A correction proposal cannot be reused.")
+
+    @staticmethod
+    def _valid_snapshot(value, fields):
+        return (
+            isinstance(value, dict)
+            and set(value) == fields
+            and all(isinstance(item, str) and item.strip() for item in value.values())
+        )
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if (
+            isinstance(self.version, bool)
+            or not isinstance(self.version, int)
+            or self.version < 1
+        ):
+            errors["version"] = "Proposal version must be a positive integer."
+        for field in (
+            "canonical_claim",
+            "rationale",
+            "headline",
+            "summary",
+            "article_body",
+        ):
+            value = getattr(self, field)
+            if (
+                not isinstance(value, str)
+                or not value.strip()
+                or value != value.strip()
+            ):
+                errors[field] = f"{field} must be a trimmed nonblank string."
+        if isinstance(self.headline, str) and len(self.headline) > 300:
+            errors["headline"] = "Headline must be 300 characters or fewer."
+        if not isinstance(self.source_urls, list) or not self.source_urls:
+            errors["source_urls"] = "At least one source URL is required."
+
+        if self.status == self.Status.DRAFT:
+            if (
+                self.correction_request_id is not None
+                and self.correction_request.status
+                != FactualCorrectionRequest.Status.ACTIVE
+            ):
+                errors["correction_request"] = (
+                    "A terminal correction request cannot accept draft edits."
+                )
+            if any(getattr(self, field) is not None for field in self.PREPARED_FIELDS):
+                errors["status"] = "A draft proposal cannot contain prepared state."
+        elif self.status == self.Status.PREPARED:
+            stored = self._stored_state()
+            if self.prepared_by_id is None and (
+                stored is None or stored["status"] != self.Status.PREPARED
+            ):
+                errors["prepared_by"] = "A preparing actor is required."
+            if not self._valid_snapshot(
+                self.prepared_by_snapshot,
+                {"id", "username"},
+            ):
+                errors["prepared_by_snapshot"] = (
+                    "The preparing actor snapshot is invalid."
+                )
+            if not self._valid_snapshot(
+                self.organization_snapshot,
+                {"id", "name", "slug"},
+            ):
+                errors["organization_snapshot"] = (
+                    "The organization snapshot is invalid."
+                )
+            if (
+                self.prepared_payload_schema_version is None
+                or self.prepared_payload is None
+            ):
+                errors["prepared_payload"] = "A prepared payload is required."
+            else:
+                try:
+                    validate_factual_correction_proposal(
+                        schema_version=self.prepared_payload_schema_version,
+                        payload=self.prepared_payload,
+                    )
+                except FactualCorrectionProposalSchemaError as error:
+                    errors["prepared_payload"] = str(error)
+                else:
+                    payload = self.prepared_payload
+                    expected = {
+                        "proposal_id": str(self.id),
+                        "proposal_version": self.version,
+                        "correction_request_id": str(self.correction_request_id),
+                    }
+                    if any(payload[key] != value for key, value in expected.items()):
+                        errors["prepared_payload"] = (
+                            "The prepared payload does not match the proposal identity."
+                        )
+                    elif self.prepared_by_id is not None and (
+                        payload["approval"]["actor"]["id"] != str(self.prepared_by_id)
+                    ):
+                        errors["prepared_payload"] = (
+                            "The prepared payload does not match the approving actor."
+                        )
+                    elif self.prepared_at is not None and (
+                        payload["approval"]["prepared_at"]
+                        != self.prepared_at.isoformat()
+                    ):
+                        errors["prepared_payload"] = (
+                            "The prepared payload does not match its preparation time."
+                        )
+                    elif (
+                        payload["approval"]["actor"]
+                        != self.prepared_by_snapshot
+                        or payload["organization"] != self.organization_snapshot
+                        or payload["claim_id"]
+                        != str(self.correction_request.claim_id)
+                        or payload["correction_case_id"]
+                        != str(self.correction_request.moderation_case_id)
+                        or payload["organization"]["id"]
+                        != str(self.correction_request.organization_id)
+                        or payload["predecessor"]["decision_id"]
+                        != str(self.correction_request.predecessor_decision_id)
+                        or payload["predecessor"]["fact_check_id"]
+                        != str(self.correction_request.predecessor_fact_check_id)
+                        or payload["predecessor"]["publication_snapshot_id"]
+                        != str(
+                            self.correction_request.predecessor_publication_snapshot_id
+                        )
+                    ):
+                        errors["prepared_payload"] = (
+                            "The prepared payload does not match request provenance."
+                        )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self._validate_immutable_update()
+        self.full_clean(validate_unique=False, validate_constraints=False)
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            "Factual correction proposals are durable and cannot be deleted directly."
+        )
+
+    def __str__(self):
+        return (
+            f"Factual correction proposal {self.id} "
+            f"for request {self.correction_request_id}"
+        )
 
 
 class KnowledgeReuseEvent(models.Model):
