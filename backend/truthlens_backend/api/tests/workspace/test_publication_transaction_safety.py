@@ -249,25 +249,20 @@ class PublicationTransactionSafetyTests(
         context = self.make_decided_context()
         first = self.make_submitted_draft(context, suffix="published-first")
         first = publish_fact_check(fact_check=first, actor=self.lead)["fact_check"]
-        second = self.make_submitted_draft(context, suffix="replacement")
         event_count = ModerationEvent.objects.filter(case=context["case"]).count()
 
         with self.assertRaises(PublishingConflict):
-            publish_fact_check(
-                fact_check=second,
-                actor=self.lead,
-            )
+            self.make_draft(context, suffix="replacement")
 
         first.refresh_from_db()
-        second.refresh_from_db()
         self.assertEqual(
             first.publication_status,
             OfficialFactCheck.PublicationStatus.PUBLISHED,
         )
         self.assertIsNone(first.archived_at)
         self.assertEqual(
-            second.publication_status,
-            OfficialFactCheck.PublicationStatus.IN_REVIEW,
+            OfficialFactCheck.objects.filter(claim=context["claim"]).count(),
+            1,
         )
         self.assertEqual(
             OfficialFactCheck.objects.filter(

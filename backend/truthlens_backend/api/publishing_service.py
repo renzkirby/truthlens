@@ -1,4 +1,5 @@
 import logging
+import uuid
 
 from django.core.exceptions import (
     ValidationError,
@@ -12,6 +13,10 @@ from django.utils import timezone
 from .evidence_snapshot_schema import (
     EvidenceSnapshotSchemaError,
     validate_evidence_snapshot,
+)
+from .publication_snapshot_schema import (
+    PublicationSnapshotSchemaError,
+    validate_publication_snapshot,
 )
 
 from .models import (
@@ -183,6 +188,52 @@ def _get_fact_check_publication_identity(fact_check):
         "organization_id": identity["organization_id"],
         "decision_id": identity["adjudication_decision_id"],
         "fact_check_id": fact_check.pk,
+    }
+
+
+def _parse_uuid_identity(value, field_name):
+    if isinstance(value, bool):
+        raise InvalidFactCheckContent(f"{field_name} must be a valid UUID.")
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, TypeError, AttributeError) as error:
+        raise InvalidFactCheckContent(
+            f"{field_name} must be a valid UUID."
+        ) from error
+
+
+def _parse_expected_version(value, field_name):
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise InvalidFactCheckContent(
+            f"{field_name} must be a positive integer."
+        )
+    return value
+
+
+def _get_editorial_revision_identity(*, predecessor_id, organization_id):
+    predecessor_id = _parse_uuid_identity(predecessor_id, "predecessor_id")
+    organization_id = _parse_uuid_identity(organization_id, "organization_id")
+    identity = (
+        OfficialFactCheck.objects.filter(pk=predecessor_id)
+        .values(
+            "claim_id",
+            "adjudication_decision_id",
+        )
+        .first()
+    )
+    if (
+        identity is None
+        or identity["claim_id"] is None
+        or identity["adjudication_decision_id"] is None
+    ):
+        raise PublishingConflict(
+            "The requested publication predecessor is unavailable."
+        )
+    return {
+        "claim_id": identity["claim_id"],
+        "organization_id": organization_id,
+        "decision_id": identity["adjudication_decision_id"],
+        "fact_check_id": predecessor_id,
     }
 
 
@@ -386,6 +437,92 @@ def _validate_decision_snapshot(snapshot, *, decision, claim):
         )
     except EvidenceSnapshotSchemaError as error:
         raise _snapshot_conflict() from error
+
+
+def _validate_predecessor_publication_snapshot(
+    publication_snapshot,
+    *,
+    predecessor,
+    decision,
+    decision_snapshot,
+    organization,
+):
+    if (
+        publication_snapshot is None
+        or publication_snapshot.fact_check_id != predecessor.id
+        or publication_snapshot.decision_snapshot_id != decision_snapshot.id
+    ):
+        raise PublishingConflict(
+            "The published predecessor does not have a valid sealed publication "
+            "record. Historical reconstruction requires a separate workflow."
+        )
+    try:
+        payload = validate_publication_snapshot(
+            schema_version=publication_snapshot.schema_version,
+            payload=publication_snapshot.payload,
+        )
+    except PublicationSnapshotSchemaError as error:
+        raise PublishingConflict(
+            "The published predecessor's sealed publication record is invalid."
+        ) from error
+
+    expected_identities = {
+        "claim_id": str(predecessor.claim_id),
+        "fact_check_id": str(predecessor.id),
+        "decision_id": str(decision.id),
+        "decision_evidence_snapshot_id": str(decision_snapshot.id),
+    }
+    if any(
+        payload[field] != expected_value
+        for field, expected_value in expected_identities.items()
+    ) or payload["organization"]["id"] != str(organization.id):
+        raise PublishingConflict(
+            "The published predecessor's sealed identities are inconsistent."
+        )
+    if (
+        payload["article_version"] != predecessor.version
+        or payload["canonical_claim"] != decision.canonical_claim
+        or payload["verdict"] != decision.verdict
+        or payload["published_at"]
+        != publication_snapshot.captured_at.isoformat()
+    ):
+        raise PublishingConflict(
+            "The published predecessor's sealed decision state is inconsistent."
+        )
+    return payload
+
+
+def _inherited_editorial_source_urls(payload):
+    inherited = []
+    seen = set()
+    for source in payload["sources"]:
+        if source["is_editorially_selected"] is not True:
+            continue
+        raw_url = source["url"]
+        try:
+            normalized = _normalize_source_urls([raw_url])
+        except InvalidFactCheckContent as error:
+            raise PublishingConflict(
+                "The predecessor's sealed editorial source selection is invalid."
+            ) from error
+        if len(normalized) != 1 or normalized[0] != raw_url or raw_url in seen:
+            raise PublishingConflict(
+                "The predecessor's sealed editorial source selection is invalid."
+            )
+        seen.add(raw_url)
+        inherited.append(raw_url)
+    return inherited
+
+
+def _revision_content_value(value, fallback, *, field_name, required=False):
+    inherited = value is None
+    selected = fallback if inherited else value
+    if not isinstance(selected, str):
+        raise InvalidFactCheckContent(f"{field_name} must be a string.")
+    normalized = selected.strip()
+    if required and not normalized:
+        raise InvalidFactCheckContent(f"{field_name} is required.")
+    return selected if inherited else normalized
 
 
 def _normalize_snapshot_source_url(raw_url):
@@ -665,6 +802,16 @@ def create_fact_check_draft(
         locked_claim = context["claim"]
         current_decision = context["decision"]
 
+        if any(
+            item.publication_status
+            == OfficialFactCheck.PublicationStatus.PUBLISHED
+            for item in context["fact_checks"]
+        ) or context["publication_snapshots"]:
+            raise PublishingConflict(
+                "A published or sealed fact-check requires an explicit revision "
+                "or correction workflow."
+            )
+
         active_drafts = [
             item
             for item in context["fact_checks"]
@@ -685,6 +832,19 @@ def create_fact_check_draft(
                 "An active fact-check draft "
                 "already exists for this "
                 "adjudication decision."
+            )
+
+        if any(
+            item.supersedes_id is not None
+            or item.revision_kind
+            in {
+                OfficialFactCheck.RevisionKind.EDITORIAL_REVISION,
+                OfficialFactCheck.RevisionKind.FACTUAL_CORRECTION,
+            }
+            for item in active_drafts
+        ):
+            raise PublishingConflict(
+                "An explicit revision or correction draft is already active."
             )
 
         # Any remaining active drafts belong to
@@ -726,6 +886,7 @@ def create_fact_check_draft(
             publication_status=(OfficialFactCheck.PublicationStatus.DRAFT),
             version=max_version + 1,
             drafted_by=actor,
+            revision_kind=OfficialFactCheck.RevisionKind.INITIAL,
         )
 
         draft.full_clean(
@@ -750,6 +911,204 @@ def create_fact_check_draft(
             to_status=(OfficialFactCheck.PublicationStatus.DRAFT),
         )
 
+        return draft
+
+
+def create_editorial_revision_draft(
+    *,
+    predecessor_id,
+    actor,
+    organization_id,
+    expected_predecessor_version,
+    expected_decision_revision,
+    revision_reason,
+    headline=None,
+    summary=None,
+    article_body=None,
+    source_urls=None,
+):
+    expected_predecessor_version = _parse_expected_version(
+        expected_predecessor_version,
+        "expected_predecessor_version",
+    )
+    expected_decision_revision = _parse_expected_version(
+        expected_decision_revision,
+        "expected_decision_revision",
+    )
+    if not isinstance(revision_reason, str):
+        raise InvalidFactCheckContent("revision_reason must be a string.")
+    revision_reason = revision_reason.strip()
+    if not revision_reason:
+        raise InvalidFactCheckContent("A nonblank revision reason is required.")
+    if len(revision_reason) > 2000:
+        raise InvalidFactCheckContent(
+            "Revision reason must be 2000 characters or fewer."
+        )
+
+    explicit_source_urls = None
+    if source_urls is not None:
+        explicit_source_urls = _normalize_source_urls(source_urls)
+
+    identity = _get_editorial_revision_identity(
+        predecessor_id=predecessor_id,
+        organization_id=organization_id,
+    )
+
+    with transaction.atomic():
+        context = _lock_publication_context(
+            identity=identity,
+            actor=actor,
+            capability=PartnerCapability.CREATE_FACT_CHECK_DRAFT,
+        )
+        predecessor = context["fact_check"]
+        decision = context["decision"]
+
+        if predecessor.version != expected_predecessor_version:
+            raise PublishingConflict(
+                "The published predecessor changed before the revision draft "
+                "could be created."
+            )
+        if decision.revision_number != expected_decision_revision:
+            raise PublishingConflict(
+                "The adjudication decision changed before the revision draft "
+                "could be created."
+            )
+        if (
+            predecessor.organization_id != context["organization"].id
+            or predecessor.adjudication_decision_id != decision.id
+        ):
+            raise PublishingConflict(
+                "The predecessor no longer matches the selected publication "
+                "authority."
+            )
+
+        published = [
+            item
+            for item in context["fact_checks"]
+            if item.publication_status
+            == OfficialFactCheck.PublicationStatus.PUBLISHED
+        ]
+        if len(published) != 1 or published[0].id != predecessor.id:
+            raise PublishingConflict(
+                "The selected predecessor is not the current published fact-check."
+            )
+
+        if context["assignment"] is not None:
+            raise PublishingConflict(
+                "Open verification work must be resolved before an editorial "
+                "revision draft can be created."
+            )
+
+        active_successors = [
+            item
+            for item in context["fact_checks"]
+            if item.supersedes_id == predecessor.id
+            and item.publication_status in ACTIVE_DRAFT_STATUSES
+        ]
+        if active_successors:
+            raise PublishingConflict(
+                "An active editorial revision already exists for this publication."
+            )
+        competing_work = [
+            item
+            for item in context["fact_checks"]
+            if item.id != predecessor.id
+            and item.publication_status in ACTIVE_DRAFT_STATUSES
+        ]
+        if competing_work:
+            raise PublishingConflict(
+                "Another fact-check draft is already active for this claim."
+            )
+
+        publication_snapshot = next(
+            (
+                snapshot
+                for snapshot in context["publication_snapshots"]
+                if snapshot.fact_check_id == predecessor.id
+            ),
+            None,
+        )
+        sealed_payload = _validate_predecessor_publication_snapshot(
+            publication_snapshot,
+            predecessor=predecessor,
+            decision=decision,
+            decision_snapshot=context["decision_snapshot"],
+            organization=context["organization"],
+        )
+
+        resolved_headline = _revision_content_value(
+            headline,
+            sealed_payload["headline"],
+            field_name="headline",
+            required=True,
+        )
+        if len(resolved_headline) > 300:
+            raise InvalidFactCheckContent(
+                "Headline must be 300 characters or fewer."
+            )
+        resolved_summary = _revision_content_value(
+            summary,
+            sealed_payload["summary"],
+            field_name="summary",
+            required=True,
+        )
+        resolved_article_body = _revision_content_value(
+            article_body,
+            sealed_payload["article_body"],
+            field_name="article_body",
+        )
+        selected_source_urls = (
+            explicit_source_urls
+            if explicit_source_urls is not None
+            else _inherited_editorial_source_urls(sealed_payload)
+        )
+
+        max_version = max(
+            (item.version for item in context["fact_checks"]),
+            default=0,
+        )
+        requested_at = timezone.now()
+        draft = OfficialFactCheck(
+            claim=context["claim"],
+            adjudication_decision=decision,
+            organization=context["organization"],
+            canonical_claim=decision.canonical_claim,
+            verdict=decision.verdict,
+            headline=resolved_headline,
+            summary=resolved_summary,
+            article_body=resolved_article_body,
+            publication_status=OfficialFactCheck.PublicationStatus.DRAFT,
+            version=max_version + 1,
+            drafted_by=actor,
+            supersedes=predecessor,
+            revision_kind=OfficialFactCheck.RevisionKind.EDITORIAL_REVISION,
+            revision_reason=revision_reason,
+            revision_requested_by=actor,
+            revision_requested_at=requested_at,
+        )
+        draft.full_clean(
+            validate_unique=False,
+            validate_constraints=False,
+        )
+        draft.save()
+
+        _sync_fact_check_sources(
+            draft,
+            actor=actor,
+            snapshot=context["decision_snapshot"],
+            snapshot_records=context["snapshot_records"],
+            source_urls=selected_source_urls,
+        )
+        _record_publication_event(
+            draft,
+            actor=actor,
+            event_type=ModerationEvent.EventType.ARTICLE_DRAFT_CREATED,
+            to_status=OfficialFactCheck.PublicationStatus.DRAFT,
+            metadata={
+                "revision_kind": draft.revision_kind,
+                "supersedes_fact_check_id": str(predecessor.id),
+            },
+        )
         return draft
 
 

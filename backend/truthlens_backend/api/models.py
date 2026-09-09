@@ -1973,6 +1973,11 @@ class OfficialFactCheck(models.Model):
         PUBLISHED = "PUBLISHED", "Published"
         ARCHIVED = "ARCHIVED", "Archived"
 
+    class RevisionKind(models.TextChoices):
+        INITIAL = "INITIAL", "Initial"
+        EDITORIAL_REVISION = "EDITORIAL_REVISION", "Editorial revision"
+        FACTUAL_CORRECTION = "FACTUAL_CORRECTION", "Factual correction"
+
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -2130,6 +2135,44 @@ class OfficialFactCheck(models.Model):
     )
 
     # ---------------------------------
+    # Explicit revision provenance
+    # ---------------------------------
+
+    supersedes = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="successors",
+    )
+
+    revision_kind = models.CharField(
+        max_length=24,
+        choices=RevisionKind.choices,
+        null=True,
+        blank=True,
+    )
+
+    revision_reason = models.TextField(
+        max_length=2000,
+        null=True,
+        blank=True,
+    )
+
+    revision_requested_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="requested_fact_check_revisions",
+    )
+
+    revision_requested_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    # ---------------------------------
     # Legacy compatibility
     # ---------------------------------
 
@@ -2165,6 +2208,46 @@ class OfficialFactCheck(models.Model):
                     claim__isnull=False,
                 ),
                 name=("uniq_published_" "fact_check_claim"),
+            ),
+            models.UniqueConstraint(
+                fields=["supersedes"],
+                condition=Q(
+                    supersedes__isnull=False,
+                    publication_status__in=(
+                        "DRAFT",
+                        "IN_REVIEW",
+                        "PUBLISHED",
+                    ),
+                ),
+                name="uniq_active_fact_check_successor",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(
+                        revision_kind__isnull=True,
+                        supersedes__isnull=True,
+                        revision_reason__isnull=True,
+                        revision_requested_by__isnull=True,
+                        revision_requested_at__isnull=True,
+                    )
+                    | Q(
+                        revision_kind="INITIAL",
+                        supersedes__isnull=True,
+                        revision_reason__isnull=True,
+                        revision_requested_by__isnull=True,
+                        revision_requested_at__isnull=True,
+                    )
+                    | Q(
+                        revision_kind__in=(
+                            "EDITORIAL_REVISION",
+                            "FACTUAL_CORRECTION",
+                        ),
+                        supersedes__isnull=False,
+                        revision_reason__isnull=False,
+                        revision_requested_at__isnull=False,
+                    )
+                ),
+                name="fact_check_revision_metadata_shape",
             ),
         ]
 
@@ -2215,7 +2298,36 @@ class OfficialFactCheck(models.Model):
         "published_by_id",
         "published_at",
         "source_thread_id",
+        "supersedes_id",
+        "revision_kind",
+        "revision_reason",
+        "revision_requested_by_id",
+        "revision_requested_at",
     )
+
+    REVISION_METADATA_FIELDS = (
+        "supersedes_id",
+        "revision_kind",
+        "revision_reason",
+        "revision_requested_by_id",
+        "revision_requested_at",
+    )
+
+    def _validate_revision_metadata_update(self):
+        if self._state.adding or not self.pk:
+            return
+        stored = OfficialFactCheck.objects.filter(pk=self.pk).values(
+            *self.REVISION_METADATA_FIELDS
+        ).first()
+        if stored is None:
+            return
+        if any(
+            getattr(self, field) != stored[field]
+            for field in self.REVISION_METADATA_FIELDS
+        ):
+            raise ValidationError(
+                "Fact-check revision provenance cannot be modified after creation."
+            )
 
     def _validate_sealed_update(self):
         if self._state.adding or not self.pk:
@@ -2250,6 +2362,105 @@ class OfficialFactCheck(models.Model):
 
     def clean(self):
         super().clean()
+
+        revision_errors = {}
+        reason = self.revision_reason
+        normalized_reason = reason.strip() if isinstance(reason, str) else reason
+
+        if self.revision_kind is None:
+            if any(
+                value is not None
+                for value in (
+                    self.supersedes_id,
+                    self.revision_reason,
+                    self.revision_requested_by_id,
+                    self.revision_requested_at,
+                )
+            ):
+                revision_errors["revision_kind"] = (
+                    "Historical unknown revision metadata must remain empty."
+                )
+        elif self.revision_kind == self.RevisionKind.INITIAL:
+            if self.supersedes_id is not None:
+                revision_errors["supersedes"] = (
+                    "An initial fact-check cannot supersede another fact-check."
+                )
+            if reason is not None:
+                revision_errors["revision_reason"] = (
+                    "An initial fact-check cannot have a revision reason."
+                )
+            if (
+                self.revision_requested_by_id is not None
+                or self.revision_requested_at is not None
+            ):
+                revision_errors["revision_requested_by"] = (
+                    "An initial fact-check cannot have revision-request metadata."
+                )
+        elif self.revision_kind in {
+            self.RevisionKind.EDITORIAL_REVISION,
+            self.RevisionKind.FACTUAL_CORRECTION,
+        }:
+            if self.supersedes_id is None:
+                revision_errors["supersedes"] = (
+                    "A revision must identify the fact-check it supersedes."
+                )
+            if not isinstance(reason, str) or not normalized_reason:
+                revision_errors["revision_reason"] = (
+                    "A nonblank revision reason is required."
+                )
+            elif len(normalized_reason) > 2000:
+                revision_errors["revision_reason"] = (
+                    "Revision reason must be 2000 characters or fewer."
+                )
+            if self._state.adding and self.revision_requested_by_id is None:
+                revision_errors["revision_requested_by"] = (
+                    "A revision must record its initiating actor."
+                )
+            if self.revision_requested_at is None:
+                revision_errors["revision_requested_at"] = (
+                    "A revision must record when it was requested."
+                )
+
+        if self.supersedes_id is not None:
+            try:
+                predecessor = self.supersedes
+            except OfficialFactCheck.DoesNotExist:
+                revision_errors["supersedes"] = (
+                    "The revision predecessor does not exist."
+                )
+            else:
+                if self.pk is not None and predecessor.pk == self.pk:
+                    revision_errors["supersedes"] = (
+                        "A fact-check cannot supersede itself."
+                    )
+                if self.claim_id != predecessor.claim_id:
+                    revision_errors["supersedes"] = (
+                        "A predecessor must belong to the same claim."
+                    )
+                if (
+                    isinstance(self.version, bool)
+                    or not isinstance(self.version, int)
+                    or self.version <= predecessor.version
+                ):
+                    revision_errors["supersedes"] = (
+                        "A successor must have a higher claim-wide version."
+                    )
+                if self.revision_kind == self.RevisionKind.EDITORIAL_REVISION:
+                    if self.adjudication_decision_id != (
+                        predecessor.adjudication_decision_id
+                    ):
+                        revision_errors["adjudication_decision"] = (
+                            "An editorial revision must retain its predecessor's "
+                            "adjudication decision."
+                        )
+                    if self.organization_id != predecessor.organization_id:
+                        revision_errors["organization"] = (
+                            "An editorial revision must retain its predecessor's "
+                            "organization."
+                        )
+
+        if revision_errors:
+            raise ValidationError(revision_errors)
 
         if self.adjudication_decision_id:
             decision = self.adjudication_decision
@@ -2298,6 +2509,7 @@ class OfficialFactCheck(models.Model):
             )
 
     def save(self, *args, **kwargs):
+        self._validate_revision_metadata_update()
         self._validate_sealed_update()
         super().save(*args, **kwargs)
 
