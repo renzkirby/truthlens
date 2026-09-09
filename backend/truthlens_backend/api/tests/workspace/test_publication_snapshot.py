@@ -435,3 +435,38 @@ class PublicationSnapshotTests(AdjudicationContractFixtures, TestCase):
         legacy.save(update_fields=["headline", "updated_at"])
         legacy.refresh_from_db()
         self.assertEqual(legacy.headline, "Legacy behavior remains unchanged")
+
+    def test_sealed_source_cannot_be_reparented_or_deleted_after_in_memory_change(self):
+        sealed_context = self.make_decided_context()
+        sealed, _result = self.publish_context(
+            sealed_context,
+            suffix="reparent-protection",
+        )
+        source = sealed.source_items.get()
+
+        draft_context = self.make_decided_context()
+        draft = create_fact_check_draft(
+            decision=draft_context["decision"],
+            actor=self.lead,
+            headline="Unsealed destination",
+            summary="Draft summary.",
+            article_body="Draft analysis.",
+        )
+
+        source.fact_check = draft
+        with self.assertRaises(ValidationError):
+            source.save(update_fields=["fact_check_id"])
+
+        source.refresh_from_db()
+        self.assertEqual(source.fact_check_id, sealed.id)
+
+        source.fact_check = draft
+        with self.assertRaises(ValidationError):
+            source.delete()
+
+        self.assertTrue(
+            OfficialFactCheckSource.objects.filter(
+                pk=source.pk,
+                fact_check=sealed,
+            ).exists()
+        )

@@ -1922,9 +1922,7 @@ class AdjudicationDecisionEvidenceSnapshot(models.Model):
         return super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
-        raise ValidationError(
-            "Decision evidence snapshots cannot be deleted directly."
-        )
+        raise ValidationError("Decision evidence snapshots cannot be deleted directly.")
 
     def __str__(self):
         return f"Evidence snapshot for decision {self.decision_id}"
@@ -2227,10 +2225,14 @@ class OfficialFactCheck(models.Model):
         ).exists():
             return
 
-        stored = OfficialFactCheck.objects.filter(pk=self.pk).values(
-            *self.SEALED_CONTENT_FIELDS,
-            "publication_status",
-        ).first()
+        stored = (
+            OfficialFactCheck.objects.filter(pk=self.pk)
+            .values(
+                *self.SEALED_CONTENT_FIELDS,
+                "publication_status",
+            )
+            .first()
+        )
         if stored is None:
             return
         for field in self.SEALED_CONTENT_FIELDS:
@@ -2433,26 +2435,37 @@ class OfficialFactCheckSource(models.Model):
         "created_at",
     )
 
-    def _fact_check_is_sealed(self):
+    def _fact_check_is_sealed(self, fact_check_id=None):
+        fact_check_id = self.fact_check_id if fact_check_id is None else fact_check_id
         return bool(
-            self.fact_check_id
+            fact_check_id
             and OfficialFactCheckPublicationSnapshot.objects.filter(
-                fact_check_id=self.fact_check_id
+                fact_check_id=fact_check_id
             ).exists()
         )
 
     def _validate_sealed_write(self):
-        if not self._fact_check_is_sealed():
+        stored = (
+            OfficialFactCheckSource.objects.filter(pk=self.pk)
+            .values(*self.SEALED_CONTENT_FIELDS)
+            .first()
+            if self.pk is not None
+            else None
+        )
+
+        previous_sealed = bool(
+            stored and self._fact_check_is_sealed(stored["fact_check_id"])
+        )
+        target_sealed = self._fact_check_is_sealed()
+
+        if not previous_sealed and not target_sealed:
             return
-        if self._state.adding:
+
+        if stored is None:
             raise ValidationError(
                 "Sources cannot be added to a sealed fact-check publication."
             )
-        stored = OfficialFactCheckSource.objects.filter(pk=self.pk).values(
-            *self.SEALED_CONTENT_FIELDS
-        ).first()
-        if stored is None:
-            return
+
         if any(
             getattr(self, field) != stored[field]
             for field in self.SEALED_CONTENT_FIELDS
@@ -2460,6 +2473,20 @@ class OfficialFactCheckSource(models.Model):
             raise ValidationError(
                 "Sealed fact-check publication sources cannot be modified."
             )
+
+    def delete(self, *args, **kwargs):
+        stored_fact_check_id = (
+            OfficialFactCheckSource.objects.filter(pk=self.pk)
+            .values_list("fact_check_id", flat=True)
+            .first()
+        )
+
+        if stored_fact_check_id and self._fact_check_is_sealed(stored_fact_check_id):
+            raise ValidationError(
+                "Sealed fact-check publication sources cannot be deleted."
+            )
+
+        return super().delete(*args, **kwargs)
 
     def clean(self):
         super().clean()
@@ -2480,16 +2507,6 @@ class OfficialFactCheckSource(models.Model):
     def save(self, *args, **kwargs):
         self._validate_sealed_write()
         return super().save(*args, **kwargs)
-
-    def delete(self, *args, **kwargs):
-        if self._fact_check_is_sealed():
-            raise ValidationError(
-                "Sealed fact-check publication sources cannot be deleted."
-            )
-        return super().delete(*args, **kwargs)
-
-    def __str__(self):
-        return self.url
 
 
 class OfficialFactCheckSourceEvidenceLink(models.Model):
@@ -2572,9 +2589,7 @@ class OfficialFactCheckSourceEvidenceLink(models.Model):
                     "Only captured VERIFIED evidence may be linked as a source."
                 )
             captured_url = record.get("evidence_url")
-            captured_url = (
-                captured_url.strip() if isinstance(captured_url, str) else ""
-            )
+            captured_url = captured_url.strip() if isinstance(captured_url, str) else ""
             source_url = (self.source.url or "").strip()
             validator = URLValidator(schemes=["http", "https"])
             try:
@@ -2698,9 +2713,7 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
                 record = evidence_by_id.get(str(link.captured_evidence_id))
                 captured_url = record.get("evidence_url") if record else None
                 captured_url = (
-                    captured_url.strip()
-                    if isinstance(captured_url, str)
-                    else ""
+                    captured_url.strip() if isinstance(captured_url, str) else ""
                 )
                 try:
                     if len(captured_url) > 2000:
@@ -2734,9 +2747,7 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
                     "source_type": source.source_type,
                     "is_editorially_selected": source.is_editorially_selected,
                     "added_by": _publication_snapshot_user(source.added_by),
-                    "created_at": _publication_snapshot_timestamp(
-                        source.created_at
-                    ),
+                    "created_at": _publication_snapshot_timestamp(source.created_at),
                     "legacy_evidence_submission_id": (
                         str(source.evidence_submission_id)
                         if source.evidence_submission_id is not None
@@ -2758,9 +2769,7 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
                 "slug": organization.slug,
             },
             "article_version": fact_check.version,
-            "published_at": _publication_snapshot_timestamp(
-                fact_check.published_at
-            ),
+            "published_at": _publication_snapshot_timestamp(fact_check.published_at),
             "canonical_claim": fact_check.canonical_claim,
             "verdict": fact_check.verdict,
             "headline": fact_check.headline,
@@ -2772,9 +2781,7 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
                 fact_check.submitted_for_review_at
             ),
             "reviewed_by": _publication_snapshot_user(fact_check.reviewed_by),
-            "reviewed_at": _publication_snapshot_timestamp(
-                fact_check.reviewed_at
-            ),
+            "reviewed_at": _publication_snapshot_timestamp(fact_check.reviewed_at),
             "published_by": _publication_snapshot_user(fact_check.published_by),
             "sources": sources,
         }
@@ -2818,9 +2825,7 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
         return super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
-        raise ValidationError(
-            "Publication snapshots cannot be deleted directly."
-        )
+        raise ValidationError("Publication snapshots cannot be deleted directly.")
 
     def __str__(self):
         return f"Publication snapshot for fact-check {self.fact_check_id}"

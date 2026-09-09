@@ -156,9 +156,9 @@ class PublicationTransactionSafetyTests(
             role=OrganizationMembership.Role.LEAD_VERIFIER,
             status=OrganizationMembership.Status.ACTIVE,
         )
-        VerificationAssignment.objects.filter(
-            pk=context["assignment"].pk
-        ).update(organization=self.other_organization)
+        VerificationAssignment.objects.filter(pk=context["assignment"].pk).update(
+            organization=self.other_organization
+        )
 
         with self.assertRaises(PublishingConflict):
             submit_fact_check_for_review(
@@ -322,9 +322,7 @@ class PublicationTransactionSafetyTests(
 
     def test_legacy_missing_assignment_is_not_fabricated(self):
         context = self.make_decided_context()
-        VerificationAssignment.objects.filter(
-            pk=context["assignment"].pk
-        ).delete()
+        VerificationAssignment.objects.filter(pk=context["assignment"].pk).delete()
         submitted = self.make_submitted_draft(context, suffix="legacy")
 
         result = publish_fact_check(
@@ -337,9 +335,7 @@ class PublicationTransactionSafetyTests(
             OfficialFactCheck.PublicationStatus.PUBLISHED,
         )
         self.assertFalse(
-            VerificationAssignment.objects.filter(
-                claim=context["claim"]
-            ).exists()
+            VerificationAssignment.objects.filter(claim=context["claim"]).exists()
         )
 
 
@@ -360,9 +356,7 @@ class PublicationPostgresLockingTests(
 
         def release_assignment():
             close_old_connections()
-            assignment = VerificationAssignment.objects.get(
-                pk=context["assignment"].pk
-            )
+            assignment = VerificationAssignment.objects.get(pk=context["assignment"].pk)
             actor = User.objects.get(pk=self.lead.pk)
             barrier.wait(timeout=10)
             try:
