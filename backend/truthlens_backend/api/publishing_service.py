@@ -529,6 +529,8 @@ def _validate_predecessor_publication_snapshot(
         payload["article_version"] != predecessor.version
         or payload["canonical_claim"] != decision.canonical_claim
         or payload["verdict"] != decision.verdict
+        or predecessor.published_at is None
+        or predecessor.published_at != publication_snapshot.captured_at
         or payload["published_at"] != publication_snapshot.captured_at.isoformat()
     ):
         raise PublishingConflict(
@@ -546,15 +548,85 @@ def _validate_editorial_revision_chain(
     decision_snapshot,
     organization,
 ):
-    """Validate stored seals and links without rebuilding historical payloads."""
+    """Validate the complete stored publication history without rebuilding it."""
 
-    fact_checks_by_id = {item.id: item for item in fact_checks}
     snapshots_by_fact_check_id = {
         item.fact_check_id: item for item in publication_snapshots
     }
-    visited = set()
-    current = predecessor
+    # An archived row without a publication timestamp or seal can be an
+    # abandoned draft. It is not part of durable published history.
+    published_history = {
+        item.id: item
+        for item in fact_checks
+        if (
+            item.publication_status
+            == OfficialFactCheck.PublicationStatus.PUBLISHED
+            or item.published_at is not None
+            or item.id in snapshots_by_fact_check_id
+        )
+    }
+    if predecessor.id not in published_history:
+        raise PublishingConflict("The publication revision chain is incomplete.")
 
+    payloads_by_fact_check_id = {}
+    for item in published_history.values():
+        if item.publication_status not in {
+            OfficialFactCheck.PublicationStatus.PUBLISHED,
+            OfficialFactCheck.PublicationStatus.ARCHIVED,
+        }:
+            raise PublishingConflict(
+                "The stored publication history has an invalid lifecycle state."
+            )
+        snapshot = snapshots_by_fact_check_id.get(item.id)
+        payloads_by_fact_check_id[item.id] = (
+            _validate_predecessor_publication_snapshot(
+                snapshot,
+                predecessor=item,
+                decision=decision,
+                decision_snapshot=decision_snapshot,
+                organization=organization,
+            )
+        )
+
+    roots = []
+    children_by_predecessor_id = {}
+    for item in published_history.values():
+        if item.supersedes_id is None:
+            roots.append(item)
+            continue
+        if item.supersedes_id not in published_history:
+            raise PublishingConflict(
+                "The publication revision chain is disconnected."
+            )
+        children_by_predecessor_id.setdefault(item.supersedes_id, []).append(item)
+
+    if any(len(children) > 1 for children in children_by_predecessor_id.values()):
+        raise PublishingConflict(
+            "The publication revision chain is branched or ambiguous."
+        )
+    if len(roots) != 1:
+        raise PublishingConflict(
+            "The publication revision chain is cyclic, disconnected, or ambiguous."
+        )
+
+    root = roots[0]
+    root_snapshot = snapshots_by_fact_check_id[root.id]
+    # Migration-era initial rows may have null revision metadata. Their own
+    # original v1 seal, not reconstructed live fields, establishes the root.
+    if (
+        root.revision_kind
+        not in {
+            None,
+            OfficialFactCheck.RevisionKind.INITIAL,
+        }
+        or root_snapshot.schema_version != FIRST_PUBLICATION_SCHEMA_VERSION
+    ):
+        raise PublishingConflict(
+            "The publication revision chain has uncertain root provenance."
+        )
+
+    visited = set()
+    current = root
     while current is not None:
         if current.id in visited:
             raise PublishingConflict(
@@ -562,60 +634,52 @@ def _validate_editorial_revision_chain(
             )
         visited.add(current.id)
 
-        current_snapshot = snapshots_by_fact_check_id.get(current.id)
-        payload = _validate_predecessor_publication_snapshot(
-            current_snapshot,
-            predecessor=current,
-            decision=decision,
-            decision_snapshot=decision_snapshot,
-            organization=organization,
-        )
-
-        if current.supersedes_id is None:
-            if current.revision_kind != OfficialFactCheck.RevisionKind.INITIAL:
-                raise PublishingConflict(
-                    "The publication revision chain has uncertain root provenance."
-                )
-            return current_snapshot
-
-        previous = fact_checks_by_id.get(current.supersedes_id)
-        previous_snapshot = snapshots_by_fact_check_id.get(current.supersedes_id)
-        revision = payload.get("revision")
+        children = children_by_predecessor_id.get(current.id, [])
+        if not children:
+            break
+        successor = children[0]
+        successor_snapshot = snapshots_by_fact_check_id[successor.id]
+        current_snapshot = snapshots_by_fact_check_id[current.id]
+        revision = payloads_by_fact_check_id[successor.id].get("revision")
         if (
-            current.revision_kind
+            successor.revision_kind
             != OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
-            or previous is None
-            or previous_snapshot is None
-            or current.claim_id != previous.claim_id
-            or current.organization_id != previous.organization_id
-            or current.adjudication_decision_id
-            != previous.adjudication_decision_id
-            or current.version <= previous.version
-            or current_snapshot.schema_version
+            or successor.claim_id != current.claim_id
+            or successor.organization_id != current.organization_id
+            or successor.adjudication_decision_id
+            != current.adjudication_decision_id
+            or successor.version <= current.version
+            or successor_snapshot.schema_version
             != EDITORIAL_REVISION_SCHEMA_VERSION
             or not isinstance(revision, dict)
-            or revision.get("supersedes_fact_check_id") != str(previous.id)
+            or revision.get("supersedes_fact_check_id") != str(current.id)
             or revision.get("supersedes_publication_snapshot_id")
-            != str(previous_snapshot.id)
-            or revision.get("predecessor_article_version") != previous.version
+            != str(current_snapshot.id)
+            or revision.get("predecessor_article_version") != current.version
             or revision.get("predecessor_published_at")
-            != previous_snapshot.captured_at.isoformat()
-            or revision.get("revision_reason") != current.revision_reason
-            or current.revision_requested_at is None
+            != current_snapshot.captured_at.isoformat()
+            or revision.get("revision_reason") != successor.revision_reason
+            or successor.revision_requested_at is None
             or revision.get("revision_requested_at")
-            != current.revision_requested_at.isoformat()
+            != successor.revision_requested_at.isoformat()
             or (
-                current.revision_requested_by_id is not None
+                successor.revision_requested_by_id is not None
                 and revision.get("revision_requested_by", {}).get("id")
-                != str(current.revision_requested_by_id)
+                != str(successor.revision_requested_by_id)
             )
         ):
             raise PublishingConflict(
                 "The publication revision chain is malformed or inconsistent."
             )
-        current = previous
+        current = successor
 
-    raise PublishingConflict("The publication revision chain is incomplete.")
+    if current.id != predecessor.id or visited != set(published_history):
+        raise PublishingConflict(
+            "The selected predecessor is not the unique tip of the stored "
+            "publication history."
+        )
+
+    return snapshots_by_fact_check_id[predecessor.id]
 
 
 def _inherited_editorial_source_urls(payload):
@@ -1720,6 +1784,22 @@ def publish_fact_check(
                 "This claim already has a published fact-check. An explicit "
                 "correction or revision workflow is required before it can "
                 "be replaced."
+            )
+
+        sealed_fact_check_ids = {
+            snapshot.fact_check_id for snapshot in context["publication_snapshots"]
+        }
+        if any(
+            item.published_at is not None
+            or (
+                item.id != locked_fact_check.id
+                and item.id in sealed_fact_check_ids
+            )
+            for item in context["fact_checks"]
+        ):
+            raise PublishingConflict(
+                "This claim already has recorded publication history. An explicit "
+                "revision or correction workflow is required."
             )
 
         if any(

@@ -1,11 +1,16 @@
-from copy import deepcopy
 import threading
+import uuid
+import time
+from copy import deepcopy
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from django.db import close_old_connections, connection
+from django.db import close_old_connections, connection, connections
 from django.test import TestCase, TransactionTestCase
+from django.utils import timezone
 
+from api import publishing_service
 from api.models import (
     EvidenceSubmission,
     ModerationEvent,
@@ -33,6 +38,7 @@ from api.publishing_service import (
 from api.tests.adjudication.test_adjudication_transaction_contract import (
     AdjudicationContractFixtures,
 )
+from api.verification_assignment_service import ensure_verification_assignment
 
 
 class EditorialReplacementFixtures(AdjudicationContractFixtures):
@@ -243,6 +249,36 @@ class EditorialRevisionPublicationTests(EditorialReplacementFixtures, TestCase):
         with self.assertRaises(PublicationSnapshotSchemaError):
             validate_publication_snapshot(schema_version=99, payload=payload)
 
+    def test_historical_null_initial_metadata_remains_publishable_without_history(self):
+        context = self.make_context(
+            evidence_statuses=[EvidenceSubmission.EvidenceStatus.VERIFIED]
+        )
+        context["decision"] = self.issue(context)["decision"]
+        draft = create_fact_check_draft(
+            decision=context["decision"],
+            actor=self.lead,
+            headline="Historical-null initial publication",
+            summary="No prior publication history exists for this claim.",
+            article_body="The initial metadata remains historically compatible.",
+        )
+        submitted = submit_fact_check_for_review(
+            fact_check=draft,
+            actor=self.lead,
+        )
+        OfficialFactCheck.objects.filter(pk=submitted.pk).update(revision_kind=None)
+        submitted.refresh_from_db()
+
+        published = publish_fact_check(fact_check=submitted, actor=self.lead)[
+            "fact_check"
+        ]
+
+        self.assertIsNone(published.revision_kind)
+        self.assertEqual(
+            published.publication_snapshot.schema_version,
+            FIRST_PUBLICATION_SCHEMA_VERSION,
+        )
+        self.assertNotIn("revision", published.publication_snapshot.payload)
+
     def test_successive_replacements_form_a_linear_sealed_chain(self):
         context = self.make_published_context(suffix="chain")
         first_revision = self.make_submitted_revision(context, reason="Revision one.")
@@ -281,6 +317,182 @@ class EditorialRevisionPublicationTests(EditorialReplacementFixtures, TestCase):
                 expected_revision_version=second_revision.version,
                 expected_decision_revision=context["decision"].revision_number,
             )
+
+    def test_historical_null_initial_root_can_publish_editorial_revision(self):
+        context = self.make_published_context(suffix="historical-null-root")
+        root_id = context["published"].id
+        root_seal_id = context["seal"].id
+        root_payload = deepcopy(context["seal"].payload)
+        OfficialFactCheck.objects.filter(pk=root_id).update(revision_kind=None)
+        context["published"].refresh_from_db()
+
+        revision = self.make_submitted_revision(
+            context,
+            reason="Clarify wording from a historical initial publication.",
+        )
+        self.replace(context, revision)
+
+        context["published"].refresh_from_db()
+        revision.refresh_from_db()
+        root_seal = OfficialFactCheckPublicationSnapshot.objects.get(pk=root_seal_id)
+        self.assertIsNone(context["published"].revision_kind)
+        self.assertEqual(root_seal.schema_version, FIRST_PUBLICATION_SCHEMA_VERSION)
+        self.assertEqual(root_seal.payload, root_payload)
+        self.assertEqual(context["published"].publication_status, "ARCHIVED")
+        self.assertEqual(revision.publication_status, "PUBLISHED")
+        self.assertEqual(revision.supersedes_id, root_id)
+
+    def test_abandoned_never_published_draft_is_not_publication_history(self):
+        context = self.make_published_context(suffix="abandoned-draft")
+        OfficialFactCheck.objects.create(
+            claim=context["claim"],
+            adjudication_decision=context["decision"],
+            organization=self.organization,
+            canonical_claim=context["decision"].canonical_claim,
+            verdict=context["decision"].verdict,
+            headline="Abandoned draft",
+            summary="This draft was never published.",
+            article_body="Abandoned draft content.",
+            publication_status=OfficialFactCheck.PublicationStatus.ARCHIVED,
+            version=context["published"].version + 1,
+            drafted_by=self.lead,
+            revision_kind=OfficialFactCheck.RevisionKind.INITIAL,
+        )
+        revision = self.make_submitted_revision(context)
+
+        self.replace(context, revision)
+
+        revision.refresh_from_db()
+        self.assertEqual(revision.publication_status, "PUBLISHED")
+
+    def test_disconnected_recorded_history_blocks_editorial_replacement(self):
+        context = self.make_published_context(suffix="disconnected-history")
+        revision = self.make_submitted_revision(context)
+        recorded_at = timezone.now()
+        disconnected = OfficialFactCheck.objects.create(
+            claim=context["claim"],
+            adjudication_decision=context["decision"],
+            organization=self.organization,
+            canonical_claim=context["decision"].canonical_claim,
+            verdict=context["decision"].verdict,
+            headline="Disconnected recorded publication",
+            summary="Recorded publication without a connected seal.",
+            article_body="Historical content is not reconstructed.",
+            publication_status=OfficialFactCheck.PublicationStatus.ARCHIVED,
+            version=revision.version + 1,
+            drafted_by=self.lead,
+            reviewed_by=self.lead,
+            reviewed_at=recorded_at,
+            published_by=self.lead,
+            published_at=recorded_at,
+            archived_at=recorded_at,
+            revision_kind=OfficialFactCheck.RevisionKind.INITIAL,
+        )
+        disconnected_payload = deepcopy(context["seal"].payload)
+        disconnected_payload.update(
+            {
+                "fact_check_id": str(disconnected.id),
+                "article_version": disconnected.version,
+                "published_at": recorded_at.isoformat(),
+            }
+        )
+        OfficialFactCheckPublicationSnapshot.objects.bulk_create(
+            [
+                OfficialFactCheckPublicationSnapshot(
+                    fact_check=disconnected,
+                    decision_snapshot=context["decision"].evidence_snapshot,
+                    schema_version=FIRST_PUBLICATION_SCHEMA_VERSION,
+                    captured_at=recorded_at,
+                    payload=disconnected_payload,
+                )
+            ]
+        )
+
+        with self.assertRaises(PublishingConflict):
+            self.replace(context, revision)
+
+        context["published"].refresh_from_db()
+        revision.refresh_from_db()
+        self.assertEqual(context["published"].publication_status, "PUBLISHED")
+        self.assertEqual(revision.publication_status, "IN_REVIEW")
+
+    def test_chain_validator_rejects_cyclic_or_branched_stored_history(self):
+        published_at = timezone.now()
+        first_id = uuid.uuid4()
+        second_id = uuid.uuid4()
+
+        def history_item(item_id, *, supersedes_id, status="ARCHIVED"):
+            return SimpleNamespace(
+                id=item_id,
+                publication_status=status,
+                published_at=published_at,
+                supersedes_id=supersedes_id,
+            )
+
+        def history_snapshot(item_id):
+            return SimpleNamespace(
+                id=uuid.uuid4(),
+                fact_check_id=item_id,
+                schema_version=EDITORIAL_REVISION_SCHEMA_VERSION,
+                captured_at=published_at,
+            )
+
+        cyclic_items = [
+            history_item(first_id, supersedes_id=second_id),
+            history_item(
+                second_id,
+                supersedes_id=first_id,
+                status=OfficialFactCheck.PublicationStatus.PUBLISHED,
+            ),
+        ]
+        cyclic_snapshots = [
+            history_snapshot(first_id),
+            history_snapshot(second_id),
+        ]
+        with patch(
+            "api.publishing_service._validate_predecessor_publication_snapshot",
+            return_value={},
+        ):
+            with self.assertRaises(PublishingConflict):
+                publishing_service._validate_editorial_revision_chain(
+                    predecessor=cyclic_items[1],
+                    fact_checks=cyclic_items,
+                    publication_snapshots=cyclic_snapshots,
+                    decision=SimpleNamespace(),
+                    decision_snapshot=SimpleNamespace(),
+                    organization=SimpleNamespace(),
+                )
+
+        root_id = uuid.uuid4()
+        left_id = uuid.uuid4()
+        right_id = uuid.uuid4()
+        branched_items = [
+            history_item(root_id, supersedes_id=None),
+            history_item(
+                left_id,
+                supersedes_id=root_id,
+                status=OfficialFactCheck.PublicationStatus.PUBLISHED,
+            ),
+            history_item(right_id, supersedes_id=root_id),
+        ]
+        branched_snapshots = [
+            history_snapshot(root_id),
+            history_snapshot(left_id),
+            history_snapshot(right_id),
+        ]
+        with patch(
+            "api.publishing_service._validate_predecessor_publication_snapshot",
+            return_value={},
+        ):
+            with self.assertRaises(PublishingConflict):
+                publishing_service._validate_editorial_revision_chain(
+                    predecessor=branched_items[1],
+                    fact_checks=branched_items,
+                    publication_snapshots=branched_snapshots,
+                    decision=SimpleNamespace(),
+                    decision_snapshot=SimpleNamespace(),
+                    organization=SimpleNamespace(),
+                )
 
     def test_strict_inputs_stale_versions_and_authority_fail_closed(self):
         context = self.make_published_context(suffix="preconditions")
@@ -497,6 +709,42 @@ class EditorialRevisionPublicationTests(EditorialReplacementFixtures, TestCase):
             ).exists()
         )
 
+    def test_ordinary_initial_publish_cannot_bypass_archived_sealed_history(self):
+        context = self.make_published_context(suffix="initial-history-bypass")
+        OfficialFactCheck.objects.filter(pk=context["published"].pk).update(
+            publication_status=OfficialFactCheck.PublicationStatus.ARCHIVED,
+            archived_at=timezone.now(),
+        )
+        candidate = OfficialFactCheck.objects.create(
+            claim=context["claim"],
+            adjudication_decision=context["decision"],
+            organization=self.organization,
+            canonical_claim=context["decision"].canonical_claim,
+            verdict=context["decision"].verdict,
+            headline="Distinct initial candidate",
+            summary="A separate candidate must not replace recorded history.",
+            article_body="This is not an explicit editorial revision.",
+            publication_status=OfficialFactCheck.PublicationStatus.IN_REVIEW,
+            version=context["published"].version + 1,
+            drafted_by=self.lead,
+            submitted_for_review_at=timezone.now(),
+            revision_kind=OfficialFactCheck.RevisionKind.INITIAL,
+        )
+
+        with self.assertRaises(PublishingConflict):
+            publish_fact_check(fact_check=candidate, actor=self.lead)
+
+        candidate.refresh_from_db()
+        context["published"].refresh_from_db()
+        self.assertEqual(candidate.publication_status, "IN_REVIEW")
+        self.assertEqual(context["published"].publication_status, "ARCHIVED")
+        self.assertEqual(
+            OfficialFactCheckPublicationSnapshot.objects.filter(
+                fact_check__claim=context["claim"]
+            ).count(),
+            1,
+        )
+
     def test_seal_or_event_failure_rolls_back_all_replacement_effects(self):
         for target, error in (
             (
@@ -565,14 +813,20 @@ class EditorialRevisionPublicationPostgresTests(
 
         context = self.make_published_context(suffix="concurrent")
         revision = self.make_submitted_revision(context)
-        barrier = threading.Barrier(2)
-        outcomes = []
 
-        def replace():
-            close_old_connections()
-            actor = User.objects.get(pk=self.lead.pk)
-            barrier.wait(timeout=10)
+        barrier = threading.Barrier(2)
+        outcomes = {}
+        errors = {}
+
+        def replace(worker_name):
+            outcome = None
+
             try:
+                close_old_connections()
+                actor = User.objects.get(pk=self.lead.pk)
+
+                barrier.wait(timeout=10)
+
                 publish_editorial_revision(
                     revision_id=revision.id,
                     predecessor_id=context["published"].id,
@@ -582,24 +836,59 @@ class EditorialRevisionPublicationPostgresTests(
                     expected_revision_version=revision.version,
                     expected_decision_revision=context["decision"].revision_number,
                 )
+
             except PublishingConflict:
-                outcomes.append("conflict")
-            except Exception as error:  # pragma: no cover - asserted below
-                outcomes.append(f"error:{type(error).__name__}")
+                outcome = "conflict"
+
+            except Exception as error:
+                outcome = f"error:{type(error).__name__}"
+                errors[worker_name] = repr(error)
+
             else:
-                outcomes.append("published")
+                outcome = "published"
+
             finally:
-                close_old_connections()
+                try:
+                    # Close only this worker's database connection.
+                    connections["default"].close()
+                except Exception as error:
+                    outcome = f"error:{type(error).__name__}"
+                    errors[worker_name] = repr(error)
+
+                outcomes[worker_name] = outcome
 
         with patch("api.publishing_service._queue_fact_check_index"):
-            workers = [threading.Thread(target=replace) for _ in range(2)]
+            workers = [
+                threading.Thread(
+                    target=replace,
+                    args=(f"replacement-{index}",),
+                    name=f"replacement-{index}",
+                )
+                for index in (1, 2)
+            ]
+
             for worker in workers:
                 worker.start()
-            for worker in workers:
-                worker.join(timeout=10)
 
-        self.assertFalse(any(worker.is_alive() for worker in workers))
-        self.assertCountEqual(outcomes, ["published", "conflict"])
+            # One bounded deadline shared by both workers.
+            deadline = time.monotonic() + 90.0
+
+            for worker in workers:
+                remaining = max(0.0, deadline - time.monotonic())
+                worker.join(timeout=remaining)
+
+            self.assertFalse(
+                any(worker.is_alive() for worker in workers),
+                "Replacement workers did not terminate within the "
+                "shared 90-second deadline.",
+            )
+
+        self.assertFalse(errors, str(errors))
+        self.assertCountEqual(
+            list(outcomes.values()),
+            ["published", "conflict"],
+        )
+
         self.assertEqual(
             OfficialFactCheck.objects.filter(
                 claim=context["claim"],
@@ -619,4 +908,124 @@ class EditorialRevisionPublicationPostgresTests(
                 event_type=ModerationEvent.EventType.ARTICLE_REVISED,
             ).count(),
             1,
+        )
+
+    def test_assignment_ensure_waits_for_replacement_without_reopening_work(self):
+        if connection.vendor != "postgresql":
+            self.skipTest("Row-lock concurrency coverage requires PostgreSQL.")
+
+        context = self.make_published_context(suffix="assignment-race")
+        revision = self.make_submitted_revision(context)
+        context["assignment"].refresh_from_db()
+        completed_at = context["assignment"].completed_at
+        assignment_count = VerificationAssignment.objects.filter(
+            claim=context["claim"]
+        ).count()
+        replacement_holds_locks = threading.Event()
+        allow_replacement = threading.Event()
+        assignment_lock_attempted = threading.Event()
+        assignment_finished = threading.Event()
+        outcomes = []
+        original_sync = publishing_service._sync_fact_check_sources
+
+        def hold_source_sync(*args, **kwargs):
+            replacement_holds_locks.set()
+            allow_replacement.wait(timeout=10)
+            return original_sync(*args, **kwargs)
+
+        def replace():
+            close_old_connections()
+            actor = User.objects.get(pk=self.lead.pk)
+            try:
+                publish_editorial_revision(
+                    revision_id=revision.id,
+                    predecessor_id=context["published"].id,
+                    actor=actor,
+                    organization_id=self.organization.id,
+                    expected_predecessor_version=context["published"].version,
+                    expected_revision_version=revision.version,
+                    expected_decision_revision=context["decision"].revision_number,
+                )
+            except Exception as error:  # pragma: no cover - asserted below
+                outcomes.append(f"replacement-error:{type(error).__name__}")
+            else:
+                outcomes.append("replacement-published")
+            finally:
+                close_old_connections()
+
+        def ensure_assignment():
+            close_old_connections()
+            claim = type(context["claim"]).objects.get(pk=context["claim"].pk)
+
+            def observe_lock(execute, sql, params, many, execution_context):
+                normalized_sql = sql.upper()
+                if 'FROM "API_CLAIM"' in normalized_sql and (
+                    "FOR UPDATE" in normalized_sql
+                ):
+                    assignment_lock_attempted.set()
+                return execute(sql, params, many, execution_context)
+
+            try:
+                with connection.execute_wrapper(observe_lock):
+                    assignment = ensure_verification_assignment(claim=claim)
+            except Exception as error:  # pragma: no cover - asserted below
+                outcomes.append(f"assignment-error:{type(error).__name__}")
+            else:
+                outcomes.append(
+                    "assignment-none" if assignment is None else "assignment-created"
+                )
+            finally:
+                assignment_finished.set()
+                close_old_connections()
+
+        with patch(
+            "api.publishing_service._sync_fact_check_sources",
+            side_effect=hold_source_sync,
+        ), patch("api.publishing_service._queue_fact_check_index"):
+            replacement_worker = threading.Thread(target=replace)
+            assignment_worker = threading.Thread(target=ensure_assignment)
+            replacement_worker.start()
+            self.assertTrue(replacement_holds_locks.wait(timeout=10))
+            assignment_worker.start()
+            self.assertTrue(assignment_lock_attempted.wait(timeout=10))
+            self.assertFalse(assignment_finished.wait(timeout=0.25))
+            allow_replacement.set()
+            replacement_worker.join(timeout=10)
+            assignment_worker.join(timeout=10)
+
+        self.assertFalse(replacement_worker.is_alive())
+        self.assertFalse(assignment_worker.is_alive())
+        self.assertCountEqual(
+            outcomes,
+            ["replacement-published", "assignment-none"],
+        )
+        context["assignment"].refresh_from_db()
+        context["published"].refresh_from_db()
+        revision.refresh_from_db()
+        self.assertEqual(context["published"].publication_status, "ARCHIVED")
+        self.assertEqual(revision.publication_status, "PUBLISHED")
+        self.assertEqual(
+            OfficialFactCheck.objects.filter(
+                claim=context["claim"],
+                publication_status=OfficialFactCheck.PublicationStatus.PUBLISHED,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            context["assignment"].status,
+            VerificationAssignment.Status.COMPLETED,
+        )
+        self.assertEqual(context["assignment"].completed_at, completed_at)
+        self.assertEqual(
+            VerificationAssignment.objects.filter(claim=context["claim"]).count(),
+            assignment_count,
+        )
+        self.assertFalse(
+            VerificationAssignment.objects.filter(
+                claim=context["claim"],
+                status__in={
+                    VerificationAssignment.Status.AVAILABLE,
+                    VerificationAssignment.Status.ACTIVE,
+                },
+            ).exists()
         )
