@@ -1,7 +1,6 @@
 import logging
 import uuid
-
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
 from django.utils import timezone
 
@@ -46,7 +45,6 @@ from .organization_service import (
     has_capability,
 )
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -72,16 +70,12 @@ def _parse_correction_uuid(value, field_name):
     try:
         return uuid.UUID(str(value))
     except (TypeError, ValueError, AttributeError) as error:
-        raise InvalidEvidenceDecision(
-            f"{field_name} must be a valid UUID."
-        ) from error
+        raise InvalidEvidenceDecision(f"{field_name} must be a valid UUID.") from error
 
 
 def _parse_correction_version(value, field_name):
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-        raise InvalidEvidenceDecision(
-            f"{field_name} must be a positive integer."
-        )
+        raise InvalidEvidenceDecision(f"{field_name} must be a positive integer.")
     return value
 
 
@@ -101,9 +95,7 @@ def _validate_correction_evidence_decision(
         EvidenceSubmission.EvidenceStatus.VERIFIED,
         EvidenceSubmission.EvidenceStatus.REJECTED,
     }:
-        raise InvalidEvidenceDecision(
-            "Evidence decision must be VERIFIED or REJECTED."
-        )
+        raise InvalidEvidenceDecision("Evidence decision must be VERIFIED or REJECTED.")
     if not isinstance(moderator_notes, str):
         raise InvalidEvidenceDecision("Moderator notes must be a string.")
     if len(moderator_notes) > 2000:
@@ -392,6 +384,41 @@ def _prepare_evidence_case_for_review(
     return case
 
 
+def _is_expected_active_evidence_case_conflict(error):
+    """Recognize only the active Evidence-case uniqueness violation."""
+    cause = getattr(error, "__cause__", None)
+    if not isinstance(cause, IntegrityError):
+        return False
+
+    driver_error = getattr(cause, "__cause__", None)
+    diagnostic = getattr(driver_error, "diag", None) or getattr(cause, "diag", None)
+    constraint_name = getattr(diagnostic, "constraint_name", None)
+    sqlstate = (
+        getattr(driver_error, "sqlstate", None)
+        or getattr(driver_error, "pgcode", None)
+        or getattr(cause, "sqlstate", None)
+        or getattr(cause, "pgcode", None)
+    )
+
+    if sqlstate is not None and sqlstate != "23505":
+        return False
+
+    if constraint_name is not None:
+        return constraint_name == "uniq_active_evidence_case"
+
+    message = str(driver_error or cause).lower().strip()
+
+    # PostgreSQL fallback when the driver does not expose the
+    # constraint name, but identifies the exact unique constraint.
+    if sqlstate == "23505":
+        return 'constraint "uniq_active_evidence_case"' in message
+
+    # SQLite's exact unique-column diagnostic.
+    return (
+        message == "unique constraint failed: api_moderationcase.evidence_submission_id"
+    )
+
+
 def review_correction_evidence(
     *,
     correction_request_id,
@@ -495,8 +522,7 @@ def review_correction_evidence(
         published = [
             item
             for item in context["fact_checks"]
-            if item.publication_status
-            == OfficialFactCheck.PublicationStatus.PUBLISHED
+            if item.publication_status == OfficialFactCheck.PublicationStatus.PUBLISHED
         ]
         if len(published) != 1 or published[0].id != predecessor.id:
             raise EvidenceReviewConflict(
@@ -538,10 +564,7 @@ def review_correction_evidence(
             )
             .first()
         )
-        if (
-            correction_case is None
-            or correction_case.id == decision.moderation_case_id
-        ):
+        if correction_case is None or correction_case.id == decision.moderation_case_id:
             raise EvidenceReviewConflict(
                 "The factual correction request's correction case is not active."
             )
@@ -590,9 +613,7 @@ def review_correction_evidence(
             if case is None or any(
                 item.id != expected_case_id for item in active_cases
             ):
-                raise EvidenceReviewConflict(
-                    "This Evidence case is no longer current."
-                )
+                raise EvidenceReviewConflict("This Evidence case is no longer current.")
             if case.status == ModerationCase.Status.CANCELLED:
                 raise EvidenceReviewConflict(
                     "The selected Evidence case was cancelled."
@@ -602,10 +623,7 @@ def review_correction_evidence(
         else:
             case = evidence_cases[-1] if evidence_cases else None
 
-        if (
-            case is not None
-            and case.organization_id != context["organization"].id
-        ):
+        if case is not None and case.organization_id != context["organization"].id:
             raise EvidenceReviewConflict(
                 "This Evidence case is not owned by the organization responsible "
                 "for the correction."
@@ -620,9 +638,17 @@ def review_correction_evidence(
                     organization=context["organization"],
                 )
             except DuplicateActiveModerationCase as error:
-                raise EvidenceReviewConflict(
-                    "This Evidence case changed before correction review."
-                ) from error
+                if _is_expected_active_evidence_case_conflict(error):
+                    raise EvidenceReviewConflict(
+                        "This Evidence case changed before correction review."
+                    ) from error
+
+                # The shared helper may wrap an unrelated IntegrityError.
+                # Preserve the original failure instead of disguising it.
+                underlying = getattr(error, "__cause__", None)
+                if underlying is not None:
+                    raise underlying from error
+                raise
 
         if case.organization_id != context["organization"].id:
             raise EvidenceReviewConflict(
@@ -667,9 +693,7 @@ def review_correction_evidence(
         try:
             evidence_records = validate_evidence_snapshot(
                 schema_version=EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
-                evidence_records=_build_decision_evidence_records(
-                    [locked_evidence]
-                ),
+                evidence_records=_build_decision_evidence_records([locked_evidence]),
             )
         except EvidenceSnapshotSchemaError as error:
             raise EvidenceReviewConflict(
@@ -700,9 +724,7 @@ def review_correction_evidence(
                 "previous_evidence_status": previous_status,
                 "new_evidence_status": evidence_status,
                 "is_reaffirmation": previous_status == evidence_status,
-                "evidence_snapshot_schema_version": (
-                    EVIDENCE_SNAPSHOT_SCHEMA_VERSION
-                ),
+                "evidence_snapshot_schema_version": (EVIDENCE_SNAPSHOT_SCHEMA_VERSION),
                 "evidence_record": evidence_record,
             },
         )
@@ -869,13 +891,12 @@ def review_evidence_submission(
 
         if expected_case_id is not None:
             try:
-                requested_case = (
-                    ModerationCase.objects.select_for_update(of=("self",))
-                    .get(
-                        pk=expected_case_id,
-                        case_type=ModerationCase.CaseType.EVIDENCE,
-                        evidence_submission=locked_evidence,
-                    )
+                requested_case = ModerationCase.objects.select_for_update(
+                    of=("self",)
+                ).get(
+                    pk=expected_case_id,
+                    case_type=ModerationCase.CaseType.EVIDENCE,
+                    evidence_submission=locked_evidence,
                 )
             except ModerationCase.DoesNotExist as error:
                 raise EvidenceReviewConflict(
