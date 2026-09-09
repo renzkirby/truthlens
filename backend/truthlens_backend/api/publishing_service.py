@@ -20,6 +20,7 @@ from .models import (
     Claim,
     ModerationEvent,
     OfficialFactCheck,
+    OfficialFactCheckPublicationSnapshot,
     OfficialFactCheckSource,
     OfficialFactCheckSourceEvidenceLink,
     Organization,
@@ -121,9 +122,7 @@ def _require_locked_capability(
         .first()
     )
     capabilities = (
-        get_membership_capabilities(membership)
-        if membership is not None
-        else set()
+        get_membership_capabilities(membership) if membership is not None else set()
     )
     if capability in capabilities:
         return
@@ -192,15 +191,13 @@ def _lock_publication_context(*, identity, actor, capability):
 
     The canonical order is Claim, open Assignment, Organization, actor
     Membership, current AdjudicationDecision, its evidence snapshot, all claim
-    fact-checks, their source rows, then their evidence-lineage rows. All
-    service mutation paths use this helper, and the nested
+    fact-checks, their source rows, their evidence-lineage rows, then sealed
+    publication records. All service mutation paths use this helper, and the nested
     assignment-completion helper reacquires only Claim then Assignment.
     """
 
     try:
-        locked_claim = Claim.objects.select_for_update().get(
-            pk=identity["claim_id"]
-        )
+        locked_claim = Claim.objects.select_for_update().get(pk=identity["claim_id"])
     except Claim.DoesNotExist as error:
         raise _publication_conflict() from error
 
@@ -250,9 +247,7 @@ def _lock_publication_context(*, identity, actor, capability):
         )
 
     decision_snapshot = (
-        AdjudicationDecisionEvidenceSnapshot.objects.select_for_update(
-            of=("self",)
-        )
+        AdjudicationDecisionEvidenceSnapshot.objects.select_for_update(of=("self",))
         .filter(decision=current_decision)
         .first()
     )
@@ -281,9 +276,7 @@ def _lock_publication_context(*, identity, actor, capability):
         )
     )
     list(
-        OfficialFactCheckSourceEvidenceLink.objects.select_for_update(
-            of=("self",)
-        )
+        OfficialFactCheckSourceEvidenceLink.objects.select_for_update(of=("self",))
         .filter(source__fact_check__claim=locked_claim)
         .order_by(
             "source_id",
@@ -291,22 +284,22 @@ def _lock_publication_context(*, identity, actor, capability):
             "id",
         )
     )
+    publication_snapshots = list(
+        OfficialFactCheckPublicationSnapshot.objects.select_for_update(of=("self",))
+        .filter(fact_check__claim=locked_claim)
+        .order_by("fact_check_id", "id")
+    )
 
     locked_fact_check = None
     if identity["fact_check_id"] is not None:
         locked_fact_check = next(
-            (
-                item
-                for item in fact_checks
-                if item.id == identity["fact_check_id"]
-            ),
+            (item for item in fact_checks if item.id == identity["fact_check_id"]),
             None,
         )
         if (
             locked_fact_check is None
             or locked_fact_check.organization_id != organization.id
-            or locked_fact_check.adjudication_decision_id
-            != current_decision.id
+            or locked_fact_check.adjudication_decision_id != current_decision.id
         ):
             raise _publication_conflict()
 
@@ -319,6 +312,7 @@ def _lock_publication_context(*, identity, actor, capability):
         "snapshot_records": snapshot_records,
         "fact_checks": fact_checks,
         "fact_check": locked_fact_check,
+        "publication_snapshots": publication_snapshots,
     }
 
 
@@ -447,18 +441,33 @@ def _sync_snapshot_evidence_sources(
             defaults={
                 "title": title,
                 "added_by": actor,
-                "source_type": (
-                    OfficialFactCheckSource.SourceType.VERIFIED_EVIDENCE
-                ),
+                "source_type": (OfficialFactCheckSource.SourceType.VERIFIED_EVIDENCE),
                 "is_editorially_selected": False,
             },
         )
         for record in records:
-            OfficialFactCheckSourceEvidenceLink.objects.get_or_create(
-                source=source,
-                snapshot=snapshot,
-                captured_evidence_id=record["id"],
-            )
+            try:
+                link, created = (
+                    OfficialFactCheckSourceEvidenceLink.objects.get_or_create(
+                        source=source,
+                        captured_evidence_id=record["id"],
+                        defaults={"snapshot": snapshot},
+                    )
+                )
+
+                if link.snapshot_id != snapshot.id:
+                    raise PublishingConflict(
+                        "An existing source-lineage association belongs "
+                        "to a different decision snapshot."
+                    )
+
+                if not created:
+                    link.full_clean()
+
+            except ValidationError as error:
+                raise PublishingConflict(
+                    "The existing source-lineage association is invalid."
+                ) from error
 
 
 def _add_editorial_sources(
@@ -920,6 +929,14 @@ def publish_fact_check(
                 "be replaced."
             )
 
+        if any(
+            snapshot.fact_check_id == locked_fact_check.id
+            for snapshot in context["publication_snapshots"]
+        ):
+            raise PublishingConflict(
+                "This fact-check already has a sealed publication record."
+            )
+
         _sync_fact_check_sources(
             locked_fact_check,
             actor=actor,
@@ -975,6 +992,23 @@ def publish_fact_check(
                 "The verification assignment changed before publication "
                 "could be completed."
             )
+
+        try:
+            sealed_payload = OfficialFactCheckPublicationSnapshot.build_payload(
+                fact_check=locked_fact_check,
+                decision_snapshot=context["decision_snapshot"],
+            )
+            OfficialFactCheckPublicationSnapshot.objects.create(
+                fact_check=locked_fact_check,
+                decision_snapshot=context["decision_snapshot"],
+                captured_at=now,
+                payload=sealed_payload,
+            )
+        except ValidationError as error:
+            raise PublishingConflict(
+                "The publication record could not be sealed because its "
+                "source provenance is inconsistent."
+            ) from error
 
         published_fact_check_id = locked_fact_check.id
 

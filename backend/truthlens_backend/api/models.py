@@ -1,5 +1,5 @@
 from django.db import models
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.db.models.functions import Lower
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
@@ -16,6 +16,11 @@ from .evidence_snapshot_schema import (
     EVIDENCE_RECORD_FIELDS as EVIDENCE_SNAPSHOT_RECORD_FIELDS,
     EvidenceSnapshotSchemaError,
     validate_evidence_snapshot,
+)
+from .publication_snapshot_schema import (
+    CURRENT_SCHEMA_VERSION as PUBLICATION_SNAPSHOT_SCHEMA_VERSION,
+    PublicationSnapshotSchemaError,
+    validate_publication_snapshot,
 )
 
 
@@ -2193,6 +2198,54 @@ class OfficialFactCheck(models.Model):
             ),
         ]
 
+    SEALED_CONTENT_FIELDS = (
+        "claim_id",
+        "adjudication_decision_id",
+        "organization_id",
+        "canonical_claim",
+        "verdict",
+        "headline",
+        "summary",
+        "article_body",
+        "sources",
+        "version",
+        "created_at",
+        "drafted_by_id",
+        "submitted_for_review_at",
+        "reviewed_by_id",
+        "reviewed_at",
+        "published_by_id",
+        "published_at",
+        "source_thread_id",
+    )
+
+    def _validate_sealed_update(self):
+        if self._state.adding or not self.pk:
+            return
+        if not OfficialFactCheckPublicationSnapshot.objects.filter(
+            fact_check_id=self.pk
+        ).exists():
+            return
+
+        stored = OfficialFactCheck.objects.filter(pk=self.pk).values(
+            *self.SEALED_CONTENT_FIELDS,
+            "publication_status",
+        ).first()
+        if stored is None:
+            return
+        for field in self.SEALED_CONTENT_FIELDS:
+            if getattr(self, field) != stored[field]:
+                raise ValidationError(
+                    "Sealed fact-check publication content cannot be modified."
+                )
+        if self.publication_status != stored["publication_status"] and not (
+            stored["publication_status"] == self.PublicationStatus.PUBLISHED
+            and self.publication_status == self.PublicationStatus.ARCHIVED
+        ):
+            raise ValidationError(
+                "A sealed fact-check only permits the archival lifecycle transition."
+            )
+
     def clean(self):
         super().clean()
 
@@ -2243,6 +2296,7 @@ class OfficialFactCheck(models.Model):
             )
 
     def save(self, *args, **kwargs):
+        self._validate_sealed_update()
         super().save(*args, **kwargs)
 
         if self.canonical_claim:
@@ -2368,6 +2422,45 @@ class OfficialFactCheckSource(models.Model):
             ),
         ]
 
+    SEALED_CONTENT_FIELDS = (
+        "fact_check_id",
+        "url",
+        "title",
+        "evidence_submission_id",
+        "added_by_id",
+        "source_type",
+        "is_editorially_selected",
+        "created_at",
+    )
+
+    def _fact_check_is_sealed(self):
+        return bool(
+            self.fact_check_id
+            and OfficialFactCheckPublicationSnapshot.objects.filter(
+                fact_check_id=self.fact_check_id
+            ).exists()
+        )
+
+    def _validate_sealed_write(self):
+        if not self._fact_check_is_sealed():
+            return
+        if self._state.adding:
+            raise ValidationError(
+                "Sources cannot be added to a sealed fact-check publication."
+            )
+        stored = OfficialFactCheckSource.objects.filter(pk=self.pk).values(
+            *self.SEALED_CONTENT_FIELDS
+        ).first()
+        if stored is None:
+            return
+        if any(
+            getattr(self, field) != stored[field]
+            for field in self.SEALED_CONTENT_FIELDS
+        ):
+            raise ValidationError(
+                "Sealed fact-check publication sources cannot be modified."
+            )
+
     def clean(self):
         super().clean()
 
@@ -2383,6 +2476,17 @@ class OfficialFactCheckSource(models.Model):
                     "claim."
                 }
             )
+
+    def save(self, *args, **kwargs):
+        self._validate_sealed_write()
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        if self._fact_check_is_sealed():
+            raise ValidationError(
+                "Sealed fact-check publication sources cannot be deleted."
+            )
+        return super().delete(*args, **kwargs)
 
     def __str__(self):
         return self.url
@@ -2425,6 +2529,12 @@ class OfficialFactCheckSourceEvidenceLink(models.Model):
 
         source_fact_check = self.source.fact_check
         snapshot = self.snapshot
+        if OfficialFactCheckPublicationSnapshot.objects.filter(
+            fact_check_id=source_fact_check.id
+        ).exists():
+            errors["source"] = (
+                "Evidence lineage cannot be added to a sealed publication."
+            )
         if source_fact_check.adjudication_decision_id != snapshot.decision_id:
             errors["snapshot"] = (
                 "Source and snapshot must belong to the same adjudication decision."
@@ -2496,6 +2606,224 @@ class OfficialFactCheckSourceEvidenceLink(models.Model):
 
     def __str__(self):
         return f"{self.source_id}: evidence {self.captured_evidence_id}"
+
+
+def _publication_snapshot_timestamp(value):
+    return value.isoformat() if value is not None else None
+
+
+def _publication_snapshot_user(user):
+    if user is None:
+        return None
+    return {
+        "id": str(user.pk),
+        "username": user.username,
+    }
+
+
+class OfficialFactCheckPublicationSnapshot(models.Model):
+    CURRENT_SCHEMA_VERSION = PUBLICATION_SNAPSHOT_SCHEMA_VERSION
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    fact_check = models.OneToOneField(
+        OfficialFactCheck,
+        on_delete=models.PROTECT,
+        related_name="publication_snapshot",
+    )
+    decision_snapshot = models.ForeignKey(
+        AdjudicationDecisionEvidenceSnapshot,
+        on_delete=models.PROTECT,
+        related_name="publication_snapshots",
+    )
+    schema_version = models.PositiveSmallIntegerField(
+        default=CURRENT_SCHEMA_VERSION,
+        editable=False,
+    )
+    captured_at = models.DateTimeField(
+        editable=False,
+    )
+    payload = models.JSONField(
+        default=dict,
+        editable=False,
+    )
+
+    class Meta:
+        ordering = ["-captured_at", "id"]
+
+    @classmethod
+    def build_payload(cls, *, fact_check, decision_snapshot):
+        if (
+            fact_check.adjudication_decision_id != decision_snapshot.decision_id
+            or str(fact_check.claim_id) != str(decision_snapshot.claim_id)
+            or fact_check.organization_id is None
+            or fact_check.published_at is None
+        ):
+            raise ValidationError(
+                "The publication and decision evidence snapshot identities differ."
+            )
+        try:
+            evidence_records = validate_evidence_snapshot(
+                schema_version=decision_snapshot.schema_version,
+                evidence_records=decision_snapshot.evidence_records,
+            )
+        except EvidenceSnapshotSchemaError as error:
+            raise ValidationError(
+                "The decision evidence snapshot is malformed."
+            ) from error
+        evidence_by_id = {record["id"]: record for record in evidence_records}
+
+        source_queryset = (
+            OfficialFactCheckSource.objects.filter(fact_check=fact_check)
+            .select_related("added_by")
+            .prefetch_related(
+                Prefetch(
+                    "evidence_links",
+                    queryset=OfficialFactCheckSourceEvidenceLink.objects.order_by(
+                        "captured_evidence_id",
+                        "id",
+                    ),
+                )
+            )
+            .order_by("created_at", "id")
+        )
+        sources = []
+        validator = URLValidator(schemes=["http", "https"])
+        for source in source_queryset:
+            lineage = []
+            for link in source.evidence_links.all():
+                record = evidence_by_id.get(str(link.captured_evidence_id))
+                captured_url = record.get("evidence_url") if record else None
+                captured_url = (
+                    captured_url.strip()
+                    if isinstance(captured_url, str)
+                    else ""
+                )
+                try:
+                    if len(captured_url) > 2000:
+                        raise ValidationError("The captured URL is too long.")
+                    validator(captured_url)
+                except ValidationError:
+                    captured_url = ""
+                if (
+                    link.snapshot_id != decision_snapshot.id
+                    or record is None
+                    or record["evidence_status"]
+                    != EvidenceSubmission.EvidenceStatus.VERIFIED
+                    or not captured_url
+                    or captured_url != source.url
+                ):
+                    raise ValidationError(
+                        "Publication source lineage is malformed or inconsistent."
+                    )
+                lineage.append(
+                    {
+                        "id": str(link.id),
+                        "decision_evidence_snapshot_id": str(link.snapshot_id),
+                        "captured_evidence_id": str(link.captured_evidence_id),
+                    }
+                )
+            sources.append(
+                {
+                    "id": str(source.id),
+                    "url": source.url,
+                    "title": source.title,
+                    "source_type": source.source_type,
+                    "is_editorially_selected": source.is_editorially_selected,
+                    "added_by": _publication_snapshot_user(source.added_by),
+                    "created_at": _publication_snapshot_timestamp(
+                        source.created_at
+                    ),
+                    "legacy_evidence_submission_id": (
+                        str(source.evidence_submission_id)
+                        if source.evidence_submission_id is not None
+                        else None
+                    ),
+                    "lineage": lineage,
+                }
+            )
+
+        organization = fact_check.organization
+        return {
+            "claim_id": str(fact_check.claim_id),
+            "fact_check_id": str(fact_check.id),
+            "decision_id": str(fact_check.adjudication_decision_id),
+            "decision_evidence_snapshot_id": str(decision_snapshot.id),
+            "organization": {
+                "id": str(organization.id),
+                "name": organization.name,
+                "slug": organization.slug,
+            },
+            "article_version": fact_check.version,
+            "published_at": _publication_snapshot_timestamp(
+                fact_check.published_at
+            ),
+            "canonical_claim": fact_check.canonical_claim,
+            "verdict": fact_check.verdict,
+            "headline": fact_check.headline,
+            "summary": fact_check.summary,
+            "article_body": fact_check.article_body,
+            "drafted_by": _publication_snapshot_user(fact_check.drafted_by),
+            "drafted_at": _publication_snapshot_timestamp(fact_check.created_at),
+            "submitted_for_review_at": _publication_snapshot_timestamp(
+                fact_check.submitted_for_review_at
+            ),
+            "reviewed_by": _publication_snapshot_user(fact_check.reviewed_by),
+            "reviewed_at": _publication_snapshot_timestamp(
+                fact_check.reviewed_at
+            ),
+            "published_by": _publication_snapshot_user(fact_check.published_by),
+            "sources": sources,
+        }
+
+    def clean(self):
+        super().clean()
+        try:
+            validate_publication_snapshot(
+                schema_version=self.schema_version,
+                payload=self.payload,
+            )
+        except PublicationSnapshotSchemaError as error:
+            raise ValidationError({"payload": str(error)}) from error
+
+        fact_check = self.fact_check
+        if fact_check.publication_status != (
+            OfficialFactCheck.PublicationStatus.PUBLISHED
+        ):
+            raise ValidationError(
+                {"fact_check": "Only a published fact-check may be sealed."}
+            )
+        if fact_check.published_at != self.captured_at:
+            raise ValidationError(
+                {"captured_at": "The seal must use the publication timestamp."}
+            )
+        expected_payload = self.build_payload(
+            fact_check=fact_check,
+            decision_snapshot=self.decision_snapshot,
+        )
+        if self.payload != expected_payload:
+            raise ValidationError(
+                {"payload": "The sealed payload does not match publication state."}
+            )
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError(
+                "Publication snapshots are immutable and cannot be modified."
+            )
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            "Publication snapshots cannot be deleted directly."
+        )
+
+    def __str__(self):
+        return f"Publication snapshot for fact-check {self.fact_check_id}"
 
 
 class KnowledgeReuseEvent(models.Model):
