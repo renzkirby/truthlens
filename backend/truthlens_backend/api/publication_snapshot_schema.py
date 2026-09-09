@@ -5,9 +5,11 @@ import re
 import uuid
 
 
-CURRENT_SCHEMA_VERSION = 1
+FIRST_PUBLICATION_SCHEMA_VERSION = 1
+EDITORIAL_REVISION_SCHEMA_VERSION = 2
+CURRENT_SCHEMA_VERSION = EDITORIAL_REVISION_SCHEMA_VERSION
 
-PAYLOAD_FIELDS = frozenset(
+BASE_PAYLOAD_FIELDS = frozenset(
     {
         "claim_id",
         "fact_check_id",
@@ -30,6 +32,8 @@ PAYLOAD_FIELDS = frozenset(
         "sources",
     }
 )
+V1_PAYLOAD_FIELDS = BASE_PAYLOAD_FIELDS
+V2_PAYLOAD_FIELDS = BASE_PAYLOAD_FIELDS | {"revision"}
 ORGANIZATION_FIELDS = frozenset({"id", "name", "slug"})
 USER_FIELDS = frozenset({"id", "username"})
 SOURCE_FIELDS = frozenset(
@@ -47,6 +51,18 @@ SOURCE_FIELDS = frozenset(
 )
 LINEAGE_FIELDS = frozenset(
     {"id", "decision_evidence_snapshot_id", "captured_evidence_id"}
+)
+REVISION_FIELDS = frozenset(
+    {
+        "revision_kind",
+        "supersedes_fact_check_id",
+        "supersedes_publication_snapshot_id",
+        "predecessor_article_version",
+        "predecessor_published_at",
+        "revision_reason",
+        "revision_requested_by",
+        "revision_requested_at",
+    }
 )
 
 SUPPORTED_VERDICTS = frozenset(
@@ -106,16 +122,8 @@ def _validate_user(value, field):
         _invalid(f"{field} has an invalid user identity.")
 
 
-def validate_publication_snapshot(*, schema_version, payload):
-    """Validate a sealed publication payload without database access."""
-
-    if (
-        isinstance(schema_version, bool)
-        or not isinstance(schema_version, int)
-        or schema_version != CURRENT_SCHEMA_VERSION
-    ):
-        _invalid("The publication snapshot schema is not supported.")
-    if not isinstance(payload, dict) or set(payload) != PAYLOAD_FIELDS:
+def _validate_base_payload(payload, *, expected_fields):
+    if not isinstance(payload, dict) or set(payload) != expected_fields:
         _invalid("The publication snapshot has an invalid field set.")
 
     for field in (
@@ -212,4 +220,74 @@ def validate_publication_snapshot(*, schema_version, payload):
                 _invalid(f"{link_prefix}.captured_evidence_id is duplicated.")
             captured_ids.add(link["captured_evidence_id"])
 
+
+def _validate_v1(payload):
+    _validate_base_payload(payload, expected_fields=V1_PAYLOAD_FIELDS)
+
+
+def _validate_v2(payload):
+    _validate_base_payload(payload, expected_fields=V2_PAYLOAD_FIELDS)
+
+    revision = payload["revision"]
+    if not isinstance(revision, dict) or set(revision) != REVISION_FIELDS:
+        _invalid("revision has an invalid field set.")
+    if revision["revision_kind"] != "EDITORIAL_REVISION":
+        _invalid("revision.revision_kind is not supported.")
+    _validate_uuid(
+        revision["supersedes_fact_check_id"],
+        "revision.supersedes_fact_check_id",
+    )
+    _validate_uuid(
+        revision["supersedes_publication_snapshot_id"],
+        "revision.supersedes_publication_snapshot_id",
+    )
+    predecessor_version = revision["predecessor_article_version"]
+    if (
+        isinstance(predecessor_version, bool)
+        or not isinstance(predecessor_version, int)
+        or predecessor_version < 1
+    ):
+        _invalid("revision.predecessor_article_version must be positive.")
+    if payload["article_version"] <= predecessor_version:
+        _invalid("article_version must follow the predecessor version.")
+    if payload["fact_check_id"] == revision["supersedes_fact_check_id"]:
+        _invalid("An editorial revision cannot supersede itself.")
+    _validate_timestamp(
+        revision["predecessor_published_at"],
+        "revision.predecessor_published_at",
+    )
+    reason = revision["revision_reason"]
+    if (
+        not isinstance(reason, str)
+        or not reason.strip()
+        or reason != reason.strip()
+        or len(reason) > 2000
+    ):
+        _invalid("revision.revision_reason is invalid.")
+    if revision["revision_requested_by"] is None:
+        _invalid("revision.revision_requested_by is required.")
+    _validate_user(
+        revision["revision_requested_by"],
+        "revision.revision_requested_by",
+    )
+    _validate_timestamp(
+        revision["revision_requested_at"],
+        "revision.revision_requested_at",
+    )
+
+
+def validate_publication_snapshot(*, schema_version, payload):
+    """Validate a sealed publication payload without database access."""
+
+    if isinstance(schema_version, bool) or not isinstance(schema_version, int):
+        _invalid("The publication snapshot schema is not supported.")
+
+    validators = {
+        FIRST_PUBLICATION_SCHEMA_VERSION: _validate_v1,
+        EDITORIAL_REVISION_SCHEMA_VERSION: _validate_v2,
+    }
+    validator = validators.get(schema_version)
+    if validator is None:
+        _invalid("The publication snapshot schema is not supported.")
+    validator(payload)
     return payload

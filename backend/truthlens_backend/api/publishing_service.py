@@ -7,7 +7,7 @@ from django.core.exceptions import (
 from django.core.validators import (
     URLValidator,
 )
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from .evidence_snapshot_schema import (
@@ -15,6 +15,8 @@ from .evidence_snapshot_schema import (
     validate_evidence_snapshot,
 )
 from .publication_snapshot_schema import (
+    EDITORIAL_REVISION_SCHEMA_VERSION,
+    FIRST_PUBLICATION_SCHEMA_VERSION,
     PublicationSnapshotSchemaError,
     validate_publication_snapshot,
 )
@@ -23,6 +25,7 @@ from .models import (
     AdjudicationDecision,
     AdjudicationDecisionEvidenceSnapshot,
     Claim,
+    ModerationCase,
     ModerationEvent,
     OfficialFactCheck,
     OfficialFactCheckPublicationSnapshot,
@@ -233,6 +236,35 @@ def _get_editorial_revision_identity(*, predecessor_id, organization_id):
     }
 
 
+def _get_editorial_replacement_identity(
+    *,
+    revision_id,
+    predecessor_id,
+    organization_id,
+):
+    revision_id = _parse_uuid_identity(revision_id, "revision_id")
+    predecessor_id = _parse_uuid_identity(predecessor_id, "predecessor_id")
+    organization_id = _parse_uuid_identity(organization_id, "organization_id")
+    identity = (
+        OfficialFactCheck.objects.filter(pk=revision_id)
+        .values("claim_id", "adjudication_decision_id")
+        .first()
+    )
+    if (
+        identity is None
+        or identity["claim_id"] is None
+        or identity["adjudication_decision_id"] is None
+    ):
+        raise PublishingConflict("The requested editorial revision is unavailable.")
+    return {
+        "claim_id": identity["claim_id"],
+        "organization_id": organization_id,
+        "decision_id": identity["adjudication_decision_id"],
+        "fact_check_id": revision_id,
+        "predecessor_id": predecessor_id,
+    }
+
+
 def _lock_publication_context(*, identity, actor, capability):
     """Lock a publication mutation using the shared Claim-first protocol.
 
@@ -418,6 +450,24 @@ def _snapshot_conflict():
     )
 
 
+def _is_expected_publication_integrity_conflict(error):
+    cause = getattr(error, "__cause__", None)
+    diagnostic = getattr(cause, "diag", None)
+    constraint_name = getattr(diagnostic, "constraint_name", None)
+    if constraint_name in {
+        "uniq_published_fact_check_claim",
+        "uniq_reserved_fact_check_successor",
+        "api_officialfactcheckpublicationsnapshot_fact_check_id_key",
+    }:
+        return True
+    message = str(error).lower()
+    return (
+        "officialfactcheckpublicationsnapshot.fact_check_id" in message
+        or "uniq_published_fact_check_claim" in message
+        or "uniq_reserved_fact_check_successor" in message
+    )
+
+
 def _validate_decision_snapshot(snapshot, *, decision, claim):
     if (
         snapshot is None
@@ -485,6 +535,87 @@ def _validate_predecessor_publication_snapshot(
             "The published predecessor's sealed decision state is inconsistent."
         )
     return payload
+
+
+def _validate_editorial_revision_chain(
+    *,
+    predecessor,
+    fact_checks,
+    publication_snapshots,
+    decision,
+    decision_snapshot,
+    organization,
+):
+    """Validate stored seals and links without rebuilding historical payloads."""
+
+    fact_checks_by_id = {item.id: item for item in fact_checks}
+    snapshots_by_fact_check_id = {
+        item.fact_check_id: item for item in publication_snapshots
+    }
+    visited = set()
+    current = predecessor
+
+    while current is not None:
+        if current.id in visited:
+            raise PublishingConflict(
+                "The publication revision chain contains a cycle."
+            )
+        visited.add(current.id)
+
+        current_snapshot = snapshots_by_fact_check_id.get(current.id)
+        payload = _validate_predecessor_publication_snapshot(
+            current_snapshot,
+            predecessor=current,
+            decision=decision,
+            decision_snapshot=decision_snapshot,
+            organization=organization,
+        )
+
+        if current.supersedes_id is None:
+            if current.revision_kind != OfficialFactCheck.RevisionKind.INITIAL:
+                raise PublishingConflict(
+                    "The publication revision chain has uncertain root provenance."
+                )
+            return current_snapshot
+
+        previous = fact_checks_by_id.get(current.supersedes_id)
+        previous_snapshot = snapshots_by_fact_check_id.get(current.supersedes_id)
+        revision = payload.get("revision")
+        if (
+            current.revision_kind
+            != OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
+            or previous is None
+            or previous_snapshot is None
+            or current.claim_id != previous.claim_id
+            or current.organization_id != previous.organization_id
+            or current.adjudication_decision_id
+            != previous.adjudication_decision_id
+            or current.version <= previous.version
+            or current_snapshot.schema_version
+            != EDITORIAL_REVISION_SCHEMA_VERSION
+            or not isinstance(revision, dict)
+            or revision.get("supersedes_fact_check_id") != str(previous.id)
+            or revision.get("supersedes_publication_snapshot_id")
+            != str(previous_snapshot.id)
+            or revision.get("predecessor_article_version") != previous.version
+            or revision.get("predecessor_published_at")
+            != previous_snapshot.captured_at.isoformat()
+            or revision.get("revision_reason") != current.revision_reason
+            or current.revision_requested_at is None
+            or revision.get("revision_requested_at")
+            != current.revision_requested_at.isoformat()
+            or (
+                current.revision_requested_by_id is not None
+                and revision.get("revision_requested_by", {}).get("id")
+                != str(current.revision_requested_by_id)
+            )
+        ):
+            raise PublishingConflict(
+                "The publication revision chain is malformed or inconsistent."
+            )
+        current = previous
+
+    raise PublishingConflict("The publication revision chain is incomplete.")
 
 
 def _inherited_editorial_source_urls(payload):
@@ -740,6 +871,7 @@ def _record_publication_event(
     event_type,
     from_status=None,
     to_status=None,
+    notes=None,
     metadata=None,
 ):
     decision = fact_check.adjudication_decision
@@ -753,6 +885,7 @@ def _record_publication_event(
         event_type=event_type,
         from_status=from_status,
         to_status=to_status,
+        notes=notes,
         metadata={
             "fact_check_id": str(fact_check.id),
             "claim_id": str(fact_check.claim_id),
@@ -1248,6 +1381,285 @@ def submit_fact_check_for_review(
         return locked_fact_check
 
 
+def publish_editorial_revision(
+    *,
+    revision_id,
+    predecessor_id,
+    actor,
+    organization_id,
+    expected_predecessor_version,
+    expected_revision_version,
+    expected_decision_revision,
+):
+    expected_predecessor_version = _parse_expected_version(
+        expected_predecessor_version,
+        "expected_predecessor_version",
+    )
+    expected_revision_version = _parse_expected_version(
+        expected_revision_version,
+        "expected_revision_version",
+    )
+    expected_decision_revision = _parse_expected_version(
+        expected_decision_revision,
+        "expected_decision_revision",
+    )
+    identity = _get_editorial_replacement_identity(
+        revision_id=revision_id,
+        predecessor_id=predecessor_id,
+        organization_id=organization_id,
+    )
+
+    with transaction.atomic():
+        context = _lock_publication_context(
+            identity=identity,
+            actor=actor,
+            capability=PartnerCapability.PUBLISH_FACT_CHECK,
+        )
+        revision = context["fact_check"]
+        decision = context["decision"]
+        predecessor = next(
+            (
+                item
+                for item in context["fact_checks"]
+                if item.id == identity["predecessor_id"]
+            ),
+            None,
+        )
+
+        if predecessor is None:
+            raise PublishingConflict(
+                "The requested publication predecessor is unavailable."
+            )
+        if predecessor.version != expected_predecessor_version:
+            raise PublishingConflict(
+                "The published predecessor changed before replacement."
+            )
+        if revision.version != expected_revision_version:
+            raise PublishingConflict(
+                "The editorial revision changed before publication."
+            )
+        if decision.revision_number != expected_decision_revision:
+            raise PublishingConflict(
+                "The adjudication decision changed before publication."
+            )
+
+        published = [
+            item
+            for item in context["fact_checks"]
+            if item.publication_status
+            == OfficialFactCheck.PublicationStatus.PUBLISHED
+        ]
+        if len(published) != 1 or published[0].id != predecessor.id:
+            raise PublishingConflict(
+                "The selected predecessor is not the current published fact-check."
+            )
+        if (
+            revision.publication_status
+            != OfficialFactCheck.PublicationStatus.IN_REVIEW
+            or revision.supersedes_id != predecessor.id
+            or revision.revision_kind
+            != OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
+        ):
+            raise PublishingConflict(
+                "The selected fact-check is not an approved editorial revision of "
+                "the current publication."
+            )
+        if any(
+            snapshot.fact_check_id == revision.id
+            for snapshot in context["publication_snapshots"]
+        ):
+            raise PublishingConflict(
+                "The editorial revision already has a sealed publication record."
+            )
+        if (
+            revision.claim_id != predecessor.claim_id
+            or revision.organization_id != predecessor.organization_id
+            or revision.organization_id != context["organization"].id
+            or revision.adjudication_decision_id != predecessor.adjudication_decision_id
+            or revision.adjudication_decision_id != decision.id
+            or revision.canonical_claim != decision.canonical_claim
+            or revision.verdict != decision.verdict
+            or predecessor.canonical_claim != decision.canonical_claim
+            or predecessor.verdict != decision.verdict
+        ):
+            raise PublishingConflict(
+                "The editorial revision no longer matches its authoritative "
+                "decision or predecessor."
+            )
+        reason = revision.revision_reason
+        if (
+            not isinstance(reason, str)
+            or not reason.strip()
+            or reason != reason.strip()
+            or len(reason) > 2000
+            or revision.revision_requested_by_id is None
+            or revision.revision_requested_at is None
+        ):
+            raise PublishingConflict(
+                "The editorial revision provenance is incomplete."
+            )
+        if context["assignment"] is not None:
+            raise PublishingConflict(
+                "Open verification work must be resolved before an editorial "
+                "replacement can be published."
+            )
+        if any(
+            item.id != revision.id
+            and item.publication_status in ACTIVE_DRAFT_STATUSES
+            for item in context["fact_checks"]
+        ):
+            raise PublishingConflict(
+                "Competing publication work is active for this claim."
+            )
+        if (
+            decision.moderation_case_id is None
+            or not ModerationCase.objects.filter(
+                pk=decision.moderation_case_id,
+                case_type=ModerationCase.CaseType.ADJUDICATION,
+                claim=context["claim"],
+                organization=context["organization"],
+            ).exists()
+        ):
+            raise PublishingConflict(
+                "The editorial revision does not have attributable adjudication "
+                "case provenance."
+            )
+
+        predecessor_snapshot = next(
+            (
+                snapshot
+                for snapshot in context["publication_snapshots"]
+                if snapshot.fact_check_id == predecessor.id
+            ),
+            None,
+        )
+        _validate_editorial_revision_chain(
+            predecessor=predecessor,
+            fact_checks=context["fact_checks"],
+            publication_snapshots=context["publication_snapshots"],
+            decision=decision,
+            decision_snapshot=context["decision_snapshot"],
+            organization=context["organization"],
+        )
+
+        _sync_fact_check_sources(
+            revision,
+            actor=actor,
+            snapshot=context["decision_snapshot"],
+            snapshot_records=context["snapshot_records"],
+        )
+        _validate_publication_content(revision)
+
+        replacement_at = timezone.now()
+        previous_status = revision.publication_status
+        revision.publication_status = OfficialFactCheck.PublicationStatus.PUBLISHED
+        revision.reviewed_by = actor
+        revision.reviewed_at = replacement_at
+        revision.published_by = actor
+        revision.published_at = replacement_at
+        revision.archived_at = None
+        try:
+            revision.full_clean(
+                validate_unique=False,
+                validate_constraints=False,
+            )
+            sealed_payload = OfficialFactCheckPublicationSnapshot.build_payload(
+                fact_check=revision,
+                decision_snapshot=context["decision_snapshot"],
+                schema_version=EDITORIAL_REVISION_SCHEMA_VERSION,
+                predecessor_snapshot=predecessor_snapshot,
+            )
+        except ValidationError as error:
+            raise PublishingConflict(
+                "The editorial revision provenance or publication seal is "
+                "inconsistent."
+            ) from error
+
+        try:
+            with transaction.atomic():
+                predecessor.publication_status = (
+                    OfficialFactCheck.PublicationStatus.ARCHIVED
+                )
+                predecessor.archived_at = replacement_at
+                predecessor.save(
+                    update_fields=[
+                        "publication_status",
+                        "archived_at",
+                        "updated_at",
+                    ]
+                )
+
+                revision.save(
+                    update_fields=[
+                        "publication_status",
+                        "reviewed_by",
+                        "reviewed_at",
+                        "published_by",
+                        "published_at",
+                        "archived_at",
+                        "updated_at",
+                    ]
+                )
+                successor_snapshot = (
+                    OfficialFactCheckPublicationSnapshot.objects.create(
+                        fact_check=revision,
+                        decision_snapshot=context["decision_snapshot"],
+                        schema_version=EDITORIAL_REVISION_SCHEMA_VERSION,
+                        captured_at=replacement_at,
+                        payload=sealed_payload,
+                    )
+                )
+                revision_event = _record_publication_event(
+                    revision,
+                    actor=actor,
+                    event_type=ModerationEvent.EventType.ARTICLE_REVISED,
+                    from_status=previous_status,
+                    to_status=OfficialFactCheck.PublicationStatus.PUBLISHED,
+                    notes=reason,
+                    metadata={
+                        "revision_kind": revision.revision_kind,
+                        "revision_reason": reason,
+                        "old_fact_check_id": str(predecessor.id),
+                        "new_fact_check_id": str(revision.id),
+                        "old_version": predecessor.version,
+                        "new_version": revision.version,
+                        "decision_id": str(decision.id),
+                        "predecessor_publication_snapshot_id": str(
+                            predecessor_snapshot.id
+                        ),
+                        "successor_publication_snapshot_id": str(
+                            successor_snapshot.id
+                        ),
+                    },
+                )
+                if revision_event is None:
+                    raise PublishingConflict(
+                        "The editorial replacement could not be attributed to its "
+                        "adjudication case."
+                    )
+        except IntegrityError as error:
+            if not _is_expected_publication_integrity_conflict(error):
+                raise
+            raise PublishingConflict(
+                "The editorial replacement conflicted with current publication "
+                "state."
+            ) from error
+        except ValidationError as error:
+            raise PublishingConflict(
+                "The editorial replacement conflicted with current publication "
+                "state or could not be sealed safely."
+            ) from error
+
+        revision_id_for_index = revision.id
+        transaction.on_commit(
+            lambda: _queue_fact_check_index(revision_id_for_index)
+        )
+        return {
+            "fact_check": revision,
+            "archived_fact_check": predecessor,
+        }
+
+
 def publish_fact_check(
     *,
     fact_check,
@@ -1269,6 +1681,19 @@ def publish_fact_check(
         ):
             raise InvalidPublicationTransition(
                 "Only a fact-check in review " "can be published."
+            )
+
+        if (
+            locked_fact_check.supersedes_id is not None
+            or locked_fact_check.revision_kind
+            in {
+                OfficialFactCheck.RevisionKind.EDITORIAL_REVISION,
+                OfficialFactCheck.RevisionKind.FACTUAL_CORRECTION,
+            }
+        ):
+            raise PublishingConflict(
+                "A revision or correction must use its explicit replacement "
+                "publication workflow."
             )
 
         if locked_fact_check.verdict != current_decision.verdict or (
@@ -1365,10 +1790,12 @@ def publish_fact_check(
             sealed_payload = OfficialFactCheckPublicationSnapshot.build_payload(
                 fact_check=locked_fact_check,
                 decision_snapshot=context["decision_snapshot"],
+                schema_version=FIRST_PUBLICATION_SCHEMA_VERSION,
             )
             OfficialFactCheckPublicationSnapshot.objects.create(
                 fact_check=locked_fact_check,
                 decision_snapshot=context["decision_snapshot"],
+                schema_version=FIRST_PUBLICATION_SCHEMA_VERSION,
                 captured_at=now,
                 payload=sealed_payload,
             )

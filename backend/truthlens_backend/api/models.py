@@ -19,6 +19,8 @@ from .evidence_snapshot_schema import (
 )
 from .publication_snapshot_schema import (
     CURRENT_SCHEMA_VERSION as PUBLICATION_SNAPSHOT_SCHEMA_VERSION,
+    EDITORIAL_REVISION_SCHEMA_VERSION as PUBLICATION_SNAPSHOT_REVISION_VERSION,
+    FIRST_PUBLICATION_SCHEMA_VERSION as PUBLICATION_SNAPSHOT_INITIAL_VERSION,
     PublicationSnapshotSchemaError,
     validate_publication_snapshot,
 )
@@ -2858,6 +2860,8 @@ def _publication_snapshot_user(user):
 
 class OfficialFactCheckPublicationSnapshot(models.Model):
     CURRENT_SCHEMA_VERSION = PUBLICATION_SNAPSHOT_SCHEMA_VERSION
+    FIRST_PUBLICATION_SCHEMA_VERSION = PUBLICATION_SNAPSHOT_INITIAL_VERSION
+    EDITORIAL_REVISION_SCHEMA_VERSION = PUBLICATION_SNAPSHOT_REVISION_VERSION
 
     id = models.UUIDField(
         primary_key=True,
@@ -2875,7 +2879,7 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
         related_name="publication_snapshots",
     )
     schema_version = models.PositiveSmallIntegerField(
-        default=CURRENT_SCHEMA_VERSION,
+        default=FIRST_PUBLICATION_SCHEMA_VERSION,
         editable=False,
     )
     captured_at = models.DateTimeField(
@@ -2890,7 +2894,34 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
         ordering = ["-captured_at", "id"]
 
     @classmethod
-    def build_payload(cls, *, fact_check, decision_snapshot):
+    def build_payload(
+        cls,
+        *,
+        fact_check,
+        decision_snapshot,
+        schema_version=PUBLICATION_SNAPSHOT_INITIAL_VERSION,
+        predecessor_snapshot=None,
+    ):
+        if schema_version == cls.FIRST_PUBLICATION_SCHEMA_VERSION:
+            if (
+                fact_check.supersedes_id is not None
+                or fact_check.revision_kind
+                in {
+                    OfficialFactCheck.RevisionKind.EDITORIAL_REVISION,
+                    OfficialFactCheck.RevisionKind.FACTUAL_CORRECTION,
+                }
+            ):
+                raise ValidationError(
+                    "Only an initial publication may use snapshot schema v1."
+                )
+        elif schema_version == cls.EDITORIAL_REVISION_SCHEMA_VERSION:
+            if (
+                fact_check.revision_kind
+                != OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
+            ):
+                raise ValidationError(
+                    "Snapshot schema v2 requires an editorial revision."
+                )
         if (
             fact_check.adjudication_decision_id != decision_snapshot.decision_id
             or str(fact_check.claim_id) != str(decision_snapshot.claim_id)
@@ -2978,7 +3009,7 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
             )
 
         organization = fact_check.organization
-        return {
+        payload = {
             "claim_id": str(fact_check.claim_id),
             "fact_check_id": str(fact_check.id),
             "decision_id": str(fact_check.adjudication_decision_id),
@@ -3006,10 +3037,90 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
             "sources": sources,
         }
 
+        if schema_version == cls.EDITORIAL_REVISION_SCHEMA_VERSION:
+            predecessor = fact_check.supersedes
+            if (
+                fact_check.revision_kind
+                != OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
+                or predecessor is None
+                or fact_check.revision_requested_by is None
+                or fact_check.revision_requested_at is None
+                or not isinstance(fact_check.revision_reason, str)
+                or not fact_check.revision_reason.strip()
+                or fact_check.revision_reason != fact_check.revision_reason.strip()
+            ):
+                raise ValidationError(
+                    "The editorial revision provenance is incomplete."
+                )
+            if predecessor_snapshot is None:
+                predecessor_snapshot = (
+                    OfficialFactCheckPublicationSnapshot.objects.filter(
+                        fact_check=predecessor
+                    ).first()
+                )
+            if (
+                predecessor_snapshot is None
+                or predecessor_snapshot.fact_check_id != predecessor.id
+                or predecessor_snapshot.decision_snapshot_id != decision_snapshot.id
+            ):
+                raise ValidationError(
+                    "The editorial revision predecessor seal is inconsistent."
+                )
+            try:
+                predecessor_payload = validate_publication_snapshot(
+                    schema_version=predecessor_snapshot.schema_version,
+                    payload=predecessor_snapshot.payload,
+                )
+            except PublicationSnapshotSchemaError as error:
+                raise ValidationError(
+                    "The editorial revision predecessor seal is malformed."
+                ) from error
+            if (
+                predecessor_payload["fact_check_id"] != str(predecessor.id)
+                or predecessor_payload["claim_id"] != str(fact_check.claim_id)
+                or predecessor_payload["decision_id"]
+                != str(fact_check.adjudication_decision_id)
+                or predecessor_payload["decision_evidence_snapshot_id"]
+                != str(decision_snapshot.id)
+                or predecessor_payload["organization"]["id"]
+                != str(fact_check.organization_id)
+                or predecessor_payload["article_version"] != predecessor.version
+                or predecessor_payload["published_at"]
+                != predecessor_snapshot.captured_at.isoformat()
+            ):
+                raise ValidationError(
+                    "The editorial revision predecessor seal identities differ."
+                )
+            payload["revision"] = {
+                "revision_kind": fact_check.revision_kind,
+                "supersedes_fact_check_id": str(predecessor.id),
+                "supersedes_publication_snapshot_id": str(
+                    predecessor_snapshot.id
+                ),
+                "predecessor_article_version": predecessor.version,
+                "predecessor_published_at": predecessor_payload["published_at"],
+                "revision_reason": fact_check.revision_reason,
+                "revision_requested_by": _publication_snapshot_user(
+                    fact_check.revision_requested_by
+                ),
+                "revision_requested_at": _publication_snapshot_timestamp(
+                    fact_check.revision_requested_at
+                ),
+            }
+
+        try:
+            validate_publication_snapshot(
+                schema_version=schema_version,
+                payload=payload,
+            )
+        except PublicationSnapshotSchemaError as error:
+            raise ValidationError("The publication snapshot is malformed.") from error
+        return payload
+
     def clean(self):
         super().clean()
         try:
-            validate_publication_snapshot(
+            payload = validate_publication_snapshot(
                 schema_version=self.schema_version,
                 payload=self.payload,
             )
@@ -3017,24 +3128,108 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
             raise ValidationError({"payload": str(error)}) from error
 
         fact_check = self.fact_check
-        if fact_check.publication_status != (
-            OfficialFactCheck.PublicationStatus.PUBLISHED
-        ):
+        allowed_statuses = {OfficialFactCheck.PublicationStatus.PUBLISHED}
+        if not self._state.adding:
+            allowed_statuses.add(OfficialFactCheck.PublicationStatus.ARCHIVED)
+        if fact_check.publication_status not in allowed_statuses:
             raise ValidationError(
-                {"fact_check": "Only a published fact-check may be sealed."}
+                {
+                    "fact_check": (
+                        "A new seal requires a published fact-check; an existing "
+                        "seal may also validate after archival."
+                    )
+                }
             )
         if fact_check.published_at != self.captured_at:
             raise ValidationError(
                 {"captured_at": "The seal must use the publication timestamp."}
             )
-        expected_payload = self.build_payload(
-            fact_check=fact_check,
-            decision_snapshot=self.decision_snapshot,
-        )
-        if self.payload != expected_payload:
-            raise ValidationError(
-                {"payload": "The sealed payload does not match publication state."}
+
+        identity_mismatch = (
+            payload["fact_check_id"] != str(fact_check.id)
+            or payload["claim_id"] != str(fact_check.claim_id)
+            or payload["decision_id"] != str(fact_check.adjudication_decision_id)
+            or payload["decision_evidence_snapshot_id"]
+            != str(self.decision_snapshot_id)
+            or (
+                fact_check.organization_id is not None
+                and payload["organization"]["id"]
+                != str(fact_check.organization_id)
             )
+            or payload["article_version"] != fact_check.version
+            or payload["published_at"] != self.captured_at.isoformat()
+            or self.decision_snapshot.decision_id
+            != fact_check.adjudication_decision_id
+            or str(self.decision_snapshot.claim_id) != str(fact_check.claim_id)
+        )
+        if identity_mismatch:
+            raise ValidationError(
+                {"payload": "The sealed payload identities are inconsistent."}
+            )
+
+        if self.schema_version == self.EDITORIAL_REVISION_SCHEMA_VERSION:
+            predecessor_snapshot = (
+                OfficialFactCheckPublicationSnapshot.objects.filter(
+                    fact_check_id=fact_check.supersedes_id
+                ).first()
+            )
+            revision = payload["revision"]
+            predecessor_payload = None
+            if predecessor_snapshot is not None:
+                try:
+                    predecessor_payload = validate_publication_snapshot(
+                        schema_version=predecessor_snapshot.schema_version,
+                        payload=predecessor_snapshot.payload,
+                    )
+                except PublicationSnapshotSchemaError:
+                    predecessor_payload = None
+            if (
+                fact_check.revision_kind
+                != OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
+                or predecessor_snapshot is None
+                or predecessor_payload is None
+                or predecessor_snapshot.decision_snapshot_id
+                != self.decision_snapshot_id
+                or predecessor_payload["fact_check_id"]
+                != str(fact_check.supersedes_id)
+                or predecessor_payload["claim_id"] != payload["claim_id"]
+                or predecessor_payload["decision_id"] != payload["decision_id"]
+                or predecessor_payload["decision_evidence_snapshot_id"]
+                != payload["decision_evidence_snapshot_id"]
+                or predecessor_payload["organization"]["id"]
+                != payload["organization"]["id"]
+                or revision["supersedes_fact_check_id"]
+                != str(fact_check.supersedes_id)
+                or revision["supersedes_publication_snapshot_id"]
+                != str(predecessor_snapshot.id)
+                or revision["predecessor_article_version"]
+                != fact_check.supersedes.version
+                or revision["predecessor_published_at"]
+                != predecessor_snapshot.captured_at.isoformat()
+                or revision["revision_reason"] != fact_check.revision_reason
+                or fact_check.revision_requested_at is None
+                or revision["revision_requested_at"]
+                != fact_check.revision_requested_at.isoformat()
+                or (
+                    fact_check.revision_requested_by_id is not None
+                    and revision["revision_requested_by"]["id"]
+                    != str(fact_check.revision_requested_by_id)
+                )
+            ):
+                raise ValidationError(
+                    {"payload": "The sealed revision provenance is inconsistent."}
+                )
+
+        if self._state.adding:
+            expected_payload = self.build_payload(
+                fact_check=fact_check,
+                decision_snapshot=self.decision_snapshot,
+                schema_version=self.schema_version,
+            )
+            if self.payload != expected_payload:
+                raise ValidationError(
+                    {"payload": "The sealed payload does not match publication state."}
+                )
 
     def save(self, *args, **kwargs):
         if not self._state.adding:
