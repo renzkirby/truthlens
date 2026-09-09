@@ -4,10 +4,15 @@ from datetime import datetime
 import re
 import uuid
 
+from .factual_correction_proposal_schema import (
+    CURRENT_SCHEMA_VERSION as FACTUAL_CORRECTION_PROPOSAL_SCHEMA_VERSION,
+)
+
 
 FIRST_PUBLICATION_SCHEMA_VERSION = 1
 EDITORIAL_REVISION_SCHEMA_VERSION = 2
-CURRENT_SCHEMA_VERSION = EDITORIAL_REVISION_SCHEMA_VERSION
+FACTUAL_CORRECTION_SCHEMA_VERSION = 3
+CURRENT_SCHEMA_VERSION = FACTUAL_CORRECTION_SCHEMA_VERSION
 
 BASE_PAYLOAD_FIELDS = frozenset(
     {
@@ -34,6 +39,7 @@ BASE_PAYLOAD_FIELDS = frozenset(
 )
 V1_PAYLOAD_FIELDS = BASE_PAYLOAD_FIELDS
 V2_PAYLOAD_FIELDS = BASE_PAYLOAD_FIELDS | {"revision"}
+V3_PAYLOAD_FIELDS = BASE_PAYLOAD_FIELDS | {"correction"}
 ORGANIZATION_FIELDS = frozenset({"id", "name", "slug"})
 USER_FIELDS = frozenset({"id", "username"})
 SOURCE_FIELDS = frozenset(
@@ -62,6 +68,30 @@ REVISION_FIELDS = frozenset(
         "revision_reason",
         "revision_requested_by",
         "revision_requested_at",
+    }
+)
+CORRECTION_FIELDS = frozenset(
+    {
+        "revision_kind",
+        "correction_request_id",
+        "prepared_proposal_id",
+        "prepared_proposal_version",
+        "prepared_payload_schema_version",
+        "predecessor_decision_id",
+        "predecessor_decision_revision",
+        "predecessor_decision_evidence_snapshot_id",
+        "predecessor_fact_check_id",
+        "predecessor_fact_check_version",
+        "predecessor_publication_snapshot_id",
+        "predecessor_published_at",
+        "new_decision_id",
+        "new_decision_revision",
+        "new_decision_evidence_snapshot_id",
+        "correction_reason",
+        "correction_requested_by",
+        "correction_requested_at",
+        "approved_by",
+        "approved_at",
     }
 )
 
@@ -276,6 +306,121 @@ def _validate_v2(payload):
     )
 
 
+def _validate_positive_integer(value, field):
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        _invalid(f"{field} must be a positive integer.")
+
+
+def _validate_nonblank(value, field, *, max_length=None):
+    if (
+        not isinstance(value, str)
+        or not value.strip()
+        or value != value.strip()
+        or (max_length is not None and len(value) > max_length)
+    ):
+        _invalid(f"{field} is invalid.")
+
+
+def _validate_v3(payload):
+    _validate_base_payload(payload, expected_fields=V3_PAYLOAD_FIELDS)
+    source_urls = [source["url"] for source in payload["sources"]]
+    if len(source_urls) != len(set(source_urls)):
+        _invalid("A factual correction cannot contain duplicate source URLs.")
+
+    correction = payload["correction"]
+    if not isinstance(correction, dict) or set(correction) != CORRECTION_FIELDS:
+        _invalid("correction has an invalid field set.")
+    if correction["revision_kind"] != "FACTUAL_CORRECTION":
+        _invalid("correction.revision_kind is not supported.")
+
+    for field in (
+        "correction_request_id",
+        "prepared_proposal_id",
+        "predecessor_decision_id",
+        "predecessor_decision_evidence_snapshot_id",
+        "predecessor_fact_check_id",
+        "predecessor_publication_snapshot_id",
+        "new_decision_id",
+        "new_decision_evidence_snapshot_id",
+    ):
+        _validate_uuid(correction[field], f"correction.{field}")
+    for field in (
+        "prepared_proposal_version",
+        "predecessor_decision_revision",
+        "predecessor_fact_check_version",
+        "new_decision_revision",
+    ):
+        _validate_positive_integer(correction[field], f"correction.{field}")
+
+    _validate_positive_integer(
+        correction["prepared_payload_schema_version"],
+        "correction.prepared_payload_schema_version",
+    )
+    if (
+        correction["prepared_payload_schema_version"]
+        != FACTUAL_CORRECTION_PROPOSAL_SCHEMA_VERSION
+    ):
+        _invalid("correction.prepared_payload_schema_version is not supported.")
+    if correction["new_decision_id"] != payload["decision_id"]:
+        _invalid("correction.new_decision_id does not match the publication.")
+    if correction["predecessor_decision_id"] == correction["new_decision_id"]:
+        _invalid("A factual correction requires a new adjudication decision.")
+    if (
+        correction["new_decision_evidence_snapshot_id"]
+        != payload["decision_evidence_snapshot_id"]
+    ):
+        _invalid(
+            "correction.new_decision_evidence_snapshot_id does not match "
+            "the publication."
+        )
+    if (
+        correction["predecessor_decision_evidence_snapshot_id"]
+        == correction["new_decision_evidence_snapshot_id"]
+    ):
+        _invalid("A factual correction requires a new decision evidence snapshot.")
+    if correction["predecessor_fact_check_id"] == payload["fact_check_id"]:
+        _invalid("A factual correction cannot supersede itself.")
+    if payload["article_version"] <= correction["predecessor_fact_check_version"]:
+        _invalid("article_version must follow the correction predecessor version.")
+    if (
+        correction["new_decision_revision"]
+        <= correction["predecessor_decision_revision"]
+    ):
+        _invalid("The corrected decision revision must strictly advance.")
+
+    _validate_timestamp(
+        correction["predecessor_published_at"],
+        "correction.predecessor_published_at",
+    )
+    _validate_timestamp(
+        correction["correction_requested_at"],
+        "correction.correction_requested_at",
+    )
+    _validate_timestamp(correction["approved_at"], "correction.approved_at")
+    _validate_nonblank(
+        correction["correction_reason"],
+        "correction.correction_reason",
+        max_length=2000,
+    )
+    if correction["correction_requested_by"] is None:
+        _invalid("correction.correction_requested_by is required.")
+    if correction["approved_by"] is None:
+        _invalid("correction.approved_by is required.")
+    _validate_user(
+        correction["correction_requested_by"],
+        "correction.correction_requested_by",
+    )
+    _validate_user(correction["approved_by"], "correction.approved_by")
+    _validate_nonblank(
+        correction["correction_requested_by"]["username"],
+        "correction.correction_requested_by.username",
+    )
+    _validate_nonblank(
+        correction["approved_by"]["username"],
+        "correction.approved_by.username",
+    )
+
+
 def validate_publication_snapshot(*, schema_version, payload):
     """Validate a sealed publication payload without database access."""
 
@@ -285,6 +430,7 @@ def validate_publication_snapshot(*, schema_version, payload):
     validators = {
         FIRST_PUBLICATION_SCHEMA_VERSION: _validate_v1,
         EDITORIAL_REVISION_SCHEMA_VERSION: _validate_v2,
+        FACTUAL_CORRECTION_SCHEMA_VERSION: _validate_v3,
     }
     validator = validators.get(schema_version)
     if validator is None:

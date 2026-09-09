@@ -16,15 +16,22 @@ from .evidence_snapshot_schema import (
 )
 from .publication_snapshot_schema import (
     EDITORIAL_REVISION_SCHEMA_VERSION,
+    FACTUAL_CORRECTION_SCHEMA_VERSION,
     FIRST_PUBLICATION_SCHEMA_VERSION,
     PublicationSnapshotSchemaError,
     validate_publication_snapshot,
+)
+from .factual_correction_proposal_schema import (
+    FactualCorrectionProposalSchemaError,
+    validate_factual_correction_proposal,
 )
 
 from .models import (
     AdjudicationDecision,
     AdjudicationDecisionEvidenceSnapshot,
     Claim,
+    EvidenceSubmission,
+    FactualCorrectionProposal,
     FactualCorrectionRequest,
     ModerationCase,
     ModerationEvent,
@@ -508,25 +515,36 @@ def _validate_predecessor_publication_snapshot(
     publication_snapshot,
     *,
     predecessor,
-    decision,
-    decision_snapshot,
     organization,
 ):
+    decision = predecessor.adjudication_decision
+    decision_snapshot = (
+        publication_snapshot.decision_snapshot
+        if publication_snapshot is not None
+        else None
+    )
     if (
         publication_snapshot is None
         or publication_snapshot.fact_check_id != predecessor.id
+        or decision_snapshot is None
         or publication_snapshot.decision_snapshot_id != decision_snapshot.id
+        or decision_snapshot.decision_id != decision.id
+        or str(decision_snapshot.claim_id) != str(predecessor.claim_id)
     ):
         raise PublishingConflict(
             "The published predecessor does not have a valid sealed publication "
             "record. Historical reconstruction requires a separate workflow."
         )
     try:
+        evidence_records = validate_evidence_snapshot(
+            schema_version=decision_snapshot.schema_version,
+            evidence_records=decision_snapshot.evidence_records,
+        )
         payload = validate_publication_snapshot(
             schema_version=publication_snapshot.schema_version,
             payload=publication_snapshot.payload,
         )
-    except PublicationSnapshotSchemaError as error:
+    except (EvidenceSnapshotSchemaError, PublicationSnapshotSchemaError) as error:
         raise PublishingConflict(
             "The published predecessor's sealed publication record is invalid."
         ) from error
@@ -537,10 +555,19 @@ def _validate_predecessor_publication_snapshot(
         "decision_id": str(decision.id),
         "decision_evidence_snapshot_id": str(decision_snapshot.id),
     }
-    if any(
-        payload[field] != expected_value
-        for field, expected_value in expected_identities.items()
-    ) or payload["organization"]["id"] != str(organization.id):
+    if (
+        decision.claim_id != predecessor.claim_id
+        or decision.organization_id != predecessor.organization_id
+        or predecessor.organization_id != organization.id
+        or predecessor.adjudication_decision_id != decision.id
+        or predecessor.canonical_claim != decision.canonical_claim
+        or predecessor.verdict != decision.verdict
+        or any(
+            payload[field] != expected_value
+            for field, expected_value in expected_identities.items()
+        )
+        or payload["organization"]["id"] != str(organization.id)
+    ):
         raise PublishingConflict(
             "The published predecessor's sealed identities are inconsistent."
         )
@@ -548,6 +575,9 @@ def _validate_predecessor_publication_snapshot(
         payload["article_version"] != predecessor.version
         or payload["canonical_claim"] != decision.canonical_claim
         or payload["verdict"] != decision.verdict
+        or payload["headline"] != predecessor.headline
+        or payload["summary"] != predecessor.summary
+        or payload["article_body"] != predecessor.article_body
         or predecessor.published_at is None
         or predecessor.published_at != publication_snapshot.captured_at
         or payload["published_at"] != publication_snapshot.captured_at.isoformat()
@@ -555,25 +585,284 @@ def _validate_predecessor_publication_snapshot(
         raise PublishingConflict(
             "The published predecessor's sealed decision state is inconsistent."
         )
-    return payload
+    evidence_by_id = {record["id"]: record for record in evidence_records}
+    for source in payload["sources"]:
+        for link in source["lineage"]:
+            record = evidence_by_id.get(link["captured_evidence_id"])
+            if (
+                link["decision_evidence_snapshot_id"] != str(decision_snapshot.id)
+                or record is None
+                or record["evidence_status"]
+                != EvidenceSubmission.EvidenceStatus.VERIFIED
+                or _normalize_snapshot_source_url(record["evidence_url"])
+                != source["url"]
+            ):
+                raise PublishingConflict(
+                    "The published predecessor's sealed source lineage is invalid."
+                )
+    return {
+        "payload": payload,
+        "decision": decision,
+        "decision_snapshot": decision_snapshot,
+        "evidence_records": evidence_records,
+    }
 
 
-def _validate_editorial_revision_chain(
+def _validate_editorial_history_edge(*, predecessor, successor, nodes):
+    predecessor_node = nodes[predecessor.id]
+    successor_node = nodes[successor.id]
+    predecessor_snapshot = predecessor_node["snapshot"]
+    successor_snapshot = successor_node["snapshot"]
+    revision = successor_node["payload"].get("revision")
+    if (
+        successor.revision_kind
+        != OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
+        or successor.claim_id != predecessor.claim_id
+        or successor.organization_id != predecessor.organization_id
+        or successor.adjudication_decision_id
+        != predecessor.adjudication_decision_id
+        or successor.version <= predecessor.version
+        or successor_snapshot.schema_version
+        != EDITORIAL_REVISION_SCHEMA_VERSION
+        or not isinstance(revision, dict)
+        or revision.get("supersedes_fact_check_id") != str(predecessor.id)
+        or revision.get("supersedes_publication_snapshot_id")
+        != str(predecessor_snapshot.id)
+        or revision.get("predecessor_article_version") != predecessor.version
+        or revision.get("predecessor_published_at")
+        != predecessor_snapshot.captured_at.isoformat()
+        or revision.get("revision_reason") != successor.revision_reason
+        or successor.revision_requested_at is None
+        or revision.get("revision_requested_at")
+        != successor.revision_requested_at.isoformat()
+        or (
+            successor.revision_requested_by_id is not None
+            and revision.get("revision_requested_by", {}).get("id")
+            != str(successor.revision_requested_by_id)
+        )
+    ):
+        raise PublishingConflict(
+            "The publication revision chain is malformed or inconsistent."
+        )
+
+
+def _validate_factual_correction_history_edge(
+    *, predecessor, successor, nodes, organization
+):
+    predecessor_node = nodes[predecessor.id]
+    successor_node = nodes[successor.id]
+    predecessor_snapshot = predecessor_node["snapshot"]
+    successor_snapshot = successor_node["snapshot"]
+    predecessor_decision = predecessor_node["decision"]
+    successor_decision = successor_node["decision"]
+    predecessor_decision_snapshot = predecessor_node["decision_snapshot"]
+    successor_decision_snapshot = successor_node["decision_snapshot"]
+    correction = successor_node["payload"].get("correction")
+    if (
+        successor.revision_kind
+        != OfficialFactCheck.RevisionKind.FACTUAL_CORRECTION
+        or successor_snapshot.schema_version != FACTUAL_CORRECTION_SCHEMA_VERSION
+        or not isinstance(correction, dict)
+        or successor.claim_id != predecessor.claim_id
+        or successor.organization_id != predecessor.organization_id
+        or successor.organization_id != organization.id
+        or successor.version <= predecessor.version
+        or successor_decision.supersedes_id != predecessor_decision.id
+        or successor_decision.revision_number
+        != predecessor_decision.revision_number + 1
+        or successor_decision.claim_id != predecessor_decision.claim_id
+        or successor_decision.organization_id != predecessor_decision.organization_id
+        or correction.get("predecessor_decision_id")
+        != str(predecessor_decision.id)
+        or correction.get("predecessor_decision_revision")
+        != predecessor_decision.revision_number
+        or correction.get("predecessor_decision_evidence_snapshot_id")
+        != str(predecessor_decision_snapshot.id)
+        or correction.get("predecessor_fact_check_id") != str(predecessor.id)
+        or correction.get("predecessor_fact_check_version") != predecessor.version
+        or correction.get("predecessor_publication_snapshot_id")
+        != str(predecessor_snapshot.id)
+        or correction.get("predecessor_published_at")
+        != predecessor_snapshot.captured_at.isoformat()
+        or correction.get("new_decision_id") != str(successor_decision.id)
+        or correction.get("new_decision_revision")
+        != successor_decision.revision_number
+        or correction.get("new_decision_evidence_snapshot_id")
+        != str(successor_decision_snapshot.id)
+    ):
+        raise PublishingConflict(
+            "The factual correction publication transition is malformed."
+        )
+
+    request = (
+        FactualCorrectionRequest.objects.select_related("moderation_case")
+        .filter(pk=correction["correction_request_id"])
+        .first()
+    )
+    proposal = FactualCorrectionProposal.objects.filter(
+        pk=correction["prepared_proposal_id"]
+    ).first()
+    if (
+        request is None
+        or proposal is None
+        # A committed historical correction must have completed its
+        # reservation. The final handoff may move these lifecycle rows
+        # inside one transaction before validating the new history.
+        or request.status != FactualCorrectionRequest.Status.COMPLETED
+        or request.claim_id != successor.claim_id
+        or request.organization_id != successor.organization_id
+        or request.predecessor_decision_id != predecessor_decision.id
+        or request.predecessor_fact_check_id != predecessor.id
+        or request.predecessor_publication_snapshot_id != predecessor_snapshot.id
+        or request.moderation_case.case_type
+        != ModerationCase.CaseType.ADJUDICATION
+        or request.moderation_case.claim_id != successor.claim_id
+        or request.moderation_case.organization_id != successor.organization_id
+        or request.moderation_case.status != ModerationCase.Status.RESOLVED
+        or request.moderation_case.resolved_at is None
+        or successor_decision.moderation_case_id != request.moderation_case_id
+        or successor_decision.decision_source
+        != AdjudicationDecision.DecisionSource.HUMAN_REVIEW
+        or proposal.correction_request_id != request.id
+        or proposal.status != FactualCorrectionProposal.Status.PREPARED
+        or proposal.version != correction["prepared_proposal_version"]
+        or proposal.prepared_payload_schema_version
+        != correction["prepared_payload_schema_version"]
+        or proposal.prepared_payload is None
+        or proposal.prepared_at is None
+    ):
+        raise PublishingConflict(
+            "The factual correction request or proposal history is inconsistent."
+        )
+    try:
+        proposal_payload = validate_factual_correction_proposal(
+            schema_version=proposal.prepared_payload_schema_version,
+            payload=proposal.prepared_payload,
+        )
+    except FactualCorrectionProposalSchemaError as error:
+        raise PublishingConflict(
+            "The historical factual correction proposal is malformed."
+        ) from error
+
+    expected_predecessor = {
+        "decision_id": str(predecessor_decision.id),
+        "decision_revision": predecessor_decision.revision_number,
+        "fact_check_id": str(predecessor.id),
+        "fact_check_version": predecessor.version,
+        "publication_snapshot_id": str(predecessor_snapshot.id),
+        "publication_snapshot_schema_version": predecessor_snapshot.schema_version,
+        "published_at": predecessor_snapshot.captured_at.isoformat(),
+    }
+    proposed_evidence = [
+        item["record"] for item in proposal_payload["evidence_basis"]["items"]
+    ]
+    sealed_sources = {
+        source["url"]: source for source in successor_node["payload"]["sources"]
+    }
+    proposed_sources = {
+        source["url"]: source for source in proposal_payload["sources"]
+    }
+    if (
+        proposal_payload["proposal_id"] != str(proposal.id)
+        or proposal_payload["proposal_version"] != proposal.version
+        or proposal_payload["correction_request_id"] != str(request.id)
+        or proposal_payload["claim_id"] != str(successor.claim_id)
+        or proposal_payload["correction_case_id"]
+        != str(request.moderation_case_id)
+        or proposal_payload["organization"]["id"]
+        != str(successor.organization_id)
+        or proposal_payload["organization"] != proposal.organization_snapshot
+        or proposal_payload["predecessor"] != expected_predecessor
+        or proposal_payload["decision"]
+        != {
+            "verdict": successor_decision.verdict,
+            "canonical_claim": successor_decision.canonical_claim,
+            "rationale": successor_decision.rationale,
+        }
+        or proposal_payload["decision"]
+        != {
+            "verdict": proposal.verdict,
+            "canonical_claim": proposal.canonical_claim,
+            "rationale": proposal.rationale,
+        }
+        or proposal_payload["article"]
+        != {
+            "headline": successor.headline,
+            "summary": successor.summary,
+            "article_body": successor.article_body,
+        }
+        or proposal_payload["article"]
+        != {
+            "headline": proposal.headline,
+            "summary": proposal.summary,
+            "article_body": proposal.article_body,
+        }
+        or [source["url"] for source in proposal_payload["sources"]]
+        != proposal.source_urls
+        or proposed_evidence != successor_node["evidence_records"]
+        or proposal_payload["evidence_basis"]["schema_version"]
+        != successor_decision_snapshot.schema_version
+        or successor_decision.verification_run_id != proposal.verification_run_id
+        or (
+            proposal_payload["verification_run"] is None
+            and successor_decision.verification_run_id is not None
+        )
+        or (
+            proposal_payload["verification_run"] is not None
+            and proposal_payload["verification_run"]["id"]
+            != str(successor_decision.verification_run_id)
+        )
+        or set(sealed_sources) != set(proposed_sources)
+        or correction["correction_reason"] != request.correction_reason
+        or correction["correction_requested_by"] != request.requested_by_snapshot
+        or correction["correction_requested_at"] != request.requested_at.isoformat()
+        or correction["approved_by"] != proposal.prepared_by_snapshot
+        or correction["approved_at"] != proposal.prepared_at.isoformat()
+        or proposal_payload["approval"]["actor"] != correction["approved_by"]
+        or proposal_payload["approval"]["prepared_at"]
+        != correction["approved_at"]
+        or successor.revision_reason != request.correction_reason
+        or successor.revision_requested_at != request.requested_at
+        or (
+            successor.revision_requested_by_id is not None
+            and correction["correction_requested_by"]["id"]
+            != str(successor.revision_requested_by_id)
+        )
+        or (
+            successor_decision.decided_by_id is not None
+            and correction["approved_by"]["id"]
+            != str(successor_decision.decided_by_id)
+        )
+    ):
+        raise PublishingConflict(
+            "The factual correction publication provenance is inconsistent."
+        )
+    for source_url, proposed_source in proposed_sources.items():
+        sealed_source = sealed_sources[source_url]
+        if (
+            sealed_source["is_editorially_selected"] is not True
+            or {
+                link["captured_evidence_id"] for link in sealed_source["lineage"]
+            }
+            != {link["evidence_id"] for link in proposed_source["evidence"]}
+        ):
+            raise PublishingConflict(
+                "The corrected publication source provenance is inconsistent."
+            )
+
+
+def _validate_complete_publication_history(
     *,
     predecessor,
     fact_checks,
     publication_snapshots,
-    decision,
-    decision_snapshot,
     organization,
 ):
-    """Validate the complete stored publication history without rebuilding it."""
+    """Validate one complete immutable publication history across decisions."""
 
     snapshots_by_fact_check_id = {
         item.fact_check_id: item for item in publication_snapshots
     }
-    # An archived row without a publication timestamp or seal can be an
-    # abandoned draft. It is not part of durable published history.
     published_history = {
         item.id: item
         for item in fact_checks
@@ -587,7 +876,7 @@ def _validate_editorial_revision_chain(
     if predecessor.id not in published_history:
         raise PublishingConflict("The publication revision chain is incomplete.")
 
-    payloads_by_fact_check_id = {}
+    nodes = {}
     for item in published_history.values():
         if item.publication_status not in {
             OfficialFactCheck.PublicationStatus.PUBLISHED,
@@ -597,15 +886,12 @@ def _validate_editorial_revision_chain(
                 "The stored publication history has an invalid lifecycle state."
             )
         snapshot = snapshots_by_fact_check_id.get(item.id)
-        payloads_by_fact_check_id[item.id] = (
-            _validate_predecessor_publication_snapshot(
-                snapshot,
-                predecessor=item,
-                decision=decision,
-                decision_snapshot=decision_snapshot,
-                organization=organization,
-            )
+        validated = _validate_predecessor_publication_snapshot(
+            snapshot,
+            predecessor=item,
+            organization=organization,
         )
+        nodes[item.id] = {"snapshot": snapshot, **validated}
 
     roots = []
     children_by_predecessor_id = {}
@@ -629,16 +915,11 @@ def _validate_editorial_revision_chain(
         )
 
     root = roots[0]
-    root_snapshot = snapshots_by_fact_check_id[root.id]
-    # Migration-era initial rows may have null revision metadata. Their own
-    # original v1 seal, not reconstructed live fields, establishes the root.
     if (
         root.revision_kind
-        not in {
-            None,
-            OfficialFactCheck.RevisionKind.INITIAL,
-        }
-        or root_snapshot.schema_version != FIRST_PUBLICATION_SCHEMA_VERSION
+        not in {None, OfficialFactCheck.RevisionKind.INITIAL}
+        or nodes[root.id]["snapshot"].schema_version
+        != FIRST_PUBLICATION_SCHEMA_VERSION
     ):
         raise PublishingConflict(
             "The publication revision chain has uncertain root provenance."
@@ -652,43 +933,28 @@ def _validate_editorial_revision_chain(
                 "The publication revision chain contains a cycle."
             )
         visited.add(current.id)
-
         children = children_by_predecessor_id.get(current.id, [])
         if not children:
             break
         successor = children[0]
-        successor_snapshot = snapshots_by_fact_check_id[successor.id]
-        current_snapshot = snapshots_by_fact_check_id[current.id]
-        revision = payloads_by_fact_check_id[successor.id].get("revision")
-        if (
-            successor.revision_kind
-            != OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
-            or successor.claim_id != current.claim_id
-            or successor.organization_id != current.organization_id
-            or successor.adjudication_decision_id
-            != current.adjudication_decision_id
-            or successor.version <= current.version
-            or successor_snapshot.schema_version
-            != EDITORIAL_REVISION_SCHEMA_VERSION
-            or not isinstance(revision, dict)
-            or revision.get("supersedes_fact_check_id") != str(current.id)
-            or revision.get("supersedes_publication_snapshot_id")
-            != str(current_snapshot.id)
-            or revision.get("predecessor_article_version") != current.version
-            or revision.get("predecessor_published_at")
-            != current_snapshot.captured_at.isoformat()
-            or revision.get("revision_reason") != successor.revision_reason
-            or successor.revision_requested_at is None
-            or revision.get("revision_requested_at")
-            != successor.revision_requested_at.isoformat()
-            or (
-                successor.revision_requested_by_id is not None
-                and revision.get("revision_requested_by", {}).get("id")
-                != str(successor.revision_requested_by_id)
+        if successor.revision_kind == OfficialFactCheck.RevisionKind.EDITORIAL_REVISION:
+            _validate_editorial_history_edge(
+                predecessor=current,
+                successor=successor,
+                nodes=nodes,
             )
+        elif successor.revision_kind == (
+            OfficialFactCheck.RevisionKind.FACTUAL_CORRECTION
         ):
+            _validate_factual_correction_history_edge(
+                predecessor=current,
+                successor=successor,
+                nodes=nodes,
+                organization=organization,
+            )
+        else:
             raise PublishingConflict(
-                "The publication revision chain is malformed or inconsistent."
+                "The publication revision chain has unsupported provenance."
             )
         current = successor
 
@@ -697,8 +963,34 @@ def _validate_editorial_revision_chain(
             "The selected predecessor is not the unique tip of the stored "
             "publication history."
         )
+    return nodes[predecessor.id]["snapshot"]
 
-    return snapshots_by_fact_check_id[predecessor.id]
+
+def _validate_editorial_revision_chain(
+    *,
+    predecessor,
+    fact_checks,
+    publication_snapshots,
+    decision,
+    decision_snapshot,
+    organization,
+):
+    """Compatibility wrapper returning the selected tip's exact original seal."""
+
+    if (
+        predecessor.adjudication_decision_id != decision.id
+        or decision_snapshot.decision_id != decision.id
+        or str(decision_snapshot.claim_id) != str(predecessor.claim_id)
+    ):
+        raise PublishingConflict(
+            "The selected publication tip does not match its decision evidence."
+        )
+    return _validate_complete_publication_history(
+        predecessor=predecessor,
+        fact_checks=fact_checks,
+        publication_snapshots=publication_snapshots,
+        organization=organization,
+    )
 
 
 def _inherited_editorial_source_urls(payload):
@@ -1260,10 +1552,8 @@ def create_editorial_revision_draft(
         sealed_payload = _validate_predecessor_publication_snapshot(
             publication_snapshot,
             predecessor=predecessor,
-            decision=decision,
-            decision_snapshot=context["decision_snapshot"],
             organization=context["organization"],
-        )
+        )["payload"]
 
         resolved_headline = _revision_content_value(
             headline,

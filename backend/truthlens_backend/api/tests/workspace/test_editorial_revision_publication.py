@@ -454,12 +454,10 @@ class EditorialRevisionPublicationTests(EditorialReplacementFixtures, TestCase):
             return_value={},
         ):
             with self.assertRaises(PublishingConflict):
-                publishing_service._validate_editorial_revision_chain(
+                publishing_service._validate_complete_publication_history(
                     predecessor=cyclic_items[1],
                     fact_checks=cyclic_items,
                     publication_snapshots=cyclic_snapshots,
-                    decision=SimpleNamespace(),
-                    decision_snapshot=SimpleNamespace(),
                     organization=SimpleNamespace(),
                 )
 
@@ -485,12 +483,10 @@ class EditorialRevisionPublicationTests(EditorialReplacementFixtures, TestCase):
             return_value={},
         ):
             with self.assertRaises(PublishingConflict):
-                publishing_service._validate_editorial_revision_chain(
+                publishing_service._validate_complete_publication_history(
                     predecessor=branched_items[1],
                     fact_checks=branched_items,
                     publication_snapshots=branched_snapshots,
-                    decision=SimpleNamespace(),
-                    decision_snapshot=SimpleNamespace(),
                     organization=SimpleNamespace(),
                 )
 
