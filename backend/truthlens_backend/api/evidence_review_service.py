@@ -1,4 +1,5 @@
 import logging
+import uuid
 
 from django.db import transaction
 from django.db.models import Prefetch
@@ -7,8 +8,10 @@ from django.utils import timezone
 from .models import (
     Claim,
     EvidenceSubmission,
+    FactualCorrectionRequest,
     ModerationCase,
     ModerationEvent,
+    OfficialFactCheck,
 )
 
 from .moderation_service import (
@@ -19,8 +22,20 @@ from .moderation_service import (
     transition_moderation_case,
 )
 from .adjudication_service import (
+    _build_decision_evidence_records,
     ensure_claim_adjudication_readiness,
     get_current_adjudication_decision,
+)
+from .evidence_snapshot_schema import (
+    CURRENT_SCHEMA_VERSION as EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
+    EvidenceSnapshotSchemaError,
+    validate_evidence_snapshot,
+)
+from .publishing_service import (
+    PublishingAuthorizationError,
+    PublishingConflict,
+    _lock_publication_context,
+    _validate_editorial_revision_chain,
 )
 from .verification_assignment_service import (
     get_claim_verification_organization,
@@ -49,6 +64,114 @@ class InvalidEvidenceDecision(EvidenceReviewError):
 
 class EvidenceReviewConflict(EvidenceReviewError):
     pass
+
+
+def _parse_correction_uuid(value, field_name):
+    if isinstance(value, bool):
+        raise InvalidEvidenceDecision(f"{field_name} must be a valid UUID.")
+    try:
+        return uuid.UUID(str(value))
+    except (TypeError, ValueError, AttributeError) as error:
+        raise InvalidEvidenceDecision(
+            f"{field_name} must be a valid UUID."
+        ) from error
+
+
+def _parse_correction_version(value, field_name):
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise InvalidEvidenceDecision(
+            f"{field_name} must be a positive integer."
+        )
+    return value
+
+
+def _validate_correction_evidence_decision(
+    *,
+    evidence_status,
+    expected_evidence_status,
+    moderator_notes,
+    rejection_reason,
+):
+    valid_statuses = {
+        value for value, _label in EvidenceSubmission.EvidenceStatus.choices
+    }
+    if expected_evidence_status not in valid_statuses:
+        raise InvalidEvidenceDecision("Invalid expected evidence status.")
+    if evidence_status not in {
+        EvidenceSubmission.EvidenceStatus.VERIFIED,
+        EvidenceSubmission.EvidenceStatus.REJECTED,
+    }:
+        raise InvalidEvidenceDecision(
+            "Evidence decision must be VERIFIED or REJECTED."
+        )
+    if not isinstance(moderator_notes, str):
+        raise InvalidEvidenceDecision("Moderator notes must be a string.")
+    if len(moderator_notes) > 2000:
+        raise InvalidEvidenceDecision(
+            "Moderator notes must be 2000 characters or fewer."
+        )
+    valid_rejection_reasons = {
+        value for value, _label in EvidenceSubmission.RejectionReason.choices
+    }
+    if rejection_reason and rejection_reason not in valid_rejection_reasons:
+        raise InvalidEvidenceDecision("Invalid evidence rejection reason.")
+    if (
+        evidence_status == EvidenceSubmission.EvidenceStatus.REJECTED
+        and not rejection_reason
+    ):
+        raise InvalidEvidenceDecision(
+            "A rejection reason is required when rejecting evidence."
+        )
+    if (
+        evidence_status == EvidenceSubmission.EvidenceStatus.VERIFIED
+        and rejection_reason
+    ):
+        raise InvalidEvidenceDecision(
+            "A rejection reason cannot be supplied when verifying evidence."
+        )
+
+
+def _get_correction_review_identity(*, correction_request_id, evidence_id):
+    correction_request_id = _parse_correction_uuid(
+        correction_request_id,
+        "correction_request_id",
+    )
+    evidence_id = _parse_correction_uuid(evidence_id, "evidence_id")
+    request_identity = (
+        FactualCorrectionRequest.objects.filter(pk=correction_request_id)
+        .values(
+            "claim_id",
+            "organization_id",
+            "predecessor_decision_id",
+            "predecessor_fact_check_id",
+        )
+        .first()
+    )
+    evidence_identity = (
+        EvidenceSubmission.objects.filter(pk=evidence_id)
+        .values("thread__claim_id")
+        .first()
+    )
+    if request_identity is None:
+        raise EvidenceReviewConflict(
+            "The factual correction request is no longer available."
+        )
+    if evidence_identity is None:
+        raise EvidenceReviewConflict(
+            "This evidence is no longer available for correction review."
+        )
+    if evidence_identity["thread__claim_id"] != request_identity["claim_id"]:
+        raise EvidenceReviewConflict(
+            "This evidence does not belong to the correction request's claim."
+        )
+    return {
+        "correction_request_id": correction_request_id,
+        "evidence_id": evidence_id,
+        "claim_id": request_identity["claim_id"],
+        "organization_id": request_identity["organization_id"],
+        "decision_id": request_identity["predecessor_decision_id"],
+        "fact_check_id": request_identity["predecessor_fact_check_id"],
+    }
 
 
 def ensure_can_review_evidence(actor, organization):
@@ -267,6 +390,346 @@ def _prepare_evidence_case_for_review(
         )
 
     return case
+
+
+def review_correction_evidence(
+    *,
+    correction_request_id,
+    evidence_id,
+    actor,
+    evidence_status,
+    expected_evidence_status,
+    expected_case_id=None,
+    moderator_notes="",
+    rejection_reason=None,
+    expected_predecessor_version,
+    expected_decision_revision,
+):
+    """Review evidence under one explicit active factual-correction reservation.
+
+    The shared publication context establishes the Claim-first authority lock
+    order through correction requests. The correction Adjudication case, selected
+    evidence row, and its Evidence cases are locked only after that context.
+    """
+
+    _validate_correction_evidence_decision(
+        evidence_status=evidence_status,
+        expected_evidence_status=expected_evidence_status,
+        moderator_notes=moderator_notes,
+        rejection_reason=rejection_reason,
+    )
+    expected_predecessor_version = _parse_correction_version(
+        expected_predecessor_version,
+        "expected_predecessor_version",
+    )
+    expected_decision_revision = _parse_correction_version(
+        expected_decision_revision,
+        "expected_decision_revision",
+    )
+    if expected_case_id is not None:
+        expected_case_id = _parse_correction_uuid(
+            expected_case_id,
+            "expected_case_id",
+        )
+    if not actor or not actor.is_authenticated:
+        raise EvidenceReviewAuthorizationError(
+            "Authentication is required to review correction evidence."
+        )
+
+    identity = _get_correction_review_identity(
+        correction_request_id=correction_request_id,
+        evidence_id=evidence_id,
+    )
+
+    with transaction.atomic():
+        try:
+            context = _lock_publication_context(
+                identity=identity,
+                actor=actor,
+                capability=PartnerCapability.REVIEW_EVIDENCE,
+            )
+        except PublishingAuthorizationError as error:
+            raise EvidenceReviewAuthorizationError(
+                "You do not have permission to review correction evidence for "
+                "this organization."
+            ) from error
+        except PublishingConflict as error:
+            raise EvidenceReviewConflict(str(error)) from error
+
+        correction_request = next(
+            (
+                item
+                for item in context["correction_requests"]
+                if item.id == identity["correction_request_id"]
+            ),
+            None,
+        )
+        if (
+            correction_request is None
+            or correction_request.status != FactualCorrectionRequest.Status.ACTIVE
+        ):
+            raise EvidenceReviewConflict(
+                "The factual correction request is no longer active."
+            )
+
+        decision = context["decision"]
+        predecessor = context["fact_check"]
+        if predecessor.version != expected_predecessor_version:
+            raise EvidenceReviewConflict(
+                "The published predecessor changed before evidence review."
+            )
+        if decision.revision_number != expected_decision_revision:
+            raise EvidenceReviewConflict(
+                "The adjudication decision changed before evidence review."
+            )
+        if (
+            correction_request.claim_id != context["claim"].id
+            or correction_request.organization_id != context["organization"].id
+            or correction_request.predecessor_decision_id != decision.id
+            or correction_request.predecessor_fact_check_id != predecessor.id
+        ):
+            raise EvidenceReviewConflict(
+                "The correction request no longer matches its recorded authority."
+            )
+
+        published = [
+            item
+            for item in context["fact_checks"]
+            if item.publication_status
+            == OfficialFactCheck.PublicationStatus.PUBLISHED
+        ]
+        if len(published) != 1 or published[0].id != predecessor.id:
+            raise EvidenceReviewConflict(
+                "The correction request's predecessor is not the current "
+                "published fact-check."
+            )
+        try:
+            predecessor_snapshot = _validate_editorial_revision_chain(
+                predecessor=predecessor,
+                fact_checks=context["fact_checks"],
+                publication_snapshots=context["publication_snapshots"],
+                decision=decision,
+                decision_snapshot=context["decision_snapshot"],
+                organization=context["organization"],
+            )
+        except PublishingConflict as error:
+            raise EvidenceReviewConflict(str(error)) from error
+        if (
+            correction_request.predecessor_publication_snapshot_id
+            != predecessor_snapshot.id
+        ):
+            raise EvidenceReviewConflict(
+                "The correction request no longer matches its sealed predecessor."
+            )
+        if context["assignment"] is not None:
+            raise EvidenceReviewConflict(
+                "Correction evidence review cannot run through an ordinary "
+                "verification assignment."
+            )
+
+        correction_case = (
+            ModerationCase.objects.select_for_update(of=("self",))
+            .filter(
+                pk=correction_request.moderation_case_id,
+                case_type=ModerationCase.CaseType.ADJUDICATION,
+                claim=context["claim"],
+                organization=context["organization"],
+                status__in=ACTIVE_CASE_STATUSES,
+            )
+            .first()
+        )
+        if (
+            correction_case is None
+            or correction_case.id == decision.moderation_case_id
+        ):
+            raise EvidenceReviewConflict(
+                "The factual correction request's correction case is not active."
+            )
+
+        try:
+            locked_evidence = (
+                EvidenceSubmission.objects.select_for_update(of=("self",))
+                .select_related("contributor", "thread", "thread__claim")
+                .get(
+                    pk=identity["evidence_id"],
+                    thread__claim=context["claim"],
+                )
+            )
+        except EvidenceSubmission.DoesNotExist as error:
+            raise EvidenceReviewConflict(
+                "This evidence is no longer available for correction review."
+            ) from error
+
+        if locked_evidence.contributor_id == actor.id:
+            raise EvidenceReviewAuthorizationError(
+                "You cannot review your own evidence."
+            )
+        if locked_evidence.evidence_status != expected_evidence_status:
+            raise EvidenceReviewConflict(
+                "This evidence changed after the correction review was opened. "
+                "Refresh it before deciding."
+            )
+
+        evidence_cases = list(
+            ModerationCase.objects.select_for_update(of=("self",))
+            .select_related("organization")
+            .filter(
+                case_type=ModerationCase.CaseType.EVIDENCE,
+                evidence_submission=locked_evidence,
+            )
+            .order_by("created_at", "id")
+        )
+        active_cases = [
+            item for item in evidence_cases if item.status in ACTIVE_CASE_STATUSES
+        ]
+        if expected_case_id is not None:
+            case = next(
+                (item for item in evidence_cases if item.id == expected_case_id),
+                None,
+            )
+            if case is None or any(
+                item.id != expected_case_id for item in active_cases
+            ):
+                raise EvidenceReviewConflict(
+                    "This Evidence case is no longer current."
+                )
+            if case.status == ModerationCase.Status.CANCELLED:
+                raise EvidenceReviewConflict(
+                    "The selected Evidence case was cancelled."
+                )
+        elif active_cases:
+            case = active_cases[-1]
+        else:
+            case = evidence_cases[-1] if evidence_cases else None
+
+        if (
+            case is not None
+            and case.organization_id != context["organization"].id
+        ):
+            raise EvidenceReviewConflict(
+                "This Evidence case is not owned by the organization responsible "
+                "for the correction."
+            )
+        if case is None or case.status == ModerationCase.Status.CANCELLED:
+            try:
+                case = create_moderation_case(
+                    case_type=ModerationCase.CaseType.EVIDENCE,
+                    actor=actor,
+                    source=ModerationCase.Source.EVIDENCE_SUBMISSION,
+                    evidence_submission=locked_evidence,
+                    organization=context["organization"],
+                )
+            except DuplicateActiveModerationCase as error:
+                raise EvidenceReviewConflict(
+                    "This Evidence case changed before correction review."
+                ) from error
+
+        if case.organization_id != context["organization"].id:
+            raise EvidenceReviewConflict(
+                "This Evidence case is not owned by the organization responsible "
+                "for the correction."
+            )
+        if not has_case_capability(
+            actor,
+            case,
+            PartnerCapability.REVIEW_EVIDENCE,
+        ):
+            raise EvidenceReviewAuthorizationError(
+                "You do not have permission to review this correction evidence."
+            )
+
+        case = _prepare_evidence_case_for_review(
+            case,
+            actor=actor,
+            allow_reopen=True,
+        )
+        previous_status = locked_evidence.evidence_status
+        reviewed_at = timezone.now()
+        locked_evidence.evidence_status = evidence_status
+        locked_evidence.verified_by = actor
+        locked_evidence.verified_at = reviewed_at
+        locked_evidence.moderator_notes = moderator_notes
+        locked_evidence.rejection_reason = (
+            rejection_reason
+            if evidence_status == EvidenceSubmission.EvidenceStatus.REJECTED
+            else None
+        )
+        locked_evidence.save(
+            update_fields=[
+                "evidence_status",
+                "verified_by",
+                "verified_at",
+                "moderator_notes",
+                "rejection_reason",
+            ]
+        )
+
+        try:
+            evidence_records = validate_evidence_snapshot(
+                schema_version=EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
+                evidence_records=_build_decision_evidence_records(
+                    [locked_evidence]
+                ),
+            )
+        except EvidenceSnapshotSchemaError as error:
+            raise EvidenceReviewConflict(
+                "The correction evidence review record could not be captured."
+            ) from error
+        evidence_record = evidence_records[0]
+        event_type = (
+            ModerationEvent.EventType.EVIDENCE_VERIFIED
+            if evidence_status == EvidenceSubmission.EvidenceStatus.VERIFIED
+            else ModerationEvent.EventType.EVIDENCE_REJECTED
+        )
+        review_event = ModerationEvent.objects.create(
+            case=case,
+            actor=actor,
+            event_type=event_type,
+            from_status=case.status,
+            to_status=case.status,
+            reason_code=rejection_reason or evidence_status,
+            notes=moderator_notes or None,
+            metadata={
+                "correction_request_id": str(correction_request.id),
+                "correction_case_id": str(correction_case.id),
+                "evidence_case_id": str(case.id),
+                "reviewer_snapshot": {
+                    "id": str(actor.pk),
+                    "username": actor.username,
+                },
+                "previous_evidence_status": previous_status,
+                "new_evidence_status": evidence_status,
+                "is_reaffirmation": previous_status == evidence_status,
+                "evidence_snapshot_schema_version": (
+                    EVIDENCE_SNAPSHOT_SCHEMA_VERSION
+                ),
+                "evidence_record": evidence_record,
+            },
+        )
+        case = transition_moderation_case(
+            case,
+            next_status=ModerationCase.Status.RESOLVED,
+            actor=actor,
+            resolution_code=evidence_status,
+            resolution_summary=(
+                moderator_notes
+                or (
+                    "Evidence verified."
+                    if evidence_status == EvidenceSubmission.EvidenceStatus.VERIFIED
+                    else "Evidence rejected."
+                )
+            ),
+        )
+
+        return {
+            "request": correction_request,
+            "correction_case": correction_case,
+            "evidence": locked_evidence,
+            "case": case,
+            "event": review_event,
+            "evidence_record": evidence_record,
+            "contributor_id": locked_evidence.contributor_id,
+        }
 
 
 def review_evidence_submission(

@@ -25,6 +25,7 @@ from .models import (
     AdjudicationDecision,
     AdjudicationDecisionEvidenceSnapshot,
     Claim,
+    FactualCorrectionRequest,
     ModerationCase,
     ModerationEvent,
     OfficialFactCheck,
@@ -271,8 +272,9 @@ def _lock_publication_context(*, identity, actor, capability):
     The canonical order is Claim, open Assignment, Organization, actor
     Membership, current AdjudicationDecision, its evidence snapshot, all claim
     fact-checks, their source rows, their evidence-lineage rows, then sealed
-    publication records. All service mutation paths use this helper, and the nested
-    assignment-completion helper reacquires only Claim then Assignment.
+    publication records, then factual-correction reservations. All service
+    mutation paths use this helper, and the nested assignment-completion helper
+    reacquires only Claim then Assignment.
     """
 
     try:
@@ -368,6 +370,11 @@ def _lock_publication_context(*, identity, actor, capability):
         .filter(fact_check__claim=locked_claim)
         .order_by("fact_check_id", "id")
     )
+    correction_requests = list(
+        FactualCorrectionRequest.objects.select_for_update(of=("self",))
+        .filter(claim=locked_claim)
+        .order_by("requested_at", "id")
+    )
 
     locked_fact_check = None
     if identity["fact_check_id"] is not None:
@@ -392,7 +399,19 @@ def _lock_publication_context(*, identity, actor, capability):
         "fact_checks": fact_checks,
         "fact_check": locked_fact_check,
         "publication_snapshots": publication_snapshots,
+        "correction_requests": correction_requests,
     }
+
+
+def _ensure_no_active_correction_reservation(context):
+    if any(
+        request.status == FactualCorrectionRequest.Status.ACTIVE
+        for request in context["correction_requests"]
+    ):
+        raise PublishingConflict(
+            "An active factual correction request reserves publication work for "
+            "this claim."
+        )
 
 
 def _normalize_source_urls(
@@ -993,6 +1012,7 @@ def create_fact_check_draft(
         )
         locked_claim = context["claim"]
         current_decision = context["decision"]
+        _ensure_no_active_correction_reservation(context)
 
         if (
             any(
@@ -1156,6 +1176,7 @@ def create_editorial_revision_draft(
         )
         predecessor = context["fact_check"]
         decision = context["decision"]
+        _ensure_no_active_correction_reservation(context)
 
         if predecessor.version != expected_predecessor_version:
             raise PublishingConflict(
@@ -1336,6 +1357,7 @@ def update_fact_check_draft(
             capability=PartnerCapability.CREATE_FACT_CHECK_DRAFT,
         )
         locked_fact_check = context["fact_check"]
+        _ensure_no_active_correction_reservation(context)
 
         if locked_fact_check.publication_status != (
             OfficialFactCheck.PublicationStatus.DRAFT
@@ -1401,6 +1423,7 @@ def submit_fact_check_for_review(
             capability=PartnerCapability.CREATE_FACT_CHECK_DRAFT,
         )
         locked_fact_check = context["fact_check"]
+        _ensure_no_active_correction_reservation(context)
 
         if locked_fact_check.publication_status != (
             OfficialFactCheck.PublicationStatus.DRAFT
@@ -1481,6 +1504,7 @@ def publish_editorial_revision(
         )
         revision = context["fact_check"]
         decision = context["decision"]
+        _ensure_no_active_correction_reservation(context)
         predecessor = next(
             (
                 item
@@ -1739,6 +1763,7 @@ def publish_fact_check(
         )
         locked_fact_check = context["fact_check"]
         current_decision = context["decision"]
+        _ensure_no_active_correction_reservation(context)
 
         if locked_fact_check.publication_status != (
             OfficialFactCheck.PublicationStatus.IN_REVIEW

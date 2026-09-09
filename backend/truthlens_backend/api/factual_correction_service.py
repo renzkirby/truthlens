@@ -116,15 +116,28 @@ def _is_expected_active_request_conflict(error):
 def _is_expected_active_adjudication_case_conflict(error):
     cause = getattr(error, "__cause__", None)
     if cause is None:
-        return True
-    diagnostic = getattr(cause, "diag", None)
+        return False
+    driver_error = getattr(cause, "__cause__", None)
+    diagnostic = getattr(cause, "diag", None) or getattr(
+        driver_error,
+        "diag",
+        None,
+    )
     constraint_name = getattr(diagnostic, "constraint_name", None)
     if constraint_name == "uniq_active_adjudication_case":
         return True
-    message = str(cause).lower()
+    sqlstate = (
+        getattr(cause, "sqlstate", None)
+        or getattr(cause, "pgcode", None)
+        or getattr(driver_error, "sqlstate", None)
+        or getattr(driver_error, "pgcode", None)
+    )
+    message = f"{cause} {driver_error or ''}".lower()
+    if sqlstate is not None and sqlstate != "23505":
+        return False
     return (
         "uniq_active_adjudication_case" in message
-        or "api_moderationcase.claim_id" in message
+        or "unique constraint failed: api_moderationcase.claim_id" in message
     )
 
 
@@ -147,11 +160,6 @@ def _lock_correction_request_context(*, identity, actor):
     except PublishingConflict as error:
         raise FactualCorrectionConflict(str(error)) from error
 
-    correction_requests = list(
-        FactualCorrectionRequest.objects.select_for_update(of=("self",))
-        .filter(claim=context["claim"])
-        .order_by("requested_at", "id")
-    )
     adjudication_cases = list(
         ModerationCase.objects.select_for_update(of=("self",))
         .filter(
@@ -162,7 +170,6 @@ def _lock_correction_request_context(*, identity, actor):
     )
     return {
         **context,
-        "correction_requests": correction_requests,
         "adjudication_cases": adjudication_cases,
     }
 
@@ -285,7 +292,7 @@ def request_factual_correction(
             )
         except DuplicateActiveModerationCase as error:
             if not _is_expected_active_adjudication_case_conflict(error):
-                raise error.__cause__
+                raise error.__cause__ or error
             raise FactualCorrectionConflict(
                 "Active Adjudication work already exists for this claim."
             ) from error

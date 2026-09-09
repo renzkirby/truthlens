@@ -23,6 +23,7 @@ from .models import (
     AdjudicationDecisionEvidenceSnapshot,
     Claim,
     EvidenceSubmission,
+    FactualCorrectionRequest,
     ModerationCase,
     ModerationEvent,
     Organization,
@@ -519,6 +520,15 @@ def ensure_adjudication_case(
     actor=None,
     organization=None,
 ):
+    if FactualCorrectionRequest.objects.filter(
+        claim=claim,
+        status=FactualCorrectionRequest.Status.ACTIVE,
+    ).exists():
+        raise AdjudicationConflict(
+            "An active factual correction request cannot be treated as a new "
+            "first-decision workflow."
+        )
+
     existing_case = get_active_adjudication_case(claim)
 
     if existing_case:
@@ -558,6 +568,15 @@ def ensure_adjudication_case(
         )
 
     except DuplicateActiveModerationCase:
+        if FactualCorrectionRequest.objects.filter(
+            claim=claim,
+            status=FactualCorrectionRequest.Status.ACTIVE,
+        ).exists():
+            raise AdjudicationConflict(
+                "An active factual correction request cannot be treated as a new "
+                "first-decision workflow."
+            )
+
         existing_case = get_active_adjudication_case(claim)
 
         if existing_case:
@@ -671,6 +690,12 @@ def ensure_claim_adjudication_readiness(
     actor=None,
     organization=None,
 ):
+    if FactualCorrectionRequest.objects.filter(
+        claim=claim,
+        status=FactualCorrectionRequest.Status.ACTIVE,
+    ).exists():
+        return None
+
     if not is_claim_ready_for_adjudication(claim):
         return None
 
