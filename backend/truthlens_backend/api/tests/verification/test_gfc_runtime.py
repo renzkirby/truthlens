@@ -335,7 +335,9 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             verification_run=start_run.return_value,
         )
 
-        retrieve_tavily.assert_called_once_with(search_query, claim_id)
+        retrieve_tavily.assert_called_once_with(
+            search_query, claim_id, verification_run=start_run.return_value,
+        )
 
         self.assertEqual(
             save_claim.call_args.args[2],
@@ -571,6 +573,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
 
         retrieve_tavily.assert_called_once_with(
             search_query[:300], claim_id, stage_prefix="url_",
+            verification_run=start_run.return_value,
         )
 
         self.assertEqual(

@@ -101,6 +101,7 @@ class VerificationRunURLRuntimeTests(TestCase):
                 self.assertEqual(self.retrieve_tavily.call_count - tavily_before, 1)
                 self.retrieve_tavily.assert_called_with(
                     self.cleaned["search_query"][:300], self.claim.pk, stage_prefix="url_",
+                    verification_run=self.claim.verification_runs.latest("created_at"),
                 )
         return self.claim.verification_runs.latest("created_at")
 
@@ -299,9 +300,11 @@ class VerificationRunURLRuntimeTests(TestCase):
     def test_tavily_query_is_truncated_before_bridge_call(self):
         self.bridge.return_value = {"claims": []}
         self.cleaned["search_query"] = "Long search query " * 30
-        self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
+        run = self._execute()
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
         self.retrieve_tavily.assert_called_once_with(
             self.cleaned["search_query"][:300], self.claim.pk, stage_prefix="url_",
+            verification_run=run,
         )
 
     def test_handled_tavily_failure_abstains(self):
