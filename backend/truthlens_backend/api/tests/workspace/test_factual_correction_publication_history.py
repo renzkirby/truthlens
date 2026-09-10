@@ -34,9 +34,7 @@ from api.tests.workspace.test_factual_correction_proposal import (
 )
 
 
-class FactualCorrectionPublicationHistoryFixtures(
-    FactualCorrectionProposalFixtures
-):
+class FactualCorrectionPublicationHistoryFixtures(FactualCorrectionProposalFixtures):
     def make_prepared_context(self, *, suffix="v3", editorial_first=False):
         if not editorial_first:
             context = self.make_proposal_context(suffix=suffix)
@@ -46,7 +44,9 @@ class FactualCorrectionPublicationHistoryFixtures(
                 context,
                 reason="Clarify the article before factual correction.",
             )
-            self.replace(context, revision)
+            replacement = self.replace(context, revision)
+            revision = replacement["fact_check"]
+
             context["published"] = revision
             context["seal"] = revision.publication_snapshot
             evidence = context["evidence"][0]
@@ -87,6 +87,11 @@ class FactualCorrectionPublicationHistoryFixtures(
 
         predecessor_decision.is_current = False
         predecessor_decision.save(update_fields=["is_current"])
+
+        # Keep the predecessor's cached ORM relation aligned with the
+        # decision row that was just transitioned out of current authority.
+        predecessor.adjudication_decision = predecessor_decision
+
         decision = AdjudicationDecision.objects.create(
             claim=context["claim"],
             moderation_case=context["correction_case"],
@@ -104,8 +109,7 @@ class FactualCorrectionPublicationHistoryFixtures(
             decision=decision,
             claim_id=context["claim"].id,
             evidence_records=[
-                item["record"]
-                for item in prepared_payload["evidence_basis"]["items"]
+                item["record"] for item in prepared_payload["evidence_basis"]["items"]
             ],
         )
         published_at = timezone.now()
@@ -270,9 +274,7 @@ class FactualCorrectionPublicationSchemaTests(
         wrong_proposal_schema["correction"]["prepared_payload_schema_version"] = 99
         malformed.append(wrong_proposal_schema)
         boolean_proposal_schema = deepcopy(payload)
-        boolean_proposal_schema["correction"][
-            "prepared_payload_schema_version"
-        ] = True
+        boolean_proposal_schema["correction"]["prepared_payload_schema_version"] = True
         malformed.append(boolean_proposal_schema)
         malformed_actor = deepcopy(payload)
         malformed_actor["correction"]["approved_by"] = {"id": "1"}
@@ -331,7 +333,6 @@ class FactualCorrectionPublicationSchemaTests(
                 **{**values, "schema_version": FIRST_PUBLICATION_SCHEMA_VERSION}
             )
 
-
     def test_v3_builder_requires_the_actual_preparing_adjudicator_and_active_case(self):
         context = self.make_prepared_context(suffix="builder-approval-identity")
         corrected = self.finalize_prepared_correction(context)
@@ -360,19 +361,29 @@ class FactualCorrectionPublicationSchemaTests(
             "prepared_proposal": context["prepared_proposal"],
         }
 
-        for invalid_actor in (self.moderator, None):
-            with self.subTest(invalid_actor=invalid_actor):
-                AdjudicationDecision.objects.filter(pk=decision.pk).update(
-                    decided_by=invalid_actor
-                )
-                decision.refresh_from_db()
-                with self.assertRaises(ValidationError):
-                    OfficialFactCheckPublicationSnapshot.build_payload(**values)
-
+        # A different live adjudicator must not replace the actual preparer.
         AdjudicationDecision.objects.filter(pk=decision.pk).update(
-            decided_by=self.lead
+            decided_by=self.moderator
         )
         decision.refresh_from_db()
+
+        with self.assertRaises(ValidationError):
+            OfficialFactCheckPublicationSnapshot.build_payload(**values)
+
+        # A deleted historical approver is allowed because immutable prepared
+        # attribution remains authoritative.
+        AdjudicationDecision.objects.filter(pk=decision.pk).update(decided_by=None)
+        decision.refresh_from_db()
+
+        self.assertEqual(
+            OfficialFactCheckPublicationSnapshot.build_payload(**values),
+            corrected.publication_snapshot.payload,
+        )
+
+        # Restore the original live adjudicator.
+        AdjudicationDecision.objects.filter(pk=decision.pk).update(decided_by=self.lead)
+        decision.refresh_from_db()
+
         self.assertEqual(
             OfficialFactCheckPublicationSnapshot.build_payload(**values),
             corrected.publication_snapshot.payload,
@@ -387,6 +398,16 @@ class FactualCorrectionPublicationSchemaTests(
                     status=invalid_status
                 )
                 correction_case.refresh_from_db()
+                request.refresh_from_db()
+
+                # Rebuild the request with its current moderation-case state instead of
+                # relying on a previously cached relation.
+                values["correction_request"] = (
+                    FactualCorrectionRequest.objects.select_related(
+                        "moderation_case"
+                    ).get(pk=request.pk)
+                )
+
                 with self.assertRaises(ValidationError):
                     OfficialFactCheckPublicationSnapshot.build_payload(**values)
 
@@ -453,7 +474,8 @@ class MixedDecisionPublicationHistoryTests(
         )
         for suffix, field, value in mutations:
             with self.subTest(field=field):
-                context = self.make_prepared_context(suffix=f"wrong-{suffix}")
+                safe_suffix = suffix.replace(" ", "-")
+                context = self.make_prepared_context(suffix=f"wrong-{safe_suffix}")
                 corrected = self.finalize_prepared_correction(context)
                 payload = deepcopy(corrected.publication_snapshot.payload)
                 payload["correction"][field] = value
@@ -546,23 +568,33 @@ class MixedDecisionPublicationHistoryTests(
         )
         self.assertEqual(self.validate_history(context), corrected.publication_snapshot)
 
-
     def test_published_correction_requires_completed_request_and_resolved_case(self):
         context = self.make_prepared_context(suffix="completed-history")
         corrected = self.finalize_prepared_correction(context)
+
         request = context["correction_request"]
         correction_case = context["correction_case"]
-        resolved_at = correction_case.resolved_at
 
+        # finalize_prepared_correction() updates these rows through QuerySet.update(),
+        # so refresh them before capturing the committed lifecycle state.
+        request.refresh_from_db()
+        correction_case.refresh_from_db()
+
+        resolved_at = correction_case.resolved_at
+        self.assertIsNotNone(resolved_at)
+
+        # A committed factual correction must not point to an ACTIVE request.
         FactualCorrectionRequest.objects.filter(pk=request.pk).update(
             status=FactualCorrectionRequest.Status.ACTIVE
         )
         with self.assertRaises(PublishingConflict):
             self.validate_history(context)
 
+        # Restore the completed request before validating case-state failures.
         FactualCorrectionRequest.objects.filter(pk=request.pk).update(
             status=FactualCorrectionRequest.Status.COMPLETED
         )
+
         for invalid_status in (
             ModerationCase.Status.OPEN,
             ModerationCase.Status.CANCELLED,
@@ -574,6 +606,7 @@ class MixedDecisionPublicationHistoryTests(
                 with self.assertRaises(PublishingConflict):
                     self.validate_history(context)
 
+        # RESOLVED without a durable resolution timestamp is still invalid.
         ModerationCase.objects.filter(pk=correction_case.pk).update(
             status=ModerationCase.Status.RESOLVED,
             resolved_at=None,
@@ -581,10 +614,16 @@ class MixedDecisionPublicationHistoryTests(
         with self.assertRaises(PublishingConflict):
             self.validate_history(context)
 
+        # Restore the exact valid committed lifecycle state.
         ModerationCase.objects.filter(pk=correction_case.pk).update(
-            resolved_at=resolved_at
+            status=ModerationCase.Status.RESOLVED,
+            resolved_at=resolved_at,
         )
-        self.assertEqual(self.validate_history(context), corrected.publication_snapshot)
+
+        self.assertEqual(
+            self.validate_history(context),
+            corrected.publication_snapshot,
+        )
 
     def test_stale_tip_is_rejected_and_never_published_draft_is_excluded(self):
         context = self.make_prepared_context(suffix="tip")

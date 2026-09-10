@@ -2433,9 +2433,13 @@ class OfficialFactCheck(models.Model):
                 revision_errors["revision_reason"] = (
                     "Revision reason must be 2000 characters or fewer."
                 )
-            if self._state.adding and self.revision_requested_by_id is None:
+            if (
+                self._state.adding
+                and self.revision_requested_by_id is None
+                and self.revision_kind == self.RevisionKind.EDITORIAL_REVISION
+            ):
                 revision_errors["revision_requested_by"] = (
-                    "A revision must record its initiating actor."
+                    "An editorial revision must record its initiating actor."
                 )
             if self.revision_requested_at is None:
                 revision_errors["revision_requested_at"] = (
@@ -3327,9 +3331,11 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
                 != prepared_proposal.source_urls
                 or proposal_payload["approval"]["actor"]
                 != prepared_proposal.prepared_by_snapshot
-                or new_decision.decided_by_id is None
-                or proposal_payload["approval"]["actor"]["id"]
-                != str(new_decision.decided_by_id)
+                or (
+                    new_decision.decided_by_id is not None
+                    and proposal_payload["approval"]["actor"]["id"]
+                    != str(new_decision.decided_by_id)
+                )
                 or proposal_payload["approval"]["prepared_at"]
                 != prepared_proposal.prepared_at.isoformat()
                 or proposal_payload["evidence_basis"]["schema_version"]

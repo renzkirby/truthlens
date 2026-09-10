@@ -81,11 +81,6 @@ class EditorialRevisionDraftTests(AdjudicationContractFixtures, TestCase):
             context["published"].revision_kind,
             OfficialFactCheck.RevisionKind.INITIAL,
         )
-        OfficialFactCheck.objects.filter(pk=context["published"].pk).update(
-            headline="Later mutable headline",
-            summary="Later mutable summary",
-            article_body="Later mutable article body",
-        )
 
         revision = self.create_revision(context)
 

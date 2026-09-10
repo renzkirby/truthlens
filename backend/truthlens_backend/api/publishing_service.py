@@ -10,6 +10,7 @@ from django.core.validators import (
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from .adjudication_service import _build_decision_evidence_records
 from .evidence_snapshot_schema import (
     EvidenceSnapshotSchemaError,
     validate_evidence_snapshot,
@@ -41,8 +42,12 @@ from .models import (
     OfficialFactCheckSourceEvidenceLink,
     Organization,
     OrganizationMembership,
+    Thread,
     VerificationAssignment,
+    VerificationRun,
 )
+
+from .moderation_service import ACTIVE_CASE_STATUSES
 
 from .organization_service import (
     PartnerCapability,
@@ -615,15 +620,12 @@ def _validate_editorial_history_edge(*, predecessor, successor, nodes):
     successor_snapshot = successor_node["snapshot"]
     revision = successor_node["payload"].get("revision")
     if (
-        successor.revision_kind
-        != OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
+        successor.revision_kind != OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
         or successor.claim_id != predecessor.claim_id
         or successor.organization_id != predecessor.organization_id
-        or successor.adjudication_decision_id
-        != predecessor.adjudication_decision_id
+        or successor.adjudication_decision_id != predecessor.adjudication_decision_id
         or successor.version <= predecessor.version
-        or successor_snapshot.schema_version
-        != EDITORIAL_REVISION_SCHEMA_VERSION
+        or successor_snapshot.schema_version != EDITORIAL_REVISION_SCHEMA_VERSION
         or not isinstance(revision, dict)
         or revision.get("supersedes_fact_check_id") != str(predecessor.id)
         or revision.get("supersedes_publication_snapshot_id")
@@ -659,8 +661,7 @@ def _validate_factual_correction_history_edge(
     successor_decision_snapshot = successor_node["decision_snapshot"]
     correction = successor_node["payload"].get("correction")
     if (
-        successor.revision_kind
-        != OfficialFactCheck.RevisionKind.FACTUAL_CORRECTION
+        successor.revision_kind != OfficialFactCheck.RevisionKind.FACTUAL_CORRECTION
         or successor_snapshot.schema_version != FACTUAL_CORRECTION_SCHEMA_VERSION
         or not isinstance(correction, dict)
         or successor.claim_id != predecessor.claim_id
@@ -672,8 +673,7 @@ def _validate_factual_correction_history_edge(
         != predecessor_decision.revision_number + 1
         or successor_decision.claim_id != predecessor_decision.claim_id
         or successor_decision.organization_id != predecessor_decision.organization_id
-        or correction.get("predecessor_decision_id")
-        != str(predecessor_decision.id)
+        or correction.get("predecessor_decision_id") != str(predecessor_decision.id)
         or correction.get("predecessor_decision_revision")
         != predecessor_decision.revision_number
         or correction.get("predecessor_decision_evidence_snapshot_id")
@@ -685,8 +685,7 @@ def _validate_factual_correction_history_edge(
         or correction.get("predecessor_published_at")
         != predecessor_snapshot.captured_at.isoformat()
         or correction.get("new_decision_id") != str(successor_decision.id)
-        or correction.get("new_decision_revision")
-        != successor_decision.revision_number
+        or correction.get("new_decision_revision") != successor_decision.revision_number
         or correction.get("new_decision_evidence_snapshot_id")
         != str(successor_decision_snapshot.id)
     ):
@@ -714,8 +713,7 @@ def _validate_factual_correction_history_edge(
         or request.predecessor_decision_id != predecessor_decision.id
         or request.predecessor_fact_check_id != predecessor.id
         or request.predecessor_publication_snapshot_id != predecessor_snapshot.id
-        or request.moderation_case.case_type
-        != ModerationCase.CaseType.ADJUDICATION
+        or request.moderation_case.case_type != ModerationCase.CaseType.ADJUDICATION
         or request.moderation_case.claim_id != successor.claim_id
         or request.moderation_case.organization_id != successor.organization_id
         or request.moderation_case.status != ModerationCase.Status.RESOLVED
@@ -759,18 +757,14 @@ def _validate_factual_correction_history_edge(
     sealed_sources = {
         source["url"]: source for source in successor_node["payload"]["sources"]
     }
-    proposed_sources = {
-        source["url"]: source for source in proposal_payload["sources"]
-    }
+    proposed_sources = {source["url"]: source for source in proposal_payload["sources"]}
     if (
         proposal_payload["proposal_id"] != str(proposal.id)
         or proposal_payload["proposal_version"] != proposal.version
         or proposal_payload["correction_request_id"] != str(request.id)
         or proposal_payload["claim_id"] != str(successor.claim_id)
-        or proposal_payload["correction_case_id"]
-        != str(request.moderation_case_id)
-        or proposal_payload["organization"]["id"]
-        != str(successor.organization_id)
+        or proposal_payload["correction_case_id"] != str(request.moderation_case_id)
+        or proposal_payload["organization"]["id"] != str(successor.organization_id)
         or proposal_payload["organization"] != proposal.organization_snapshot
         or proposal_payload["predecessor"] != expected_predecessor
         or proposal_payload["decision"]
@@ -819,8 +813,7 @@ def _validate_factual_correction_history_edge(
         or correction["approved_by"] != proposal.prepared_by_snapshot
         or correction["approved_at"] != proposal.prepared_at.isoformat()
         or proposal_payload["approval"]["actor"] != correction["approved_by"]
-        or proposal_payload["approval"]["prepared_at"]
-        != correction["approved_at"]
+        or proposal_payload["approval"]["prepared_at"] != correction["approved_at"]
         or successor.revision_reason != request.correction_reason
         or successor.revision_requested_at != request.requested_at
         or (
@@ -830,8 +823,7 @@ def _validate_factual_correction_history_edge(
         )
         or (
             successor_decision.decided_by_id is not None
-            and correction["approved_by"]["id"]
-            != str(successor_decision.decided_by_id)
+            and correction["approved_by"]["id"] != str(successor_decision.decided_by_id)
         )
     ):
         raise PublishingConflict(
@@ -839,13 +831,9 @@ def _validate_factual_correction_history_edge(
         )
     for source_url, proposed_source in proposed_sources.items():
         sealed_source = sealed_sources[source_url]
-        if (
-            sealed_source["is_editorially_selected"] is not True
-            or {
-                link["captured_evidence_id"] for link in sealed_source["lineage"]
-            }
-            != {link["evidence_id"] for link in proposed_source["evidence"]}
-        ):
+        if sealed_source["is_editorially_selected"] is not True or {
+            link["captured_evidence_id"] for link in sealed_source["lineage"]
+        } != {link["evidence_id"] for link in proposed_source["evidence"]}:
             raise PublishingConflict(
                 "The corrected publication source provenance is inconsistent."
             )
@@ -867,8 +855,7 @@ def _validate_complete_publication_history(
         item.id: item
         for item in fact_checks
         if (
-            item.publication_status
-            == OfficialFactCheck.PublicationStatus.PUBLISHED
+            item.publication_status == OfficialFactCheck.PublicationStatus.PUBLISHED
             or item.published_at is not None
             or item.id in snapshots_by_fact_check_id
         )
@@ -900,9 +887,7 @@ def _validate_complete_publication_history(
             roots.append(item)
             continue
         if item.supersedes_id not in published_history:
-            raise PublishingConflict(
-                "The publication revision chain is disconnected."
-            )
+            raise PublishingConflict("The publication revision chain is disconnected.")
         children_by_predecessor_id.setdefault(item.supersedes_id, []).append(item)
 
     if any(len(children) > 1 for children in children_by_predecessor_id.values()):
@@ -916,10 +901,8 @@ def _validate_complete_publication_history(
 
     root = roots[0]
     if (
-        root.revision_kind
-        not in {None, OfficialFactCheck.RevisionKind.INITIAL}
-        or nodes[root.id]["snapshot"].schema_version
-        != FIRST_PUBLICATION_SCHEMA_VERSION
+        root.revision_kind not in {None, OfficialFactCheck.RevisionKind.INITIAL}
+        or nodes[root.id]["snapshot"].schema_version != FIRST_PUBLICATION_SCHEMA_VERSION
     ):
         raise PublishingConflict(
             "The publication revision chain has uncertain root provenance."
@@ -929,9 +912,7 @@ def _validate_complete_publication_history(
     current = root
     while current is not None:
         if current.id in visited:
-            raise PublishingConflict(
-                "The publication revision chain contains a cycle."
-            )
+            raise PublishingConflict("The publication revision chain contains a cycle.")
         visited.add(current.id)
         children = children_by_predecessor_id.get(current.id, [])
         if not children:
@@ -1824,16 +1805,14 @@ def publish_editorial_revision(
         published = [
             item
             for item in context["fact_checks"]
-            if item.publication_status
-            == OfficialFactCheck.PublicationStatus.PUBLISHED
+            if item.publication_status == OfficialFactCheck.PublicationStatus.PUBLISHED
         ]
         if len(published) != 1 or published[0].id != predecessor.id:
             raise PublishingConflict(
                 "The selected predecessor is not the current published fact-check."
             )
         if (
-            revision.publication_status
-            != OfficialFactCheck.PublicationStatus.IN_REVIEW
+            revision.publication_status != OfficialFactCheck.PublicationStatus.IN_REVIEW
             or revision.supersedes_id != predecessor.id
             or revision.revision_kind
             != OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
@@ -1873,17 +1852,14 @@ def publish_editorial_revision(
             or revision.revision_requested_by_id is None
             or revision.revision_requested_at is None
         ):
-            raise PublishingConflict(
-                "The editorial revision provenance is incomplete."
-            )
+            raise PublishingConflict("The editorial revision provenance is incomplete.")
         if context["assignment"] is not None:
             raise PublishingConflict(
                 "Open verification work must be resolved before an editorial "
                 "replacement can be published."
             )
         if any(
-            item.id != revision.id
-            and item.publication_status in ACTIVE_DRAFT_STATUSES
+            item.id != revision.id and item.publication_status in ACTIVE_DRAFT_STATUSES
             for item in context["fact_checks"]
         ):
             raise PublishingConflict(
@@ -2005,9 +1981,7 @@ def publish_editorial_revision(
                         "predecessor_publication_snapshot_id": str(
                             predecessor_snapshot.id
                         ),
-                        "successor_publication_snapshot_id": str(
-                            successor_snapshot.id
-                        ),
+                        "successor_publication_snapshot_id": str(successor_snapshot.id),
                     },
                 )
                 if revision_event is None:
@@ -2029,9 +2003,7 @@ def publish_editorial_revision(
             ) from error
 
         revision_id_for_index = revision.id
-        transaction.on_commit(
-            lambda: _queue_fact_check_index(revision_id_for_index)
-        )
+        transaction.on_commit(lambda: _queue_fact_check_index(revision_id_for_index))
         return {
             "fact_check": revision,
             "archived_fact_check": predecessor,
@@ -2106,10 +2078,7 @@ def publish_fact_check(
         }
         if any(
             item.published_at is not None
-            or (
-                item.id != locked_fact_check.id
-                and item.id in sealed_fact_check_ids
-            )
+            or (item.id != locked_fact_check.id and item.id in sealed_fact_check_ids)
             for item in context["fact_checks"]
         ):
             raise PublishingConflict(
@@ -2207,4 +2176,863 @@ def publish_fact_check(
         return {
             "fact_check": locked_fact_check,
             "archived_fact_check": previous_published,
+        }
+
+
+def _get_factual_correction_handoff_identity(
+    *,
+    correction_request_id,
+    organization_id,
+):
+    correction_request_id = _parse_uuid_identity(
+        correction_request_id,
+        "correction_request_id",
+    )
+    organization_id = _parse_uuid_identity(organization_id, "organization_id")
+    identity = (
+        FactualCorrectionRequest.objects.filter(pk=correction_request_id)
+        .values(
+            "claim_id",
+            "organization_id",
+            "predecessor_decision_id",
+            "predecessor_fact_check_id",
+        )
+        .first()
+    )
+    if identity is None:
+        raise PublishingConflict(
+            "The factual correction request is no longer available."
+        )
+    if identity["organization_id"] != organization_id:
+        raise PublishingConflict(
+            "The factual correction request does not belong to this organization."
+        )
+    return {
+        "correction_request_id": correction_request_id,
+        "claim_id": identity["claim_id"],
+        "organization_id": organization_id,
+        "decision_id": identity["predecessor_decision_id"],
+        "fact_check_id": identity["predecessor_fact_check_id"],
+    }
+
+
+def _is_expected_factual_correction_integrity_conflict(error):
+    cause = getattr(error, "__cause__", None)
+    diagnostic = getattr(cause, "diag", None)
+    constraint_name = getattr(diagnostic, "constraint_name", None)
+    expected_constraints = {
+        "uniq_current_adjudication_decision_claim",
+        "uniq_adjudication_claim_revision",
+        "uniq_fact_check_claim_version",
+        "uniq_published_fact_check_claim",
+        "uniq_reserved_fact_check_successor",
+    }
+    if constraint_name in expected_constraints:
+        return True
+    message = str(error).lower()
+    if any(name in message for name in expected_constraints):
+        return True
+    expected_sqlite_messages = {
+        "unique constraint failed: api_adjudicationdecision.claim_id, "
+        "api_adjudicationdecision.revision_number",
+        "unique constraint failed: api_adjudicationdecision.claim_id",
+        "unique constraint failed: api_officialfactcheck.claim_id, "
+        "api_officialfactcheck.version",
+        "unique constraint failed: api_officialfactcheck.claim_id",
+        "unique constraint failed: api_officialfactcheck.supersedes_id",
+    }
+    return message in expected_sqlite_messages
+
+
+def _verification_run_prepared_payload(run):
+    if run is None:
+        return None
+    return {
+        "id": str(run.id),
+        "claim_id": str(run.claim_id),
+        "status": run.status,
+        "pipeline_version": run.pipeline_version,
+        "triggered_by_id": (
+            str(run.triggered_by_id) if run.triggered_by_id is not None else None
+        ),
+        "started_at": run.started_at.isoformat() if run.started_at else None,
+        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+        "created_at": run.created_at.isoformat(),
+    }
+
+
+def _validate_prepared_approval_event(
+    *,
+    proposal,
+    request,
+    correction_case,
+    events,
+    payload,
+):
+    candidates = [
+        event
+        for event in events
+        if event.case_id == correction_case.id
+        and event.event_type
+        == ModerationEvent.EventType.FACTUAL_CORRECTION_PROPOSAL_PREPARED
+        and isinstance(event.metadata, dict)
+        and event.metadata.get("proposal_id") == str(proposal.id)
+    ]
+    if len(candidates) != 1:
+        raise PublishingConflict(
+            "The prepared correction approval is missing or ambiguous."
+        )
+    event = candidates[0]
+    expected_metadata = {
+        "correction_request_id": str(request.id),
+        "proposal_id": str(proposal.id),
+        "proposal_version": proposal.version,
+        "prepared_payload_schema_version": proposal.prepared_payload_schema_version,
+        "predecessor_decision_id": str(request.predecessor_decision_id),
+        "predecessor_decision_revision": payload["predecessor"]["decision_revision"],
+        "predecessor_fact_check_id": str(request.predecessor_fact_check_id),
+        "predecessor_fact_check_version": payload["predecessor"]["fact_check_version"],
+        "predecessor_publication_snapshot_id": str(
+            request.predecessor_publication_snapshot_id
+        ),
+        "approver_snapshot": proposal.prepared_by_snapshot,
+        "prepared_at": proposal.prepared_at.isoformat(),
+    }
+    if (
+        event.metadata != expected_metadata
+        or payload["approval"]["actor"] != proposal.prepared_by_snapshot
+        or payload["approval"]["prepared_at"] != proposal.prepared_at.isoformat()
+        or (
+            event.actor_id is not None
+            and event.metadata["approver_snapshot"]["id"] != str(event.actor_id)
+        )
+        or (
+            proposal.prepared_by_id is not None
+            and proposal.prepared_by_snapshot["id"] != str(proposal.prepared_by_id)
+        )
+    ):
+        raise PublishingConflict(
+            "The prepared correction approval provenance is inconsistent."
+        )
+
+
+def _validate_prepared_evidence_provenance(
+    *,
+    payload,
+    request,
+    correction_case,
+    organization,
+    evidence,
+    evidence_cases,
+    events,
+):
+    if any(case.status in ACTIVE_CASE_STATUSES for case in evidence_cases):
+        raise PublishingConflict("An Evidence case is still active for this claim.")
+
+    prepared_items = payload["evidence_basis"]["items"]
+    prepared_records = [item["record"] for item in prepared_items]
+    try:
+        validated_records = validate_evidence_snapshot(
+            schema_version=payload["evidence_basis"]["schema_version"],
+            evidence_records=prepared_records,
+        )
+    except EvidenceSnapshotSchemaError as error:
+        raise PublishingConflict(
+            "The prepared correction evidence basis is malformed."
+        ) from error
+    if validated_records != _build_decision_evidence_records(evidence) or [
+        record["id"] for record in validated_records
+    ] != [str(item.id) for item in evidence]:
+        raise PublishingConflict(
+            "The prepared correction evidence basis no longer matches the claim."
+        )
+
+    cases_by_id = {str(case.id): case for case in evidence_cases}
+    events_by_id = {str(event.id): event for event in events}
+    for item in prepared_items:
+        record = item["record"]
+        evidence_case = cases_by_id.get(item["evidence_case_id"])
+        event = events_by_id.get(item["review_event_id"])
+        expected_event_type = (
+            ModerationEvent.EventType.EVIDENCE_VERIFIED
+            if record["evidence_status"] == EvidenceSubmission.EvidenceStatus.VERIFIED
+            else ModerationEvent.EventType.EVIDENCE_REJECTED
+        )
+        expected_event_fields = {
+            "correction_request_id",
+            "correction_case_id",
+            "evidence_case_id",
+            "reviewer_snapshot",
+            "previous_evidence_status",
+            "new_evidence_status",
+            "is_reaffirmation",
+            "evidence_snapshot_schema_version",
+            "evidence_record",
+        }
+        metadata = event.metadata if event is not None else None
+        if (
+            evidence_case is None
+            or event is None
+            or evidence_case.case_type != ModerationCase.CaseType.EVIDENCE
+            or evidence_case.organization_id != organization.id
+            or str(evidence_case.evidence_submission_id) != record["id"]
+            or evidence_case.status in ACTIVE_CASE_STATUSES
+            or event.case_id != evidence_case.id
+            or event.event_type != expected_event_type
+            or event.created_at < request.requested_at
+            or not isinstance(metadata, dict)
+            or set(metadata) != expected_event_fields
+            or record["evidence_status"]
+            not in {
+                EvidenceSubmission.EvidenceStatus.VERIFIED,
+                EvidenceSubmission.EvidenceStatus.REJECTED,
+            }
+            or metadata["correction_request_id"] != str(request.id)
+            or metadata["correction_case_id"] != str(correction_case.id)
+            or metadata["evidence_case_id"] != str(evidence_case.id)
+            or metadata["new_evidence_status"] != record["evidence_status"]
+            or metadata["previous_evidence_status"]
+            not in {
+                EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+                EvidenceSubmission.EvidenceStatus.VERIFIED,
+                EvidenceSubmission.EvidenceStatus.REJECTED,
+            }
+            or not isinstance(metadata["is_reaffirmation"], bool)
+            or metadata["is_reaffirmation"]
+            != (metadata["previous_evidence_status"] == metadata["new_evidence_status"])
+            or metadata["evidence_snapshot_schema_version"]
+            != payload["evidence_basis"]["schema_version"]
+            or metadata["evidence_record"] != record
+            or not isinstance(metadata["reviewer_snapshot"], dict)
+            or set(metadata["reviewer_snapshot"]) != {"id", "username"}
+            or not all(
+                isinstance(value, str) and value.strip()
+                for value in metadata["reviewer_snapshot"].values()
+            )
+            or record["reviewer_id"] != metadata["reviewer_snapshot"]["id"]
+            or (
+                event.actor_id is not None
+                and metadata["reviewer_snapshot"].get("id") != str(event.actor_id)
+            )
+        ):
+            raise PublishingConflict(
+                "The prepared correction evidence review provenance is stale or "
+                "inconsistent."
+            )
+
+
+def _create_factual_correction_sources(
+    fact_check,
+    *,
+    decision_snapshot,
+    prepared_payload,
+):
+    evidence_records = {
+        record["id"]: record
+        for record in validate_evidence_snapshot(
+            schema_version=decision_snapshot.schema_version,
+            evidence_records=decision_snapshot.evidence_records,
+        )
+    }
+    for prepared_source in prepared_payload["sources"]:
+        evidence_ids = [
+            lineage["evidence_id"] for lineage in prepared_source["evidence"]
+        ]
+        title = next(
+            (
+                evidence_records[evidence_id]["evidence_caption"]
+                for evidence_id in evidence_ids
+                if isinstance(evidence_records[evidence_id]["evidence_caption"], str)
+                and evidence_records[evidence_id]["evidence_caption"].strip()
+            ),
+            None,
+        )
+        source = OfficialFactCheckSource(
+            fact_check=fact_check,
+            url=prepared_source["url"],
+            title=title,
+            evidence_submission=None,
+            added_by=None,
+            source_type=(
+                OfficialFactCheckSource.SourceType.VERIFIED_EVIDENCE
+                if evidence_ids
+                else OfficialFactCheckSource.SourceType.MODERATOR_ADDED
+            ),
+            is_editorially_selected=True,
+        )
+        source.full_clean(validate_unique=False, validate_constraints=False)
+        source.save()
+        for evidence_id in evidence_ids:
+            OfficialFactCheckSourceEvidenceLink.objects.create(
+                source=source,
+                snapshot=decision_snapshot,
+                captured_evidence_id=evidence_id,
+            )
+    _sync_sources_cache(fact_check)
+
+
+def _resolve_factual_correction_case(
+    case,
+    *,
+    actor,
+    decision,
+    resolved_at,
+    event_metadata,
+):
+    if (
+        case.status not in ACTIVE_CASE_STATUSES
+        or case.case_type != ModerationCase.CaseType.ADJUDICATION
+        or case.id != decision.moderation_case_id
+        or case.claim_id != decision.claim_id
+        or case.organization_id != decision.organization_id
+    ):
+        raise PublishingConflict(
+            "The factual correction Adjudication case cannot be resolved."
+        )
+    previous_status = case.status
+    case.status = ModerationCase.Status.RESOLVED
+    case.resolution_code = decision.verdict
+    case.resolution_summary = decision.rationale
+    case.resolved_by = actor
+    case.resolved_at = resolved_at
+    case.full_clean(validate_unique=False, validate_constraints=False)
+    case.save(
+        update_fields=[
+            "status",
+            "resolution_code",
+            "resolution_summary",
+            "resolved_by",
+            "resolved_at",
+            "updated_at",
+        ]
+    )
+    ModerationEvent.objects.create(
+        case=case,
+        actor=actor,
+        event_type=ModerationEvent.EventType.CASE_RESOLVED,
+        from_status=previous_status,
+        to_status=ModerationCase.Status.RESOLVED,
+        reason_code=decision.verdict,
+        notes=decision.rationale,
+        metadata=event_metadata,
+    )
+    return case
+
+
+def publish_factual_correction(
+    *,
+    correction_request_id,
+    actor,
+    organization_id,
+    expected_proposal_version,
+    expected_predecessor_version,
+    expected_decision_revision,
+):
+    """Atomically replace both factual authority and its public article."""
+
+    expected_proposal_version = _parse_expected_version(
+        expected_proposal_version,
+        "expected_proposal_version",
+    )
+    expected_predecessor_version = _parse_expected_version(
+        expected_predecessor_version,
+        "expected_predecessor_version",
+    )
+    expected_decision_revision = _parse_expected_version(
+        expected_decision_revision,
+        "expected_decision_revision",
+    )
+    if not actor or not actor.is_authenticated:
+        raise PublishingAuthorizationError(
+            "Authentication is required to publish a factual correction."
+        )
+    identity = _get_factual_correction_handoff_identity(
+        correction_request_id=correction_request_id,
+        organization_id=organization_id,
+    )
+
+    with transaction.atomic():
+        context = _lock_publication_context(
+            identity=identity,
+            actor=actor,
+            capability=PartnerCapability.PUBLISH_FACT_CHECK,
+        )
+        request = next(
+            (
+                item
+                for item in context["correction_requests"]
+                if item.id == identity["correction_request_id"]
+            ),
+            None,
+        )
+        if request is None or request.status != FactualCorrectionRequest.Status.ACTIVE:
+            raise PublishingConflict(
+                "The factual correction request has already reached a terminal state."
+            )
+
+        proposals = list(
+            FactualCorrectionProposal.objects.select_for_update(of=("self",))
+            .filter(correction_request__in=context["correction_requests"])
+            .order_by("correction_request_id", "id")
+        )
+        proposal = next(
+            (item for item in proposals if item.correction_request_id == request.id),
+            None,
+        )
+        if (
+            proposal is None
+            or proposal.status != FactualCorrectionProposal.Status.PREPARED
+        ):
+            raise PublishingConflict(
+                "A prepared factual correction proposal is required for publication."
+            )
+
+        decisions = list(
+            AdjudicationDecision.objects.select_for_update(of=("self",))
+            .filter(claim=context["claim"])
+            .order_by("revision_number", "id")
+        )
+        decision_snapshots = list(
+            AdjudicationDecisionEvidenceSnapshot.objects.select_for_update(of=("self",))
+            .filter(decision__claim=context["claim"])
+            .order_by("decision_id", "id")
+        )
+        threads = list(
+            Thread.objects.select_for_update(of=("self",))
+            .filter(claim=context["claim"])
+            .order_by("id")
+        )
+        evidence = list(
+            EvidenceSubmission.objects.select_for_update(of=("self",))
+            .filter(thread__claim=context["claim"])
+            .order_by("submitted_at", "id")
+        )
+        adjudication_cases = list(
+            ModerationCase.objects.select_for_update(of=("self",))
+            .filter(
+                case_type=ModerationCase.CaseType.ADJUDICATION,
+                claim=context["claim"],
+            )
+            .order_by("created_at", "id")
+        )
+        evidence_cases = list(
+            ModerationCase.objects.select_for_update(of=("self",))
+            .filter(
+                case_type=ModerationCase.CaseType.EVIDENCE,
+                evidence_submission__thread__claim=context["claim"],
+            )
+            .order_by("evidence_submission_id", "created_at", "id")
+        )
+        event_case_ids = [case.id for case in adjudication_cases + evidence_cases]
+        events = list(
+            ModerationEvent.objects.select_for_update(of=("self",))
+            .filter(case_id__in=event_case_ids)
+            .order_by("created_at", "id")
+        )
+
+        predecessor = context["fact_check"]
+        predecessor_decision = context["decision"]
+        predecessor_decision_snapshot = context["decision_snapshot"]
+        correction_case = next(
+            (
+                case
+                for case in adjudication_cases
+                if case.id == request.moderation_case_id
+            ),
+            None,
+        )
+        original_case = next(
+            (
+                case
+                for case in adjudication_cases
+                if case.id == predecessor_decision.moderation_case_id
+            ),
+            None,
+        )
+        if (
+            request.claim_id != context["claim"].id
+            or request.organization_id != context["organization"].id
+            or request.predecessor_decision_id != predecessor_decision.id
+            or request.predecessor_fact_check_id != predecessor.id
+            or proposal.correction_request_id != request.id
+            or proposal.version != expected_proposal_version
+            or predecessor.version != expected_predecessor_version
+            or predecessor_decision.revision_number != expected_decision_revision
+        ):
+            raise PublishingConflict(
+                "The prepared correction no longer matches the expected authority "
+                "versions."
+            )
+        if (
+            predecessor_decision_snapshot is None
+            or predecessor_decision_snapshot.id
+            not in {snapshot.id for snapshot in decision_snapshots}
+            or request.predecessor_publication_snapshot_id
+            not in {snapshot.id for snapshot in context["publication_snapshots"]}
+            or correction_case is None
+            or correction_case.id == predecessor_decision.moderation_case_id
+            or correction_case.status not in ACTIVE_CASE_STATUSES
+            or correction_case.organization_id != context["organization"].id
+            or original_case is None
+            or original_case.status != ModerationCase.Status.RESOLVED
+            or original_case.organization_id != context["organization"].id
+            or any(
+                case.id != correction_case.id and case.status in ACTIVE_CASE_STATUSES
+                for case in adjudication_cases
+            )
+        ):
+            raise PublishingConflict(
+                "The correction request's Adjudication case provenance is no longer "
+                "valid."
+            )
+        if context["assignment"] is not None:
+            raise PublishingConflict(
+                "Ordinary verification work is active for this claim."
+            )
+        published = [
+            item
+            for item in context["fact_checks"]
+            if item.publication_status == OfficialFactCheck.PublicationStatus.PUBLISHED
+        ]
+        if len(published) != 1 or published[0].id != predecessor.id:
+            raise PublishingConflict(
+                "The correction predecessor is not the current publication."
+            )
+        if any(
+            item.id != predecessor.id
+            and item.publication_status in ACTIVE_DRAFT_STATUSES
+            for item in context["fact_checks"]
+        ):
+            raise PublishingConflict(
+                "Competing publication work is active for this claim."
+            )
+        if (
+            any(
+                decision.supersedes_id == predecessor_decision.id
+                for decision in decisions
+            )
+            or max(
+                (decision.revision_number for decision in decisions),
+                default=0,
+            )
+            != predecessor_decision.revision_number
+        ):
+            raise PublishingConflict(
+                "The predecessor decision already has a recorded successor."
+            )
+
+        predecessor_seal = _validate_complete_publication_history(
+            predecessor=predecessor,
+            fact_checks=context["fact_checks"],
+            publication_snapshots=context["publication_snapshots"],
+            organization=context["organization"],
+        )
+        if predecessor_seal.id != request.predecessor_publication_snapshot_id:
+            raise PublishingConflict(
+                "The correction request no longer matches the current publication "
+                "seal."
+            )
+
+        try:
+            prepared_payload = validate_factual_correction_proposal(
+                schema_version=proposal.prepared_payload_schema_version,
+                payload=proposal.prepared_payload,
+            )
+        except FactualCorrectionProposalSchemaError as error:
+            raise PublishingConflict(
+                "The prepared factual correction proposal is malformed."
+            ) from error
+        expected_predecessor = {
+            "decision_id": str(predecessor_decision.id),
+            "decision_revision": predecessor_decision.revision_number,
+            "fact_check_id": str(predecessor.id),
+            "fact_check_version": predecessor.version,
+            "publication_snapshot_id": str(predecessor_seal.id),
+            "publication_snapshot_schema_version": predecessor_seal.schema_version,
+            "published_at": predecessor_seal.captured_at.isoformat(),
+        }
+        if (
+            prepared_payload["proposal_id"] != str(proposal.id)
+            or prepared_payload["proposal_version"] != proposal.version
+            or prepared_payload["correction_request_id"] != str(request.id)
+            or prepared_payload["claim_id"] != str(context["claim"].id)
+            or prepared_payload["correction_case_id"] != str(correction_case.id)
+            or prepared_payload["organization"] != proposal.organization_snapshot
+            or prepared_payload["organization"]["id"] != str(context["organization"].id)
+            or prepared_payload["predecessor"] != expected_predecessor
+            or prepared_payload["decision"]
+            != {
+                "verdict": proposal.verdict,
+                "canonical_claim": proposal.canonical_claim,
+                "rationale": proposal.rationale,
+            }
+            or prepared_payload["article"]
+            != {
+                "headline": proposal.headline,
+                "summary": proposal.summary,
+                "article_body": proposal.article_body,
+            }
+            or [source["url"] for source in prepared_payload["sources"]]
+            != proposal.source_urls
+            or proposal.prepared_at is None
+            or proposal.prepared_by_snapshot is None
+        ):
+            raise PublishingConflict(
+                "The prepared payload no longer matches its immutable proposal."
+            )
+
+        _validate_prepared_approval_event(
+            proposal=proposal,
+            request=request,
+            correction_case=correction_case,
+            events=events,
+            payload=prepared_payload,
+        )
+        _validate_prepared_evidence_provenance(
+            payload=prepared_payload,
+            request=request,
+            correction_case=correction_case,
+            organization=context["organization"],
+            evidence=evidence,
+            evidence_cases=evidence_cases,
+            events=events,
+        )
+
+        verification_run = None
+        if proposal.verification_run_id is not None:
+            verification_run = (
+                VerificationRun.objects.select_for_update(of=("self",))
+                .filter(
+                    pk=proposal.verification_run_id,
+                    claim=context["claim"],
+                )
+                .first()
+            )
+        if (
+            (proposal.verification_run_id is not None and verification_run is None)
+            or (
+                verification_run is not None
+                and (
+                    verification_run.status != VerificationRun.Status.COMPLETED
+                    or verification_run.completed_at is None
+                )
+            )
+            or prepared_payload["verification_run"]
+            != _verification_run_prepared_payload(verification_run)
+        ):
+            raise PublishingConflict(
+                "The prepared VerificationRun provenance is no longer valid."
+            )
+
+        handoff_at = timezone.now()
+        max_fact_check_version = max(
+            (item.version for item in context["fact_checks"]),
+            default=0,
+        )
+        next_decision_revision = predecessor_decision.revision_number + 1
+        try:
+            with transaction.atomic():
+                predecessor_decision.is_current = False
+                predecessor_decision.save(update_fields=["is_current"])
+
+                # Publication-history validation may already have cached the predecessor's
+                # adjudication_decision as a separate ORM instance. Keep that relation cache
+                # aligned with the locked decision row before constructing the v3 seal.
+                predecessor.adjudication_decision = predecessor_decision
+
+                decision = AdjudicationDecision.objects.create(
+                    claim=context["claim"],
+                    moderation_case=correction_case,
+                    verdict=prepared_payload["decision"]["verdict"],
+                    canonical_claim=prepared_payload["decision"]["canonical_claim"],
+                    rationale=prepared_payload["decision"]["rationale"],
+                    decided_by_id=proposal.prepared_by_id,
+                    organization=context["organization"],
+                    verification_run=verification_run,
+                    ai_verdict_snapshot=None,
+                    ai_confidence_snapshot=None,
+                    ai_summary_snapshot=None,
+                    ai_pipeline_version_snapshot=(
+                        verification_run.pipeline_version
+                        if verification_run is not None
+                        else None
+                    ),
+                    decision_source=AdjudicationDecision.DecisionSource.HUMAN_REVIEW,
+                    revision_number=next_decision_revision,
+                    supersedes=predecessor_decision,
+                    is_current=True,
+                    decided_at=proposal.prepared_at,
+                )
+                decision_snapshot = AdjudicationDecisionEvidenceSnapshot.objects.create(
+                    decision=decision,
+                    claim_id=context["claim"].id,
+                    schema_version=prepared_payload["evidence_basis"]["schema_version"],
+                    evidence_records=[
+                        item["record"]
+                        for item in prepared_payload["evidence_basis"]["items"]
+                    ],
+                )
+
+                predecessor.publication_status = (
+                    OfficialFactCheck.PublicationStatus.ARCHIVED
+                )
+                predecessor.archived_at = handoff_at
+                predecessor.save(
+                    update_fields=[
+                        "publication_status",
+                        "archived_at",
+                        "updated_at",
+                    ]
+                )
+                successor = OfficialFactCheck(
+                    claim=context["claim"],
+                    adjudication_decision=decision,
+                    organization=context["organization"],
+                    canonical_claim=prepared_payload["decision"]["canonical_claim"],
+                    verdict=prepared_payload["decision"]["verdict"],
+                    headline=prepared_payload["article"]["headline"],
+                    summary=prepared_payload["article"]["summary"],
+                    article_body=prepared_payload["article"]["article_body"],
+                    publication_status=OfficialFactCheck.PublicationStatus.PUBLISHED,
+                    version=max_fact_check_version + 1,
+                    drafted_by=None,
+                    submitted_for_review_at=None,
+                    reviewed_by_id=proposal.prepared_by_id,
+                    reviewed_at=proposal.prepared_at,
+                    published_by=actor,
+                    published_at=handoff_at,
+                    archived_at=None,
+                    supersedes=predecessor,
+                    revision_kind=OfficialFactCheck.RevisionKind.FACTUAL_CORRECTION,
+                    revision_reason=request.correction_reason,
+                    revision_requested_by_id=request.requested_by_id,
+                    revision_requested_at=request.requested_at,
+                )
+                successor.full_clean(
+                    validate_unique=False,
+                    validate_constraints=False,
+                )
+                successor.save()
+                _create_factual_correction_sources(
+                    successor,
+                    decision_snapshot=decision_snapshot,
+                    prepared_payload=prepared_payload,
+                )
+                _validate_publication_content(successor)
+                sealed_payload = OfficialFactCheckPublicationSnapshot.build_payload(
+                    fact_check=successor,
+                    decision_snapshot=decision_snapshot,
+                    schema_version=FACTUAL_CORRECTION_SCHEMA_VERSION,
+                    predecessor_snapshot=predecessor_seal,
+                    correction_request=request,
+                    prepared_proposal=proposal,
+                )
+                successor_seal = OfficialFactCheckPublicationSnapshot.objects.create(
+                    fact_check=successor,
+                    decision_snapshot=decision_snapshot,
+                    schema_version=FACTUAL_CORRECTION_SCHEMA_VERSION,
+                    captured_at=handoff_at,
+                    payload=sealed_payload,
+                )
+        except IntegrityError as error:
+            if not _is_expected_factual_correction_integrity_conflict(error):
+                raise
+            raise PublishingConflict(
+                "The factual correction conflicted with current decision or "
+                "publication state."
+            ) from error
+        context["claim"].final_verdict = decision.verdict
+        context["claim"].last_updated = handoff_at
+        context["claim"].save(update_fields=["final_verdict", "last_updated"])
+        thread_ids = [
+            thread.id for thread in threads if thread.status != Thread.Status.REJECTED
+        ]
+        if thread_ids:
+            Thread.objects.filter(pk__in=thread_ids).update(
+                moderator_verdict=decision.verdict,
+                moderator_notes=decision.rationale,
+                moderated_by_id=proposal.prepared_by_id,
+                moderated_at=proposal.prepared_at,
+            )
+
+        event_metadata = {
+            "correction_request_id": str(request.id),
+            "prepared_proposal_id": str(proposal.id),
+            "prepared_proposal_version": proposal.version,
+            "old_decision_id": str(predecessor_decision.id),
+            "new_decision_id": str(decision.id),
+            "old_decision_revision": predecessor_decision.revision_number,
+            "new_decision_revision": decision.revision_number,
+            "old_decision_evidence_snapshot_id": str(predecessor_decision_snapshot.id),
+            "new_decision_evidence_snapshot_id": str(decision_snapshot.id),
+            "old_fact_check_id": str(predecessor.id),
+            "new_fact_check_id": str(successor.id),
+            "old_fact_check_version": predecessor.version,
+            "new_fact_check_version": successor.version,
+            "predecessor_publication_snapshot_id": str(predecessor_seal.id),
+            "successor_publication_snapshot_id": str(successor_seal.id),
+            "approver_snapshot": proposal.prepared_by_snapshot,
+            "publisher_snapshot": {
+                "id": str(actor.id),
+                "username": actor.username,
+            },
+            # Corrections intentionally do not reuse the first-decision trust
+            # dispatch. A future policy can account for this durable marker.
+            "trust_dispatch_status": "NOT_SCHEDULED_POLICY_UNDEFINED",
+        }
+        verdict_event = ModerationEvent.objects.create(
+            case=correction_case,
+            actor=actor,
+            event_type=ModerationEvent.EventType.VERDICT_REVISED,
+            from_status=correction_case.status,
+            to_status=correction_case.status,
+            reason_code=decision.verdict,
+            notes=decision.rationale,
+            metadata=event_metadata,
+        )
+        article_event = ModerationEvent.objects.create(
+            case=correction_case,
+            actor=actor,
+            event_type=ModerationEvent.EventType.ARTICLE_REVISED,
+            from_status=OfficialFactCheck.PublicationStatus.PUBLISHED,
+            to_status=successor.publication_status,
+            reason_code=decision.verdict,
+            notes=request.correction_reason,
+            metadata={
+                **event_metadata,
+                "revision_kind": successor.revision_kind,
+                "revision_reason": successor.revision_reason,
+            },
+        )
+        correction_case = _resolve_factual_correction_case(
+            correction_case,
+            actor=actor,
+            decision=decision,
+            resolved_at=handoff_at,
+            event_metadata=event_metadata,
+        )
+        request.status = FactualCorrectionRequest.Status.COMPLETED
+        request.save(update_fields=["status", "updated_at"])
+
+        resulting_fact_checks = [*context["fact_checks"], successor]
+        resulting_snapshots = [*context["publication_snapshots"], successor_seal]
+        _validate_complete_publication_history(
+            predecessor=successor,
+            fact_checks=resulting_fact_checks,
+            publication_snapshots=resulting_snapshots,
+            organization=context["organization"],
+        )
+
+        successor_id_for_index = successor.id
+        transaction.on_commit(lambda: _queue_fact_check_index(successor_id_for_index))
+        return {
+            "decision": decision,
+            "decision_snapshot": decision_snapshot,
+            "fact_check": successor,
+            "publication_snapshot": successor_seal,
+            "archived_fact_check": predecessor,
+            "correction_request": request,
+            "case": correction_case,
+            "verdict_event": verdict_event,
+            "article_event": article_event,
         }
