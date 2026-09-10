@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import LogoImage from "../assets/truthlens_logo.png";
 import Icons from "./Icons.jsx";
 import "./NavigationBar.css";
-import NotificationPopup from "./NotificationPopup.jsx";
 import Button from "./ui/Button.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { buildApiUrl, resolveApiEndpoint } from "../utils/api";
@@ -378,8 +377,6 @@ function NavigationBar() {
                      </div>
                   )}
                </div>
-               <NotificationPopup />
-
                <div className="tl-app-nav__account" ref={dropdownRef}>
                   <button
                      ref={accountTriggerRef}
