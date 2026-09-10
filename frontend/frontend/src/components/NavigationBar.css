@@ -1,7 +1,7 @@
 /* ================= Navbar ================= */
 .top-navbar {
     background-color: var(--brand-dark);
-    height: 64px;
+    height: var(--tl-app-header-height);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -524,7 +524,7 @@
 
     .top-navbar {
         padding: 0 16px;
-        height: 56px;
+        height: var(--tl-app-mobile-header-height);
     }
 
     .nav-left {
@@ -538,7 +538,7 @@
         bottom: 0;
         left: 0;
         right: 0;
-        height: 64px;
+        height: var(--tl-app-mobile-nav-height);
         background: rgba(255, 255, 255, 0.92);
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
@@ -690,7 +690,7 @@
 @media (max-width: 480px) {
     .top-navbar {
         padding: 0 12px;
-        height: 52px;
+        height: var(--tl-app-mobile-header-height);
     }
 
     .logo-section {
@@ -703,7 +703,7 @@
     }
 
     .mobile-bottom-bar {
-        height: 60px;
+        height: var(--tl-app-mobile-nav-height);
     }
 
     .bottom-tab {

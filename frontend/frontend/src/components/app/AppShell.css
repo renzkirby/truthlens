@@ -1,0 +1,20 @@
+.app-shell {
+   --tl-app-header-height: 64px;
+   --tl-app-mobile-header-height: 56px;
+   --tl-app-mobile-nav-height: 64px;
+
+   min-width: 0;
+   min-height: 100vh;
+   min-height: 100dvh;
+}
+
+.app-shell__content {
+   min-width: 0;
+}
+
+@media (max-width: 480px) {
+   .app-shell {
+      --tl-app-mobile-header-height: 52px;
+      --tl-app-mobile-nav-height: 60px;
+   }
+}

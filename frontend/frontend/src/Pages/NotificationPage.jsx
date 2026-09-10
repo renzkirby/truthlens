@@ -1,5 +1,4 @@
 import { useState } from "react";
-import NavigationBar from "../components/NavigationBar";
 import Icons from "../components/Icons";
 import "./NotificationPage.css";
 
@@ -108,8 +107,6 @@ function NotificationPage() {
 
    return (
       <div className="notifications-layout">
-         <NavigationBar />
-
          <main className="notification-container">
             <header className="notifications-header">
                <div>

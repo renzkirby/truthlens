@@ -20,7 +20,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useNotification } from "../hooks/useNotification";
-import NavigationBar from "../components/NavigationBar";
 import Icons from "../components/Icons";
 import EvidenceCard from "../components/EvidenceCard";
 
@@ -141,7 +140,6 @@ function UserAvatar({ username = "", isMod = false, size = 36 }) {
 const ThreadDetailSkeleton = () => {
    return (
       <div className="thread-layout">
-         <NavigationBar />
          <div className="tdp-page">
             <div className="tdp-breadcrumb" style={{ borderBottomColor: "var(--border-default)" }}>
                <div className="tdp-breadcrumb-left" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -851,7 +849,6 @@ function ThreadDetailPage() {
    if (error || !thread) {
       return (
          <>
-            <NavigationBar />
             <div className="tdp-error">
                <Icons name="alert-triangle" size={32} color="#d97706" />
                <p>{error || "Thread not found."}</p>
@@ -863,8 +860,6 @@ function ThreadDetailPage() {
 
    return (
       <div className="thread-layout">
-         <NavigationBar />
-
          <div className="tdp-page">
             {/*Breadcrumb bar */}
             <div className="tdp-breadcrumb" style={{ borderBottomColor: vm.color }}>

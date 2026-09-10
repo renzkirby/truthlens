@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import "./UserHub.css";
 import Icons from "../components/Icons.jsx";
-import NavigationBar from "../components/NavigationBar.jsx";
 import { getEffectiveVerdict } from "../utils/verdict";
 import { VERDICT_META } from "../utils/constants";
 import { buildApiUrl } from "../utils/api";
@@ -539,8 +538,6 @@ const ImpactCard = ({ icon, value, label, description, tone }) => {
 const UserHubSkeleton = () => {
    return (
       <div className="hub-page-layout">
-         <NavigationBar />
-
          <div className="hub-wrapper">
             <main className="hub-container">
                {/* Overview skeleton */}
@@ -1162,8 +1159,6 @@ export default function UserHub() {
    if (error && !hubData) {
       return (
          <div className="hub-page-layout">
-            <NavigationBar />
-
             <div className="hub-wrapper">
                <main className="hub-container">
                   <div className="hub-error-state box-panel">
@@ -1385,7 +1380,6 @@ export default function UserHub() {
 
    return (
       <div className="hub-page-layout">
-         <NavigationBar />
          <div className="hub-wrapper">
             <main className="hub-container">
                <header className="hub-overview">

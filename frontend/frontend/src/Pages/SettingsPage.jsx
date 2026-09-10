@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "../hooks/useAuth";
-import NavigationBar from "../components/NavigationBar";
 import Icons from "../components/Icons";
 import "./SettingsPage.css";
 import { User } from "lucide-react";
@@ -140,8 +139,6 @@ function SettingsPage() {
 
    return (
       <div className="settings-layout">
-         <NavigationBar />
-
          <main className="settings-container">
             <div className="settings-header">
                <h1>Settings</h1>

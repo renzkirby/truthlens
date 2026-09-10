@@ -24,6 +24,7 @@ import RootRedirect from "./components/RootRedirect";
 import OrganizationInvitationPage from "./Pages/OrganizationInvitationPage.jsx";
 import PartnersPage from "./Pages/PartnersPage.jsx";
 import PartnerProfilePage from "./Pages/PartnerProfilePage.jsx";
+import AppShell from "./components/app/AppShell.jsx";
 
 function App() {
    return (
@@ -43,26 +44,29 @@ function App() {
                <Route path="/partners" element={<PartnersPage />} />
                <Route path="/partners/:slug" element={<PartnerProfilePage />} />
 
-               {/* Capability-driven operational workspace */}
-               <Route element={<PrivateRoute requireWorkspace />}>
-                  <Route path="/workspace" element={<WorkspacePage />} />
-
-                  <Route path="/moderation" element={<Navigate to="/workspace" replace />} />
-               </Route>
-
                {/* Protected Routes - accessible to any authenticated user */}
                <Route element={<PrivateRoute />}>
                   <Route path="/onboarding" element={<OnboardingPage />} />
-                  <Route path="/community" element={<CommunityFeed />} />
-                  <Route path="/dashboard" element={<UserHub />} />
-                  <Route path="/verify" element={<VerifyPage />} />
-                  <Route path="/thread/create" element={<CreateThreadPage />} />
-                  <Route path="/profile" element={<UserProfile />} />
-                  <Route path="/thread/detail/:threadId" element={<ThreadDetailPage />} />
-                  <Route path="/analysis/:claimId" element={<DeepAnalysisPage />} />
-                  <Route path="/user/:username" element={<UserProfile />} />
-                  <Route path="/settings" element={<SettingsPage />} />
-                  <Route path="/notifications" element={<NotificationPage />} />
+
+                  <Route element={<AppShell />}>
+                     <Route path="/community" element={<CommunityFeed />} />
+                     <Route path="/dashboard" element={<UserHub />} />
+                     <Route path="/verify" element={<VerifyPage />} />
+                     <Route path="/thread/create" element={<CreateThreadPage />} />
+                     <Route path="/profile" element={<UserProfile />} />
+                     <Route path="/thread/detail/:threadId" element={<ThreadDetailPage />} />
+                     <Route path="/analysis/:claimId" element={<DeepAnalysisPage />} />
+                     <Route path="/user/:username" element={<UserProfile />} />
+                     <Route path="/settings" element={<SettingsPage />} />
+                     <Route path="/notifications" element={<NotificationPage />} />
+
+                     {/* Capability-driven operational workspace */}
+                     <Route element={<PrivateRoute requireWorkspace />}>
+                        <Route path="/workspace" element={<WorkspacePage />} />
+
+                        <Route path="/moderation" element={<Navigate to="/workspace" replace />} />
+                     </Route>
+                  </Route>
                </Route>
             </Routes>
          </BrowserRouter>

@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 
 import { useAuth } from "../hooks/useAuth";
-import NavigationBar from "../components/NavigationBar.jsx";
 import Icons from "../components/Icons.jsx";
 
 import {
@@ -192,8 +191,6 @@ function WorkspacePage() {
 
    return (
       <div className="workspace-page">
-         <NavigationBar />
-
          <main className="workspace-container">
             <header className="workspace-header">
                <div className="workspace-header-copy">
