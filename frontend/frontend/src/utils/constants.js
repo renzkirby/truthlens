@@ -106,6 +106,7 @@ export const API_ENDPOINTS = {
    ONBOARDING_COMPLETE: "auth/onboarding/complete/",
    VERIFY_EMAIL: "auth/verify-email/",
    SEND_VERIFICATION: "auth/send-verification/",
+   USER_SEARCH: "users/search/",
 
    // Claims & Threads
    CLAIMS: "claims/",
