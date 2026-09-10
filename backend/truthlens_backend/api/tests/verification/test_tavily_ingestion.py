@@ -13,6 +13,7 @@ from api.models import (
     VerificationRun,
 )
 from api.verification.contracts import RawEvidence
+from api.verification.canonical_sources import assign_canonical_source
 from api.verification.ingestion import ingest_provider_evidence, ingest_raw_evidence
 from api.verification.persistence import persist_evidence_source
 from api.verification.providers.tavily import TavilyProvider
@@ -142,6 +143,9 @@ class TavilyIngestionTests(TestCase):
         self.assertEqual(tavily.content_hash, gfc.content_hash)
         self.assertEqual(tavily.canonical_url, gfc.canonical_url)
         self.assertEqual(EvidenceSource.objects.count(), 2)
+        self.assertEqual(tavily.canonical_source_id, gfc.canonical_source_id)
+        self.assertEqual(tavily.canonical_source.domain, "example.com")
+        self.assertEqual(CanonicalSource.objects.count(), 1)
 
     def test_provider_exception_propagates_without_writes(self):
         provider, client, _ = self._build_provider([])
@@ -226,10 +230,36 @@ class TavilyIngestionTests(TestCase):
             list(EvidenceSource.objects.values_list("pk", flat=True)), [existing.pk]
         )
 
-    def test_ingestion_leaves_scoring_canonical_source_and_lifecycle_untouched(self):
+    def test_canonical_assignment_failure_rolls_back_the_ingestion_batch(self):
+        provider, _, _ = self._build_provider([
+            {"url": "https://first.example/article"},
+            {"url": "https://second.example/article"},
+        ])
+        calls = []
+
+        def assign_then_fail(source):
+            calls.append(source.pk)
+            if len(calls) == 2:
+                self.assertEqual(EvidenceSource.objects.count(), 2)
+                self.assertEqual(CanonicalSource.objects.count(), 1)
+                raise RuntimeError("Simulated canonical assignment failure")
+            return assign_canonical_source(source)
+
+        with patch(
+            "api.verification.ingestion.assign_canonical_source",
+            side_effect=assign_then_fail,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "canonical assignment failure"):
+                ingest_provider_evidence(provider, "claim")
+
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(EvidenceSource.objects.count(), 0)
+        self.assertEqual(CanonicalSource.objects.count(), 0)
+
+    def test_ingestion_assigns_host_identity_and_leaves_scoring_and_lifecycle_untouched(self):
         before = {
             model: model.objects.count()
-            for model in (CanonicalSource, VerificationRun, VerificationEvidence)
+            for model in (VerificationRun, VerificationEvidence)
         }
         provider, _, _ = self._build_provider([{
             "url": "https://reuters.com/article", "content": "Source content",
@@ -240,7 +270,11 @@ class TavilyIngestionTests(TestCase):
         }])
         source = ingest_provider_evidence(provider, "claim")[0]
         source.refresh_from_db()
-        self.assertIsNone(source.canonical_source_id)
+        self.assertEqual(source.canonical_source.domain, "reuters.com")
+        self.assertEqual(source.canonical_source.name, "reuters.com")
+        self.assertIsNone(source.canonical_source.source_type)
+        self.assertIsNone(source.canonical_source.canonical_url)
+        self.assertEqual(CanonicalSource.objects.count(), 1)
         self.assertIsNone(source.authority_score)
         self.assertIsNone(source.publisher)
         self.assertEqual(source.raw_reference, {"tavily_result_index": 0})

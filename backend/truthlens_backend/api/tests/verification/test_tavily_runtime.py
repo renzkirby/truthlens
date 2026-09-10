@@ -7,7 +7,13 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from api import tasks
-from api.models import Claim, EvidenceSource, VerificationEvidence, VerificationRun
+from api.models import (
+    CanonicalSource,
+    Claim,
+    EvidenceSource,
+    VerificationEvidence,
+    VerificationRun,
+)
 from api.verification import runs
 from api.verification.contracts import RawEvidence
 from api.verification.persistence import persist_evidence_source
@@ -322,6 +328,22 @@ class TavilyTextRuntimeIngestionTests(TestCase):
             self.assertIsNone(link.directness_score)
             self.assertIsNone(link.recency_score)
 
+    def _assert_tavily_host_identities(self):
+        tavily_sources = EvidenceSource.objects.filter(provider="TAVILY")
+        self.assertEqual(
+            tavily_sources.filter(canonical_source__domain="example.com").count(),
+            3,
+        )
+        self.assertEqual(tavily_sources.filter(canonical_source=None).count(), 1)
+        self.assertEqual(
+            tavily_sources.exclude(canonical_source=None)
+            .values("canonical_source_id")
+            .distinct()
+            .count(),
+            1,
+        )
+        self.assertEqual(CanonicalSource.objects.filter(domain="example.com").count(), 1)
+
     def _assert_original_evaluation_and_sources(self):
         expected_context = (
             "Text Extracted From Image (Do NOT use this as evidence to prove itself):\n"
@@ -357,7 +379,7 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         self.assertEqual(self.client.search.call_args.kwargs["timeout"], tasks.DEFAULT_HTTP_TIMEOUT_SEC)
         self.assertEqual(EvidenceSource.objects.filter(provider="TAVILY").count(), 4)
         self.assertFalse(EvidenceSource.objects.exclude(authority_score=None).exists())
-        self.assertFalse(EvidenceSource.objects.exclude(canonical_source=None).exists())
+        self._assert_tavily_host_identities()
         self.relevance.assert_not_called()
         self.evaluate_gfc.assert_not_called()
         stages = [call.args[1] for call in self.log_stage.call_args_list]
@@ -552,7 +574,7 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         self._assert_original_url_evaluation_and_sources(evaluate_url)
         self.assertEqual(EvidenceSource.objects.filter(provider="TAVILY").count(), 4)
         self.assertFalse(EvidenceSource.objects.exclude(authority_score=None).exists())
-        self.assertFalse(EvidenceSource.objects.exclude(canonical_source=None).exists())
+        self._assert_tavily_host_identities()
         stages = [call.args[1] for call in self.log_stage.call_args_list]
         self.assertIn("url_tavily_evidence_ingestion", stages)
         self.assertNotIn("tavily_evidence_ingestion", stages)

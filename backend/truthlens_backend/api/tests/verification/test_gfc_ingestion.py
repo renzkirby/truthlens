@@ -4,7 +4,7 @@ import requests
 
 from django.test import TestCase
 
-from api.models import EvidenceSource
+from api.models import CanonicalSource, EvidenceSource
 from api.verification.contracts import RawEvidence
 from api.verification.ingestion import (
     ingest_provider_evidence,
@@ -104,6 +104,20 @@ class GoogleFactCheckIngestionTests(TestCase):
             source.canonical_url,
             ("https://example.com/" "fact-check?id=42"),
         )
+
+        self.assertEqual(
+            source.canonical_source.domain,
+            "example.com",
+        )
+
+        self.assertEqual(
+            source.canonical_source.name,
+            "example.com",
+        )
+
+        self.assertIsNone(source.canonical_source.source_type)
+        self.assertIsNone(source.canonical_source.canonical_url)
+        self.assertEqual(CanonicalSource.objects.count(), 1)
 
         self.assertIsNotNone(source.content_hash)
 
