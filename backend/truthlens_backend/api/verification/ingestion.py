@@ -3,6 +3,7 @@ from collections.abc import Iterable
 from django.db import transaction
 
 from ..models import EvidenceSource
+from .canonical_sources import assign_canonical_source
 from .contracts import RawEvidence
 from .normalizers import normalize_evidence
 from .persistence import persist_evidence_source
@@ -33,6 +34,8 @@ def ingest_raw_evidence(
                     normalized_evidence
                 )
             )
+
+            evidence_source = assign_canonical_source(evidence_source)
 
             if evidence_source.pk in seen_source_ids:
                 continue
