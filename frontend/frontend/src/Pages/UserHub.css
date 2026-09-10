@@ -187,7 +187,7 @@
 }
 
 /* Shared Box Panel Structure */
-.box-panel {
+.hub-page-layout .box-panel {
    background-color: #ffffff;
    border-radius: 12px;
    border: 1px solid #e2e8f0;
@@ -1705,7 +1705,7 @@
       text-align: center;
    }
 
-   .box-panel {
+   .hub-page-layout .box-panel {
       width: auto;
       margin-left: -16px;
       margin-right: -16px;
@@ -1798,7 +1798,9 @@
       font-size: 10px;
    }
 
-   .box-panel {
+   .hub-page-layout .box-panel {
+      margin-left: -12px;
+      margin-right: -12px;
       padding: 14px;
    }
 }

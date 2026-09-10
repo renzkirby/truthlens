@@ -108,7 +108,7 @@
 }
 
 /* ── Box panel ── */
-.box-panel {
+.create-thread-layout .box-panel {
    background: #fff;
    border-radius: 12px;
    padding: 24px;
@@ -396,7 +396,7 @@
       padding: 14px 16px;
    }
 
-   .box-panel {
+   .create-thread-layout .box-panel {
       border-radius: 0;
       border-left: none;
       border-right: none;
@@ -419,7 +419,9 @@
       font-size: 16px;
    }
 
-   .box-panel {
+   .create-thread-layout .box-panel {
+      margin-left: -12px;
+      margin-right: -12px;
       padding: 16px;
    }
 

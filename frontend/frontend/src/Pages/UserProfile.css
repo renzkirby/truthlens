@@ -17,6 +17,16 @@
   gap: 20px;
 }
 
+.profile-layout .box-panel {
+  background-color: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 24px;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.05),
+    0 2px 4px -1px rgba(0, 0, 0, 0.03);
+}
+
 /* ── Identity Header (X-Style Layout) ── */
 .profile-header-container {
   position: relative;
@@ -1050,13 +1060,17 @@
   .claim-card,
   .trust-breakdown-card,
   .moderator-profile-summary,
-  .box-panel {
+  .profile-layout .box-panel {
     border-radius: 0;
     border-left: none;
     border-right: none;
     margin-left: -16px;
     margin-right: -16px;
     width: auto;
+  }
+
+  .profile-layout .box-panel {
+    padding: 18px;
   }
 
   /* Tab swipe pattern */
@@ -1131,6 +1145,10 @@
 @media (max-width: 480px) {
   .profile-container {
     padding-bottom: var(--tl-space-5);
+  }
+
+  .profile-layout .box-panel {
+    padding: 14px;
   }
 
   .profile-avatar-wrapper {

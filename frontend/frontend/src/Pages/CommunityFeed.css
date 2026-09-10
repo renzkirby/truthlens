@@ -28,7 +28,7 @@ body {
   gap: 20px;
 }
 
-.box-panel {
+.feed-layout .box-panel {
   background-color: var(--bg-surface);
   border-radius: 12px;
   padding: 16px 24px;
@@ -803,7 +803,7 @@ body {
     /* use borders or margins on children instead */
   }
 
-  .box-panel {
+  .feed-layout .box-panel {
     border-radius: 0;
     border-left: none;
     border-right: none;

@@ -136,7 +136,7 @@
 }
 
 /* ── Box panel ── */
-.box-panel {
+.verify-layout .box-panel {
    background: #fff;
    border-radius: 12px;
    padding: 24px;
@@ -779,8 +779,8 @@
       justify-content: center;
    }
 
-   .box-panel,
-   .result-card {
+   .verify-layout .box-panel,
+   .verify-layout .result-card {
       padding: 18px;
       border-radius: 0;
       border-left: none;
@@ -805,7 +805,13 @@
       padding: 8px 14px;
    }
 
-   .box-panel {
+   .verify-layout .box-panel,
+   .verify-layout .result-card {
+      margin-left: -12px;
+      margin-right: -12px;
+   }
+
+   .verify-layout .box-panel {
       padding: 14px;
    }
 }
