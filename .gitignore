@@ -3,3 +3,5 @@
 .agents
 *.md
 !README.md
+!DESIGN.md
+graphify-out/
