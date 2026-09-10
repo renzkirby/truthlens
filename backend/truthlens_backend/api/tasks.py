@@ -157,7 +157,9 @@ def _retrieve_and_ingest_gfc(
     return payload
 
 
-def _retrieve_and_ingest_tavily(search_query, claim_id, *, stage_prefix=""):
+def _retrieve_and_ingest_tavily(
+    search_query, claim_id, *, stage_prefix="", verification_run=None,
+):
     """Retrieve once, preserving usable payloads if evidence persistence fails."""
     provider = TavilyProvider(timeout=DEFAULT_HTTP_TIMEOUT_SEC)
     payload, raw_evidence_items = provider.search_with_payload(search_query, limit=5)
@@ -184,6 +186,37 @@ def _retrieve_and_ingest_tavily(search_query, claim_id, *, stage_prefix=""):
             ingestion_started_at,
             evidence_sources=len(evidence_sources),
         )
+
+        if verification_run is not None:
+            linking_started_at = time.perf_counter()
+            linking_stage = f"{stage_prefix}tavily_evidence_linking"
+            try:
+                links = link_evidence_sources_to_run(
+                    verification_run,
+                    evidence_sources,
+                    evidence_role=VerificationEvidence.EvidenceRole.SECONDARY,
+                )
+                _log_stage(
+                    claim_id,
+                    linking_stage,
+                    linking_started_at,
+                    verification_run_id=verification_run.pk,
+                    evidence_links=len(links),
+                )
+            except Exception as exc:
+                _log_stage(
+                    claim_id,
+                    f"{linking_stage}_failed",
+                    linking_started_at,
+                    verification_run_id=verification_run.pk,
+                    error=str(exc)[:120],
+                )
+                logger.error(
+                    "Tavily evidence linking failed for claim %s, run %s: %s",
+                    claim_id,
+                    verification_run.pk,
+                    exc,
+                )
 
     return payload
 
@@ -603,7 +636,7 @@ def execute_core_text_pipeline(raw_text, claim_id):
             tavily_started_at = time.perf_counter()
             try:
                 tavily_response = _retrieve_and_ingest_tavily(
-                    search_query, claim_id,
+                    search_query, claim_id, verification_run=run,
                 )
                 tavily_results = tavily_response.get("results", [])
                 tavily_answer = tavily_response.get(
@@ -961,6 +994,7 @@ def url_fact_check_process(url, claim_id):
                 search_query[:300],
                 claim_id,
                 stage_prefix="url_",
+                verification_run=run,
             )
 
             tavily_results = search_response.get("results", [])

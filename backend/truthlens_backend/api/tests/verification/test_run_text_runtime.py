@@ -95,11 +95,18 @@ class VerificationRunTextRuntimeTests(TestCase):
 
     def _execute(self):
         terminal_count = self._terminal_count()
+        tavily_before = self.retrieve_tavily.call_count
         try:
             tasks.execute_core_text_pipeline(self.claim.context_text, self.claim.id)
         finally:
             self.assertLessEqual(self._terminal_count() - terminal_count, 1)
             self.assertEqual(VerificationEvidence.objects.count(), self.evidence_count)
+            if self.retrieve_tavily.call_count > tavily_before:
+                self.assertEqual(self.retrieve_tavily.call_count - tavily_before, 1)
+                self.retrieve_tavily.assert_called_with(
+                    self.cleaned["search_query"], self.claim.pk,
+                    verification_run=self.claim.verification_runs.latest("created_at"),
+                )
         self.assertEqual(self._terminal_count() - terminal_count, 1)
         return self.claim.verification_runs.latest("created_at")
 
@@ -483,8 +490,14 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
     def _execute(self):
         before = sum(helper.call_count for helper in self.terminals)
         observations_before = len(self.observed_runs)
+        tavily_before = self.retrieve_tavily.call_count
         tasks.execute_core_text_pipeline(self.claim.context_text, self.claim.pk)
         run = self.claim.verification_runs.latest("created_at")
+        if self.retrieve_tavily.call_count > tavily_before:
+            self.assertEqual(self.retrieve_tavily.call_count - tavily_before, 1)
+            self.retrieve_tavily.assert_called_with(
+                self.cleaned["search_query"], self.claim.pk, verification_run=run,
+            )
         self.assertEqual(sum(helper.call_count for helper in self.terminals) - before, 1)
         self.assertEqual(self.observed_runs[observations_before:], [
             (run.pk, VerificationRun.Status.RUNNING, VerificationRun.Status.RUNNING),
@@ -494,7 +507,9 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         self.assertIsNone(run.failure_message)
         return run
 
-    def _record_links_at_fallback(self, search_query, claim_id):
+    def _record_links_at_fallback(self, search_query, claim_id, *, verification_run):
+        self.assertEqual(verification_run.status, VerificationRun.Status.RUNNING)
+        self.assertEqual(verification_run.claim_id, self.claim.pk)
         self.links_at_fallback = list(VerificationEvidence.objects.values_list("evidence_source_id", flat=True))
         return self.tavily_response
 
