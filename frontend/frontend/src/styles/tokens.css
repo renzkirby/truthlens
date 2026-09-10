@@ -1,0 +1,148 @@
+:root {
+  /* Brand */
+  --tl-color-brand-primary: #4f46e5;
+  --tl-color-brand-primary-hover: #4338ca;
+  --tl-color-brand-dark: #1e1b4b;
+
+  /* Surfaces */
+  --tl-color-bg-app: #f1f5f9;
+  --tl-color-bg-surface: #ffffff;
+  --tl-color-bg-subtle: #f9fafb;
+
+  /* Text */
+  --tl-color-text-main: #111827;
+  --tl-color-text-body: #374151;
+  --tl-color-text-muted: #6b7280;
+  --tl-color-text-inverse: #ffffff;
+
+  /* Borders */
+  --tl-color-border-default: #e5e7eb;
+  --tl-color-border-light: #f3f4f6;
+
+  /* Verdict: Fact / Verified */
+  --tl-color-fact-border: #0e9f6e;
+  --tl-color-fact-bg: #d1fae5;
+  --tl-color-fact-text: #065f46;
+
+  /* Verdict: Fake / False */
+  --tl-color-fake-border: #e02424;
+  --tl-color-fake-bg: #fee2e2;
+  --tl-color-fake-text: #7f1d1d;
+
+  /* Verdict: Misleading */
+  --tl-color-misleading-border: #d97706;
+  --tl-color-misleading-bg: #fef3c7;
+  --tl-color-misleading-text: #78350f;
+
+  /* Verdict: Unverified */
+  --tl-color-unverified-border: #ebdc09;
+  --tl-color-unverified-bg: #fefce8;
+  --tl-color-unverified-text: #854d0e;
+
+  /* Verdict: Out of Scope */
+  --tl-color-outofscope-border: #6b7280;
+  --tl-color-outofscope-bg: #f3f4f6;
+  --tl-color-outofscope-text: #374151;
+
+  /* Verdict: Satire */
+  --tl-color-satire-border: #7c3aed;
+  --tl-color-satire-bg: #ede9fe;
+  --tl-color-satire-text: #4c1d95;
+
+  /* Typography */
+  --tl-font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --tl-text-xs: 0.75rem;
+  --tl-text-sm: 0.8125rem;
+  --tl-text-ui: 0.875rem;
+  --tl-text-base: 1rem;
+  --tl-text-lg: 1.125rem;
+  --tl-text-xl: 1.5rem;
+  --tl-text-2xl: 2rem;
+
+  /* Spacing */
+  --tl-space-1: 4px;
+  --tl-space-2: 8px;
+  --tl-space-3: 12px;
+  --tl-space-4: 16px;
+  --tl-space-5: 20px;
+  --tl-space-6: 24px;
+  --tl-space-8: 32px;
+  --tl-space-10: 40px;
+  --tl-space-12: 48px;
+  --tl-space-16: 64px;
+  --tl-space-20: 80px;
+  --tl-space-24: 96px;
+
+  /* Radius */
+  --tl-radius-sm: 6px;
+  --tl-radius-md: 8px;
+  --tl-radius-lg: 12px;
+  --tl-radius-xl: 16px;
+  --tl-radius-pill: 999px;
+
+  /* Elevation */
+  --tl-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --tl-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --tl-shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.12);
+
+  /* Control heights */
+  --tl-control-height-compact: 36px;
+  --tl-control-height-standard: 40px;
+  --tl-control-height-comfortable: 44px;
+
+  /* Motion */
+  --tl-duration-fast: 120ms;
+  --tl-duration-normal: 180ms;
+  --tl-duration-slow: 240ms;
+
+  /* Focus */
+  --tl-focus-color: var(--tl-color-brand-primary);
+  --tl-focus-width: 2px;
+  --tl-focus-offset: 2px;
+
+  /* Compatibility aliases */
+  --brand-primary: var(--tl-color-brand-primary);
+  --brand-primary-hover: var(--tl-color-brand-primary-hover);
+  --brand-dark: var(--tl-color-brand-dark);
+
+  --bg-app: var(--tl-color-bg-app);
+  --bg-surface: var(--tl-color-bg-surface);
+  --bg-subtle: var(--tl-color-bg-subtle);
+
+  --text-main: var(--tl-color-text-main);
+  --text-body: var(--tl-color-text-body);
+  --text-muted: var(--tl-color-text-muted);
+  --text-inverse: var(--tl-color-text-inverse);
+
+  --border-default: var(--tl-color-border-default);
+  --border-light: var(--tl-color-border-light);
+
+  --verdict-fact-border: var(--tl-color-fact-border);
+  --verdict-fact-bg: var(--tl-color-fact-bg);
+  --verdict-fact-text: var(--tl-color-fact-text);
+
+  --verdict-fake-border: var(--tl-color-fake-border);
+  --verdict-fake-bg: var(--tl-color-fake-bg);
+  --verdict-fake-text: var(--tl-color-fake-text);
+
+  --verdict-misleading-border: var(--tl-color-misleading-border);
+  --verdict-misleading-bg: var(--tl-color-misleading-bg);
+  --verdict-misleading-text: var(--tl-color-misleading-text);
+
+  --verdict-unverified-border: var(--tl-color-unverified-border);
+  --verdict-unverified-bg: var(--tl-color-unverified-bg);
+  --verdict-unverified-text: var(--tl-color-unverified-text);
+
+  --verdict-outofscope-border: var(--tl-color-outofscope-border);
+  --verdict-outofscope-bg: var(--tl-color-outofscope-bg);
+  --verdict-outofscope-text: var(--tl-color-outofscope-text);
+
+  --verdict-satire-border: var(--tl-color-satire-border);
+  --verdict-satire-bg: var(--tl-color-satire-bg);
+  --verdict-satire-text: var(--tl-color-satire-text);
+
+  --primary-blue: var(--tl-color-brand-primary);
+  --border-color: var(--tl-color-border-default);
+  --text-white: var(--tl-color-text-inverse);
+  --bg-dark: var(--tl-color-brand-dark);
+}
