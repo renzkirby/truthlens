@@ -5,7 +5,6 @@
 /* ── Page shell ─────────────────────────────────────────────────────────────── */
 .tdp-page {
     background: #ffffff;
-    min-height: 100vh;
     font-family: 'Inter', sans-serif;
 }
 
@@ -2124,7 +2123,7 @@
 
 @media (max-width: 768px) {
     .tdp-body {
-        padding: 20px 16px 76px;
+        padding: 20px 16px var(--tl-space-3);
     }
 
     .tdp-form-row {
@@ -2433,5 +2432,11 @@
 
     .tdp-label {
         min-width: auto;
+    }
+}
+
+@media (max-width: 480px) {
+    .tdp-body {
+        padding-bottom: var(--tl-space-4);
     }
 }

@@ -1,5 +1,4 @@
 .settings-layout {
-   min-height: 100vh;
    background-color: var(--bg-default, #f3f4f6);
    display: flex;
    flex-direction: column;
@@ -478,8 +477,7 @@
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
    .settings-container {
-      padding: 20px 12px 100px;
-      /* bottom padding for mobile navbar */
+      padding: 20px 12px 36px;
    }
 
    .settings-main-wrapper {
@@ -569,7 +567,7 @@
       width: 100%;
    }
    .settings-container {
-      padding: 16px 12px 92px;
+      padding: 16px 12px var(--tl-space-8);
    }
 
    .settings-header {

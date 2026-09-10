@@ -1,7 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 .profile-layout {
-  min-height: 100vh;
   display: flex;
   flex-direction: column;
   background-color: var(--bg-app);
@@ -1043,7 +1042,7 @@
   }
 
   .profile-container {
-    padding: 24px 16px 80px;
+    padding: 24px 16px var(--tl-space-4);
   }
 
   /* Make main cards edge-to-edge on mobile */
@@ -1130,6 +1129,10 @@
 }
 
 @media (max-width: 480px) {
+  .profile-container {
+    padding-bottom: var(--tl-space-5);
+  }
+
   .profile-avatar-wrapper {
     top: -52px;
     left: 14px;

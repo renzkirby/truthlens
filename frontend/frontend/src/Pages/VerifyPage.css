@@ -1,7 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 .verify-layout {
-   min-height: 100vh;
    display: flex;
    flex-direction: column;
    background-color: var(--bg-app);
@@ -740,7 +739,7 @@
 /* ── Responsive ── */
 @media (max-width: 768px) {
    .verify-container {
-      padding: 24px 16px 80px;
+      padding: 24px 16px var(--tl-space-4);
       gap: 18px;
    }
 
@@ -794,7 +793,7 @@
 
 @media (max-width: 480px) {
    .verify-container {
-      padding: 20px 12px 76px;
+      padding: 20px 12px var(--tl-space-4);
    }
 
    .verify-title {

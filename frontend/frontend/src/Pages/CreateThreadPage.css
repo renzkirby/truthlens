@@ -1,7 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 .create-thread-layout {
-   min-height: 100vh;
    display: flex;
    flex-direction: column;
    background-color: var(--bg-app);
@@ -385,7 +384,7 @@
    }
 
    .create-thread-container {
-      padding: 24px 16px 80px;
+      padding: 24px 16px var(--tl-space-4);
    }
 
    .create-thread-title {
@@ -409,7 +408,7 @@
 
 @media (max-width: 480px) {
    .create-thread-container {
-      padding: 20px 12px 76px;
+      padding: 20px 12px var(--tl-space-4);
    }
 
    .create-thread-topbar {

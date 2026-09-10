@@ -1,7 +1,6 @@
 /* UserHub.css */
 /* 1. Layout & Structure */
 .hub-page-layout {
-   min-height: 100vh;
    background-color: #f6f8fb;
    font-family: "Inter", sans-serif;
    color: #0f172a;
@@ -1458,7 +1457,7 @@
 @media (max-width: 768px) {
    .hub-wrapper {
       padding-top: 24px;
-      padding-bottom: 80px;
+      padding-bottom: var(--tl-space-4);
    }
 
    .hub-container {
@@ -1722,7 +1721,7 @@
 @media (max-width: 480px) {
    .hub-wrapper {
       padding-top: 16px;
-      padding-bottom: 76px;
+      padding-bottom: var(--tl-space-4);
    }
 
    .hub-container {

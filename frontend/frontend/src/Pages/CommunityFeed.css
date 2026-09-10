@@ -13,7 +13,6 @@ body {
 }
 
 .feed-layout {
-  min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
@@ -798,7 +797,7 @@ body {
 
   /* Edge-to-edge feed */
   .feed-container {
-    padding: 0 0 80px;
+    padding: 0 0 var(--tl-space-4);
     /* remove side padding */
     gap: 0;
     /* use borders or margins on children instead */
@@ -973,6 +972,10 @@ body {
    Small Mobile Fixes (< 480px) 
    ========================================================= */
 @media (max-width: 480px) {
+
+  .feed-container {
+    padding-bottom: var(--tl-space-5);
+  }
 
   /* 1. Force Single Line Header */
   .card-header {

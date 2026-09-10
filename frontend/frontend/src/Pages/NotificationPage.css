@@ -1,7 +1,5 @@
 .tl-notifications-page {
    min-width: 0;
-   min-height: calc(100vh - var(--tl-app-header-height));
-   min-height: calc(100dvh - var(--tl-app-header-height));
    color: var(--tl-color-text-main);
    background: var(--tl-color-bg-app);
 }
@@ -59,13 +57,8 @@
 }
 
 @media (max-width: 768px) {
-   .tl-notifications-page {
-      min-height: calc(100vh - var(--tl-app-mobile-header-height));
-      min-height: calc(100dvh - var(--tl-app-mobile-header-height));
-   }
-
    .tl-notifications-page__content {
-      padding: var(--tl-space-6) var(--tl-space-4) var(--tl-space-24);
+      padding: var(--tl-space-6) var(--tl-space-4) var(--tl-space-8);
    }
 
    .tl-notifications-page__state {
@@ -79,7 +72,7 @@
 
 @media (max-width: 480px) {
    .tl-notifications-page__content {
-      padding: var(--tl-space-5) var(--tl-space-3) var(--tl-space-20);
+      padding: var(--tl-space-5) var(--tl-space-3) var(--tl-space-5);
    }
 
    .tl-notifications-page__state {
