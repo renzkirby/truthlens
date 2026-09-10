@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import AuthShell from "../components/auth/AuthShell";
 import Icons from "../components/Icons.jsx";
+import Button from "../components/ui/Button.jsx";
+import Input from "../components/ui/Input.jsx";
 import { resolveApiEndpoint } from "../utils/api";
 import "./LoginPage.css";
 
@@ -93,12 +95,13 @@ function ForgotPasswordPage() {
                      <label htmlFor="reset-email">Email address</label>
 
                      <div className="input-wrapper">
-                        <Icons name="mail" size={18} className="input-icon" aria-hidden="true" />
-
-                        <input
+                        <Input
                            id="reset-email"
                            type="email"
                            name="email"
+                           density="comfortable"
+                           surface="subtle"
+                           leadingIcon={<Icons name="mail" size={18} aria-hidden="true" />}
                            placeholder="you@example.com"
                            value={email}
                            onChange={(event) => setEmail(event.target.value)}
@@ -109,19 +112,17 @@ function ForgotPasswordPage() {
                      </div>
                   </div>
 
-                  <button type="submit" className="submit-btn" disabled={isSubmitting} aria-busy={isSubmitting}>
-                     {isSubmitting ? (
-                        <span className="sign-in-loading">
-                           <span className="sign-in-spinner" aria-hidden="true" />
-                           <span>Sending instructions…</span>
-                        </span>
-                     ) : (
-                        <>
-                           <span>Send reset instructions</span>
-                           <Icons name="arrow-right" size={18} aria-hidden="true" />
-                        </>
-                     )}
-                  </button>
+                  <Button
+                     type="submit"
+                     density="comfortable"
+                     loading={isSubmitting}
+                     loadingLabel="Sending instructions…"
+                     trailingIcon={<Icons name="arrow-right" size={18} aria-hidden="true" />}
+                     fullWidth
+                     disabled={isSubmitting}
+                  >
+                     Send reset instructions
+                  </Button>
                </form>
 
                <div className="signup-prompt">
