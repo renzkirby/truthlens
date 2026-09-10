@@ -4,6 +4,7 @@ import LogoImage from "../assets/truthlens_logo.png";
 import Icons from "./Icons.jsx";
 import "./NavigationBar.css";
 import Button from "./ui/Button.jsx";
+import IconButton from "./ui/IconButton.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { buildApiUrl, resolveApiEndpoint } from "../utils/api";
 import { canAccessWorkspace } from "../utils/workspace";
@@ -215,17 +216,18 @@ function NavigationBar() {
    const isVerifyRoute = location.pathname === "/verify" || location.pathname.startsWith("/analysis/");
    const isDashboardRoute = location.pathname === "/dashboard";
    const isWorkspaceRoute = location.pathname === "/workspace" || location.pathname === "/moderation";
+   const isProfileRoute = location.pathname === "/profile";
 
    return (
       <>
-         <nav className="top-navbar" aria-label="Authenticated primary navigation">
+         <header className="top-navbar">
             <div className="tl-app-nav__start">
                <Link to="/community" className="tl-app-nav__brand">
                   <img src={LogoImage} alt="" className="tl-app-nav__brand-mark" />
                   <span className="tl-app-nav__brand-name">TruthLens</span>
                </Link>
 
-               <div className="tl-app-nav__primary">
+               <nav className="tl-app-nav__primary" aria-label="Primary navigation">
                   <Link
                      to="/community"
                      className={`tl-app-nav__primary-link ${isCommunityRoute ? "active" : ""}`}
@@ -260,10 +262,18 @@ function NavigationBar() {
                         Workspace
                      </Link>
                   )}
-               </div>
+               </nav>
             </div>
 
             <div className="tl-app-nav__actions">
+               <IconButton
+                  variant="ghost"
+                  density="comfortable"
+                  className="tl-app-nav__mobile-search-trigger"
+                  icon={<Icons name="search" size={20} />}
+                  aria-label="Search"
+                  onClick={() => setMobileSearchOpen(true)}
+               />
                <div className="navbar-search" ref={searchContainerRef}>
                   <form className="search-box" onSubmit={handleSearchSubmit}>
                      <Icons name="search" color="gray" />
@@ -579,50 +589,56 @@ function NavigationBar() {
                   </div>
                </div>
             )}
-         </nav>
+         </header>
 
          {/* ── Mobile Bottom Tab Bar ── */}
-         <nav className="mobile-bottom-bar" aria-label="Mobile navigation">
+         <nav className="mobile-bottom-bar" aria-label="Mobile primary navigation">
             <Link
                to="/community"
-               className={`bottom-tab ${location.pathname === "/community" ? "active" : ""}`}
+               className={`bottom-tab ${isCommunityRoute ? "active" : ""}`}
                onClick={closeNavigationOverlays}
+               aria-current={isCommunityRoute ? "page" : undefined}
             >
-               <Icons name="home" size={22} />
-               <span>Feed</span>
+               <Icons name="globe" size={20} />
+               <span>Community</span>
             </Link>
-            <button
-               className={`bottom-tab ${mobileSearchOpen ? "active" : ""}`}
-               onClick={() => setMobileSearchOpen(true)}
-            >
-               <Icons name="search" size={22} />
-               <span>Search</span>
-            </button>
             <Link
                to="/verify"
-               className={`bottom-tab bottom-tab-center ${location.pathname === "/verify" ? "active" : ""}`}
+               className={`bottom-tab ${isVerifyRoute ? "active" : ""}`}
                onClick={closeNavigationOverlays}
+               aria-current={isVerifyRoute ? "page" : undefined}
             >
-               <div className="bottom-tab-center-icon">
-                  <Icons name="scan-line" size={24} color="#fff" />
-               </div>
+               <Icons name="scan-line" size={20} />
                <span>Verify</span>
             </Link>
             <Link
-               to="/notifications"
-               className={`bottom-tab ${location.pathname === "/notifications" ? "active" : ""}`}
+               to="/dashboard"
+               className={`bottom-tab ${isDashboardRoute ? "active" : ""}`}
                onClick={closeNavigationOverlays}
+               aria-current={isDashboardRoute ? "page" : undefined}
             >
-               <Icons name="bell" size={22} />
-               <span>Notifications</span>
+               <Icons name="dashboard" size={20} />
+               <span>Dashboard</span>
             </Link>
+            {canUseWorkspace && (
+               <Link
+                  to="/workspace"
+                  className={`bottom-tab ${isWorkspaceRoute ? "active" : ""}`}
+                  onClick={closeNavigationOverlays}
+                  aria-current={isWorkspaceRoute ? "page" : undefined}
+               >
+                  <Icons name="shield-check" size={20} />
+                  <span>Workspace</span>
+               </Link>
+            )}
             <Link
                to="/profile"
-               className={`bottom-tab ${location.pathname === "/profile" ? "active" : ""}`}
+               className={`bottom-tab ${isProfileRoute ? "active" : ""}`}
                onClick={closeNavigationOverlays}
+               aria-current={isProfileRoute ? "page" : undefined}
             >
-               <Icons name="user" size={22} />
-               <span>Me</span>
+               <Icons name="user" size={20} />
+               <span>Profile</span>
             </Link>
          </nav>
       </>
