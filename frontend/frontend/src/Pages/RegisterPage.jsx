@@ -21,6 +21,8 @@ import { useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import Icons from "../components/Icons.jsx";
+import Button from "../components/ui/Button.jsx";
+import Input from "../components/ui/Input.jsx";
 import { useGoogleLogin } from "@react-oauth/google";
 import AuthShell from "../components/auth/AuthShell.jsx";
 
@@ -29,7 +31,7 @@ import { resolveApiEndpoint } from "../utils/api";
 import { resolveAuthDestination } from "../utils/authNavigation";
 
 // ── Styles ──
-import "./RegisterPage.css";
+import "../components/account/AccountForm.css";
 
 function RegisterPage() {
    const { login } = useAuth();
@@ -249,106 +251,102 @@ function RegisterPage() {
             "Build credibility through meaningful participation",
          ]}
       >
-         <div className="register-right">
-            <div className="form-container">
-               <div className="form-header">
-                  <p className="greeting-text">Join TruthLens</p>
+         <div className="account-form">
+            <div className="account-form__header">
+               <p className="account-form__eyebrow">Join TruthLens</p>
 
-                  <h1 className="form-title">Create your account</h1>
+               <h1 className="account-form__title">Create your account</h1>
 
-                  <p className="form-description">Get started with a free TruthLens account.</p>
+               <p className="account-form__description">Get started with a free TruthLens account.</p>
+            </div>
+
+            <form
+               onSubmit={(event) => {
+                  event.preventDefault();
+                  handleSubmit();
+               }}
+               noValidate
+            >
+               {error && (
+                  <div className="account-form__alert" role="alert" aria-live="polite">
+                     <Icons name="alert-triangle" size={16} aria-hidden="true" />
+
+                     <span>{error}</span>
+                  </div>
+               )}
+
+               {/* username */}
+               <div className="account-field">
+                  <label className="account-field__label" htmlFor="register-username">
+                     Username
+                  </label>
+                  <Input
+                     id="register-username"
+                     type="text"
+                     name="username"
+                     density="comfortable"
+                     surface="subtle"
+                     leadingIcon={<Icons name="user" size={18} aria-hidden="true" />}
+                     autoComplete="username"
+                     placeholder="Choose a username"
+                     value={formValues.username}
+                     onChange={handleInputChange}
+                     aria-invalid={Boolean(fieldErrors.username)}
+                     aria-describedby={fieldErrors.username ? "register-username-error" : undefined}
+                     disabled={isSigningIn}
+                     required
+                  />
+                  {fieldErrors.username && (
+                     <p id="register-username-error" className="account-field__error" role="alert">
+                        {fieldErrors.username}
+                     </p>
+                  )}
                </div>
 
-               <form
-                  onSubmit={(event) => {
-                     event.preventDefault();
-                     handleSubmit();
-                  }}
-                  noValidate
-               >
-                  {error && (
-                     <div className="error-message" role="alert" aria-live="polite">
-                        <Icons name="alert-triangle" size={16} aria-hidden="true" />
-
-                        <span>{error}</span>
-                     </div>
+               {/* email */}
+               <div className="account-field">
+                  <label className="account-field__label" htmlFor="register-email">
+                     Email Address
+                  </label>
+                  <Input
+                     id="register-email"
+                     type="email"
+                     name="email"
+                     density="comfortable"
+                     surface="subtle"
+                     leadingIcon={<Icons name="mail" size={18} aria-hidden="true" />}
+                     autoComplete="email"
+                     placeholder="you@example.com"
+                     value={formValues.email}
+                     onChange={handleInputChange}
+                     aria-invalid={Boolean(fieldErrors.email)}
+                     aria-describedby={fieldErrors.email ? "register-email-error" : undefined}
+                     disabled={isSigningIn}
+                     required
+                  />
+                  {fieldErrors.email && (
+                     <p id="register-email-error" className="account-field__error" role="alert">
+                        {fieldErrors.email}
+                     </p>
                   )}
+               </div>
 
-                  {/* username */}
-                  <div className="input-group">
-                     <label htmlFor="register-username">Username</label>
-                     <div className="input-wrapper">
-                        <Icons name="user" size={18} className="input-icon" aria-hidden="true" />
-                        <input
-                           id="register-username"
-                           type="text"
-                           name="username"
-                           autoComplete="username"
-                           placeholder="Choose a username"
-                           value={formValues.username}
-                           onChange={handleInputChange}
-                           aria-invalid={Boolean(fieldErrors.username)}
-                           aria-describedby={fieldErrors.username ? "register-username-error" : undefined}
-                           disabled={isSigningIn}
-                           required
-                        />
-                     </div>
-                     {fieldErrors.username && (
-                        <p id="register-username-error" className="field-error" role="alert">
-                           {fieldErrors.username}
-                        </p>
-                     )}
-                  </div>
-
-                  {/* email */}
-                  <div className="input-group">
-                     <label htmlFor="register-email">Email Address</label>
-                     <div className="input-wrapper">
-                        <Icons name="mail" size={18} className="input-icon" aria-hidden="true" />
-                        <input
-                           id="register-email"
-                           type="email"
-                           name="email"
-                           autoComplete="email"
-                           placeholder="you@example.com"
-                           value={formValues.email}
-                           onChange={handleInputChange}
-                           aria-invalid={Boolean(fieldErrors.email)}
-                           aria-describedby={fieldErrors.email ? "register-email-error" : undefined}
-                           disabled={isSigningIn}
-                           required
-                        />
-                     </div>
-                     {fieldErrors.email && (
-                        <p id="register-email-error" className="field-error" role="alert">
-                           {fieldErrors.email}
-                        </p>
-                     )}
-                  </div>
-
-                  {/* password */}
-                  <div className="input-group">
-                     <label htmlFor="register-password">Password</label>
-                     <div className="input-wrapper">
-                        <Icons name="shield" size={18} className="input-icon" aria-hidden="true" />
-                        <input
-                           id="register-password"
-                           type={showPassword ? "text" : "password"}
-                           name="password"
-                           autoComplete="new-password"
-                           placeholder="Create a strong password"
-                           value={formValues.password}
-                           onChange={handleInputChange}
-                           aria-invalid={Boolean(fieldErrors.password)}
-                           aria-describedby={
-                              fieldErrors.password ? "register-password-error" : "register-password-hint"
-                           }
-                           disabled={isSigningIn}
-                           required
-                        />
+               {/* password */}
+               <div className="account-field account-field--text-toggle">
+                  <label className="account-field__label" htmlFor="register-password">
+                     Password
+                  </label>
+                  <Input
+                     id="register-password"
+                     type={showPassword ? "text" : "password"}
+                     name="password"
+                     density="comfortable"
+                     surface="subtle"
+                     leadingIcon={<Icons name="shield" size={18} aria-hidden="true" />}
+                     trailingAdornment={
                         <button
                            type="button"
-                           className="show-password-btn"
+                           className="account-password-toggle"
                            onClick={() => setShowPassword((current) => !current)}
                            aria-label={showPassword ? "Hide password" : "Show password"}
                            aria-pressed={showPassword}
@@ -358,100 +356,108 @@ function RegisterPage() {
 
                            <span>{showPassword ? "Hide" : "Show"}</span>
                         </button>
-                     </div>
-                     {fieldErrors.password ? (
-                        <p id="register-password-error" className="field-error" role="alert">
-                           {fieldErrors.password}
-                        </p>
-                     ) : (
-                        <p id="register-password-hint" className="field-hint">
-                           Use a password that is difficult to guess and not commonly used.
-                        </p>
-                     )}
-                  </div>
-
-                  <button type="submit" className="submit-btn" disabled={isSigningIn} aria-busy={isSigningIn}>
-                     {isSigningIn ? (
-                        <span className="sign-in-loading">
-                           <span className="sign-in-spinner" aria-hidden="true" />
-                           <span>Creating account…</span>
-                        </span>
-                     ) : (
-                        <>
-                           <span>Create account</span>
-
-                           <Icons name="arrow-right" size={18} aria-hidden="true" />
-                        </>
-                     )}
-                  </button>
-               </form>
-
-               <div className="signin-prompt">
-                  Already have an account?{" "}
-                  <Link
-                     to="/login"
-                     state={{
-                        from,
-                     }}
-                  >
-                     Sign in
-                  </Link>
+                     }
+                     autoComplete="new-password"
+                     placeholder="Create a strong password"
+                     value={formValues.password}
+                     onChange={handleInputChange}
+                     aria-invalid={Boolean(fieldErrors.password)}
+                     aria-describedby={
+                        fieldErrors.password ? "register-password-error" : "register-password-hint"
+                     }
+                     disabled={isSigningIn}
+                     required
+                  />
+                  {fieldErrors.password ? (
+                     <p id="register-password-error" className="account-field__error" role="alert">
+                        {fieldErrors.password}
+                     </p>
+                  ) : (
+                     <p id="register-password-hint" className="account-field__hint">
+                        Use a password that is difficult to guess and not commonly used.
+                     </p>
+                  )}
                </div>
 
-               <div className="divider">
-                  <span>OR</span>
-               </div>
-
-               <button
-                  type="button"
-                  className="gsi-material-button"
-                  onClick={() => loginWithGoogle()}
+               <Button
+                  type="submit"
+                  variant="primary"
+                  density="comfortable"
+                  loading={isSigningIn}
+                  loadingLabel="Creating account…"
+                  trailingIcon={<Icons name="arrow-right" size={18} aria-hidden="true" />}
+                  fullWidth
                   disabled={isSigningIn}
-                  aria-label="Continue with Google"
                >
-                  <div className="gsi-material-button-state" />
+                  Create account
+               </Button>
+            </form>
 
-                  <div className="gsi-material-button-content-wrapper">
-                     <div className="gsi-material-button-icon">
-                        <svg
-                           version="1.1"
-                           xmlns="http://www.w3.org/2000/svg"
-                           viewBox="0 0 48 48"
-                           aria-hidden="true"
-                           focusable="false"
-                        >
-                           <path
-                              fill="#EA4335"
-                              d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
-                           />
-
-                           <path
-                              fill="#4285F4"
-                              d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
-                           />
-
-                           <path
-                              fill="#FBBC05"
-                              d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
-                           />
-
-                           <path
-                              fill="#34A853"
-                              d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
-                           />
-
-                           <path fill="none" d="M0 0h48v48H0z" />
-                        </svg>
-                     </div>
-
-                     <span className="gsi-material-button-contents">Continue with Google</span>
-
-                     <span className="gsi-material-button-hidden-text" aria-hidden="true">
-                        Continue with Google
-                     </span>
-                  </div>
-               </button>
+            <div className="account-form__prompt">
+               Already have an account?{" "}
+               <Link
+                  to="/login"
+                  state={{
+                     from,
+                  }}
+               >
+                  Sign in
+               </Link>
             </div>
+
+            <div className="account-form__divider">
+               <span>OR</span>
+            </div>
+
+            <button
+               type="button"
+               className="account-google-button"
+               onClick={() => loginWithGoogle()}
+               disabled={isSigningIn}
+               aria-label="Continue with Google"
+            >
+               <div className="account-google-button__state" />
+
+               <div className="account-google-button__content">
+                  <div className="account-google-button__icon">
+                     <svg
+                        version="1.1"
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 48 48"
+                        aria-hidden="true"
+                        focusable="false"
+                     >
+                        <path
+                           fill="#EA4335"
+                           d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+                        />
+
+                        <path
+                           fill="#4285F4"
+                           d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+                        />
+
+                        <path
+                           fill="#FBBC05"
+                           d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+                        />
+
+                        <path
+                           fill="#34A853"
+                           d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+                        />
+
+                        <path fill="none" d="M0 0h48v48H0z" />
+                     </svg>
+                  </div>
+
+                  <span className="account-google-button__label">Continue with Google</span>
+
+                  <span className="account-google-button__hidden-text" aria-hidden="true">
+                     Continue with Google
+                  </span>
+               </div>
+            </button>
          </div>
       </AuthShell>
    );
