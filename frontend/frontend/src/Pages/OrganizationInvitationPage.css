@@ -1,14 +1,6 @@
-.org-invite-page {
-   min-height: 100vh;
-   display: flex;
-   align-items: center;
-   justify-content: center;
-   padding: 48px 20px;
-   background: radial-gradient(circle at top, rgba(79, 70, 229, 0.09), transparent 34rem), var(--bg-page, #f8fafc);
-}
-
 .org-invite-card {
-   width: min(100%, 680px);
+   width: 100%;
+   min-width: 0;
    padding: 36px;
    border: 1px solid var(--border-default);
    border-radius: 20px;
@@ -17,7 +9,8 @@
 }
 
 .org-invite-card--state {
-   max-width: 520px;
+   max-width: 32.5rem;
+   margin-inline: auto;
    text-align: center;
 }
 
@@ -297,11 +290,6 @@
 }
 
 @media (max-width: 640px) {
-   .org-invite-page {
-      align-items: flex-start;
-      padding: 20px 12px;
-   }
-
    .org-invite-card {
       padding: 24px 18px;
       border-radius: 16px;

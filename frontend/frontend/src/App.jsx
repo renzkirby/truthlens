@@ -26,6 +26,7 @@ import PartnersPage from "./Pages/PartnersPage.jsx";
 import PartnerProfilePage from "./Pages/PartnerProfilePage.jsx";
 import AppShell from "./components/app/AppShell.jsx";
 import PublicShell from "./components/public/PublicShell.jsx";
+import AccountActionShell from "./components/account/AccountActionShell.jsx";
 
 function App() {
    return (
@@ -45,7 +46,9 @@ function App() {
                <Route path="/" element={<RootRedirect />} />
                <Route path="/wireframes" element={<TruthLensWireframes />} />
                <Route path="/verify-email" element={<VerifyEmailPage />} />
-               <Route path="/organization-invitations/:token" element={<OrganizationInvitationPage />} />
+               <Route element={<AccountActionShell />}>
+                  <Route path="/organization-invitations/:token" element={<OrganizationInvitationPage />} />
+               </Route>
 
                {/* Protected Routes - accessible to any authenticated user */}
                <Route element={<PrivateRoute />}>

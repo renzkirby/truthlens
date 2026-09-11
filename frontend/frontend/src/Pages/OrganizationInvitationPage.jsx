@@ -237,63 +237,57 @@ function OrganizationInvitationPage() {
 
    if (loadState === "loading") {
       return (
-         <div className="org-invite-page">
-            <main className="org-invite-card org-invite-card--state" aria-busy="true" aria-live="polite">
-               <span className="org-invite-spinner" aria-hidden="true" />
+         <div className="org-invite-card org-invite-card--state" aria-busy="true" aria-live="polite">
+            <span className="org-invite-spinner" aria-hidden="true" />
 
-               <h1>Loading invitation</h1>
+            <h1>Loading invitation</h1>
 
-               <p>Confirming your TruthLens organization invitation.</p>
-            </main>
+            <p>Confirming your TruthLens organization invitation.</p>
          </div>
       );
    }
 
    if (loadState === "invalid") {
       return (
-         <div className="org-invite-page">
-            <main className="org-invite-card org-invite-card--state" role="alert">
-               <div className="org-invite-state-icon">
-                  <Icons name="alert-triangle" size={28} aria-hidden="true" />
-               </div>
+         <div className="org-invite-card org-invite-card--state" role="alert">
+            <div className="org-invite-state-icon">
+               <Icons name="alert-triangle" size={28} aria-hidden="true" />
+            </div>
 
-               <p className="org-invite-eyebrow">TruthLens Partner Network</p>
+            <p className="org-invite-eyebrow">TruthLens Partner Network</p>
 
-               <h1>Invitation unavailable</h1>
+            <h1>Invitation unavailable</h1>
 
-               <p>
-                  This invitation link is invalid, has been cancelled, has already been used, or was replaced by a newer
-                  invitation.
-               </p>
+            <p>
+               This invitation link is invalid, has been cancelled, has already been used, or was replaced by a newer
+               invitation.
+            </p>
 
-               <button
-                  type="button"
-                  className="org-invite-button org-invite-button--secondary"
-                  onClick={() => navigate("/community")}
-               >
-                  Go to TruthLens
-               </button>
-            </main>
+            <button
+               type="button"
+               className="org-invite-button org-invite-button--secondary"
+               onClick={() => navigate("/community")}
+            >
+               Go to TruthLens
+            </button>
          </div>
       );
    }
 
    if (loadState === "error") {
       return (
-         <div className="org-invite-page">
-            <main className="org-invite-card org-invite-card--state" role="alert">
-               <div className="org-invite-state-icon">
-                  <Icons name="alert-triangle" size={28} aria-hidden="true" />
-               </div>
+         <div className="org-invite-card org-invite-card--state" role="alert">
+            <div className="org-invite-state-icon">
+               <Icons name="alert-triangle" size={28} aria-hidden="true" />
+            </div>
 
-               <h1>Invitation temporarily unavailable</h1>
+            <h1>Invitation temporarily unavailable</h1>
 
-               <p>TruthLens couldn't load this invitation right now.</p>
+            <p>TruthLens couldn't load this invitation right now.</p>
 
-               <button type="button" className="org-invite-button org-invite-button--primary" onClick={loadInvitation}>
-                  Try again
-               </button>
-            </main>
+            <button type="button" className="org-invite-button org-invite-button--primary" onClick={loadInvitation}>
+               Try again
+            </button>
          </div>
       );
    }
@@ -310,39 +304,36 @@ function OrganizationInvitationPage() {
 
    if (acceptanceState === "accepted") {
       return (
-         <div className="org-invite-page">
-            <main className="org-invite-card org-invite-card--state" aria-live="polite">
-               <div className="org-invite-state-icon org-invite-state-icon--success">
-                  <Icons name="check-circle" size={30} aria-hidden="true" />
-               </div>
+         <div className="org-invite-card org-invite-card--state" aria-live="polite">
+            <div className="org-invite-state-icon org-invite-state-icon--success">
+               <Icons name="check-circle" size={30} aria-hidden="true" />
+            </div>
 
-               <p className="org-invite-eyebrow">Membership activated</p>
+            <p className="org-invite-eyebrow">Membership activated</p>
 
-               <h1>You're now part of {organization.name}</h1>
+            <h1>You're now part of {organization.name}</h1>
 
-               <p>
-                  Your TruthLens account now has the organization role <strong>{invitation.invited_role_label}</strong>.
-               </p>
+            <p>
+               Your TruthLens account now has the organization role <strong>{invitation.invited_role_label}</strong>.
+            </p>
 
-               <button
-                  type="button"
-                  className="org-invite-button org-invite-button--primary"
-                  onClick={() =>
-                     navigate(successDestination, {
-                        replace: true,
-                     })
-                  }
-               >
-                  {successDestination === "/workspace" ? "Open Verification Workspace" : "Go to Dashboard"}
-               </button>
-            </main>
+            <button
+               type="button"
+               className="org-invite-button org-invite-button--primary"
+               onClick={() =>
+                  navigate(successDestination, {
+                     replace: true,
+                  })
+               }
+            >
+               {successDestination === "/workspace" ? "Open Verification Workspace" : "Go to Dashboard"}
+            </button>
          </div>
       );
    }
 
    return (
-      <div className="org-invite-page">
-         <main className="org-invite-card">
+      <div className="org-invite-card">
             <header className="org-invite-header">
                <div className="org-invite-brand">
                   <Icons name="shield" size={18} aria-hidden="true" />
@@ -544,7 +535,6 @@ function OrganizationInvitationPage() {
                   <p className="org-invite-consent">Membership is not activated until you explicitly accept.</p>
                </div>
             )}
-         </main>
       </div>
    );
 }
