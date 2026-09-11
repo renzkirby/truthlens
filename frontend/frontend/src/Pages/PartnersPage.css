@@ -4,7 +4,19 @@
 }
 
 .partners-page__container {
-   width: min(1180px, calc(100% - 48px));
+   width: 100%;
+
+   max-width: calc(
+      var(--tl-public-content-max) +
+      var(--tl-public-gutter-left) +
+      var(--tl-public-gutter-right)
+   );
+
+   min-width: 0;
+
+   padding-left: var(--tl-public-gutter-left);
+   padding-right: var(--tl-public-gutter-right);
+
    margin: 0 auto;
 }
 
@@ -128,8 +140,9 @@
 
 .partners-filter-control input:focus,
 .partners-filter-control select:focus {
-   border-color: #10b981;
-   outline: 3px solid rgba(16, 185, 129, 0.18);
+   border-color: var(--tl-color-brand-primary);
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
 }
 
 .partners-results {
@@ -177,8 +190,8 @@
 }
 
 .partner-directory-card:focus-visible {
-   outline: 3px solid #10b981;
-   outline-offset: 4px;
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
 }
 
 .partner-directory-card__topline {
@@ -306,25 +319,25 @@
 }
 
 .partners-state button {
-   min-height: 42px;
+   min-height: var(--tl-control-height-comfortable);
    margin-top: 20px;
    padding: 0 17px;
-   border: 1px solid #10b981;
+   border: 1px solid var(--tl-color-brand-primary);
    border-radius: 9px;
-   color: #ffffff;
-   background: #10b981;
+   color: var(--tl-color-text-inverse);
+   background: var(--tl-color-brand-primary);
    font-weight: 700;
    cursor: pointer;
 }
 
 .partners-state button:hover {
-   border-color: #059669;
-   background: #059669;
+   border-color: var(--tl-color-brand-primary-hover);
+   background: var(--tl-color-brand-primary-hover);
 }
 
 .partners-state button:focus-visible {
-   outline: 3px solid rgba(16, 185, 129, 0.3);
-   outline-offset: 3px;
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
 }
 
 @media (max-width: 920px) {
@@ -334,10 +347,6 @@
 }
 
 @media (max-width: 700px) {
-   .partners-page__container {
-      width: min(100% - 36px, 1180px);
-   }
-
    .partners-hero__content {
       padding-top: 58px;
       padding-bottom: 56px;
@@ -365,10 +374,6 @@
 }
 
 @media (max-width: 390px) {
-   .partners-page__container {
-      width: min(100% - 28px, 1180px);
-   }
-
    .partners-hero h1 {
       font-size: 2.25rem;
    }
