@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import AuthShell from "../components/auth/AuthShell";
+import AccountStatus from "../components/account/AccountStatus.jsx";
 import Icons from "../components/Icons.jsx";
 import Button from "../components/ui/Button.jsx";
 import Input from "../components/ui/Input.jsx";
@@ -77,21 +78,19 @@ function ResetPasswordPage() {
          ]}
       >
          {success ? (
-            <div className="auth-status">
-               <div className="auth-status-icon" aria-hidden="true">
-                  <Icons name="check-circle" size={24} />
-               </div>
-
-               <p className="account-form__eyebrow">Password updated</p>
-
-               <h1 className="account-form__title">You're ready to sign in</h1>
-
-               <p className="form-description">Your TruthLens password has been changed successfully.</p>
-
-               <Link to="/login" className="account-form__status-link auth-link-button">
-                  Sign in
-               </Link>
-            </div>
+            <AccountStatus
+               tone="success"
+               icon={<Icons name="check-circle" size={24} aria-hidden="true" />}
+               eyebrow="Password updated"
+               title="You're ready to sign in"
+               description="Your TruthLens password has been changed successfully."
+               actions={
+                  <Link to="/login" className="account-status__action account-status__action--primary">
+                     Sign in
+                  </Link>
+               }
+               live="polite"
+            />
          ) : (
             <div className="account-form">
                <div className="account-form__header">

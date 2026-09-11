@@ -255,46 +255,6 @@
    padding: 0 10px;
 }
 
-.account-form__status-link {
-   box-sizing: border-box;
-   width: 100%;
-   min-height: 46px;
-   margin-top: 4px;
-   padding: 14px;
-   display: inline-flex;
-   align-items: center;
-   justify-content: center;
-   border: 1px solid var(--tl-color-brand-primary);
-   border-radius: var(--tl-radius-md);
-   color: var(--tl-color-text-inverse);
-   background: var(--tl-color-brand-primary);
-   font-size: 0.95rem;
-   font-weight: 600;
-   text-align: center;
-   text-decoration: none;
-   transition:
-      background-color var(--tl-duration-fast) ease,
-      border-color var(--tl-duration-fast) ease,
-      box-shadow var(--tl-duration-fast) ease,
-      transform var(--tl-duration-fast) ease;
-}
-
-.account-form__status-link:hover {
-   border-color: var(--tl-color-brand-primary-hover);
-   background: var(--tl-color-brand-primary-hover);
-   box-shadow: 0 6px 16px rgba(79, 70, 229, 0.16);
-   transform: translateY(-1px);
-}
-
-.account-form__status-link:active {
-   transform: translateY(0);
-}
-
-.account-form__status-link:focus-visible {
-   outline: var(--tl-focus-width) solid var(--tl-focus-color);
-   outline-offset: var(--tl-focus-offset);
-}
-
 .account-google-button {
    position: relative;
    box-sizing: border-box;
@@ -432,7 +392,4 @@
       margin: var(--tl-space-5) 0;
    }
 
-   .account-form__status-link {
-      padding: 13px;
-   }
 }

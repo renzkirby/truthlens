@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import AuthShell from "../components/auth/AuthShell";
+import AccountStatus from "../components/account/AccountStatus.jsx";
 import Icons from "../components/Icons.jsx";
 import Button from "../components/ui/Button.jsx";
 import Input from "../components/ui/Input.jsx";
@@ -55,23 +56,23 @@ function ForgotPasswordPage() {
          ]}
       >
          {success ? (
-            <div className="auth-status">
-               <div className="auth-status-icon" aria-hidden="true">
-                  <Icons name="mail-check" size={24} />
-               </div>
-
-               <p className="account-form__eyebrow">Check your email</p>
-
-               <h1 className="account-form__title">Reset instructions sent</h1>
-
-               <p className="form-description">
-                  If an account exists for <strong>{email}</strong>, we've sent password reset instructions.
-               </p>
-
-               <Link to="/login" className="account-form__status-link auth-link-button">
-                  Back to sign in
-               </Link>
-            </div>
+            <AccountStatus
+               tone="info"
+               icon={<Icons name="mail-check" size={24} aria-hidden="true" />}
+               eyebrow="Check your email"
+               title="Reset instructions sent"
+               description={
+                  <>
+                     If an account exists for <strong>{email}</strong>, we've sent password reset instructions.
+                  </>
+               }
+               actions={
+                  <Link to="/login" className="account-status__action account-status__action--primary">
+                     Back to sign in
+                  </Link>
+               }
+               live="polite"
+            />
          ) : (
             <div className="account-form">
                <div className="account-form__header">
