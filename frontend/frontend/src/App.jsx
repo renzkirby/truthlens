@@ -25,6 +25,7 @@ import OrganizationInvitationPage from "./Pages/OrganizationInvitationPage.jsx";
 import PartnersPage from "./Pages/PartnersPage.jsx";
 import PartnerProfilePage from "./Pages/PartnerProfilePage.jsx";
 import AppShell from "./components/app/AppShell.jsx";
+import PublicShell from "./components/public/PublicShell.jsx";
 
 function App() {
    return (
@@ -32,7 +33,11 @@ function App() {
          <Toast />
          <BrowserRouter>
             <Routes>
-               <Route path="/landing-page" element={<LandingPage />} />
+               <Route element={<PublicShell />}>
+                  <Route path="/landing-page" element={<LandingPage />} />
+                  <Route path="/partners" element={<PartnersPage />} />
+                  <Route path="/partners/:slug" element={<PartnerProfilePage />} />
+               </Route>
                <Route path="/login" element={<LoginPage />} />
                <Route path="/register" element={<RegisterPage />} />
                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -41,8 +46,6 @@ function App() {
                <Route path="/wireframes" element={<TruthLensWireframes />} />
                <Route path="/verify-email" element={<VerifyEmailPage />} />
                <Route path="/organization-invitations/:token" element={<OrganizationInvitationPage />} />
-               <Route path="/partners" element={<PartnersPage />} />
-               <Route path="/partners/:slug" element={<PartnerProfilePage />} />
 
                {/* Protected Routes - accessible to any authenticated user */}
                <Route element={<PrivateRoute />}>
