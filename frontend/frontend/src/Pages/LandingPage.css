@@ -40,7 +40,11 @@
       ),
       linear-gradient(135deg, #17154d 0%, #27236f 48%, #4f46e5 100%);
 
-   padding: 96px 24px 104px;
+   padding:
+      96px
+      var(--tl-public-gutter-right)
+      104px
+      var(--tl-public-gutter-left);
 }
 
 /* Subtle decorative glow */
@@ -71,7 +75,7 @@
    position: relative;
    z-index: 1;
 
-   width: min(1180px, 100%);
+   width: min(var(--tl-public-content-max), 100%);
 
    margin: 0 auto;
 
@@ -792,7 +796,8 @@
 
 @media (max-width: 900px) {
    :where(.landing-page) .hero-section {
-      padding: 78px 24px 88px;
+      padding-top: 78px;
+      padding-bottom: 88px;
    }
 
    :where(.landing-page) .hero-container {
@@ -871,7 +876,8 @@
 
 @media (max-width: 600px) {
    :where(.landing-page) .hero-section {
-      padding: 64px 18px 72px;
+      padding-top: 64px;
+      padding-bottom: 72px;
    }
 
    :where(.landing-page) .hero-container {
@@ -954,11 +960,6 @@
 }
 
 @media (max-width: 420px) {
-   :where(.landing-page) .hero-section {
-      padding-left: 14px;
-      padding-right: 14px;
-   }
-
    :where(.landing-page) .hero-title {
       font-size: 2.25rem;
    }
@@ -1049,7 +1050,11 @@
 :where(.landing-page) .features-section {
    position: relative;
 
-   padding: 104px 24px;
+   padding:
+      104px
+      var(--tl-public-gutter-right)
+      104px
+      var(--tl-public-gutter-left);
 
    background: var(--bg-surface);
 
@@ -1081,7 +1086,7 @@
 
    z-index: 1;
 
-   width: min(1120px, 100%);
+   width: min(var(--tl-public-content-comfortable-max), 100%);
 
    margin: 0 auto;
 }
@@ -1324,7 +1329,8 @@
 
 @media (max-width: 900px) {
    :where(.landing-page) .features-section {
-      padding: 84px 24px;
+      padding-top: 84px;
+      padding-bottom: 84px;
    }
 
    :where(.landing-page) .features-header {
@@ -1344,7 +1350,8 @@
 
 @media (max-width: 700px) {
    :where(.landing-page) .features-section {
-      padding: 72px 18px;
+      padding-top: 72px;
+      padding-bottom: 72px;
    }
 
    :where(.landing-page) .features-header {
@@ -1378,7 +1385,8 @@
 
 @media (max-width: 420px) {
    :where(.landing-page) .features-section {
-      padding: 64px 14px;
+      padding-top: 64px;
+      padding-bottom: 64px;
    }
 
    :where(.landing-page) .features-header {
@@ -1424,7 +1432,11 @@
 :where(.landing-page) .how-it-works {
    position: relative;
 
-   padding: 104px 24px;
+   padding:
+      104px
+      var(--tl-public-gutter-right)
+      104px
+      var(--tl-public-gutter-left);
 
    background: linear-gradient(
       180deg,
@@ -1645,7 +1657,8 @@
 
 @media (max-width: 900px) {
    :where(.landing-page) .how-it-works {
-      padding: 84px 24px;
+      padding-top: 84px;
+      padding-bottom: 84px;
    }
 
    :where(.landing-page) .section-header {
@@ -1677,7 +1690,8 @@
 
 @media (max-width: 700px) {
    :where(.landing-page) .how-it-works {
-      padding: 72px 18px;
+      padding-top: 72px;
+      padding-bottom: 72px;
    }
 
    :where(.landing-page) .section-header {
@@ -1711,7 +1725,8 @@
 
 @media (max-width: 420px) {
    :where(.landing-page) .how-it-works {
-      padding: 64px 14px;
+      padding-top: 64px;
+      padding-bottom: 64px;
    }
 
    :where(.landing-page) .section-header {
@@ -1748,7 +1763,11 @@
 :where(.landing-page) .trust-section {
    position: relative;
 
-   padding: 112px 24px;
+   padding:
+      112px
+      var(--tl-public-gutter-right)
+      112px
+      var(--tl-public-gutter-left);
 
    color: #ffffff;
 
@@ -1791,7 +1810,7 @@
 
    z-index: 1;
 
-   width: min(1120px, 100%);
+   width: min(var(--tl-public-content-comfortable-max), 100%);
 
    margin: 0 auto;
 
@@ -2046,9 +2065,10 @@
    TRUST — TABLET
    ========================================================= */
 
-@media (max-width: 1000px) {
+@media (max-width: 900px) {
    :where(.landing-page) .trust-section {
-      padding: 96px 24px;
+      padding-top: 96px;
+      padding-bottom: 96px;
    }
 
    :where(.landing-page) .trust-container {
@@ -2068,7 +2088,8 @@
 
 @media (max-width: 820px) {
    :where(.landing-page) .trust-section {
-      padding: 84px 24px;
+      padding-top: 84px;
+      padding-bottom: 84px;
    }
 
    :where(.landing-page) .trust-container {
@@ -2109,7 +2130,8 @@
 
 @media (max-width: 600px) {
    :where(.landing-page) .trust-section {
-      padding: 72px 18px;
+      padding-top: 72px;
+      padding-bottom: 72px;
    }
 
    :where(.landing-page) .trust-title {
@@ -2141,7 +2163,8 @@
 
 @media (max-width: 420px) {
    :where(.landing-page) .trust-section {
-      padding: 64px 14px;
+      padding-top: 64px;
+      padding-bottom: 64px;
    }
 
    :where(.landing-page) .trust-title {
@@ -2179,7 +2202,11 @@
 :where(.landing-page) .about-section {
    position: relative;
 
-   padding: 112px 24px 0;
+   padding:
+      112px
+      var(--tl-public-gutter-right)
+      0
+      var(--tl-public-gutter-left);
 
    background: var(--bg-app);
 
@@ -2187,7 +2214,7 @@
 }
 
 :where(.landing-page) .about-container {
-   width: min(1120px, 100%);
+   width: min(var(--tl-public-content-comfortable-max), 100%);
 
    margin: 0 auto 96px;
 
@@ -2353,11 +2380,11 @@
    ========================================================= */
 
 :where(.landing-page) .about-statement {
-   padding: 0 24px;
+   padding: 0;
 }
 
 :where(.landing-page) .about-statement-inner {
-   width: min(1120px, 100%);
+   width: min(var(--tl-public-content-comfortable-max), 100%);
 
    margin: 0 auto;
 
@@ -2442,7 +2469,8 @@
 
 @media (max-width: 600px) {
    :where(.landing-page) .about-section {
-      padding: 72px 18px 0;
+      padding-top: 72px;
+      padding-bottom: 0;
    }
 
    :where(.landing-page) .about-container {
@@ -2470,10 +2498,6 @@
       height: 48px;
    }
 
-   :where(.landing-page) .about-statement {
-      padding: 0;
-   }
-
    :where(.landing-page) .about-statement-inner {
       padding: 32px 0;
 
@@ -2494,11 +2518,6 @@
    ========================================================= */
 
 @media (max-width: 420px) {
-   :where(.landing-page) .about-section {
-      padding-left: 14px;
-      padding-right: 14px;
-   }
-
    :where(.landing-page) .about-title {
       font-size: 1.9rem;
    }
@@ -2520,7 +2539,11 @@
 :where(.landing-page) .final-cta {
    position: relative;
 
-   padding: 104px 24px;
+   padding:
+      104px
+      var(--tl-public-gutter-right)
+      104px
+      var(--tl-public-gutter-left);
 
    background: var(--bg-surface);
 
@@ -2745,7 +2768,8 @@
 
 @media (max-width: 900px) {
    :where(.landing-page) .final-cta {
-      padding: 88px 24px;
+      padding-top: 88px;
+      padding-bottom: 88px;
    }
 
    :where(.landing-page) .final-cta-container {
@@ -2759,7 +2783,8 @@
 
 @media (max-width: 600px) {
    :where(.landing-page) .final-cta {
-      padding: 72px 18px;
+      padding-top: 72px;
+      padding-bottom: 72px;
    }
 
    :where(.landing-page) .final-cta-container {
@@ -2797,11 +2822,6 @@
    ========================================================= */
 
 @media (max-width: 420px) {
-   :where(.landing-page) .final-cta {
-      padding-left: 14px;
-      padding-right: 14px;
-   }
-
    :where(.landing-page) .final-cta-container {
       padding: 42px 20px;
    }

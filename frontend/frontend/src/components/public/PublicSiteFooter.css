@@ -5,7 +5,11 @@
 .public-site-footer {
    position: relative;
 
-   padding: 72px 24px 28px;
+   padding:
+      72px
+      var(--tl-public-gutter-right)
+      calc(28px + var(--tl-public-safe-bottom))
+      var(--tl-public-gutter-left);
 
    color: #ffffff;
 
@@ -13,7 +17,7 @@
 }
 
 .public-site-footer__container {
-   width: min(1120px, 100%);
+   width: min(var(--tl-public-content-comfortable-max), 100%);
 
    margin: 0 auto;
 }
@@ -203,7 +207,11 @@
 
 @media (max-width: 600px) {
    .public-site-footer {
-      padding: 56px 18px 24px;
+      padding:
+         56px
+         var(--tl-public-gutter-right)
+         calc(24px + var(--tl-public-safe-bottom))
+         var(--tl-public-gutter-left);
    }
 
    .public-site-footer__main {
@@ -236,11 +244,6 @@
    ========================================================= */
 
 @media (max-width: 420px) {
-   .public-site-footer {
-      padding-left: 14px;
-      padding-right: 14px;
-   }
-
    .public-site-footer__nav {
       grid-template-columns: 1fr;
 

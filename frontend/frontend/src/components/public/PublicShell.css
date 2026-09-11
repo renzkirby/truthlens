@@ -3,6 +3,21 @@
 }
 
 .public-shell {
+   --tl-public-gutter-base: var(--tl-space-6);
+   --tl-public-gutter-left:
+      max(
+         var(--tl-public-gutter-base),
+         env(safe-area-inset-left, 0px)
+      );
+   --tl-public-gutter-right:
+      max(
+         var(--tl-public-gutter-base),
+         env(safe-area-inset-right, 0px)
+      );
+   --tl-public-content-max: 1180px;
+   --tl-public-content-comfortable-max: 1120px;
+   --tl-public-safe-top: env(safe-area-inset-top, 0px);
+   --tl-public-safe-bottom: env(safe-area-inset-bottom, 0px);
    min-width: 0;
    min-height: 100vh;
    min-height: 100dvh;
@@ -21,4 +36,16 @@
 .public-shell__main > * {
    flex: 1 1 auto;
    min-width: 0;
+}
+
+@media (max-width: 900px) {
+   .public-shell {
+      --tl-public-gutter-base: var(--tl-space-4);
+   }
+}
+
+@media (max-width: 480px) {
+   .public-shell {
+      --tl-public-gutter-base: var(--tl-space-3);
+   }
 }
