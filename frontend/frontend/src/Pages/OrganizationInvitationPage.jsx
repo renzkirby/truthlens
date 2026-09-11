@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
+import AccountStatus from "../components/account/AccountStatus.jsx";
 import Icons from "../components/Icons.jsx";
+import Button from "../components/ui/Button.jsx";
 
 import { resolveApiEndpoint } from "../utils/api";
 import { createAuthReturnState } from "../utils/authNavigation";
@@ -237,12 +239,15 @@ function OrganizationInvitationPage() {
 
    if (loadState === "loading") {
       return (
-         <div className="org-invite-card org-invite-card--state" aria-busy="true" aria-live="polite">
-            <span className="org-invite-spinner" aria-hidden="true" />
-
-            <h1>Loading invitation</h1>
-
-            <p>Confirming your TruthLens organization invitation.</p>
+         <div className="org-invite-card org-invite-card--state">
+            <AccountStatus
+               tone="info"
+               loading={true}
+               title="Loading invitation"
+               description="Confirming your TruthLens organization invitation."
+               live="polite"
+               busy={true}
+            />
          </div>
       );
    }
@@ -250,26 +255,24 @@ function OrganizationInvitationPage() {
    if (loadState === "invalid") {
       return (
          <div className="org-invite-card org-invite-card--state" role="alert">
-            <div className="org-invite-state-icon">
-               <Icons name="alert-triangle" size={28} aria-hidden="true" />
-            </div>
-
-            <p className="org-invite-eyebrow">TruthLens Partner Network</p>
-
-            <h1>Invitation unavailable</h1>
-
-            <p>
-               This invitation link is invalid, has been cancelled, has already been used, or was replaced by a newer
-               invitation.
-            </p>
-
-            <button
-               type="button"
-               className="org-invite-button org-invite-button--secondary"
-               onClick={() => navigate("/community")}
-            >
-               Go to TruthLens
-            </button>
+            <AccountStatus
+               tone="warning"
+               icon={<Icons name="alert-triangle" size={28} aria-hidden="true" />}
+               eyebrow="TruthLens Partner Network"
+               title="Invitation unavailable"
+               description="This invitation link is invalid, has been cancelled, has already been used, or was replaced by a newer invitation."
+               actions={
+                  <Button
+                     type="button"
+                     variant="secondary"
+                     density="comfortable"
+                     fullWidth
+                     onClick={() => navigate("/community")}
+                  >
+                     Go to TruthLens
+                  </Button>
+               }
+            />
          </div>
       );
    }
@@ -277,17 +280,23 @@ function OrganizationInvitationPage() {
    if (loadState === "error") {
       return (
          <div className="org-invite-card org-invite-card--state" role="alert">
-            <div className="org-invite-state-icon">
-               <Icons name="alert-triangle" size={28} aria-hidden="true" />
-            </div>
-
-            <h1>Invitation temporarily unavailable</h1>
-
-            <p>TruthLens couldn't load this invitation right now.</p>
-
-            <button type="button" className="org-invite-button org-invite-button--primary" onClick={loadInvitation}>
-               Try again
-            </button>
+            <AccountStatus
+               tone="critical"
+               icon={<Icons name="alert-triangle" size={28} aria-hidden="true" />}
+               title="Invitation temporarily unavailable"
+               description="TruthLens couldn't load this invitation right now."
+               actions={
+                  <Button
+                     type="button"
+                     variant="primary"
+                     density="comfortable"
+                     fullWidth
+                     onClick={loadInvitation}
+                  >
+                     Try again
+                  </Button>
+               }
+            />
          </div>
       );
    }
@@ -304,30 +313,35 @@ function OrganizationInvitationPage() {
 
    if (acceptanceState === "accepted") {
       return (
-         <div className="org-invite-card org-invite-card--state" aria-live="polite">
-            <div className="org-invite-state-icon org-invite-state-icon--success">
-               <Icons name="check-circle" size={30} aria-hidden="true" />
-            </div>
-
-            <p className="org-invite-eyebrow">Membership activated</p>
-
-            <h1>You're now part of {organization.name}</h1>
-
-            <p>
-               Your TruthLens account now has the organization role <strong>{invitation.invited_role_label}</strong>.
-            </p>
-
-            <button
-               type="button"
-               className="org-invite-button org-invite-button--primary"
-               onClick={() =>
-                  navigate(successDestination, {
-                     replace: true,
-                  })
+         <div className="org-invite-card org-invite-card--state">
+            <AccountStatus
+               tone="success"
+               icon={<Icons name="check-circle" size={30} aria-hidden="true" />}
+               eyebrow="Membership activated"
+               title={`You're now part of ${organization.name}`}
+               description={
+                  <>
+                     Your TruthLens account now has the organization role{" "}
+                     <strong>{invitation.invited_role_label}</strong>.
+                  </>
                }
-            >
-               {successDestination === "/workspace" ? "Open Verification Workspace" : "Go to Dashboard"}
-            </button>
+               actions={
+                  <Button
+                     type="button"
+                     variant="primary"
+                     density="comfortable"
+                     fullWidth
+                     onClick={() =>
+                        navigate(successDestination, {
+                           replace: true,
+                        })
+                     }
+                  >
+                     {successDestination === "/workspace" ? "Open Verification Workspace" : "Go to Dashboard"}
+                  </Button>
+               }
+               live="polite"
+            />
          </div>
       );
    }
@@ -389,12 +403,14 @@ function OrganizationInvitationPage() {
                </div>
             </dl>
 
-            <div className="org-invite-authority-note">
+            <div className="org-invite-membership-note">
                <Icons name="shield" size={18} aria-hidden="true" />
 
                <p>
-                  Accepting this invitation adds organization-scoped institutional authority to your personal TruthLens
-                  account according to the assigned role. Your personal account remains separate from the organization.
+                  Accepting this invitation adds the organization membership and assigned role to your personal
+                  TruthLens account. Any verification, adjudication, or publication authority is determined by the
+                  capabilities granted to that role; membership by itself does not grant final authority. Your personal
+                  account remains separate from the organization.
                </p>
             </div>
 
@@ -419,33 +435,39 @@ function OrganizationInvitationPage() {
                      account.
                   </p>
 
-                  <button
+                  <Button
                      type="button"
-                     className="org-invite-button org-invite-button--primary"
+                     variant="primary"
+                     density="comfortable"
+                     fullWidth
                      onClick={() => goToAuthentication("/login")}
                   >
                      Sign in
-                  </button>
+                  </Button>
 
-                  <button
+                  <Button
                      type="button"
-                     className="org-invite-button org-invite-button--secondary"
+                     variant="secondary"
+                     density="comfortable"
+                     fullWidth
                      onClick={() => goToAuthentication("/register")}
                   >
                      Create account
-                  </button>
+                  </Button>
                </div>
             ) : !user ? (
-               <div className="org-invite-message org-invite-message--warning" role="alert">
+               <div className="org-invite-message org-invite-message--critical" role="alert">
                   <p>TruthLens couldn't load your account information.</p>
 
-                  <button
+                  <Button
                      type="button"
-                     className="org-invite-button org-invite-button--secondary"
+                     variant="secondary"
+                     density="comfortable"
+                     fullWidth
                      onClick={() => refreshUser()}
                   >
                      Reload account
-                  </button>
+                  </Button>
                </div>
             ) : !user.is_email_verified || acceptanceState === "verification-required" ? (
                <div className="org-invite-actions">
@@ -468,27 +490,35 @@ function OrganizationInvitationPage() {
                      </p>
                   )}
 
-                  <button
+                  <Button
                      type="button"
-                     className="org-invite-button org-invite-button--primary"
+                     variant="primary"
+                     density="comfortable"
+                     fullWidth
                      onClick={handleSendVerification}
                      disabled={isSendingVerification}
+                     loading={isSendingVerification}
+                     loadingLabel="Sending…"
                   >
-                     {isSendingVerification ? "Sending…" : "Send verification email"}
-                  </button>
+                     Send verification email
+                  </Button>
 
-                  <button
+                  <Button
                      type="button"
-                     className="org-invite-button org-invite-button--secondary"
+                     variant="secondary"
+                     density="comfortable"
+                     fullWidth
                      onClick={handleCheckVerification}
                      disabled={isCheckingVerification}
+                     loading={isCheckingVerification}
+                     loadingLabel="Checking…"
                   >
-                     {isCheckingVerification ? "Checking…" : "I've verified my email"}
-                  </button>
+                     I've verified my email
+                  </Button>
                </div>
             ) : acceptanceState === "wrong-account" ? (
                <div className="org-invite-actions">
-                  <div className="org-invite-message org-invite-message--danger" role="alert">
+                  <div className="org-invite-message org-invite-message--critical" role="alert">
                      <Icons name="alert-triangle" size={18} aria-hidden="true" />
 
                      <div>
@@ -498,13 +528,15 @@ function OrganizationInvitationPage() {
                      </div>
                   </div>
 
-                  <button
+                  <Button
                      type="button"
-                     className="org-invite-button org-invite-button--primary"
+                     variant="primary"
+                     density="comfortable"
+                     fullWidth
                      onClick={handleUseAnotherAccount}
                   >
                      Sign in with another account
-                  </button>
+                  </Button>
                </div>
             ) : (
                <div className="org-invite-actions">
@@ -515,22 +547,25 @@ function OrganizationInvitationPage() {
                   </div>
 
                   {(acceptanceState === "conflict" || acceptanceState === "error") && (
-                     <div className="org-invite-message org-invite-message--danger" role="alert">
+                     <div className="org-invite-message org-invite-message--critical" role="alert">
                         <Icons name="alert-triangle" size={18} aria-hidden="true" />
 
                         <p>{actionMessage}</p>
                      </div>
                   )}
 
-                  <button
+                  <Button
                      type="button"
-                     className="org-invite-button org-invite-button--primary"
+                     variant="primary"
+                     density="comfortable"
+                     fullWidth
                      onClick={handleAccept}
                      disabled={isAccepting}
-                     aria-busy={isAccepting}
+                     loading={isAccepting}
+                     loadingLabel="Accepting invitation…"
                   >
-                     {isAccepting ? "Accepting invitation…" : "Accept invitation"}
-                  </button>
+                     Accept invitation
+                  </Button>
 
                   <p className="org-invite-consent">Membership is not activated until you explicitly accept.</p>
                </div>
