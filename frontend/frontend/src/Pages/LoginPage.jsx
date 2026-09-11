@@ -178,7 +178,7 @@ function LoginPage() {
                <div className="form-container">
                   <div className="form-header">
                      <p className="greeting-text">Welcome back</p>
-                     <h2 className="form-title">Sign in to your TruthLens account</h2>
+                     <h1 className="form-title">Sign in to your TruthLens account</h1>
                   </div>
 
                   <form

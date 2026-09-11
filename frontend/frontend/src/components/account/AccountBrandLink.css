@@ -1,0 +1,34 @@
+.account-brand-link {
+   position: relative;
+   z-index: 2;
+   width: fit-content;
+   min-height: var(--tl-control-height-comfortable);
+   display: inline-flex;
+   align-items: center;
+   gap: 0.65rem;
+   color: var(--tl-color-text-main);
+   text-decoration: none;
+   font-size: 1.25rem;
+   font-weight: 700;
+}
+
+.account-brand-link--inverse {
+   color: var(--tl-color-text-inverse);
+}
+
+.account-brand-link:focus-visible {
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
+   border-radius: 0.5rem;
+}
+
+.account-brand-link--inverse:focus-visible {
+   outline: 3px solid rgba(255, 255, 255, 0.65);
+   outline-offset: 4px;
+}
+
+.account-brand-link__logo {
+   width: auto;
+   height: 2.5rem;
+   object-fit: contain;
+}

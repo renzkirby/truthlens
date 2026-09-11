@@ -1,0 +1,5 @@
+.account-surface {
+   width: min(100%, 28rem);
+   min-width: 0;
+   margin-inline: auto;
+}

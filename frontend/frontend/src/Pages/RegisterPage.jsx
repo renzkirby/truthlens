@@ -254,7 +254,7 @@ function RegisterPage() {
                <div className="form-header">
                   <p className="greeting-text">Join TruthLens</p>
 
-                  <h2 className="form-title">Create your account</h2>
+                  <h1 className="form-title">Create your account</h1>
 
                   <p className="form-description">Get started with a free TruthLens account.</p>
                </div>

@@ -82,7 +82,7 @@ function ResetPasswordPage() {
 
                <p className="greeting-text">Password updated</p>
 
-               <h2 className="form-title">You're ready to sign in</h2>
+               <h1 className="form-title">You're ready to sign in</h1>
 
                <p className="form-description">Your TruthLens password has been changed successfully.</p>
 
@@ -95,7 +95,7 @@ function ResetPasswordPage() {
                <div className="form-header">
                   <p className="greeting-text">Secure your account</p>
 
-                  <h2 className="form-title">Create a new password</h2>
+                  <h1 className="form-title">Create a new password</h1>
                </div>
 
                <form onSubmit={handleSubmit}>

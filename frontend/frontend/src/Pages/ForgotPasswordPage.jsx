@@ -62,7 +62,7 @@ function ForgotPasswordPage() {
 
                <p className="greeting-text">Check your email</p>
 
-               <h2 className="form-title">Reset instructions sent</h2>
+               <h1 className="form-title">Reset instructions sent</h1>
 
                <p className="form-description">
                   If an account exists for <strong>{email}</strong>, we've sent password reset instructions.
@@ -77,7 +77,7 @@ function ForgotPasswordPage() {
                <div className="form-header">
                   <p className="greeting-text">Forgot your password?</p>
 
-                  <h2 className="form-title">Reset your password</h2>
+                  <h1 className="form-title">Reset your password</h1>
 
                   <p className="form-description">Enter the email address associated with your TruthLens account.</p>
                </div>
