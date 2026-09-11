@@ -27,6 +27,7 @@ import PartnerProfilePage from "./Pages/PartnerProfilePage.jsx";
 import AppShell from "./components/app/AppShell.jsx";
 import PublicShell from "./components/public/PublicShell.jsx";
 import AccountActionShell from "./components/account/AccountActionShell.jsx";
+import OnboardingShell from "./components/account/OnboardingShell.jsx";
 
 function App() {
    return (
@@ -52,7 +53,9 @@ function App() {
 
                {/* Protected Routes - accessible to any authenticated user */}
                <Route element={<PrivateRoute />}>
-                  <Route path="/onboarding" element={<OnboardingPage />} />
+                  <Route element={<OnboardingShell />}>
+                     <Route path="/onboarding" element={<OnboardingPage />} />
+                  </Route>
 
                   <Route element={<AppShell />}>
                      <Route path="/community" element={<CommunityFeed />} />

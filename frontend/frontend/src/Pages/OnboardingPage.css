@@ -3,51 +3,19 @@
    Full-page onboarding flow — 5 steps, slide transitions
    ══════════════════════════════════════════════════════════════════ */
 
-/* ── Page Shell ── */
-.ob-page {
-   min-height: 100vh;
-   background: var(--bg-app);
-   display: flex;
-   flex-direction: column;
-   align-items: center;
-   justify-content: center;
-   padding: 24px 16px;
+/* ── Flow Layout ── */
+.ob-flow {
+   width: 100%;
+   min-width: 0;
    position: relative;
-   overflow: hidden;
-   font-family: "Inter", sans-serif;
-}
-
-/* ── Background Blobs ── */
-.ob-bg-blob {
-   position: absolute;
-   border-radius: 50%;
-   filter: blur(80px);
-   opacity: 0.18;
-   pointer-events: none;
-   z-index: 0;
-}
-
-.ob-bg-blob--1 {
-   width: 500px;
-   height: 500px;
-   background: var(--brand-primary);
-   top: -150px;
-   left: -150px;
-}
-
-.ob-bg-blob--2 {
-   width: 400px;
-   height: 400px;
-   background: #0e9f6e;
-   bottom: -100px;
-   right: -100px;
+   padding-top: var(--tl-space-12);
 }
 
 /* ── Skip & Counter ── */
 .ob-skip-btn {
    position: absolute;
-   top: 22px;
-   right: 24px;
+   top: var(--tl-space-2);
+   right: 0;
    background: none;
    border: 1px solid var(--border-default);
    color: var(--text-muted);
@@ -69,8 +37,8 @@
 
 .ob-step-counter {
    position: absolute;
-   top: 26px;
-   left: 24px;
+   top: var(--tl-space-3);
+   left: 0;
    font-size: 11px;
    font-weight: 600;
    color: var(--text-muted);
@@ -88,7 +56,7 @@
       0 2px 8px rgba(0, 0, 0, 0.06);
    border: 1px solid var(--border-default);
    width: 100%;
-   max-width: 1000px;
+   min-width: 0;
    min-height: 540px;
    display: grid;
    grid-template-columns:
@@ -958,12 +926,6 @@
 
 /* ── Responsive ── */
 @media (max-width: 768px) {
-   .ob-page {
-      justify-content: flex-start;
-      padding: 72px 14px 20px;
-      overflow-y: auto;
-   }
-
    .ob-card {
       grid-template-columns: 1fr;
       min-height: unset;
@@ -1000,11 +962,6 @@
       font-size: 0.8125rem;
       line-height: 1.45;
    }
-   .ob-page {
-      padding-left: 10px;
-      padding-right: 10px;
-   }
-
    .ob-content {
       padding: 28px 18px 20px;
    }

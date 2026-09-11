@@ -401,7 +401,7 @@ export default function OnboardingPage() {
    };
 
    return (
-      <div className="ob-page">
+      <div className="ob-flow">
          {/* Skip button — always visible except on last step */}
          {!isLast && (
             <button className="ob-skip-btn" onClick={handleSkip} disabled={isTransitioning || isCompleting}>
@@ -531,10 +531,6 @@ export default function OnboardingPage() {
                <StepVisual type={step.visual} />
             </div>
          </div>
-
-         {/* Background decoration */}
-         <div className="ob-bg-blob ob-bg-blob--1" />
-         <div className="ob-bg-blob ob-bg-blob--2" />
       </div>
    );
 }
