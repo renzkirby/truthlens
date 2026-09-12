@@ -899,12 +899,23 @@ function SafetyReviewPanel() {
                         </div>
 
                         <div className="safety-thread-context">
-                           <span>{formatLabel(detail.thread?.claim?.claim_type, "Claim type unavailable")}</span>
                            <p>{detail.thread?.claim?.context_text || detail.thread?.caption || "Thread context unavailable"}</p>
-                           <small>
-                              Author: {detail.thread?.author?.username ? `@${detail.thread.author.username}` : "Unknown"}
-                              {detail.thread?.created_at ? ` · Posted ${formatDateTime(detail.thread.created_at)}` : ""}
-                           </small>
+                           <dl className="safety-thread-provenance">
+                              <div>
+                                 <dt>Claim type</dt>
+                                 <dd>{formatLabel(detail.thread?.claim?.claim_type, "Claim type unavailable")}</dd>
+                              </div>
+                              <div>
+                                 <dt>Author</dt>
+                                 <dd>{detail.thread?.author?.username ? `@${detail.thread.author.username}` : "Unknown"}</dd>
+                              </div>
+                              {detail.thread?.created_at && (
+                                 <div>
+                                    <dt>Posted</dt>
+                                    <dd>{formatDateTime(detail.thread.created_at)}</dd>
+                                 </div>
+                              )}
+                           </dl>
                         </div>
                      </section>
 
@@ -930,43 +941,6 @@ function SafetyReviewPanel() {
                            </ul>
                         ) : (
                            <p className="safety-inline-empty">No report details are associated with this case.</p>
-                        )}
-                     </section>
-
-                     <section className="safety-detail-section">
-                        <div className="safety-subheading-row safety-major-section-heading">
-                           <div>
-                              <h4>Moderation history</h4>
-                              <p>Recent case events supplied by the Safety audit history.</p>
-                           </div>
-                        </div>
-
-                        {Array.isArray(detail.events) && detail.events.length > 0 ? (
-                           <ol className="safety-event-list">
-                              {detail.events.map((event, index) => (
-                                 <li key={`${event.event_type}-${event.created_at}-${index}`}>
-                                    <span className="safety-event-marker" aria-hidden="true" />
-                                    <div>
-                                       <div className="safety-event-heading">
-                                          <strong>{formatLabel(event.event_type)}</strong>
-                                          <time dateTime={event.created_at}>{formatDateTime(event.created_at)}</time>
-                                       </div>
-                                       <p>
-                                          Actor: {event.actor?.username ? `@${event.actor.username}` : "Actor not displayed"}
-                                       </p>
-                                       {(event.from_status || event.to_status) && (
-                                          <p>
-                                             Transition: {formatLabel(event.from_status, "None")} → {formatLabel(event.to_status, "None")}
-                                          </p>
-                                       )}
-                                       {event.reason_code && <p>Reason: {formatLabel(event.reason_code)}</p>}
-                                       {event.notes && <p>Notes: {event.notes}</p>}
-                                    </div>
-                                 </li>
-                              ))}
-                           </ol>
-                        ) : (
-                           <p className="safety-inline-empty">No moderation history is available.</p>
                         )}
                      </section>
 
@@ -1113,6 +1087,49 @@ function SafetyReviewPanel() {
                                  </form>
                               )}
                            </>
+                        )}
+                     </section>
+
+                     <section className="safety-detail-section">
+                        <div className="safety-subheading-row safety-major-section-heading">
+                           <div>
+                              <h4>Moderation history</h4>
+                              <p>Recent case events supplied by the Safety audit history.</p>
+                           </div>
+                        </div>
+
+                        {Array.isArray(detail.events) && detail.events.length > 0 ? (
+                           <details className="safety-history-disclosure">
+                              <summary>
+                                 <span>Case events</span>
+                                 <span>{detail.events.length} {detail.events.length === 1 ? "event" : "events"}</span>
+                              </summary>
+                              <ol className="safety-event-list">
+                                 {detail.events.map((event, index) => (
+                                    <li key={`${event.event_type}-${event.created_at}-${index}`}>
+                                       <span className="safety-event-marker" aria-hidden="true" />
+                                       <div>
+                                          <div className="safety-event-heading">
+                                             <strong>{formatLabel(event.event_type)}</strong>
+                                             <time dateTime={event.created_at}>{formatDateTime(event.created_at)}</time>
+                                          </div>
+                                          <p>
+                                             Actor: {event.actor?.username ? `@${event.actor.username}` : "Actor not displayed"}
+                                          </p>
+                                          {(event.from_status || event.to_status) && (
+                                             <p>
+                                                Transition: {formatLabel(event.from_status, "None")} → {formatLabel(event.to_status, "None")}
+                                             </p>
+                                          )}
+                                          {event.reason_code && <p>Reason: {formatLabel(event.reason_code)}</p>}
+                                          {event.notes && <p>Notes: {event.notes}</p>}
+                                       </div>
+                                    </li>
+                                 ))}
+                              </ol>
+                           </details>
+                        ) : (
+                           <p className="safety-inline-empty">No moderation history is available.</p>
                         )}
                      </section>
                   </div>

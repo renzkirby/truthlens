@@ -415,18 +415,16 @@
 .safety-case-facts {
    display: grid;
    grid-template-columns: repeat(2, minmax(0, 1fr));
-   gap: 1px;
+   gap: var(--tl-space-4) var(--tl-space-6);
    margin: 17px 0 0;
-   overflow: hidden;
-   border: 1px solid var(--border-default);
-   border-radius: 9px;
-   background: var(--border-default);
+   padding: var(--tl-space-4) 0;
+   border-top: 1px solid var(--border-light);
+   border-bottom: 1px solid var(--border-light);
 }
 
 .safety-case-facts > div {
    min-width: 0;
-   padding: 11px 12px;
-   background: var(--bg-surface);
+   padding: 0;
 }
 
 .safety-case-facts dt {
@@ -441,6 +439,11 @@
    font-size: 0.77rem;
    font-weight: 600;
    overflow-wrap: anywhere;
+}
+
+.safety-case-facts > div:first-child dd {
+   color: var(--text-main);
+   font-weight: 700;
 }
 
 .safety-detail-section,
@@ -490,36 +493,52 @@
 }
 
 .safety-thread-context {
-   margin-top: 12px;
-   padding: 14px;
-   border-radius: 9px;
+   min-width: 0;
+   padding: 14px 16px;
+   border-bottom: 1px solid var(--border-light);
    background: var(--bg-subtle);
 }
 
-.safety-thread-context > span {
-   color: var(--text-muted);
-   font-size: 0.67rem;
-   font-weight: 700;
-}
-
 .safety-thread-context p {
-   margin: 7px 0;
+   margin: 0;
    color: var(--text-main);
-   font-size: 0.83rem;
-   line-height: 1.55;
+   font-size: 0.88rem;
+   line-height: 1.65;
    overflow-wrap: anywhere;
    white-space: pre-wrap;
 }
 
-.safety-thread-context small {
+.safety-thread-provenance {
+   min-width: 0;
+   display: grid;
+   grid-template-columns: repeat(3, minmax(0, 1fr));
+   gap: var(--tl-space-4);
+   margin: var(--tl-space-4) 0 0;
+   padding-top: var(--tl-space-3);
+   border-top: 1px solid var(--border-light);
+}
+
+.safety-thread-provenance > div {
+   min-width: 0;
+}
+
+.safety-thread-provenance dt {
    color: var(--text-muted);
-   font-size: 0.69rem;
-   line-height: 1.45;
+   font-size: 0.66rem;
+   font-weight: 650;
+}
+
+.safety-thread-provenance dd {
+   margin: 4px 0 0;
+   color: var(--text-body);
+   font-size: 0.72rem;
+   line-height: 1.5;
+   overflow-wrap: anywhere;
 }
 
 .safety-report-list,
 .safety-event-list {
-   margin: 12px 0 0;
+   margin: 0;
    padding: 0;
    list-style: none;
 }
@@ -535,6 +554,7 @@
 
 .safety-report-list li > div,
 .safety-event-heading {
+   min-width: 0;
    display: flex;
    align-items: baseline;
    justify-content: space-between;
@@ -543,8 +563,10 @@
 
 .safety-report-list strong,
 .safety-event-heading strong {
+   min-width: 0;
    color: var(--text-main);
    font-size: 0.77rem;
+   overflow-wrap: anywhere;
 }
 
 .safety-report-list time,
@@ -567,6 +589,46 @@
    margin: 12px 0 0;
    color: var(--text-muted);
    font-size: 0.78rem;
+}
+
+.safety-history-disclosure {
+   min-width: 0;
+   border-top: 1px solid var(--border-default);
+   border-bottom: 1px solid var(--border-default);
+}
+
+.safety-history-disclosure > summary {
+   min-width: 0;
+   min-height: 44px;
+   box-sizing: border-box;
+   padding: 11px 2px;
+   color: var(--text-body);
+   font-size: 0.75rem;
+   font-weight: 700;
+   line-height: 1.45;
+   overflow-wrap: anywhere;
+   cursor: pointer;
+}
+
+.safety-history-disclosure > summary:hover {
+   background: var(--bg-subtle);
+   color: var(--brand-primary);
+}
+
+.safety-history-disclosure[open] > summary {
+   border-bottom: 1px solid var(--border-light);
+}
+
+.safety-history-disclosure > summary span:last-child {
+   float: right;
+   margin-left: var(--tl-space-4);
+   color: var(--text-muted);
+   font-size: 0.68rem;
+   font-weight: 650;
+}
+
+.safety-history-disclosure .safety-event-list {
+   margin: var(--tl-space-3) 0 var(--tl-space-3) var(--tl-space-4);
 }
 
 .safety-event-list {
@@ -777,7 +839,8 @@
 .safety-contained-error button:focus-visible,
 .safety-thread-link:focus-visible,
 .safety-action-section button:focus-visible,
-.safety-decision-form textarea:focus-visible {
+.safety-decision-form textarea:focus-visible,
+.safety-history-disclosure > summary:focus-visible {
    outline: 2px solid var(--brand-primary);
    outline-offset: 2px;
 }
@@ -861,6 +924,20 @@
    .safety-report-list time,
    .safety-event-heading time {
       white-space: normal;
+   }
+
+   .safety-thread-provenance {
+      grid-template-columns: 1fr;
+   }
+
+   .safety-history-disclosure > summary span:last-child {
+      float: none;
+      display: block;
+      margin: 2px 0 0;
+   }
+
+   .safety-history-disclosure .safety-event-list {
+      margin-left: 0;
    }
 
    .safety-release-confirm,
