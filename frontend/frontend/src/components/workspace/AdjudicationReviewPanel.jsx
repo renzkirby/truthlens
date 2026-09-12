@@ -197,12 +197,22 @@ function SafeExternalLink({ value, children, className = "" }) {
 function EvidenceRecord({ evidence }) {
    const safeEvidenceUrl = getSafeHttpUrl(evidence?.evidence_url);
    const rejected = evidence?.evidence_status === "REJECTED";
+   const evidenceStatusTone =
+      evidence?.evidence_status === "VERIFIED"
+         ? "verified"
+         : rejected
+           ? "rejected"
+           : evidence?.evidence_status === "UNVERIFIED"
+             ? "unreviewed"
+             : "neutral";
 
    return (
       <li className="adjudication-evidence-record">
          <div className="adjudication-record-heading">
             <h6>{evidence?.evidence_caption || "Untitled evidence submission"}</h6>
-            <span>{evidence?.evidence_status_label || formatLabel(evidence?.evidence_status)}</span>
+            <span className={`adjudication-evidence-status adjudication-evidence-status--${evidenceStatusTone}`}>
+               {evidence?.evidence_status_label || formatLabel(evidence?.evidence_status)}
+            </span>
          </div>
 
          <dl className="adjudication-detail-facts compact">
@@ -1739,67 +1749,52 @@ function AdjudicationReviewContent({
                                     </div>
                                  )}
 
-                                 <section className="adjudication-detail-section" aria-labelledby="adjudication-case-context-heading">
-                                    <div className="adjudication-subheading-row">
-                                       <div>
-                                          <h5 id="adjudication-case-context-heading">Case and claim context</h5>
-                                          <p>Review the full claim context before interpreting evidence or decision history.</p>
-                                       </div>
-                                       <details className="adjudication-full-id">
-                                          <summary>Full case ID</summary>
-                                          <span>{detail.id}</span>
-                                       </details>
-                                    </div>
+                                 <div className="adjudication-detail-layout">
+                                    <div className="adjudication-primary-surface">
+                                       <section className="adjudication-detail-section" aria-labelledby="adjudication-case-context-heading">
+                                          <div className="adjudication-subheading-row">
+                                             <div>
+                                                <h5 id="adjudication-case-context-heading">Case and claim context</h5>
+                                                <p>Review the full claim context before interpreting evidence or decision history.</p>
+                                             </div>
+                                          </div>
 
-                                    <dl className="adjudication-detail-facts">
-                                       <div><dt>Organization</dt><dd>{detail.organization?.name || "Unavailable"}</dd></div>
-                                       <div><dt>Claim ID</dt><dd>{detailClaim.id || "Unavailable"}</dd></div>
-                                       <div><dt>Claim type</dt><dd>{formatLabel(detailClaim.claim_type)}</dd></div>
-                                       <div><dt>Workflow state</dt><dd>{formatLabel(detail.workflow_state)}</dd></div>
-                                       <div><dt>Case status</dt><dd>{detail.status_label || formatLabel(detail.status)}</dd></div>
-                                       <div><dt>Priority</dt><dd>{detail.priority_label || formatLabel(detail.priority)}</dd></div>
-                                       <div><dt>Source</dt><dd>{detail.source_label || formatLabel(detail.source)}</dd></div>
-                                       <div><dt>Created</dt><dd><FormattedDateTime value={detail.created_at} /></dd></div>
-                                       <div><dt>Updated</dt><dd><FormattedDateTime value={detail.updated_at} /></dd></div>
-                                       <div><dt>Resolved</dt><dd><FormattedDateTime value={detail.resolved_at} fallback="Not resolved" /></dd></div>
-                                    </dl>
+                                          <div className="adjudication-reading-block prominent">
+                                             <strong>Claim text</strong>
+                                             <p>{detailClaim.context_text || "Claim text unavailable."}</p>
+                                          </div>
 
-                                    <div className="adjudication-reading-block prominent">
-                                       <strong>Claim text</strong>
-                                       <p>{detailClaim.context_text || "Claim text unavailable."}</p>
-                                    </div>
+                                          <div className="adjudication-context-links">
+                                             <SafeExternalLink value={detailClaim.url_link}>Open original claim</SafeExternalLink>
+                                             <SafeExternalLink value={detailClaim.source_link}>Open claim source</SafeExternalLink>
+                                             <SafeExternalLink value={detailClaim.media_url}>Open claim media</SafeExternalLink>
+                                          </div>
+                                          {[detailClaim.url_link, detailClaim.source_link, detailClaim.media_url].some(
+                                             (value) => value && !getSafeHttpUrl(value),
+                                          ) && (
+                                             <p className="adjudication-inline-warning">
+                                                One or more recorded claim links cannot be opened because they are not supported HTTP(S) addresses.
+                                             </p>
+                                          )}
 
-                                    <div className="adjudication-context-links">
-                                       <SafeExternalLink value={detailClaim.url_link}>Open original claim</SafeExternalLink>
-                                       <SafeExternalLink value={detailClaim.source_link}>Open claim source</SafeExternalLink>
-                                       <SafeExternalLink value={detailClaim.media_url}>Open claim media</SafeExternalLink>
-                                    </div>
-                                    {[detailClaim.url_link, detailClaim.source_link, detailClaim.media_url].some(
-                                       (value) => value && !getSafeHttpUrl(value),
-                                    ) && (
-                                       <p className="adjudication-inline-warning">
-                                          One or more recorded claim links cannot be opened because they are not supported HTTP(S) addresses.
-                                       </p>
-                                    )}
-
-                                    <div className="adjudication-thread-context">
-                                       <h6>Related threads</h6>
-                                       {Array.isArray(detailClaim.threads) && detailClaim.threads.length > 0 ? (
-                                          <ul>
-                                             {detailClaim.threads.map((thread) => (
-                                                <li key={thread.id}>
-                                                   <Link to={`/thread/detail/${encodeURIComponent(thread.id)}`}>
-                                                      {thread.caption || `Thread ${formatCaseReference(thread.id)}`}
-                                                   </Link>
-                                                   <span><FormattedDateTime value={thread.created_at} /></span>
-                                                </li>
-                                             ))}
-                                          </ul>
-                                       ) : (
-                                          <p>No related thread reference is available.</p>
-                                       )}
-                                    </div>
-                                 </section>
+                                          <div className="adjudication-thread-context">
+                                             <h6>Related threads</h6>
+                                             {Array.isArray(detailClaim.threads) && detailClaim.threads.length > 0 ? (
+                                                <ul>
+                                                   {detailClaim.threads.map((thread) => (
+                                                      <li key={thread.id}>
+                                                         <Link to={`/thread/detail/${encodeURIComponent(thread.id)}`}>
+                                                            {thread.caption || `Thread ${formatCaseReference(thread.id)}`}
+                                                         </Link>
+                                                         <span><FormattedDateTime value={thread.created_at} /></span>
+                                                      </li>
+                                                   ))}
+                                                </ul>
+                                             ) : (
+                                                <p>No related thread reference is available.</p>
+                                             )}
+                                          </div>
+                                       </section>
 
                                  <section className="adjudication-detail-section" aria-labelledby="adjudication-evidence-heading">
                                     <div className="adjudication-subheading-row">
@@ -1813,12 +1808,26 @@ function AdjudicationReviewContent({
                                     </div>
 
                                     <div className="adjudication-evidence-totals">
-                                       <span>Total <strong>{normalizeNonnegativeNumber(evidenceReview.total)}</strong></span>
-                                       <span>Verified <strong>{normalizeNonnegativeNumber(evidenceReview.verified)}</strong></span>
-                                       <span>Rejected <strong>{normalizeNonnegativeNumber(evidenceReview.rejected)}</strong></span>
-                                       <span>Unreviewed <strong>{normalizeNonnegativeNumber(evidenceReview.unreviewed)}</strong></span>
-                                       <span>Active Evidence cases <strong>{normalizeNonnegativeNumber(evidenceReview.active_evidence_cases)}</strong></span>
-                                       <span>All reviewed <strong>{evidenceReview.all_reviewed ? "Yes" : "No"}</strong></span>
+                                       <span className="adjudication-evidence-metric adjudication-evidence-metric--neutral">
+                                          Total <strong>{normalizeNonnegativeNumber(evidenceReview.total)}</strong>
+                                       </span>
+                                       <span className="adjudication-evidence-metric adjudication-evidence-metric--success">
+                                          Verified <strong>{normalizeNonnegativeNumber(evidenceReview.verified)}</strong>
+                                       </span>
+                                       <span className="adjudication-evidence-metric adjudication-evidence-metric--critical">
+                                          Rejected <strong>{normalizeNonnegativeNumber(evidenceReview.rejected)}</strong>
+                                       </span>
+                                       <span className="adjudication-evidence-metric adjudication-evidence-metric--info">
+                                          Unreviewed <strong>{normalizeNonnegativeNumber(evidenceReview.unreviewed)}</strong>
+                                       </span>
+                                       <span className="adjudication-evidence-metric adjudication-evidence-metric--info">
+                                          Active Evidence cases <strong>{normalizeNonnegativeNumber(evidenceReview.active_evidence_cases)}</strong>
+                                       </span>
+                                       <span
+                                          className={`adjudication-evidence-metric adjudication-evidence-metric--${evidenceReview.all_reviewed ? "success" : "info"}`}
+                                       >
+                                          All reviewed <strong>{evidenceReview.all_reviewed ? "Yes" : "No"}</strong>
+                                       </span>
                                     </div>
                                     <p className="adjudication-domain-note">
                                        Evidence verification assesses source suitability. It does not establish whether the claim is true or false.
@@ -2100,7 +2109,7 @@ function AdjudicationReviewContent({
                                     )}
                                  </section>
 
-                                 <section className="adjudication-detail-section" aria-labelledby="adjudication-resolution-heading">
+                                       <section className="adjudication-detail-section" aria-labelledby="adjudication-resolution-heading">
                                     <div className="adjudication-subheading-row">
                                        <div>
                                           <h5 id="adjudication-resolution-heading">Resolution and case history</h5>
@@ -2140,7 +2149,32 @@ function AdjudicationReviewContent({
                                     {detailEvents.truncated && (
                                        <p className="adjudication-truncation-note">Showing the most recent 50 events, in chronological order.</p>
                                     )}
-                                 </section>
+                                       </section>
+                                    </div>
+
+                                    <aside
+                                       className="adjudication-context-rail"
+                                       aria-label="Selected case context"
+                                    >
+                                       <h5>Case context</h5>
+                                       <dl className="adjudication-detail-facts">
+                                          <div><dt>Organization</dt><dd>{detail.organization?.name || "Unavailable"}</dd></div>
+                                          <div><dt>Claim ID</dt><dd>{detailClaim.id || "Unavailable"}</dd></div>
+                                          <div><dt>Claim type</dt><dd>{formatLabel(detailClaim.claim_type)}</dd></div>
+                                          <div><dt>Workflow state</dt><dd>{formatLabel(detail.workflow_state)}</dd></div>
+                                          <div><dt>Case status</dt><dd>{detail.status_label || formatLabel(detail.status)}</dd></div>
+                                          <div><dt>Priority</dt><dd>{detail.priority_label || formatLabel(detail.priority)}</dd></div>
+                                          <div><dt>Source</dt><dd>{detail.source_label || formatLabel(detail.source)}</dd></div>
+                                          <div><dt>Created</dt><dd><FormattedDateTime value={detail.created_at} /></dd></div>
+                                          <div><dt>Updated</dt><dd><FormattedDateTime value={detail.updated_at} /></dd></div>
+                                          <div><dt>Resolved</dt><dd><FormattedDateTime value={detail.resolved_at} fallback="Not resolved" /></dd></div>
+                                       </dl>
+                                       <details className="adjudication-full-id">
+                                          <summary>Full case ID</summary>
+                                          <span>{detail.id}</span>
+                                       </details>
+                                    </aside>
+                                 </div>
                               </div>
                            ) : null}
                         </div>
