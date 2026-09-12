@@ -746,7 +746,7 @@ function SafetyReviewPanel() {
                      <p>No Platform Safety cases match the current filters.</p>
                   </div>
                ) : (
-                  <div className="safety-case-list">
+                  <ul className="safety-case-list">
                      {queue.results.map((caseItem) => {
                         const isSelected = selectedCaseId === caseItem.id;
                         const reasonSummary = Array.isArray(caseItem.report_reason_summary)
@@ -754,48 +754,49 @@ function SafetyReviewPanel() {
                            : [];
 
                         return (
-                           <button
-                              key={caseItem.id}
-                              type="button"
-                              className={`safety-case-row ${isSelected ? "selected" : ""}`}
-                              aria-pressed={isSelected}
-                              aria-controls="safety-case-detail"
-                              onClick={() => handleSelectCase(caseItem.id)}
-                           >
-                              <span className="safety-case-row-top">
-                                 <span className={`safety-status status-${String(caseItem.status).toLowerCase()}`}>
-                                    {formatLabel(caseItem.status)}
+                           <li key={caseItem.id} className="safety-case-item">
+                              <button
+                                 type="button"
+                                 className={`safety-case-row ${isSelected ? "selected" : ""}`}
+                                 aria-pressed={isSelected}
+                                 aria-controls="safety-case-detail"
+                                 onClick={() => handleSelectCase(caseItem.id)}
+                              >
+                                 <span className="safety-case-row-top">
+                                    <span className={`safety-status status-${String(caseItem.status).toLowerCase()}`}>
+                                       {formatLabel(caseItem.status)}
+                                    </span>
+                                    <span className={`safety-priority priority-${String(caseItem.priority).toLowerCase()}`}>
+                                       {formatLabel(caseItem.priority)} priority
+                                    </span>
+                                    {isSelected && <span className="safety-selected-label">Selected</span>}
                                  </span>
-                                 <span className={`safety-priority priority-${String(caseItem.priority).toLowerCase()}`}>
-                                    {formatLabel(caseItem.priority)} priority
+
+                                 <strong>{getCaseTitle(caseItem)}</strong>
+
+                                 <span className="safety-case-context">
+                                    By {caseItem?.thread?.author?.username ? `@${caseItem.thread.author.username}` : "Unknown author"}
                                  </span>
-                                 {isSelected && <span className="safety-selected-label">Selected</span>}
-                              </span>
 
-                              <strong>{getCaseTitle(caseItem)}</strong>
+                                 <span className="safety-reason-summary">
+                                    {reasonSummary.length > 0
+                                       ? reasonSummary
+                                            .map((reason) => `${reason.reason_label}: ${reason.count}`)
+                                            .join(" · ")
+                                       : "No unresolved report reasons"}
+                                 </span>
 
-                              <span className="safety-case-context">
-                                 By {caseItem?.thread?.author?.username ? `@${caseItem.thread.author.username}` : "Unknown author"}
-                              </span>
-
-                              <span className="safety-reason-summary">
-                                 {reasonSummary.length > 0
-                                    ? reasonSummary
-                                         .map((reason) => `${reason.reason_label}: ${reason.count}`)
-                                         .join(" · ")
-                                    : "No unresolved report reasons"}
-                              </span>
-
-                              <span className="safety-case-row-meta">
-                                 <span>{caseItem.report_count} {caseItem.report_count === 1 ? "report" : "reports"}</span>
-                                 <span>{getAssignmentLabel(caseItem, currentUserId)}</span>
-                                 <span>Created {formatDateTime(caseItem.created_at)}</span>
-                                 <span>Updated {formatDateTime(caseItem.updated_at)}</span>
-                              </span>
-                           </button>
+                                 <span className="safety-case-row-meta">
+                                    <span>{caseItem.report_count} {caseItem.report_count === 1 ? "report" : "reports"}</span>
+                                    <span>{getAssignmentLabel(caseItem, currentUserId)}</span>
+                                    <span>Created {formatDateTime(caseItem.created_at)}</span>
+                                    <span>Updated {formatDateTime(caseItem.updated_at)}</span>
+                                 </span>
+                              </button>
+                           </li>
                         );
                      })}
-                  </div>
+                  </ul>
                )}
             </section>
 
@@ -884,7 +885,7 @@ function SafetyReviewPanel() {
                      </dl>
 
                      <section className="safety-detail-section">
-                        <div className="safety-subheading-row">
+                        <div className="safety-subheading-row safety-major-section-heading">
                            <div>
                               <h4>Thread context</h4>
                               <p>Context associated with the reported community thread.</p>
@@ -908,7 +909,7 @@ function SafetyReviewPanel() {
                      </section>
 
                      <section className="safety-detail-section">
-                        <div className="safety-subheading-row">
+                        <div className="safety-subheading-row safety-major-section-heading">
                            <div>
                               <h4>Reports</h4>
                               <p>{detail.report_count} case-specific {detail.report_count === 1 ? "report" : "reports"}</p>
@@ -933,7 +934,7 @@ function SafetyReviewPanel() {
                      </section>
 
                      <section className="safety-detail-section">
-                        <div className="safety-subheading-row">
+                        <div className="safety-subheading-row safety-major-section-heading">
                            <div>
                               <h4>Moderation history</h4>
                               <p>Recent case events supplied by the Safety audit history.</p>
@@ -970,7 +971,7 @@ function SafetyReviewPanel() {
                      </section>
 
                      <section className="safety-action-section" aria-labelledby="safety-actions-heading">
-                        <div className="safety-subheading-row">
+                        <div className="safety-subheading-row safety-major-section-heading">
                            <div>
                               <h4 id="safety-actions-heading">Safety actions</h4>
                               <p>Actions apply to this Platform Safety case, not a factual verdict.</p>
