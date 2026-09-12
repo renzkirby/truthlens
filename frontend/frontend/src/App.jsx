@@ -28,6 +28,7 @@ import AppShell from "./components/app/AppShell.jsx";
 import PublicShell from "./components/public/PublicShell.jsx";
 import AccountActionShell from "./components/account/AccountActionShell.jsx";
 import OnboardingShell from "./components/account/OnboardingShell.jsx";
+import WorkspaceShell from "./components/workspace/WorkspaceShell.jsx";
 
 function App() {
    return (
@@ -71,7 +72,9 @@ function App() {
 
                      {/* Capability-driven operational workspace */}
                      <Route element={<PrivateRoute requireWorkspace />}>
-                        <Route path="/workspace" element={<WorkspacePage />} />
+                        <Route element={<WorkspaceShell />}>
+                           <Route path="/workspace" element={<WorkspacePage />} />
+                        </Route>
 
                         <Route path="/moderation" element={<Navigate to="/workspace" replace />} />
                      </Route>

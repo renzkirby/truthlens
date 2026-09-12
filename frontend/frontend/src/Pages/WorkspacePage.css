@@ -1,12 +1,7 @@
-.workspace-page {
-   background: var(--bg-app);
+.workspace-view {
+   width: 100%;
+   min-width: 0;
    color: var(--text-main);
-}
-
-.workspace-container {
-   width: min(1280px, calc(100% - 48px));
-   margin: 0 auto;
-   padding: 36px 0 56px;
 }
 
 .workspace-header {
@@ -153,6 +148,7 @@
    grid-template-columns: 250px minmax(0, 1fr);
    gap: 22px;
    align-items: start;
+   min-width: 0;
 }
 
 .workspace-sidebar,
@@ -248,6 +244,7 @@
 }
 
 .workspace-content {
+   min-width: 0;
    min-height: 420px;
    padding: 26px;
 }
@@ -346,11 +343,6 @@
 }
 
 @media (max-width: 900px) {
-   .workspace-container {
-      width: min(100% - 32px, 1280px);
-      padding-top: 24px;
-   }
-
    .workspace-header {
       flex-direction: column;
    }
@@ -371,10 +363,6 @@
 }
 
 @media (max-width: 640px) {
-   .workspace-container {
-      width: min(100% - 24px, 1280px);
-   }
-
    .workspace-description {
       margin-left: 0;
    }

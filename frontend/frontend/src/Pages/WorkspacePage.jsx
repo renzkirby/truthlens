@@ -190,8 +190,7 @@ function WorkspacePage() {
    const selectedOrganization = selectedMembership?.organization ?? null;
 
    return (
-      <div className="workspace-page">
-         <main className="workspace-container">
+      <div className="workspace-view">
             <header className="workspace-header">
                <div className="workspace-header-copy">
                   <div className="workspace-title-row">
@@ -380,7 +379,6 @@ function WorkspacePage() {
                   )}
                </section>
             </div>
-         </main>
       </div>
    );
 }
