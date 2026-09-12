@@ -4,6 +4,9 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { resolveApiEndpoint } from "../../utils/api";
 import Icons from "../Icons.jsx";
+import Button from "../ui/Button.jsx";
+import Select from "../ui/Select.jsx";
+import Textarea from "../ui/Textarea.jsx";
 
 import "./SafetyReviewPanel.css";
 
@@ -641,7 +644,8 @@ function SafetyReviewPanel() {
             <div className="safety-filter-grid">
                <label>
                   <span>Status</span>
-                  <select
+                  <Select
+                     density="standard"
                      value={filters.status}
                      disabled={queueLoading}
                      onChange={(event) => handleFilterChange("status", event.target.value)}
@@ -651,12 +655,13 @@ function SafetyReviewPanel() {
                            {value ? formatLabel(value) : "All statuses"}
                         </option>
                      ))}
-                  </select>
+                  </Select>
                </label>
 
                <label>
                   <span>Priority</span>
-                  <select
+                  <Select
+                     density="standard"
                      value={filters.priority}
                      disabled={queueLoading}
                      onChange={(event) => handleFilterChange("priority", event.target.value)}
@@ -666,12 +671,13 @@ function SafetyReviewPanel() {
                            {value ? formatLabel(value) : "All priorities"}
                         </option>
                      ))}
-                  </select>
+                  </Select>
                </label>
 
                <label>
                   <span>Assignment</span>
-                  <select
+                  <Select
+                     density="standard"
                      value={filters.assigned}
                      disabled={queueLoading}
                      onChange={(event) => handleFilterChange("assigned", event.target.value)}
@@ -681,18 +687,20 @@ function SafetyReviewPanel() {
                            {option.label}
                         </option>
                      ))}
-                  </select>
+                  </Select>
                </label>
 
-               <button
+               <Button
                   type="button"
+                  variant="secondary"
+                  density="standard"
                   className="safety-refresh-button"
                   disabled={queueLoading}
                   onClick={() => requestQueueRefresh({ clearMessages: true })}
+                  leadingIcon={<Icons name="refresh-cw" size={15} />}
                >
-                  <Icons name="refresh-cw" size={15} />
                   Refresh
-               </button>
+               </Button>
             </div>
          </div>
 
@@ -728,9 +736,9 @@ function SafetyReviewPanel() {
                   <div className="safety-contained-error" role="alert">
                      <strong>Safety queue unavailable</strong>
                      <span>{queueError}</span>
-                     <button type="button" onClick={handleQueueRetry}>
+                     <Button type="button" variant="secondary" density="compact" onClick={handleQueueRetry}>
                         Retry
-                     </button>
+                     </Button>
                   </div>
                )}
 
@@ -818,19 +826,23 @@ function SafetyReviewPanel() {
                      <strong>Case detail unavailable</strong>
                      <span>{detailError}</span>
                      {detailUnavailable ? (
-                        <button
+                        <Button
                            type="button"
+                           variant="secondary"
+                           density="compact"
                            onClick={handleReturnToQueue}
                         >
                            Return to queue
-                        </button>
+                        </Button>
                      ) : (
-                        <button
+                        <Button
                            type="button"
+                           variant="secondary"
+                           density="compact"
                            onClick={handleDetailRetry}
                         >
                            Retry
-                        </button>
+                        </Button>
                      )}
                   </div>
                ) : !selectedCaseId ? (
@@ -963,9 +975,17 @@ function SafetyReviewPanel() {
                         ) : !detail.assigned_to ? (
                            <div className="safety-assignment-action">
                               <p>Claim this case before recording a Safety decision.</p>
-                              <button type="button" disabled={isBusy} onClick={handleClaim}>
-                                 {pendingOperation?.kind === "claim" ? "Claiming…" : "Claim case"}
-                              </button>
+                              <Button
+                                 type="button"
+                                 variant="primary"
+                                 density="comfortable"
+                                 disabled={isBusy}
+                                 loading={pendingOperation?.kind === "claim"}
+                                 loadingLabel="Claiming…"
+                                 onClick={handleClaim}
+                              >
+                                 Claim case
+                              </Button>
                            </div>
                         ) : isAssignedToAnother ? (
                            <div className="safety-assignment-locked">
@@ -983,61 +1003,76 @@ function SafetyReviewPanel() {
                                  {confirmingRelease ? (
                                     <div className="safety-release-confirm">
                                        <span>Release this case?</span>
-                                       <button
+                                       <Button
                                           ref={releaseCancelRef}
                                           type="button"
-                                          className="secondary"
+                                          variant="secondary"
+                                          density="standard"
                                           disabled={isBusy}
                                           onClick={handleCancelReleaseConfirmation}
                                        >
                                           Cancel
-                                       </button>
-                                       <button type="button" disabled={isBusy} onClick={handleRelease}>
-                                          {pendingOperation?.kind === "release" ? "Releasing…" : "Release case"}
-                                       </button>
+                                       </Button>
+                                       <Button
+                                          type="button"
+                                          variant="primary"
+                                          density="standard"
+                                          disabled={isBusy}
+                                          loading={pendingOperation?.kind === "release"}
+                                          loadingLabel="Releasing…"
+                                          onClick={handleRelease}
+                                       >
+                                          Release case
+                                       </Button>
                                     </div>
                                  ) : (
-                                    <button
+                                    <Button
                                        ref={releaseTriggerRef}
                                        type="button"
-                                       className="safety-release-trigger"
+                                       variant="secondary"
+                                       density="standard"
                                        disabled={isBusy || Boolean(decisionAction)}
                                        onClick={handleOpenReleaseConfirmation}
                                     >
                                        Release case
-                                    </button>
+                                    </Button>
                                  )}
                               </div>
 
                               {!decisionAction ? (
                                  <div className="safety-decision-options">
-                                    <button
+                                    <Button
                                        ref={dismissActionRef}
                                        type="button"
+                                       variant="secondary"
+                                       density="comfortable"
                                        disabled={isBusy || confirmingRelease}
                                        onClick={() => handleOpenDecision("DISMISS")}
                                     >
                                        Dismiss case
-                                    </button>
-                                    <button
+                                    </Button>
+                                    <Button
                                        ref={removeActionRef}
                                        type="button"
-                                       className="danger"
+                                       variant="destructive"
+                                       density="comfortable"
                                        disabled={isBusy || confirmingRelease}
                                        onClick={() => handleOpenDecision("REMOVE")}
                                     >
                                        Remove content
-                                    </button>
+                                    </Button>
                                     {detail.status !== "ESCALATED" && (
-                                       <button
+                                       <Button
                                           ref={escalateActionRef}
                                           type="button"
-                                          className="warning"
+                                          variant="secondary"
+                                          density="comfortable"
+                                          className="safety-warning-action"
                                           disabled={isBusy || confirmingRelease}
                                           onClick={() => handleOpenDecision("ESCALATE")}
                                        >
                                           Escalate review
-                                       </button>
+                                       </Button>
                                     )}
                                  </div>
                               ) : (
@@ -1050,9 +1085,10 @@ function SafetyReviewPanel() {
                                     <label htmlFor="safety-moderator-notes">
                                        Moderator notes {selectedActionDetail.notesRequired ? "(required)" : "(optional)"}
                                     </label>
-                                    <textarea
+                                    <Textarea
                                        ref={decisionNotesRef}
                                        id="safety-moderator-notes"
+                                       density="standard"
                                        value={decisionNotes}
                                        maxLength={2000}
                                        required={selectedActionDetail.notesRequired}
@@ -1066,23 +1102,32 @@ function SafetyReviewPanel() {
                                     </span>
 
                                     <div className="safety-decision-controls">
-                                       <button
+                                       <Button
                                           type="button"
-                                          className="secondary"
+                                          variant="secondary"
+                                          density="standard"
                                           disabled={isBusy}
                                           onClick={handleCancelDecision}
                                        >
                                           Cancel
-                                       </button>
-                                       <button
+                                       </Button>
+                                       <Button
                                           type="submit"
-                                          className={decisionAction === "REMOVE" ? "danger" : "primary"}
+                                          variant={
+                                             decisionAction === "REMOVE"
+                                                ? "destructive"
+                                                : decisionAction === "DISMISS"
+                                                  ? "primary"
+                                                  : "secondary"
+                                          }
+                                          density="comfortable"
+                                          className={decisionAction === "ESCALATE" ? "safety-warning-action" : ""}
                                           disabled={isBusy}
+                                          loading={pendingOperation?.kind === "action"}
+                                          loadingLabel="Submitting…"
                                        >
-                                          {pendingOperation?.kind === "action"
-                                             ? "Submitting…"
-                                             : `Confirm ${selectedActionDetail.label.toLowerCase()}`}
-                                       </button>
+                                          {`Confirm ${selectedActionDetail.label.toLowerCase()}`}
+                                       </Button>
                                     </div>
                                  </form>
                               )}

@@ -49,45 +49,6 @@
    font-weight: 650;
 }
 
-.safety-filter-grid select,
-.safety-refresh-button {
-   min-height: 38px;
-   border: 1px solid var(--border-default);
-   border-radius: 8px;
-   background: var(--bg-surface);
-   color: var(--text-body);
-   font: inherit;
-   font-size: 0.78rem;
-}
-
-.safety-filter-grid select {
-   width: 100%;
-   padding: 0 30px 0 10px;
-   cursor: pointer;
-}
-
-.safety-refresh-button {
-   display: inline-flex;
-   align-items: center;
-   justify-content: center;
-   gap: 7px;
-   padding: 0 12px;
-   font-weight: 650;
-   cursor: pointer;
-}
-
-.safety-filter-grid select:hover:not(:disabled),
-.safety-refresh-button:hover:not(:disabled) {
-   border-color: var(--brand-primary);
-}
-
-.safety-filter-grid select:disabled,
-.safety-refresh-button:disabled,
-.safety-action-section button:disabled {
-   cursor: not-allowed;
-   opacity: 0.58;
-}
-
 .safety-notice,
 .safety-error {
    display: flex;
@@ -101,21 +62,29 @@
 }
 
 .safety-notice {
-   border: 1px solid var(--border-default);
-   background: var(--bg-subtle);
-   color: var(--text-body);
+   border: 1px solid var(--tl-color-status-info-border);
+   background: var(--tl-color-status-info-bg);
+   color: var(--tl-color-status-info-text);
 }
 
 .safety-error {
-   border: 1px solid var(--verdict-fake-border);
-   background: var(--verdict-fake-bg);
-   color: var(--verdict-fake-text);
+   border: 1px solid var(--tl-color-status-critical-border);
+   background: var(--tl-color-status-critical-bg);
+   color: var(--tl-color-status-critical-text);
 }
 
 .safety-error > div {
+   min-width: 0;
    display: flex;
    flex-direction: column;
    gap: 2px;
+   overflow-wrap: anywhere;
+}
+
+.safety-notice > span,
+.safety-contained-error > span {
+   min-width: 0;
+   overflow-wrap: anywhere;
 }
 
 .safety-workspace-grid {
@@ -173,25 +142,16 @@
    align-items: flex-start;
    gap: 6px;
    padding: 15px;
-   border: 1px solid var(--verdict-fake-border);
+   border: 1px solid var(--tl-color-status-critical-border);
    border-radius: 9px;
-   background: var(--verdict-fake-bg);
-   color: var(--verdict-fake-text);
+   background: var(--tl-color-status-critical-bg);
+   color: var(--tl-color-status-critical-text);
    font-size: 0.8rem;
    line-height: 1.5;
 }
 
-.safety-contained-error button {
-   min-height: 34px;
+.safety-contained-error .tl-button {
    margin-top: 3px;
-   padding: 0 11px;
-   border: 1px solid currentColor;
-   border-radius: 7px;
-   background: var(--bg-surface);
-   color: inherit;
-   font: inherit;
-   font-weight: 650;
-   cursor: pointer;
 }
 
 .safety-state {
@@ -673,44 +633,16 @@
    white-space: pre-wrap;
 }
 
-.safety-action-section button,
-.safety-contained-error button {
-   min-height: 36px;
-   padding: 0 12px;
-   border: 1px solid var(--brand-primary);
-   border-radius: 8px;
-   background: var(--brand-primary);
-   color: var(--text-inverse);
-   font: inherit;
-   font-size: 0.75rem;
-   font-weight: 700;
-   cursor: pointer;
+.tl-button.safety-warning-action {
+   border-color: var(--tl-color-status-warning-border);
+   background: var(--tl-color-status-warning-bg);
+   color: var(--tl-color-status-warning-text);
 }
 
-.safety-action-section button.secondary,
-.safety-action-section .safety-release-trigger,
-.safety-decision-options button {
-   border-color: var(--border-default);
-   background: var(--bg-surface);
-   color: var(--text-body);
-}
-
-.safety-action-section button.danger,
-.safety-decision-options button.danger {
-   border-color: var(--verdict-fake-border);
-   background: var(--verdict-fake-bg);
-   color: var(--verdict-fake-text);
-}
-
-.safety-decision-options button.warning {
-   border-color: var(--verdict-misleading-border);
-   background: var(--verdict-misleading-bg);
-   color: var(--verdict-misleading-text);
-}
-
-.safety-action-section button:hover:not(:disabled),
-.safety-contained-error button:hover:not(:disabled) {
-   filter: brightness(0.97);
+.tl-button.safety-warning-action:not(:disabled):hover {
+   border-color: var(--tl-color-status-warning-text);
+   background: var(--tl-color-status-warning-bg);
+   color: var(--tl-color-status-warning-text);
 }
 
 .safety-complete-state,
@@ -733,6 +665,18 @@
    align-items: flex-start;
 }
 
+.safety-complete-state {
+   border: 1px solid var(--tl-color-status-success-border);
+   background: var(--tl-color-status-success-bg);
+   color: var(--tl-color-status-success-text);
+}
+
+.safety-assignment-locked {
+   border: 1px solid var(--tl-color-status-info-border);
+   background: var(--tl-color-status-info-bg);
+   color: var(--tl-color-status-info-text);
+}
+
 .safety-complete-state > div {
    display: flex;
    flex-direction: column;
@@ -740,7 +684,7 @@
 }
 
 .safety-complete-state span {
-   color: var(--text-muted);
+   color: var(--tl-color-status-success-text);
 }
 
 .safety-assignment-action,
@@ -749,15 +693,25 @@
 }
 
 .safety-assignment-action p {
+   min-width: 0;
    margin: 0;
    line-height: 1.5;
+   overflow-wrap: anywhere;
 }
 
 .safety-owner-row > span {
+   min-width: 0;
    display: inline-flex;
    align-items: center;
    gap: 7px;
    font-weight: 650;
+   overflow-wrap: anywhere;
+}
+
+.safety-assignment-locked > span,
+.safety-release-confirm > span {
+   min-width: 0;
+   overflow-wrap: anywhere;
 }
 
 .safety-release-confirm {
@@ -803,21 +757,6 @@
    font-weight: 700;
 }
 
-.safety-decision-form textarea {
-   width: 100%;
-   min-height: 112px;
-   box-sizing: border-box;
-   resize: vertical;
-   padding: 10px 11px;
-   border: 1px solid var(--border-default);
-   border-radius: 8px;
-   background: var(--bg-surface);
-   color: var(--text-main);
-   font: inherit;
-   font-size: 0.8rem;
-   line-height: 1.5;
-}
-
 .safety-notes-count {
    display: block;
    margin-top: 4px;
@@ -833,13 +772,8 @@
    margin-top: 12px;
 }
 
-.safety-filter-grid select:focus-visible,
-.safety-refresh-button:focus-visible,
 .safety-case-row:focus-visible,
-.safety-contained-error button:focus-visible,
 .safety-thread-link:focus-visible,
-.safety-action-section button:focus-visible,
-.safety-decision-form textarea:focus-visible,
 .safety-history-disclosure > summary:focus-visible {
    outline: 2px solid var(--brand-primary);
    outline-offset: 2px;
@@ -948,9 +882,11 @@
       flex-direction: column;
    }
 
-   .safety-release-confirm button,
-   .safety-decision-options button,
-   .safety-decision-controls button {
+   .safety-assignment-action > .tl-button,
+   .safety-owner-row > .tl-button,
+   .safety-release-confirm .tl-button,
+   .safety-decision-options .tl-button,
+   .safety-decision-controls .tl-button {
       width: 100%;
    }
 }
