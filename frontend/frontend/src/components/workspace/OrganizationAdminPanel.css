@@ -55,43 +55,20 @@
    margin-bottom: 18px;
 }
 
-.org-admin-toolbar > div {
+.org-admin-toolbar > div:first-child {
    display: flex;
    flex-direction: column;
    gap: 3px;
 }
 
-.org-admin-toolbar strong {
+.org-admin-toolbar > div:first-child > strong {
    color: var(--text-main);
    font-size: 0.94rem;
 }
 
-.org-admin-toolbar span {
+.org-admin-toolbar > div:first-child > span {
    color: var(--text-muted);
    font-size: 0.8rem;
-}
-
-.org-admin-toolbar button,
-.org-admin-error button {
-   display: inline-flex;
-   align-items: center;
-   justify-content: center;
-   gap: 7px;
-   min-height: 36px;
-   padding: 0 12px;
-   border: 1px solid var(--border-default);
-   border-radius: 8px;
-   background: var(--bg-surface);
-   color: var(--text-body);
-   font: inherit;
-   font-size: 0.78rem;
-   font-weight: 650;
-   cursor: pointer;
-}
-
-.org-admin-toolbar button:hover,
-.org-admin-error button:hover {
-   background: var(--bg-subtle);
 }
 
 .org-admin-summary {
@@ -282,36 +259,7 @@
 
 .org-member-manage-button {
    width: 118px;
-   min-height: 36px;
-   display: inline-flex;
-   align-items: center;
-   justify-content: center;
-   gap: 6px;
-   padding: 0 10px;
-   border: 1px solid var(--border-default);
-   border-radius: 8px;
-   background: var(--bg-surface);
-   color: var(--text-body);
-   font: inherit;
-   font-size: 0.76rem;
-   font-weight: 650;
-   cursor: pointer;
    white-space: nowrap;
-}
-
-.org-member-manage-button:hover:not(:disabled) {
-   border-color: var(--brand-primary);
-   background: rgba(79, 70, 229, 0.05);
-   color: var(--brand-primary);
-}
-
-.org-member-manage-button:disabled {
-   opacity: 0.55;
-   cursor: not-allowed;
-}
-
-.org-member-manage-button svg {
-   flex: 0 0 auto;
 }
 
 .org-member-menu {
@@ -352,12 +300,12 @@
 }
 
 .org-member-menu button.danger {
-   color: var(--verdict-fake-text);
+   color: var(--tl-color-status-critical-text);
 }
 
 .org-member-menu button.danger:hover,
 .org-member-menu button.danger:focus-visible {
-   background: var(--verdict-fake-bg);
+   background: var(--tl-color-status-critical-bg);
 }
 
 .org-member-protected-label {
@@ -416,8 +364,7 @@
    line-height: 1.5;
 }
 
-.org-admin-error button {
-   min-height: 32px;
+.org-admin-error .tl-button {
    margin-top: 4px;
 }
 
@@ -435,78 +382,15 @@
 
 .org-admin-toolbar-actions {
    display: flex;
+   flex-direction: row;
    align-items: center;
    gap: 8px;
 }
 
-.org-admin-toolbar-actions button {
-   width: 132px;
-}
-
-.org-admin-toolbar-actions button,
-.org-invitation-actions button,
-.org-invite-admin-form-actions button {
-   min-height: 36px;
-   display: inline-flex;
-   align-items: center;
-   justify-content: center;
-   gap: 7px;
-   padding: 0 12px;
-   border: 1px solid var(--border-default);
-   border-radius: 8px;
-   background: var(--bg-surface);
-   color: var(--text-body);
-   font: inherit;
-   font-size: 0.78rem;
-   font-weight: 650;
-   line-height: 1;
+.org-admin-toolbar-actions .tl-button {
+   width: auto;
+   min-width: 132px;
    white-space: nowrap;
-   cursor: pointer;
-   transition:
-      background-color 150ms ease,
-      border-color 150ms ease,
-      color 150ms ease,
-      box-shadow 150ms ease;
-}
-
-.org-admin-toolbar-actions button:hover:not(:disabled),
-.org-invitation-actions button:hover:not(:disabled),
-.org-invite-admin-form-actions button:hover:not(:disabled) {
-   background: var(--bg-subtle);
-   border-color: var(--border-strong, var(--border-default));
-}
-
-.org-admin-toolbar-actions button:focus-visible,
-.org-invitation-actions button:focus-visible,
-.org-invite-admin-form-actions button:focus-visible,
-.org-invite-admin-close:focus-visible,
-.org-invite-admin-fields input:focus-visible,
-.org-invite-admin-fields select:focus-visible,
-.org-member-manage-button:focus-visible,
-.org-admin-role-field select:focus-visible {
-   outline: 3px solid rgba(79, 70, 229, 0.18);
-   outline-offset: 2px;
-}
-
-.org-admin-toolbar-actions button:disabled,
-.org-invitation-actions button:disabled,
-.org-invite-admin-form-actions button:disabled {
-   opacity: 0.55;
-   cursor: not-allowed;
-}
-
-.org-admin-toolbar-actions .org-admin-invite-button,
-.org-invite-admin-form-actions .primary {
-   border-color: var(--brand-primary);
-   background: var(--brand-primary);
-   color: #fff;
-}
-
-.org-admin-toolbar-actions .org-admin-invite-button:hover:not(:disabled),
-.org-invite-admin-form-actions .primary:hover:not(:disabled) {
-   border-color: var(--brand-primary);
-   background: var(--brand-primary);
-   filter: brightness(0.95);
 }
 
 .org-invite-admin-form {
@@ -545,26 +429,6 @@
    font-size: 0.78rem;
 }
 
-.org-invite-admin-close {
-   width: 34px;
-   height: 34px;
-   flex: 0 0 auto;
-   display: grid;
-   place-items: center;
-   padding: 0;
-   border: 1px solid transparent;
-   border-radius: 8px;
-   background: transparent;
-   color: var(--text-muted);
-   cursor: pointer;
-}
-
-.org-invite-admin-close:hover {
-   border-color: var(--border-default);
-   background: var(--bg-subtle);
-   color: var(--text-main);
-}
-
 .org-invite-admin-fields {
    display: grid;
    grid-template-columns: 1fr 1fr;
@@ -584,26 +448,16 @@
    font-weight: 650;
 }
 
-.org-invite-admin-fields input,
-.org-invite-admin-fields select {
-   min-height: 42px;
-   padding: 0 11px;
-   border: 1px solid var(--border-default);
-   border-radius: 8px;
-   background: var(--bg-surface);
-   color: var(--text-main);
-   font: inherit;
-}
-
 .org-invite-admin-notice {
    display: flex;
    align-items: flex-start;
    gap: 8px;
    margin-top: 14px;
    padding: 11px;
+   border: 1px solid var(--tl-color-status-info-border);
    border-radius: 8px;
-   background: var(--bg-subtle);
-   color: var(--text-muted);
+   background: var(--tl-color-status-info-bg);
+   color: var(--tl-color-status-info-text);
    font-size: 0.76rem;
    line-height: 1.5;
 }
@@ -622,10 +476,21 @@
 }
 
 .org-invitation-list {
-   display: flex;
-   flex-direction: column;
-   gap: 10px;
-   margin-top: 16px;
+   margin: 16px 0 0;
+   padding: 0;
+   list-style: none;
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: 10px;
+   background: var(--tl-color-bg-surface);
+}
+
+.org-invitation-list-item {
+   min-width: 0;
+   border-bottom: 1px solid var(--tl-color-border-light);
+}
+
+.org-invitation-list-item:last-child {
+   border-bottom: 0;
 }
 
 .org-invitation-card {
@@ -633,13 +498,11 @@
    grid-template-columns:
       minmax(200px, 0.9fr)
       minmax(0, 2fr)
-      182px;
+      220px;
    gap: 18px;
    align-items: center;
    padding: 16px 18px;
-   border: 1px solid var(--border-default);
-   border-radius: 11px;
-   background: var(--bg-surface);
+   background: transparent;
 }
 
 .org-invitation-identity {
@@ -669,19 +532,17 @@
 }
 
 .org-invitation-identity strong {
-   overflow: hidden;
    color: var(--text-main);
    font-size: 0.86rem;
-   text-overflow: ellipsis;
-   white-space: nowrap;
+   line-height: 1.35;
+   overflow-wrap: anywhere;
 }
 
 .org-invitation-identity span {
-   overflow: hidden;
    color: var(--text-muted);
    font-size: 0.74rem;
-   text-overflow: ellipsis;
-   white-space: nowrap;
+   line-height: 1.4;
+   overflow-wrap: anywhere;
 }
 
 .org-invitation-details {
@@ -689,6 +550,8 @@
    display: grid;
    grid-template-columns: repeat(4, minmax(0, 1fr));
    gap: 14px;
+   margin: 0;
+   padding: 0;
 }
 
 .org-invitation-details > div {
@@ -699,100 +562,70 @@
    gap: 5px;
 }
 
-.org-invitation-details > div > span:first-child:not(.org-invitation-status) {
+.org-invitation-details dt {
    color: var(--text-muted);
    font-size: 0.68rem;
    font-weight: 600;
 }
 
-.org-invitation-details strong {
+.org-invitation-details dd {
    max-width: 100%;
-   overflow: hidden;
+   margin: 0;
    color: var(--text-body);
    font-size: 0.78rem;
    font-weight: 650;
-   text-overflow: ellipsis;
-   white-space: nowrap;
+   line-height: 1.4;
+   overflow-wrap: anywhere;
 }
 
 .org-invitation-status {
    display: inline-flex;
    align-items: center;
-   align-self: flex-start;
+   flex-wrap: wrap;
+   max-width: 100%;
    min-height: 24px;
-   padding: 0 8px;
-   border: 1px solid var(--border-default);
+   padding: 3px 8px;
+   border: 1px solid var(--tl-color-border-default);
    border-radius: 999px;
+   background: var(--tl-color-bg-subtle);
+   color: var(--tl-color-text-muted);
    font-size: 0.7rem;
    font-weight: 700;
-   white-space: nowrap;
+   line-height: 1.25;
+   overflow-wrap: anywhere;
 }
 
 .org-invitation-status.pending {
-   border-color: var(--verdict-misleading-border);
-   background: var(--verdict-misleading-bg);
-   color: var(--verdict-misleading-text);
+   border-color: var(--tl-color-status-warning-border);
+   background: var(--tl-color-status-warning-bg);
+   color: var(--tl-color-status-warning-text);
 }
 
 .org-invitation-status.accepted {
-   border-color: var(--verdict-fact-border);
-   background: var(--verdict-fact-bg);
-   color: var(--verdict-fact-text);
+   border-color: var(--tl-color-status-success-border);
+   background: var(--tl-color-status-success-bg);
+   color: var(--tl-color-status-success-text);
 }
 
-.org-invitation-status.cancelled {
-   border-color: var(--verdict-fake-border);
-   background: var(--verdict-fake-bg);
-   color: var(--verdict-fake-text);
-}
-
+.org-invitation-status.cancelled,
 .org-invitation-status.expired {
-   border-color: var(--border-default);
-   background: var(--bg-subtle);
-   color: var(--text-muted);
+   border-color: var(--tl-color-border-default);
+   background: var(--tl-color-bg-subtle);
+   color: var(--tl-color-text-muted);
 }
 
 .org-invitation-actions {
-   width: 182px;
+   width: 220px;
    display: flex;
    align-items: center;
    justify-content: flex-end;
    gap: 8px;
 }
 
-.org-invitation-actions button {
+.org-invitation-actions .tl-button {
    min-width: 0;
-   min-height: 34px;
-   flex: 1 1 0;
-   padding-inline: 10px;
-}
-
-.org-invitation-actions button svg {
-   width: 14px;
-   height: 14px;
-   flex: 0 0 14px;
-}
-
-.org-invitation-actions button:not(.danger) {
-   color: var(--text-body);
-}
-
-.org-invitation-actions button:not(.danger):hover:not(:disabled) {
-   border-color: var(--brand-primary);
-   background: rgba(79, 70, 229, 0.06);
-   color: var(--brand-primary);
-}
-
-.org-invitation-actions .danger {
-   border-color: var(--verdict-fake-border);
-   background: var(--bg-surface);
-   color: var(--verdict-fake-text);
-}
-
-.org-invitation-actions .danger:hover:not(:disabled) {
-   border-color: var(--verdict-fake-border);
-   background: var(--verdict-fake-bg);
-   color: var(--verdict-fake-text);
+   flex: 0 0 auto;
+   white-space: nowrap;
 }
 
 /* ── Confirmation and membership action dialogs ─────────────── */
@@ -835,18 +668,18 @@
 }
 
 .org-admin-confirm-icon.danger {
-   background: var(--verdict-fake-bg);
-   color: var(--verdict-fake-text);
+   background: var(--tl-color-status-critical-bg);
+   color: var(--tl-color-status-critical-text);
 }
 
 .org-admin-confirm-icon.warning {
-   background: var(--bg-subtle);
-   color: var(--brand-primary);
+   background: var(--tl-color-status-warning-bg);
+   color: var(--tl-color-status-warning-text);
 }
 
 .org-admin-confirm-icon.neutral {
-   background: rgba(79, 70, 229, 0.08);
-   color: var(--brand-primary);
+   background: var(--tl-color-status-info-bg);
+   color: var(--tl-color-status-info-text);
 }
 
 .org-admin-confirm-copy h3 {
@@ -880,16 +713,6 @@
    font-weight: 650;
 }
 
-.org-admin-role-field select {
-   min-height: 42px;
-   padding: 0 11px;
-   border: 1px solid var(--border-default);
-   border-radius: 8px;
-   background: var(--bg-surface);
-   color: var(--text-main);
-   font: inherit;
-}
-
 .org-admin-authority-note {
    display: flex;
    align-items: flex-start;
@@ -916,68 +739,18 @@
    margin-top: 20px;
 }
 
-.org-admin-confirm-actions button {
-   min-height: 38px;
-   display: inline-flex;
-   align-items: center;
-   justify-content: center;
-   gap: 7px;
-   padding: 0 13px;
-   border: 1px solid var(--border-default);
-   border-radius: 8px;
-   background: var(--bg-surface);
-   color: var(--text-body);
-   font: inherit;
-   font-size: 0.78rem;
-   font-weight: 650;
-   cursor: pointer;
-}
-
-.org-admin-confirm-actions button:hover:not(:disabled) {
-   background: var(--bg-subtle);
-}
-
-.org-admin-confirm-actions button:focus-visible {
-   outline: 3px solid rgba(79, 70, 229, 0.18);
-   outline-offset: 2px;
-}
-
-.org-admin-confirm-actions button.primary {
-   border-color: var(--brand-primary);
-   background: var(--brand-primary);
-   color: #fff;
-}
-
-.org-admin-confirm-actions button.primary:hover:not(:disabled) {
-   border-color: var(--brand-primary);
-   background: var(--brand-primary);
-   filter: brightness(0.95);
-}
-
-.org-admin-confirm-actions button.danger {
-   border-color: var(--verdict-fake-border);
-   background: var(--verdict-fake-bg);
-   color: var(--verdict-fake-text);
-}
-
-.org-admin-confirm-actions button.danger:hover:not(:disabled) {
-   filter: brightness(0.97);
-}
-
-.org-admin-confirm-actions button:disabled {
-   opacity: 0.55;
-   cursor: not-allowed;
-}
-
 @media (prefers-reduced-motion: reduce) {
    .org-admin-spinner {
       animation: none;
    }
 
    .org-admin-view-switcher button,
-   .org-admin-toolbar-actions button,
-   .org-invitation-actions button,
-   .org-invite-admin-form-actions button {
+   .org-admin-toolbar-actions .tl-button,
+   .org-invite-admin-form-header .tl-icon-button,
+   .org-invite-admin-form-actions .tl-button,
+   .org-invitation-actions .tl-button,
+   .org-member-manage-button,
+   .org-admin-confirm-actions .tl-button {
       transition: none;
    }
 }
@@ -1023,7 +796,7 @@
       justify-content: flex-start;
    }
 
-   .org-invitation-actions button {
+   .org-invitation-actions .tl-button {
       flex: 0 0 auto;
    }
 }
@@ -1039,7 +812,7 @@
       flex-wrap: wrap;
    }
 
-   .org-admin-toolbar-actions button {
+   .org-admin-toolbar-actions .tl-button {
       width: auto;
       flex: 1 1 auto;
       align-self: auto;
@@ -1090,14 +863,22 @@
       min-width: 0;
    }
 
+   .org-invitation-actions {
+      width: 100%;
+      flex-direction: column;
+      align-items: stretch;
+   }
+
    .org-invite-admin-form-actions,
    .org-admin-confirm-actions {
       flex-direction: column-reverse;
    }
 
-   .org-invite-admin-form-actions button,
-   .org-admin-confirm-actions button {
+   .org-invitation-actions .tl-button,
+   .org-invite-admin-form-actions .tl-button,
+   .org-admin-confirm-actions .tl-button {
       width: 100%;
+      flex: 0 0 auto;
    }
 }
 
@@ -1121,6 +902,8 @@
    .org-member-list,
    .org-member-list-item,
    .org-member-item,
+   .org-invitation-list,
+   .org-invitation-list-item,
    .org-invitation-card,
    .org-invite-admin-form,
    .org-admin-confirm-modal {
@@ -1150,7 +933,7 @@
       flex-direction: column;
    }
 
-   .org-admin-toolbar-actions button {
+   .org-admin-toolbar-actions .tl-button {
       width: 100%;
    }
 }
