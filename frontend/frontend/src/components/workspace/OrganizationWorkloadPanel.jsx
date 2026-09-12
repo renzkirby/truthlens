@@ -46,6 +46,8 @@ function OrganizationWorkloadPanel({ organizationId, organizationName, canReleas
 
    const [requestVersion, setRequestVersion] = useState(0);
 
+   const [loadedOffset, setLoadedOffset] = useState(null);
+
    const [workload, setWorkload] = useState({
       count: 0,
       results: [],
@@ -97,6 +99,8 @@ function OrganizationWorkloadPanel({ organizationId, organizationName, canReleas
                results: Array.isArray(data?.results) ? data.results : [],
             });
 
+            setLoadedOffset(offset);
+
             setErrorMessage("");
          })
          .catch((error) => {
@@ -105,11 +109,6 @@ function OrganizationWorkloadPanel({ organizationId, organizationName, canReleas
             }
 
             setErrorMessage(error?.message || "Unable to load organization workload.");
-
-            setWorkload({
-               count: 0,
-               results: [],
-            });
          })
          .finally(() => {
             if (!cancelled) {
@@ -120,7 +119,7 @@ function OrganizationWorkloadPanel({ organizationId, organizationName, canReleas
       return () => {
          cancelled = true;
       };
-   }, [authFetch, workloadUrl, requestVersion]);
+   }, [authFetch, workloadUrl, offset, requestVersion]);
 
    const refresh = () => {
       setLoading(true);
@@ -152,29 +151,11 @@ function OrganizationWorkloadPanel({ organizationId, organizationName, canReleas
       setOffset((currentOffset) => currentOffset + PAGE_SIZE);
    };
 
-   if (loading) {
-      return (
-         <div className="workload-state">
-            <Icons name="loader" size={21} className="workload-spinner" />
+   const hasCurrentWorkload = loadedOffset === offset;
 
-            <span>Loading organization workload...</span>
-         </div>
-      );
-   }
+   const isBlockingLoad = loading && !hasCurrentWorkload;
 
-   if (errorMessage) {
-      return (
-         <div className="workload-error" role="alert">
-            <Icons name="alert-circle" size={18} />
-
-            <div>
-               <strong>Workload unavailable</strong>
-
-               <span>{errorMessage}</span>
-            </div>
-         </div>
-      );
-   }
+   const isBackgroundRefresh = loading && hasCurrentWorkload;
 
    const hasPrevious = offset > 0;
 
@@ -245,13 +226,15 @@ function OrganizationWorkloadPanel({ organizationId, organizationName, canReleas
    };
 
    return (
-      <div className="organization-workload">
+      <div className="organization-workload" aria-busy={loading ? "true" : undefined}>
          <div className="workload-toolbar">
             <div>
                <strong>Active investigations</strong>
 
                <span>
-                  {workload.count} currently owned by {organizationName || "this organization"}
+                  {hasCurrentWorkload
+                     ? `${workload.count} currently owned by ${organizationName || "this organization"}`
+                     : `Organization-owned investigations for ${organizationName || "this organization"}`}
                </span>
             </div>
 
@@ -262,6 +245,9 @@ function OrganizationWorkloadPanel({ organizationId, organizationName, canReleas
                className="workload-refresh-action"
                leadingIcon={<Icons name="refresh-cw" size={15} />}
                onClick={refresh}
+               loading={isBackgroundRefresh}
+               loadingLabel="Refreshing…"
+               disabled={loading}
             >
                Refresh
             </Button>
@@ -287,7 +273,38 @@ function OrganizationWorkloadPanel({ organizationId, organizationName, canReleas
             </div>
          )}
 
-         {workload.results.length === 0 ? (
+         {errorMessage && (
+            <div className="workload-error" role="alert">
+               <Icons name="alert-circle" size={18} />
+
+               <div>
+                  <strong>Workload unavailable</strong>
+
+                  <span>{errorMessage}</span>
+
+                  <Button
+                     type="button"
+                     variant="secondary"
+                     density="compact"
+                     leadingIcon={<Icons name="refresh-cw" size={14} />}
+                     onClick={refresh}
+                     disabled={loading}
+                  >
+                     Try again
+                  </Button>
+               </div>
+            </div>
+         )}
+
+         {isBlockingLoad && (
+            <div className="workload-state" role="status" aria-live="polite">
+               <Icons name="loader" size={21} className="workload-spinner" />
+
+               <span>Loading organization workload...</span>
+            </div>
+         )}
+
+         {!isBlockingLoad && hasCurrentWorkload && workload.results.length === 0 && (
             <div className="workload-state">
                <Icons name="inbox" size={25} />
 
@@ -297,7 +314,9 @@ function OrganizationWorkloadPanel({ organizationId, organizationName, canReleas
                   Claimed investigations will appear here once your organization accepts work from Verification Intake.
                </p>
             </div>
-         ) : (
+         )}
+
+         {!isBlockingLoad && hasCurrentWorkload && workload.results.length > 0 && (
             <>
                <ul className="workload-list">
                   {workload.results.map((assignment) => {

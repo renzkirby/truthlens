@@ -50,6 +50,11 @@
    gap: 2px;
 }
 
+.workload-error .tl-button {
+   align-self: flex-start;
+   margin-top: 5px;
+}
+
 .workload-error strong {
    font-size: 0.85rem;
 }
