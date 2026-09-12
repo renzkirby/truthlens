@@ -1346,27 +1346,27 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
             </form>
          )}
 
-         <div className="org-admin-summary" aria-label="Membership summary">
+         <dl className="org-admin-summary" aria-label="Membership summary">
             <div>
-               <span>Total</span>
-               <strong>{roster.count}</strong>
+               <dt>Total</dt>
+               <dd>{roster.count}</dd>
             </div>
 
             <div>
-               <span>Active</span>
-               <strong>{roster.summary.active}</strong>
+               <dt>Active</dt>
+               <dd>{roster.summary.active}</dd>
             </div>
 
             <div>
-               <span>Pending</span>
-               <strong>{roster.summary.pending}</strong>
+               <dt>Pending</dt>
+               <dd>{roster.summary.pending}</dd>
             </div>
 
             <div>
-               <span>Suspended</span>
-               <strong>{roster.summary.suspended}</strong>
+               <dt>Suspended</dt>
+               <dd>{roster.summary.suspended}</dd>
             </div>
-         </div>
+         </dl>
 
          {roster.results.length === 0 ? (
             <div className="org-admin-state">
@@ -1377,7 +1377,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                <p>Current organization memberships will appear here.</p>
             </div>
          ) : (
-            <div className="org-member-list">
+            <ul className="org-member-list">
                {roster.results.map((membership) => {
                   const user = membership?.user ?? {};
                   const manageable = canManageMembership(membershipRole, membership);
@@ -1385,192 +1385,195 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                   const menuOpen = memberMenuId === membership.id;
 
                   return (
-                     <article
-                        key={membership.id}
-                        className={`org-member-card ${busy ? "is-busy" : ""}`}
-                        aria-busy={busy ? "true" : undefined}
-                     >
-                        <div className="org-member-identity">
-                           <div className="org-member-avatar">
-                              <Icons name="user" size={18} />
+                     <li key={membership.id} className="org-member-list-item">
+                        <article
+                           className={`org-member-item ${busy ? "is-busy" : ""}`}
+                           aria-busy={busy ? "true" : undefined}
+                        >
+                           <div className="org-member-identity">
+                              <div className="org-member-avatar">
+                                 <Icons name="user" size={18} />
+                              </div>
+
+                              <div>
+                                 <strong>@{user.username || "unknown"}</strong>
+
+                                 <span>{user.email || "No email available"}</span>
+                              </div>
                            </div>
 
-                           <div>
-                              <strong>@{user.username || "unknown"}</strong>
+                           <dl className="org-member-details">
+                              <div>
+                                 <dt>Role</dt>
+                                 <dd>{formatLabel(membership.role)}</dd>
+                              </div>
 
-                              <span>{user.email || "No email available"}</span>
-                           </div>
-                        </div>
+                              <div>
+                                 <dt>Status</dt>
 
-                        <div className="org-member-details">
-                           <div>
-                              <span>Role</span>
-                              <strong>{formatLabel(membership.role)}</strong>
-                           </div>
+                                 <dd>
+                                    <span
+                                       className={`org-member-status ${String(membership.status || "UNKNOWN").toLowerCase()}`}
+                                    >
+                                       <Icons name={getStatusIcon(membership.status)} size={13} />
+                                       {formatLabel(membership.status)}
+                                    </span>
+                                 </dd>
+                              </div>
 
-                           <div>
-                              <span>Status</span>
+                              <div>
+                                 <dt>Joined</dt>
+                                 <dd>{formatDate(membership.joined_at)}</dd>
+                              </div>
 
-                              <span
-                                 className={`org-member-status ${String(membership.status || "UNKNOWN").toLowerCase()}`}
-                              >
-                                 <Icons name={getStatusIcon(membership.status)} size={13} />
-                                 {formatLabel(membership.status)}
-                              </span>
-                           </div>
+                              <div>
+                                 <dt>Approved by</dt>
 
-                           <div>
-                              <span>Joined</span>
-                              <strong>{formatDate(membership.joined_at)}</strong>
-                           </div>
+                                 <dd>
+                                    {membership?.approved_by?.username
+                                       ? `@${membership.approved_by.username}`
+                                       : "Not recorded"}
+                                 </dd>
+                              </div>
+                           </dl>
 
-                           <div>
-                              <span>Approved by</span>
-
-                              <strong>
-                                 {membership?.approved_by?.username
-                                    ? `@${membership.approved_by.username}`
-                                    : "Not recorded"}
-                              </strong>
-                           </div>
-                        </div>
-
-                        <div className="org-member-actions">
-                           {manageable ? (
-                              <>
-                                 <button
-                                    ref={(node) => {
-                                       if (node) {
-                                          memberManageButtonRefs.current.set(membership.id, node);
-                                       } else {
-                                          memberManageButtonRefs.current.delete(membership.id);
-                                       }
-                                    }}
-                                    type="button"
-                                    className="org-member-manage-button"
-                                    aria-haspopup="menu"
-                                    aria-expanded={menuOpen}
-                                    aria-controls={menuOpen ? `member-menu-${membership.id}` : undefined}
-                                    disabled={Boolean(memberActionId)}
-                                    onClick={(event) => {
-                                       event.stopPropagation();
-                                       setMemberMenuId((current) => (current === membership.id ? null : membership.id));
-                                    }}
-                                    onKeyDown={(event) => {
-                                       if (event.key === "ArrowDown") {
-                                          event.preventDefault();
-                                          event.stopPropagation();
-                                          setMemberMenuId(membership.id);
-                                       }
-                                    }}
-                                 >
-                                    {busy ? (
-                                       <Icons name="loader" size={14} className="org-admin-spinner" />
-                                    ) : (
-                                       <Icons name="settings" size={14} />
-                                    )}
-                                    Manage
-                                    <Icons name="chevron-down" size={13} />
-                                 </button>
-
-                                 {menuOpen && !busy && (
-                                    <div
-                                       ref={memberMenuRef}
-                                       id={`member-menu-${membership.id}`}
-                                       className="org-member-menu"
-                                       role="menu"
-                                       aria-label={`Manage @${user.username || "member"}`}
-                                       onClick={(event) => event.stopPropagation()}
-                                       onBlur={(event) => {
-                                          if (!event.currentTarget.contains(event.relatedTarget)) {
-                                             setMemberMenuId(null);
+                           <div className="org-member-actions">
+                              {manageable ? (
+                                 <>
+                                    <button
+                                       ref={(node) => {
+                                          if (node) {
+                                             memberManageButtonRefs.current.set(membership.id, node);
+                                          } else {
+                                             memberManageButtonRefs.current.delete(membership.id);
                                           }
+                                       }}
+                                       type="button"
+                                       className="org-member-manage-button"
+                                       aria-haspopup="menu"
+                                       aria-expanded={menuOpen}
+                                       aria-controls={menuOpen ? `member-menu-${membership.id}` : undefined}
+                                       disabled={Boolean(memberActionId)}
+                                       onClick={(event) => {
+                                          event.stopPropagation();
+                                          setMemberMenuId((current) => (current === membership.id ? null : membership.id));
                                        }}
                                        onKeyDown={(event) => {
-                                          if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-                                             return;
+                                          if (event.key === "ArrowDown") {
+                                             event.preventDefault();
+                                             event.stopPropagation();
+                                             setMemberMenuId(membership.id);
                                           }
-
-                                          event.preventDefault();
-
-                                          const items = Array.from(
-                                             event.currentTarget.querySelectorAll('[role="menuitem"]:not([disabled])'),
-                                          );
-
-                                          if (items.length === 0) {
-                                             return;
-                                          }
-
-                                          const currentIndex = items.indexOf(document.activeElement);
-                                          let nextIndex = currentIndex;
-
-                                          if (event.key === "Home") {
-                                             nextIndex = 0;
-                                          } else if (event.key === "End") {
-                                             nextIndex = items.length - 1;
-                                          } else if (event.key === "ArrowDown") {
-                                             nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % items.length;
-                                          } else if (event.key === "ArrowUp") {
-                                             nextIndex =
-                                                currentIndex < 0
-                                                   ? items.length - 1
-                                                   : (currentIndex - 1 + items.length) % items.length;
-                                          }
-
-                                          items[nextIndex].focus();
                                        }}
                                     >
-                                       <button type="button" role="menuitem" onClick={() => openRoleDialog(membership)}>
-                                          <Icons name="pencil" size={14} />
-                                          Change role
-                                       </button>
-
-                                       {membership.status === "ACTIVE" && (
-                                          <button
-                                             type="button"
-                                             role="menuitem"
-                                             onClick={() => openSuspendDialog(membership)}
-                                          >
-                                             <Icons name="user-minus" size={14} />
-                                             Suspend membership
-                                          </button>
+                                       {busy ? (
+                                          <Icons name="loader" size={14} className="org-admin-spinner" />
+                                       ) : (
+                                          <Icons name="settings" size={14} />
                                        )}
+                                       Manage
+                                       <Icons name="chevron-down" size={13} />
+                                    </button>
 
-                                       {membership.status === "SUSPENDED" && (
-                                          <button
-                                             type="button"
-                                             role="menuitem"
-                                             onClick={() => openRestoreDialog(membership)}
-                                          >
-                                             <Icons name="user-check" size={14} />
-                                             Restore membership
-                                          </button>
-                                       )}
+                                    {menuOpen && !busy && (
+                                       <div
+                                          ref={memberMenuRef}
+                                          id={`member-menu-${membership.id}`}
+                                          className="org-member-menu"
+                                          role="menu"
+                                          aria-label={`Manage @${user.username || "member"}`}
+                                          onClick={(event) => event.stopPropagation()}
+                                          onBlur={(event) => {
+                                             if (!event.currentTarget.contains(event.relatedTarget)) {
+                                                setMemberMenuId(null);
+                                             }
+                                          }}
+                                          onKeyDown={(event) => {
+                                             if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+                                                return;
+                                             }
 
-                                       {membership.status !== "LEFT" && (
-                                          <button
-                                             type="button"
-                                             role="menuitem"
-                                             className="danger"
-                                             onClick={() => openRemoveDialog(membership)}
-                                          >
-                                             <Icons name="trash" size={14} />
-                                             Remove from organization
+                                             event.preventDefault();
+
+                                             const items = Array.from(
+                                                event.currentTarget.querySelectorAll('[role="menuitem"]:not([disabled])'),
+                                             );
+
+                                             if (items.length === 0) {
+                                                return;
+                                             }
+
+                                             const currentIndex = items.indexOf(document.activeElement);
+                                             let nextIndex = currentIndex;
+
+                                             if (event.key === "Home") {
+                                                nextIndex = 0;
+                                             } else if (event.key === "End") {
+                                                nextIndex = items.length - 1;
+                                             } else if (event.key === "ArrowDown") {
+                                                nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % items.length;
+                                             } else if (event.key === "ArrowUp") {
+                                                nextIndex =
+                                                   currentIndex < 0
+                                                      ? items.length - 1
+                                                      : (currentIndex - 1 + items.length) % items.length;
+                                             }
+
+                                             items[nextIndex].focus();
+                                          }}
+                                       >
+                                          <button type="button" role="menuitem" onClick={() => openRoleDialog(membership)}>
+                                             <Icons name="pencil" size={14} />
+                                             Change role
                                           </button>
-                                       )}
-                                    </div>
-                                 )}
-                              </>
-                           ) : (
-                              <span className="org-member-protected-label">
-                                 {membership.role === "OWNER" ? "Ownership protected" : "Managed by owner"}
-                              </span>
-                           )}
-                        </div>
-                     </article>
+
+                                          {membership.status === "ACTIVE" && (
+                                             <button
+                                                type="button"
+                                                role="menuitem"
+                                                onClick={() => openSuspendDialog(membership)}
+                                             >
+                                                <Icons name="user-minus" size={14} />
+                                                Suspend membership
+                                             </button>
+                                          )}
+
+                                          {membership.status === "SUSPENDED" && (
+                                             <button
+                                                type="button"
+                                                role="menuitem"
+                                                onClick={() => openRestoreDialog(membership)}
+                                             >
+                                                <Icons name="user-check" size={14} />
+                                                Restore membership
+                                             </button>
+                                          )}
+
+                                          {membership.status !== "LEFT" && (
+                                             <button
+                                                type="button"
+                                                role="menuitem"
+                                                className="danger"
+                                                onClick={() => openRemoveDialog(membership)}
+                                             >
+                                                <Icons name="trash" size={14} />
+                                                Remove from organization
+                                             </button>
+                                          )}
+                                       </div>
+                                    )}
+                                 </>
+                              ) : (
+                                 <span className="org-member-protected-label">
+                                    {membership.role === "OWNER" ? "Ownership protected" : "Managed by owner"}
+                                 </span>
+                              )}
+                           </div>
+                        </article>
+                     </li>
                   );
                })}
-            </div>
+            </ul>
          )}
 
          <section className="org-invitation-admin-section">
