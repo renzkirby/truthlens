@@ -1058,27 +1058,34 @@ function EvidenceReviewContent({
                         </div>
 
                         <p className="evidence-reading-text">{evidence?.evidence_caption || "No evidence caption was provided."}</p>
-                        <dl className="evidence-facts">
+                        <dl className="evidence-source-record">
                            <div>
-                              <dt>Evidence type</dt>
-                              <dd>{evidence?.evidence_type_label || "Unavailable"}</dd>
-                           </div>
-                           <div>
-                              <dt>Submitted</dt>
-                              <dd><FormattedDateTime value={evidence?.submitted_at} /></dd>
-                           </div>
-                           <div>
-                              <dt>Contributor</dt>
-                              <dd>{evidence?.contributor?.username ? `@${evidence.contributor.username}` : "Not recorded"}</dd>
-                           </div>
-                           <div>
-                              <dt>Source URL</dt>
+                              <dt>Source</dt>
                               <dd className="evidence-url-text">{evidence?.evidence_url || "Source URL unavailable"}</dd>
                            </div>
                         </dl>
                         {!evidenceUrl && evidence?.evidence_url && (
                            <p className="evidence-inline-warning">The submitted URL cannot be opened because it is not a supported HTTP(S) address.</p>
                         )}
+                        <dl className="evidence-provenance">
+                           <div>
+                              <dt>Submitted by</dt>
+                              <dd>{evidence?.contributor?.username ? `@${evidence.contributor.username}` : "Not recorded"}</dd>
+                           </div>
+                           <div>
+                              <dt>Submitted</dt>
+                              <dd><FormattedDateTime value={evidence?.submitted_at} /></dd>
+                           </div>
+                        </dl>
+                        <details className="evidence-record-disclosure">
+                           <summary>Evidence details</summary>
+                           <dl className="evidence-record-details">
+                              <div>
+                                 <dt>Evidence type</dt>
+                                 <dd>{evidence?.evidence_type_label || "Unavailable"}</dd>
+                              </div>
+                           </dl>
+                        </details>
                      </section>
 
                      <section className="evidence-detail-section" aria-labelledby="claim-context-heading">
@@ -1095,21 +1102,24 @@ function EvidenceReviewContent({
                            )}
                         </div>
                         <p className="evidence-reading-text">{claim?.context_text || detail.thread?.caption || "Claim context unavailable"}</p>
-                        <dl className="evidence-facts">
-                           <div>
-                              <dt>Claim type</dt>
-                              <dd>{formatLabel(claim?.claim_type)}</dd>
-                           </div>
-                           <div>
-                              <dt>Thread caption</dt>
-                              <dd>{detail.thread?.caption || "Unavailable"}</dd>
-                           </div>
-                        </dl>
                         <div className="evidence-context-links">
                            {claimUrl && <a href={claimUrl} target="_blank" rel="noopener noreferrer">Open original claim URL <Icons name="external-link" size={12} aria-hidden="true" /></a>}
                            {sourceUrl && <a href={sourceUrl} target="_blank" rel="noopener noreferrer">Open claim source <Icons name="external-link" size={12} aria-hidden="true" /></a>}
                            {mediaUrl && <a href={mediaUrl} target="_blank" rel="noopener noreferrer">Open claim media <Icons name="external-link" size={12} aria-hidden="true" /></a>}
                         </div>
+                        <details className="evidence-record-disclosure">
+                           <summary>Claim details</summary>
+                           <dl className="evidence-record-details">
+                              <div>
+                                 <dt>Claim type</dt>
+                                 <dd>{formatLabel(claim?.claim_type)}</dd>
+                              </div>
+                              <div>
+                                 <dt>Thread caption</dt>
+                                 <dd>{detail.thread?.caption || "Unavailable"}</dd>
+                              </div>
+                           </dl>
+                        </details>
                      </section>
 
                      <section className="evidence-detail-section" aria-labelledby="review-state-heading">
@@ -1119,15 +1129,21 @@ function EvidenceReviewContent({
                               <p>Evidence disposition and case lifecycle are separate records.</p>
                            </div>
                         </div>
-                        <dl className="evidence-facts">
+                        <dl className="evidence-review-status">
                            <div>
                               <dt>Evidence disposition</dt>
-                              <dd>{getDispositionLabel(evidence)}</dd>
+                              <dd>
+                                 <span className={`evidence-disposition disposition-${evidence?.evidence_status?.toLowerCase() || "unknown"}`}>
+                                    {getDispositionLabel(evidence)}
+                                 </span>
+                              </dd>
                            </div>
                            <div>
                               <dt>Case lifecycle</dt>
-                              <dd>{formatLabel(detail.status)}</dd>
+                              <dd><span className="evidence-case-status">{formatLabel(detail.status)}</span></dd>
                            </div>
+                        </dl>
+                        <dl className="evidence-review-provenance">
                            <div>
                               <dt>Reviewer</dt>
                               <dd>{detail.verified_by?.username ? `@${detail.verified_by.username}` : "Reviewer not recorded"}</dd>
@@ -1141,49 +1157,19 @@ function EvidenceReviewContent({
                                  />
                               </dd>
                            </div>
-                           {evidence?.evidence_status === "REJECTED" && (
+                        </dl>
+                        {evidence?.evidence_status === "REJECTED" && (
+                           <dl className="evidence-review-outcome">
                               <div>
                                  <dt>Rejection reason</dt>
                                  <dd>{detail.rejection_reason_label || "Historical rejection reason unavailable"}</dd>
                               </div>
-                           )}
-                        </dl>
+                           </dl>
+                        )}
                         <div className="evidence-review-notes">
                            <strong>Moderator notes</strong>
                            <p>{detail.moderator_notes || "No review notes were recorded."}</p>
                         </div>
-                     </section>
-
-                     <section className="evidence-detail-section" aria-labelledby="evidence-history-heading">
-                        <div className="evidence-subheading-row evidence-major-section-heading">
-                           <div>
-                              <h5 id="evidence-history-heading">Audit history</h5>
-                              <p>Recent case events supplied by the authoritative Evidence Review record.</p>
-                           </div>
-                        </div>
-                        {Array.isArray(detail.events) && detail.events.length > 0 ? (
-                           <ol className="evidence-event-list">
-                              {detail.events.map((event, index) => (
-                                 <li key={`${event.event_type}-${event.created_at}-${index}`}>
-                                    <span className="evidence-event-marker" aria-hidden="true" />
-                                    <div>
-                                       <div className="evidence-event-heading">
-                                          <strong>{formatLabel(event.event_type)}</strong>
-                                          <FormattedDateTime value={event.created_at} />
-                                       </div>
-                                       <p>Actor: {event.actor?.username ? `@${event.actor.username}` : "Actor not displayed"}</p>
-                                       {(event.from_status || event.to_status) && (
-                                          <p>Case transition: {formatLabel(event.from_status, "None")} → {formatLabel(event.to_status, "None")}</p>
-                                       )}
-                                       {event.reason_code && <p>Reason: {formatLabel(event.reason_code)}</p>}
-                                       {event.notes && <p>Notes: {event.notes}</p>}
-                                    </div>
-                                 </li>
-                              ))}
-                           </ol>
-                        ) : (
-                           <p className="evidence-inline-empty">No case audit history is available.</p>
-                        )}
                      </section>
 
                      <section className="evidence-decision-section" aria-labelledby="evidence-decision-heading">
@@ -1314,6 +1300,44 @@ function EvidenceReviewContent({
                                  </button>
                               </div>
                            </form>
+                        )}
+                     </section>
+
+                     <section className="evidence-detail-section" aria-labelledby="evidence-history-heading">
+                        <div className="evidence-subheading-row evidence-major-section-heading">
+                           <div>
+                              <h5 id="evidence-history-heading">Audit history</h5>
+                              <p>Recent case events supplied by the authoritative Evidence Review record.</p>
+                           </div>
+                        </div>
+                        {Array.isArray(detail.events) && detail.events.length > 0 ? (
+                           <details className="evidence-history-disclosure">
+                              <summary>
+                                 <span>Case events</span>
+                                 <span>{detail.events.length} {detail.events.length === 1 ? "event" : "events"}</span>
+                              </summary>
+                              <ol className="evidence-event-list">
+                                 {detail.events.map((event, index) => (
+                                    <li key={`${event.event_type}-${event.created_at}-${index}`}>
+                                       <span className="evidence-event-marker" aria-hidden="true" />
+                                       <div>
+                                          <div className="evidence-event-heading">
+                                             <strong>{formatLabel(event.event_type)}</strong>
+                                             <FormattedDateTime value={event.created_at} />
+                                          </div>
+                                          <p>Actor: {event.actor?.username ? `@${event.actor.username}` : "Actor not displayed"}</p>
+                                          {(event.from_status || event.to_status) && (
+                                             <p>Case transition: {formatLabel(event.from_status, "None")} → {formatLabel(event.to_status, "None")}</p>
+                                          )}
+                                          {event.reason_code && <p>Reason: {formatLabel(event.reason_code)}</p>}
+                                          {event.notes && <p>Notes: {event.notes}</p>}
+                                       </div>
+                                    </li>
+                                 ))}
+                              </ol>
+                           </details>
+                        ) : (
+                           <p className="evidence-inline-empty">No case audit history is available.</p>
                         )}
                      </section>
                   </div>
