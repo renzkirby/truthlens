@@ -351,7 +351,8 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
    const memberManageButtonRefs = useRef(new Map());
    const invitationCancelButtonRefs = useRef(new Map());
 
-   const [requestVersion, setRequestVersion] = useState(0);
+   const [rosterRequestVersion, setRosterRequestVersion] = useState(0);
+   const [invitationsRequestVersion, setInvitationsRequestVersion] = useState(0);
    const [activeAdminView, setActiveAdminView] = useState("members");
    const [hasOpenedPublicPresence, setHasOpenedPublicPresence] = useState(false);
 
@@ -447,7 +448,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
       return () => {
          cancelled = true;
       };
-   }, [authFetch, invitationsUrl, requestVersion]);
+   }, [authFetch, invitationsRequestVersion, invitationsUrl]);
 
    useEffect(() => {
       if (!membersUrl) {
@@ -504,7 +505,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
       return () => {
          cancelled = true;
       };
-   }, [authFetch, membersUrl, requestVersion]);
+   }, [authFetch, membersUrl, rosterRequestVersion]);
 
    useEffect(() => {
       if (!memberMenuId) {
@@ -691,7 +692,20 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
       setInvitationsError("");
       setMemberMenuId(null);
 
-      setRequestVersion((current) => current + 1);
+      setRosterRequestVersion((current) => current + 1);
+      setInvitationsRequestVersion((current) => current + 1);
+   };
+
+   const retryMemberRoster = () => {
+      setLoading(true);
+      setErrorMessage("");
+      setRosterRequestVersion((current) => current + 1);
+   };
+
+   const retryInvitations = () => {
+      setInvitationsLoading(true);
+      setInvitationsError("");
+      setInvitationsRequestVersion((current) => current + 1);
    };
 
    const replaceRosterMembership = (updatedMembership) => {
@@ -1194,45 +1208,11 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
       );
    }
 
-   if (loading) {
-      return (
-         <div className="org-admin-state" aria-live="polite">
-            <Icons name="loader" size={21} className="org-admin-spinner" />
-
-            <span>Loading organization members...</span>
-         </div>
-      );
-   }
-
-   if (errorMessage) {
-      return (
-         <div className="org-admin-error" role="alert">
-            <Icons name="alert-circle" size={18} />
-
-            <div>
-               <strong>Member roster unavailable</strong>
-
-               <span>{errorMessage}</span>
-
-               <Button
-                  type="button"
-                  variant="secondary"
-                  density="compact"
-                  leadingIcon={<Icons name="refresh-cw" size={14} />}
-                  onClick={refresh}
-               >
-                  Try again
-               </Button>
-            </div>
-         </div>
-      );
-   }
-
    const organizationName = roster?.organization?.name || "this organization";
 
    return (
       <div className="organization-admin-panel">
-         <div className="org-admin-view-switcher" aria-label="Organization administration sections">
+         <div className="org-admin-view-switcher" role="group" aria-label="Organization administration sections">
             <button
                type="button"
                aria-pressed={activeAdminView === "members"}
@@ -1261,7 +1241,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
          >
             <div className="org-admin-toolbar">
             <div>
-               <strong>Organization members</strong>
+               <h3>Organization members</h3>
 
                <span>Manage institutional memberships and invite new members.</span>
             </div>
@@ -1403,39 +1383,67 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
             </form>
          )}
 
-         <dl className="org-admin-summary" aria-label="Membership summary">
-            <div>
-               <dt>Total</dt>
-               <dd>{roster.count}</dd>
+         {loading ? (
+            <div className="org-admin-state" aria-live="polite">
+               <Icons name="loader" size={21} className="org-admin-spinner" />
+
+               <span>Loading organization members...</span>
             </div>
+         ) : errorMessage ? (
+            <div className="org-admin-error" role="alert">
+               <Icons name="alert-circle" size={18} />
 
-            <div>
-               <dt>Active</dt>
-               <dd>{roster.summary.active}</dd>
-            </div>
+               <div>
+                  <strong>Member roster unavailable</strong>
 
-            <div>
-               <dt>Pending</dt>
-               <dd>{roster.summary.pending}</dd>
-            </div>
+                  <span>{errorMessage}</span>
 
-            <div>
-               <dt>Suspended</dt>
-               <dd>{roster.summary.suspended}</dd>
-            </div>
-         </dl>
-
-         {roster.results.length === 0 ? (
-            <div className="org-admin-state">
-               <Icons name="users" size={25} />
-
-               <h3>No current members</h3>
-
-               <p>Current organization memberships will appear here.</p>
+                  <Button
+                     type="button"
+                     variant="secondary"
+                     density="compact"
+                     leadingIcon={<Icons name="refresh-cw" size={14} />}
+                     onClick={retryMemberRoster}
+                  >
+                     Try again
+                  </Button>
+               </div>
             </div>
          ) : (
-            <ul className="org-member-list">
-               {roster.results.map((membership) => {
+            <>
+               <dl className="org-admin-summary" aria-label="Membership summary">
+                  <div>
+                     <dt>Total</dt>
+                     <dd>{roster.count}</dd>
+                  </div>
+
+                  <div>
+                     <dt>Active</dt>
+                     <dd>{roster.summary.active}</dd>
+                  </div>
+
+                  <div>
+                     <dt>Pending</dt>
+                     <dd>{roster.summary.pending}</dd>
+                  </div>
+
+                  <div>
+                     <dt>Suspended</dt>
+                     <dd>{roster.summary.suspended}</dd>
+                  </div>
+               </dl>
+
+               {roster.results.length === 0 ? (
+                  <div className="org-admin-state">
+                     <Icons name="users" size={25} />
+
+                     <h4>No current members</h4>
+
+                     <p>Current organization memberships will appear here.</p>
+                  </div>
+               ) : (
+                  <ul className="org-member-list">
+                     {roster.results.map((membership) => {
                   const user = membership?.user ?? {};
                   const manageable = canManageMembership(membershipRole, membership);
                   const busy = memberActionId === membership.id;
@@ -1633,14 +1641,16 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                         </article>
                      </li>
                   );
-               })}
-            </ul>
+                     })}
+                  </ul>
+               )}
+            </>
          )}
 
          <section className="org-invitation-admin-section">
             <div className="org-invitation-admin-heading">
                <div>
-                  <strong>Organization invitations</strong>
+                  <h3>Organization invitations</h3>
 
                   <span>Manage pending and historical invitations.</span>
                </div>
@@ -1659,7 +1669,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                      <strong>Invitations unavailable</strong>
                      <span>{invitationsError}</span>
 
-                     <Button type="button" variant="secondary" density="compact" onClick={refresh}>
+                     <Button type="button" variant="secondary" density="compact" onClick={retryInvitations}>
                         Try again
                      </Button>
                   </div>
@@ -1668,7 +1678,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                <div className="org-admin-state">
                   <Icons name="mail" size={25} />
 
-                  <h3>No invitations yet</h3>
+                  <h4>No invitations yet</h4>
 
                   <p>Invitations you send will appear here.</p>
                </div>
@@ -1923,7 +1933,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                className="org-admin-view-region"
                hidden={activeAdminView !== "public-presence"}
             >
-               <OrganizationPublicProfilePanel organizationId={organizationId} requestVersion={requestVersion} />
+               <OrganizationPublicProfilePanel organizationId={organizationId} />
             </div>
          )}
       </div>

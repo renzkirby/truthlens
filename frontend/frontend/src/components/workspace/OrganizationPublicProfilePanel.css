@@ -1,10 +1,5 @@
 .org-public-profile-panel {
    min-width: 0;
-   margin-bottom: 30px;
-   padding: 22px;
-   border: 1px solid var(--border-default);
-   border-radius: 14px;
-   background: var(--bg-surface);
 }
 
 .org-public-profile-heading {
@@ -519,10 +514,6 @@
 }
 
 @media (max-width: 760px) {
-   .org-public-profile-panel {
-      padding: 18px;
-   }
-
    .org-public-profile-fields,
    .org-public-profile-consent {
       grid-template-columns: 1fr;
@@ -562,10 +553,6 @@
 }
 
 @media (max-width: 375px) {
-   .org-public-profile-panel {
-      padding: 15px;
-   }
-
    .org-public-profile-statuses {
       grid-template-columns: 1fr;
    }

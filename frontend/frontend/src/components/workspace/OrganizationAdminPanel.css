@@ -61,9 +61,11 @@
    gap: 3px;
 }
 
-.org-admin-toolbar > div:first-child > strong {
+.org-admin-toolbar > div:first-child > h3 {
+   margin: 0;
    color: var(--text-main);
    font-size: 0.94rem;
+   font-weight: 700;
 }
 
 .org-admin-toolbar > div:first-child > span {
@@ -328,7 +330,8 @@
    color: var(--text-muted);
 }
 
-.org-admin-state h3 {
+.org-admin-state h3,
+.org-admin-state h4 {
    margin: 11px 0 5px;
    color: var(--text-main);
    font-size: 1rem;
@@ -417,7 +420,8 @@
 }
 
 .org-invite-admin-form-header strong,
-.org-invitation-admin-heading strong {
+.org-invitation-admin-heading h3 {
+   margin: 0;
    color: var(--text-main);
    font-size: 0.94rem;
    font-weight: 700;

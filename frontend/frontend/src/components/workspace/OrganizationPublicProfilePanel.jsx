@@ -196,7 +196,7 @@ function getServerFieldErrors(error) {
    }, {});
 }
 
-function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) {
+function OrganizationPublicProfilePanel({ organizationId }) {
    const { authFetch } = useAuth();
    const { addToast } = useNotification();
 
@@ -309,7 +309,7 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
       return () => {
          cancelled = true;
       };
-   }, [authFetch, clearSelectedLogo, endpoint, requestVersion, retryVersion]);
+   }, [authFetch, clearSelectedLogo, endpoint, retryVersion]);
 
    const dirty = useMemo(() => {
       if (!savedProfile) {
