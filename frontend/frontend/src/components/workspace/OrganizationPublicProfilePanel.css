@@ -47,10 +47,10 @@
    align-items: flex-start;
    gap: 10px;
    padding: 13px;
-   border: 1px solid var(--verdict-fake-border);
+   border: 1px solid var(--tl-color-status-critical-border);
    border-radius: 9px;
-   background: var(--verdict-fake-bg);
-   color: var(--verdict-fake-text);
+   background: var(--tl-color-status-critical-bg);
+   color: var(--tl-color-status-critical-text);
 }
 
 .org-public-profile-error > div {
@@ -61,38 +61,15 @@
    gap: 5px;
 }
 
-.org-public-profile-error span {
+.org-public-profile-error > span,
+.org-public-profile-error > div > span {
    overflow-wrap: anywhere;
    font-size: 0.78rem;
    line-height: 1.5;
 }
 
-.org-public-profile-error button,
-.org-public-profile-actions button {
-   min-height: 36px;
-   display: inline-flex;
-   align-items: center;
-   justify-content: center;
-   gap: 7px;
-   padding: 0 12px;
-   border: 1px solid var(--border-default);
-   border-radius: 8px;
-   background: var(--bg-surface);
-   color: var(--text-body);
-   font: inherit;
-   font-size: 0.78rem;
-   font-weight: 650;
-   cursor: pointer;
-}
-
-.org-public-profile-error button {
+.org-public-profile-error .tl-button {
    margin-top: 4px;
-}
-
-.org-public-profile-error button:hover:not(:disabled),
-.org-public-profile-actions button:hover:not(:disabled) {
-   border-color: var(--border-strong, var(--border-default));
-   background: var(--bg-subtle);
 }
 
 .org-public-profile-overview {
@@ -237,17 +214,31 @@
 }
 
 .org-public-visibility.visible {
-   border-color: var(--verdict-fact-border);
-   color: var(--verdict-fact-text);
+   border-color: var(--tl-color-status-success-border);
+   background: var(--tl-color-status-success-bg);
+   color: var(--tl-color-status-success-text);
 }
 
 .org-public-visibility.disabled {
+   border-color: var(--border-default);
+   background: var(--bg-surface);
    color: var(--text-muted);
 }
 
 .org-public-visibility.unavailable {
-   border-color: var(--verdict-misleading-border);
-   color: var(--verdict-misleading-text);
+   border-color: var(--tl-color-status-warning-border);
+   background: var(--tl-color-status-warning-bg);
+   color: var(--tl-color-status-warning-text);
+}
+
+.org-public-visibility.visible p,
+.org-public-visibility.visible .org-public-profile-link span {
+   color: var(--tl-color-status-success-text);
+}
+
+.org-public-visibility.unavailable p,
+.org-public-visibility.unavailable .org-public-profile-link span {
+   color: var(--tl-color-status-warning-text);
 }
 
 .org-public-profile-form {
@@ -278,41 +269,20 @@
    font-weight: 700;
 }
 
-.org-public-profile-field input,
-.org-public-profile-field textarea {
+.org-public-profile-field .tl-field,
+.org-public-profile-field .tl-input,
+.org-public-profile-field .tl-textarea {
    width: 100%;
    min-width: 0;
-   border: 1px solid var(--border-default);
-   border-radius: 8px;
-   background: var(--bg-surface);
-   color: var(--text-main);
-   font: inherit;
 }
 
-.org-public-profile-field input {
-   min-height: 42px;
-   padding: 0 11px;
-}
-
-.org-public-profile-field textarea {
-   padding: 10px 11px;
-   line-height: 1.55;
+.org-public-profile-field .tl-textarea {
    resize: vertical;
-}
-
-.org-public-profile-field input:disabled,
-.org-public-profile-field textarea:disabled {
-   opacity: 0.68;
-   cursor: not-allowed;
-}
-
-.org-public-profile-field input[aria-invalid="true"],
-.org-public-profile-field textarea[aria-invalid="true"] {
-   border-color: var(--verdict-fake-border);
 }
 
 .org-public-profile-help,
 .org-public-profile-field-error {
+   overflow-wrap: anywhere;
    font-size: 0.71rem;
    line-height: 1.5;
 }
@@ -322,7 +292,7 @@
 }
 
 .org-public-profile-field-error {
-   color: var(--verdict-fake-text);
+   color: var(--tl-color-status-critical-text);
    font-weight: 650;
 }
 
@@ -439,56 +409,15 @@
    gap: 8px;
 }
 
-.org-public-logo-actions button,
-.org-public-logo-remove-confirmation button {
-   min-height: 34px;
-   display: inline-flex;
-   align-items: center;
-   justify-content: center;
-   padding: 0 11px;
-   border: 1px solid var(--border-default);
-   border-radius: 8px;
-   background: var(--bg-surface);
-   color: var(--text-body);
-   font: inherit;
-   font-size: 0.73rem;
-   font-weight: 650;
-   cursor: pointer;
-}
-
-.org-public-logo-actions button:hover:not(:disabled),
-.org-public-logo-remove-confirmation button:hover:not(:disabled) {
-   background: var(--bg-surface);
-   border-color: var(--border-strong, var(--border-default));
-}
-
-.org-public-logo-actions button.primary {
-   border-color: var(--brand-primary);
-   background: var(--brand-primary);
-   color: #fff;
-}
-
-.org-public-logo-actions button.danger,
-.org-public-logo-remove-confirmation button.danger {
-   border-color: var(--verdict-fake-border);
-   color: var(--verdict-fake-text);
-}
-
-.org-public-logo-actions button:disabled,
-.org-public-logo-remove-confirmation button:disabled {
-   opacity: 0.55;
-   cursor: not-allowed;
-}
-
 .org-public-logo-remove-confirmation {
    display: flex;
    flex-direction: column;
    gap: 8px;
    padding: 10px;
-   border: 1px solid var(--verdict-fake-border);
+   border: 1px solid var(--tl-color-status-critical-border);
    border-radius: 8px;
-   background: var(--verdict-fake-bg);
-   color: var(--verdict-fake-text);
+   background: var(--tl-color-status-critical-bg);
+   color: var(--tl-color-status-critical-text);
 }
 
 .org-public-logo-remove-confirmation > strong {
@@ -548,6 +477,10 @@
    line-height: 1.5;
 }
 
+.org-public-profile-consent-option .org-public-profile-field-error {
+   color: var(--tl-color-status-critical-text);
+}
+
 .org-public-profile-unsaved {
    margin: 14px 0 0;
    color: var(--text-muted);
@@ -566,42 +499,13 @@
    margin-top: 16px;
 }
 
-.org-public-profile-actions button.primary {
+.org-public-profile-actions .tl-button--primary {
    min-width: 154px;
-   border-color: var(--brand-primary);
-   background: var(--brand-primary);
-   color: #fff;
 }
 
-.org-public-profile-actions button.primary:hover:not(:disabled) {
-   border-color: var(--brand-primary);
-   background: var(--brand-primary);
-   filter: brightness(0.95);
-}
-
-.org-public-profile-actions button:disabled {
-   opacity: 0.55;
-   cursor: not-allowed;
-}
-
-.org-public-profile-error button:focus-visible,
-.org-public-profile-actions button:focus-visible,
-.org-public-logo-actions button:focus-visible,
-.org-public-logo-remove-confirmation button:focus-visible,
-.org-public-profile-field input:focus-visible,
-.org-public-profile-field textarea:focus-visible,
 .org-public-profile-consent-option input:focus-visible {
    outline: 3px solid rgba(79, 70, 229, 0.18);
    outline-offset: 2px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-   .org-public-profile-error button,
-   .org-public-profile-actions button,
-   .org-public-logo-actions button,
-   .org-public-logo-remove-confirmation button {
-      transition: none;
-   }
 }
 
 @media (max-width: 980px) {
@@ -643,8 +547,7 @@
       flex-direction: column-reverse;
    }
 
-   .org-public-profile-actions button,
-   .org-public-profile-actions button.primary {
+   .org-public-profile-actions .tl-button {
       width: 100%;
    }
 
@@ -672,8 +575,8 @@
       flex-direction: column;
    }
 
-   .org-public-logo-actions button,
-   .org-public-logo-remove-confirmation button {
+   .org-public-logo-actions .tl-button,
+   .org-public-logo-remove-confirmation .tl-button {
       width: 100%;
    }
 }

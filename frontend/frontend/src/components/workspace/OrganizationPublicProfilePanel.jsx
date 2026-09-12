@@ -4,6 +4,9 @@ import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
 import Icons from "../Icons.jsx";
+import Button from "../ui/Button.jsx";
+import Input from "../ui/Input.jsx";
+import Textarea from "../ui/Textarea.jsx";
 
 import "./OrganizationPublicProfilePanel.css";
 
@@ -601,10 +604,15 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
                <div>
                   <strong>Public profile settings unavailable</strong>
                   <span>{loadError}</span>
-                  <button type="button" onClick={() => setRetryVersion((current) => current + 1)}>
-                     <Icons name="refresh-cw" size={14} />
+                  <Button
+                     type="button"
+                     variant="secondary"
+                     density="compact"
+                     leadingIcon={<Icons name="refresh-cw" size={14} />}
+                     onClick={() => setRetryVersion((current) => current + 1)}
+                  >
                      Retry
-                  </button>
+                  </Button>
                </div>
             </div>
          ) : savedProfile ? (
@@ -669,28 +677,42 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
                   <div className="org-public-profile-fields">
                      <div className="org-public-profile-field org-public-profile-field-wide">
                         <label htmlFor="org-public-profile-description">Public description</label>
-                        <textarea
+                        <Textarea
                            id="org-public-profile-description"
+                           density="standard"
+                           surface="surface"
                            value={draft.description}
                            onChange={(event) => updateDraft("description", event.target.value)}
-                           aria-describedby="org-public-profile-description-help"
+                           aria-describedby={`org-public-profile-description-help${fieldErrors.description ? " org-public-profile-description-error" : ""}`}
+                           invalid={Boolean(fieldErrors.description)}
                            rows={5}
                            disabled={saving || Boolean(logoBusy)}
                         />
                         <span id="org-public-profile-description-help" className="org-public-profile-help">
                            Describe the organization for its public TruthLens partner profile. Blank is allowed.
                         </span>
+                        {fieldErrors.description && (
+                           <span
+                              id="org-public-profile-description-error"
+                              className="org-public-profile-field-error"
+                              role="alert"
+                           >
+                              {fieldErrors.description}
+                           </span>
+                        )}
                      </div>
 
                      <div className="org-public-profile-field">
                         <label htmlFor="org-public-profile-website">Website</label>
-                        <input
+                        <Input
                            id="org-public-profile-website"
+                           density="standard"
                            type="url"
                            value={draft.website}
                            onChange={(event) => updateDraft("website", event.target.value)}
                            aria-describedby={`org-public-profile-website-help${fieldErrors.website ? " org-public-profile-website-error" : ""}`}
                            aria-invalid={fieldErrors.website ? "true" : undefined}
+                           invalid={Boolean(fieldErrors.website)}
                            maxLength={2000}
                            placeholder="https://example.org"
                            disabled={saving || Boolean(logoBusy)}
@@ -760,44 +782,49 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
                               <div className="org-public-logo-actions">
                                  {selectedLogo ? (
                                     <>
-                                       <button
+                                       <Button
                                           type="button"
+                                          variant="secondary"
+                                          density="standard"
                                           onClick={clearSelectedLogo}
                                           disabled={saving || Boolean(logoBusy)}
                                        >
                                           Cancel selection
-                                       </button>
-                                       <button
+                                       </Button>
+                                       <Button
                                           type="button"
-                                          className="primary"
+                                          variant="primary"
+                                          density="standard"
+                                          loading={logoBusy === "upload"}
+                                          loadingLabel="Uploading…"
                                           onClick={handleLogoUpload}
                                           disabled={saving || Boolean(logoBusy)}
                                        >
-                                          {logoBusy === "upload"
-                                             ? "Uploading…"
-                                             : savedProfile.logo_url
-                                               ? "Replace logo"
-                                               : "Upload logo"}
-                                       </button>
+                                          {savedProfile.logo_url ? "Replace logo" : "Upload logo"}
+                                       </Button>
                                     </>
                                  ) : (
                                     <>
-                                       <button
+                                       <Button
                                           type="button"
+                                          variant="secondary"
+                                          density="standard"
+                                          leadingIcon={<Icons name="image" size={15} />}
                                           onClick={() => logoFileInputRef.current?.click()}
                                           disabled={saving || Boolean(logoBusy)}
                                        >
                                           {savedProfile.logo_url ? "Replace logo" : "Choose logo"}
-                                       </button>
+                                       </Button>
                                        {savedProfile.logo_url && (
-                                          <button
+                                          <Button
                                              type="button"
-                                             className="danger"
+                                             variant="destructive"
+                                             density="standard"
                                              onClick={() => setConfirmLogoRemoval(true)}
                                              disabled={saving || Boolean(logoBusy)}
                                           >
                                              Remove logo
-                                          </button>
+                                          </Button>
                                        )}
                                     </>
                                  )}
@@ -807,21 +834,26 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
                                  <div className="org-public-logo-remove-confirmation" role="group" aria-label="Remove logo confirmation">
                                     <strong>Remove this logo?</strong>
                                     <div>
-                                       <button
+                                       <Button
                                           type="button"
+                                          variant="secondary"
+                                          density="standard"
                                           onClick={() => setConfirmLogoRemoval(false)}
                                           disabled={Boolean(logoBusy)}
                                        >
                                           Cancel
-                                       </button>
-                                       <button
+                                       </Button>
+                                       <Button
                                           type="button"
-                                          className="danger"
+                                          variant="destructive"
+                                          density="standard"
+                                          loading={logoBusy === "remove"}
+                                          loadingLabel="Removing…"
                                           onClick={handleLogoRemoval}
                                           disabled={Boolean(logoBusy)}
                                        >
-                                          {logoBusy === "remove" ? "Removing…" : "Remove logo"}
-                                       </button>
+                                          Remove logo
+                                       </Button>
                                     </div>
                                  </div>
                               )}
@@ -837,12 +869,15 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
 
                      <div className="org-public-profile-field org-public-profile-field-wide">
                         <label htmlFor="org-public-profile-expertise">Expertise areas</label>
-                        <textarea
+                        <Textarea
                            id="org-public-profile-expertise"
+                           density="standard"
+                           surface="surface"
                            value={draft.expertise_areas}
                            onChange={(event) => updateDraft("expertise_areas", event.target.value)}
                            aria-describedby={`org-public-profile-expertise-help${fieldErrors.expertise_areas ? " org-public-profile-expertise-error" : ""}`}
                            aria-invalid={fieldErrors.expertise_areas ? "true" : undefined}
+                           invalid={Boolean(fieldErrors.expertise_areas)}
                            rows={5}
                            placeholder={"Election verification\nMedia literacy\nPublic policy"}
                            disabled={saving || Boolean(logoBusy)}
@@ -871,7 +906,7 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
                            type="checkbox"
                            checked={draft.public_profile_enabled}
                            onChange={(event) => updateDraft("public_profile_enabled", event.target.checked)}
-                           aria-describedby="org-public-profile-enabled-help"
+                           aria-describedby={`org-public-profile-enabled-help${fieldErrors.public_profile_enabled ? " org-public-profile-enabled-error" : ""}`}
                         />
                         <span>
                            <strong>Enable public partner profile</strong>
@@ -879,6 +914,15 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
                               Consent to show the approved profile publicly when TruthLens eligibility requirements are
                               also satisfied. This does not change verification, partnership, or publication authority.
                            </small>
+                           {fieldErrors.public_profile_enabled && (
+                              <small
+                                 id="org-public-profile-enabled-error"
+                                 className="org-public-profile-field-error"
+                                 role="alert"
+                              >
+                                 {fieldErrors.public_profile_enabled}
+                              </small>
+                           )}
                         </span>
                      </label>
 
@@ -887,7 +931,7 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
                            type="checkbox"
                            checked={draft.public_logo_enabled}
                            onChange={(event) => updateDraft("public_logo_enabled", event.target.checked)}
-                           aria-describedby="org-public-profile-logo-enabled-help"
+                           aria-describedby={`org-public-profile-logo-enabled-help${fieldErrors.public_logo_enabled ? " org-public-profile-logo-enabled-error" : ""}`}
                         />
                         <span>
                            <strong>Allow public logo display</strong>
@@ -895,6 +939,15 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
                               Separate consent for public branding. It remains independent of public profile enablement
                               and does not authorize institutional fact-check publication or attribution.
                            </small>
+                           {fieldErrors.public_logo_enabled && (
+                              <small
+                                 id="org-public-profile-logo-enabled-error"
+                                 className="org-public-profile-field-error"
+                                 role="alert"
+                              >
+                                 {fieldErrors.public_logo_enabled}
+                              </small>
+                           )}
                         </span>
                      </label>
                   </fieldset>
@@ -909,19 +962,25 @@ function OrganizationPublicProfilePanel({ organizationId, requestVersion = 0 }) 
                   )}
 
                   <div className="org-public-profile-actions">
-                     <button type="button" onClick={resetChanges} disabled={!dirty || saving || Boolean(logoBusy)}>
+                     <Button
+                        type="button"
+                        variant="secondary"
+                        density="standard"
+                        onClick={resetChanges}
+                        disabled={!dirty || saving || Boolean(logoBusy)}
+                     >
                         Reset changes
-                     </button>
-                     <button type="submit" className="primary" disabled={!dirty || saving || Boolean(logoBusy)}>
-                        {saving ? (
-                           <>
-                              <Icons name="loader" size={14} className="org-admin-spinner" />
-                              Saving…
-                           </>
-                        ) : (
-                           "Save public profile"
-                        )}
-                     </button>
+                     </Button>
+                     <Button
+                        type="submit"
+                        variant="primary"
+                        density="standard"
+                        loading={saving}
+                        loadingLabel="Saving…"
+                        disabled={!dirty || saving || Boolean(logoBusy)}
+                     >
+                        Save public profile
+                     </Button>
                   </div>
                </form>
             </>
