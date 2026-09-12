@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "../../hooks/useAuth";
 import Icons from "../Icons.jsx";
+import Button from "../ui/Button.jsx";
 
 import { resolveApiEndpoint } from "../../utils/api";
 
@@ -280,10 +281,17 @@ function VerificationIntakePanel({ organizationId, organizationName }) {
                <span>{intake.count} waiting for professional verification</span>
             </div>
 
-            <button type="button" className="intake-refresh-button" onClick={refreshCurrentPage} disabled={loading}>
-               <Icons name="refresh-cw" size={15} />
+            <Button
+               type="button"
+               variant="secondary"
+               density="standard"
+               className="intake-refresh-action"
+               leadingIcon={<Icons name="refresh-cw" size={15} />}
+               onClick={refreshCurrentPage}
+               disabled={loading}
+            >
                Refresh
-            </button>
+            </Button>
          </div>
 
          {notice && (
@@ -322,7 +330,7 @@ function VerificationIntakePanel({ organizationId, organizationName }) {
             </div>
          ) : !errorMessage ? (
             <>
-               <div className="intake-list">
+               <ul className="intake-list">
                   {intake.results.map((assignment) => {
                      const claim = assignment?.claim ?? {};
 
@@ -333,116 +341,135 @@ function VerificationIntakePanel({ organizationId, organizationName }) {
                      const isClaiming = claimingId === assignment.id;
 
                      return (
-                        <article key={assignment.id} className="intake-card">
-                           <div className="intake-card-top">
-                              <div className="intake-card-labels">
-                                 <span className="intake-status-badge">Available</span>
+                        <li key={assignment.id} className="intake-list-item">
+                           <article className="intake-item">
+                              <div className="intake-item-top">
+                                 <div className="intake-item-labels">
+                                    <span className="intake-status-badge">Available</span>
 
-                                 <span className="intake-type-badge">{formatLabel(claim.claim_type)}</span>
-                              </div>
-
-                              <span className="intake-updated">Updated {formatDateTime(claim.last_updated)}</span>
-                           </div>
-
-                           <h3 className="intake-claim-text">{claim.context_text || "Claim text unavailable"}</h3>
-
-                           {claim.ai_summary && <p className="intake-ai-summary">{claim.ai_summary}</p>}
-
-                           <div className="intake-signals">
-                              <div>
-                                 <span className="intake-signal-label">AI assessment</span>
-
-                                 <span
-                                    className="intake-verdict"
-                                    style={{
-                                       color: verdictMeta.color,
-                                       background: verdictMeta.bg,
-                                       borderColor: verdictMeta.border,
-                                    }}
-                                 >
-                                    {verdictMeta.label}
-                                 </span>
-                              </div>
-
-                              <div>
-                                 <span className="intake-signal-label">AI confidence</span>
-
-                                 <strong>{formatConfidence(claim.consensus_score)}</strong>
-                              </div>
-
-                              <div>
-                                 <span className="intake-signal-label">Source type</span>
-
-                                 <strong>{formatLabel(claim.source_type)}</strong>
-                              </div>
-                           </div>
-
-                           <div className="intake-card-footer">
-                              <InvestigationContextLinks claim={claim} />
-
-                              {isConfirming ? (
-                                 <div className="intake-confirm">
-                                    <span>
-                                       Claim for <strong>{organizationName}</strong>?
-                                    </span>
-
-                                    <button
-                                       type="button"
-                                       className="intake-button secondary"
-                                       disabled={isClaiming}
-                                       onClick={() => setConfirmingId(null)}
-                                    >
-                                       Cancel
-                                    </button>
-
-                                    <button
-                                       type="button"
-                                       className="intake-button primary"
-                                       disabled={isClaiming}
-                                       onClick={() => handleClaim(assignment.id)}
-                                    >
-                                       {isClaiming ? (
-                                          <>
-                                             <Icons name="loader" size={14} className="intake-spinner" />
-                                             Claiming...
-                                          </>
-                                       ) : (
-                                          "Confirm claim"
-                                       )}
-                                    </button>
+                                    <span className="intake-type-badge">{formatLabel(claim.claim_type)}</span>
                                  </div>
-                              ) : (
-                                 <button
-                                    type="button"
-                                    className="intake-button primary"
-                                    disabled={Boolean(claimingId)}
-                                    onClick={() => setConfirmingId(assignment.id)}
-                                 >
-                                    <Icons name="inbox" size={15} />
-                                    Claim investigation
-                                 </button>
-                              )}
-                           </div>
-                        </article>
+
+                                 <span className="intake-updated">Updated {formatDateTime(claim.last_updated)}</span>
+                              </div>
+
+                              <h3 className="intake-claim-text">{claim.context_text || "Claim text unavailable"}</h3>
+
+                              {claim.ai_summary && <p className="intake-ai-summary">{claim.ai_summary}</p>}
+
+                              <dl className="intake-signals">
+                                 <div>
+                                    <dt className="intake-signal-label">AI assessment</dt>
+
+                                    <dd>
+                                       <span
+                                          className="intake-verdict"
+                                          style={{
+                                             color: verdictMeta.color,
+                                             background: verdictMeta.bg,
+                                             borderColor: verdictMeta.border,
+                                          }}
+                                       >
+                                          {verdictMeta.label}
+                                       </span>
+                                    </dd>
+                                 </div>
+
+                                 <div>
+                                    <dt className="intake-signal-label">AI confidence</dt>
+
+                                    <dd>
+                                       <strong>{formatConfidence(claim.consensus_score)}</strong>
+                                    </dd>
+                                 </div>
+
+                                 <div>
+                                    <dt className="intake-signal-label">Source type</dt>
+
+                                    <dd>
+                                       <strong>{formatLabel(claim.source_type)}</strong>
+                                    </dd>
+                                 </div>
+                              </dl>
+
+                              <div className="intake-item-footer">
+                                 <InvestigationContextLinks claim={claim} />
+
+                                 {isConfirming ? (
+                                    <div className="intake-confirm">
+                                       <span>
+                                          Claim for <strong>{organizationName}</strong>?
+                                       </span>
+
+                                       <Button
+                                          type="button"
+                                          variant="secondary"
+                                          density="standard"
+                                          disabled={isClaiming}
+                                          onClick={() => setConfirmingId(null)}
+                                       >
+                                          Cancel
+                                       </Button>
+
+                                       <Button
+                                          type="button"
+                                          variant="primary"
+                                          density="comfortable"
+                                          loading={isClaiming}
+                                          loadingLabel="Claiming..."
+                                          disabled={isClaiming}
+                                          onClick={() => handleClaim(assignment.id)}
+                                       >
+                                          Confirm claim
+                                       </Button>
+                                    </div>
+                                 ) : (
+                                    <Button
+                                       type="button"
+                                       variant="primary"
+                                       density="comfortable"
+                                       className="intake-claim-action"
+                                       leadingIcon={<Icons name="inbox" size={15} />}
+                                       disabled={Boolean(claimingId)}
+                                       onClick={() => setConfirmingId(assignment.id)}
+                                    >
+                                       Claim investigation
+                                    </Button>
+                                 )}
+                              </div>
+                           </article>
+                        </li>
                      );
                   })}
-               </div>
+               </ul>
 
                <div className="intake-pagination">
                   <span>
                      Showing {rangeStart}–{rangeEnd} of {intake.count}
                   </span>
 
-                  <div>
-                     <button type="button" disabled={!hasPrevious || loading} onClick={handlePreviousPage}>
-                        <Icons name="chevron-left" size={15} />
+                  <div className="intake-pagination-controls">
+                     <Button
+                        type="button"
+                        variant="secondary"
+                        density="compact"
+                        leadingIcon={<Icons name="chevron-left" size={15} />}
+                        disabled={!hasPrevious || loading}
+                        onClick={handlePreviousPage}
+                     >
                         Previous
-                     </button>
+                     </Button>
 
-                     <button type="button" disabled={!hasNext || loading} onClick={handleNextPage}>
+                     <Button
+                        type="button"
+                        variant="secondary"
+                        density="compact"
+                        trailingIcon={<Icons name="chevron-right" size={15} />}
+                        disabled={!hasNext || loading}
+                        onClick={handleNextPage}
+                     >
                         Next
-                        <Icons name="chevron-right" size={15} />
-                     </button>
+                     </Button>
                   </div>
                </div>
             </>
