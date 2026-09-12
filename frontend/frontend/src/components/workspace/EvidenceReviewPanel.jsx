@@ -4,6 +4,9 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { resolveApiEndpoint } from "../../utils/api";
 import Icons from "../Icons.jsx";
+import Button from "../ui/Button.jsx";
+import Select from "../ui/Select.jsx";
+import Textarea from "../ui/Textarea.jsx";
 
 import "./EvidenceReviewPanel.css";
 
@@ -825,16 +828,17 @@ function EvidenceReviewContent({
             >
                <strong>Evidence Review unavailable</strong>
                <span>{authorityError}</span>
-               <button type="button" onClick={handleAuthorityRetry}>
+               <Button type="button" variant="secondary" density="compact" onClick={handleAuthorityRetry}>
                   Retry access
-               </button>
+               </Button>
             </div>
          ) : (
             <>
                <div className="evidence-toolbar">
             <label htmlFor="evidence-disposition-filter">
                Review history
-               <select
+               <Select
+                  density="standard"
                   id="evidence-disposition-filter"
                   value={disposition}
                   disabled={Boolean(mutation)}
@@ -845,27 +849,29 @@ function EvidenceReviewContent({
                         {option.label}
                      </option>
                   ))}
-               </select>
+               </Select>
             </label>
 
             <div className="evidence-toolbar-actions">
                <span aria-live="polite">
                   {queue.count} {queue.count === 1 ? "case" : "cases"}
                </span>
-               <button
+               <Button
                   type="button"
+                  variant="secondary"
+                  density="compact"
+                  leadingIcon={<Icons name="refresh-cw" size={15} aria-hidden="true" />}
                   disabled={queueLoading || Boolean(mutation)}
                   onClick={() => requestQueueRefresh()}
                >
-                  <Icons name="refresh-cw" size={15} aria-hidden="true" />
                   {queueLoading && queue.results.length > 0 ? "Refreshing…" : "Refresh"}
-               </button>
+               </Button>
             </div>
          </div>
 
          {notice && (
             <div className="evidence-notice" role="status" aria-live="polite">
-               <Icons name="check-circle" size={17} aria-hidden="true" />
+               <Icons name="info" size={17} aria-hidden="true" />
                <span>{notice}</span>
             </div>
          )}
@@ -885,15 +891,17 @@ function EvidenceReviewContent({
                   <div className="evidence-contained-error" role="alert">
                      <strong>Evidence queue unavailable</strong>
                      <span>{queueError}</span>
-                     <button
+                     <Button
                         type="button"
+                        variant="secondary"
+                        density="compact"
                         onClick={() => {
                            queueHeadingRef.current?.focus();
                            requestQueueRefresh({ preserveRows: false });
                         }}
                      >
                         Retry
-                     </button>
+                     </Button>
                   </div>
                )}
 
@@ -950,39 +958,45 @@ function EvidenceReviewContent({
                )}
 
                <nav className="evidence-pagination" aria-label="Evidence queue pagination">
-                  <button
+                  <Button
                      type="button"
+                     variant="secondary"
+                     density="compact"
+                     leadingIcon={<Icons name="chevron-left" size={15} aria-hidden="true" />}
                      disabled={!hasPreviousPage || queueLoading || Boolean(mutation)}
                      onClick={() => handlePageChange(Math.max(0, offset - PAGE_SIZE))}
                   >
-                     <Icons name="chevron-left" size={15} aria-hidden="true" />
                      Previous
-                  </button>
+                  </Button>
                   <span>
                      Page {currentPage} of {totalPages}
                   </span>
-                  <button
+                  <Button
                      type="button"
+                     variant="secondary"
+                     density="compact"
+                     trailingIcon={<Icons name="chevron-right" size={15} aria-hidden="true" />}
                      disabled={!hasNextPage || queueLoading || Boolean(mutation)}
                      onClick={() => handlePageChange(offset + PAGE_SIZE)}
                   >
                      Next
-                     <Icons name="chevron-right" size={15} aria-hidden="true" />
-                  </button>
+                  </Button>
                </nav>
             </section>
 
             <section className="evidence-detail" aria-labelledby="evidence-detail-heading" aria-busy={detailLoading}>
                {selectedCaseId && (
-                  <button
+                  <Button
                      type="button"
+                     variant="secondary"
+                     density="compact"
+                     leadingIcon={<Icons name="arrow-left" size={15} aria-hidden="true" />}
                      className="evidence-return-to-queue"
                      disabled={Boolean(mutation)}
                      onClick={() => clearSelection({ restoreQueueFocus: true })}
                   >
-                     <Icons name="arrow-left" size={15} aria-hidden="true" />
                      Return to queue
-                  </button>
+                  </Button>
                )}
 
                {!selectedCaseId ? (
@@ -1003,19 +1017,26 @@ function EvidenceReviewContent({
                      <span>{detailError}</span>
                      <div className="evidence-error-actions">
                         {!detailUnavailable && (
-                           <button
+                           <Button
                               type="button"
+                              variant="secondary"
+                              density="compact"
                               onClick={() => {
                                  focusDetailAfterRetryRef.current = true;
                                  requestDetailRefresh(selectedCaseId);
                               }}
                            >
                               Retry detail
-                           </button>
+                           </Button>
                         )}
-                        <button type="button" className="secondary" onClick={() => clearSelection({ restoreQueueFocus: true })}>
+                        <Button
+                           type="button"
+                           variant="secondary"
+                           density="compact"
+                           onClick={() => clearSelection({ restoreQueueFocus: true })}
+                        >
                            Return to queue
-                        </button>
+                        </Button>
                      </div>
                   </div>
                ) : detail ? (
@@ -1183,11 +1204,7 @@ function EvidenceReviewContent({
                         {!isActiveCase || evidence?.evidence_status !== "UNVERIFIED" ? (
                            <div className="evidence-readonly-state" role="status">
                               <Icons
-                                 name={
-                                    detail.status === "CANCELLED" || !evidence?.evidence_status
-                                       ? "alert-circle"
-                                       : "check-circle"
-                                 }
+                                 name="info"
                                  size={18}
                                  aria-hidden="true"
                               />
@@ -1214,21 +1231,24 @@ function EvidenceReviewContent({
                            </div>
                         ) : !decision ? (
                            <div className="evidence-decision-options">
-                              <button
+                              <Button
                                  type="button"
+                                 variant="primary"
+                                 density="comfortable"
                                  disabled={Boolean(mutation)}
                                  onClick={(event) => handleOpenDecision("VERIFIED", event.currentTarget)}
                               >
                                  Verify evidence
-                              </button>
-                              <button
+                              </Button>
+                              <Button
                                  type="button"
-                                 className="danger"
+                                 variant="destructive"
+                                 density="comfortable"
                                  disabled={Boolean(mutation)}
                                  onClick={(event) => handleOpenDecision("REJECTED", event.currentTarget)}
                               >
                                  Reject evidence
-                              </button>
+                              </Button>
                            </div>
                         ) : (
                            <form className="evidence-decision-form" onSubmit={handleDecisionSubmit} aria-busy={isMutatingSelectedCase}>
@@ -1241,12 +1261,14 @@ function EvidenceReviewContent({
                               {decision === "REJECTED" && (
                                  <label htmlFor="evidence-rejection-reason">
                                     Rejection reason
-                                    <select
+                                    <Select
+                                       density="standard"
                                        ref={rejectionReasonRef}
                                        id="evidence-rejection-reason"
                                        value={rejectionReason}
                                        required
                                        disabled={isMutatingSelectedCase}
+                                       invalid={Boolean(validationError)}
                                        aria-invalid={Boolean(validationError)}
                                        aria-describedby={
                                           validationError
@@ -1262,13 +1284,14 @@ function EvidenceReviewContent({
                                        {REJECTION_REASONS.map((reason) => (
                                           <option key={reason.value} value={reason.value}>{reason.label}</option>
                                        ))}
-                                    </select>
+                                    </Select>
                                  </label>
                               )}
 
                               <label htmlFor="evidence-moderator-notes">
                                  Moderator notes <span>(optional)</span>
-                                 <textarea
+                                 <Textarea
+                                    density="standard"
                                     ref={decisionNotesRef}
                                     id="evidence-moderator-notes"
                                     value={moderatorNotes}
@@ -1292,12 +1315,25 @@ function EvidenceReviewContent({
                               )}
 
                               <div className="evidence-decision-controls">
-                                 <button type="button" className="secondary" disabled={isMutatingSelectedCase} onClick={handleCancelDecision}>
+                                 <Button
+                                    type="button"
+                                    variant="secondary"
+                                    density="standard"
+                                    disabled={isMutatingSelectedCase}
+                                    onClick={handleCancelDecision}
+                                 >
                                     Cancel
-                                 </button>
-                                 <button type="submit" className={decision === "REJECTED" ? "danger" : "primary"} disabled={isMutatingSelectedCase}>
-                                    {isMutatingSelectedCase ? "Submitting…" : `Confirm ${selectedDecisionCopy.label.toLowerCase()}`}
-                                 </button>
+                                 </Button>
+                                 <Button
+                                    type="submit"
+                                    variant={decision === "REJECTED" ? "destructive" : "primary"}
+                                    density="comfortable"
+                                    loading={isMutatingSelectedCase}
+                                    loadingLabel="Submitting…"
+                                    disabled={isMutatingSelectedCase}
+                                 >
+                                    {`Confirm ${selectedDecisionCopy.label.toLowerCase()}`}
+                                 </Button>
                               </div>
                            </form>
                         )}
