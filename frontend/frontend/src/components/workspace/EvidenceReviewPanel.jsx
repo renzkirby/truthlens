@@ -909,43 +909,44 @@ function EvidenceReviewContent({
                      <p>{emptyCopy.body}</p>
                   </div>
                ) : (
-                  <div className="evidence-case-list">
+                  <ul className="evidence-case-list">
                      {queue.results.map((caseItem) => {
                         const selected = selectedCaseId === caseItem.id;
                         return (
-                           <button
-                              key={caseItem.id}
-                              type="button"
-                              className={`evidence-case-row ${selected ? "selected" : ""}`}
-                              aria-pressed={selected}
-                              disabled={Boolean(mutation)}
-                              onClick={() => handleSelectCase(caseItem.id)}
-                           >
-                              <span className="evidence-case-row-top">
-                                 <span className={`evidence-disposition disposition-${caseItem.evidence?.evidence_status?.toLowerCase() || "unknown"}`}>
-                                    {getDispositionLabel(caseItem.evidence)}
+                           <li key={caseItem.id} className="evidence-case-item">
+                              <button
+                                 type="button"
+                                 className={`evidence-case-row ${selected ? "selected" : ""}`}
+                                 aria-pressed={selected}
+                                 disabled={Boolean(mutation)}
+                                 onClick={() => handleSelectCase(caseItem.id)}
+                              >
+                                 <span className="evidence-case-row-top">
+                                    <span className={`evidence-disposition disposition-${caseItem.evidence?.evidence_status?.toLowerCase() || "unknown"}`}>
+                                       {getDispositionLabel(caseItem.evidence)}
+                                    </span>
+                                    <span className="evidence-case-status">Case: {formatLabel(caseItem.status)}</span>
+                                    {selected && <span className="evidence-selected-label">Selected</span>}
                                  </span>
-                                 <span className="evidence-case-status">Case: {formatLabel(caseItem.status)}</span>
-                                 {selected && <span className="evidence-selected-label">Selected</span>}
-                              </span>
-                              <strong>{getEvidenceTitle(caseItem)}</strong>
-                              <span className="evidence-type">{caseItem.evidence?.evidence_type_label || "Evidence type unavailable"}</span>
-                              <span className="evidence-claim-preview">{getClaimContext(caseItem)}</span>
-                              <span className="evidence-case-row-meta">
-                                 <span>
-                                    Submitted <FormattedDateTime value={caseItem.evidence?.submitted_at} />
+                                 <strong>{getEvidenceTitle(caseItem)}</strong>
+                                 <span className="evidence-type">{caseItem.evidence?.evidence_type_label || "Evidence type unavailable"}</span>
+                                 <span className="evidence-claim-preview">{getClaimContext(caseItem)}</span>
+                                 <span className="evidence-case-row-meta">
+                                    <span>
+                                       Submitted <FormattedDateTime value={caseItem.evidence?.submitted_at} />
+                                    </span>
+                                    <span>
+                                       {caseItem.evidence?.contributor?.username
+                                          ? `Contributor @${caseItem.evidence.contributor.username}`
+                                          : "Contributor not recorded"}
+                                    </span>
+                                    <span>Case {formatCaseReference(caseItem.id)}</span>
                                  </span>
-                                 <span>
-                                    {caseItem.evidence?.contributor?.username
-                                       ? `Contributor @${caseItem.evidence.contributor.username}`
-                                       : "Contributor not recorded"}
-                                 </span>
-                                 <span>Case {formatCaseReference(caseItem.id)}</span>
-                              </span>
-                           </button>
+                              </button>
+                           </li>
                         );
                      })}
-                  </div>
+                  </ul>
                )}
 
                <nav className="evidence-pagination" aria-label="Evidence queue pagination">
@@ -1043,7 +1044,7 @@ function EvidenceReviewContent({
                      )}
 
                      <section className="evidence-detail-section" aria-labelledby="submitted-evidence-heading">
-                        <div className="evidence-subheading-row">
+                        <div className="evidence-subheading-row evidence-major-section-heading">
                            <div>
                               <h5 id="submitted-evidence-heading">Submitted evidence</h5>
                               <p>Review the submitted source directly and assess its suitability.</p>
@@ -1081,7 +1082,7 @@ function EvidenceReviewContent({
                      </section>
 
                      <section className="evidence-detail-section" aria-labelledby="claim-context-heading">
-                        <div className="evidence-subheading-row">
+                        <div className="evidence-subheading-row evidence-major-section-heading">
                            <div>
                               <h5 id="claim-context-heading">Claim context</h5>
                               <p>Evidence suitability is reviewed in the context of this investigation.</p>
@@ -1112,7 +1113,7 @@ function EvidenceReviewContent({
                      </section>
 
                      <section className="evidence-detail-section" aria-labelledby="review-state-heading">
-                        <div className="evidence-subheading-row">
+                        <div className="evidence-subheading-row evidence-major-section-heading">
                            <div>
                               <h5 id="review-state-heading">Review state</h5>
                               <p>Evidence disposition and case lifecycle are separate records.</p>
@@ -1154,7 +1155,7 @@ function EvidenceReviewContent({
                      </section>
 
                      <section className="evidence-detail-section" aria-labelledby="evidence-history-heading">
-                        <div className="evidence-subheading-row">
+                        <div className="evidence-subheading-row evidence-major-section-heading">
                            <div>
                               <h5 id="evidence-history-heading">Audit history</h5>
                               <p>Recent case events supplied by the authoritative Evidence Review record.</p>
@@ -1186,7 +1187,7 @@ function EvidenceReviewContent({
                      </section>
 
                      <section className="evidence-decision-section" aria-labelledby="evidence-decision-heading">
-                        <div className="evidence-subheading-row">
+                        <div className="evidence-subheading-row evidence-major-section-heading">
                            <div>
                               <h5 id="evidence-decision-heading">Evidence decision</h5>
                               <p>Decide source suitability only. Adjudication determines the claim-level conclusion later.</p>
