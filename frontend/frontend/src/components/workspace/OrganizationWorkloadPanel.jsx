@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "../../hooks/useAuth";
 import Icons from "../Icons.jsx";
+import Button from "../ui/Button.jsx";
 
 import { resolveApiEndpoint } from "../../utils/api";
 
@@ -254,10 +255,16 @@ function OrganizationWorkloadPanel({ organizationId, organizationName, canReleas
                </span>
             </div>
 
-            <button type="button" onClick={refresh}>
-               <Icons name="refresh-cw" size={15} />
+            <Button
+               type="button"
+               variant="secondary"
+               density="standard"
+               className="workload-refresh-action"
+               leadingIcon={<Icons name="refresh-cw" size={15} />}
+               onClick={refresh}
+            >
                Refresh
-            </button>
+            </Button>
          </div>
 
          {notice && (
@@ -292,7 +299,7 @@ function OrganizationWorkloadPanel({ organizationId, organizationName, canReleas
             </div>
          ) : (
             <>
-               <div className="workload-list">
+               <ul className="workload-list">
                   {workload.results.map((assignment) => {
                      const claim = assignment?.claim ?? {};
                      const isConfirmingRelease = confirmingReleaseId === assignment.id;
@@ -300,118 +307,140 @@ function OrganizationWorkloadPanel({ organizationId, organizationName, canReleas
                      const isReleasing = releasingId === assignment.id;
 
                      return (
-                        <article key={assignment.id} className="workload-card">
-                           <div className="workload-card-header">
-                              <div>
-                                 <span className="workload-status">Active</span>
+                        <li key={assignment.id} className="workload-list-item">
+                           <article className="workload-item">
+                              <div className="workload-item-header">
+                                 <div>
+                                    <span className="workload-status">Active</span>
 
-                                 <span className="workload-type">{formatLabel(claim.claim_type)}</span>
+                                    <span className="workload-type">{formatLabel(claim.claim_type)}</span>
+                                 </div>
+
+                                 <span>Claimed {formatDateTime(assignment.claimed_at)}</span>
                               </div>
 
-                              <span>Claimed {formatDateTime(assignment.claimed_at)}</span>
-                           </div>
+                              <h3 className="workload-claim-text">{claim.context_text || "Claim text unavailable"}</h3>
 
-                           <h3>{claim.context_text || "Claim text unavailable"}</h3>
+                              <dl className="workload-meta">
+                                 <div>
+                                    <dt>Claimed by</dt>
 
-                           <div className="workload-meta">
-                              <div>
-                                 <span>Claimed by</span>
+                                    <dd>
+                                       <strong>
+                                          {assignment?.claimed_by?.username
+                                             ? `@${assignment.claimed_by.username}`
+                                             : "Unknown"}
+                                       </strong>
+                                    </dd>
+                                 </div>
 
-                                 <strong>
-                                    {assignment?.claimed_by?.username
-                                       ? `@${assignment.claimed_by.username}`
-                                       : "Unknown"}
-                                 </strong>
+                                 <div>
+                                    <dt>AI assessment</dt>
+
+                                    <dd>
+                                       <strong>{formatLabel(claim.ai_verdict || "UNVERIFIED")}</strong>
+                                    </dd>
+                                 </div>
+
+                                 <div>
+                                    <dt>Last updated</dt>
+
+                                    <dd>
+                                       <strong>{formatDateTime(claim.last_updated)}</strong>
+                                    </dd>
+                                 </div>
+                              </dl>
+
+                              <div className="workload-context-row">
+                                 <InvestigationContextLinks claim={claim} />
                               </div>
 
-                              <div>
-                                 <span>AI assessment</span>
+                              {canReleaseInvestigation && (
+                                 <div className="workload-item-actions">
+                                    {isConfirmingRelease ? (
+                                       <div className="workload-release-confirm">
+                                          <div className="workload-release-warning">
+                                             <Icons name="alert-triangle" size={17} />
 
-                                 <strong>{formatLabel(claim.ai_verdict || "UNVERIFIED")}</strong>
-                              </div>
+                                             <span>
+                                                Release this investigation back to shared intake? This is only permitted
+                                                before authoritative review work begins.
+                                             </span>
+                                          </div>
 
-                              <div>
-                                 <span>Last updated</span>
+                                          <div className="workload-release-controls">
+                                             <Button
+                                                type="button"
+                                                variant="secondary"
+                                                density="standard"
+                                                disabled={isReleasing}
+                                                onClick={() => setConfirmingReleaseId(null)}
+                                             >
+                                                Cancel
+                                             </Button>
 
-                                 <strong>{formatDateTime(claim.last_updated)}</strong>
-                              </div>
-                           </div>
-                           <div className="workload-context-row">
-                              <InvestigationContextLinks claim={claim} />
-                           </div>
-                           {canReleaseInvestigation && (
-                              <div className="workload-card-actions">
-                                 {isConfirmingRelease ? (
-                                    <div className="workload-release-confirm">
-                                       <div className="workload-release-warning">
-                                          <Icons name="alert-triangle" size={17} />
-
-                                          <span>
-                                             Release this investigation back to shared intake? This is only permitted
-                                             before authoritative review work begins.
-                                          </span>
+                                             <Button
+                                                type="button"
+                                                variant="secondary"
+                                                density="comfortable"
+                                                className="workload-warning-action"
+                                                loading={isReleasing}
+                                                loadingLabel="Releasing..."
+                                                disabled={isReleasing}
+                                                onClick={() => handleRelease(assignment.id)}
+                                             >
+                                                Confirm release
+                                             </Button>
+                                          </div>
                                        </div>
-
-                                       <div className="workload-release-controls">
-                                          <button
-                                             type="button"
-                                             className="workload-action-button secondary"
-                                             disabled={isReleasing}
-                                             onClick={() => setConfirmingReleaseId(null)}
-                                          >
-                                             Cancel
-                                          </button>
-
-                                          <button
-                                             type="button"
-                                             className="workload-action-button primary"
-                                             disabled={isReleasing}
-                                             onClick={() => handleRelease(assignment.id)}
-                                          >
-                                             {isReleasing ? (
-                                                <>
-                                                   <Icons name="loader" size={14} className="workload-spinner" />
-                                                   Releasing...
-                                                </>
-                                             ) : (
-                                                "Confirm release"
-                                             )}
-                                          </button>
-                                       </div>
-                                    </div>
-                                 ) : (
-                                    <button
-                                       type="button"
-                                       className="workload-release-button"
-                                       disabled={Boolean(releasingId)}
-                                       onClick={() => setConfirmingReleaseId(assignment.id)}
-                                    >
-                                       <Icons name="logout" size={15} />
-                                       Release investigation
-                                    </button>
-                                 )}
-                              </div>
-                           )}
-                        </article>
+                                    ) : (
+                                       <Button
+                                          type="button"
+                                          variant="secondary"
+                                          density="standard"
+                                          className="workload-release-action"
+                                          leadingIcon={<Icons name="logout" size={15} />}
+                                          disabled={Boolean(releasingId)}
+                                          onClick={() => setConfirmingReleaseId(assignment.id)}
+                                       >
+                                          Release investigation
+                                       </Button>
+                                    )}
+                                 </div>
+                              )}
+                           </article>
+                        </li>
                      );
                   })}
-               </div>
+               </ul>
 
                <div className="workload-pagination">
                   <span>
                      Showing {rangeStart}–{rangeEnd} of {workload.count}
                   </span>
 
-                  <div>
-                     <button type="button" disabled={!hasPrevious} onClick={handlePreviousPage}>
-                        <Icons name="chevron-left" size={15} />
+                  <div className="workload-pagination-controls">
+                     <Button
+                        type="button"
+                        variant="secondary"
+                        density="compact"
+                        leadingIcon={<Icons name="chevron-left" size={15} />}
+                        disabled={!hasPrevious}
+                        onClick={handlePreviousPage}
+                     >
                         Previous
-                     </button>
+                     </Button>
 
-                     <button type="button" disabled={!hasNext} onClick={handleNextPage}>
+                     <Button
+                        type="button"
+                        variant="secondary"
+                        density="compact"
+                        trailingIcon={<Icons name="chevron-right" size={15} />}
+                        disabled={!hasNext}
+                        onClick={handleNextPage}
+                     >
                         Next
-                        <Icons name="chevron-right" size={15} />
-                     </button>
+                     </Button>
                   </div>
                </div>
             </>
