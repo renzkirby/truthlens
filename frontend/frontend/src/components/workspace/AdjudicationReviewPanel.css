@@ -855,6 +855,53 @@
    overflow-wrap: anywhere;
 }
 
+.adjudication-decision-verdict {
+   align-self: flex-start;
+   display: inline-flex;
+   align-items: center;
+   max-width: 100%;
+   min-height: 23px;
+   padding: 3px 7px;
+   border: 1px solid var(--border-default);
+   border-radius: 999px;
+   background: var(--bg-subtle);
+   color: var(--text-body);
+   font-size: 0.67rem;
+   font-weight: 700;
+   line-height: 1.35;
+   overflow-wrap: anywhere;
+}
+
+.adjudication-decision-verdict.adjudication-decision-verdict--fact {
+   border-color: var(--verdict-fact-border);
+   background: var(--verdict-fact-bg);
+   color: var(--verdict-fact-text);
+}
+
+.adjudication-decision-verdict.adjudication-decision-verdict--fake {
+   border-color: var(--verdict-fake-border);
+   background: var(--verdict-fake-bg);
+   color: var(--verdict-fake-text);
+}
+
+.adjudication-decision-verdict.adjudication-decision-verdict--misleading {
+   border-color: var(--verdict-misleading-border);
+   background: var(--verdict-misleading-bg);
+   color: var(--verdict-misleading-text);
+}
+
+.adjudication-decision-verdict.adjudication-decision-verdict--satire {
+   border-color: var(--verdict-satire-border);
+   background: var(--verdict-satire-bg);
+   color: var(--verdict-satire-text);
+}
+
+.adjudication-decision-verdict.adjudication-decision-verdict--unverified {
+   border-color: var(--verdict-unverified-border);
+   background: var(--verdict-unverified-bg);
+   color: var(--verdict-unverified-text);
+}
+
 .adjudication-source-row {
    align-items: center;
    margin-top: 13px;
@@ -877,6 +924,53 @@
 .adjudication-review-outcome p {
    margin: 3px 0 0;
    white-space: pre-wrap;
+}
+
+.adjudication-evidence-provenance {
+   grid-template-columns: repeat(3, minmax(0, 1fr));
+   padding-top: var(--tl-space-3);
+   border-top: 1px solid var(--border-light);
+}
+
+.adjudication-record-disclosure {
+   min-width: 0;
+   margin-top: var(--tl-space-4);
+   border-top: 1px solid var(--border-light);
+}
+
+.adjudication-record-disclosure > summary {
+   padding: 10px 0;
+   color: var(--brand-primary);
+   font-size: 0.72rem;
+   font-weight: 700;
+   line-height: 1.45;
+   cursor: pointer;
+}
+
+.adjudication-record-disclosure > summary::marker,
+.adjudication-decision-record.historical > summary::marker,
+.adjudication-history-disclosure > summary::marker {
+   color: var(--text-muted);
+}
+
+.adjudication-record-disclosure > summary:hover,
+.adjudication-decision-record.historical > summary:hover,
+.adjudication-history-disclosure > summary:hover {
+   background: var(--bg-subtle);
+}
+
+.adjudication-record-disclosure[open] > summary {
+   color: var(--text-main);
+}
+
+.adjudication-record-disclosure-body {
+   margin-top: 2px;
+   padding-left: var(--tl-space-3);
+}
+
+.adjudication-technical-provenance .adjudication-record-disclosure-body,
+.adjudication-decision-technical {
+   grid-template-columns: 1fr;
 }
 
 .adjudication-readiness-state {
@@ -1304,11 +1398,97 @@
 }
 
 .adjudication-decision-history {
+   display: flex;
+   flex-direction: column;
    margin-top: 4px;
+}
+
+.adjudication-decision-record.current .adjudication-record-heading h6 {
+   font-size: 0.86rem;
+}
+
+.adjudication-decision-provenance {
+   gap: 12px 18px;
+}
+
+.adjudication-decision-technical {
+   padding-top: var(--tl-space-3);
+   border-top: 1px solid var(--border-light);
+}
+
+.adjudication-decision-record.historical {
+   margin-top: 0;
+   padding: 0;
+   border-top: 1px solid var(--border-default);
+}
+
+.adjudication-decision-record.historical > summary,
+.adjudication-history-disclosure > summary {
+   min-width: 0;
+   padding: 12px 0;
+   color: var(--text-body);
+   cursor: pointer;
+}
+
+.adjudication-decision-summary h6,
+.adjudication-history-disclosure > summary h6 {
+   width: calc(100% - 1.5rem);
+   min-width: 0;
+   display: inline-flex;
+   align-items: center;
+   flex-wrap: wrap;
+   gap: 7px 12px;
+   margin: 0 0 0 4px;
+   vertical-align: middle;
+}
+
+.adjudication-decision-summary h6 {
+   color: var(--text-main);
+   font-size: 0.78rem;
+}
+
+.adjudication-decision-summary-date {
+   min-width: 0;
+   margin-left: auto;
+   color: var(--text-muted);
+   font-size: 0.67rem;
+   font-weight: 500;
+   overflow-wrap: anywhere;
+}
+
+.adjudication-decision-record.historical[open] > summary {
+   border-bottom: 1px solid var(--border-light);
+}
+
+.adjudication-decision-record-body {
+   min-width: 0;
+   padding: 0 0 var(--tl-space-4) var(--tl-space-4);
 }
 
 .adjudication-resolution {
    min-width: 0;
+}
+
+.adjudication-history-disclosure {
+   min-width: 0;
+   margin-top: var(--tl-space-5);
+   border-top: 1px solid var(--border-default);
+}
+
+.adjudication-history-disclosure > summary h6 {
+   justify-content: space-between;
+   color: var(--text-main);
+   font-size: 0.78rem;
+}
+
+.adjudication-history-disclosure > summary h6 > span:last-child {
+   color: var(--text-muted);
+   font-size: 0.68rem;
+   font-weight: 500;
+}
+
+.adjudication-history-disclosure[open] > summary {
+   border-bottom: 1px solid var(--border-light);
 }
 
 .adjudication-event-list {
@@ -1316,6 +1496,13 @@
    display: flex;
    flex-direction: column;
    gap: 13px;
+   padding-left: var(--tl-space-4);
+}
+
+.adjudication-history-disclosure .adjudication-inline-empty,
+.adjudication-history-disclosure .adjudication-truncation-note {
+   margin-top: var(--tl-space-3);
+   padding-left: var(--tl-space-4);
 }
 
 .adjudication-event-record {
@@ -1387,7 +1574,10 @@
 .adjudication-form-heading:focus,
 .adjudication-section-heading h4:focus,
 .adjudication-selection h4:focus,
-.adjudication-full-id summary:focus-visible {
+.adjudication-full-id summary:focus-visible,
+.adjudication-record-disclosure > summary:focus-visible,
+.adjudication-decision-record.historical > summary:focus-visible,
+.adjudication-history-disclosure > summary:focus-visible {
    outline: 2px solid var(--brand-primary);
    outline-offset: 3px;
 }
@@ -1509,6 +1699,31 @@
    .adjudication-evidence-list {
       padding-left: 0;
       border-left: 0;
+   }
+
+   .adjudication-evidence-provenance {
+      grid-template-columns: 1fr;
+   }
+
+   .adjudication-record-disclosure-body,
+   .adjudication-decision-record-body,
+   .adjudication-event-list,
+   .adjudication-history-disclosure .adjudication-inline-empty,
+   .adjudication-history-disclosure .adjudication-truncation-note {
+      padding-left: 0;
+   }
+
+   .adjudication-record-disclosure > summary,
+   .adjudication-decision-record.historical > summary,
+   .adjudication-history-disclosure > summary {
+      min-height: 44px;
+      box-sizing: border-box;
+   }
+
+   .adjudication-decision-summary-date,
+   .adjudication-history-disclosure > summary h6 > span:last-child {
+      flex-basis: 100%;
+      margin-left: 0;
    }
 
    .adjudication-detail-actions {

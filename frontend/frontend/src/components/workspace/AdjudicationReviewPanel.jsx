@@ -126,15 +126,23 @@ function MinimalUser({ user, fallback = "Not recorded" }) {
 
 function DecisionRecord({ decision, current = false }) {
    const provenance = decision?.provenance || {};
-
-   return (
-      <article className="adjudication-decision-record">
-         <div className="adjudication-record-heading">
-            <h6>{current ? "Current decision" : `Revision ${decision?.revision_number ?? "unavailable"}`}</h6>
-            <span>{decision?.verdict_label || formatLabel(decision?.verdict, "Verdict unavailable")}</span>
-         </div>
-
-         <dl className="adjudication-detail-facts compact">
+   const verdictLabel = decision?.verdict_label || formatLabel(decision?.verdict, "Verdict unavailable");
+   const verdictTone =
+      {
+         FACT: "fact",
+         FAKE: "fake",
+         MISLEADING: "misleading",
+         SATIRE: "satire",
+         UNVERIFIED: "unverified",
+      }[decision?.verdict] || "neutral";
+   const verdictBadge = (
+      <span className={`adjudication-decision-verdict adjudication-decision-verdict--${verdictTone}`}>
+         {verdictLabel}
+      </span>
+   );
+   const recordBody = (
+      <>
+         <dl className="adjudication-detail-facts compact adjudication-decision-provenance">
             <div>
                <dt>Revision</dt>
                <dd>{decision?.revision_number ?? "Not recorded"}</dd>
@@ -161,11 +169,26 @@ function DecisionRecord({ decision, current = false }) {
                <dt>Provenance</dt>
                <dd>{formatLabel(provenance.status, "Provenance unavailable")}</dd>
             </div>
-            <div>
-               <dt>Verification run</dt>
-               <dd>{decision?.verification_run_id || "Not recorded"}</dd>
-            </div>
          </dl>
+
+         {current ? (
+            <details className="adjudication-record-disclosure adjudication-technical-provenance">
+               <summary>Technical provenance</summary>
+               <dl className="adjudication-detail-facts compact adjudication-record-disclosure-body">
+                  <div>
+                     <dt>Verification run</dt>
+                     <dd>{decision?.verification_run_id || "Not recorded"}</dd>
+                  </div>
+               </dl>
+            </details>
+         ) : (
+            <dl className="adjudication-detail-facts compact adjudication-decision-technical">
+               <div>
+                  <dt>Verification run</dt>
+                  <dd>{decision?.verification_run_id || "Not recorded"}</dd>
+               </div>
+            </dl>
+         )}
 
          <div className="adjudication-reading-block">
             <strong>Canonical wording</strong>
@@ -175,6 +198,35 @@ function DecisionRecord({ decision, current = false }) {
             <strong>Rationale</strong>
             <p>{decision?.rationale || "Rationale unavailable."}</p>
          </div>
+      </>
+   );
+
+   if (!current) {
+      return (
+         <details className="adjudication-decision-record historical">
+            <summary className="adjudication-decision-summary">
+               <h6>
+                  <span>Revision {decision?.revision_number ?? "unavailable"}</span>
+                  {verdictBadge}
+                  <span className="adjudication-decision-summary-date">
+                     <FormattedDateTime value={decision?.decided_at} fallback="Decision date not recorded" />
+                  </span>
+               </h6>
+            </summary>
+            <div className="adjudication-decision-record-body">
+               {recordBody}
+            </div>
+         </details>
+      );
+   }
+
+   return (
+      <article className="adjudication-decision-record current">
+         <div className="adjudication-record-heading">
+            <h6>Current decision</h6>
+            {verdictBadge}
+         </div>
+         {recordBody}
       </article>
    );
 }
@@ -215,39 +267,6 @@ function EvidenceRecord({ evidence }) {
             </span>
          </div>
 
-         <dl className="adjudication-detail-facts compact">
-            <div>
-               <dt>Evidence type</dt>
-               <dd>{evidence?.evidence_type_label || formatLabel(evidence?.evidence_type)}</dd>
-            </div>
-            <div>
-               <dt>Submitted</dt>
-               <dd><FormattedDateTime value={evidence?.submitted_at} /></dd>
-            </div>
-            <div>
-               <dt>Contributor</dt>
-               <dd><MinimalUser user={evidence?.contributor} /></dd>
-            </div>
-            <div>
-               <dt>Reviewed by</dt>
-               <dd><MinimalUser user={evidence?.reviewed_by} fallback="Reviewer not recorded" /></dd>
-            </div>
-            <div>
-               <dt>Reviewed</dt>
-               <dd><FormattedDateTime value={evidence?.reviewed_at} fallback="Review date not recorded" /></dd>
-            </div>
-            <div>
-               <dt>Evidence ID</dt>
-               <dd>{evidence?.id || "Unavailable"}</dd>
-            </div>
-         </dl>
-
-         {evidence?.is_current_user_contributor && (
-            <p className="adjudication-inline-warning">
-               You contributed this evidence. The authoritative action state accounts for direct-contribution conflicts.
-            </p>
-         )}
-
          <div className="adjudication-source-row">
             <span className="adjudication-url-text">{evidence?.evidence_url || "Source URL unavailable"}</span>
             {safeEvidenceUrl && (
@@ -260,6 +279,27 @@ function EvidenceRecord({ evidence }) {
             <p className="adjudication-inline-warning">This source cannot be opened because it is not a supported HTTP(S) address.</p>
          )}
 
+         <dl className="adjudication-detail-facts compact adjudication-evidence-provenance">
+            <div>
+               <dt>Contributor</dt>
+               <dd><MinimalUser user={evidence?.contributor} /></dd>
+            </div>
+            <div>
+               <dt>Reviewed by</dt>
+               <dd><MinimalUser user={evidence?.reviewed_by} fallback="Reviewer not recorded" /></dd>
+            </div>
+            <div>
+               <dt>Reviewed</dt>
+               <dd><FormattedDateTime value={evidence?.reviewed_at} fallback="Review date not recorded" /></dd>
+            </div>
+         </dl>
+
+         {evidence?.is_current_user_contributor && (
+            <p className="adjudication-inline-warning">
+               You contributed this evidence. The authoritative action state accounts for direct-contribution conflicts.
+            </p>
+         )}
+
          <div className="adjudication-review-outcome">
             {rejected && (
                <p>
@@ -270,6 +310,24 @@ function EvidenceRecord({ evidence }) {
             )}
             <p><strong>Review notes:</strong> {evidence?.review_notes || "No review notes were recorded."}</p>
          </div>
+
+         <details className="adjudication-record-disclosure">
+            <summary>Evidence details</summary>
+            <dl className="adjudication-detail-facts compact adjudication-record-disclosure-body">
+               <div>
+                  <dt>Evidence type</dt>
+                  <dd>{evidence?.evidence_type_label || formatLabel(evidence?.evidence_type)}</dd>
+               </div>
+               <div>
+                  <dt>Submitted</dt>
+                  <dd><FormattedDateTime value={evidence?.submitted_at} /></dd>
+               </div>
+               <div>
+                  <dt>Evidence ID</dt>
+                  <dd>{evidence?.id || "Unavailable"}</dd>
+               </div>
+            </dl>
+         </details>
       </li>
    );
 }
@@ -2133,22 +2191,26 @@ function AdjudicationReviewContent({
                                        <p className="adjudication-inline-empty">This case has no recorded resolution.</p>
                                     )}
 
-                                    <div className="adjudication-history-heading">
-                                       <h6>Case events</h6>
-                                       <span>{normalizeNonnegativeNumber(detailEvents.count)} {detailEvents.count === 1 ? "event" : "events"}</span>
-                                    </div>
-                                    {eventItems.length > 0 ? (
-                                       <ol className="adjudication-event-list">
-                                          {eventItems.map((event, index) => (
-                                             <EventRecord key={`${event.event_type}-${event.created_at}-${index}`} event={event} />
-                                          ))}
-                                       </ol>
-                                    ) : (
-                                       <p className="adjudication-inline-empty">No case events are available.</p>
-                                    )}
-                                    {detailEvents.truncated && (
-                                       <p className="adjudication-truncation-note">Showing the most recent 50 events, in chronological order.</p>
-                                    )}
+                                    <details className="adjudication-history-disclosure">
+                                       <summary>
+                                          <h6>
+                                             <span>Case events</span>
+                                             <span>{normalizeNonnegativeNumber(detailEvents.count)} {detailEvents.count === 1 ? "event" : "events"}</span>
+                                          </h6>
+                                       </summary>
+                                       {eventItems.length > 0 ? (
+                                          <ol className="adjudication-event-list">
+                                             {eventItems.map((event, index) => (
+                                                <EventRecord key={`${event.event_type}-${event.created_at}-${index}`} event={event} />
+                                             ))}
+                                          </ol>
+                                       ) : (
+                                          <p className="adjudication-inline-empty">No case events are available.</p>
+                                       )}
+                                       {detailEvents.truncated && (
+                                          <p className="adjudication-truncation-note">Showing the most recent 50 events, in chronological order.</p>
+                                       )}
+                                    </details>
                                        </section>
                                     </div>
 
