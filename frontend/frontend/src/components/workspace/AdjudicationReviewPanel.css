@@ -118,27 +118,11 @@
    font-weight: 700;
 }
 
-.adjudication-filter-grid select,
-.adjudication-toolbar button,
-.adjudication-pagination button,
-.adjudication-contained-error button,
-.adjudication-return-to-queue,
-.adjudication-detail-actions > button {
-   min-height: 38px;
-   border: 1px solid var(--border-default);
-   border-radius: 8px;
-   background: var(--bg-surface);
-   color: var(--text-body);
-   font: inherit;
-}
-
-.adjudication-filter-grid select {
+.adjudication-filter-grid .tl-select {
    width: 100%;
-   padding: 0 32px 0 10px;
-   cursor: pointer;
 }
 
-.adjudication-detail-actions > button:last-child {
+.adjudication-detail-actions > .tl-button:last-child {
    margin-left: auto;
 }
 
@@ -155,35 +139,12 @@
    font-variant-numeric: tabular-nums;
 }
 
-.adjudication-toolbar button,
-.adjudication-pagination button,
-.adjudication-contained-error button,
-.adjudication-return-to-queue,
-.adjudication-detail-actions > button {
-   display: inline-flex;
-   align-items: center;
-   justify-content: center;
-   gap: 7px;
-   padding: 0 12px;
-   font-size: 0.75rem;
-   font-weight: 700;
-   cursor: pointer;
+.adjudication-review-panel .tl-button {
+   max-width: 100%;
 }
 
-.adjudication-filter-grid select:hover,
-.adjudication-toolbar button:hover:not(:disabled),
-.adjudication-pagination button:hover:not(:disabled),
-.adjudication-contained-error button:hover:not(:disabled),
-.adjudication-return-to-queue:hover:not(:disabled),
-.adjudication-detail-actions > button:hover:not(:disabled) {
-   border-color: var(--brand-primary);
-}
-
-.adjudication-toolbar button:disabled,
-.adjudication-pagination button:disabled,
-.adjudication-detail-actions > button:disabled {
-   cursor: not-allowed;
-   opacity: 0.58;
+.adjudication-review-panel .tl-button__label {
+   overflow-wrap: anywhere;
 }
 
 .adjudication-contained-error {
@@ -192,19 +153,16 @@
    align-items: flex-start;
    gap: 5px;
    padding: 15px;
-   border: 1px solid var(--verdict-fake-border);
+   border: 1px solid var(--tl-color-status-critical-border);
    border-radius: 9px;
-   background: var(--verdict-fake-bg);
-   color: var(--verdict-fake-text);
+   background: var(--tl-color-status-critical-bg);
+   color: var(--tl-color-status-critical-text);
    font-size: 0.79rem;
    line-height: 1.5;
 }
 
-.adjudication-contained-error button {
-   min-height: 34px;
+.adjudication-contained-error > .tl-button {
    margin-top: 4px;
-   border-color: currentColor;
-   color: inherit;
 }
 
 .adjudication-authority-error {
@@ -403,7 +361,7 @@
    margin-top: 16px;
 }
 
-.adjudication-pagination button:last-child {
+.adjudication-pagination .tl-button:last-child {
    justify-self: end;
 }
 
@@ -443,18 +401,6 @@
    align-items: center;
    justify-content: space-between;
    gap: 10px;
-}
-
-.adjudication-detail-actions > button {
-   min-height: 38px;
-   border: 1px solid var(--border-default);
-   border-radius: 8px;
-   background: var(--bg-surface);
-   color: var(--text-body);
-   font: inherit;
-   font-size: 0.75rem;
-   font-weight: 700;
-   cursor: pointer;
 }
 
 .adjudication-detail-header {
@@ -716,10 +662,19 @@
 .adjudication-private-history-notice {
    margin-top: 12px;
    padding: 10px 12px;
-   border: 1px solid var(--border-default);
    border-radius: 8px;
-   background: var(--bg-subtle);
-   color: var(--text-body);
+}
+
+.adjudication-inline-warning {
+   border: 1px solid var(--tl-color-status-warning-border);
+   background: var(--tl-color-status-warning-bg);
+   color: var(--tl-color-status-warning-text);
+}
+
+.adjudication-private-history-notice {
+   border: 1px solid var(--tl-color-status-info-border);
+   background: var(--tl-color-status-info-bg);
+   color: var(--tl-color-status-info-text);
 }
 
 .adjudication-thread-context {
@@ -990,12 +945,16 @@
    margin-top: 1px;
 }
 
-.adjudication-readiness-state.ready svg {
-   color: var(--verdict-fact-text);
+.adjudication-readiness-state.ready {
+   border-color: var(--tl-color-status-success-border);
+   background: var(--tl-color-status-success-bg);
+   color: var(--tl-color-status-success-text);
 }
 
-.adjudication-readiness-state.blocked svg {
-   color: var(--text-muted);
+.adjudication-readiness-state.blocked {
+   border-color: var(--tl-color-status-warning-border);
+   background: var(--tl-color-status-warning-bg);
+   color: var(--tl-color-status-warning-text);
 }
 
 .adjudication-readiness-state strong,
@@ -1009,7 +968,7 @@
 
 .adjudication-readiness-state span {
    margin-top: 3px;
-   color: var(--text-muted);
+   color: currentColor;
    font-size: 0.73rem;
    line-height: 1.5;
 }
@@ -1020,16 +979,16 @@
    gap: 9px;
    margin-top: 13px;
    padding: 12px;
-   border: 1px solid var(--border-default);
+   border: 1px solid var(--tl-color-status-info-border);
    border-radius: 9px;
-   background: var(--bg-subtle);
-   color: var(--text-body);
+   background: var(--tl-color-status-info-bg);
+   color: var(--tl-color-status-info-text);
 }
 
 .adjudication-read-only-state svg {
    flex: 0 0 auto;
    margin-top: 1px;
-   color: var(--brand-primary);
+   color: currentColor;
 }
 
 .adjudication-read-only-state strong,
@@ -1038,13 +997,13 @@
 }
 
 .adjudication-read-only-state strong {
-   color: var(--text-main);
+   color: currentColor;
    font-size: 0.78rem;
 }
 
 .adjudication-read-only-state span {
    margin-top: 3px;
-   color: var(--text-muted);
+   color: currentColor;
    font-size: 0.73rem;
    line-height: 1.5;
 }
@@ -1104,19 +1063,21 @@
 }
 
 .adjudication-action-message.success {
-   border-color: var(--verdict-fact-border);
-   background: var(--verdict-fact-bg);
-   color: var(--verdict-fact-text);
+   border-color: var(--tl-color-status-success-border);
+   background: var(--tl-color-status-success-bg);
+   color: var(--tl-color-status-success-text);
 }
 
 .adjudication-action-message.error {
-   border-color: var(--verdict-fake-border);
-   background: var(--verdict-fake-bg);
-   color: var(--verdict-fake-text);
+   border-color: var(--tl-color-status-critical-border);
+   background: var(--tl-color-status-critical-bg);
+   color: var(--tl-color-status-critical-text);
 }
 
 .adjudication-action-message.pending {
-   background: var(--bg-subtle);
+   border-color: var(--tl-color-status-info-border);
+   background: var(--tl-color-status-info-bg);
+   color: var(--tl-color-status-info-text);
 }
 
 .adjudication-action-message > svg {
@@ -1141,41 +1102,8 @@
    line-height: 1.5;
 }
 
-.adjudication-action-message button,
-.adjudication-decision-entry button,
-.adjudication-decision-form-actions button {
-   min-height: 36px;
-   padding: 0 12px;
-   border: 1px solid currentColor;
-   border-radius: 8px;
-   background: var(--bg-surface);
-   color: inherit;
-   font: inherit;
-   font-size: 0.74rem;
-   font-weight: 700;
-   cursor: pointer;
-}
-
-.adjudication-action-message button {
+.adjudication-action-message .tl-button {
    margin-top: 4px;
-}
-
-.adjudication-action-message button:disabled,
-.adjudication-decision-entry button:disabled,
-.adjudication-decision-form-actions button:disabled {
-   cursor: not-allowed;
-   opacity: 0.58;
-}
-
-.adjudication-action-message button:hover:not(:disabled),
-.adjudication-decision-form-actions button:first-child:hover:not(:disabled) {
-   background: var(--bg-subtle);
-}
-
-.adjudication-decision-entry button:hover:not(:disabled),
-.adjudication-decision-form-actions button:last-child:hover:not(:disabled) {
-   border-color: var(--brand-primary-hover);
-   background: var(--brand-primary-hover);
 }
 
 .adjudication-decision-entry {
@@ -1183,13 +1111,6 @@
    align-items: center;
    gap: 12px;
    margin-top: 16px;
-}
-
-.adjudication-decision-entry button,
-.adjudication-decision-form-actions button:last-child {
-   border-color: var(--brand-primary);
-   background: var(--brand-primary);
-   color: var(--text-inverse);
 }
 
 .adjudication-decision-entry p {
@@ -1217,8 +1138,10 @@
    flex-direction: column;
    gap: 16px;
    margin-top: 18px;
-   padding-top: 18px;
-   border-top: 1px solid var(--border-default);
+   padding: var(--tl-space-5);
+   border: 1px solid var(--border-default);
+   border-radius: var(--tl-radius-lg);
+   background: var(--bg-subtle);
 }
 
 .adjudication-form-heading {
@@ -1270,7 +1193,7 @@
    gap: 7px;
 }
 
-.adjudication-verdict-options label {
+.adjudication-verdict-option {
    min-width: 0;
    display: flex;
    align-items: center;
@@ -1283,11 +1206,44 @@
    cursor: pointer;
 }
 
-.adjudication-verdict-options label:has(input:checked) {
-   border-color: var(--brand-primary);
-   background: var(--bg-subtle);
-   color: var(--text-main);
+.adjudication-verdict-option:has(input:checked) {
    font-weight: 700;
+}
+
+.adjudication-verdict-option--fact:has(input:checked) {
+   border-color: var(--verdict-fact-border);
+   background: var(--verdict-fact-bg);
+   color: var(--verdict-fact-text);
+}
+
+.adjudication-verdict-option--fake:has(input:checked) {
+   border-color: var(--verdict-fake-border);
+   background: var(--verdict-fake-bg);
+   color: var(--verdict-fake-text);
+}
+
+.adjudication-verdict-option--misleading:has(input:checked) {
+   border-color: var(--verdict-misleading-border);
+   background: var(--verdict-misleading-bg);
+   color: var(--verdict-misleading-text);
+}
+
+.adjudication-verdict-option--satire:has(input:checked) {
+   border-color: var(--verdict-satire-border);
+   background: var(--verdict-satire-bg);
+   color: var(--verdict-satire-text);
+}
+
+.adjudication-verdict-option--unverified:has(input:checked) {
+   border-color: var(--verdict-unverified-border);
+   background: var(--verdict-unverified-bg);
+   color: var(--verdict-unverified-text);
+}
+
+.adjudication-verdict-option--neutral:has(input:checked) {
+   border-color: var(--brand-primary);
+   background: var(--bg-surface);
+   color: var(--text-main);
 }
 
 .adjudication-verdict-options input {
@@ -1302,27 +1258,8 @@
    gap: 6px;
 }
 
-.adjudication-decision-field textarea {
+.adjudication-decision-field .tl-textarea {
    width: 100%;
-   min-width: 0;
-   resize: vertical;
-   padding: 10px 11px;
-   border: 1px solid var(--border-default);
-   border-radius: 8px;
-   background: var(--bg-surface);
-   color: var(--text-main);
-   font: inherit;
-   font-size: 0.78rem;
-   line-height: 1.55;
-   overflow-wrap: anywhere;
-}
-
-.adjudication-decision-field textarea[aria-invalid="true"] {
-   border-color: var(--verdict-fake-border);
-}
-
-.adjudication-decision-field textarea:hover {
-   border-color: var(--brand-primary);
 }
 
 .adjudication-decision-field small {
@@ -1333,7 +1270,7 @@
 
 .adjudication-form-error {
    margin: -10px 0 0;
-   color: var(--verdict-fake-text);
+   color: var(--tl-color-status-critical-text);
    font-size: 0.72rem;
    line-height: 1.45;
 }
@@ -1341,8 +1278,9 @@
 .adjudication-form-error.summary {
    margin: 0;
    padding: 10px 11px;
-   border-left: 3px solid var(--verdict-fake-border);
-   background: var(--verdict-fake-bg);
+   border: 1px solid var(--tl-color-status-critical-border);
+   border-radius: var(--tl-radius-md);
+   background: var(--tl-color-status-critical-bg);
 }
 
 .adjudication-decision-form-actions {
@@ -1354,10 +1292,8 @@
 
 .adjudication-confirmation-consequence {
    margin: 0;
-   padding: 11px 12px;
-   border: 1px solid var(--border-default);
-   border-radius: 8px;
-   background: var(--bg-subtle);
+   padding: 0 0 0 var(--tl-space-3);
+   border-left: 1px solid var(--brand-primary);
    color: var(--text-body);
    font-size: 0.76rem;
    line-height: 1.55;
@@ -1554,22 +1490,12 @@
    line-height: 1.55;
 }
 
-.adjudication-filter-grid select:focus-visible,
-.adjudication-toolbar button:focus-visible,
 .adjudication-case-row:focus-visible,
-.adjudication-pagination button:focus-visible,
 .adjudication-contained-error:focus,
-.adjudication-contained-error button:focus-visible,
-.adjudication-return-to-queue:focus-visible,
-.adjudication-detail-actions > button:focus-visible,
 .adjudication-context-links a:focus-visible,
 .adjudication-external-link:focus-visible,
 .adjudication-thread-context a:focus-visible,
 .adjudication-action-message:focus,
-.adjudication-action-message button:focus-visible,
-.adjudication-decision-entry button:focus-visible,
-.adjudication-decision-form-actions button:focus-visible,
-.adjudication-decision-field textarea:focus-visible,
 .adjudication-verdict-options input:focus-visible,
 .adjudication-form-heading:focus,
 .adjudication-section-heading h4:focus,
@@ -1670,21 +1596,21 @@
       flex-direction: column;
    }
 
-   .adjudication-toolbar-actions button,
-   .adjudication-pagination button {
+   .adjudication-toolbar-actions .tl-button,
+   .adjudication-pagination .tl-button {
       width: 100%;
    }
 
-   .adjudication-filter-grid select,
-   .adjudication-toolbar button,
-   .adjudication-pagination button,
-   .adjudication-contained-error button,
+   .adjudication-filter-grid .tl-select,
+   .adjudication-toolbar .tl-button,
+   .adjudication-pagination .tl-button,
+   .adjudication-contained-error .tl-button,
    .adjudication-return-to-queue,
-   .adjudication-detail-actions > button,
-   .adjudication-action-message button,
-   .adjudication-decision-entry button,
-   .adjudication-decision-form-actions button,
-   .adjudication-verdict-options label {
+   .adjudication-detail-actions > .tl-button,
+   .adjudication-action-message .tl-button,
+   .adjudication-decision-entry .tl-button,
+   .adjudication-decision-form-actions .tl-button,
+   .adjudication-verdict-option {
       min-height: 44px;
    }
 
@@ -1731,12 +1657,14 @@
       flex-direction: column;
    }
 
-   .adjudication-detail-actions > button,
-   .adjudication-error-actions > button {
+   .adjudication-detail-actions > .tl-button,
+   .adjudication-error-actions > .tl-button,
+   .adjudication-contained-error > .tl-button,
+   .adjudication-action-message .tl-button {
       width: 100%;
    }
 
-   .adjudication-detail-actions > button:last-child {
+   .adjudication-detail-actions > .tl-button:last-child {
       margin-left: 0;
    }
 
@@ -1770,9 +1698,14 @@
       flex-direction: column;
    }
 
-   .adjudication-decision-entry button,
-   .adjudication-decision-form-actions button {
+   .adjudication-decision-entry .tl-button,
+   .adjudication-decision-form-actions .tl-button {
       width: 100%;
+   }
+
+   .adjudication-decision-form,
+   .adjudication-decision-confirmation {
+      padding: var(--tl-space-4);
    }
 
    .adjudication-verdict-options > div {

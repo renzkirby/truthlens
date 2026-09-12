@@ -4,6 +4,9 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { resolveApiEndpoint } from "../../utils/api";
 import Icons from "../Icons.jsx";
+import Button from "../ui/Button.jsx";
+import Select from "../ui/Select.jsx";
+import Textarea from "../ui/Textarea.jsx";
 
 import "./AdjudicationReviewPanel.css";
 
@@ -99,6 +102,16 @@ function formatCaseReference(caseId) {
    return String(caseId || "").slice(0, 8);
 }
 
+function getVerdictTone(value) {
+   return {
+      FACT: "fact",
+      FAKE: "fake",
+      MISLEADING: "misleading",
+      SATIRE: "satire",
+      UNVERIFIED: "unverified",
+   }[value] || "neutral";
+}
+
 function getClaimContext(caseItem) {
    return caseItem?.claim?.context_text || "Claim context unavailable";
 }
@@ -127,14 +140,7 @@ function MinimalUser({ user, fallback = "Not recorded" }) {
 function DecisionRecord({ decision, current = false }) {
    const provenance = decision?.provenance || {};
    const verdictLabel = decision?.verdict_label || formatLabel(decision?.verdict, "Verdict unavailable");
-   const verdictTone =
-      {
-         FACT: "fact",
-         FAKE: "fake",
-         MISLEADING: "misleading",
-         SATIRE: "satire",
-         UNVERIFIED: "unverified",
-      }[decision?.verdict] || "neutral";
+   const verdictTone = getVerdictTone(decision?.verdict);
    const verdictBadge = (
       <span className={`adjudication-decision-verdict adjudication-decision-verdict--${verdictTone}`}>
          {verdictLabel}
@@ -1464,9 +1470,9 @@ function AdjudicationReviewContent({
             >
                <strong>Adjudication unavailable</strong>
                <span>{authorityError}</span>
-               <button type="button" onClick={handleAuthorityRetry}>
+               <Button type="button" variant="secondary" density="compact" onClick={handleAuthorityRetry}>
                   Retry access
-               </button>
+               </Button>
             </div>
          ) : (
             <>
@@ -1474,7 +1480,8 @@ function AdjudicationReviewContent({
                   <div className="adjudication-filter-grid">
                      <label htmlFor="adjudication-status-filter">
                         <span>Case status</span>
-                        <select
+                        <Select
+                           density="standard"
                            id="adjudication-status-filter"
                            value={statusFilter}
                            onChange={(event) =>
@@ -1486,12 +1493,13 @@ function AdjudicationReviewContent({
                                  {option.label}
                               </option>
                            ))}
-                        </select>
+                        </Select>
                      </label>
 
                      <label htmlFor="adjudication-priority-filter">
                         <span>Priority</span>
-                        <select
+                        <Select
+                           density="standard"
                            id="adjudication-priority-filter"
                            value={priorityFilter}
                            onChange={(event) =>
@@ -1503,7 +1511,7 @@ function AdjudicationReviewContent({
                                  {option.label}
                               </option>
                            ))}
-                        </select>
+                        </Select>
                      </label>
                   </div>
 
@@ -1513,14 +1521,16 @@ function AdjudicationReviewContent({
                            ? "Loading cases…"
                            : `${queue.count} ${queue.count === 1 ? "case" : "cases"}`}
                      </span>
-                     <button
+                     <Button
                         type="button"
+                        variant="secondary"
+                        density="compact"
+                        leadingIcon={<Icons name="refresh-cw" size={15} aria-hidden="true" />}
                         disabled={queueLoading}
                         onClick={() => requestQueueRefresh()}
                      >
-                        <Icons name="refresh-cw" size={15} aria-hidden="true" />
                         {queueLoading && queue.results.length > 0 ? "Refreshing…" : "Refresh"}
-                     </button>
+                     </Button>
                   </div>
                </div>
 
@@ -1536,9 +1546,14 @@ function AdjudicationReviewContent({
                         <strong>Decision status · Case {formatCaseReference(actionNotice.caseId)}</strong>
                         <span>{actionNotice.message}</span>
                         {actionNotice.inspectable && (
-                           <button type="button" onClick={() => handleInspectSubmittedCase(actionNotice.caseId)}>
+                           <Button
+                              type="button"
+                              variant="secondary"
+                              density="compact"
+                              onClick={() => handleInspectSubmittedCase(actionNotice.caseId)}
+                           >
                               Inspect recorded case
-                           </button>
+                           </Button>
                         )}
                      </div>
                   </div>
@@ -1556,9 +1571,15 @@ function AdjudicationReviewContent({
                         <strong>Decision workflow needs attention</strong>
                         <span>{actionError}</span>
                         {reconciliationPending && (
-                           <button type="button" disabled={Boolean(mutation)} onClick={handleRetryReconciliation}>
+                           <Button
+                              type="button"
+                              variant="secondary"
+                              density="compact"
+                              disabled={Boolean(mutation)}
+                              onClick={handleRetryReconciliation}
+                           >
                               {mutation ? "Reconciling…" : "Retry canonical reconciliation"}
-                           </button>
+                           </Button>
                         )}
                      </div>
                   </div>
@@ -1596,9 +1617,14 @@ function AdjudicationReviewContent({
                            <strong>Adjudication queue unavailable</strong>
                            <span>{queueError}</span>
                            {queue.results.length > 0 && <span>Previously loaded results remain visible below.</span>}
-                           <button type="button" onClick={() => requestQueueRefresh({ preserveRows: false })}>
+                           <Button
+                              type="button"
+                              variant="secondary"
+                              density="compact"
+                              onClick={() => requestQueueRefresh({ preserveRows: false })}
+                           >
                               Retry
-                           </button>
+                           </Button>
                         </div>
                      )}
 
@@ -1689,29 +1715,33 @@ function AdjudicationReviewContent({
                      )}
 
                      <nav className="adjudication-pagination" aria-label="Adjudication queue pagination">
-                        <button
+                        <Button
                            type="button"
+                           variant="secondary"
+                           density="compact"
+                           leadingIcon={<Icons name="chevron-left" size={15} aria-hidden="true" />}
                            disabled={!hasPreviousPage || queueLoading}
                            onClick={() =>
                               replaceQueueScope({ nextOffset: Math.max(0, offset - (queue.limit || PAGE_SIZE)) })
                            }
                         >
-                           <Icons name="chevron-left" size={15} aria-hidden="true" />
                            Previous
-                        </button>
+                        </Button>
                         <span>
                            Page {currentPage} of {totalPages}
                         </span>
-                        <button
+                        <Button
                            type="button"
+                           variant="secondary"
+                           density="compact"
+                           trailingIcon={<Icons name="chevron-right" size={15} aria-hidden="true" />}
                            disabled={!hasNextPage || queueLoading}
                            onClick={() =>
                               replaceQueueScope({ nextOffset: offset + (queue.limit || PAGE_SIZE) })
                            }
                         >
                            Next
-                           <Icons name="chevron-right" size={15} aria-hidden="true" />
-                        </button>
+                        </Button>
                      </nav>
                   </section>
 
@@ -1723,18 +1753,26 @@ function AdjudicationReviewContent({
                      {selectedCaseId ? (
                         <div className="adjudication-selection-content">
                            <div className="adjudication-detail-actions">
-                              <button
+                              <Button
                                  type="button"
+                                 variant="secondary"
+                                 density="compact"
+                                 leadingIcon={<Icons name="arrow-left" size={15} aria-hidden="true" />}
                                  className="adjudication-return-to-queue"
                                  onClick={() => clearSelection({ restoreQueueFocus: true })}
                               >
-                                 <Icons name="arrow-left" size={15} aria-hidden="true" />
                                  Return to queue
-                              </button>
-                              <button type="button" disabled={detailLoading} onClick={requestDetailRefresh}>
-                                 <Icons name="refresh-cw" size={14} aria-hidden="true" />
+                              </Button>
+                              <Button
+                                 type="button"
+                                 variant="secondary"
+                                 density="compact"
+                                 leadingIcon={<Icons name="refresh-cw" size={14} aria-hidden="true" />}
+                                 disabled={detailLoading}
+                                 onClick={requestDetailRefresh}
+                              >
                                  {detailLoading && detail ? "Refreshing case…" : "Refresh case"}
-                              </button>
+                              </Button>
                            </div>
 
                            <header className="adjudication-detail-header">
@@ -1780,10 +1818,17 @@ function AdjudicationReviewContent({
                                  <strong>{detailUnavailable ? "Case unavailable" : "Adjudication detail unavailable"}</strong>
                                  <span>{detailError}</span>
                                  <div className="adjudication-error-actions">
-                                    <button type="button" onClick={requestDetailRefresh}>Retry detail</button>
-                                    <button type="button" onClick={() => clearSelection({ restoreQueueFocus: true })}>
+                                    <Button type="button" variant="secondary" density="compact" onClick={requestDetailRefresh}>
+                                       Retry detail
+                                    </Button>
+                                    <Button
+                                       type="button"
+                                       variant="secondary"
+                                       density="compact"
+                                       onClick={() => clearSelection({ restoreQueueFocus: true })}
+                                    >
                                        Return to queue
-                                    </button>
+                                    </Button>
                                  </div>
                               </div>
                            ) : detail ? (
@@ -1803,7 +1848,9 @@ function AdjudicationReviewContent({
                                        <strong>Case refresh failed</strong>
                                        <span>{detailError}</span>
                                        <span>The previously loaded case detail remains visible below.</span>
-                                       <button type="button" onClick={requestDetailRefresh}>Retry detail</button>
+                                       <Button type="button" variant="secondary" density="compact" onClick={requestDetailRefresh}>
+                                          Retry detail
+                                       </Button>
                                     </div>
                                  )}
 
@@ -1961,14 +2008,16 @@ function AdjudicationReviewContent({
 
                                     {readyForFirstDecision && !decisionFormOpen && !confirmation && !confirmationChecking && (
                                        <div className="adjudication-decision-entry">
-                                          <button
+                                          <Button
                                              type="button"
+                                             variant="primary"
+                                             density="comfortable"
                                              ref={decisionTriggerRef}
                                              disabled={Boolean(mutation) || Boolean(reconciliationPending) || detailLoading || Boolean(detailError)}
                                              onClick={handleBeginDecision}
                                           >
                                              Begin decision
-                                          </button>
+                                          </Button>
                                           <p>
                                              This begins a deliberate first-decision review. It does not draft or publish a fact-check.
                                           </p>
@@ -2007,7 +2056,10 @@ function AdjudicationReviewContent({
                                              <p>Choose the claim-level human decision. Evidence dispositions remain separate.</p>
                                              <div>
                                                 {VERDICT_OPTIONS.map((option, index) => (
-                                                   <label key={option.value}>
+                                                   <label
+                                                      key={option.value}
+                                                      className={`adjudication-verdict-option adjudication-verdict-option--${getVerdictTone(option.value)}`}
+                                                   >
                                                       <input
                                                          ref={index === 0 ? firstVerdictRef : undefined}
                                                          type="radio"
@@ -2030,11 +2082,13 @@ function AdjudicationReviewContent({
 
                                           <label className="adjudication-decision-field" htmlFor="adjudication-canonical-claim">
                                              <span>Canonical claim wording <span aria-hidden="true">*</span></span>
-                                             <textarea
+                                             <Textarea
+                                                density="standard"
                                                 id="adjudication-canonical-claim"
                                                 ref={canonicalClaimRef}
                                                 value={decisionDraft.canonicalClaim}
                                                 onChange={(event) => handleDecisionDraftChange("canonicalClaim", event.target.value)}
+                                                invalid={Boolean(decisionErrors.canonicalClaim)}
                                                 aria-invalid={Boolean(decisionErrors.canonicalClaim)}
                                                 aria-describedby={
                                                    decisionErrors.canonicalClaim
@@ -2056,11 +2110,13 @@ function AdjudicationReviewContent({
 
                                           <label className="adjudication-decision-field" htmlFor="adjudication-rationale">
                                              <span>Decision rationale <span aria-hidden="true">*</span></span>
-                                             <textarea
+                                             <Textarea
+                                                density="standard"
                                                 id="adjudication-rationale"
                                                 ref={rationaleRef}
                                                 value={decisionDraft.rationale}
                                                 onChange={(event) => handleDecisionDraftChange("rationale", event.target.value)}
+                                                invalid={Boolean(decisionErrors.rationale)}
                                                 aria-invalid={Boolean(decisionErrors.rationale)}
                                                 aria-describedby={
                                                    decisionErrors.rationale
@@ -2081,8 +2137,12 @@ function AdjudicationReviewContent({
                                           )}
 
                                           <div className="adjudication-decision-form-actions">
-                                             <button type="button" onClick={handleCancelDecision}>Cancel</button>
-                                             <button type="submit">Review decision</button>
+                                             <Button type="button" variant="secondary" density="standard" onClick={handleCancelDecision}>
+                                                Cancel
+                                             </Button>
+                                             <Button type="submit" variant="primary" density="comfortable">
+                                                Review decision
+                                             </Button>
                                           </div>
                                        </form>
                                     )}
@@ -2107,7 +2167,13 @@ function AdjudicationReviewContent({
                                           <dl className="adjudication-confirmation-summary">
                                              <div>
                                                 <dt>Verdict</dt>
-                                                <dd>{VERDICT_OPTIONS.find((option) => option.value === confirmation.payload.moderator_verdict)?.label}</dd>
+                                                <dd>
+                                                   <span
+                                                      className={`adjudication-decision-verdict adjudication-decision-verdict--${getVerdictTone(confirmation.payload.moderator_verdict)}`}
+                                                   >
+                                                      {VERDICT_OPTIONS.find((option) => option.value === confirmation.payload.moderator_verdict)?.label}
+                                                   </span>
+                                                </dd>
                                              </div>
                                              <div>
                                                 <dt>Canonical wording</dt>
@@ -2120,12 +2186,24 @@ function AdjudicationReviewContent({
                                           </dl>
 
                                           <div className="adjudication-decision-form-actions">
-                                             <button type="button" disabled={Boolean(mutation)} onClick={handleCancelConfirmation}>
+                                             <Button
+                                                type="button"
+                                                variant="secondary"
+                                                density="standard"
+                                                disabled={Boolean(mutation)}
+                                                onClick={handleCancelConfirmation}
+                                             >
                                                 Back to edit
-                                             </button>
-                                             <button type="button" disabled={Boolean(mutation)} onClick={handleDecisionSubmit}>
+                                             </Button>
+                                             <Button
+                                                type="button"
+                                                variant="primary"
+                                                density="comfortable"
+                                                disabled={Boolean(mutation)}
+                                                onClick={handleDecisionSubmit}
+                                             >
                                                 {mutation ? "Recording decision…" : "Confirm and record decision"}
-                                             </button>
+                                             </Button>
                                           </div>
                                        </div>
                                     )}
