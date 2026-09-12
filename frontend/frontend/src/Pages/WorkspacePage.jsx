@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import { useAuth } from "../hooks/useAuth";
 import Icons from "../components/Icons.jsx";
+import Select from "../components/ui/Select.jsx";
 
 import {
    WorkspaceCapability,
@@ -171,6 +172,23 @@ function WorkspacePage() {
       [platformCapabilities, organizationCapabilities],
    );
 
+   const visibleSectionGroups = useMemo(
+      () =>
+         [
+            {
+               scope: "platform",
+               label: "Platform Safety",
+               sections: visibleSections.filter((section) => section.scope === "platform"),
+            },
+            {
+               scope: "organization",
+               label: "Organization tools",
+               sections: visibleSections.filter((section) => section.scope === "organization"),
+            },
+         ].filter((group) => group.sections.length > 0),
+      [visibleSections],
+   );
+
    const activeSectionId = useMemo(() => {
       if (visibleSections.length === 0) {
          return null;
@@ -220,8 +238,9 @@ function WorkspacePage() {
                   <div className="workspace-organization-control">
                      <label htmlFor="workspace-organization">Organization</label>
 
-                     <select
+                     <Select
                         id="workspace-organization"
+                        density="standard"
                         value={selectedOrganizationId ?? ""}
                         onChange={(event) => setRequestedOrganizationId(event.target.value)}
                      >
@@ -230,10 +249,10 @@ function WorkspacePage() {
                               {membership.organization.name}
                            </option>
                         ))}
-                     </select>
+                     </Select>
 
                      {selectedMembership && (
-                        <span className="workspace-role-label">{formatRole(selectedMembership.role)}</span>
+                        <span className="workspace-role-label">Your role: {formatRole(selectedMembership.role)}</span>
                      )}
                   </div>
                ) : (
@@ -245,51 +264,35 @@ function WorkspacePage() {
                )}
             </header>
 
-            <section className="workspace-context-bar">
-               <div>
-                  <span className="workspace-context-label">Platform permissions</span>
-
-                  <strong>{platformCapabilities.length}</strong>
-               </div>
-
-               <div>
-                  <span className="workspace-context-label">
-                     {isPlatformSection ? "Safety scope" : "Organization permissions"}
-                  </span>
-
-                  <strong>{isPlatformSection ? "Platform-wide" : organizationCapabilities.length}</strong>
-               </div>
-
-               <div>
-                  <span className="workspace-context-label">Active organization</span>
-
-                  <strong>{isPlatformSection ? "Not applicable" : (selectedOrganization?.name ?? "None")}</strong>
-               </div>
-            </section>
-
             <div className="workspace-body">
                <aside className="workspace-sidebar">
                   <div className="workspace-sidebar-heading">Available tools</div>
 
                   <nav className="workspace-navigation" aria-label="Workspace sections">
-                     {visibleSections.map((section) => (
-                        <button
-                           key={section.id}
-                           type="button"
-                           className={`workspace-nav-item ${activeSectionId === section.id ? "active" : ""}`}
-                           aria-pressed={activeSectionId === section.id}
-                           onClick={() => setRequestedSectionId(section.id)}
-                        >
-                           <span className="workspace-nav-icon">
-                              <Icons name={section.icon} size={17} />
-                           </span>
+                     {visibleSectionGroups.map((group) => (
+                        <section key={group.scope} className="workspace-nav-group">
+                           <h2>{group.label}</h2>
 
-                           <span className="workspace-nav-copy">
-                              <strong>{section.label}</strong>
+                           <div className="workspace-nav-group-items">
+                              {group.sections.map((section) => (
+                                 <button
+                                    key={section.id}
+                                    type="button"
+                                    className={`workspace-nav-item ${activeSectionId === section.id ? "active" : ""}`}
+                                    aria-pressed={activeSectionId === section.id}
+                                    onClick={() => setRequestedSectionId(section.id)}
+                                 >
+                                    <span className="workspace-nav-icon">
+                                       <Icons name={section.icon} size={17} />
+                                    </span>
 
-                              <small>{section.scope === "platform" ? "Platform" : "Organization"}</small>
-                           </span>
-                        </button>
+                                    <span className="workspace-nav-copy">
+                                       <strong>{section.label}</strong>
+                                    </span>
+                                 </button>
+                              ))}
+                           </div>
+                        </section>
                      ))}
                   </nav>
                </aside>
@@ -299,10 +302,12 @@ function WorkspacePage() {
                      <>
                         <div className="workspace-content-header">
                            <div>
-                              <span className="workspace-scope-badge">
+                              <span className="workspace-scope-context">
                                  {activeSection.scope === "platform"
-                                    ? "Platform authority"
-                                    : (selectedOrganization?.name ?? "Organization authority")}
+                                    ? "Platform Safety"
+                                    : selectedOrganization?.name
+                                      ? `Organization · ${selectedOrganization.name}`
+                                      : "Organization"}
                               </span>
 
                               <h2>{activeSection.label}</h2>
