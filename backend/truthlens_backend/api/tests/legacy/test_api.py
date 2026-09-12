@@ -34,9 +34,11 @@ from api.models import (
     Organization,
     OrganizationMembership,
     AdjudicationDecision,
+    AdjudicationDecisionEvidenceSnapshot,
     VerificationAssignment,
     OfficialFactCheck,
     OfficialFactCheckSource,
+    OfficialFactCheckSourceEvidenceLink,
     KnowledgeReuseEvent,
 )
 from api.throttles import FactCheckRateThrottle
@@ -4161,10 +4163,11 @@ class PublishingFoundationTests(APITestCase):
             OfficialFactCheckSource.SourceType.VERIFIED_EVIDENCE,
         )
 
-        self.assertEqual(
-            source.evidence_submission,
-            self.evidence,
-        )
+        self.assertIsNone(source.evidence_submission_id)
+        self.assertFalse(source.is_editorially_selected)
+        lineage = OfficialFactCheckSourceEvidenceLink.objects.get(source=source)
+        self.assertEqual(lineage.snapshot_id, self.decision.evidence_snapshot.id)
+        self.assertEqual(lineage.captured_evidence_id, self.evidence.id)
 
         draft.refresh_from_db()
 
@@ -4324,7 +4327,7 @@ class PublishingFoundationTests(APITestCase):
             OfficialFactCheck.PublicationStatus.DRAFT,
         )
 
-    def test_new_published_version_archives_previous_version(
+    def test_existing_published_fact_check_blocks_ordinary_replacement(
         self,
     ):
         first_draft = self._create_complete_draft(suffix="v1")
@@ -4340,27 +4343,30 @@ class PublishingFoundationTests(APITestCase):
             2,
         )
 
-        second_result = self._publish(second_draft)
+        second_draft = submit_fact_check_for_review(
+            fact_check=second_draft,
+            actor=self.moderator,
+        )
 
-        second_published = second_result["fact_check"]
+        with self.assertRaises(PublishingConflict):
+            publish_fact_check(
+                fact_check=second_draft,
+                actor=self.moderator,
+            )
 
         first_published.refresh_from_db()
+        second_draft.refresh_from_db()
 
         self.assertEqual(
             first_published.publication_status,
-            OfficialFactCheck.PublicationStatus.ARCHIVED,
-        )
-
-        self.assertIsNotNone(first_published.archived_at)
-
-        self.assertEqual(
-            second_published.publication_status,
             OfficialFactCheck.PublicationStatus.PUBLISHED,
         )
 
+        self.assertIsNone(first_published.archived_at)
+
         self.assertEqual(
-            second_published.version,
-            2,
+            second_draft.publication_status,
+            OfficialFactCheck.PublicationStatus.IN_REVIEW,
         )
 
         self.assertEqual(
@@ -4369,11 +4375,6 @@ class PublishingFoundationTests(APITestCase):
                 publication_status=(OfficialFactCheck.PublicationStatus.PUBLISHED),
             ).count(),
             1,
-        )
-
-        self.assertEqual(
-            second_result["archived_fact_check"].id,
-            first_published.id,
         )
 
     def test_update_draft_cannot_change_authoritative_fields(
@@ -4546,6 +4547,11 @@ class PublishingFoundationTests(APITestCase):
             verdict=(AdjudicationDecision.Verdict.MISLEADING),
             canonical_claim=("The revised reviewed claim " "is misleading."),
             rationale=("Additional review changed " "the authoritative verdict."),
+        )
+        AdjudicationDecisionEvidenceSnapshot.objects.create(
+            decision=revised["decision"],
+            claim_id=self.claim.id,
+            evidence_records=self.decision.evidence_snapshot.evidence_records,
         )
 
         fresh_draft = create_fact_check_draft(

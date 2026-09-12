@@ -4,7 +4,6 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { resolveApiEndpoint } from "../utils/api";
-import PublicSiteHeader from "../components/public/PublicSiteHeader";
 import PartnerLogo from "../components/partners/PartnerLogo";
 import "./PartnerProfilePage.css";
 
@@ -149,15 +148,14 @@ function PartnerProfilePage() {
 
    return (
       <div className="partner-profile-page">
-         <PublicSiteHeader />
-         <main id="main-content" className="partner-profile-main" tabIndex={-1}>
+         <div className="partner-profile-main">
             <Link to={partnersPath} className="partner-profile-back">
                <ArrowLeft aria-hidden="true" />
                Back to partners
             </Link>
 
             <PartnerProfileContent key={slug} slug={slug} />
-         </main>
+         </div>
       </div>
    );
 }

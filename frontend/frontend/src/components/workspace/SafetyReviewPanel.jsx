@@ -4,6 +4,9 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { resolveApiEndpoint } from "../../utils/api";
 import Icons from "../Icons.jsx";
+import Button from "../ui/Button.jsx";
+import Select from "../ui/Select.jsx";
+import Textarea from "../ui/Textarea.jsx";
 
 import "./SafetyReviewPanel.css";
 
@@ -641,7 +644,8 @@ function SafetyReviewPanel() {
             <div className="safety-filter-grid">
                <label>
                   <span>Status</span>
-                  <select
+                  <Select
+                     density="standard"
                      value={filters.status}
                      disabled={queueLoading}
                      onChange={(event) => handleFilterChange("status", event.target.value)}
@@ -651,12 +655,13 @@ function SafetyReviewPanel() {
                            {value ? formatLabel(value) : "All statuses"}
                         </option>
                      ))}
-                  </select>
+                  </Select>
                </label>
 
                <label>
                   <span>Priority</span>
-                  <select
+                  <Select
+                     density="standard"
                      value={filters.priority}
                      disabled={queueLoading}
                      onChange={(event) => handleFilterChange("priority", event.target.value)}
@@ -666,12 +671,13 @@ function SafetyReviewPanel() {
                            {value ? formatLabel(value) : "All priorities"}
                         </option>
                      ))}
-                  </select>
+                  </Select>
                </label>
 
                <label>
                   <span>Assignment</span>
-                  <select
+                  <Select
+                     density="standard"
                      value={filters.assigned}
                      disabled={queueLoading}
                      onChange={(event) => handleFilterChange("assigned", event.target.value)}
@@ -681,18 +687,20 @@ function SafetyReviewPanel() {
                            {option.label}
                         </option>
                      ))}
-                  </select>
+                  </Select>
                </label>
 
-               <button
+               <Button
                   type="button"
+                  variant="secondary"
+                  density="standard"
                   className="safety-refresh-button"
                   disabled={queueLoading}
                   onClick={() => requestQueueRefresh({ clearMessages: true })}
+                  leadingIcon={<Icons name="refresh-cw" size={15} />}
                >
-                  <Icons name="refresh-cw" size={15} />
                   Refresh
-               </button>
+               </Button>
             </div>
          </div>
 
@@ -728,9 +736,9 @@ function SafetyReviewPanel() {
                   <div className="safety-contained-error" role="alert">
                      <strong>Safety queue unavailable</strong>
                      <span>{queueError}</span>
-                     <button type="button" onClick={handleQueueRetry}>
+                     <Button type="button" variant="secondary" density="compact" onClick={handleQueueRetry}>
                         Retry
-                     </button>
+                     </Button>
                   </div>
                )}
 
@@ -746,7 +754,7 @@ function SafetyReviewPanel() {
                      <p>No Platform Safety cases match the current filters.</p>
                   </div>
                ) : (
-                  <div className="safety-case-list">
+                  <ul className="safety-case-list">
                      {queue.results.map((caseItem) => {
                         const isSelected = selectedCaseId === caseItem.id;
                         const reasonSummary = Array.isArray(caseItem.report_reason_summary)
@@ -754,48 +762,49 @@ function SafetyReviewPanel() {
                            : [];
 
                         return (
-                           <button
-                              key={caseItem.id}
-                              type="button"
-                              className={`safety-case-row ${isSelected ? "selected" : ""}`}
-                              aria-pressed={isSelected}
-                              aria-controls="safety-case-detail"
-                              onClick={() => handleSelectCase(caseItem.id)}
-                           >
-                              <span className="safety-case-row-top">
-                                 <span className={`safety-status status-${String(caseItem.status).toLowerCase()}`}>
-                                    {formatLabel(caseItem.status)}
+                           <li key={caseItem.id} className="safety-case-item">
+                              <button
+                                 type="button"
+                                 className={`safety-case-row ${isSelected ? "selected" : ""}`}
+                                 aria-pressed={isSelected}
+                                 aria-controls="safety-case-detail"
+                                 onClick={() => handleSelectCase(caseItem.id)}
+                              >
+                                 <span className="safety-case-row-top">
+                                    <span className={`safety-status status-${String(caseItem.status).toLowerCase()}`}>
+                                       {formatLabel(caseItem.status)}
+                                    </span>
+                                    <span className={`safety-priority priority-${String(caseItem.priority).toLowerCase()}`}>
+                                       {formatLabel(caseItem.priority)} priority
+                                    </span>
+                                    {isSelected && <span className="safety-selected-label">Selected</span>}
                                  </span>
-                                 <span className={`safety-priority priority-${String(caseItem.priority).toLowerCase()}`}>
-                                    {formatLabel(caseItem.priority)} priority
+
+                                 <strong>{getCaseTitle(caseItem)}</strong>
+
+                                 <span className="safety-case-context">
+                                    By {caseItem?.thread?.author?.username ? `@${caseItem.thread.author.username}` : "Unknown author"}
                                  </span>
-                                 {isSelected && <span className="safety-selected-label">Selected</span>}
-                              </span>
 
-                              <strong>{getCaseTitle(caseItem)}</strong>
+                                 <span className="safety-reason-summary">
+                                    {reasonSummary.length > 0
+                                       ? reasonSummary
+                                            .map((reason) => `${reason.reason_label}: ${reason.count}`)
+                                            .join(" · ")
+                                       : "No unresolved report reasons"}
+                                 </span>
 
-                              <span className="safety-case-context">
-                                 By {caseItem?.thread?.author?.username ? `@${caseItem.thread.author.username}` : "Unknown author"}
-                              </span>
-
-                              <span className="safety-reason-summary">
-                                 {reasonSummary.length > 0
-                                    ? reasonSummary
-                                         .map((reason) => `${reason.reason_label}: ${reason.count}`)
-                                         .join(" · ")
-                                    : "No unresolved report reasons"}
-                              </span>
-
-                              <span className="safety-case-row-meta">
-                                 <span>{caseItem.report_count} {caseItem.report_count === 1 ? "report" : "reports"}</span>
-                                 <span>{getAssignmentLabel(caseItem, currentUserId)}</span>
-                                 <span>Created {formatDateTime(caseItem.created_at)}</span>
-                                 <span>Updated {formatDateTime(caseItem.updated_at)}</span>
-                              </span>
-                           </button>
+                                 <span className="safety-case-row-meta">
+                                    <span>{caseItem.report_count} {caseItem.report_count === 1 ? "report" : "reports"}</span>
+                                    <span>{getAssignmentLabel(caseItem, currentUserId)}</span>
+                                    <span>Created {formatDateTime(caseItem.created_at)}</span>
+                                    <span>Updated {formatDateTime(caseItem.updated_at)}</span>
+                                 </span>
+                              </button>
+                           </li>
                         );
                      })}
-                  </div>
+                  </ul>
                )}
             </section>
 
@@ -817,19 +826,23 @@ function SafetyReviewPanel() {
                      <strong>Case detail unavailable</strong>
                      <span>{detailError}</span>
                      {detailUnavailable ? (
-                        <button
+                        <Button
                            type="button"
+                           variant="secondary"
+                           density="compact"
                            onClick={handleReturnToQueue}
                         >
                            Return to queue
-                        </button>
+                        </Button>
                      ) : (
-                        <button
+                        <Button
                            type="button"
+                           variant="secondary"
+                           density="compact"
                            onClick={handleDetailRetry}
                         >
                            Retry
-                        </button>
+                        </Button>
                      )}
                   </div>
                ) : !selectedCaseId ? (
@@ -884,7 +897,7 @@ function SafetyReviewPanel() {
                      </dl>
 
                      <section className="safety-detail-section">
-                        <div className="safety-subheading-row">
+                        <div className="safety-subheading-row safety-major-section-heading">
                            <div>
                               <h4>Thread context</h4>
                               <p>Context associated with the reported community thread.</p>
@@ -898,17 +911,28 @@ function SafetyReviewPanel() {
                         </div>
 
                         <div className="safety-thread-context">
-                           <span>{formatLabel(detail.thread?.claim?.claim_type, "Claim type unavailable")}</span>
                            <p>{detail.thread?.claim?.context_text || detail.thread?.caption || "Thread context unavailable"}</p>
-                           <small>
-                              Author: {detail.thread?.author?.username ? `@${detail.thread.author.username}` : "Unknown"}
-                              {detail.thread?.created_at ? ` · Posted ${formatDateTime(detail.thread.created_at)}` : ""}
-                           </small>
+                           <dl className="safety-thread-provenance">
+                              <div>
+                                 <dt>Claim type</dt>
+                                 <dd>{formatLabel(detail.thread?.claim?.claim_type, "Claim type unavailable")}</dd>
+                              </div>
+                              <div>
+                                 <dt>Author</dt>
+                                 <dd>{detail.thread?.author?.username ? `@${detail.thread.author.username}` : "Unknown"}</dd>
+                              </div>
+                              {detail.thread?.created_at && (
+                                 <div>
+                                    <dt>Posted</dt>
+                                    <dd>{formatDateTime(detail.thread.created_at)}</dd>
+                                 </div>
+                              )}
+                           </dl>
                         </div>
                      </section>
 
                      <section className="safety-detail-section">
-                        <div className="safety-subheading-row">
+                        <div className="safety-subheading-row safety-major-section-heading">
                            <div>
                               <h4>Reports</h4>
                               <p>{detail.report_count} case-specific {detail.report_count === 1 ? "report" : "reports"}</p>
@@ -932,45 +956,8 @@ function SafetyReviewPanel() {
                         )}
                      </section>
 
-                     <section className="safety-detail-section">
-                        <div className="safety-subheading-row">
-                           <div>
-                              <h4>Moderation history</h4>
-                              <p>Recent case events supplied by the Safety audit history.</p>
-                           </div>
-                        </div>
-
-                        {Array.isArray(detail.events) && detail.events.length > 0 ? (
-                           <ol className="safety-event-list">
-                              {detail.events.map((event, index) => (
-                                 <li key={`${event.event_type}-${event.created_at}-${index}`}>
-                                    <span className="safety-event-marker" aria-hidden="true" />
-                                    <div>
-                                       <div className="safety-event-heading">
-                                          <strong>{formatLabel(event.event_type)}</strong>
-                                          <time dateTime={event.created_at}>{formatDateTime(event.created_at)}</time>
-                                       </div>
-                                       <p>
-                                          Actor: {event.actor?.username ? `@${event.actor.username}` : "Actor not displayed"}
-                                       </p>
-                                       {(event.from_status || event.to_status) && (
-                                          <p>
-                                             Transition: {formatLabel(event.from_status, "None")} → {formatLabel(event.to_status, "None")}
-                                          </p>
-                                       )}
-                                       {event.reason_code && <p>Reason: {formatLabel(event.reason_code)}</p>}
-                                       {event.notes && <p>Notes: {event.notes}</p>}
-                                    </div>
-                                 </li>
-                              ))}
-                           </ol>
-                        ) : (
-                           <p className="safety-inline-empty">No moderation history is available.</p>
-                        )}
-                     </section>
-
                      <section className="safety-action-section" aria-labelledby="safety-actions-heading">
-                        <div className="safety-subheading-row">
+                        <div className="safety-subheading-row safety-major-section-heading">
                            <div>
                               <h4 id="safety-actions-heading">Safety actions</h4>
                               <p>Actions apply to this Platform Safety case, not a factual verdict.</p>
@@ -988,9 +975,17 @@ function SafetyReviewPanel() {
                         ) : !detail.assigned_to ? (
                            <div className="safety-assignment-action">
                               <p>Claim this case before recording a Safety decision.</p>
-                              <button type="button" disabled={isBusy} onClick={handleClaim}>
-                                 {pendingOperation?.kind === "claim" ? "Claiming…" : "Claim case"}
-                              </button>
+                              <Button
+                                 type="button"
+                                 variant="primary"
+                                 density="comfortable"
+                                 disabled={isBusy}
+                                 loading={pendingOperation?.kind === "claim"}
+                                 loadingLabel="Claiming…"
+                                 onClick={handleClaim}
+                              >
+                                 Claim case
+                              </Button>
                            </div>
                         ) : isAssignedToAnother ? (
                            <div className="safety-assignment-locked">
@@ -1008,61 +1003,76 @@ function SafetyReviewPanel() {
                                  {confirmingRelease ? (
                                     <div className="safety-release-confirm">
                                        <span>Release this case?</span>
-                                       <button
+                                       <Button
                                           ref={releaseCancelRef}
                                           type="button"
-                                          className="secondary"
+                                          variant="secondary"
+                                          density="standard"
                                           disabled={isBusy}
                                           onClick={handleCancelReleaseConfirmation}
                                        >
                                           Cancel
-                                       </button>
-                                       <button type="button" disabled={isBusy} onClick={handleRelease}>
-                                          {pendingOperation?.kind === "release" ? "Releasing…" : "Release case"}
-                                       </button>
+                                       </Button>
+                                       <Button
+                                          type="button"
+                                          variant="primary"
+                                          density="standard"
+                                          disabled={isBusy}
+                                          loading={pendingOperation?.kind === "release"}
+                                          loadingLabel="Releasing…"
+                                          onClick={handleRelease}
+                                       >
+                                          Release case
+                                       </Button>
                                     </div>
                                  ) : (
-                                    <button
+                                    <Button
                                        ref={releaseTriggerRef}
                                        type="button"
-                                       className="safety-release-trigger"
+                                       variant="secondary"
+                                       density="standard"
                                        disabled={isBusy || Boolean(decisionAction)}
                                        onClick={handleOpenReleaseConfirmation}
                                     >
                                        Release case
-                                    </button>
+                                    </Button>
                                  )}
                               </div>
 
                               {!decisionAction ? (
                                  <div className="safety-decision-options">
-                                    <button
+                                    <Button
                                        ref={dismissActionRef}
                                        type="button"
+                                       variant="secondary"
+                                       density="comfortable"
                                        disabled={isBusy || confirmingRelease}
                                        onClick={() => handleOpenDecision("DISMISS")}
                                     >
                                        Dismiss case
-                                    </button>
-                                    <button
+                                    </Button>
+                                    <Button
                                        ref={removeActionRef}
                                        type="button"
-                                       className="danger"
+                                       variant="destructive"
+                                       density="comfortable"
                                        disabled={isBusy || confirmingRelease}
                                        onClick={() => handleOpenDecision("REMOVE")}
                                     >
                                        Remove content
-                                    </button>
+                                    </Button>
                                     {detail.status !== "ESCALATED" && (
-                                       <button
+                                       <Button
                                           ref={escalateActionRef}
                                           type="button"
-                                          className="warning"
+                                          variant="secondary"
+                                          density="comfortable"
+                                          className="safety-warning-action"
                                           disabled={isBusy || confirmingRelease}
                                           onClick={() => handleOpenDecision("ESCALATE")}
                                        >
                                           Escalate review
-                                       </button>
+                                       </Button>
                                     )}
                                  </div>
                               ) : (
@@ -1075,9 +1085,10 @@ function SafetyReviewPanel() {
                                     <label htmlFor="safety-moderator-notes">
                                        Moderator notes {selectedActionDetail.notesRequired ? "(required)" : "(optional)"}
                                     </label>
-                                    <textarea
+                                    <Textarea
                                        ref={decisionNotesRef}
                                        id="safety-moderator-notes"
+                                       density="standard"
                                        value={decisionNotes}
                                        maxLength={2000}
                                        required={selectedActionDetail.notesRequired}
@@ -1091,27 +1102,79 @@ function SafetyReviewPanel() {
                                     </span>
 
                                     <div className="safety-decision-controls">
-                                       <button
+                                       <Button
                                           type="button"
-                                          className="secondary"
+                                          variant="secondary"
+                                          density="standard"
                                           disabled={isBusy}
                                           onClick={handleCancelDecision}
                                        >
                                           Cancel
-                                       </button>
-                                       <button
+                                       </Button>
+                                       <Button
                                           type="submit"
-                                          className={decisionAction === "REMOVE" ? "danger" : "primary"}
+                                          variant={
+                                             decisionAction === "REMOVE"
+                                                ? "destructive"
+                                                : decisionAction === "DISMISS"
+                                                  ? "primary"
+                                                  : "secondary"
+                                          }
+                                          density="comfortable"
+                                          className={decisionAction === "ESCALATE" ? "safety-warning-action" : ""}
                                           disabled={isBusy}
+                                          loading={pendingOperation?.kind === "action"}
+                                          loadingLabel="Submitting…"
                                        >
-                                          {pendingOperation?.kind === "action"
-                                             ? "Submitting…"
-                                             : `Confirm ${selectedActionDetail.label.toLowerCase()}`}
-                                       </button>
+                                          {`Confirm ${selectedActionDetail.label.toLowerCase()}`}
+                                       </Button>
                                     </div>
                                  </form>
                               )}
                            </>
+                        )}
+                     </section>
+
+                     <section className="safety-detail-section">
+                        <div className="safety-subheading-row safety-major-section-heading">
+                           <div>
+                              <h4>Moderation history</h4>
+                              <p>Recent case events supplied by the Safety audit history.</p>
+                           </div>
+                        </div>
+
+                        {Array.isArray(detail.events) && detail.events.length > 0 ? (
+                           <details className="safety-history-disclosure">
+                              <summary>
+                                 <span>Case events</span>
+                                 <span>{detail.events.length} {detail.events.length === 1 ? "event" : "events"}</span>
+                              </summary>
+                              <ol className="safety-event-list">
+                                 {detail.events.map((event, index) => (
+                                    <li key={`${event.event_type}-${event.created_at}-${index}`}>
+                                       <span className="safety-event-marker" aria-hidden="true" />
+                                       <div>
+                                          <div className="safety-event-heading">
+                                             <strong>{formatLabel(event.event_type)}</strong>
+                                             <time dateTime={event.created_at}>{formatDateTime(event.created_at)}</time>
+                                          </div>
+                                          <p>
+                                             Actor: {event.actor?.username ? `@${event.actor.username}` : "Actor not displayed"}
+                                          </p>
+                                          {(event.from_status || event.to_status) && (
+                                             <p>
+                                                Transition: {formatLabel(event.from_status, "None")} → {formatLabel(event.to_status, "None")}
+                                             </p>
+                                          )}
+                                          {event.reason_code && <p>Reason: {formatLabel(event.reason_code)}</p>}
+                                          {event.notes && <p>Notes: {event.notes}</p>}
+                                       </div>
+                                    </li>
+                                 ))}
+                              </ol>
+                           </details>
+                        ) : (
+                           <p className="safety-inline-empty">No moderation history is available.</p>
                         )}
                      </section>
                   </div>

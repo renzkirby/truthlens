@@ -10,6 +10,7 @@ from .models import (
     AdjudicationDecision,
     Claim,
     EvidenceSubmission,
+    FactualCorrectionRequest,
     ModerationCase,
     OfficialFactCheck,
     VerificationAssignment,
@@ -234,6 +235,12 @@ def ensure_verification_assignment(
             locked_claim,
             lock=True,
         )
+
+        if FactualCorrectionRequest.objects.filter(
+            claim=locked_claim,
+            status=FactualCorrectionRequest.Status.ACTIVE,
+        ).exists():
+            return None
 
         if existing:
             return existing

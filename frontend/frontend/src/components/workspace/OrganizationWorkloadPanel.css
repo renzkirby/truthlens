@@ -6,11 +6,13 @@
    display: flex;
    align-items: center;
    justify-content: space-between;
+   flex-wrap: wrap;
    gap: 16px;
    margin-bottom: 18px;
 }
 
 .workload-toolbar > div {
+   min-width: 0;
    display: flex;
    flex-direction: column;
    gap: 3px;
@@ -24,50 +26,33 @@
 .workload-toolbar span {
    color: var(--text-muted);
    font-size: 0.8rem;
-}
-
-.workload-toolbar button {
-   display: inline-flex;
-   align-items: center;
-   justify-content: center;
-   gap: 7px;
-   min-height: 36px;
-   padding: 0 12px;
-   border: 1px solid var(--border-default);
-   border-radius: 8px;
-   background: var(--bg-surface);
-   color: var(--text-body);
-   font: inherit;
-   font-size: 0.8rem;
-   font-weight: 600;
-   cursor: pointer;
-}
-
-.workload-toolbar button:hover:not(:disabled) {
-   background: var(--bg-subtle);
-}
-
-.workload-toolbar button:disabled {
-   cursor: not-allowed;
-   opacity: 0.6;
+   line-height: 1.45;
+   overflow-wrap: anywhere;
 }
 
 .workload-error {
+   min-width: 0;
    display: flex;
    align-items: flex-start;
    gap: 10px;
    margin-top: 16px;
    padding: 13px 14px;
-   border: 1px solid var(--verdict-fake-border);
+   border: 1px solid var(--tl-color-status-critical-border);
    border-radius: 9px;
-   background: var(--verdict-fake-bg);
-   color: var(--verdict-fake-text);
+   background: var(--tl-color-status-critical-bg);
+   color: var(--tl-color-status-critical-text);
 }
 
 .workload-error > div {
+   min-width: 0;
    display: flex;
    flex-direction: column;
    gap: 2px;
+}
+
+.workload-error .tl-button {
+   align-self: flex-start;
+   margin-top: 5px;
 }
 
 .workload-error strong {
@@ -77,6 +62,7 @@
 .workload-error span {
    font-size: 0.78rem;
    line-height: 1.5;
+   overflow-wrap: anywhere;
 }
 
 .workload-state {
@@ -114,37 +100,53 @@
 }
 
 .workload-list {
-   display: flex;
-   flex-direction: column;
-   gap: 12px;
-}
-
-.workload-card {
-   padding: 18px;
+   margin: 0;
+   padding: 0;
    border: 1px solid var(--border-default);
    border-radius: 12px;
    background: var(--bg-surface);
+   list-style: none;
 }
 
-.workload-card-header {
+.workload-list-item {
+   min-width: 0;
+   border-bottom: 1px solid var(--border-light);
+}
+
+.workload-list-item:last-child {
+   border-bottom: 0;
+}
+
+.workload-item {
+   min-width: 0;
+   padding: 18px;
+}
+
+.workload-item-header {
+   min-width: 0;
    display: flex;
    align-items: center;
    justify-content: space-between;
+   flex-wrap: wrap;
    gap: 14px;
    margin-bottom: 12px;
 }
 
-.workload-card-header > div {
+.workload-item-header > div {
+   min-width: 0;
    display: flex;
    align-items: center;
    flex-wrap: wrap;
    gap: 7px;
 }
 
-.workload-card-header > span {
+.workload-item-header > span {
+   min-width: 0;
    color: var(--text-muted);
    font-size: 0.72rem;
-   white-space: nowrap;
+   line-height: 1.45;
+   overflow-wrap: anywhere;
+   text-align: right;
 }
 
 .workload-status,
@@ -156,11 +158,15 @@
    border-radius: 999px;
    font-size: 0.7rem;
    font-weight: 700;
+   line-height: 1.35;
+   overflow-wrap: anywhere;
+   text-align: center;
 }
 
 .workload-status {
-   background: var(--verdict-fact-bg);
-   color: var(--verdict-fact-text);
+   border: 1px solid var(--tl-color-status-info-border);
+   background: var(--tl-color-status-info-bg);
+   color: var(--tl-color-status-info-text);
 }
 
 .workload-type {
@@ -169,22 +175,24 @@
    color: var(--text-muted);
 }
 
-.workload-card h3 {
+.workload-claim-text {
    margin: 0;
    color: var(--text-main);
    font-size: 1rem;
    font-weight: 650;
    line-height: 1.55;
+   overflow-wrap: anywhere;
 }
 
 .workload-meta {
+   min-width: 0;
    display: grid;
    grid-template-columns: repeat(3, minmax(0, 1fr));
    gap: 12px;
-   margin-top: 16px;
-   padding: 13px;
-   border-radius: 9px;
-   background: var(--bg-subtle);
+   margin: 16px 0 0;
+   padding: 13px 0;
+   border-top: 1px solid var(--border-light);
+   border-bottom: 1px solid var(--border-light);
 }
 
 .workload-meta > div {
@@ -195,54 +203,36 @@
    gap: 6px;
 }
 
-.workload-meta span {
+.workload-meta dt {
    color: var(--text-muted);
    font-size: 0.7rem;
    font-weight: 600;
 }
 
-.workload-meta strong {
+.workload-meta dd {
+   min-width: 0;
+   margin: 0;
    max-width: 100%;
    color: var(--text-body);
    font-size: 0.81rem;
+   line-height: 1.45;
    overflow-wrap: anywhere;
-}
-
-.workload-card {
-   transition:
-      border-color 0.15s ease,
-      box-shadow 0.15s ease;
-}
-
-.workload-card:hover {
-   border-color: var(--brand-primary);
-   box-shadow: 0 4px 14px rgb(15 23 42 / 5%);
-}
-
-.workload-toolbar button:focus-visible,
-.workload-card:focus-visible {
-   outline: 2px solid var(--brand-primary);
-   outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
    .workload-spinner {
       animation: none;
    }
-
-   .workload-card {
-      transition: none;
-   }
 }
 
 @media (max-width: 760px) {
    .workload-toolbar,
-   .workload-card-header {
+   .workload-item-header {
       align-items: flex-start;
       flex-direction: column;
    }
 
-   .workload-toolbar button {
+   .workload-refresh-action {
       width: 100%;
    }
 
@@ -250,18 +240,36 @@
       grid-template-columns: 1fr;
    }
 
-   .workload-card-header > span {
-      white-space: normal;
+   .workload-item-header > span {
+      text-align: left;
    }
 }
 
 @media (max-width: 520px) {
-   .workload-card {
-      padding: 15px;
+   .workload-item {
+      padding: 16px;
    }
 
-   .workload-meta {
-      padding: 11px;
+   .workload-toolbar,
+   .workload-item-actions,
+   .workload-release-confirm,
+   .workload-release-controls,
+   .workload-pagination-controls {
+      width: 100%;
+   }
+
+   .workload-toolbar {
+      align-items: stretch;
+   }
+
+   .workload-release-controls,
+   .workload-pagination-controls {
+      flex-direction: column;
+   }
+
+   .workload-release-controls .tl-button,
+   .workload-pagination-controls .tl-button {
+      width: 100%;
    }
 }
 
@@ -278,35 +286,10 @@
    font-size: 0.76rem;
 }
 
-.workload-pagination > div {
+.workload-pagination-controls {
    display: flex;
+   flex-wrap: wrap;
    gap: 8px;
-}
-
-.workload-pagination button {
-   display: inline-flex;
-   align-items: center;
-   justify-content: center;
-   gap: 5px;
-   min-height: 34px;
-   padding: 0 10px;
-   border: 1px solid var(--border-default);
-   border-radius: 8px;
-   background: var(--bg-surface);
-   color: var(--text-body);
-   font: inherit;
-   font-size: 0.76rem;
-   font-weight: 600;
-   cursor: pointer;
-}
-
-.workload-pagination button:hover:not(:disabled) {
-   background: var(--bg-subtle);
-}
-
-.workload-pagination button:disabled {
-   cursor: not-allowed;
-   opacity: 0.45;
 }
 
 @media (max-width: 760px) {
@@ -318,6 +301,7 @@
 
 .workload-notice,
 .workload-action-error {
+   min-width: 0;
    display: flex;
    align-items: flex-start;
    gap: 10px;
@@ -329,24 +313,33 @@
 }
 
 .workload-notice {
-   border: 1px solid var(--border-default);
-   background: var(--bg-subtle);
-   color: var(--text-body);
+   border: 1px solid var(--tl-color-status-info-border);
+   background: var(--tl-color-status-info-bg);
+   color: var(--tl-color-status-info-text);
 }
 
 .workload-action-error {
-   border: 1px solid var(--verdict-fake-border);
-   background: var(--verdict-fake-bg);
-   color: var(--verdict-fake-text);
+   border: 1px solid var(--tl-color-status-critical-border);
+   background: var(--tl-color-status-critical-bg);
+   color: var(--tl-color-status-critical-text);
+}
+
+.workload-notice > span,
+.workload-action-error > div,
+.workload-action-error span {
+   min-width: 0;
+   overflow-wrap: anywhere;
 }
 
 .workload-action-error > div {
+   min-width: 0;
    display: flex;
    flex-direction: column;
    gap: 2px;
 }
 
-.workload-card-actions {
+.workload-item-actions {
+   min-width: 0;
    display: flex;
    justify-content: flex-end;
    margin-top: 16px;
@@ -354,43 +347,17 @@
    border-top: 1px solid var(--border-light);
 }
 
-.workload-release-button,
-.workload-action-button {
-   display: inline-flex;
-   align-items: center;
-   justify-content: center;
-   gap: 7px;
-   min-height: 36px;
-   padding: 0 12px;
-   border-radius: 8px;
-   font: inherit;
-   font-size: 0.78rem;
-   font-weight: 650;
-   cursor: pointer;
-}
-
-.workload-release-button {
-   border: 1px solid var(--border-default);
-   background: var(--bg-surface);
-   color: var(--text-body);
-}
-
-.workload-release-button:hover:not(:disabled) {
-   border-color: var(--verdict-misleading-border);
-   background: var(--verdict-misleading-bg);
-   color: var(--verdict-misleading-text);
-}
-
 .workload-release-confirm {
+   min-width: 0;
    width: 100%;
    display: flex;
    align-items: center;
    justify-content: space-between;
    gap: 16px;
    padding: 12px;
-   border: 1px solid var(--verdict-misleading-border);
+   border: 1px solid var(--tl-color-status-warning-border);
    border-radius: 9px;
-   background: var(--verdict-misleading-bg);
+   background: var(--tl-color-status-warning-bg);
 }
 
 .workload-release-warning {
@@ -398,9 +365,10 @@
    display: flex;
    align-items: flex-start;
    gap: 8px;
-   color: var(--verdict-misleading-text);
+   color: var(--tl-color-status-warning-text);
    font-size: 0.78rem;
    line-height: 1.5;
+   overflow-wrap: anywhere;
 }
 
 .workload-release-warning svg {
@@ -409,35 +377,30 @@
 }
 
 .workload-release-controls {
+   min-width: 0;
    flex: 0 0 auto;
    display: flex;
    gap: 8px;
 }
 
-.workload-action-button.secondary {
-   border: 1px solid var(--border-default);
-   background: var(--bg-surface);
-   color: var(--text-body);
+.workload-warning-action {
+   border-color: var(--tl-color-status-warning-border);
+   background: var(--tl-color-status-warning-bg);
+   color: var(--tl-color-status-warning-text);
 }
 
-.workload-action-button.primary {
-   border: 1px solid var(--brand-primary);
-   background: var(--brand-primary);
-   color: var(--text-inverse);
-}
-
-.workload-release-button:disabled,
-.workload-action-button:disabled {
-   cursor: not-allowed;
-   opacity: 0.6;
+.workload-warning-action:not(:disabled):hover {
+   border-color: var(--tl-color-status-warning-text);
+   background: var(--tl-color-status-warning-bg);
+   color: var(--tl-color-status-warning-text);
 }
 
 @media (max-width: 760px) {
-   .workload-card-actions {
+   .workload-item-actions {
       justify-content: stretch;
    }
 
-   .workload-release-button {
+   .workload-release-action {
       width: 100%;
    }
 
@@ -450,7 +413,7 @@
       width: 100%;
    }
 
-   .workload-release-controls button {
+   .workload-release-controls .tl-button {
       flex: 1;
    }
 }

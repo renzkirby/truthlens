@@ -4,6 +4,9 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { resolveApiEndpoint } from "../../utils/api";
 import Icons from "../Icons.jsx";
+import Button from "../ui/Button.jsx";
+import Select from "../ui/Select.jsx";
+import Textarea from "../ui/Textarea.jsx";
 
 import "./AdjudicationReviewPanel.css";
 
@@ -99,6 +102,16 @@ function formatCaseReference(caseId) {
    return String(caseId || "").slice(0, 8);
 }
 
+function getVerdictTone(value) {
+   return {
+      FACT: "fact",
+      FAKE: "fake",
+      MISLEADING: "misleading",
+      SATIRE: "satire",
+      UNVERIFIED: "unverified",
+   }[value] || "neutral";
+}
+
 function getClaimContext(caseItem) {
    return caseItem?.claim?.context_text || "Claim context unavailable";
 }
@@ -126,15 +139,16 @@ function MinimalUser({ user, fallback = "Not recorded" }) {
 
 function DecisionRecord({ decision, current = false }) {
    const provenance = decision?.provenance || {};
-
-   return (
-      <article className="adjudication-decision-record">
-         <div className="adjudication-record-heading">
-            <h6>{current ? "Current decision" : `Revision ${decision?.revision_number ?? "unavailable"}`}</h6>
-            <span>{decision?.verdict_label || formatLabel(decision?.verdict, "Verdict unavailable")}</span>
-         </div>
-
-         <dl className="adjudication-detail-facts compact">
+   const verdictLabel = decision?.verdict_label || formatLabel(decision?.verdict, "Verdict unavailable");
+   const verdictTone = getVerdictTone(decision?.verdict);
+   const verdictBadge = (
+      <span className={`adjudication-decision-verdict adjudication-decision-verdict--${verdictTone}`}>
+         {verdictLabel}
+      </span>
+   );
+   const recordBody = (
+      <>
+         <dl className="adjudication-detail-facts compact adjudication-decision-provenance">
             <div>
                <dt>Revision</dt>
                <dd>{decision?.revision_number ?? "Not recorded"}</dd>
@@ -161,11 +175,26 @@ function DecisionRecord({ decision, current = false }) {
                <dt>Provenance</dt>
                <dd>{formatLabel(provenance.status, "Provenance unavailable")}</dd>
             </div>
-            <div>
-               <dt>Verification run</dt>
-               <dd>{decision?.verification_run_id || "Not recorded"}</dd>
-            </div>
          </dl>
+
+         {current ? (
+            <details className="adjudication-record-disclosure adjudication-technical-provenance">
+               <summary>Technical provenance</summary>
+               <dl className="adjudication-detail-facts compact adjudication-record-disclosure-body">
+                  <div>
+                     <dt>Verification run</dt>
+                     <dd>{decision?.verification_run_id || "Not recorded"}</dd>
+                  </div>
+               </dl>
+            </details>
+         ) : (
+            <dl className="adjudication-detail-facts compact adjudication-decision-technical">
+               <div>
+                  <dt>Verification run</dt>
+                  <dd>{decision?.verification_run_id || "Not recorded"}</dd>
+               </div>
+            </dl>
+         )}
 
          <div className="adjudication-reading-block">
             <strong>Canonical wording</strong>
@@ -175,6 +204,35 @@ function DecisionRecord({ decision, current = false }) {
             <strong>Rationale</strong>
             <p>{decision?.rationale || "Rationale unavailable."}</p>
          </div>
+      </>
+   );
+
+   if (!current) {
+      return (
+         <details className="adjudication-decision-record historical">
+            <summary className="adjudication-decision-summary">
+               <h6>
+                  <span>Revision {decision?.revision_number ?? "unavailable"}</span>
+                  {verdictBadge}
+                  <span className="adjudication-decision-summary-date">
+                     <FormattedDateTime value={decision?.decided_at} fallback="Decision date not recorded" />
+                  </span>
+               </h6>
+            </summary>
+            <div className="adjudication-decision-record-body">
+               {recordBody}
+            </div>
+         </details>
+      );
+   }
+
+   return (
+      <article className="adjudication-decision-record current">
+         <div className="adjudication-record-heading">
+            <h6>Current decision</h6>
+            {verdictBadge}
+         </div>
+         {recordBody}
       </article>
    );
 }
@@ -197,46 +255,23 @@ function SafeExternalLink({ value, children, className = "" }) {
 function EvidenceRecord({ evidence }) {
    const safeEvidenceUrl = getSafeHttpUrl(evidence?.evidence_url);
    const rejected = evidence?.evidence_status === "REJECTED";
+   const evidenceStatusTone =
+      evidence?.evidence_status === "VERIFIED"
+         ? "verified"
+         : rejected
+           ? "rejected"
+           : evidence?.evidence_status === "UNVERIFIED"
+             ? "unreviewed"
+             : "neutral";
 
    return (
       <li className="adjudication-evidence-record">
          <div className="adjudication-record-heading">
             <h6>{evidence?.evidence_caption || "Untitled evidence submission"}</h6>
-            <span>{evidence?.evidence_status_label || formatLabel(evidence?.evidence_status)}</span>
+            <span className={`adjudication-evidence-status adjudication-evidence-status--${evidenceStatusTone}`}>
+               {evidence?.evidence_status_label || formatLabel(evidence?.evidence_status)}
+            </span>
          </div>
-
-         <dl className="adjudication-detail-facts compact">
-            <div>
-               <dt>Evidence type</dt>
-               <dd>{evidence?.evidence_type_label || formatLabel(evidence?.evidence_type)}</dd>
-            </div>
-            <div>
-               <dt>Submitted</dt>
-               <dd><FormattedDateTime value={evidence?.submitted_at} /></dd>
-            </div>
-            <div>
-               <dt>Contributor</dt>
-               <dd><MinimalUser user={evidence?.contributor} /></dd>
-            </div>
-            <div>
-               <dt>Reviewed by</dt>
-               <dd><MinimalUser user={evidence?.reviewed_by} fallback="Reviewer not recorded" /></dd>
-            </div>
-            <div>
-               <dt>Reviewed</dt>
-               <dd><FormattedDateTime value={evidence?.reviewed_at} fallback="Review date not recorded" /></dd>
-            </div>
-            <div>
-               <dt>Evidence ID</dt>
-               <dd>{evidence?.id || "Unavailable"}</dd>
-            </div>
-         </dl>
-
-         {evidence?.is_current_user_contributor && (
-            <p className="adjudication-inline-warning">
-               You contributed this evidence. The authoritative action state accounts for direct-contribution conflicts.
-            </p>
-         )}
 
          <div className="adjudication-source-row">
             <span className="adjudication-url-text">{evidence?.evidence_url || "Source URL unavailable"}</span>
@@ -250,6 +285,27 @@ function EvidenceRecord({ evidence }) {
             <p className="adjudication-inline-warning">This source cannot be opened because it is not a supported HTTP(S) address.</p>
          )}
 
+         <dl className="adjudication-detail-facts compact adjudication-evidence-provenance">
+            <div>
+               <dt>Contributor</dt>
+               <dd><MinimalUser user={evidence?.contributor} /></dd>
+            </div>
+            <div>
+               <dt>Reviewed by</dt>
+               <dd><MinimalUser user={evidence?.reviewed_by} fallback="Reviewer not recorded" /></dd>
+            </div>
+            <div>
+               <dt>Reviewed</dt>
+               <dd><FormattedDateTime value={evidence?.reviewed_at} fallback="Review date not recorded" /></dd>
+            </div>
+         </dl>
+
+         {evidence?.is_current_user_contributor && (
+            <p className="adjudication-inline-warning">
+               You contributed this evidence. The authoritative action state accounts for direct-contribution conflicts.
+            </p>
+         )}
+
          <div className="adjudication-review-outcome">
             {rejected && (
                <p>
@@ -260,6 +316,24 @@ function EvidenceRecord({ evidence }) {
             )}
             <p><strong>Review notes:</strong> {evidence?.review_notes || "No review notes were recorded."}</p>
          </div>
+
+         <details className="adjudication-record-disclosure">
+            <summary>Evidence details</summary>
+            <dl className="adjudication-detail-facts compact adjudication-record-disclosure-body">
+               <div>
+                  <dt>Evidence type</dt>
+                  <dd>{evidence?.evidence_type_label || formatLabel(evidence?.evidence_type)}</dd>
+               </div>
+               <div>
+                  <dt>Submitted</dt>
+                  <dd><FormattedDateTime value={evidence?.submitted_at} /></dd>
+               </div>
+               <div>
+                  <dt>Evidence ID</dt>
+                  <dd>{evidence?.id || "Unavailable"}</dd>
+               </div>
+            </dl>
+         </details>
       </li>
    );
 }
@@ -1396,9 +1470,9 @@ function AdjudicationReviewContent({
             >
                <strong>Adjudication unavailable</strong>
                <span>{authorityError}</span>
-               <button type="button" onClick={handleAuthorityRetry}>
+               <Button type="button" variant="secondary" density="compact" onClick={handleAuthorityRetry}>
                   Retry access
-               </button>
+               </Button>
             </div>
          ) : (
             <>
@@ -1406,7 +1480,8 @@ function AdjudicationReviewContent({
                   <div className="adjudication-filter-grid">
                      <label htmlFor="adjudication-status-filter">
                         <span>Case status</span>
-                        <select
+                        <Select
+                           density="standard"
                            id="adjudication-status-filter"
                            value={statusFilter}
                            onChange={(event) =>
@@ -1418,12 +1493,13 @@ function AdjudicationReviewContent({
                                  {option.label}
                               </option>
                            ))}
-                        </select>
+                        </Select>
                      </label>
 
                      <label htmlFor="adjudication-priority-filter">
                         <span>Priority</span>
-                        <select
+                        <Select
+                           density="standard"
                            id="adjudication-priority-filter"
                            value={priorityFilter}
                            onChange={(event) =>
@@ -1435,7 +1511,7 @@ function AdjudicationReviewContent({
                                  {option.label}
                               </option>
                            ))}
-                        </select>
+                        </Select>
                      </label>
                   </div>
 
@@ -1445,14 +1521,16 @@ function AdjudicationReviewContent({
                            ? "Loading cases…"
                            : `${queue.count} ${queue.count === 1 ? "case" : "cases"}`}
                      </span>
-                     <button
+                     <Button
                         type="button"
+                        variant="secondary"
+                        density="compact"
+                        leadingIcon={<Icons name="refresh-cw" size={15} aria-hidden="true" />}
                         disabled={queueLoading}
                         onClick={() => requestQueueRefresh()}
                      >
-                        <Icons name="refresh-cw" size={15} aria-hidden="true" />
                         {queueLoading && queue.results.length > 0 ? "Refreshing…" : "Refresh"}
-                     </button>
+                     </Button>
                   </div>
                </div>
 
@@ -1468,9 +1546,14 @@ function AdjudicationReviewContent({
                         <strong>Decision status · Case {formatCaseReference(actionNotice.caseId)}</strong>
                         <span>{actionNotice.message}</span>
                         {actionNotice.inspectable && (
-                           <button type="button" onClick={() => handleInspectSubmittedCase(actionNotice.caseId)}>
+                           <Button
+                              type="button"
+                              variant="secondary"
+                              density="compact"
+                              onClick={() => handleInspectSubmittedCase(actionNotice.caseId)}
+                           >
                               Inspect recorded case
-                           </button>
+                           </Button>
                         )}
                      </div>
                   </div>
@@ -1488,9 +1571,15 @@ function AdjudicationReviewContent({
                         <strong>Decision workflow needs attention</strong>
                         <span>{actionError}</span>
                         {reconciliationPending && (
-                           <button type="button" disabled={Boolean(mutation)} onClick={handleRetryReconciliation}>
+                           <Button
+                              type="button"
+                              variant="secondary"
+                              density="compact"
+                              disabled={Boolean(mutation)}
+                              onClick={handleRetryReconciliation}
+                           >
                               {mutation ? "Reconciling…" : "Retry canonical reconciliation"}
-                           </button>
+                           </Button>
                         )}
                      </div>
                   </div>
@@ -1528,9 +1617,14 @@ function AdjudicationReviewContent({
                            <strong>Adjudication queue unavailable</strong>
                            <span>{queueError}</span>
                            {queue.results.length > 0 && <span>Previously loaded results remain visible below.</span>}
-                           <button type="button" onClick={() => requestQueueRefresh({ preserveRows: false })}>
+                           <Button
+                              type="button"
+                              variant="secondary"
+                              density="compact"
+                              onClick={() => requestQueueRefresh({ preserveRows: false })}
+                           >
                               Retry
-                           </button>
+                           </Button>
                         </div>
                      )}
 
@@ -1621,29 +1715,33 @@ function AdjudicationReviewContent({
                      )}
 
                      <nav className="adjudication-pagination" aria-label="Adjudication queue pagination">
-                        <button
+                        <Button
                            type="button"
+                           variant="secondary"
+                           density="compact"
+                           leadingIcon={<Icons name="chevron-left" size={15} aria-hidden="true" />}
                            disabled={!hasPreviousPage || queueLoading}
                            onClick={() =>
                               replaceQueueScope({ nextOffset: Math.max(0, offset - (queue.limit || PAGE_SIZE)) })
                            }
                         >
-                           <Icons name="chevron-left" size={15} aria-hidden="true" />
                            Previous
-                        </button>
+                        </Button>
                         <span>
                            Page {currentPage} of {totalPages}
                         </span>
-                        <button
+                        <Button
                            type="button"
+                           variant="secondary"
+                           density="compact"
+                           trailingIcon={<Icons name="chevron-right" size={15} aria-hidden="true" />}
                            disabled={!hasNextPage || queueLoading}
                            onClick={() =>
                               replaceQueueScope({ nextOffset: offset + (queue.limit || PAGE_SIZE) })
                            }
                         >
                            Next
-                           <Icons name="chevron-right" size={15} aria-hidden="true" />
-                        </button>
+                        </Button>
                      </nav>
                   </section>
 
@@ -1655,18 +1753,26 @@ function AdjudicationReviewContent({
                      {selectedCaseId ? (
                         <div className="adjudication-selection-content">
                            <div className="adjudication-detail-actions">
-                              <button
+                              <Button
                                  type="button"
+                                 variant="secondary"
+                                 density="compact"
+                                 leadingIcon={<Icons name="arrow-left" size={15} aria-hidden="true" />}
                                  className="adjudication-return-to-queue"
                                  onClick={() => clearSelection({ restoreQueueFocus: true })}
                               >
-                                 <Icons name="arrow-left" size={15} aria-hidden="true" />
                                  Return to queue
-                              </button>
-                              <button type="button" disabled={detailLoading} onClick={requestDetailRefresh}>
-                                 <Icons name="refresh-cw" size={14} aria-hidden="true" />
+                              </Button>
+                              <Button
+                                 type="button"
+                                 variant="secondary"
+                                 density="compact"
+                                 leadingIcon={<Icons name="refresh-cw" size={14} aria-hidden="true" />}
+                                 disabled={detailLoading}
+                                 onClick={requestDetailRefresh}
+                              >
                                  {detailLoading && detail ? "Refreshing case…" : "Refresh case"}
-                              </button>
+                              </Button>
                            </div>
 
                            <header className="adjudication-detail-header">
@@ -1712,10 +1818,17 @@ function AdjudicationReviewContent({
                                  <strong>{detailUnavailable ? "Case unavailable" : "Adjudication detail unavailable"}</strong>
                                  <span>{detailError}</span>
                                  <div className="adjudication-error-actions">
-                                    <button type="button" onClick={requestDetailRefresh}>Retry detail</button>
-                                    <button type="button" onClick={() => clearSelection({ restoreQueueFocus: true })}>
+                                    <Button type="button" variant="secondary" density="compact" onClick={requestDetailRefresh}>
+                                       Retry detail
+                                    </Button>
+                                    <Button
+                                       type="button"
+                                       variant="secondary"
+                                       density="compact"
+                                       onClick={() => clearSelection({ restoreQueueFocus: true })}
+                                    >
                                        Return to queue
-                                    </button>
+                                    </Button>
                                  </div>
                               </div>
                            ) : detail ? (
@@ -1735,71 +1848,58 @@ function AdjudicationReviewContent({
                                        <strong>Case refresh failed</strong>
                                        <span>{detailError}</span>
                                        <span>The previously loaded case detail remains visible below.</span>
-                                       <button type="button" onClick={requestDetailRefresh}>Retry detail</button>
+                                       <Button type="button" variant="secondary" density="compact" onClick={requestDetailRefresh}>
+                                          Retry detail
+                                       </Button>
                                     </div>
                                  )}
 
-                                 <section className="adjudication-detail-section" aria-labelledby="adjudication-case-context-heading">
-                                    <div className="adjudication-subheading-row">
-                                       <div>
-                                          <h5 id="adjudication-case-context-heading">Case and claim context</h5>
-                                          <p>Review the full claim context before interpreting evidence or decision history.</p>
-                                       </div>
-                                       <details className="adjudication-full-id">
-                                          <summary>Full case ID</summary>
-                                          <span>{detail.id}</span>
-                                       </details>
-                                    </div>
+                                 <div className="adjudication-detail-layout">
+                                    <div className="adjudication-primary-surface">
+                                       <section className="adjudication-detail-section" aria-labelledby="adjudication-case-context-heading">
+                                          <div className="adjudication-subheading-row">
+                                             <div>
+                                                <h5 id="adjudication-case-context-heading">Case and claim context</h5>
+                                                <p>Review the full claim context before interpreting evidence or decision history.</p>
+                                             </div>
+                                          </div>
 
-                                    <dl className="adjudication-detail-facts">
-                                       <div><dt>Organization</dt><dd>{detail.organization?.name || "Unavailable"}</dd></div>
-                                       <div><dt>Claim ID</dt><dd>{detailClaim.id || "Unavailable"}</dd></div>
-                                       <div><dt>Claim type</dt><dd>{formatLabel(detailClaim.claim_type)}</dd></div>
-                                       <div><dt>Workflow state</dt><dd>{formatLabel(detail.workflow_state)}</dd></div>
-                                       <div><dt>Case status</dt><dd>{detail.status_label || formatLabel(detail.status)}</dd></div>
-                                       <div><dt>Priority</dt><dd>{detail.priority_label || formatLabel(detail.priority)}</dd></div>
-                                       <div><dt>Source</dt><dd>{detail.source_label || formatLabel(detail.source)}</dd></div>
-                                       <div><dt>Created</dt><dd><FormattedDateTime value={detail.created_at} /></dd></div>
-                                       <div><dt>Updated</dt><dd><FormattedDateTime value={detail.updated_at} /></dd></div>
-                                       <div><dt>Resolved</dt><dd><FormattedDateTime value={detail.resolved_at} fallback="Not resolved" /></dd></div>
-                                    </dl>
+                                          <div className="adjudication-reading-block prominent">
+                                             <strong>Claim text</strong>
+                                             <p>{detailClaim.context_text || "Claim text unavailable."}</p>
+                                          </div>
 
-                                    <div className="adjudication-reading-block prominent">
-                                       <strong>Claim text</strong>
-                                       <p>{detailClaim.context_text || "Claim text unavailable."}</p>
-                                    </div>
+                                          <div className="adjudication-context-links">
+                                             <SafeExternalLink value={detailClaim.url_link}>Open original claim</SafeExternalLink>
+                                             <SafeExternalLink value={detailClaim.source_link}>Open claim source</SafeExternalLink>
+                                             <SafeExternalLink value={detailClaim.media_url}>Open claim media</SafeExternalLink>
+                                          </div>
+                                          {[detailClaim.url_link, detailClaim.source_link, detailClaim.media_url].some(
+                                             (value) => value && !getSafeHttpUrl(value),
+                                          ) && (
+                                             <p className="adjudication-inline-warning">
+                                                One or more recorded claim links cannot be opened because they are not supported HTTP(S) addresses.
+                                             </p>
+                                          )}
 
-                                    <div className="adjudication-context-links">
-                                       <SafeExternalLink value={detailClaim.url_link}>Open original claim</SafeExternalLink>
-                                       <SafeExternalLink value={detailClaim.source_link}>Open claim source</SafeExternalLink>
-                                       <SafeExternalLink value={detailClaim.media_url}>Open claim media</SafeExternalLink>
-                                    </div>
-                                    {[detailClaim.url_link, detailClaim.source_link, detailClaim.media_url].some(
-                                       (value) => value && !getSafeHttpUrl(value),
-                                    ) && (
-                                       <p className="adjudication-inline-warning">
-                                          One or more recorded claim links cannot be opened because they are not supported HTTP(S) addresses.
-                                       </p>
-                                    )}
-
-                                    <div className="adjudication-thread-context">
-                                       <h6>Related threads</h6>
-                                       {Array.isArray(detailClaim.threads) && detailClaim.threads.length > 0 ? (
-                                          <ul>
-                                             {detailClaim.threads.map((thread) => (
-                                                <li key={thread.id}>
-                                                   <Link to={`/thread/detail/${encodeURIComponent(thread.id)}`}>
-                                                      {thread.caption || `Thread ${formatCaseReference(thread.id)}`}
-                                                   </Link>
-                                                   <span><FormattedDateTime value={thread.created_at} /></span>
-                                                </li>
-                                             ))}
-                                          </ul>
-                                       ) : (
-                                          <p>No related thread reference is available.</p>
-                                       )}
-                                    </div>
-                                 </section>
+                                          <div className="adjudication-thread-context">
+                                             <h6>Related threads</h6>
+                                             {Array.isArray(detailClaim.threads) && detailClaim.threads.length > 0 ? (
+                                                <ul>
+                                                   {detailClaim.threads.map((thread) => (
+                                                      <li key={thread.id}>
+                                                         <Link to={`/thread/detail/${encodeURIComponent(thread.id)}`}>
+                                                            {thread.caption || `Thread ${formatCaseReference(thread.id)}`}
+                                                         </Link>
+                                                         <span><FormattedDateTime value={thread.created_at} /></span>
+                                                      </li>
+                                                   ))}
+                                                </ul>
+                                             ) : (
+                                                <p>No related thread reference is available.</p>
+                                             )}
+                                          </div>
+                                       </section>
 
                                  <section className="adjudication-detail-section" aria-labelledby="adjudication-evidence-heading">
                                     <div className="adjudication-subheading-row">
@@ -1813,12 +1913,26 @@ function AdjudicationReviewContent({
                                     </div>
 
                                     <div className="adjudication-evidence-totals">
-                                       <span>Total <strong>{normalizeNonnegativeNumber(evidenceReview.total)}</strong></span>
-                                       <span>Verified <strong>{normalizeNonnegativeNumber(evidenceReview.verified)}</strong></span>
-                                       <span>Rejected <strong>{normalizeNonnegativeNumber(evidenceReview.rejected)}</strong></span>
-                                       <span>Unreviewed <strong>{normalizeNonnegativeNumber(evidenceReview.unreviewed)}</strong></span>
-                                       <span>Active Evidence cases <strong>{normalizeNonnegativeNumber(evidenceReview.active_evidence_cases)}</strong></span>
-                                       <span>All reviewed <strong>{evidenceReview.all_reviewed ? "Yes" : "No"}</strong></span>
+                                       <span className="adjudication-evidence-metric adjudication-evidence-metric--neutral">
+                                          Total <strong>{normalizeNonnegativeNumber(evidenceReview.total)}</strong>
+                                       </span>
+                                       <span className="adjudication-evidence-metric adjudication-evidence-metric--success">
+                                          Verified <strong>{normalizeNonnegativeNumber(evidenceReview.verified)}</strong>
+                                       </span>
+                                       <span className="adjudication-evidence-metric adjudication-evidence-metric--critical">
+                                          Rejected <strong>{normalizeNonnegativeNumber(evidenceReview.rejected)}</strong>
+                                       </span>
+                                       <span className="adjudication-evidence-metric adjudication-evidence-metric--info">
+                                          Unreviewed <strong>{normalizeNonnegativeNumber(evidenceReview.unreviewed)}</strong>
+                                       </span>
+                                       <span className="adjudication-evidence-metric adjudication-evidence-metric--info">
+                                          Active Evidence cases <strong>{normalizeNonnegativeNumber(evidenceReview.active_evidence_cases)}</strong>
+                                       </span>
+                                       <span
+                                          className={`adjudication-evidence-metric adjudication-evidence-metric--${evidenceReview.all_reviewed ? "success" : "info"}`}
+                                       >
+                                          All reviewed <strong>{evidenceReview.all_reviewed ? "Yes" : "No"}</strong>
+                                       </span>
                                     </div>
                                     <p className="adjudication-domain-note">
                                        Evidence verification assesses source suitability. It does not establish whether the claim is true or false.
@@ -1894,14 +2008,16 @@ function AdjudicationReviewContent({
 
                                     {readyForFirstDecision && !decisionFormOpen && !confirmation && !confirmationChecking && (
                                        <div className="adjudication-decision-entry">
-                                          <button
+                                          <Button
                                              type="button"
+                                             variant="primary"
+                                             density="comfortable"
                                              ref={decisionTriggerRef}
                                              disabled={Boolean(mutation) || Boolean(reconciliationPending) || detailLoading || Boolean(detailError)}
                                              onClick={handleBeginDecision}
                                           >
                                              Begin decision
-                                          </button>
+                                          </Button>
                                           <p>
                                              This begins a deliberate first-decision review. It does not draft or publish a fact-check.
                                           </p>
@@ -1940,7 +2056,10 @@ function AdjudicationReviewContent({
                                              <p>Choose the claim-level human decision. Evidence dispositions remain separate.</p>
                                              <div>
                                                 {VERDICT_OPTIONS.map((option, index) => (
-                                                   <label key={option.value}>
+                                                   <label
+                                                      key={option.value}
+                                                      className={`adjudication-verdict-option adjudication-verdict-option--${getVerdictTone(option.value)}`}
+                                                   >
                                                       <input
                                                          ref={index === 0 ? firstVerdictRef : undefined}
                                                          type="radio"
@@ -1963,11 +2082,13 @@ function AdjudicationReviewContent({
 
                                           <label className="adjudication-decision-field" htmlFor="adjudication-canonical-claim">
                                              <span>Canonical claim wording <span aria-hidden="true">*</span></span>
-                                             <textarea
+                                             <Textarea
+                                                density="standard"
                                                 id="adjudication-canonical-claim"
                                                 ref={canonicalClaimRef}
                                                 value={decisionDraft.canonicalClaim}
                                                 onChange={(event) => handleDecisionDraftChange("canonicalClaim", event.target.value)}
+                                                invalid={Boolean(decisionErrors.canonicalClaim)}
                                                 aria-invalid={Boolean(decisionErrors.canonicalClaim)}
                                                 aria-describedby={
                                                    decisionErrors.canonicalClaim
@@ -1989,11 +2110,13 @@ function AdjudicationReviewContent({
 
                                           <label className="adjudication-decision-field" htmlFor="adjudication-rationale">
                                              <span>Decision rationale <span aria-hidden="true">*</span></span>
-                                             <textarea
+                                             <Textarea
+                                                density="standard"
                                                 id="adjudication-rationale"
                                                 ref={rationaleRef}
                                                 value={decisionDraft.rationale}
                                                 onChange={(event) => handleDecisionDraftChange("rationale", event.target.value)}
+                                                invalid={Boolean(decisionErrors.rationale)}
                                                 aria-invalid={Boolean(decisionErrors.rationale)}
                                                 aria-describedby={
                                                    decisionErrors.rationale
@@ -2014,8 +2137,12 @@ function AdjudicationReviewContent({
                                           )}
 
                                           <div className="adjudication-decision-form-actions">
-                                             <button type="button" onClick={handleCancelDecision}>Cancel</button>
-                                             <button type="submit">Review decision</button>
+                                             <Button type="button" variant="secondary" density="standard" onClick={handleCancelDecision}>
+                                                Cancel
+                                             </Button>
+                                             <Button type="submit" variant="primary" density="comfortable">
+                                                Review decision
+                                             </Button>
                                           </div>
                                        </form>
                                     )}
@@ -2040,7 +2167,13 @@ function AdjudicationReviewContent({
                                           <dl className="adjudication-confirmation-summary">
                                              <div>
                                                 <dt>Verdict</dt>
-                                                <dd>{VERDICT_OPTIONS.find((option) => option.value === confirmation.payload.moderator_verdict)?.label}</dd>
+                                                <dd>
+                                                   <span
+                                                      className={`adjudication-decision-verdict adjudication-decision-verdict--${getVerdictTone(confirmation.payload.moderator_verdict)}`}
+                                                   >
+                                                      {VERDICT_OPTIONS.find((option) => option.value === confirmation.payload.moderator_verdict)?.label}
+                                                   </span>
+                                                </dd>
                                              </div>
                                              <div>
                                                 <dt>Canonical wording</dt>
@@ -2053,12 +2186,24 @@ function AdjudicationReviewContent({
                                           </dl>
 
                                           <div className="adjudication-decision-form-actions">
-                                             <button type="button" disabled={Boolean(mutation)} onClick={handleCancelConfirmation}>
+                                             <Button
+                                                type="button"
+                                                variant="secondary"
+                                                density="standard"
+                                                disabled={Boolean(mutation)}
+                                                onClick={handleCancelConfirmation}
+                                             >
                                                 Back to edit
-                                             </button>
-                                             <button type="button" disabled={Boolean(mutation)} onClick={handleDecisionSubmit}>
+                                             </Button>
+                                             <Button
+                                                type="button"
+                                                variant="primary"
+                                                density="comfortable"
+                                                disabled={Boolean(mutation)}
+                                                onClick={handleDecisionSubmit}
+                                             >
                                                 {mutation ? "Recording decision…" : "Confirm and record decision"}
-                                             </button>
+                                             </Button>
                                           </div>
                                        </div>
                                     )}
@@ -2100,7 +2245,7 @@ function AdjudicationReviewContent({
                                     )}
                                  </section>
 
-                                 <section className="adjudication-detail-section" aria-labelledby="adjudication-resolution-heading">
+                                       <section className="adjudication-detail-section" aria-labelledby="adjudication-resolution-heading">
                                     <div className="adjudication-subheading-row">
                                        <div>
                                           <h5 id="adjudication-resolution-heading">Resolution and case history</h5>
@@ -2124,23 +2269,52 @@ function AdjudicationReviewContent({
                                        <p className="adjudication-inline-empty">This case has no recorded resolution.</p>
                                     )}
 
-                                    <div className="adjudication-history-heading">
-                                       <h6>Case events</h6>
-                                       <span>{normalizeNonnegativeNumber(detailEvents.count)} {detailEvents.count === 1 ? "event" : "events"}</span>
+                                    <details className="adjudication-history-disclosure">
+                                       <summary>
+                                          <h6>
+                                             <span>Case events</span>
+                                             <span>{normalizeNonnegativeNumber(detailEvents.count)} {detailEvents.count === 1 ? "event" : "events"}</span>
+                                          </h6>
+                                       </summary>
+                                       {eventItems.length > 0 ? (
+                                          <ol className="adjudication-event-list">
+                                             {eventItems.map((event, index) => (
+                                                <EventRecord key={`${event.event_type}-${event.created_at}-${index}`} event={event} />
+                                             ))}
+                                          </ol>
+                                       ) : (
+                                          <p className="adjudication-inline-empty">No case events are available.</p>
+                                       )}
+                                       {detailEvents.truncated && (
+                                          <p className="adjudication-truncation-note">Showing the most recent 50 events, in chronological order.</p>
+                                       )}
+                                    </details>
+                                       </section>
                                     </div>
-                                    {eventItems.length > 0 ? (
-                                       <ol className="adjudication-event-list">
-                                          {eventItems.map((event, index) => (
-                                             <EventRecord key={`${event.event_type}-${event.created_at}-${index}`} event={event} />
-                                          ))}
-                                       </ol>
-                                    ) : (
-                                       <p className="adjudication-inline-empty">No case events are available.</p>
-                                    )}
-                                    {detailEvents.truncated && (
-                                       <p className="adjudication-truncation-note">Showing the most recent 50 events, in chronological order.</p>
-                                    )}
-                                 </section>
+
+                                    <aside
+                                       className="adjudication-context-rail"
+                                       aria-label="Selected case context"
+                                    >
+                                       <h5>Case context</h5>
+                                       <dl className="adjudication-detail-facts">
+                                          <div><dt>Organization</dt><dd>{detail.organization?.name || "Unavailable"}</dd></div>
+                                          <div><dt>Claim ID</dt><dd>{detailClaim.id || "Unavailable"}</dd></div>
+                                          <div><dt>Claim type</dt><dd>{formatLabel(detailClaim.claim_type)}</dd></div>
+                                          <div><dt>Workflow state</dt><dd>{formatLabel(detail.workflow_state)}</dd></div>
+                                          <div><dt>Case status</dt><dd>{detail.status_label || formatLabel(detail.status)}</dd></div>
+                                          <div><dt>Priority</dt><dd>{detail.priority_label || formatLabel(detail.priority)}</dd></div>
+                                          <div><dt>Source</dt><dd>{detail.source_label || formatLabel(detail.source)}</dd></div>
+                                          <div><dt>Created</dt><dd><FormattedDateTime value={detail.created_at} /></dd></div>
+                                          <div><dt>Updated</dt><dd><FormattedDateTime value={detail.updated_at} /></dd></div>
+                                          <div><dt>Resolved</dt><dd><FormattedDateTime value={detail.resolved_at} fallback="Not resolved" /></dd></div>
+                                       </dl>
+                                       <details className="adjudication-full-id">
+                                          <summary>Full case ID</summary>
+                                          <span>{detail.id}</span>
+                                       </details>
+                                    </aside>
+                                 </div>
                               </div>
                            ) : null}
                         </div>

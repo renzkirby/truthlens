@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import AccountStatus from "../components/account/AccountStatus.jsx";
 import Icons from "../components/Icons";
 import AuthShell from "../components/auth/AuthShell";
+import Button from "../components/ui/Button.jsx";
 import { resolveApiEndpoint } from "../utils/api";
-import "./VerifyEmailPage.css";
 
 const verificationRequests = new Map();
 
@@ -104,32 +105,68 @@ function VerifyEmailPage() {
    const content = {
       loading: {
          icon: "loader",
+         tone: "info",
          title: "Verifying your email",
          description: "Please wait while we confirm your email address.",
       },
       success: {
          icon: "check-circle",
+         tone: "success",
          title: "Email verified",
          description: message,
       },
       expired: {
          icon: "clock",
+         tone: "warning",
          title: "Verification link expired",
          description: message,
       },
       invalid: {
          icon: "alert-circle",
+         tone: "warning",
          title: "Verification link unavailable",
          description: message,
       },
       error: {
          icon: "alert-triangle",
+         tone: "critical",
          title: "Verification unavailable",
          description: message,
       },
    };
 
    const current = content[status];
+   let actions = null;
+
+   if (status === "success") {
+      actions = user ? (
+         <Link to="/community" className="account-status__action account-status__action--primary">
+            Continue to TruthLens
+         </Link>
+      ) : (
+         <Link to="/login" className="account-status__action account-status__action--primary">
+            Sign in to TruthLens
+         </Link>
+      );
+   } else if (status === "expired" || status === "invalid") {
+      actions = (
+         <Link to="/login" className="account-status__action account-status__action--primary">
+            Sign in to resend verification email
+         </Link>
+      );
+   } else if (status === "error") {
+      actions = (
+         <Button
+            type="button"
+            variant="primary"
+            density="comfortable"
+            fullWidth
+            onClick={() => window.location.reload()}
+         >
+            Try again
+         </Button>
+      );
+   }
 
    return (
       <AuthShell
@@ -142,53 +179,16 @@ function VerifyEmailPage() {
             "Support trusted account activity",
          ]}
       >
-         <div className="verify-email-panel">
-            <div className="verify-email-card" aria-live="polite" aria-busy={status === "loading"}>
-               <div className={`verify-email-icon verify-email-icon--${status}`}>
-                  {status === "loading" ? (
-                     <span className="verify-email-spinner" aria-hidden="true" />
-                  ) : (
-                     <Icons name={current.icon} size={28} aria-hidden="true" />
-                  )}
-               </div>
-
-               <h1>{current.title}</h1>
-
-               <p>{current.description}</p>
-
-               {status === "success" && (
-                  <div className="verify-email-actions">
-                     {user ? (
-                        <Link to="/community" className="verify-email-btn verify-email-btn--primary">
-                           Continue to TruthLens
-                        </Link>
-                     ) : (
-                        <Link to="/login" className="verify-email-btn verify-email-btn--primary">
-                           Sign in to TruthLens
-                        </Link>
-                     )}
-                  </div>
-               )}
-
-               {(status === "expired" || status === "invalid") && (
-                  <div className="verify-email-actions">
-                     <Link to="/login" className="verify-email-btn verify-email-btn--primary">
-                        Sign in to resend verification email
-                     </Link>
-                  </div>
-               )}
-
-               {status === "error" && (
-                  <button
-                     type="button"
-                     className="verify-email-btn verify-email-btn--primary"
-                     onClick={() => window.location.reload()}
-                  >
-                     Try again
-                  </button>
-               )}
-            </div>
-         </div>
+         <AccountStatus
+            tone={current.tone}
+            loading={status === "loading"}
+            icon={status === "loading" ? undefined : <Icons name={current.icon} size={28} aria-hidden="true" />}
+            title={current.title}
+            description={current.description}
+            actions={actions}
+            live="polite"
+            busy={status === "loading"}
+         />
       </AuthShell>
    );
 }

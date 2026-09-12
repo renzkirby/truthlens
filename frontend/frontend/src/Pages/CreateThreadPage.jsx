@@ -18,7 +18,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import NavigationBar from "../components/NavigationBar";
 import Icons from "../components/Icons.jsx";
 
 // ── Utilities & Constants ──
@@ -271,8 +270,6 @@ function CreateThreadPage() {
 
    return (
       <div className="create-thread-layout">
-         <NavigationBar />
-
          <div className="create-thread-topbar">
             <div className="breadcrumb">
                <Link to="/community" className="breadcrumb-link">

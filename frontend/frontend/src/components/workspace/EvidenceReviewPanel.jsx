@@ -4,6 +4,9 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { resolveApiEndpoint } from "../../utils/api";
 import Icons from "../Icons.jsx";
+import Button from "../ui/Button.jsx";
+import Select from "../ui/Select.jsx";
+import Textarea from "../ui/Textarea.jsx";
 
 import "./EvidenceReviewPanel.css";
 
@@ -825,16 +828,17 @@ function EvidenceReviewContent({
             >
                <strong>Evidence Review unavailable</strong>
                <span>{authorityError}</span>
-               <button type="button" onClick={handleAuthorityRetry}>
+               <Button type="button" variant="secondary" density="compact" onClick={handleAuthorityRetry}>
                   Retry access
-               </button>
+               </Button>
             </div>
          ) : (
             <>
                <div className="evidence-toolbar">
             <label htmlFor="evidence-disposition-filter">
                Review history
-               <select
+               <Select
+                  density="standard"
                   id="evidence-disposition-filter"
                   value={disposition}
                   disabled={Boolean(mutation)}
@@ -845,27 +849,29 @@ function EvidenceReviewContent({
                         {option.label}
                      </option>
                   ))}
-               </select>
+               </Select>
             </label>
 
             <div className="evidence-toolbar-actions">
                <span aria-live="polite">
                   {queue.count} {queue.count === 1 ? "case" : "cases"}
                </span>
-               <button
+               <Button
                   type="button"
+                  variant="secondary"
+                  density="compact"
+                  leadingIcon={<Icons name="refresh-cw" size={15} aria-hidden="true" />}
                   disabled={queueLoading || Boolean(mutation)}
                   onClick={() => requestQueueRefresh()}
                >
-                  <Icons name="refresh-cw" size={15} aria-hidden="true" />
                   {queueLoading && queue.results.length > 0 ? "Refreshing…" : "Refresh"}
-               </button>
+               </Button>
             </div>
          </div>
 
          {notice && (
             <div className="evidence-notice" role="status" aria-live="polite">
-               <Icons name="check-circle" size={17} aria-hidden="true" />
+               <Icons name="info" size={17} aria-hidden="true" />
                <span>{notice}</span>
             </div>
          )}
@@ -885,15 +891,17 @@ function EvidenceReviewContent({
                   <div className="evidence-contained-error" role="alert">
                      <strong>Evidence queue unavailable</strong>
                      <span>{queueError}</span>
-                     <button
+                     <Button
                         type="button"
+                        variant="secondary"
+                        density="compact"
                         onClick={() => {
                            queueHeadingRef.current?.focus();
                            requestQueueRefresh({ preserveRows: false });
                         }}
                      >
                         Retry
-                     </button>
+                     </Button>
                   </div>
                )}
 
@@ -909,79 +917,86 @@ function EvidenceReviewContent({
                      <p>{emptyCopy.body}</p>
                   </div>
                ) : (
-                  <div className="evidence-case-list">
+                  <ul className="evidence-case-list">
                      {queue.results.map((caseItem) => {
                         const selected = selectedCaseId === caseItem.id;
                         return (
-                           <button
-                              key={caseItem.id}
-                              type="button"
-                              className={`evidence-case-row ${selected ? "selected" : ""}`}
-                              aria-pressed={selected}
-                              disabled={Boolean(mutation)}
-                              onClick={() => handleSelectCase(caseItem.id)}
-                           >
-                              <span className="evidence-case-row-top">
-                                 <span className={`evidence-disposition disposition-${caseItem.evidence?.evidence_status?.toLowerCase() || "unknown"}`}>
-                                    {getDispositionLabel(caseItem.evidence)}
+                           <li key={caseItem.id} className="evidence-case-item">
+                              <button
+                                 type="button"
+                                 className={`evidence-case-row ${selected ? "selected" : ""}`}
+                                 aria-pressed={selected}
+                                 disabled={Boolean(mutation)}
+                                 onClick={() => handleSelectCase(caseItem.id)}
+                              >
+                                 <span className="evidence-case-row-top">
+                                    <span className={`evidence-disposition disposition-${caseItem.evidence?.evidence_status?.toLowerCase() || "unknown"}`}>
+                                       {getDispositionLabel(caseItem.evidence)}
+                                    </span>
+                                    <span className="evidence-case-status">Case: {formatLabel(caseItem.status)}</span>
+                                    {selected && <span className="evidence-selected-label">Selected</span>}
                                  </span>
-                                 <span className="evidence-case-status">Case: {formatLabel(caseItem.status)}</span>
-                                 {selected && <span className="evidence-selected-label">Selected</span>}
-                              </span>
-                              <strong>{getEvidenceTitle(caseItem)}</strong>
-                              <span className="evidence-type">{caseItem.evidence?.evidence_type_label || "Evidence type unavailable"}</span>
-                              <span className="evidence-claim-preview">{getClaimContext(caseItem)}</span>
-                              <span className="evidence-case-row-meta">
-                                 <span>
-                                    Submitted <FormattedDateTime value={caseItem.evidence?.submitted_at} />
+                                 <strong>{getEvidenceTitle(caseItem)}</strong>
+                                 <span className="evidence-type">{caseItem.evidence?.evidence_type_label || "Evidence type unavailable"}</span>
+                                 <span className="evidence-claim-preview">{getClaimContext(caseItem)}</span>
+                                 <span className="evidence-case-row-meta">
+                                    <span>
+                                       Submitted <FormattedDateTime value={caseItem.evidence?.submitted_at} />
+                                    </span>
+                                    <span>
+                                       {caseItem.evidence?.contributor?.username
+                                          ? `Contributor @${caseItem.evidence.contributor.username}`
+                                          : "Contributor not recorded"}
+                                    </span>
+                                    <span>Case {formatCaseReference(caseItem.id)}</span>
                                  </span>
-                                 <span>
-                                    {caseItem.evidence?.contributor?.username
-                                       ? `Contributor @${caseItem.evidence.contributor.username}`
-                                       : "Contributor not recorded"}
-                                 </span>
-                                 <span>Case {formatCaseReference(caseItem.id)}</span>
-                              </span>
-                           </button>
+                              </button>
+                           </li>
                         );
                      })}
-                  </div>
+                  </ul>
                )}
 
                <nav className="evidence-pagination" aria-label="Evidence queue pagination">
-                  <button
+                  <Button
                      type="button"
+                     variant="secondary"
+                     density="compact"
+                     leadingIcon={<Icons name="chevron-left" size={15} aria-hidden="true" />}
                      disabled={!hasPreviousPage || queueLoading || Boolean(mutation)}
                      onClick={() => handlePageChange(Math.max(0, offset - PAGE_SIZE))}
                   >
-                     <Icons name="chevron-left" size={15} aria-hidden="true" />
                      Previous
-                  </button>
+                  </Button>
                   <span>
                      Page {currentPage} of {totalPages}
                   </span>
-                  <button
+                  <Button
                      type="button"
+                     variant="secondary"
+                     density="compact"
+                     trailingIcon={<Icons name="chevron-right" size={15} aria-hidden="true" />}
                      disabled={!hasNextPage || queueLoading || Boolean(mutation)}
                      onClick={() => handlePageChange(offset + PAGE_SIZE)}
                   >
                      Next
-                     <Icons name="chevron-right" size={15} aria-hidden="true" />
-                  </button>
+                  </Button>
                </nav>
             </section>
 
             <section className="evidence-detail" aria-labelledby="evidence-detail-heading" aria-busy={detailLoading}>
                {selectedCaseId && (
-                  <button
+                  <Button
                      type="button"
+                     variant="secondary"
+                     density="compact"
+                     leadingIcon={<Icons name="arrow-left" size={15} aria-hidden="true" />}
                      className="evidence-return-to-queue"
                      disabled={Boolean(mutation)}
                      onClick={() => clearSelection({ restoreQueueFocus: true })}
                   >
-                     <Icons name="arrow-left" size={15} aria-hidden="true" />
                      Return to queue
-                  </button>
+                  </Button>
                )}
 
                {!selectedCaseId ? (
@@ -1002,19 +1017,26 @@ function EvidenceReviewContent({
                      <span>{detailError}</span>
                      <div className="evidence-error-actions">
                         {!detailUnavailable && (
-                           <button
+                           <Button
                               type="button"
+                              variant="secondary"
+                              density="compact"
                               onClick={() => {
                                  focusDetailAfterRetryRef.current = true;
                                  requestDetailRefresh(selectedCaseId);
                               }}
                            >
                               Retry detail
-                           </button>
+                           </Button>
                         )}
-                        <button type="button" className="secondary" onClick={() => clearSelection({ restoreQueueFocus: true })}>
+                        <Button
+                           type="button"
+                           variant="secondary"
+                           density="compact"
+                           onClick={() => clearSelection({ restoreQueueFocus: true })}
+                        >
                            Return to queue
-                        </button>
+                        </Button>
                      </div>
                   </div>
                ) : detail ? (
@@ -1043,7 +1065,7 @@ function EvidenceReviewContent({
                      )}
 
                      <section className="evidence-detail-section" aria-labelledby="submitted-evidence-heading">
-                        <div className="evidence-subheading-row">
+                        <div className="evidence-subheading-row evidence-major-section-heading">
                            <div>
                               <h5 id="submitted-evidence-heading">Submitted evidence</h5>
                               <p>Review the submitted source directly and assess its suitability.</p>
@@ -1057,31 +1079,38 @@ function EvidenceReviewContent({
                         </div>
 
                         <p className="evidence-reading-text">{evidence?.evidence_caption || "No evidence caption was provided."}</p>
-                        <dl className="evidence-facts">
+                        <dl className="evidence-source-record">
                            <div>
-                              <dt>Evidence type</dt>
-                              <dd>{evidence?.evidence_type_label || "Unavailable"}</dd>
-                           </div>
-                           <div>
-                              <dt>Submitted</dt>
-                              <dd><FormattedDateTime value={evidence?.submitted_at} /></dd>
-                           </div>
-                           <div>
-                              <dt>Contributor</dt>
-                              <dd>{evidence?.contributor?.username ? `@${evidence.contributor.username}` : "Not recorded"}</dd>
-                           </div>
-                           <div>
-                              <dt>Source URL</dt>
+                              <dt>Source</dt>
                               <dd className="evidence-url-text">{evidence?.evidence_url || "Source URL unavailable"}</dd>
                            </div>
                         </dl>
                         {!evidenceUrl && evidence?.evidence_url && (
                            <p className="evidence-inline-warning">The submitted URL cannot be opened because it is not a supported HTTP(S) address.</p>
                         )}
+                        <dl className="evidence-provenance">
+                           <div>
+                              <dt>Submitted by</dt>
+                              <dd>{evidence?.contributor?.username ? `@${evidence.contributor.username}` : "Not recorded"}</dd>
+                           </div>
+                           <div>
+                              <dt>Submitted</dt>
+                              <dd><FormattedDateTime value={evidence?.submitted_at} /></dd>
+                           </div>
+                        </dl>
+                        <details className="evidence-record-disclosure">
+                           <summary>Evidence details</summary>
+                           <dl className="evidence-record-details">
+                              <div>
+                                 <dt>Evidence type</dt>
+                                 <dd>{evidence?.evidence_type_label || "Unavailable"}</dd>
+                              </div>
+                           </dl>
+                        </details>
                      </section>
 
                      <section className="evidence-detail-section" aria-labelledby="claim-context-heading">
-                        <div className="evidence-subheading-row">
+                        <div className="evidence-subheading-row evidence-major-section-heading">
                            <div>
                               <h5 id="claim-context-heading">Claim context</h5>
                               <p>Evidence suitability is reviewed in the context of this investigation.</p>
@@ -1094,39 +1123,48 @@ function EvidenceReviewContent({
                            )}
                         </div>
                         <p className="evidence-reading-text">{claim?.context_text || detail.thread?.caption || "Claim context unavailable"}</p>
-                        <dl className="evidence-facts">
-                           <div>
-                              <dt>Claim type</dt>
-                              <dd>{formatLabel(claim?.claim_type)}</dd>
-                           </div>
-                           <div>
-                              <dt>Thread caption</dt>
-                              <dd>{detail.thread?.caption || "Unavailable"}</dd>
-                           </div>
-                        </dl>
                         <div className="evidence-context-links">
                            {claimUrl && <a href={claimUrl} target="_blank" rel="noopener noreferrer">Open original claim URL <Icons name="external-link" size={12} aria-hidden="true" /></a>}
                            {sourceUrl && <a href={sourceUrl} target="_blank" rel="noopener noreferrer">Open claim source <Icons name="external-link" size={12} aria-hidden="true" /></a>}
                            {mediaUrl && <a href={mediaUrl} target="_blank" rel="noopener noreferrer">Open claim media <Icons name="external-link" size={12} aria-hidden="true" /></a>}
                         </div>
+                        <details className="evidence-record-disclosure">
+                           <summary>Claim details</summary>
+                           <dl className="evidence-record-details">
+                              <div>
+                                 <dt>Claim type</dt>
+                                 <dd>{formatLabel(claim?.claim_type)}</dd>
+                              </div>
+                              <div>
+                                 <dt>Thread caption</dt>
+                                 <dd>{detail.thread?.caption || "Unavailable"}</dd>
+                              </div>
+                           </dl>
+                        </details>
                      </section>
 
                      <section className="evidence-detail-section" aria-labelledby="review-state-heading">
-                        <div className="evidence-subheading-row">
+                        <div className="evidence-subheading-row evidence-major-section-heading">
                            <div>
                               <h5 id="review-state-heading">Review state</h5>
                               <p>Evidence disposition and case lifecycle are separate records.</p>
                            </div>
                         </div>
-                        <dl className="evidence-facts">
+                        <dl className="evidence-review-status">
                            <div>
                               <dt>Evidence disposition</dt>
-                              <dd>{getDispositionLabel(evidence)}</dd>
+                              <dd>
+                                 <span className={`evidence-disposition disposition-${evidence?.evidence_status?.toLowerCase() || "unknown"}`}>
+                                    {getDispositionLabel(evidence)}
+                                 </span>
+                              </dd>
                            </div>
                            <div>
                               <dt>Case lifecycle</dt>
-                              <dd>{formatLabel(detail.status)}</dd>
+                              <dd><span className="evidence-case-status">{formatLabel(detail.status)}</span></dd>
                            </div>
+                        </dl>
+                        <dl className="evidence-review-provenance">
                            <div>
                               <dt>Reviewer</dt>
                               <dd>{detail.verified_by?.username ? `@${detail.verified_by.username}` : "Reviewer not recorded"}</dd>
@@ -1140,53 +1178,23 @@ function EvidenceReviewContent({
                                  />
                               </dd>
                            </div>
-                           {evidence?.evidence_status === "REJECTED" && (
+                        </dl>
+                        {evidence?.evidence_status === "REJECTED" && (
+                           <dl className="evidence-review-outcome">
                               <div>
                                  <dt>Rejection reason</dt>
                                  <dd>{detail.rejection_reason_label || "Historical rejection reason unavailable"}</dd>
                               </div>
-                           )}
-                        </dl>
+                           </dl>
+                        )}
                         <div className="evidence-review-notes">
                            <strong>Moderator notes</strong>
                            <p>{detail.moderator_notes || "No review notes were recorded."}</p>
                         </div>
                      </section>
 
-                     <section className="evidence-detail-section" aria-labelledby="evidence-history-heading">
-                        <div className="evidence-subheading-row">
-                           <div>
-                              <h5 id="evidence-history-heading">Audit history</h5>
-                              <p>Recent case events supplied by the authoritative Evidence Review record.</p>
-                           </div>
-                        </div>
-                        {Array.isArray(detail.events) && detail.events.length > 0 ? (
-                           <ol className="evidence-event-list">
-                              {detail.events.map((event, index) => (
-                                 <li key={`${event.event_type}-${event.created_at}-${index}`}>
-                                    <span className="evidence-event-marker" aria-hidden="true" />
-                                    <div>
-                                       <div className="evidence-event-heading">
-                                          <strong>{formatLabel(event.event_type)}</strong>
-                                          <FormattedDateTime value={event.created_at} />
-                                       </div>
-                                       <p>Actor: {event.actor?.username ? `@${event.actor.username}` : "Actor not displayed"}</p>
-                                       {(event.from_status || event.to_status) && (
-                                          <p>Case transition: {formatLabel(event.from_status, "None")} → {formatLabel(event.to_status, "None")}</p>
-                                       )}
-                                       {event.reason_code && <p>Reason: {formatLabel(event.reason_code)}</p>}
-                                       {event.notes && <p>Notes: {event.notes}</p>}
-                                    </div>
-                                 </li>
-                              ))}
-                           </ol>
-                        ) : (
-                           <p className="evidence-inline-empty">No case audit history is available.</p>
-                        )}
-                     </section>
-
                      <section className="evidence-decision-section" aria-labelledby="evidence-decision-heading">
-                        <div className="evidence-subheading-row">
+                        <div className="evidence-subheading-row evidence-major-section-heading">
                            <div>
                               <h5 id="evidence-decision-heading">Evidence decision</h5>
                               <p>Decide source suitability only. Adjudication determines the claim-level conclusion later.</p>
@@ -1196,11 +1204,7 @@ function EvidenceReviewContent({
                         {!isActiveCase || evidence?.evidence_status !== "UNVERIFIED" ? (
                            <div className="evidence-readonly-state" role="status">
                               <Icons
-                                 name={
-                                    detail.status === "CANCELLED" || !evidence?.evidence_status
-                                       ? "alert-circle"
-                                       : "check-circle"
-                                 }
+                                 name="info"
                                  size={18}
                                  aria-hidden="true"
                               />
@@ -1227,21 +1231,24 @@ function EvidenceReviewContent({
                            </div>
                         ) : !decision ? (
                            <div className="evidence-decision-options">
-                              <button
+                              <Button
                                  type="button"
+                                 variant="primary"
+                                 density="comfortable"
                                  disabled={Boolean(mutation)}
                                  onClick={(event) => handleOpenDecision("VERIFIED", event.currentTarget)}
                               >
                                  Verify evidence
-                              </button>
-                              <button
+                              </Button>
+                              <Button
                                  type="button"
-                                 className="danger"
+                                 variant="destructive"
+                                 density="comfortable"
                                  disabled={Boolean(mutation)}
                                  onClick={(event) => handleOpenDecision("REJECTED", event.currentTarget)}
                               >
                                  Reject evidence
-                              </button>
+                              </Button>
                            </div>
                         ) : (
                            <form className="evidence-decision-form" onSubmit={handleDecisionSubmit} aria-busy={isMutatingSelectedCase}>
@@ -1254,12 +1261,14 @@ function EvidenceReviewContent({
                               {decision === "REJECTED" && (
                                  <label htmlFor="evidence-rejection-reason">
                                     Rejection reason
-                                    <select
+                                    <Select
+                                       density="standard"
                                        ref={rejectionReasonRef}
                                        id="evidence-rejection-reason"
                                        value={rejectionReason}
                                        required
                                        disabled={isMutatingSelectedCase}
+                                       invalid={Boolean(validationError)}
                                        aria-invalid={Boolean(validationError)}
                                        aria-describedby={
                                           validationError
@@ -1275,13 +1284,14 @@ function EvidenceReviewContent({
                                        {REJECTION_REASONS.map((reason) => (
                                           <option key={reason.value} value={reason.value}>{reason.label}</option>
                                        ))}
-                                    </select>
+                                    </Select>
                                  </label>
                               )}
 
                               <label htmlFor="evidence-moderator-notes">
                                  Moderator notes <span>(optional)</span>
-                                 <textarea
+                                 <Textarea
+                                    density="standard"
                                     ref={decisionNotesRef}
                                     id="evidence-moderator-notes"
                                     value={moderatorNotes}
@@ -1305,14 +1315,65 @@ function EvidenceReviewContent({
                               )}
 
                               <div className="evidence-decision-controls">
-                                 <button type="button" className="secondary" disabled={isMutatingSelectedCase} onClick={handleCancelDecision}>
+                                 <Button
+                                    type="button"
+                                    variant="secondary"
+                                    density="standard"
+                                    disabled={isMutatingSelectedCase}
+                                    onClick={handleCancelDecision}
+                                 >
                                     Cancel
-                                 </button>
-                                 <button type="submit" className={decision === "REJECTED" ? "danger" : "primary"} disabled={isMutatingSelectedCase}>
-                                    {isMutatingSelectedCase ? "Submitting…" : `Confirm ${selectedDecisionCopy.label.toLowerCase()}`}
-                                 </button>
+                                 </Button>
+                                 <Button
+                                    type="submit"
+                                    variant={decision === "REJECTED" ? "destructive" : "primary"}
+                                    density="comfortable"
+                                    loading={isMutatingSelectedCase}
+                                    loadingLabel="Submitting…"
+                                    disabled={isMutatingSelectedCase}
+                                 >
+                                    {`Confirm ${selectedDecisionCopy.label.toLowerCase()}`}
+                                 </Button>
                               </div>
                            </form>
+                        )}
+                     </section>
+
+                     <section className="evidence-detail-section" aria-labelledby="evidence-history-heading">
+                        <div className="evidence-subheading-row evidence-major-section-heading">
+                           <div>
+                              <h5 id="evidence-history-heading">Audit history</h5>
+                              <p>Recent case events supplied by the authoritative Evidence Review record.</p>
+                           </div>
+                        </div>
+                        {Array.isArray(detail.events) && detail.events.length > 0 ? (
+                           <details className="evidence-history-disclosure">
+                              <summary>
+                                 <span>Case events</span>
+                                 <span>{detail.events.length} {detail.events.length === 1 ? "event" : "events"}</span>
+                              </summary>
+                              <ol className="evidence-event-list">
+                                 {detail.events.map((event, index) => (
+                                    <li key={`${event.event_type}-${event.created_at}-${index}`}>
+                                       <span className="evidence-event-marker" aria-hidden="true" />
+                                       <div>
+                                          <div className="evidence-event-heading">
+                                             <strong>{formatLabel(event.event_type)}</strong>
+                                             <FormattedDateTime value={event.created_at} />
+                                          </div>
+                                          <p>Actor: {event.actor?.username ? `@${event.actor.username}` : "Actor not displayed"}</p>
+                                          {(event.from_status || event.to_status) && (
+                                             <p>Case transition: {formatLabel(event.from_status, "None")} → {formatLabel(event.to_status, "None")}</p>
+                                          )}
+                                          {event.reason_code && <p>Reason: {formatLabel(event.reason_code)}</p>}
+                                          {event.notes && <p>Notes: {event.notes}</p>}
+                                       </div>
+                                    </li>
+                                 ))}
+                              </ol>
+                           </details>
+                        ) : (
+                           <p className="evidence-inline-empty">No case audit history is available.</p>
                         )}
                      </section>
                   </div>

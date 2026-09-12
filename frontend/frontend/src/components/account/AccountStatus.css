@@ -1,0 +1,143 @@
+.account-status {
+   width: 100%;
+   min-width: 0;
+   text-align: center;
+}
+
+.account-status--neutral {
+   --account-status-icon-bg: var(--tl-color-status-neutral-bg);
+   --account-status-icon-border: var(--tl-color-status-neutral-border);
+   --account-status-icon-text: var(--tl-color-status-neutral-text);
+}
+
+.account-status--info {
+   --account-status-icon-bg: var(--tl-color-status-info-bg);
+   --account-status-icon-border: var(--tl-color-status-info-border);
+   --account-status-icon-text: var(--tl-color-status-info-text);
+}
+
+.account-status--success {
+   --account-status-icon-bg: var(--tl-color-status-success-bg);
+   --account-status-icon-border: var(--tl-color-status-success-border);
+   --account-status-icon-text: var(--tl-color-status-success-text);
+}
+
+.account-status--warning {
+   --account-status-icon-bg: var(--tl-color-status-warning-bg);
+   --account-status-icon-border: var(--tl-color-status-warning-border);
+   --account-status-icon-text: var(--tl-color-status-warning-text);
+}
+
+.account-status--critical {
+   --account-status-icon-bg: var(--tl-color-status-critical-bg);
+   --account-status-icon-border: var(--tl-color-status-critical-border);
+   --account-status-icon-text: var(--tl-color-status-critical-text);
+}
+
+.account-status__icon {
+   width: 4rem;
+   height: 4rem;
+   margin: 0 auto var(--tl-space-6);
+   display: grid;
+   place-items: center;
+   border: 1px solid var(--account-status-icon-border);
+   border-radius: var(--tl-radius-pill);
+   color: var(--account-status-icon-text);
+   background: var(--account-status-icon-bg);
+}
+
+.account-status__spinner {
+   width: 1.5rem;
+   height: 1.5rem;
+   border: 2px solid var(--account-status-icon-border);
+   border-top-color: var(--account-status-icon-text);
+   border-radius: var(--tl-radius-pill);
+   animation: account-status-spin 0.8s linear infinite;
+}
+
+.account-status__eyebrow {
+   margin: 0 0 6px;
+   color: var(--account-status-icon-text);
+   font-size: 0.85rem;
+   font-weight: 600;
+}
+
+.account-status__title {
+   margin: 0;
+   color: var(--tl-color-text-main);
+   font-size: 1.75rem;
+   line-height: 1.2;
+}
+
+.account-status__description {
+   margin: var(--tl-space-4) 0 0;
+   color: var(--tl-color-text-muted);
+   line-height: 1.65;
+   overflow-wrap: anywhere;
+}
+
+.account-status__actions {
+   margin-top: var(--tl-space-8);
+   display: grid;
+   gap: var(--tl-space-3);
+}
+
+.account-status__actions > * {
+   min-width: 0;
+}
+
+.account-status__action {
+   box-sizing: border-box;
+   width: 100%;
+   min-height: var(--tl-control-height-comfortable);
+   padding: var(--tl-space-3) var(--tl-space-4);
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   border: 1px solid transparent;
+   border-radius: var(--tl-radius-md);
+   font: inherit;
+   font-weight: 600;
+   text-align: center;
+   text-decoration: none;
+   overflow-wrap: anywhere;
+   cursor: pointer;
+   transition:
+      background-color var(--tl-duration-fast) ease,
+      border-color var(--tl-duration-fast) ease,
+      color var(--tl-duration-fast) ease;
+}
+
+.account-status__action--primary {
+   border-color: var(--tl-color-brand-primary);
+   color: var(--tl-color-text-inverse);
+   background: var(--tl-color-brand-primary);
+}
+
+.account-status__action--primary:hover {
+   border-color: var(--tl-color-brand-primary-hover);
+   background: var(--tl-color-brand-primary-hover);
+}
+
+.account-status__action:focus-visible {
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
+}
+
+@keyframes account-status-spin {
+   to {
+      transform: rotate(360deg);
+   }
+}
+
+@media (max-width: 480px) {
+   .account-status__title {
+      font-size: 1.6rem;
+   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+   .account-status__spinner {
+      animation: none;
+   }
+}

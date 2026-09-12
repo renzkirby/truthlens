@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import NavigationBar from "../components/NavigationBar";
 import Icons from "../components/Icons";
 import { getEffectiveVerdict } from "../utils/verdict";
 import { VERDICT_META } from "../utils/constants";
@@ -10,7 +9,6 @@ import "./ThreadDetailPage.css";
 const DeepAnalysisSkeleton = () => {
    return (
       <div className="thread-layout">
-         <NavigationBar />
          <div className="tdp-page">
             <div className="tdp-breadcrumb" style={{ borderBottomColor: "var(--border-default)" }}>
                <div className="tdp-breadcrumb-left" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -120,7 +118,6 @@ function DeepAnalysisPage() {
    if (error || !claimData) {
       return (
          <div className="thread-layout">
-            <NavigationBar />
             <div className="tdp-error">
                <Icons name="alert-triangle" size={32} color="#d97706" />
                <p>{error || "Analysis not found."}</p>
@@ -135,7 +132,6 @@ function DeepAnalysisPage() {
 
    return (
       <div className="thread-layout">
-         <NavigationBar />
          <div className="tdp-page">
             {/* Breadcrumb */}
             <div className="tdp-breadcrumb" style={{ borderBottomColor: vm.color }}>

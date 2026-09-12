@@ -1,0 +1,395 @@
+.account-form {
+   width: 100%;
+   min-width: 0;
+}
+
+.account-form form {
+   width: 100%;
+   min-width: 0;
+}
+
+.account-form__header {
+   margin-bottom: var(--tl-space-6);
+}
+
+.account-form__eyebrow {
+   margin: 0 0 6px;
+   color: var(--tl-color-text-muted);
+   font-size: 0.85rem;
+   font-weight: 500;
+}
+
+.account-form__title {
+   margin: 0;
+   color: var(--tl-color-text-main);
+   font-size: 1.6rem;
+   font-weight: 700;
+}
+
+.account-form__description {
+   margin: var(--tl-space-3) 0 0;
+   color: var(--tl-color-text-muted);
+   font-size: 0.9rem;
+   line-height: 1.6;
+}
+
+.account-form__alert {
+   margin-bottom: var(--tl-space-4);
+   padding: 10px 14px;
+   display: flex;
+   align-items: center;
+   gap: var(--tl-space-2);
+   border: 1px solid var(--tl-color-status-critical-border);
+   border-radius: var(--tl-radius-md);
+   color: var(--tl-color-status-critical-text);
+   background: var(--tl-color-status-critical-bg);
+   font-size: 0.85rem;
+   font-weight: 500;
+}
+
+.account-form__alert > svg {
+   flex: 0 0 auto;
+}
+
+.account-form__alert > span {
+   min-width: 0;
+   overflow-wrap: anywhere;
+}
+
+.account-field {
+   min-width: 0;
+   margin-bottom: var(--tl-space-4);
+   display: flex;
+   flex-direction: column;
+   gap: 6px;
+}
+
+.account-field__label-row {
+   min-width: 0;
+   display: flex;
+   align-items: baseline;
+   justify-content: space-between;
+   flex-wrap: wrap;
+   gap: 6px var(--tl-space-3);
+}
+
+.account-field__label {
+   color: var(--tl-color-text-main);
+   font-size: 0.85rem;
+   font-weight: 600;
+}
+
+.account-field__hint,
+.account-field__error {
+   margin: 6px 0 0;
+   font-size: var(--tl-text-sm);
+   line-height: 1.45;
+   overflow-wrap: anywhere;
+}
+
+.account-field__hint {
+   color: var(--tl-color-text-muted);
+}
+
+.account-field__error {
+   color: var(--tl-color-status-critical-text);
+}
+
+.account-field--text-toggle .tl-field--has-trailing > .tl-input {
+   padding-right: 6.5rem;
+}
+
+.account-field--icon-toggle .tl-field--has-trailing > .tl-input {
+   padding-right: calc(var(--tl-control-height-comfortable) + var(--tl-space-4));
+}
+
+.account-password-toggle {
+   min-width: var(--tl-control-height-comfortable);
+   min-height: var(--tl-control-height-comfortable);
+   padding: 0 var(--tl-space-2);
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   gap: 4px;
+   border: 0;
+   border-radius: var(--tl-radius-sm);
+   color: var(--tl-color-brand-primary);
+   background: transparent;
+   font-size: 0.75rem;
+   font-weight: 600;
+   cursor: pointer;
+}
+
+.account-password-toggle:focus-visible {
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
+}
+
+.account-password-toggle:disabled {
+   cursor: not-allowed;
+   opacity: 0.5;
+}
+
+.account-forgot-link {
+   color: var(--tl-color-brand-primary);
+   font-size: 0.82rem;
+   font-weight: 600;
+   text-decoration: none;
+}
+
+.account-forgot-link:hover {
+   text-decoration: underline;
+   text-underline-offset: 3px;
+}
+
+.account-forgot-link:focus-visible {
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
+   border-radius: 4px;
+}
+
+.account-form__options {
+   margin-bottom: var(--tl-space-6);
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+}
+
+.account-remember {
+   position: relative;
+   display: inline-flex;
+   align-items: center;
+   gap: 0.55rem;
+   cursor: pointer;
+   user-select: none;
+}
+
+.account-remember input {
+   position: absolute;
+   opacity: 0;
+   pointer-events: none;
+}
+
+.account-remember__control {
+   width: 1.1rem;
+   height: 1.1rem;
+   flex: 0 0 1.1rem;
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   border: 1.5px solid var(--tl-color-border-default);
+   border-radius: 4px;
+   color: var(--tl-color-text-inverse);
+   background: var(--tl-color-bg-surface);
+   transition:
+      background-color var(--tl-duration-fast) ease,
+      border-color var(--tl-duration-fast) ease;
+}
+
+.account-remember__control svg {
+   opacity: 0;
+}
+
+.account-remember input:checked + .account-remember__control {
+   border-color: var(--tl-color-brand-primary);
+   background: var(--tl-color-brand-primary);
+}
+
+.account-remember input:checked + .account-remember__control svg {
+   opacity: 1;
+}
+
+.account-remember input:focus-visible + .account-remember__control {
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
+}
+
+.account-remember input:disabled + .account-remember__control,
+.account-remember input:disabled ~ span {
+   cursor: not-allowed;
+   opacity: 0.55;
+}
+
+.account-form__prompt {
+   margin: 18px 0 0;
+   color: var(--tl-color-text-muted);
+   font-size: 0.85rem;
+   text-align: center;
+}
+
+.account-form__prompt a {
+   color: var(--tl-color-brand-primary);
+   font-weight: 600;
+   text-decoration: none;
+}
+
+.account-form__prompt a:hover {
+   text-decoration: underline;
+   text-underline-offset: 3px;
+}
+
+.account-form__prompt a:focus-visible {
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
+   border-radius: 4px;
+}
+
+.account-form__divider {
+   margin: var(--tl-space-6) 0;
+   display: flex;
+   align-items: center;
+   color: var(--tl-color-text-muted);
+   font-size: 0.75rem;
+   font-weight: 600;
+   text-align: center;
+}
+
+.account-form__divider::before,
+.account-form__divider::after {
+   content: "";
+   flex: 1;
+   border-bottom: 1px solid var(--tl-color-border-default);
+}
+
+.account-form__divider span {
+   padding: 0 10px;
+}
+
+.account-google-button {
+   position: relative;
+   box-sizing: border-box;
+   width: 100%;
+   min-width: 0;
+   height: 40px;
+   margin-inline: auto;
+   padding: 0 var(--tl-space-3);
+   overflow: hidden;
+   border: 0;
+   border-radius: 4px;
+   outline: none;
+   color: #1f1f1f;
+   background-color: #f2f2f2;
+   background-image: none;
+   font-family: "Roboto", Arial, sans-serif;
+   font-size: 14px;
+   letter-spacing: 0.25px;
+   text-align: center;
+   vertical-align: middle;
+   white-space: nowrap;
+   cursor: pointer;
+   user-select: none;
+   -webkit-appearance: none;
+   transition:
+      background-color 0.218s,
+      border-color 0.218s,
+      box-shadow 0.218s;
+}
+
+.account-google-button:focus-visible {
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
+}
+
+.account-google-button__icon {
+   width: 20px;
+   min-width: 20px;
+   height: 20px;
+   margin-right: 10px;
+}
+
+.account-google-button__icon svg {
+   width: 100%;
+   height: 100%;
+   display: block;
+}
+
+.account-google-button__content {
+   position: relative;
+   width: 100%;
+   min-width: 0;
+   height: 100%;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   flex-flow: row nowrap;
+}
+
+.account-google-button__label {
+   min-width: 0;
+   overflow: hidden;
+   font-family: "Roboto", Arial, sans-serif;
+   font-weight: 500;
+   text-overflow: ellipsis;
+   vertical-align: top;
+}
+
+.account-google-button__state {
+   position: absolute;
+   inset: 0;
+   opacity: 0;
+   transition: opacity 0.218s;
+}
+
+.account-google-button__hidden-text {
+   display: none;
+}
+
+.account-google-button:disabled {
+   cursor: default;
+   background-color: #ffffff61;
+}
+
+.account-google-button:disabled .account-google-button__state {
+   background-color: #1f1f1f1f;
+}
+
+.account-google-button:disabled .account-google-button__label,
+.account-google-button:disabled .account-google-button__icon {
+   opacity: 38%;
+}
+
+.account-google-button:not(:disabled):active .account-google-button__state,
+.account-google-button:not(:disabled):focus .account-google-button__state {
+   background-color: #001d35;
+   opacity: 12%;
+}
+
+.account-google-button:not(:disabled):hover {
+   box-shadow:
+      0 1px 2px 0 rgba(60, 64, 67, 0.3),
+      0 1px 3px 1px rgba(60, 64, 67, 0.15);
+}
+
+.account-google-button:not(:disabled):hover .account-google-button__state {
+   background-color: #001d35;
+   opacity: 8%;
+}
+
+@media (max-width: 768px) {
+   .account-form__title {
+      font-size: 1.5rem;
+   }
+}
+
+@media (max-width: 480px) {
+   .account-form__header {
+      margin-bottom: var(--tl-space-5);
+   }
+
+   .account-form__title {
+      font-size: 1.35rem;
+   }
+
+   .account-field {
+      margin-bottom: var(--tl-space-3);
+   }
+
+   .account-form__prompt {
+      margin-top: var(--tl-space-4);
+   }
+
+   .account-form__divider {
+      margin: var(--tl-space-5) 0;
+   }
+
+}

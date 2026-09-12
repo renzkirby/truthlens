@@ -20,7 +20,6 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useNotification } from "../hooks/useNotification";
-import NavigationBar from "../components/NavigationBar.jsx";
 import Icons from "../components/Icons.jsx";
 
 // ── Utilities & Hooks ──
@@ -566,8 +565,6 @@ function CommunityFeed() {
 
    return (
       <div className="feed-layout">
-         <NavigationBar />
-
          <main className="feed-container">
             {/* ── Category Filter Pills ── */}
             <div className="category-pills">

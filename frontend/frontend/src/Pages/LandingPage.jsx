@@ -1,6 +1,5 @@
 import React from "react";
 import "./LandingPage.css";
-import PublicSiteHeader from "../components/public/PublicSiteHeader";
 import LogoImage from "../assets/truthlens_logo.png";
 import { Link } from "react-router-dom";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -33,9 +32,6 @@ const TruthLens = () => {
 
    return (
       <div className="landing-page">
-         <PublicSiteHeader />
-
-         <main id="main-content" tabIndex={-1}>
          {/* Hero Section */}
          <section className="hero-section">
             <div className="hero-container">
@@ -656,71 +652,6 @@ const TruthLens = () => {
                </div>
             </div>
          </section>
-         </main>
-
-         {/* Footer */}
-         <footer className="footer">
-            <div className="footer-container">
-               {/* Main Footer */}
-               <div className="footer-main">
-                  {/* Brand */}
-                  <div className="footer-brand">
-                     <Link to="/landing-page" className="footer-brand-link" aria-label="TruthLens home">
-                        <img src={LogoImage} alt="" className="footer-logo" />
-
-                        <span className="footer-brand-name">TruthLens</span>
-                     </Link>
-
-                     <p className="footer-description">
-                        AI-assisted verification built to help you investigate questionable content, examine supporting
-                        evidence, and make better-informed decisions online.
-                     </p>
-                  </div>
-
-                  {/* Navigation */}
-                  <div className="footer-nav">
-                     <div className="footer-nav-group">
-                        <h3>Explore</h3>
-
-                        <a href="#features">Features</a>
-
-                        <a href="#how-it-works">How it works</a>
-
-                        <a href="#trust">Trust & Transparency</a>
-
-                        <Link to="/partners">Public partners</Link>
-
-                        <a href="#about">About</a>
-                     </div>
-
-                     <div className="footer-nav-group">
-                        <h3>TruthLens</h3>
-
-                        <a
-                           href="https://chromewebstore.google.com/detail/truthlens/dhkeknpnigghagekhdcpknbggfpbmkgo"
-                           target="_blank"
-                           rel="noopener noreferrer"
-                        >
-                           Chrome Extension
-                        </a>
-
-                        <Link to="/community">Community</Link>
-
-                        <Link to="/login">Login</Link>
-
-                        <Link to="/register">Create an account</Link>
-                     </div>
-                  </div>
-               </div>
-
-               {/* Footer Bottom */}
-               <div className="footer-bottom">
-                  <span>© {new Date().getFullYear()} TruthLens. Investigate before you amplify.</span>
-
-                  <span className="footer-status">AI-assisted verification • Evidence-aware results</span>
-               </div>
-            </div>
-         </footer>
       </div>
    );
 };

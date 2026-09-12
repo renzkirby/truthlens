@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import AuthShell from "../components/auth/AuthShell";
+import AccountStatus from "../components/account/AccountStatus.jsx";
 import Icons from "../components/Icons.jsx";
+import Button from "../components/ui/Button.jsx";
+import Input from "../components/ui/Input.jsx";
 import { resolveApiEndpoint } from "../utils/api";
-import "./LoginPage.css";
+import "../components/account/AccountForm.css";
 
 function ForgotPasswordPage() {
    const [email, setEmail] = useState("");
@@ -53,81 +56,83 @@ function ForgotPasswordPage() {
          ]}
       >
          {success ? (
-            <div className="auth-status">
-               <div className="auth-status-icon" aria-hidden="true">
-                  <Icons name="mail-check" size={24} />
-               </div>
-
-               <p className="greeting-text">Check your email</p>
-
-               <h2 className="form-title">Reset instructions sent</h2>
-
-               <p className="form-description">
-                  If an account exists for <strong>{email}</strong>, we've sent password reset instructions.
-               </p>
-
-               <Link to="/login" className="submit-btn auth-link-button">
-                  Back to sign in
-               </Link>
-            </div>
+            <AccountStatus
+               tone="info"
+               icon={<Icons name="mail-check" size={24} aria-hidden="true" />}
+               eyebrow="Check your email"
+               title="Reset instructions sent"
+               description={
+                  <>
+                     If an account exists for <strong>{email}</strong>, we've sent password reset instructions.
+                  </>
+               }
+               actions={
+                  <Link to="/login" className="account-status__action account-status__action--primary">
+                     Back to sign in
+                  </Link>
+               }
+               live="polite"
+            />
          ) : (
-            <>
-               <div className="form-header">
-                  <p className="greeting-text">Forgot your password?</p>
+            <div className="account-form">
+               <div className="account-form__header">
+                  <p className="account-form__eyebrow">Forgot your password?</p>
 
-                  <h2 className="form-title">Reset your password</h2>
+                  <h1 className="account-form__title">Reset your password</h1>
 
-                  <p className="form-description">Enter the email address associated with your TruthLens account.</p>
+                  <p className="account-form__description">
+                     Enter the email address associated with your TruthLens account.
+                  </p>
                </div>
 
                <form onSubmit={handleSubmit}>
                   {error && (
-                     <div className="error-message" role="alert" aria-live="polite">
+                     <div className="account-form__alert" role="alert" aria-live="polite">
                         <Icons name="alert-triangle" size={16} aria-hidden="true" />
 
                         <span>{error}</span>
                      </div>
                   )}
 
-                  <div className="input-group">
-                     <label htmlFor="reset-email">Email address</label>
+                  <div className="account-field">
+                     <label className="account-field__label" htmlFor="reset-email">
+                        Email address
+                     </label>
 
-                     <div className="input-wrapper">
-                        <Icons name="mail" size={18} className="input-icon" aria-hidden="true" />
-
-                        <input
-                           id="reset-email"
-                           type="email"
-                           name="email"
-                           placeholder="you@example.com"
-                           value={email}
-                           onChange={(event) => setEmail(event.target.value)}
-                           autoComplete="email"
-                           disabled={isSubmitting}
-                           required
-                        />
-                     </div>
+                     <Input
+                        id="reset-email"
+                        type="email"
+                        name="email"
+                        density="comfortable"
+                        surface="subtle"
+                        leadingIcon={<Icons name="mail" size={18} aria-hidden="true" />}
+                        placeholder="you@example.com"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        autoComplete="email"
+                        disabled={isSubmitting}
+                        required
+                     />
                   </div>
 
-                  <button type="submit" className="submit-btn" disabled={isSubmitting} aria-busy={isSubmitting}>
-                     {isSubmitting ? (
-                        <span className="sign-in-loading">
-                           <span className="sign-in-spinner" aria-hidden="true" />
-                           <span>Sending instructions…</span>
-                        </span>
-                     ) : (
-                        <>
-                           <span>Send reset instructions</span>
-                           <Icons name="arrow-right" size={18} aria-hidden="true" />
-                        </>
-                     )}
-                  </button>
+                  <Button
+                     type="submit"
+                     variant="primary"
+                     density="comfortable"
+                     loading={isSubmitting}
+                     loadingLabel="Sending instructions…"
+                     trailingIcon={<Icons name="arrow-right" size={18} aria-hidden="true" />}
+                     fullWidth
+                     disabled={isSubmitting}
+                  >
+                     Send reset instructions
+                  </Button>
                </form>
 
-               <div className="signup-prompt">
+               <div className="account-form__prompt">
                   Remember your password? <Link to="/login">Back to sign in</Link>
                </div>
-            </>
+            </div>
          )}
       </AuthShell>
    );

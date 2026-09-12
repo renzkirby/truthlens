@@ -1,18 +1,31 @@
 .partner-profile-page {
-   min-height: 100vh;
    color: var(--text-main);
    background: var(--bg-app);
 }
 
 .partner-profile-main {
-   width: min(900px, calc(100% - 48px));
+   width: 100%;
+
+   max-width: calc(
+      900px +
+      var(--tl-public-gutter-left) +
+      var(--tl-public-gutter-right)
+   );
+
+   min-width: 0;
+
    margin: 0 auto;
-   padding: 38px 0 90px;
+
+   padding:
+      38px
+      var(--tl-public-gutter-right)
+      90px
+      var(--tl-public-gutter-left);
 }
 
 .partner-profile-back {
    width: fit-content;
-   min-height: 40px;
+   min-height: var(--tl-control-height-comfortable);
    display: inline-flex;
    align-items: center;
    gap: 8px;
@@ -35,8 +48,8 @@
 .partner-profile-back:focus-visible,
 .partner-profile-website:focus-visible,
 .partner-profile-state button:focus-visible {
-   outline: 3px solid #10b981;
-   outline-offset: 4px;
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
 }
 
 .partner-profile,
@@ -83,6 +96,7 @@
    color: var(--text-muted);
    font-size: 0.92rem;
    font-weight: 650;
+   overflow-wrap: anywhere;
 }
 
 .partner-profile-content {
@@ -135,7 +149,7 @@
 .partner-profile-website {
    width: fit-content;
    max-width: 100%;
-   min-height: 42px;
+   min-height: var(--tl-control-height-comfortable);
    margin-top: 14px;
    display: inline-flex;
    align-items: center;
@@ -208,20 +222,20 @@
 }
 
 .partner-profile-state button {
-   min-height: 42px;
+   min-height: var(--tl-control-height-comfortable);
    margin-top: 21px;
    padding: 0 18px;
-   border: 1px solid #10b981;
+   border: 1px solid var(--tl-color-brand-primary);
    border-radius: 9px;
-   color: #ffffff;
-   background: #10b981;
+   color: var(--tl-color-text-inverse);
+   background: var(--tl-color-brand-primary);
    font-weight: 700;
    cursor: pointer;
 }
 
 .partner-profile-state button:hover {
-   border-color: #059669;
-   background: #059669;
+   border-color: var(--tl-color-brand-primary-hover);
+   background: var(--tl-color-brand-primary-hover);
 }
 
 .partner-profile-state__logo {
@@ -233,7 +247,6 @@
 
 @media (max-width: 650px) {
    .partner-profile-main {
-      width: min(100% - 36px, 900px);
       padding-top: 26px;
       padding-bottom: 64px;
    }
@@ -253,10 +266,6 @@
 }
 
 @media (max-width: 440px) {
-   .partner-profile-main {
-      width: min(100% - 28px, 900px);
-   }
-
    .partner-profile-hero {
       flex-direction: column;
       gap: 19px;

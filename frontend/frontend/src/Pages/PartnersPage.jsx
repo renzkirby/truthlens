@@ -4,7 +4,6 @@ import { Search, SlidersHorizontal } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { resolveApiEndpoint } from "../utils/api";
-import PublicSiteHeader from "../components/public/PublicSiteHeader";
 import PartnerLogo from "../components/partners/PartnerLogo";
 import "./PartnersPage.css";
 
@@ -156,9 +155,7 @@ function PartnersPage() {
 
    return (
       <div className="partners-page">
-         <PublicSiteHeader />
-         <main id="main-content" tabIndex={-1}>
-            <section className="partners-hero" aria-labelledby="partners-heading">
+         <section className="partners-hero" aria-labelledby="partners-heading">
                <div className="partners-page__container partners-hero__content">
                   <p className="partners-eyebrow">Public partner directory</p>
                   <h1 id="partners-heading">TruthLens Partners</h1>
@@ -258,8 +255,7 @@ function PartnersPage() {
                      )}
                   </div>
                </div>
-            </section>
-         </main>
+         </section>
       </div>
    );
 }

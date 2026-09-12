@@ -1,14 +1,6 @@
-.org-invite-page {
-   min-height: 100vh;
-   display: flex;
-   align-items: center;
-   justify-content: center;
-   padding: 48px 20px;
-   background: radial-gradient(circle at top, rgba(79, 70, 229, 0.09), transparent 34rem), var(--bg-page, #f8fafc);
-}
-
 .org-invite-card {
-   width: min(100%, 680px);
+   width: 100%;
+   min-width: 0;
    padding: 36px;
    border: 1px solid var(--border-default);
    border-radius: 20px;
@@ -17,8 +9,8 @@
 }
 
 .org-invite-card--state {
-   max-width: 520px;
-   text-align: center;
+   max-width: 32.5rem;
+   margin-inline: auto;
 }
 
 .org-invite-brand {
@@ -40,16 +32,15 @@
    text-transform: uppercase;
 }
 
-.org-invite-header h1,
-.org-invite-card--state h1 {
+.org-invite-header h1 {
    margin: 0;
    color: var(--text-main);
    font-size: clamp(1.75rem, 4vw, 2.35rem);
    line-height: 1.15;
+   overflow-wrap: anywhere;
 }
 
-.org-invite-intro,
-.org-invite-card--state > p {
+.org-invite-intro {
    margin: 14px 0 0;
    color: var(--text-muted);
    line-height: 1.65;
@@ -93,6 +84,7 @@
 .org-invite-org-copy strong {
    color: var(--text-main);
    font-size: 1rem;
+   overflow-wrap: anywhere;
 }
 
 .org-invite-org-copy span {
@@ -127,29 +119,32 @@
    color: var(--text-main);
    font-size: 0.92rem;
    font-weight: 700;
+   overflow-wrap: anywhere;
 }
 
-.org-invite-authority-note {
+.org-invite-membership-note {
    display: flex;
    align-items: flex-start;
    gap: 12px;
    margin-top: 20px;
    padding: 16px;
+   border: 1px solid var(--tl-color-status-info-border);
    border-radius: 12px;
-   background: rgba(79, 70, 229, 0.07);
-   color: var(--text-body);
+   background: var(--tl-color-status-info-bg);
+   color: var(--tl-color-status-info-text);
 }
 
-.org-invite-authority-note svg {
+.org-invite-membership-note svg {
    flex: 0 0 auto;
-   color: var(--brand-primary);
+   color: var(--tl-color-status-info-text);
    margin-top: 2px;
 }
 
-.org-invite-authority-note p {
+.org-invite-membership-note p {
    margin: 0;
    font-size: 0.875rem;
    line-height: 1.6;
+   overflow-wrap: anywhere;
 }
 
 .org-invite-actions {
@@ -165,91 +160,38 @@
    line-height: 1.6;
 }
 
-.org-invite-button {
-   min-height: 46px;
-   width: 100%;
-   padding: 11px 18px;
-   border-radius: 10px;
-   font: inherit;
-   font-weight: 700;
-   cursor: pointer;
-   transition:
-      transform 150ms ease,
-      background-color 150ms ease,
-      border-color 150ms ease;
-}
-
-.org-invite-button:not(:disabled):active {
-   transform: translateY(1px);
-}
-
-.org-invite-button:disabled {
-   cursor: not-allowed;
-   opacity: 0.65;
-}
-
-.org-invite-button--primary {
-   border: 1px solid var(--brand-primary);
-   background: var(--brand-primary);
-   color: #fff;
-}
-
-.org-invite-button--secondary {
-   border: 1px solid var(--border-default);
-   background: var(--bg-surface);
-   color: var(--text-main);
-}
-
-.org-invite-button:focus-visible {
-   outline: 3px solid rgba(79, 70, 229, 0.22);
-   outline-offset: 2px;
-}
-
 .org-invite-message {
    display: flex;
    align-items: flex-start;
    gap: 10px;
    padding: 14px;
-   border: 1px solid var(--border-default);
+   border: 1px solid var(--tl-color-status-neutral-border);
    border-radius: 12px;
-   background: var(--bg-subtle, #f8fafc);
-   color: var(--text-body);
+   background: var(--tl-color-status-neutral-bg);
+   color: var(--tl-color-status-neutral-text);
    text-align: left;
 }
 
 .org-invite-message strong {
-   color: var(--text-main);
+   color: inherit;
 }
 
 .org-invite-message p {
    margin: 4px 0 0;
    line-height: 1.55;
+   overflow-wrap: anywhere;
 }
 
 .org-invite-message--warning {
-   border-color: #fbbf24;
-   background: #fffbeb;
+   border-color: var(--tl-color-status-warning-border);
+   background: var(--tl-color-status-warning-bg);
+   color: var(--tl-color-status-warning-text);
 }
 
-.org-invite-message--danger {
-   border-color: #fca5a5;
-   background: #fef2f2;
-}
-
-.org-invite-state-icon {
-   width: 54px;
-   height: 54px;
-   display: grid;
-   place-items: center;
-   margin: 0 auto 18px;
-   border-radius: 50%;
-   background: var(--bg-subtle, #f8fafc);
-   color: var(--text-muted);
-}
-
-.org-invite-state-icon--success {
-   background: #ecfdf5;
-   color: #047857;
+.org-invite-message--critical {
+   border-color: var(--tl-color-status-critical-border);
+   background: var(--tl-color-status-critical-bg);
+   color: var(--tl-color-status-critical-text);
 }
 
 .org-invite-account {
@@ -277,31 +219,10 @@
    color: var(--text-muted);
    font-size: 0.8rem;
    text-align: center;
-}
-
-.org-invite-spinner {
-   display: block;
-   width: 34px;
-   height: 34px;
-   margin: 0 auto 18px;
-   border: 3px solid var(--border-default);
-   border-top-color: var(--brand-primary);
-   border-radius: 50%;
-   animation: org-invite-spin 800ms linear infinite;
-}
-
-@keyframes org-invite-spin {
-   to {
-      transform: rotate(360deg);
-   }
+   overflow-wrap: anywhere;
 }
 
 @media (max-width: 640px) {
-   .org-invite-page {
-      align-items: flex-start;
-      padding: 20px 12px;
-   }
-
    .org-invite-card {
       padding: 24px 18px;
       border-radius: 16px;
@@ -309,15 +230,5 @@
 
    .org-invite-details {
       grid-template-columns: 1fr;
-   }
-}
-
-@media (prefers-reduced-motion: reduce) {
-   .org-invite-button {
-      transition: none;
-   }
-
-   .org-invite-spinner {
-      animation-duration: 1.6s;
    }
 }

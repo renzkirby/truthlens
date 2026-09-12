@@ -1,15 +1,13 @@
 /* UserHub.css */
 /* 1. Layout & Structure */
 .hub-page-layout {
-   min-height: 100vh;
    background-color: #f6f8fb;
    font-family: "Inter", sans-serif;
    color: #0f172a;
 }
 
 .hub-wrapper {
-   padding-top: 80px;
-   /* offset for nav */
+   padding-top: var(--tl-space-8);
    padding-bottom: 60px;
    display: flex;
    justify-content: center;
@@ -189,7 +187,7 @@
 }
 
 /* Shared Box Panel Structure */
-.box-panel {
+.hub-page-layout .box-panel {
    background-color: #ffffff;
    border-radius: 12px;
    border: 1px solid #e2e8f0;
@@ -1458,7 +1456,7 @@
 @media (max-width: 768px) {
    .hub-wrapper {
       padding-top: 24px;
-      padding-bottom: 80px;
+      padding-bottom: var(--tl-space-4);
    }
 
    .hub-container {
@@ -1707,7 +1705,7 @@
       text-align: center;
    }
 
-   .box-panel {
+   .hub-page-layout .box-panel {
       width: auto;
       margin-left: -16px;
       margin-right: -16px;
@@ -1722,7 +1720,7 @@
 @media (max-width: 480px) {
    .hub-wrapper {
       padding-top: 16px;
-      padding-bottom: 76px;
+      padding-bottom: var(--tl-space-4);
    }
 
    .hub-container {
@@ -1800,7 +1798,9 @@
       font-size: 10px;
    }
 
-   .box-panel {
+   .hub-page-layout .box-panel {
+      margin-left: -12px;
+      margin-right: -12px;
       padding: 14px;
    }
 }

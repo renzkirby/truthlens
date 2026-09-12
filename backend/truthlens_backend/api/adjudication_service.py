@@ -20,8 +20,10 @@ from .adjudication_provenance import (
 )
 from .models import (
     AdjudicationDecision,
+    AdjudicationDecisionEvidenceSnapshot,
     Claim,
     EvidenceSubmission,
+    FactualCorrectionRequest,
     ModerationCase,
     ModerationEvent,
     Organization,
@@ -41,7 +43,6 @@ from .organization_service import (
     has_capability,
 )
 from .verification_assignment_service import get_active_verification_assignment
-
 
 logger = logging.getLogger(__name__)
 
@@ -331,8 +332,7 @@ def get_adjudication_case_detail(
     )
     all_decisions = AdjudicationDecision.objects.filter(claim=claim)
     visible_decision_filter = Q(organization=organization) & (
-        Q(moderation_case__isnull=True)
-        | Q(moderation_case__organization=organization)
+        Q(moderation_case__isnull=True) | Q(moderation_case__organization=organization)
     )
     visible_decision_queryset = (
         all_decisions.filter(visible_decision_filter)
@@ -350,12 +350,8 @@ def get_adjudication_case_detail(
             "id",
         )
     )
-    visible_current_decision = visible_decision_queryset.filter(
-        is_current=True
-    ).first()
-    visible_history_queryset = visible_decision_queryset.filter(
-        is_current=False
-    )
+    visible_current_decision = visible_decision_queryset.filter(is_current=True).first()
+    visible_history_queryset = visible_decision_queryset.filter(is_current=False)
     visible_history_count = visible_history_queryset.count()
     visible_history = list(visible_history_queryset[:50])
     visible_decisions = (
@@ -375,8 +371,8 @@ def get_adjudication_case_detail(
 
     visible_decision_ids = {decision.id for decision in visible_decisions}
     for decision in visible_decisions:
-        decision.adjudication_provenance = (
-            get_adjudication_decision_provenance(claim, decision)
+        decision.adjudication_provenance = get_adjudication_decision_provenance(
+            claim, decision
         )
 
     event_queryset = case.events.select_related("actor").order_by(
@@ -393,16 +389,12 @@ def get_adjudication_case_detail(
     elif case.status == ModerationCase.Status.CANCELLED:
         blockers.append(_adjudication_blocker("CASE_CANCELLED"))
     elif case.status == ModerationCase.Status.REOPENED:
-        blockers.append(
-            _adjudication_blocker("CORRECTION_WORKFLOW_REQUIRED")
-        )
+        blockers.append(_adjudication_blocker("CORRECTION_WORKFLOW_REQUIRED"))
 
     if assignment is None:
         blockers.append(_adjudication_blocker("NO_ACTIVE_ASSIGNMENT"))
     elif assignment.organization_id != organization.id:
-        blockers.append(
-            _adjudication_blocker("ASSIGNMENT_ORGANIZATION_CHANGED")
-        )
+        blockers.append(_adjudication_blocker("ASSIGNMENT_ORGANIZATION_CHANGED"))
 
     unreviewed_count = sum(
         item.evidence_status == EvidenceSubmission.EvidenceStatus.UNVERIFIED
@@ -418,9 +410,7 @@ def get_adjudication_case_detail(
     if any(thread.author_id == actor.id for thread in threads) or any(
         item.contributor_id == actor.id for item in evidence
     ):
-        blockers.append(
-            _adjudication_blocker("DIRECT_CONTRIBUTION_CONFLICT")
-        )
+        blockers.append(_adjudication_blocker("DIRECT_CONTRIBUTION_CONFLICT"))
 
     has_any_decision_history = bool(
         visible_decisions or has_restricted_decision_history
@@ -429,18 +419,12 @@ def get_adjudication_case_detail(
         if visible_current_decision is not None:
             blockers.append(_adjudication_blocker("CURRENT_DECISION_EXISTS"))
         else:
-            blockers.append(
-                _adjudication_blocker("EXISTING_ADJUDICATION_HISTORY")
-            )
+            blockers.append(_adjudication_blocker("EXISTING_ADJUDICATION_HISTORY"))
     elif has_any_decision_history:
         if visible_decisions and not has_restricted_decision_history:
-            blockers.append(
-                _adjudication_blocker("HISTORICAL_DECISION_STATE")
-            )
+            blockers.append(_adjudication_blocker("HISTORICAL_DECISION_STATE"))
         else:
-            blockers.append(
-                _adjudication_blocker("EXISTING_ADJUDICATION_HISTORY")
-            )
+            blockers.append(_adjudication_blocker("EXISTING_ADJUDICATION_HISTORY"))
 
     expected_revision = 0
     if raw_current_decision is not None:
@@ -455,8 +439,7 @@ def get_adjudication_case_detail(
     case.adjudication_active_evidence_case_count = active_evidence_case_count
     case.adjudication_assignment = (
         assignment
-        if assignment is not None
-        and assignment.organization_id == organization.id
+        if assignment is not None and assignment.organization_id == organization.id
         else None
     )
     case.adjudication_visible_decisions = visible_decisions
@@ -518,48 +501,22 @@ def ensure_adjudication_case(
     actor=None,
     organization=None,
 ):
-    existing_case = get_active_adjudication_case(claim)
+    with transaction.atomic():
+        # The Claim is the shared parent lock for adjudication,
+        # publication, assignment, and correction writers.
+        locked_claim = Claim.objects.select_for_update().get(pk=claim.pk)
 
-    if existing_case:
-        if organization is not None:
-            if (
-                existing_case.organization_id
-                and existing_case.organization_id != organization.id
-            ):
+        def ensure_no_correction_reservation():
+            if FactualCorrectionRequest.objects.filter(
+                claim=locked_claim,
+                status=FactualCorrectionRequest.Status.ACTIVE,
+            ).exists():
                 raise AdjudicationConflict(
-                    "This adjudication case belongs " "to another organization."
+                    "An active factual correction request cannot be "
+                    "treated as a new first-decision workflow."
                 )
 
-            if existing_case.organization_id is None:
-                existing_case.organization = organization
-
-                existing_case.save(
-                    update_fields=[
-                        "organization",
-                        "updated_at",
-                    ]
-                )
-
-        return existing_case
-
-    latest_case = get_latest_adjudication_case(claim)
-
-    if latest_case and latest_case.status == ModerationCase.Status.RESOLVED:
-        return latest_case
-
-    try:
-        return create_moderation_case(
-            case_type=(ModerationCase.CaseType.ADJUDICATION),
-            actor=actor,
-            source=(ModerationCase.Source.COMMUNITY_ESCALATION),
-            claim=claim,
-            organization=organization,
-        )
-
-    except DuplicateActiveModerationCase:
-        existing_case = get_active_adjudication_case(claim)
-
-        if existing_case:
+        def bind_existing_case(existing_case):
             if organization is not None:
                 if (
                     existing_case.organization_id
@@ -571,7 +528,6 @@ def ensure_adjudication_case(
 
                 if existing_case.organization_id is None:
                     existing_case.organization = organization
-
                     existing_case.save(
                         update_fields=[
                             "organization",
@@ -581,7 +537,50 @@ def ensure_adjudication_case(
 
             return existing_case
 
-        raise
+        # Recheck under the Claim lock before returning or
+        # modifying any ordinary Adjudication case.
+        ensure_no_correction_reservation()
+
+        existing_case = get_active_adjudication_case(
+            locked_claim,
+            lock=True,
+        )
+
+        if existing_case:
+            return bind_existing_case(existing_case)
+
+        latest_case = get_latest_adjudication_case(
+            locked_claim,
+            lock=True,
+        )
+
+        if latest_case and latest_case.status == ModerationCase.Status.RESOLVED:
+            return latest_case
+
+        try:
+            return create_moderation_case(
+                case_type=ModerationCase.CaseType.ADJUDICATION,
+                actor=actor,
+                source=ModerationCase.Source.COMMUNITY_ESCALATION,
+                claim=locked_claim,
+                organization=organization,
+            )
+
+        except DuplicateActiveModerationCase:
+            # Retain the original race-recovery behavior, but never
+            # return a case that belongs to newly reserved correction
+            # work. This check is still protected by the Claim lock.
+            ensure_no_correction_reservation()
+
+            existing_case = get_active_adjudication_case(
+                locked_claim,
+                lock=True,
+            )
+
+            if existing_case:
+                return bind_existing_case(existing_case)
+
+            raise
 
 
 def _prepare_first_adjudication_case(case, *, actor):
@@ -670,6 +669,12 @@ def ensure_claim_adjudication_readiness(
     actor=None,
     organization=None,
 ):
+    if FactualCorrectionRequest.objects.filter(
+        claim=claim,
+        status=FactualCorrectionRequest.Status.ACTIVE,
+    ).exists():
+        return None
+
     if not is_claim_ready_for_adjudication(claim):
         return None
 
@@ -718,9 +723,7 @@ def _lock_adjudication_context(*, case_id, organization_id, actor):
         )
 
     try:
-        organization = Organization.objects.select_for_update().get(
-            pk=organization_id
-        )
+        organization = Organization.objects.select_for_update().get(pk=organization_id)
     except Organization.DoesNotExist as error:
         raise AdjudicationNotFound("Adjudication case not found.") from error
 
@@ -753,9 +756,7 @@ def _lock_adjudication_context(*, case_id, organization_id, actor):
         .first()
     )
     capabilities = (
-        get_membership_capabilities(membership)
-        if membership is not None
-        else set()
+        get_membership_capabilities(membership) if membership is not None else set()
     )
     if PartnerCapability.ADJUDICATE not in capabilities:
         raise AdjudicationAuthorizationError(
@@ -832,6 +833,36 @@ def _resolve_completed_verification_run(*, verification_run_id, claim):
     return run
 
 
+def _snapshot_timestamp(value):
+    return value.isoformat() if value is not None else None
+
+
+def _build_decision_evidence_records(evidence):
+    """Serialize the already-locked evidence basis using recorded values only."""
+
+    return [
+        {
+            "id": str(item.pk),
+            "thread_id": str(item.thread_id),
+            "evidence_status": item.evidence_status,
+            "evidence_type": item.evidence_type,
+            "evidence_caption": item.evidence_caption,
+            "evidence_url": item.evidence_url,
+            "contributor_id": (
+                str(item.contributor_id) if item.contributor_id is not None else None
+            ),
+            "reviewer_id": (
+                str(item.verified_by_id) if item.verified_by_id is not None else None
+            ),
+            "submitted_at": _snapshot_timestamp(item.submitted_at),
+            "reviewed_at": _snapshot_timestamp(item.verified_at),
+            "moderator_notes": item.moderator_notes,
+            "rejection_reason": item.rejection_reason,
+        }
+        for item in evidence
+    ]
+
+
 def issue_adjudication_decision(
     *,
     case_id,
@@ -843,9 +874,7 @@ def issue_adjudication_decision(
     expected_revision,
     verification_run_id=None,
 ):
-    valid_verdicts = {
-        value for value, _label in AdjudicationDecision.Verdict.choices
-    }
+    valid_verdicts = {value for value, _label in AdjudicationDecision.Verdict.choices}
     if verdict not in valid_verdicts:
         raise InvalidAdjudicationDecision("Invalid adjudication verdict.")
     if (
@@ -944,6 +973,12 @@ def issue_adjudication_decision(
             revision_number=1,
             supersedes=None,
             is_current=True,
+        )
+
+        AdjudicationDecisionEvidenceSnapshot.objects.create(
+            decision=decision,
+            claim_id=locked_claim.pk,
+            evidence_records=_build_decision_evidence_records(context["evidence"]),
         )
 
         locked_claim.final_verdict = verdict

@@ -10,7 +10,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import AccountStatus from "../components/account/AccountStatus.jsx";
+import AccountSurface from "../components/account/AccountSurface.jsx";
 import Icons from "../components/Icons.jsx";
+import Button from "../components/ui/Button.jsx";
 import "./OnboardingPage.css";
 import { resolveApiEndpoint } from "../utils/api";
 import { resolveAuthDestination } from "../utils/authNavigation";
@@ -21,8 +24,8 @@ const STEPS = [
       id: "welcome",
       label: "Welcome",
       icon: "sparkles",
-      accentColor: "var(--brand-primary)",
-      accentBg: "#ede9fe",
+      accentColor: "var(--tl-color-brand-primary)",
+      accentBg: "var(--tl-color-bg-subtle)",
       title: (username) => `Welcome to TruthLens${username ? `, @${username}` : ""}!`,
       subtitle: "A better way to investigate questionable information.",
       body: "TruthLens combines AI-assisted analysis with community evidence to help you evaluate claims before deciding what to trust or share. Here's a quick look at the tools available to you.",
@@ -32,8 +35,8 @@ const STEPS = [
       id: "extension",
       label: "Extension",
       icon: "puzzle",
-      accentColor: "#0e9f6e",
-      accentBg: "#d1fae5",
+      accentColor: "var(--tl-color-brand-primary)",
+      accentBg: "var(--tl-color-bg-subtle)",
       title: () => "Investigate Without Leaving the Page",
       subtitle: "Use the TruthLens Chrome extension while browsing the web.",
       body: "Analyze supported pages, URLs, images, and selected content directly from your browser. TruthLens returns an AI-assisted verdict, supporting information, and a confidence indicator when available.",
@@ -43,8 +46,8 @@ const STEPS = [
       id: "web",
       label: "Analysis",
       icon: "scan-line",
-      accentColor: "#7c3aed",
-      accentBg: "#ede9fe",
+      accentColor: "var(--tl-color-brand-primary)",
+      accentBg: "var(--tl-color-bg-subtle)",
       title: () => "Explore the Full Analysis",
       subtitle: "Review more context, evidence, and sources behind a result.",
       body: "TruthLens lets you inspect analyzed claims in more detail, including available evidence, source information, confidence signals, and the reasoning behind the result.",
@@ -54,8 +57,8 @@ const STEPS = [
       id: "community",
       label: "Community",
       icon: "users",
-      accentColor: "#d97706",
-      accentBg: "#fef3c7",
+      accentColor: "var(--tl-color-brand-primary)",
+      accentBg: "var(--tl-color-bg-subtle)",
       title: () => "Add Human Evidence",
       subtitle: "Some claims benefit from more than automated analysis.",
       body: "Community investigations let contributors discuss claims, submit evidence, and evaluate supporting material. Meaningful participation contributes to your reputation and Trust Score on TruthLens.",
@@ -65,8 +68,8 @@ const STEPS = [
       id: "ready",
       label: "Ready",
       icon: "rocket",
-      accentColor: "var(--brand-primary)",
-      accentBg: "#ede9fe",
+      accentColor: "var(--tl-color-brand-primary)",
+      accentBg: "var(--tl-color-bg-subtle)",
       title: (username) => `You're ready${username ? `, @${username}` : ""}.`,
       subtitle: "Start investigating with the tools that brought you here.",
       body: "You can explore community investigations, review a full analysis, or continue the action you started before creating your account.",
@@ -125,7 +128,7 @@ function StepVisual({ type }) {
                      <div className="ob-skeleton ob-skeleton--line" />
                      <div className="ob-skeleton ob-skeleton--line ob-skeleton--short" />
                      <div className="ob-snip-overlay">
-                        <Icons name="scissors" size={14} color="#4f46e5" />
+                        <Icons name="scissors" size={14} color="var(--tl-color-brand-primary)" />
                         <span>Snipping...</span>
                      </div>
                   </div>
@@ -133,7 +136,7 @@ function StepVisual({ type }) {
             </div>
             <div className="ob-result-card">
                <div className="ob-result-header">
-                  <Icons name="scan-line" size={14} color="#4f46e5" />
+                  <Icons name="scan-line" size={14} color="var(--tl-color-brand-primary)" />
                   <span>TruthLens</span>
                </div>
                <div className="ob-result-verdict ob-result-verdict--fake">
@@ -158,11 +161,11 @@ function StepVisual({ type }) {
                   <div className="ob-vtab">Text</div>
                </div>
                <div className="ob-verify-input">
-                  <Icons name="link" size={14} color="#6b7280" />
+                  <Icons name="link" size={14} color="var(--tl-color-text-muted)" />
                   <span className="ob-verify-placeholder">Paste a URL to verify...</span>
                </div>
                <div className="ob-verify-btn">
-                  <Icons name="scan-line" size={14} color="#fff" />
+                  <Icons name="scan-line" size={14} color="var(--tl-color-text-inverse)" />
                   Verify
                </div>
                <div className="ob-verify-result">
@@ -171,7 +174,7 @@ function StepVisual({ type }) {
                      The photo is real but was taken in 2019, not during the 2024 event.
                   </p>
                   <div className="ob-verify-source">
-                     <Icons name="external-link" size={12} color="#6b7280" />
+                     <Icons name="external-link" size={12} color="var(--tl-color-text-muted)" />
                      <span>Supporting source</span>
                   </div>
                </div>
@@ -209,7 +212,7 @@ function StepVisual({ type }) {
                   </div>
                </div>
                <div className="ob-trust-row">
-                  <Icons name="trophy" size={13} color="#d97706" />
+                  <Icons name="trophy" size={13} color="var(--tl-color-brand-primary)" />
                   <span>Your contributions help shape your Trust Score</span>
                </div>
             </div>
@@ -221,7 +224,7 @@ function StepVisual({ type }) {
       return (
          <div className="ob-visual ob-visual--ready">
             <div className="ob-ready-ring">
-               <Icons name="check-circle" size={48} color="#0e9f6e" />
+               <Icons name="check-circle" size={48} color="var(--tl-color-status-success-text)" />
             </div>
 
             <div className="ob-ready-actions">
@@ -299,8 +302,46 @@ export default function OnboardingPage() {
       };
    }, []);
 
-   if (loading || !user) {
-      return null;
+   if (loading) {
+      return (
+         <AccountSurface>
+            <AccountStatus
+               tone="info"
+               loading={true}
+               eyebrow="Account setup"
+               title="Preparing onboarding"
+               description="Loading your TruthLens account."
+               live="polite"
+               busy={true}
+            />
+         </AccountSurface>
+      );
+   }
+
+   if (!user) {
+      return (
+         <AccountSurface>
+            <AccountStatus
+               tone="critical"
+               icon={<Icons name="alert-triangle" size={28} aria-hidden="true" />}
+               eyebrow="Account setup"
+               title="Onboarding unavailable"
+               description="TruthLens couldn't load your account information. Refresh the page to try again."
+               actions={
+                  <Button
+                     type="button"
+                     variant="primary"
+                     density="comfortable"
+                     fullWidth
+                     onClick={() => window.location.reload()}
+                  >
+                     Try again
+                  </Button>
+               }
+               live="assertive"
+            />
+         </AccountSurface>
+      );
    }
 
    if (user.has_completed_onboarding) {
@@ -401,12 +442,21 @@ export default function OnboardingPage() {
    };
 
    return (
-      <div className="ob-page">
+      <div className="ob-flow">
          {/* Skip button — always visible except on last step */}
          {!isLast && (
-            <button className="ob-skip-btn" onClick={handleSkip} disabled={isTransitioning || isCompleting}>
-               {isCompleting ? "Finishing..." : "Skip introduction"}
-            </button>
+            <Button
+               type="button"
+               variant="ghost"
+               density="comfortable"
+               className="ob-skip-action"
+               onClick={handleSkip}
+               disabled={isTransitioning || isCompleting}
+               loading={isCompleting}
+               loadingLabel="Finishing..."
+            >
+               Skip introduction
+            </Button>
          )}
 
          {/* Step counter */}
@@ -423,7 +473,7 @@ export default function OnboardingPage() {
                {isFirst && user.is_email_verified === false && (
                   <div
                      className={`ob-email-notice ${
-                        verificationEmailSent === false ? "ob-email-notice--warning" : "ob-email-notice--success"
+                        verificationEmailSent === false ? "ob-email-notice--warning" : "ob-email-notice--info"
                      }`}
                      role="status"
                   >
@@ -478,27 +528,30 @@ export default function OnboardingPage() {
                {/* Navigation */}
                <div className="ob-nav">
                   {!isFirst && (
-                     <button
-                        className="ob-btn ob-btn--back"
+                     <Button
+                        type="button"
+                        variant="secondary"
+                        density="comfortable"
+                        leadingIcon={<Icons name="arrow-left" size={16} />}
                         onClick={handleBack}
                         disabled={isTransitioning || isCompleting}
                      >
-                        <Icons name="arrow-left" size={16} />
                         Back
-                     </button>
+                     </Button>
                   )}
 
-                  <button
-                     className="ob-btn ob-btn--next"
+                  <Button
+                     type="button"
+                     variant="primary"
+                     density="comfortable"
+                     className="ob-next-action"
                      onClick={handleNext}
                      disabled={isTransitioning || isCompleting}
-                     aria-busy={isLast && isCompleting}
-                     style={{
-                        backgroundColor: step.accentColor,
-                     }}
+                     loading={isLast && isCompleting}
+                     loadingLabel="Finishing..."
                   >
-                     {isLast ? (isCompleting ? "Finishing..." : "Continue to TruthLens") : "Next"}
-                  </button>
+                     {isLast ? "Continue to TruthLens" : "Next"}
+                  </Button>
                </div>
 
                {/* Dot indicators */}
@@ -512,16 +565,11 @@ export default function OnboardingPage() {
                         className={`ob-dot ${i === currentStep ? "ob-dot--active" : ""} ${
                            i < currentStep ? "ob-dot--done" : ""
                         }`}
-                        style={
-                           i <= currentStep
-                              ? {
-                                   backgroundColor: s.accentColor,
-                                }
-                              : {}
-                        }
                         onClick={() => handleDotClick(i)}
                         disabled={isTransitioning || isCompleting}
-                     />
+                     >
+                        <span className="ob-dot__indicator" aria-hidden="true" />
+                     </button>
                   ))}
                </nav>
             </div>
@@ -531,10 +579,6 @@ export default function OnboardingPage() {
                <StepVisual type={step.visual} />
             </div>
          </div>
-
-         {/* Background decoration */}
-         <div className="ob-bg-blob ob-bg-blob--1" />
-         <div className="ob-bg-blob ob-bg-blob--2" />
       </div>
    );
 }

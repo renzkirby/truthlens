@@ -18,7 +18,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import NavigationBar from "../components/NavigationBar.jsx";
 
 // ── Utilities & Hooks ──
 import { VERDICT_CONFIG, API_BASE_URL } from "../utils/constants";
@@ -376,7 +375,6 @@ function UserProfile() {
    if (isLoadingProfile) {
       return (
          <div className="profile-layout">
-            <NavigationBar />
             <main className="profile-container">
                <p style={{ textAlign: "center", marginTop: "50px" }}>Loading profile...</p>
             </main>
@@ -387,7 +385,6 @@ function UserProfile() {
    if (!displayUser && !isOwnProfile) {
       return (
          <div className="profile-layout">
-            <NavigationBar />
             <main className="profile-container">
                <h2 style={{ textAlign: "center", marginTop: "50px" }}>User not found.</h2>
             </main>
@@ -508,8 +505,6 @@ function UserProfile() {
 
    return (
       <div className="profile-layout">
-         <NavigationBar />
-
          <main className="profile-container">
             {/* ── User Identity Header (X-Style Layout) ── */}
             <div className="profile-header-container">

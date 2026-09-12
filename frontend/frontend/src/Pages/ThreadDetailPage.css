@@ -4,8 +4,9 @@
 
 /* ── Page shell ─────────────────────────────────────────────────────────────── */
 .tdp-page {
+    --tdp-breadcrumb-height: 52px;
+
     background: #ffffff;
-    min-height: 100vh;
     font-family: 'Inter', sans-serif;
 }
 
@@ -61,8 +62,7 @@
     justify-content: space-between;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
     position: sticky;
-    top: 56px;
-    /* adjust to your NavBar height */
+    top: var(--tl-app-header-height);
     z-index: 40;
     background: #fff;
 }
@@ -1679,8 +1679,9 @@
     flex-direction: column;
     gap: 16px;
     position: sticky;
-    top: 120px;
-    /* nav + breadcrumb height */
+    top: calc(
+        var(--tl-app-header-height) + var(--tdp-breadcrumb-height) + var(--tl-space-1)
+    );
 }
 
 .tdp-sidebar-card {
@@ -2124,7 +2125,7 @@
 
 @media (max-width: 768px) {
     .tdp-body {
-        padding: 20px 16px 76px;
+        padding: 20px 16px var(--tl-space-3);
     }
 
     .tdp-form-row {
@@ -2144,6 +2145,7 @@
     }
 
     .tdp-breadcrumb {
+        top: var(--tl-app-mobile-header-height);
         padding: 10px 16px;
         height: auto;
         flex-direction: column;
@@ -2433,5 +2435,11 @@
 
     .tdp-label {
         min-width: auto;
+    }
+}
+
+@media (max-width: 480px) {
+    .tdp-body {
+        padding-bottom: var(--tl-space-4);
     }
 }

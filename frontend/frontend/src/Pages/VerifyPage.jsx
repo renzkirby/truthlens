@@ -20,7 +20,6 @@
 import { useState, useRef } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useNavigate } from "react-router-dom";
-import NavigationBar from "../components/NavigationBar.jsx";
 import Icons from "../components/Icons.jsx";
 
 // ── Utilities & Constants ──
@@ -444,8 +443,6 @@ function VerifyPage() {
 
    return (
       <div className="verify-layout">
-         <NavigationBar />
-
          <main className={`verify-container ${result && !loading ? "has-result" : ""}`}>
             <div className="verify-header">
                <div className="verify-header-icon">

@@ -3,6 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../hooks/useNotification";
 import Icons from "../Icons.jsx";
+import Button from "../ui/Button.jsx";
+import IconButton from "../ui/IconButton.jsx";
+import Input from "../ui/Input.jsx";
+import Select from "../ui/Select.jsx";
 import OrganizationPublicProfilePanel from "./OrganizationPublicProfilePanel.jsx";
 
 import { resolveApiEndpoint } from "../../utils/api";
@@ -200,51 +204,62 @@ function InvitationAdminCard({ invitation, busy, onResend, onCancel, cancelButto
             </div>
          </div>
 
-         <div className="org-invitation-details">
+         <dl className="org-invitation-details">
             <div>
-               <span>Status</span>
+               <dt>Status</dt>
 
-               <span className={`org-invitation-status ${String(invitation.status || "UNKNOWN").toLowerCase()}`}>
-                  {formatLabel(invitation.status)}
-               </span>
+               <dd>
+                  <span className={`org-invitation-status ${String(invitation.status || "UNKNOWN").toLowerCase()}`}>
+                     {formatLabel(invitation.status)}
+                  </span>
+               </dd>
             </div>
 
             <div>
-               <span>Sent</span>
+               <dt>Sent</dt>
 
-               <strong>{formatDate(invitation.last_sent_at)}</strong>
+               <dd>{formatDate(invitation.last_sent_at)}</dd>
             </div>
 
             <div>
-               <span>Expires</span>
+               <dt>Expires</dt>
 
-               <strong>{formatDate(invitation.expires_at)}</strong>
+               <dd>{formatDate(invitation.expires_at)}</dd>
             </div>
 
             <div>
-               <span>Deliveries</span>
+               <dt>Deliveries</dt>
 
-               <strong>{invitation.send_count ?? 1}</strong>
+               <dd>{invitation.send_count ?? 1}</dd>
             </div>
-         </div>
+         </dl>
 
          {isPending && (
             <div className="org-invitation-actions">
-               <button type="button" onClick={() => onResend(invitation)} disabled={actionsDisabled}>
-                  <Icons name="send" size={14} />
+               <Button
+                  type="button"
+                  variant="secondary"
+                  density="compact"
+                  leadingIcon={<Icons name="send" size={14} />}
+                  loading={busy}
+                  loadingLabel="Resending…"
+                  onClick={() => onResend(invitation)}
+                  disabled={actionsDisabled}
+               >
                   Resend
-               </button>
+               </Button>
 
-               <button
+               <Button
                   ref={cancelButtonRef}
                   type="button"
-                  className="danger"
+                  variant="destructive"
+                  density="compact"
+                  leadingIcon={<Icons name="x-circle" size={14} />}
                   onClick={(event) => onCancel(invitation, event)}
                   disabled={actionsDisabled}
                >
-                  <Icons name="x-circle" size={14} />
                   Cancel
-               </button>
+               </Button>
             </div>
          )}
       </article>
@@ -259,7 +274,7 @@ function AdminConfirmDialog({
    children,
    confirmLabel,
    confirmIcon,
-   confirmClassName = "",
+   confirmVariant = "primary",
    busy = false,
    onClose,
    onConfirm,
@@ -294,14 +309,29 @@ function AdminConfirmDialog({
             </div>
 
             <div className="org-admin-confirm-actions">
-               <button type="button" onClick={onClose} disabled={busy} data-autofocus="true">
+               <Button
+                  type="button"
+                  variant="secondary"
+                  density="standard"
+                  onClick={onClose}
+                  disabled={busy}
+                  data-autofocus="true"
+               >
                   Keep membership
-               </button>
+               </Button>
 
-               <button type="button" className={confirmClassName} onClick={onConfirm} disabled={busy}>
-                  {confirmIcon && <Icons name={confirmIcon} size={15} />}
-                  {busy ? "Working…" : confirmLabel}
-               </button>
+               <Button
+                  type="button"
+                  variant={confirmVariant}
+                  density="standard"
+                  leadingIcon={confirmIcon ? <Icons name={confirmIcon} size={15} /> : undefined}
+                  loading={busy}
+                  loadingLabel="Working…"
+                  onClick={onConfirm}
+                  disabled={busy}
+               >
+                  {confirmLabel}
+               </Button>
             </div>
          </div>
       </div>
@@ -321,7 +351,8 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
    const memberManageButtonRefs = useRef(new Map());
    const invitationCancelButtonRefs = useRef(new Map());
 
-   const [requestVersion, setRequestVersion] = useState(0);
+   const [rosterRequestVersion, setRosterRequestVersion] = useState(0);
+   const [invitationsRequestVersion, setInvitationsRequestVersion] = useState(0);
    const [activeAdminView, setActiveAdminView] = useState("members");
    const [hasOpenedPublicPresence, setHasOpenedPublicPresence] = useState(false);
 
@@ -417,7 +448,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
       return () => {
          cancelled = true;
       };
-   }, [authFetch, invitationsUrl, requestVersion]);
+   }, [authFetch, invitationsRequestVersion, invitationsUrl]);
 
    useEffect(() => {
       if (!membersUrl) {
@@ -474,7 +505,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
       return () => {
          cancelled = true;
       };
-   }, [authFetch, membersUrl, requestVersion]);
+   }, [authFetch, membersUrl, rosterRequestVersion]);
 
    useEffect(() => {
       if (!memberMenuId) {
@@ -661,7 +692,20 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
       setInvitationsError("");
       setMemberMenuId(null);
 
-      setRequestVersion((current) => current + 1);
+      setRosterRequestVersion((current) => current + 1);
+      setInvitationsRequestVersion((current) => current + 1);
+   };
+
+   const retryMemberRoster = () => {
+      setLoading(true);
+      setErrorMessage("");
+      setRosterRequestVersion((current) => current + 1);
+   };
+
+   const retryInvitations = () => {
+      setInvitationsLoading(true);
+      setInvitationsError("");
+      setInvitationsRequestVersion((current) => current + 1);
    };
 
    const replaceRosterMembership = (updatedMembership) => {
@@ -1164,40 +1208,11 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
       );
    }
 
-   if (loading) {
-      return (
-         <div className="org-admin-state" aria-live="polite">
-            <Icons name="loader" size={21} className="org-admin-spinner" />
-
-            <span>Loading organization members...</span>
-         </div>
-      );
-   }
-
-   if (errorMessage) {
-      return (
-         <div className="org-admin-error" role="alert">
-            <Icons name="alert-circle" size={18} />
-
-            <div>
-               <strong>Member roster unavailable</strong>
-
-               <span>{errorMessage}</span>
-
-               <button type="button" onClick={refresh}>
-                  <Icons name="refresh-cw" size={14} />
-                  Try again
-               </button>
-            </div>
-         </div>
-      );
-   }
-
    const organizationName = roster?.organization?.name || "this organization";
 
    return (
       <div className="organization-admin-panel">
-         <div className="org-admin-view-switcher" aria-label="Organization administration sections">
+         <div className="org-admin-view-switcher" role="group" aria-label="Organization administration sections">
             <button
                type="button"
                aria-pressed={activeAdminView === "members"}
@@ -1226,25 +1241,32 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
          >
             <div className="org-admin-toolbar">
             <div>
-               <strong>Organization members</strong>
+               <h3>Organization members</h3>
 
                <span>Manage institutional memberships and invite new members.</span>
             </div>
 
             <div className="org-admin-toolbar-actions">
-               <button
+               <Button
                   type="button"
-                  className="org-admin-invite-button"
+                  variant="primary"
+                  density="standard"
+                  leadingIcon={<Icons name="user-plus" size={15} />}
                   onClick={() => setShowInviteForm((current) => !current)}
                >
-                  <Icons name="user-plus" size={15} />
                   Invite member
-               </button>
+               </Button>
 
-               <button ref={refreshButtonRef} type="button" onClick={refresh}>
-                  <Icons name="refresh-cw" size={15} />
+               <Button
+                  ref={refreshButtonRef}
+                  type="button"
+                  variant="secondary"
+                  density="standard"
+                  leadingIcon={<Icons name="refresh-cw" size={15} />}
+                  onClick={refresh}
+               >
                   Refresh
-               </button>
+               </Button>
             </div>
          </div>
 
@@ -1257,25 +1279,26 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                      <span>TruthLens will email an invitation link to this address.</span>
                   </div>
 
-                  <button
+                  <IconButton
                      type="button"
-                     className="org-invite-admin-close"
+                     variant="ghost"
+                     density="compact"
+                     icon={<Icons name="x" size={17} />}
                      onClick={() => {
                         setShowInviteForm(false);
                         setInviteError("");
                      }}
                      aria-label="Close invitation form"
-                  >
-                     <Icons name="x" size={17} />
-                  </button>
+                  />
                </div>
 
                <div className="org-invite-admin-fields">
                   <div>
                      <label htmlFor="org-invite-email">Email address</label>
 
-                     <input
+                     <Input
                         id="org-invite-email"
+                        density="standard"
                         type="email"
                         value={inviteForm.email}
                         onChange={(event) =>
@@ -1294,8 +1317,9 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                   <div>
                      <label htmlFor="org-invite-role">Organization role</label>
 
-                     <select
+                     <Select
                         id="org-invite-role"
+                        density="standard"
                         value={inviteForm.invited_role}
                         onChange={(event) =>
                            setInviteForm((current) => ({
@@ -1313,7 +1337,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                               {role.label}
                            </option>
                         ))}
-                     </select>
+                     </Select>
                   </div>
                </div>
 
@@ -1335,248 +1359,298 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                )}
 
                <div className="org-invite-admin-form-actions">
-                  <button type="button" onClick={() => setShowInviteForm(false)} disabled={isSendingInvite}>
+                  <Button
+                     type="button"
+                     variant="secondary"
+                     density="standard"
+                     onClick={() => setShowInviteForm(false)}
+                     disabled={isSendingInvite}
+                  >
                      Cancel
-                  </button>
+                  </Button>
 
-                  <button type="submit" className="primary" disabled={isSendingInvite}>
-                     {isSendingInvite ? "Sending invitation…" : "Send invitation"}
-                  </button>
+                  <Button
+                     type="submit"
+                     variant="primary"
+                     density="standard"
+                     loading={isSendingInvite}
+                     loadingLabel="Sending invitation…"
+                     disabled={isSendingInvite}
+                  >
+                     Send invitation
+                  </Button>
                </div>
             </form>
          )}
 
-         <div className="org-admin-summary" aria-label="Membership summary">
-            <div>
-               <span>Total</span>
-               <strong>{roster.count}</strong>
+         {loading ? (
+            <div className="org-admin-state" aria-live="polite">
+               <Icons name="loader" size={21} className="org-admin-spinner" />
+
+               <span>Loading organization members...</span>
             </div>
+         ) : errorMessage ? (
+            <div className="org-admin-error" role="alert">
+               <Icons name="alert-circle" size={18} />
 
-            <div>
-               <span>Active</span>
-               <strong>{roster.summary.active}</strong>
-            </div>
+               <div>
+                  <strong>Member roster unavailable</strong>
 
-            <div>
-               <span>Pending</span>
-               <strong>{roster.summary.pending}</strong>
-            </div>
+                  <span>{errorMessage}</span>
 
-            <div>
-               <span>Suspended</span>
-               <strong>{roster.summary.suspended}</strong>
-            </div>
-         </div>
-
-         {roster.results.length === 0 ? (
-            <div className="org-admin-state">
-               <Icons name="users" size={25} />
-
-               <h3>No current members</h3>
-
-               <p>Current organization memberships will appear here.</p>
+                  <Button
+                     type="button"
+                     variant="secondary"
+                     density="compact"
+                     leadingIcon={<Icons name="refresh-cw" size={14} />}
+                     onClick={retryMemberRoster}
+                  >
+                     Try again
+                  </Button>
+               </div>
             </div>
          ) : (
-            <div className="org-member-list">
-               {roster.results.map((membership) => {
+            <>
+               <dl className="org-admin-summary" aria-label="Membership summary">
+                  <div>
+                     <dt>Total</dt>
+                     <dd>{roster.count}</dd>
+                  </div>
+
+                  <div>
+                     <dt>Active</dt>
+                     <dd>{roster.summary.active}</dd>
+                  </div>
+
+                  <div>
+                     <dt>Pending</dt>
+                     <dd>{roster.summary.pending}</dd>
+                  </div>
+
+                  <div>
+                     <dt>Suspended</dt>
+                     <dd>{roster.summary.suspended}</dd>
+                  </div>
+               </dl>
+
+               {roster.results.length === 0 ? (
+                  <div className="org-admin-state">
+                     <Icons name="users" size={25} />
+
+                     <h4>No current members</h4>
+
+                     <p>Current organization memberships will appear here.</p>
+                  </div>
+               ) : (
+                  <ul className="org-member-list">
+                     {roster.results.map((membership) => {
                   const user = membership?.user ?? {};
                   const manageable = canManageMembership(membershipRole, membership);
                   const busy = memberActionId === membership.id;
                   const menuOpen = memberMenuId === membership.id;
 
                   return (
-                     <article
-                        key={membership.id}
-                        className={`org-member-card ${busy ? "is-busy" : ""}`}
-                        aria-busy={busy ? "true" : undefined}
-                     >
-                        <div className="org-member-identity">
-                           <div className="org-member-avatar">
-                              <Icons name="user" size={18} />
+                     <li key={membership.id} className="org-member-list-item">
+                        <article
+                           className={`org-member-item ${busy ? "is-busy" : ""}`}
+                           aria-busy={busy ? "true" : undefined}
+                        >
+                           <div className="org-member-identity">
+                              <div className="org-member-avatar">
+                                 <Icons name="user" size={18} />
+                              </div>
+
+                              <div>
+                                 <strong>@{user.username || "unknown"}</strong>
+
+                                 <span>{user.email || "No email available"}</span>
+                              </div>
                            </div>
 
-                           <div>
-                              <strong>@{user.username || "unknown"}</strong>
+                           <dl className="org-member-details">
+                              <div>
+                                 <dt>Role</dt>
+                                 <dd>{formatLabel(membership.role)}</dd>
+                              </div>
 
-                              <span>{user.email || "No email available"}</span>
-                           </div>
-                        </div>
+                              <div>
+                                 <dt>Status</dt>
 
-                        <div className="org-member-details">
-                           <div>
-                              <span>Role</span>
-                              <strong>{formatLabel(membership.role)}</strong>
-                           </div>
+                                 <dd>
+                                    <span
+                                       className={`org-member-status ${String(membership.status || "UNKNOWN").toLowerCase()}`}
+                                    >
+                                       <Icons name={getStatusIcon(membership.status)} size={13} />
+                                       {formatLabel(membership.status)}
+                                    </span>
+                                 </dd>
+                              </div>
 
-                           <div>
-                              <span>Status</span>
+                              <div>
+                                 <dt>Joined</dt>
+                                 <dd>{formatDate(membership.joined_at)}</dd>
+                              </div>
 
-                              <span
-                                 className={`org-member-status ${String(membership.status || "UNKNOWN").toLowerCase()}`}
-                              >
-                                 <Icons name={getStatusIcon(membership.status)} size={13} />
-                                 {formatLabel(membership.status)}
-                              </span>
-                           </div>
+                              <div>
+                                 <dt>Approved by</dt>
 
-                           <div>
-                              <span>Joined</span>
-                              <strong>{formatDate(membership.joined_at)}</strong>
-                           </div>
+                                 <dd>
+                                    {membership?.approved_by?.username
+                                       ? `@${membership.approved_by.username}`
+                                       : "Not recorded"}
+                                 </dd>
+                              </div>
+                           </dl>
 
-                           <div>
-                              <span>Approved by</span>
-
-                              <strong>
-                                 {membership?.approved_by?.username
-                                    ? `@${membership.approved_by.username}`
-                                    : "Not recorded"}
-                              </strong>
-                           </div>
-                        </div>
-
-                        <div className="org-member-actions">
-                           {manageable ? (
-                              <>
-                                 <button
-                                    ref={(node) => {
-                                       if (node) {
-                                          memberManageButtonRefs.current.set(membership.id, node);
-                                       } else {
-                                          memberManageButtonRefs.current.delete(membership.id);
-                                       }
-                                    }}
-                                    type="button"
-                                    className="org-member-manage-button"
-                                    aria-haspopup="menu"
-                                    aria-expanded={menuOpen}
-                                    aria-controls={menuOpen ? `member-menu-${membership.id}` : undefined}
-                                    disabled={Boolean(memberActionId)}
-                                    onClick={(event) => {
-                                       event.stopPropagation();
-                                       setMemberMenuId((current) => (current === membership.id ? null : membership.id));
-                                    }}
-                                    onKeyDown={(event) => {
-                                       if (event.key === "ArrowDown") {
-                                          event.preventDefault();
-                                          event.stopPropagation();
-                                          setMemberMenuId(membership.id);
-                                       }
-                                    }}
-                                 >
-                                    {busy ? (
-                                       <Icons name="loader" size={14} className="org-admin-spinner" />
-                                    ) : (
-                                       <Icons name="settings" size={14} />
-                                    )}
-                                    Manage
-                                    <Icons name="chevron-down" size={13} />
-                                 </button>
-
-                                 {menuOpen && !busy && (
-                                    <div
-                                       ref={memberMenuRef}
-                                       id={`member-menu-${membership.id}`}
-                                       className="org-member-menu"
-                                       role="menu"
-                                       aria-label={`Manage @${user.username || "member"}`}
-                                       onClick={(event) => event.stopPropagation()}
-                                       onBlur={(event) => {
-                                          if (!event.currentTarget.contains(event.relatedTarget)) {
-                                             setMemberMenuId(null);
+                           <div className="org-member-actions">
+                              {manageable ? (
+                                 <>
+                                    <Button
+                                       ref={(node) => {
+                                          if (node) {
+                                             memberManageButtonRefs.current.set(membership.id, node);
+                                          } else {
+                                             memberManageButtonRefs.current.delete(membership.id);
                                           }
+                                       }}
+                                       type="button"
+                                       variant="secondary"
+                                       density="compact"
+                                       className="org-member-manage-button"
+                                       leadingIcon={
+                                          busy ? (
+                                             <Icons name="loader" size={14} className="org-admin-spinner" />
+                                          ) : (
+                                             <Icons name="settings" size={14} />
+                                          )
+                                       }
+                                       trailingIcon={<Icons name="chevron-down" size={13} />}
+                                       aria-haspopup="menu"
+                                       aria-expanded={menuOpen}
+                                       aria-controls={menuOpen ? `member-menu-${membership.id}` : undefined}
+                                       disabled={Boolean(memberActionId)}
+                                       onClick={(event) => {
+                                          event.stopPropagation();
+                                          setMemberMenuId((current) => (current === membership.id ? null : membership.id));
                                        }}
                                        onKeyDown={(event) => {
-                                          if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-                                             return;
+                                          if (event.key === "ArrowDown") {
+                                             event.preventDefault();
+                                             event.stopPropagation();
+                                             setMemberMenuId(membership.id);
                                           }
-
-                                          event.preventDefault();
-
-                                          const items = Array.from(
-                                             event.currentTarget.querySelectorAll('[role="menuitem"]:not([disabled])'),
-                                          );
-
-                                          if (items.length === 0) {
-                                             return;
-                                          }
-
-                                          const currentIndex = items.indexOf(document.activeElement);
-                                          let nextIndex = currentIndex;
-
-                                          if (event.key === "Home") {
-                                             nextIndex = 0;
-                                          } else if (event.key === "End") {
-                                             nextIndex = items.length - 1;
-                                          } else if (event.key === "ArrowDown") {
-                                             nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % items.length;
-                                          } else if (event.key === "ArrowUp") {
-                                             nextIndex =
-                                                currentIndex < 0
-                                                   ? items.length - 1
-                                                   : (currentIndex - 1 + items.length) % items.length;
-                                          }
-
-                                          items[nextIndex].focus();
                                        }}
                                     >
-                                       <button type="button" role="menuitem" onClick={() => openRoleDialog(membership)}>
-                                          <Icons name="pencil" size={14} />
-                                          Change role
-                                       </button>
+                                       Manage
+                                    </Button>
 
-                                       {membership.status === "ACTIVE" && (
-                                          <button
-                                             type="button"
-                                             role="menuitem"
-                                             onClick={() => openSuspendDialog(membership)}
-                                          >
-                                             <Icons name="user-minus" size={14} />
-                                             Suspend membership
-                                          </button>
-                                       )}
+                                    {menuOpen && !busy && (
+                                       <div
+                                          ref={memberMenuRef}
+                                          id={`member-menu-${membership.id}`}
+                                          className="org-member-menu"
+                                          role="menu"
+                                          aria-label={`Manage @${user.username || "member"}`}
+                                          onClick={(event) => event.stopPropagation()}
+                                          onBlur={(event) => {
+                                             if (!event.currentTarget.contains(event.relatedTarget)) {
+                                                setMemberMenuId(null);
+                                             }
+                                          }}
+                                          onKeyDown={(event) => {
+                                             if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+                                                return;
+                                             }
 
-                                       {membership.status === "SUSPENDED" && (
-                                          <button
-                                             type="button"
-                                             role="menuitem"
-                                             onClick={() => openRestoreDialog(membership)}
-                                          >
-                                             <Icons name="user-check" size={14} />
-                                             Restore membership
-                                          </button>
-                                       )}
+                                             event.preventDefault();
 
-                                       {membership.status !== "LEFT" && (
-                                          <button
-                                             type="button"
-                                             role="menuitem"
-                                             className="danger"
-                                             onClick={() => openRemoveDialog(membership)}
-                                          >
-                                             <Icons name="trash" size={14} />
-                                             Remove from organization
+                                             const items = Array.from(
+                                                event.currentTarget.querySelectorAll('[role="menuitem"]:not([disabled])'),
+                                             );
+
+                                             if (items.length === 0) {
+                                                return;
+                                             }
+
+                                             const currentIndex = items.indexOf(document.activeElement);
+                                             let nextIndex = currentIndex;
+
+                                             if (event.key === "Home") {
+                                                nextIndex = 0;
+                                             } else if (event.key === "End") {
+                                                nextIndex = items.length - 1;
+                                             } else if (event.key === "ArrowDown") {
+                                                nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % items.length;
+                                             } else if (event.key === "ArrowUp") {
+                                                nextIndex =
+                                                   currentIndex < 0
+                                                      ? items.length - 1
+                                                      : (currentIndex - 1 + items.length) % items.length;
+                                             }
+
+                                             items[nextIndex].focus();
+                                          }}
+                                       >
+                                          <button type="button" role="menuitem" onClick={() => openRoleDialog(membership)}>
+                                             <Icons name="pencil" size={14} />
+                                             Change role
                                           </button>
-                                       )}
-                                    </div>
-                                 )}
-                              </>
-                           ) : (
-                              <span className="org-member-protected-label">
-                                 {membership.role === "OWNER" ? "Ownership protected" : "Managed by owner"}
-                              </span>
-                           )}
-                        </div>
-                     </article>
+
+                                          {membership.status === "ACTIVE" && (
+                                             <button
+                                                type="button"
+                                                role="menuitem"
+                                                onClick={() => openSuspendDialog(membership)}
+                                             >
+                                                <Icons name="user-minus" size={14} />
+                                                Suspend membership
+                                             </button>
+                                          )}
+
+                                          {membership.status === "SUSPENDED" && (
+                                             <button
+                                                type="button"
+                                                role="menuitem"
+                                                onClick={() => openRestoreDialog(membership)}
+                                             >
+                                                <Icons name="user-check" size={14} />
+                                                Restore membership
+                                             </button>
+                                          )}
+
+                                          {membership.status !== "LEFT" && (
+                                             <button
+                                                type="button"
+                                                role="menuitem"
+                                                className="danger"
+                                                onClick={() => openRemoveDialog(membership)}
+                                             >
+                                                <Icons name="trash" size={14} />
+                                                Remove from organization
+                                             </button>
+                                          )}
+                                       </div>
+                                    )}
+                                 </>
+                              ) : (
+                                 <span className="org-member-protected-label">
+                                    {membership.role === "OWNER" ? "Ownership protected" : "Managed by owner"}
+                                 </span>
+                              )}
+                           </div>
+                        </article>
+                     </li>
                   );
-               })}
-            </div>
+                     })}
+                  </ul>
+               )}
+            </>
          )}
 
          <section className="org-invitation-admin-section">
             <div className="org-invitation-admin-heading">
                <div>
-                  <strong>Organization invitations</strong>
+                  <h3>Organization invitations</h3>
 
                   <span>Manage pending and historical invitations.</span>
                </div>
@@ -1595,38 +1669,39 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                      <strong>Invitations unavailable</strong>
                      <span>{invitationsError}</span>
 
-                     <button type="button" onClick={refresh}>
+                     <Button type="button" variant="secondary" density="compact" onClick={retryInvitations}>
                         Try again
-                     </button>
+                     </Button>
                   </div>
                </div>
             ) : invitations.length === 0 ? (
                <div className="org-admin-state">
                   <Icons name="mail" size={25} />
 
-                  <h3>No invitations yet</h3>
+                  <h4>No invitations yet</h4>
 
                   <p>Invitations you send will appear here.</p>
                </div>
             ) : (
-               <div className="org-invitation-list">
+               <ul className="org-invitation-list">
                   {invitations.map((invitation) => (
-                     <InvitationAdminCard
-                        key={invitation.id}
-                        invitation={invitation}
-                        busy={invitationActionId === invitation.id}
-                        onResend={handleResendInvitation}
-                        onCancel={openInvitationCancelDialog}
-                        cancelButtonRef={(node) => {
-                           if (node) {
-                              invitationCancelButtonRefs.current.set(invitation.id, node);
-                           } else {
-                              invitationCancelButtonRefs.current.delete(invitation.id);
-                           }
-                        }}
-                     />
+                     <li key={invitation.id} className="org-invitation-list-item">
+                        <InvitationAdminCard
+                           invitation={invitation}
+                           busy={invitationActionId === invitation.id}
+                           onResend={handleResendInvitation}
+                           onCancel={openInvitationCancelDialog}
+                           cancelButtonRef={(node) => {
+                              if (node) {
+                                 invitationCancelButtonRefs.current.set(invitation.id, node);
+                              } else {
+                                 invitationCancelButtonRefs.current.delete(invitation.id);
+                              }
+                           }}
+                        />
+                     </li>
                   ))}
-               </div>
+               </ul>
             )}
          </section>
 
@@ -1662,24 +1737,27 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                   </div>
 
                   <div className="org-admin-confirm-actions">
-                     <button
+                     <Button
                         type="button"
+                        variant="secondary"
+                        density="standard"
                         onClick={() => setCancelTarget(null)}
                         disabled={Boolean(invitationActionId)}
                         data-autofocus="true"
                      >
                         Keep invitation
-                     </button>
+                     </Button>
 
-                     <button
+                     <Button
                         type="button"
-                        className="danger"
+                        variant="destructive"
+                        density="standard"
+                        leadingIcon={<Icons name="x-circle" size={15} />}
                         onClick={handleCancelInvitation}
                         disabled={Boolean(invitationActionId)}
                      >
-                        <Icons name="x-circle" size={15} />
                         {invitationActionId ? "Cancelling…" : "Cancel invitation"}
-                     </button>
+                     </Button>
                   </div>
                </div>
             </div>
@@ -1721,8 +1799,9 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                   <div className="org-admin-role-field">
                      <label htmlFor="org-member-role-select">New role</label>
 
-                     <select
+                     <Select
                         id="org-member-role-select"
+                        density="standard"
                         value={roleValue}
                         onChange={(event) => setRoleValue(event.target.value)}
                         disabled={Boolean(memberActionId)}
@@ -1737,7 +1816,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                                  {role.label}
                               </option>
                            ))}
-                     </select>
+                     </Select>
                   </div>
 
                   <div className="org-admin-authority-note">
@@ -1749,8 +1828,10 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                   </div>
 
                   <div className="org-admin-confirm-actions">
-                     <button
+                     <Button
                         type="button"
+                        variant="secondary"
+                        density="standard"
                         onClick={() => {
                            setRoleTarget(null);
                            setRoleValue("");
@@ -1758,17 +1839,18 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                         disabled={Boolean(memberActionId)}
                      >
                         Cancel
-                     </button>
+                     </Button>
 
-                     <button
+                     <Button
                         type="button"
-                        className="primary"
+                        variant="primary"
+                        density="standard"
+                        leadingIcon={<Icons name="check" size={15} />}
                         onClick={handleRoleChange}
                         disabled={!roleValue || Boolean(memberActionId)}
                      >
-                        <Icons name="check" size={15} />
                         Update role
-                     </button>
+                     </Button>
                   </div>
                </div>
             </div>
@@ -1782,7 +1864,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                title="Suspend membership?"
                confirmLabel="Suspend membership"
                confirmIcon="user-minus"
-               confirmClassName="danger"
+               confirmVariant="destructive"
                busy={memberActionId === suspendTarget.id}
                onClose={() => setSuspendTarget(null)}
                onConfirm={handleSuspendMembership}
@@ -1805,7 +1887,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                title="Restore membership?"
                confirmLabel="Restore membership"
                confirmIcon="user-check"
-               confirmClassName="primary"
+               confirmVariant="primary"
                busy={memberActionId === restoreTarget.id}
                onClose={() => setRestoreTarget(null)}
                onConfirm={handleRestoreMembership}
@@ -1826,7 +1908,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                title="Remove from organization?"
                confirmLabel="Remove from organization"
                confirmIcon="trash"
-               confirmClassName="danger"
+               confirmVariant="destructive"
                busy={memberActionId === removeTarget.id}
                onClose={() => setRemoveTarget(null)}
                onConfirm={handleRemoveMembership}
@@ -1851,7 +1933,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                className="org-admin-view-region"
                hidden={activeAdminView !== "public-presence"}
             >
-               <OrganizationPublicProfilePanel organizationId={organizationId} requestVersion={requestVersion} />
+               <OrganizationPublicProfilePanel organizationId={organizationId} />
             </div>
          )}
       </div>

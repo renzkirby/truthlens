@@ -1,7 +1,8 @@
 from django.db import models
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.db.models.functions import Lower
 from django.core.exceptions import ValidationError
+from django.core.validators import URLValidator
 from django.contrib.auth.models import User
 from django.conf import settings
 from django.contrib.postgres.search import SearchVectorField, SearchVector
@@ -9,6 +10,26 @@ from django.contrib.postgres.indexes import GinIndex
 from pgvector.django import VectorField, HnswIndex
 from django.utils import timezone
 import uuid
+
+from .evidence_snapshot_schema import (
+    CURRENT_SCHEMA_VERSION as EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
+    EVIDENCE_RECORD_FIELDS as EVIDENCE_SNAPSHOT_RECORD_FIELDS,
+    EvidenceSnapshotSchemaError,
+    validate_evidence_snapshot,
+)
+from .publication_snapshot_schema import (
+    CURRENT_SCHEMA_VERSION as PUBLICATION_SNAPSHOT_SCHEMA_VERSION,
+    EDITORIAL_REVISION_SCHEMA_VERSION as PUBLICATION_SNAPSHOT_REVISION_VERSION,
+    FACTUAL_CORRECTION_SCHEMA_VERSION as PUBLICATION_SNAPSHOT_CORRECTION_VERSION,
+    FIRST_PUBLICATION_SCHEMA_VERSION as PUBLICATION_SNAPSHOT_INITIAL_VERSION,
+    PublicationSnapshotSchemaError,
+    validate_publication_snapshot,
+)
+from .factual_correction_proposal_schema import (
+    CURRENT_SCHEMA_VERSION as FACTUAL_CORRECTION_PROPOSAL_SCHEMA_VERSION,
+    FactualCorrectionProposalSchemaError,
+    validate_factual_correction_proposal,
+)
 
 
 def _claim_vector_indexes():
@@ -1586,6 +1607,14 @@ class ModerationEvent(models.Model):
             "ARTICLE_REVISED",
             "Article Revised",
         )
+        FACTUAL_CORRECTION_REQUESTED = (
+            "FACTUAL_CORRECTION_REQUESTED",
+            "Factual Correction Requested",
+        )
+        FACTUAL_CORRECTION_PROPOSAL_PREPARED = (
+            "FACTUAL_CORRECTION_PROPOSAL_PREPARED",
+            "Factual Correction Proposal Prepared",
+        )
 
     id = models.UUIDField(
         primary_key=True,
@@ -1864,6 +1893,57 @@ class AdjudicationDecision(models.Model):
         )
 
 
+class AdjudicationDecisionEvidenceSnapshot(models.Model):
+    CURRENT_SCHEMA_VERSION = EVIDENCE_SNAPSHOT_SCHEMA_VERSION
+    EVIDENCE_RECORD_FIELDS = EVIDENCE_SNAPSHOT_RECORD_FIELDS
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    decision = models.OneToOneField(
+        AdjudicationDecision,
+        on_delete=models.PROTECT,
+        related_name="evidence_snapshot",
+    )
+    claim_id = models.UUIDField(
+        editable=False,
+    )
+    schema_version = models.PositiveSmallIntegerField(
+        default=CURRENT_SCHEMA_VERSION,
+        editable=False,
+    )
+    captured_at = models.DateTimeField(
+        auto_now_add=True,
+        editable=False,
+    )
+    evidence_records = models.JSONField(
+        default=list,
+        editable=False,
+    )
+
+    class Meta:
+        ordering = ["-captured_at"]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError(
+                "Decision evidence snapshots are immutable and cannot be modified."
+            )
+        if str(self.claim_id) != str(self.decision.claim_id):
+            raise ValidationError(
+                "Snapshot claim identity must match its adjudication decision."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Decision evidence snapshots cannot be deleted directly.")
+
+    def __str__(self):
+        return f"Evidence snapshot for decision {self.decision_id}"
+
+
 class Vote(models.Model):
     class Meta:
         constraints = [
@@ -1908,6 +1988,11 @@ class OfficialFactCheck(models.Model):
         IN_REVIEW = "IN_REVIEW", "In Review"
         PUBLISHED = "PUBLISHED", "Published"
         ARCHIVED = "ARCHIVED", "Archived"
+
+    class RevisionKind(models.TextChoices):
+        INITIAL = "INITIAL", "Initial"
+        EDITORIAL_REVISION = "EDITORIAL_REVISION", "Editorial revision"
+        FACTUAL_CORRECTION = "FACTUAL_CORRECTION", "Factual correction"
 
     id = models.UUIDField(
         primary_key=True,
@@ -2066,6 +2151,44 @@ class OfficialFactCheck(models.Model):
     )
 
     # ---------------------------------
+    # Explicit revision provenance
+    # ---------------------------------
+
+    supersedes = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="successors",
+    )
+
+    revision_kind = models.CharField(
+        max_length=24,
+        choices=RevisionKind.choices,
+        null=True,
+        blank=True,
+    )
+
+    revision_reason = models.TextField(
+        max_length=2000,
+        null=True,
+        blank=True,
+    )
+
+    revision_requested_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="requested_fact_check_revisions",
+    )
+
+    revision_requested_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    # ---------------------------------
     # Legacy compatibility
     # ---------------------------------
 
@@ -2102,6 +2225,49 @@ class OfficialFactCheck(models.Model):
                 ),
                 name=("uniq_published_" "fact_check_claim"),
             ),
+            models.UniqueConstraint(
+                fields=["supersedes"],
+                condition=Q(supersedes__isnull=False)
+                & (
+                    Q(
+                        publication_status__in=(
+                            "DRAFT",
+                            "IN_REVIEW",
+                            "PUBLISHED",
+                        )
+                    )
+                    | Q(published_at__isnull=False)
+                ),
+                name="uniq_reserved_fact_check_successor",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(
+                        revision_kind__isnull=True,
+                        supersedes__isnull=True,
+                        revision_reason__isnull=True,
+                        revision_requested_by__isnull=True,
+                        revision_requested_at__isnull=True,
+                    )
+                    | Q(
+                        revision_kind="INITIAL",
+                        supersedes__isnull=True,
+                        revision_reason__isnull=True,
+                        revision_requested_by__isnull=True,
+                        revision_requested_at__isnull=True,
+                    )
+                    | Q(
+                        revision_kind__in=(
+                            "EDITORIAL_REVISION",
+                            "FACTUAL_CORRECTION",
+                        ),
+                        supersedes__isnull=False,
+                        revision_reason__isnull=False,
+                        revision_requested_at__isnull=False,
+                    )
+                ),
+                name="fact_check_revision_metadata_shape",
+            ),
         ]
 
         indexes = [
@@ -2132,8 +2298,194 @@ class OfficialFactCheck(models.Model):
             ),
         ]
 
+    SEALED_CONTENT_FIELDS = (
+        "claim_id",
+        "adjudication_decision_id",
+        "organization_id",
+        "canonical_claim",
+        "verdict",
+        "headline",
+        "summary",
+        "article_body",
+        "sources",
+        "version",
+        "created_at",
+        "drafted_by_id",
+        "submitted_for_review_at",
+        "reviewed_by_id",
+        "reviewed_at",
+        "published_by_id",
+        "published_at",
+        "source_thread_id",
+        "supersedes_id",
+        "revision_kind",
+        "revision_reason",
+        "revision_requested_by_id",
+        "revision_requested_at",
+    )
+
+    REVISION_METADATA_FIELDS = (
+        "supersedes_id",
+        "revision_kind",
+        "revision_reason",
+        "revision_requested_by_id",
+        "revision_requested_at",
+    )
+
+    def _validate_revision_metadata_update(self):
+        if self._state.adding or not self.pk:
+            return
+        stored = (
+            OfficialFactCheck.objects.filter(pk=self.pk)
+            .values(*self.REVISION_METADATA_FIELDS)
+            .first()
+        )
+        if stored is None:
+            return
+        if any(
+            getattr(self, field) != stored[field]
+            for field in self.REVISION_METADATA_FIELDS
+        ):
+            raise ValidationError(
+                "Fact-check revision provenance cannot be modified after creation."
+            )
+
+    def _validate_sealed_update(self):
+        if self._state.adding or not self.pk:
+            return
+        if not OfficialFactCheckPublicationSnapshot.objects.filter(
+            fact_check_id=self.pk
+        ).exists():
+            return
+
+        stored = (
+            OfficialFactCheck.objects.filter(pk=self.pk)
+            .values(
+                *self.SEALED_CONTENT_FIELDS,
+                "publication_status",
+            )
+            .first()
+        )
+        if stored is None:
+            return
+        for field in self.SEALED_CONTENT_FIELDS:
+            if getattr(self, field) != stored[field]:
+                raise ValidationError(
+                    "Sealed fact-check publication content cannot be modified."
+                )
+        if self.publication_status != stored["publication_status"] and not (
+            stored["publication_status"] == self.PublicationStatus.PUBLISHED
+            and self.publication_status == self.PublicationStatus.ARCHIVED
+        ):
+            raise ValidationError(
+                "A sealed fact-check only permits the archival lifecycle transition."
+            )
+
     def clean(self):
         super().clean()
+
+        revision_errors = {}
+        reason = self.revision_reason
+        normalized_reason = reason.strip() if isinstance(reason, str) else reason
+
+        if self.revision_kind is None:
+            if any(
+                value is not None
+                for value in (
+                    self.supersedes_id,
+                    self.revision_reason,
+                    self.revision_requested_by_id,
+                    self.revision_requested_at,
+                )
+            ):
+                revision_errors["revision_kind"] = (
+                    "Historical unknown revision metadata must remain empty."
+                )
+        elif self.revision_kind == self.RevisionKind.INITIAL:
+            if self.supersedes_id is not None:
+                revision_errors["supersedes"] = (
+                    "An initial fact-check cannot supersede another fact-check."
+                )
+            if reason is not None:
+                revision_errors["revision_reason"] = (
+                    "An initial fact-check cannot have a revision reason."
+                )
+            if (
+                self.revision_requested_by_id is not None
+                or self.revision_requested_at is not None
+            ):
+                revision_errors["revision_requested_by"] = (
+                    "An initial fact-check cannot have revision-request metadata."
+                )
+        elif self.revision_kind in {
+            self.RevisionKind.EDITORIAL_REVISION,
+            self.RevisionKind.FACTUAL_CORRECTION,
+        }:
+            if self.supersedes_id is None:
+                revision_errors["supersedes"] = (
+                    "A revision must identify the fact-check it supersedes."
+                )
+            if not isinstance(reason, str) or not normalized_reason:
+                revision_errors["revision_reason"] = (
+                    "A nonblank revision reason is required."
+                )
+            elif len(normalized_reason) > 2000:
+                revision_errors["revision_reason"] = (
+                    "Revision reason must be 2000 characters or fewer."
+                )
+            if (
+                self._state.adding
+                and self.revision_requested_by_id is None
+                and self.revision_kind == self.RevisionKind.EDITORIAL_REVISION
+            ):
+                revision_errors["revision_requested_by"] = (
+                    "An editorial revision must record its initiating actor."
+                )
+            if self.revision_requested_at is None:
+                revision_errors["revision_requested_at"] = (
+                    "A revision must record when it was requested."
+                )
+
+        if self.supersedes_id is not None:
+            try:
+                predecessor = self.supersedes
+            except OfficialFactCheck.DoesNotExist:
+                revision_errors["supersedes"] = (
+                    "The revision predecessor does not exist."
+                )
+            else:
+                if self.pk is not None and predecessor.pk == self.pk:
+                    revision_errors["supersedes"] = (
+                        "A fact-check cannot supersede itself."
+                    )
+                if self.claim_id != predecessor.claim_id:
+                    revision_errors["supersedes"] = (
+                        "A predecessor must belong to the same claim."
+                    )
+                if (
+                    isinstance(self.version, bool)
+                    or not isinstance(self.version, int)
+                    or self.version <= predecessor.version
+                ):
+                    revision_errors["supersedes"] = (
+                        "A successor must have a higher claim-wide version."
+                    )
+                if self.revision_kind == self.RevisionKind.EDITORIAL_REVISION:
+                    if self.adjudication_decision_id != (
+                        predecessor.adjudication_decision_id
+                    ):
+                        revision_errors["adjudication_decision"] = (
+                            "An editorial revision must retain its predecessor's "
+                            "adjudication decision."
+                        )
+                    if self.organization_id != predecessor.organization_id:
+                        revision_errors["organization"] = (
+                            "An editorial revision must retain its predecessor's "
+                            "organization."
+                        )
+
+        if revision_errors:
+            raise ValidationError(revision_errors)
 
         if self.adjudication_decision_id:
             decision = self.adjudication_decision
@@ -2182,6 +2534,8 @@ class OfficialFactCheck(models.Model):
             )
 
     def save(self, *args, **kwargs):
+        self._validate_revision_metadata_update()
+        self._validate_sealed_update()
         super().save(*args, **kwargs)
 
         if self.canonical_claim:
@@ -2270,6 +2624,16 @@ class OfficialFactCheckSource(models.Model):
         default=SourceType.MODERATOR_ADDED,
     )
 
+    is_editorially_selected = models.BooleanField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text=(
+            "Whether an editor explicitly selected this source. Null preserves "
+            "unknown provenance for records created before this field existed."
+        ),
+    )
+
     created_at = models.DateTimeField(
         auto_now_add=True,
     )
@@ -2297,6 +2661,70 @@ class OfficialFactCheckSource(models.Model):
             ),
         ]
 
+    SEALED_CONTENT_FIELDS = (
+        "fact_check_id",
+        "url",
+        "title",
+        "evidence_submission_id",
+        "added_by_id",
+        "source_type",
+        "is_editorially_selected",
+        "created_at",
+    )
+
+    def _fact_check_is_sealed(self, fact_check_id=None):
+        fact_check_id = self.fact_check_id if fact_check_id is None else fact_check_id
+        return bool(
+            fact_check_id
+            and OfficialFactCheckPublicationSnapshot.objects.filter(
+                fact_check_id=fact_check_id
+            ).exists()
+        )
+
+    def _validate_sealed_write(self):
+        stored = (
+            OfficialFactCheckSource.objects.filter(pk=self.pk)
+            .values(*self.SEALED_CONTENT_FIELDS)
+            .first()
+            if self.pk is not None
+            else None
+        )
+
+        previous_sealed = bool(
+            stored and self._fact_check_is_sealed(stored["fact_check_id"])
+        )
+        target_sealed = self._fact_check_is_sealed()
+
+        if not previous_sealed and not target_sealed:
+            return
+
+        if stored is None:
+            raise ValidationError(
+                "Sources cannot be added to a sealed fact-check publication."
+            )
+
+        if any(
+            getattr(self, field) != stored[field]
+            for field in self.SEALED_CONTENT_FIELDS
+        ):
+            raise ValidationError(
+                "Sealed fact-check publication sources cannot be modified."
+            )
+
+    def delete(self, *args, **kwargs):
+        stored_fact_check_id = (
+            OfficialFactCheckSource.objects.filter(pk=self.pk)
+            .values_list("fact_check_id", flat=True)
+            .first()
+        )
+
+        if stored_fact_check_id and self._fact_check_is_sealed(stored_fact_check_id):
+            raise ValidationError(
+                "Sealed fact-check publication sources cannot be deleted."
+            )
+
+        return super().delete(*args, **kwargs)
+
     def clean(self):
         super().clean()
 
@@ -2313,8 +2741,1407 @@ class OfficialFactCheckSource(models.Model):
                 }
             )
 
+    def save(self, *args, **kwargs):
+        self._validate_sealed_write()
+        return super().save(*args, **kwargs)
+
     def __str__(self):
         return self.url
+
+
+class OfficialFactCheckSourceEvidenceLink(models.Model):
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    source = models.ForeignKey(
+        OfficialFactCheckSource,
+        on_delete=models.CASCADE,
+        related_name="evidence_links",
+        editable=False,
+    )
+    snapshot = models.ForeignKey(
+        AdjudicationDecisionEvidenceSnapshot,
+        on_delete=models.PROTECT,
+        related_name="source_links",
+        editable=False,
+    )
+    captured_evidence_id = models.UUIDField(
+        editable=False,
+    )
+
+    class Meta:
+        ordering = ["source_id", "captured_evidence_id", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source", "captured_evidence_id"],
+                name="unique_source_captured_evidence",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        errors = {}
+
+        source_fact_check = self.source.fact_check
+        snapshot = self.snapshot
+        if OfficialFactCheckPublicationSnapshot.objects.filter(
+            fact_check_id=source_fact_check.id
+        ).exists():
+            errors["source"] = (
+                "Evidence lineage cannot be added to a sealed publication."
+            )
+        if source_fact_check.adjudication_decision_id != snapshot.decision_id:
+            errors["snapshot"] = (
+                "Source and snapshot must belong to the same adjudication decision."
+            )
+        if str(source_fact_check.claim_id) != str(snapshot.claim_id):
+            errors["snapshot"] = (
+                "Snapshot claim identity must match the fact-check claim."
+            )
+        record = None
+        try:
+            evidence_records = validate_evidence_snapshot(
+                schema_version=snapshot.schema_version,
+                evidence_records=snapshot.evidence_records,
+            )
+        except EvidenceSnapshotSchemaError as error:
+            errors["snapshot"] = str(error)
+        else:
+            record = next(
+                (
+                    item
+                    for item in evidence_records
+                    if item["id"] == str(self.captured_evidence_id)
+                ),
+                None,
+            )
+        if record is None:
+            errors["captured_evidence_id"] = (
+                "The captured evidence record is not present in the snapshot."
+            )
+        else:
+            if record.get("evidence_status") != (
+                EvidenceSubmission.EvidenceStatus.VERIFIED
+            ):
+                errors["captured_evidence_id"] = (
+                    "Only captured VERIFIED evidence may be linked as a source."
+                )
+            captured_url = record.get("evidence_url")
+            captured_url = captured_url.strip() if isinstance(captured_url, str) else ""
+            source_url = (self.source.url or "").strip()
+            validator = URLValidator(schemes=["http", "https"])
+            try:
+                if len(captured_url) > 2000:
+                    raise ValidationError("The captured URL is too long.")
+                validator(captured_url)
+            except ValidationError:
+                captured_url = ""
+            if not captured_url or captured_url != source_url:
+                errors["captured_evidence_id"] = (
+                    "The captured evidence URL must match the source URL."
+                )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError(
+                "Evidence source lineage links are immutable and cannot be modified."
+            )
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            "Evidence source lineage links cannot be deleted directly."
+        )
+
+    def __str__(self):
+        return f"{self.source_id}: evidence {self.captured_evidence_id}"
+
+
+def _publication_snapshot_timestamp(value):
+    return value.isoformat() if value is not None else None
+
+
+def _publication_snapshot_user(user):
+    if user is None:
+        return None
+    return {
+        "id": str(user.pk),
+        "username": user.username,
+    }
+
+
+class OfficialFactCheckPublicationSnapshot(models.Model):
+    CURRENT_SCHEMA_VERSION = PUBLICATION_SNAPSHOT_SCHEMA_VERSION
+    FIRST_PUBLICATION_SCHEMA_VERSION = PUBLICATION_SNAPSHOT_INITIAL_VERSION
+    EDITORIAL_REVISION_SCHEMA_VERSION = PUBLICATION_SNAPSHOT_REVISION_VERSION
+    FACTUAL_CORRECTION_SCHEMA_VERSION = PUBLICATION_SNAPSHOT_CORRECTION_VERSION
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    fact_check = models.OneToOneField(
+        OfficialFactCheck,
+        on_delete=models.PROTECT,
+        related_name="publication_snapshot",
+    )
+    decision_snapshot = models.ForeignKey(
+        AdjudicationDecisionEvidenceSnapshot,
+        on_delete=models.PROTECT,
+        related_name="publication_snapshots",
+    )
+    schema_version = models.PositiveSmallIntegerField(
+        default=FIRST_PUBLICATION_SCHEMA_VERSION,
+        editable=False,
+    )
+    captured_at = models.DateTimeField(
+        editable=False,
+    )
+    payload = models.JSONField(
+        default=dict,
+        editable=False,
+    )
+
+    class Meta:
+        ordering = ["-captured_at", "id"]
+
+    @classmethod
+    def build_payload(
+        cls,
+        *,
+        fact_check,
+        decision_snapshot,
+        schema_version=PUBLICATION_SNAPSHOT_INITIAL_VERSION,
+        predecessor_snapshot=None,
+        correction_request=None,
+        prepared_proposal=None,
+    ):
+        if schema_version == cls.FIRST_PUBLICATION_SCHEMA_VERSION:
+            if (
+                fact_check.supersedes_id is not None
+                or fact_check.revision_kind
+                in {
+                    OfficialFactCheck.RevisionKind.EDITORIAL_REVISION,
+                    OfficialFactCheck.RevisionKind.FACTUAL_CORRECTION,
+                }
+            ):
+                raise ValidationError(
+                    "Only an initial publication may use snapshot schema v1."
+                )
+        elif schema_version == cls.EDITORIAL_REVISION_SCHEMA_VERSION:
+            if (
+                fact_check.revision_kind
+                != OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
+            ):
+                raise ValidationError(
+                    "Snapshot schema v2 requires an editorial revision."
+                )
+        elif schema_version == cls.FACTUAL_CORRECTION_SCHEMA_VERSION:
+            if (
+                fact_check.revision_kind
+                != OfficialFactCheck.RevisionKind.FACTUAL_CORRECTION
+            ):
+                raise ValidationError(
+                    "Snapshot schema v3 requires a factual correction."
+                )
+        if (
+            fact_check.adjudication_decision_id != decision_snapshot.decision_id
+            or str(fact_check.claim_id) != str(decision_snapshot.claim_id)
+            or fact_check.organization_id is None
+            or fact_check.published_at is None
+        ):
+            raise ValidationError(
+                "The publication and decision evidence snapshot identities differ."
+            )
+        try:
+            evidence_records = validate_evidence_snapshot(
+                schema_version=decision_snapshot.schema_version,
+                evidence_records=decision_snapshot.evidence_records,
+            )
+        except EvidenceSnapshotSchemaError as error:
+            raise ValidationError(
+                "The decision evidence snapshot is malformed."
+            ) from error
+        evidence_by_id = {record["id"]: record for record in evidence_records}
+
+        source_queryset = (
+            OfficialFactCheckSource.objects.filter(fact_check=fact_check)
+            .select_related("added_by")
+            .prefetch_related(
+                Prefetch(
+                    "evidence_links",
+                    queryset=OfficialFactCheckSourceEvidenceLink.objects.order_by(
+                        "captured_evidence_id",
+                        "id",
+                    ),
+                )
+            )
+            .order_by("created_at", "id")
+        )
+        sources = []
+        validator = URLValidator(schemes=["http", "https"])
+        for source in source_queryset:
+            lineage = []
+            for link in source.evidence_links.all():
+                record = evidence_by_id.get(str(link.captured_evidence_id))
+                captured_url = record.get("evidence_url") if record else None
+                captured_url = (
+                    captured_url.strip() if isinstance(captured_url, str) else ""
+                )
+                try:
+                    if len(captured_url) > 2000:
+                        raise ValidationError("The captured URL is too long.")
+                    validator(captured_url)
+                except ValidationError:
+                    captured_url = ""
+                if (
+                    link.snapshot_id != decision_snapshot.id
+                    or record is None
+                    or record["evidence_status"]
+                    != EvidenceSubmission.EvidenceStatus.VERIFIED
+                    or not captured_url
+                    or captured_url != source.url
+                ):
+                    raise ValidationError(
+                        "Publication source lineage is malformed or inconsistent."
+                    )
+                lineage.append(
+                    {
+                        "id": str(link.id),
+                        "decision_evidence_snapshot_id": str(link.snapshot_id),
+                        "captured_evidence_id": str(link.captured_evidence_id),
+                    }
+                )
+            sources.append(
+                {
+                    "id": str(source.id),
+                    "url": source.url,
+                    "title": source.title,
+                    "source_type": source.source_type,
+                    "is_editorially_selected": source.is_editorially_selected,
+                    "added_by": _publication_snapshot_user(source.added_by),
+                    "created_at": _publication_snapshot_timestamp(source.created_at),
+                    "legacy_evidence_submission_id": (
+                        str(source.evidence_submission_id)
+                        if source.evidence_submission_id is not None
+                        else None
+                    ),
+                    "lineage": lineage,
+                }
+            )
+
+        organization = fact_check.organization
+        payload = {
+            "claim_id": str(fact_check.claim_id),
+            "fact_check_id": str(fact_check.id),
+            "decision_id": str(fact_check.adjudication_decision_id),
+            "decision_evidence_snapshot_id": str(decision_snapshot.id),
+            "organization": {
+                "id": str(organization.id),
+                "name": organization.name,
+                "slug": organization.slug,
+            },
+            "article_version": fact_check.version,
+            "published_at": _publication_snapshot_timestamp(fact_check.published_at),
+            "canonical_claim": fact_check.canonical_claim,
+            "verdict": fact_check.verdict,
+            "headline": fact_check.headline,
+            "summary": fact_check.summary,
+            "article_body": fact_check.article_body,
+            "drafted_by": _publication_snapshot_user(fact_check.drafted_by),
+            "drafted_at": _publication_snapshot_timestamp(fact_check.created_at),
+            "submitted_for_review_at": _publication_snapshot_timestamp(
+                fact_check.submitted_for_review_at
+            ),
+            "reviewed_by": _publication_snapshot_user(fact_check.reviewed_by),
+            "reviewed_at": _publication_snapshot_timestamp(fact_check.reviewed_at),
+            "published_by": _publication_snapshot_user(fact_check.published_by),
+            "sources": sources,
+        }
+
+        if schema_version == cls.EDITORIAL_REVISION_SCHEMA_VERSION:
+            predecessor = fact_check.supersedes
+            if (
+                fact_check.revision_kind
+                != OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
+                or predecessor is None
+                or fact_check.revision_requested_by is None
+                or fact_check.revision_requested_at is None
+                or not isinstance(fact_check.revision_reason, str)
+                or not fact_check.revision_reason.strip()
+                or fact_check.revision_reason != fact_check.revision_reason.strip()
+            ):
+                raise ValidationError(
+                    "The editorial revision provenance is incomplete."
+                )
+            if predecessor_snapshot is None:
+                predecessor_snapshot = (
+                    OfficialFactCheckPublicationSnapshot.objects.filter(
+                        fact_check=predecessor
+                    ).first()
+                )
+            if (
+                predecessor_snapshot is None
+                or predecessor_snapshot.fact_check_id != predecessor.id
+                or predecessor_snapshot.decision_snapshot_id != decision_snapshot.id
+            ):
+                raise ValidationError(
+                    "The editorial revision predecessor seal is inconsistent."
+                )
+            try:
+                predecessor_payload = validate_publication_snapshot(
+                    schema_version=predecessor_snapshot.schema_version,
+                    payload=predecessor_snapshot.payload,
+                )
+            except PublicationSnapshotSchemaError as error:
+                raise ValidationError(
+                    "The editorial revision predecessor seal is malformed."
+                ) from error
+            if (
+                predecessor_payload["fact_check_id"] != str(predecessor.id)
+                or predecessor_payload["claim_id"] != str(fact_check.claim_id)
+                or predecessor_payload["decision_id"]
+                != str(fact_check.adjudication_decision_id)
+                or predecessor_payload["decision_evidence_snapshot_id"]
+                != str(decision_snapshot.id)
+                or predecessor_payload["organization"]["id"]
+                != str(fact_check.organization_id)
+                or predecessor_payload["article_version"] != predecessor.version
+                or predecessor_payload["published_at"]
+                != predecessor_snapshot.captured_at.isoformat()
+            ):
+                raise ValidationError(
+                    "The editorial revision predecessor seal identities differ."
+                )
+            payload["revision"] = {
+                "revision_kind": fact_check.revision_kind,
+                "supersedes_fact_check_id": str(predecessor.id),
+                "supersedes_publication_snapshot_id": str(
+                    predecessor_snapshot.id
+                ),
+                "predecessor_article_version": predecessor.version,
+                "predecessor_published_at": predecessor_payload["published_at"],
+                "revision_reason": fact_check.revision_reason,
+                "revision_requested_by": _publication_snapshot_user(
+                    fact_check.revision_requested_by
+                ),
+                "revision_requested_at": _publication_snapshot_timestamp(
+                    fact_check.revision_requested_at
+                ),
+            }
+        elif schema_version == cls.FACTUAL_CORRECTION_SCHEMA_VERSION:
+            predecessor = fact_check.supersedes
+            new_decision = fact_check.adjudication_decision
+            if (
+                predecessor is None
+                or not isinstance(predecessor_snapshot, cls)
+                or not isinstance(correction_request, FactualCorrectionRequest)
+                or not isinstance(prepared_proposal, FactualCorrectionProposal)
+                or predecessor_snapshot._state.adding
+                or correction_request._state.adding
+                or prepared_proposal._state.adding
+                or fact_check.revision_requested_at is None
+                or not isinstance(fact_check.revision_reason, str)
+                or not fact_check.revision_reason.strip()
+                or fact_check.revision_reason != fact_check.revision_reason.strip()
+            ):
+                raise ValidationError(
+                    "The factual correction provenance is incomplete."
+                )
+            predecessor_decision = predecessor.adjudication_decision
+            predecessor_decision_snapshot = predecessor_snapshot.decision_snapshot
+            try:
+                validate_evidence_snapshot(
+                    schema_version=predecessor_decision_snapshot.schema_version,
+                    evidence_records=predecessor_decision_snapshot.evidence_records,
+                )
+            except EvidenceSnapshotSchemaError as error:
+                raise ValidationError(
+                    "The factual correction predecessor evidence seal is malformed."
+                ) from error
+            if (
+                predecessor_snapshot.fact_check_id != predecessor.id
+                or predecessor_decision_snapshot.decision_id
+                != predecessor_decision.id
+                or str(predecessor_decision_snapshot.claim_id)
+                != str(predecessor.claim_id)
+                or new_decision.supersedes_id != predecessor_decision.id
+                or new_decision.revision_number
+                != predecessor_decision.revision_number + 1
+                or new_decision.claim_id != predecessor_decision.claim_id
+                or new_decision.organization_id
+                != predecessor_decision.organization_id
+                or not new_decision.is_current
+                or predecessor_decision.is_current
+                or fact_check.claim_id != predecessor.claim_id
+                or fact_check.organization_id != predecessor.organization_id
+                or fact_check.canonical_claim != new_decision.canonical_claim
+                or fact_check.verdict != new_decision.verdict
+                or fact_check.version <= predecessor.version
+                or fact_check.publication_status
+                != OfficialFactCheck.PublicationStatus.PUBLISHED
+                or predecessor.publication_status
+                not in {
+                    OfficialFactCheck.PublicationStatus.PUBLISHED,
+                    OfficialFactCheck.PublicationStatus.ARCHIVED,
+                }
+                or predecessor.published_at != predecessor_snapshot.captured_at
+            ):
+                raise ValidationError(
+                    "The factual correction decision transition is inconsistent."
+                )
+            try:
+                predecessor_payload = validate_publication_snapshot(
+                    schema_version=predecessor_snapshot.schema_version,
+                    payload=predecessor_snapshot.payload,
+                )
+            except PublicationSnapshotSchemaError as error:
+                raise ValidationError(
+                    "The factual correction predecessor seal is malformed."
+                ) from error
+            if (
+                predecessor_payload["claim_id"] != str(predecessor.claim_id)
+                or predecessor_payload["fact_check_id"] != str(predecessor.id)
+                or predecessor_payload["decision_id"]
+                != str(predecessor_decision.id)
+                or predecessor_payload["decision_evidence_snapshot_id"]
+                != str(predecessor_decision_snapshot.id)
+                or predecessor_payload["organization"]["id"]
+                != str(predecessor.organization_id)
+                or predecessor_payload["article_version"] != predecessor.version
+                or predecessor_payload["published_at"]
+                != predecessor_snapshot.captured_at.isoformat()
+            ):
+                raise ValidationError(
+                    "The factual correction predecessor seal identities differ."
+                )
+
+            if (
+                correction_request.id != prepared_proposal.correction_request_id
+                or correction_request.status
+                != FactualCorrectionRequest.Status.ACTIVE
+                or correction_request.claim_id != fact_check.claim_id
+                or correction_request.organization_id != fact_check.organization_id
+                or correction_request.predecessor_decision_id
+                != predecessor_decision.id
+                or correction_request.predecessor_fact_check_id != predecessor.id
+                or correction_request.predecessor_publication_snapshot_id
+                != predecessor_snapshot.id
+                or correction_request.moderation_case.claim_id
+                != fact_check.claim_id
+                or correction_request.moderation_case.organization_id
+                != fact_check.organization_id
+                or correction_request.moderation_case.case_type
+                != ModerationCase.CaseType.ADJUDICATION
+                or correction_request.moderation_case.status
+                not in {
+                    ModerationCase.Status.OPEN,
+                    ModerationCase.Status.IN_REVIEW,
+                    ModerationCase.Status.ESCALATED,
+                    ModerationCase.Status.REOPENED,
+                }
+                or new_decision.moderation_case_id
+                != correction_request.moderation_case_id
+                or new_decision.decision_source
+                != AdjudicationDecision.DecisionSource.HUMAN_REVIEW
+                or new_decision.verification_run_id
+                != prepared_proposal.verification_run_id
+                or prepared_proposal.status
+                != FactualCorrectionProposal.Status.PREPARED
+                or prepared_proposal.prepared_payload_schema_version
+                != FACTUAL_CORRECTION_PROPOSAL_SCHEMA_VERSION
+                or prepared_proposal.prepared_payload is None
+                or prepared_proposal.prepared_at is None
+            ):
+                raise ValidationError(
+                    "The factual correction request or prepared proposal is "
+                    "inconsistent."
+                )
+            try:
+                proposal_payload = validate_factual_correction_proposal(
+                    schema_version=prepared_proposal.prepared_payload_schema_version,
+                    payload=prepared_proposal.prepared_payload,
+                )
+            except FactualCorrectionProposalSchemaError as error:
+                raise ValidationError(
+                    "The prepared factual correction proposal is malformed."
+                ) from error
+
+            expected_proposal_predecessor = {
+                "decision_id": str(predecessor_decision.id),
+                "decision_revision": predecessor_decision.revision_number,
+                "fact_check_id": str(predecessor.id),
+                "fact_check_version": predecessor.version,
+                "publication_snapshot_id": str(predecessor_snapshot.id),
+                "publication_snapshot_schema_version": (
+                    predecessor_snapshot.schema_version
+                ),
+                "published_at": predecessor_snapshot.captured_at.isoformat(),
+            }
+            proposed_evidence_records = [
+                item["record"]
+                for item in proposal_payload["evidence_basis"]["items"]
+            ]
+            if (
+                proposal_payload["proposal_id"] != str(prepared_proposal.id)
+                or proposal_payload["proposal_version"] != prepared_proposal.version
+                or proposal_payload["correction_request_id"]
+                != str(correction_request.id)
+                or proposal_payload["claim_id"] != str(fact_check.claim_id)
+                or proposal_payload["correction_case_id"]
+                != str(correction_request.moderation_case_id)
+                or proposal_payload["organization"]["id"]
+                != str(fact_check.organization_id)
+                or proposal_payload["organization"]
+                != prepared_proposal.organization_snapshot
+                or proposal_payload["predecessor"]
+                != expected_proposal_predecessor
+                or proposal_payload["decision"]
+                != {
+                    "verdict": new_decision.verdict,
+                    "canonical_claim": new_decision.canonical_claim,
+                    "rationale": new_decision.rationale,
+                }
+                or proposal_payload["decision"]
+                != {
+                    "verdict": prepared_proposal.verdict,
+                    "canonical_claim": prepared_proposal.canonical_claim,
+                    "rationale": prepared_proposal.rationale,
+                }
+                or proposal_payload["article"]
+                != {
+                    "headline": fact_check.headline,
+                    "summary": fact_check.summary,
+                    "article_body": fact_check.article_body,
+                }
+                or proposal_payload["article"]
+                != {
+                    "headline": prepared_proposal.headline,
+                    "summary": prepared_proposal.summary,
+                    "article_body": prepared_proposal.article_body,
+                }
+                or [source["url"] for source in proposal_payload["sources"]]
+                != prepared_proposal.source_urls
+                or proposal_payload["approval"]["actor"]
+                != prepared_proposal.prepared_by_snapshot
+                or (
+                    new_decision.decided_by_id is not None
+                    and proposal_payload["approval"]["actor"]["id"]
+                    != str(new_decision.decided_by_id)
+                )
+                or proposal_payload["approval"]["prepared_at"]
+                != prepared_proposal.prepared_at.isoformat()
+                or proposal_payload["evidence_basis"]["schema_version"]
+                != decision_snapshot.schema_version
+                or proposed_evidence_records != evidence_records
+                or (
+                    proposal_payload["verification_run"] is None
+                    and new_decision.verification_run_id is not None
+                )
+                or (
+                    proposal_payload["verification_run"] is not None
+                    and proposal_payload["verification_run"]["id"]
+                    != str(new_decision.verification_run_id)
+                )
+            ):
+                raise ValidationError(
+                    "The prepared proposal does not match the factual correction."
+                )
+
+            # The proposal approval snapshot is the accountable source-selection
+            # approval. Existing source.added_by identities remain as recorded;
+            # they are never backfilled or presented as source discovery.
+            payload_sources_by_url = {source["url"]: source for source in sources}
+            proposal_sources_by_url = {
+                source["url"]: source for source in proposal_payload["sources"]
+            }
+            if set(payload_sources_by_url) != set(proposal_sources_by_url):
+                raise ValidationError(
+                    "The corrected publication sources do not match the prepared "
+                    "proposal."
+                )
+            for source_url, proposal_source in proposal_sources_by_url.items():
+                publication_source = payload_sources_by_url[source_url]
+                captured_ids = {
+                    link["captured_evidence_id"]
+                    for link in publication_source["lineage"]
+                }
+                prepared_ids = {
+                    link["evidence_id"] for link in proposal_source["evidence"]
+                }
+                if (
+                    publication_source["is_editorially_selected"] is not True
+                    or captured_ids != prepared_ids
+                    or (
+                        proposal_source["provenance"] == "EDITORIAL"
+                        and publication_source["lineage"]
+                    )
+                ):
+                    raise ValidationError(
+                        "The corrected publication source provenance is inconsistent."
+                    )
+
+            if (
+                fact_check.revision_reason != correction_request.correction_reason
+                or fact_check.revision_requested_at != correction_request.requested_at
+                or (
+                    fact_check.revision_requested_by_id is not None
+                    and correction_request.requested_by_snapshot.get("id")
+                    != str(fact_check.revision_requested_by_id)
+                )
+            ):
+                raise ValidationError(
+                    "The factual correction request attribution is inconsistent."
+                )
+
+            payload["correction"] = {
+                "revision_kind": fact_check.revision_kind,
+                "correction_request_id": str(correction_request.id),
+                "prepared_proposal_id": str(prepared_proposal.id),
+                "prepared_proposal_version": prepared_proposal.version,
+                "prepared_payload_schema_version": (
+                    prepared_proposal.prepared_payload_schema_version
+                ),
+                "predecessor_decision_id": str(predecessor_decision.id),
+                "predecessor_decision_revision": (
+                    predecessor_decision.revision_number
+                ),
+                "predecessor_decision_evidence_snapshot_id": str(
+                    predecessor_decision_snapshot.id
+                ),
+                "predecessor_fact_check_id": str(predecessor.id),
+                "predecessor_fact_check_version": predecessor.version,
+                "predecessor_publication_snapshot_id": str(
+                    predecessor_snapshot.id
+                ),
+                "predecessor_published_at": (
+                    predecessor_snapshot.captured_at.isoformat()
+                ),
+                "new_decision_id": str(new_decision.id),
+                "new_decision_revision": new_decision.revision_number,
+                "new_decision_evidence_snapshot_id": str(decision_snapshot.id),
+                "correction_reason": correction_request.correction_reason,
+                "correction_requested_by": correction_request.requested_by_snapshot,
+                "correction_requested_at": correction_request.requested_at.isoformat(),
+                "approved_by": prepared_proposal.prepared_by_snapshot,
+                "approved_at": prepared_proposal.prepared_at.isoformat(),
+            }
+
+        try:
+            validate_publication_snapshot(
+                schema_version=schema_version,
+                payload=payload,
+            )
+        except PublicationSnapshotSchemaError as error:
+            raise ValidationError("The publication snapshot is malformed.") from error
+        return payload
+
+    def clean(self):
+        super().clean()
+        try:
+            payload = validate_publication_snapshot(
+                schema_version=self.schema_version,
+                payload=self.payload,
+            )
+        except PublicationSnapshotSchemaError as error:
+            raise ValidationError({"payload": str(error)}) from error
+
+        fact_check = self.fact_check
+        allowed_statuses = {OfficialFactCheck.PublicationStatus.PUBLISHED}
+        if not self._state.adding:
+            allowed_statuses.add(OfficialFactCheck.PublicationStatus.ARCHIVED)
+        if fact_check.publication_status not in allowed_statuses:
+            raise ValidationError(
+                {
+                    "fact_check": (
+                        "A new seal requires a published fact-check; an existing "
+                        "seal may also validate after archival."
+                    )
+                }
+            )
+        if fact_check.published_at != self.captured_at:
+            raise ValidationError(
+                {"captured_at": "The seal must use the publication timestamp."}
+            )
+
+        identity_mismatch = (
+            payload["fact_check_id"] != str(fact_check.id)
+            or payload["claim_id"] != str(fact_check.claim_id)
+            or payload["decision_id"] != str(fact_check.adjudication_decision_id)
+            or payload["decision_evidence_snapshot_id"]
+            != str(self.decision_snapshot_id)
+            or (
+                fact_check.organization_id is not None
+                and payload["organization"]["id"]
+                != str(fact_check.organization_id)
+            )
+            or payload["article_version"] != fact_check.version
+            or payload["published_at"] != self.captured_at.isoformat()
+            or self.decision_snapshot.decision_id
+            != fact_check.adjudication_decision_id
+            or str(self.decision_snapshot.claim_id) != str(fact_check.claim_id)
+        )
+        if identity_mismatch:
+            raise ValidationError(
+                {"payload": "The sealed payload identities are inconsistent."}
+            )
+
+        if self.schema_version == self.EDITORIAL_REVISION_SCHEMA_VERSION:
+            predecessor_snapshot = (
+                OfficialFactCheckPublicationSnapshot.objects.filter(
+                    fact_check_id=fact_check.supersedes_id
+                ).first()
+            )
+            revision = payload["revision"]
+            predecessor_payload = None
+            if predecessor_snapshot is not None:
+                try:
+                    predecessor_payload = validate_publication_snapshot(
+                        schema_version=predecessor_snapshot.schema_version,
+                        payload=predecessor_snapshot.payload,
+                    )
+                except PublicationSnapshotSchemaError:
+                    predecessor_payload = None
+            if (
+                fact_check.revision_kind
+                != OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
+                or predecessor_snapshot is None
+                or predecessor_payload is None
+                or predecessor_snapshot.decision_snapshot_id
+                != self.decision_snapshot_id
+                or predecessor_payload["fact_check_id"]
+                != str(fact_check.supersedes_id)
+                or predecessor_payload["claim_id"] != payload["claim_id"]
+                or predecessor_payload["decision_id"] != payload["decision_id"]
+                or predecessor_payload["decision_evidence_snapshot_id"]
+                != payload["decision_evidence_snapshot_id"]
+                or predecessor_payload["organization"]["id"]
+                != payload["organization"]["id"]
+                or revision["supersedes_fact_check_id"]
+                != str(fact_check.supersedes_id)
+                or revision["supersedes_publication_snapshot_id"]
+                != str(predecessor_snapshot.id)
+                or revision["predecessor_article_version"]
+                != fact_check.supersedes.version
+                or revision["predecessor_published_at"]
+                != predecessor_snapshot.captured_at.isoformat()
+                or revision["revision_reason"] != fact_check.revision_reason
+                or fact_check.revision_requested_at is None
+                or revision["revision_requested_at"]
+                != fact_check.revision_requested_at.isoformat()
+                or (
+                    fact_check.revision_requested_by_id is not None
+                    and revision["revision_requested_by"]["id"]
+                    != str(fact_check.revision_requested_by_id)
+                )
+            ):
+                raise ValidationError(
+                    {"payload": "The sealed revision provenance is inconsistent."}
+                )
+
+        correction_request = None
+        prepared_proposal = None
+        predecessor_snapshot = None
+        if self.schema_version == self.FACTUAL_CORRECTION_SCHEMA_VERSION:
+            correction = payload["correction"]
+            predecessor_snapshot = (
+                OfficialFactCheckPublicationSnapshot.objects.filter(
+                    pk=correction["predecessor_publication_snapshot_id"]
+                ).first()
+            )
+            correction_request = FactualCorrectionRequest.objects.filter(
+                pk=correction["correction_request_id"]
+            ).first()
+            prepared_proposal = FactualCorrectionProposal.objects.filter(
+                pk=correction["prepared_proposal_id"]
+            ).first()
+            if (
+                predecessor_snapshot is None
+                or correction_request is None
+                or prepared_proposal is None
+            ):
+                raise ValidationError(
+                    {"payload": "The sealed correction provenance is unavailable."}
+                )
+
+        if self._state.adding:
+            expected_payload = self.build_payload(
+                fact_check=fact_check,
+                decision_snapshot=self.decision_snapshot,
+                schema_version=self.schema_version,
+                predecessor_snapshot=predecessor_snapshot,
+                correction_request=correction_request,
+                prepared_proposal=prepared_proposal,
+            )
+            if self.payload != expected_payload:
+                raise ValidationError(
+                    {"payload": "The sealed payload does not match publication state."}
+                )
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError(
+                "Publication snapshots are immutable and cannot be modified."
+            )
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Publication snapshots cannot be deleted directly.")
+
+    def __str__(self):
+        return f"Publication snapshot for fact-check {self.fact_check_id}"
+
+
+class FactualCorrectionRequest(models.Model):
+    class Status(models.TextChoices):
+        ACTIVE = "ACTIVE", "Active"
+        COMPLETED = "COMPLETED", "Completed"
+        CANCELLED = "CANCELLED", "Cancelled"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    claim = models.ForeignKey(
+        Claim,
+        on_delete=models.PROTECT,
+        related_name="factual_correction_requests",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.PROTECT,
+        related_name="factual_correction_requests",
+    )
+    predecessor_decision = models.ForeignKey(
+        AdjudicationDecision,
+        on_delete=models.PROTECT,
+        related_name="factual_correction_requests",
+    )
+    predecessor_fact_check = models.ForeignKey(
+        OfficialFactCheck,
+        on_delete=models.PROTECT,
+        related_name="factual_correction_requests",
+    )
+    predecessor_publication_snapshot = models.ForeignKey(
+        OfficialFactCheckPublicationSnapshot,
+        on_delete=models.PROTECT,
+        related_name="factual_correction_requests",
+    )
+    moderation_case = models.OneToOneField(
+        ModerationCase,
+        on_delete=models.PROTECT,
+        related_name="factual_correction_request",
+    )
+    requested_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="factual_correction_requests",
+    )
+    requested_by_snapshot = models.JSONField(
+        editable=False,
+    )
+    organization_snapshot = models.JSONField(
+        editable=False,
+    )
+    correction_reason = models.TextField(
+        max_length=2000,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+        db_index=True,
+    )
+    requested_at = models.DateTimeField(
+        default=timezone.now,
+        editable=False,
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    class Meta:
+        ordering = ["-requested_at", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["claim"],
+                condition=Q(status="ACTIVE"),
+                name="uniq_active_factual_correction_request",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["organization", "status"],
+                name="fact_correction_org_status_idx",
+            ),
+        ]
+
+    IMMUTABLE_FIELDS = (
+        "claim_id",
+        "organization_id",
+        "predecessor_decision_id",
+        "predecessor_fact_check_id",
+        "predecessor_publication_snapshot_id",
+        "moderation_case_id",
+        "requested_by_id",
+        "requested_by_snapshot",
+        "organization_snapshot",
+        "correction_reason",
+        "requested_at",
+    )
+
+    def _validate_immutable_update(self):
+        if self._state.adding or not self.pk:
+            return
+        stored = (
+            FactualCorrectionRequest.objects.filter(pk=self.pk)
+            .values(*self.IMMUTABLE_FIELDS, "status")
+            .first()
+        )
+        if stored is None:
+            return
+        if any(
+            getattr(self, field) != stored[field] for field in self.IMMUTABLE_FIELDS
+        ):
+            raise ValidationError(
+                "Factual correction request provenance cannot be modified."
+            )
+        if self.status != stored["status"] and (
+            stored["status"] != self.Status.ACTIVE
+            or self.status not in {self.Status.COMPLETED, self.Status.CANCELLED}
+        ):
+            raise ValidationError(
+                "A terminal factual correction request cannot be reused."
+            )
+
+    @staticmethod
+    def _validate_identity_snapshot(value, *, expected_fields):
+        return (
+            isinstance(value, dict)
+            and set(value) == expected_fields
+            and all(isinstance(item, str) for item in value.values())
+            and bool(value["id"].strip())
+        )
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        reason = self.correction_reason
+        if (
+            not isinstance(reason, str)
+            or not reason.strip()
+            or reason != reason.strip()
+            or len(reason) > 2000
+        ):
+            errors["correction_reason"] = (
+                "A trimmed correction reason of 2000 characters or fewer is required."
+            )
+
+        actor_fields = {"id", "username"}
+        organization_fields = {"id", "name", "slug"}
+        if not self._validate_identity_snapshot(
+            self.requested_by_snapshot,
+            expected_fields=actor_fields,
+        ):
+            errors["requested_by_snapshot"] = (
+                "The recorded initiating actor identity is invalid."
+            )
+        if not self._validate_identity_snapshot(
+            self.organization_snapshot,
+            expected_fields=organization_fields,
+        ):
+            errors["organization_snapshot"] = (
+                "The recorded organization identity is invalid."
+            )
+
+        if self._state.adding and self.requested_by_id is None:
+            errors["requested_by"] = "An initiating actor is required."
+        if self.requested_by_id is not None and isinstance(
+            self.requested_by_snapshot,
+            dict,
+        ):
+            if self.requested_by_snapshot.get("id") != str(self.requested_by_id):
+                errors["requested_by_snapshot"] = (
+                    "The recorded actor identity does not match the initiator."
+                )
+            elif self._state.adding and self.requested_by_snapshot.get(
+                "username"
+            ) != self.requested_by.username:
+                errors["requested_by_snapshot"] = (
+                    "The recorded actor name does not match the initiator."
+                )
+
+        if isinstance(self.organization_snapshot, dict):
+            if self.organization_snapshot.get("id") != str(self.organization_id):
+                errors["organization_snapshot"] = (
+                    "The recorded organization identity does not match the request."
+                )
+            elif self._state.adding and (
+                self.organization_snapshot.get("name") != self.organization.name
+                or self.organization_snapshot.get("slug") != self.organization.slug
+            ):
+                errors["organization_snapshot"] = (
+                    "The recorded organization identity does not match the request."
+                )
+
+        decision = self.predecessor_decision
+        fact_check = self.predecessor_fact_check
+        publication_snapshot = self.predecessor_publication_snapshot
+        moderation_case = self.moderation_case
+        if (
+            decision.claim_id != self.claim_id
+            or decision.organization_id != self.organization_id
+        ):
+            errors["predecessor_decision"] = (
+                "The predecessor decision does not match the request authority."
+            )
+        if (
+            fact_check.claim_id != self.claim_id
+            or fact_check.organization_id != self.organization_id
+            or fact_check.adjudication_decision_id != decision.id
+        ):
+            errors["predecessor_fact_check"] = (
+                "The predecessor publication does not match the request authority."
+            )
+        if (
+            publication_snapshot.fact_check_id != fact_check.id
+            or publication_snapshot.decision_snapshot.decision_id != decision.id
+            or str(publication_snapshot.decision_snapshot.claim_id)
+            != str(self.claim_id)
+        ):
+            errors["predecessor_publication_snapshot"] = (
+                "The predecessor seal does not match the requested correction."
+            )
+        if (
+            moderation_case.case_type != ModerationCase.CaseType.ADJUDICATION
+            or moderation_case.claim_id != self.claim_id
+            or moderation_case.organization_id != self.organization_id
+        ):
+            errors["moderation_case"] = (
+                "The correction case does not match the request authority."
+            )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self._validate_immutable_update()
+        self.full_clean(
+            validate_unique=False,
+            validate_constraints=False,
+        )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            "Factual correction requests are durable and cannot be deleted directly."
+        )
+
+    def __str__(self):
+        return f"Factual correction request {self.id} for claim {self.claim_id}"
+
+
+class FactualCorrectionProposal(models.Model):
+    """Durable non-authoritative replacement proposal for one correction."""
+
+    class Status(models.TextChoices):
+        DRAFT = "DRAFT", "Draft"
+        PREPARED = "PREPARED", "Prepared"
+
+    CURRENT_SCHEMA_VERSION = FACTUAL_CORRECTION_PROPOSAL_SCHEMA_VERSION
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    correction_request = models.OneToOneField(
+        FactualCorrectionRequest,
+        on_delete=models.PROTECT,
+        related_name="proposal",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+    version = models.PositiveIntegerField(default=1)
+    verdict = models.CharField(
+        max_length=20,
+        choices=AdjudicationDecision.Verdict.choices,
+    )
+    canonical_claim = models.TextField()
+    rationale = models.TextField()
+    headline = models.CharField(max_length=300)
+    summary = models.TextField()
+    article_body = models.TextField()
+    source_urls = models.JSONField(default=list)
+    verification_run = models.ForeignKey(
+        VerificationRun,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="factual_correction_proposals",
+    )
+    prepared_payload_schema_version = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        editable=False,
+    )
+    prepared_payload = models.JSONField(null=True, blank=True, editable=False)
+    prepared_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="prepared_factual_correction_proposals",
+    )
+    prepared_by_snapshot = models.JSONField(null=True, blank=True, editable=False)
+    organization_snapshot = models.JSONField(null=True, blank=True, editable=False)
+    prepared_at = models.DateTimeField(null=True, blank=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True, editable=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(version__gte=1),
+                name="fact_correction_proposal_version_positive",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(
+                        status="DRAFT",
+                        prepared_payload_schema_version__isnull=True,
+                        prepared_payload__isnull=True,
+                        prepared_by__isnull=True,
+                        prepared_by_snapshot__isnull=True,
+                        organization_snapshot__isnull=True,
+                        prepared_at__isnull=True,
+                    )
+                    | Q(
+                        status="PREPARED",
+                        prepared_payload_schema_version__isnull=False,
+                        prepared_payload__isnull=False,
+                        prepared_by_snapshot__isnull=False,
+                        organization_snapshot__isnull=False,
+                        prepared_at__isnull=False,
+                    )
+                ),
+                name="fact_correction_proposal_lifecycle_payload",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["status", "-created_at"],
+                name="fact_corr_proposal_status_idx",
+            ),
+        ]
+
+    CONTENT_FIELDS = (
+        "verdict",
+        "canonical_claim",
+        "rationale",
+        "headline",
+        "summary",
+        "article_body",
+        "source_urls",
+        "verification_run_id",
+    )
+    PREPARED_FIELDS = (
+        "prepared_payload_schema_version",
+        "prepared_payload",
+        "prepared_by_id",
+        "prepared_by_snapshot",
+        "organization_snapshot",
+        "prepared_at",
+    )
+
+    def _stored_state(self):
+        if self._state.adding or not self.pk:
+            return None
+        return FactualCorrectionProposal.objects.filter(pk=self.pk).values(
+            "correction_request_id",
+            "status",
+            "version",
+            *self.CONTENT_FIELDS,
+            *self.PREPARED_FIELDS,
+        ).first()
+
+    def _validate_immutable_update(self):
+        stored = self._stored_state()
+        if stored is None:
+            return
+        if self.correction_request_id != stored["correction_request_id"]:
+            raise ValidationError("A correction proposal cannot change requests.")
+        if stored["status"] == self.Status.PREPARED:
+            fields = (
+                "status",
+                "version",
+                *self.CONTENT_FIELDS,
+                *self.PREPARED_FIELDS,
+            )
+            if any(getattr(self, field) != stored[field] for field in fields):
+                raise ValidationError(
+                    "A prepared factual correction proposal is immutable."
+                )
+        elif self.status not in {self.Status.DRAFT, self.Status.PREPARED}:
+            raise ValidationError("A correction proposal cannot be reused.")
+
+    @staticmethod
+    def _valid_snapshot(value, fields):
+        return (
+            isinstance(value, dict)
+            and set(value) == fields
+            and all(isinstance(item, str) and item.strip() for item in value.values())
+        )
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if (
+            isinstance(self.version, bool)
+            or not isinstance(self.version, int)
+            or self.version < 1
+        ):
+            errors["version"] = "Proposal version must be a positive integer."
+        for field in (
+            "canonical_claim",
+            "rationale",
+            "headline",
+            "summary",
+            "article_body",
+        ):
+            value = getattr(self, field)
+            if (
+                not isinstance(value, str)
+                or not value.strip()
+                or value != value.strip()
+            ):
+                errors[field] = f"{field} must be a trimmed nonblank string."
+        if isinstance(self.headline, str) and len(self.headline) > 300:
+            errors["headline"] = "Headline must be 300 characters or fewer."
+        if not isinstance(self.source_urls, list) or not self.source_urls:
+            errors["source_urls"] = "At least one source URL is required."
+
+        if self.status == self.Status.DRAFT:
+            if (
+                self.correction_request_id is not None
+                and self.correction_request.status
+                != FactualCorrectionRequest.Status.ACTIVE
+            ):
+                errors["correction_request"] = (
+                    "A terminal correction request cannot accept draft edits."
+                )
+            if any(getattr(self, field) is not None for field in self.PREPARED_FIELDS):
+                errors["status"] = "A draft proposal cannot contain prepared state."
+        elif self.status == self.Status.PREPARED:
+            stored = self._stored_state()
+            if self.prepared_by_id is None and (
+                stored is None or stored["status"] != self.Status.PREPARED
+            ):
+                errors["prepared_by"] = "A preparing actor is required."
+            if not self._valid_snapshot(
+                self.prepared_by_snapshot,
+                {"id", "username"},
+            ):
+                errors["prepared_by_snapshot"] = (
+                    "The preparing actor snapshot is invalid."
+                )
+            if not self._valid_snapshot(
+                self.organization_snapshot,
+                {"id", "name", "slug"},
+            ):
+                errors["organization_snapshot"] = (
+                    "The organization snapshot is invalid."
+                )
+            if (
+                self.prepared_payload_schema_version is None
+                or self.prepared_payload is None
+            ):
+                errors["prepared_payload"] = "A prepared payload is required."
+            else:
+                try:
+                    validate_factual_correction_proposal(
+                        schema_version=self.prepared_payload_schema_version,
+                        payload=self.prepared_payload,
+                    )
+                except FactualCorrectionProposalSchemaError as error:
+                    errors["prepared_payload"] = str(error)
+                else:
+                    payload = self.prepared_payload
+                    expected = {
+                        "proposal_id": str(self.id),
+                        "proposal_version": self.version,
+                        "correction_request_id": str(self.correction_request_id),
+                    }
+                    if any(payload[key] != value for key, value in expected.items()):
+                        errors["prepared_payload"] = (
+                            "The prepared payload does not match the proposal identity."
+                        )
+                    elif self.prepared_by_id is not None and (
+                        payload["approval"]["actor"]["id"] != str(self.prepared_by_id)
+                    ):
+                        errors["prepared_payload"] = (
+                            "The prepared payload does not match the approving actor."
+                        )
+                    elif self.prepared_at is not None and (
+                        payload["approval"]["prepared_at"]
+                        != self.prepared_at.isoformat()
+                    ):
+                        errors["prepared_payload"] = (
+                            "The prepared payload does not match its preparation time."
+                        )
+                    elif (
+                        payload["approval"]["actor"]
+                        != self.prepared_by_snapshot
+                        or payload["organization"] != self.organization_snapshot
+                        or payload["claim_id"]
+                        != str(self.correction_request.claim_id)
+                        or payload["correction_case_id"]
+                        != str(self.correction_request.moderation_case_id)
+                        or payload["organization"]["id"]
+                        != str(self.correction_request.organization_id)
+                        or payload["predecessor"]["decision_id"]
+                        != str(self.correction_request.predecessor_decision_id)
+                        or payload["predecessor"]["fact_check_id"]
+                        != str(self.correction_request.predecessor_fact_check_id)
+                        or payload["predecessor"]["publication_snapshot_id"]
+                        != str(
+                            self.correction_request.predecessor_publication_snapshot_id
+                        )
+                    ):
+                        errors["prepared_payload"] = (
+                            "The prepared payload does not match request provenance."
+                        )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self._validate_immutable_update()
+        self.full_clean(validate_unique=False, validate_constraints=False)
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            "Factual correction proposals are durable and cannot be deleted directly."
+        )
+
+    def __str__(self):
+        return (
+            f"Factual correction proposal {self.id} "
+            f"for request {self.correction_request_id}"
+        )
 
 
 class KnowledgeReuseEvent(models.Model):
