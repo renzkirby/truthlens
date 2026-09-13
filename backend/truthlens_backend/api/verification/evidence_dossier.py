@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
@@ -74,3 +75,84 @@ def load_reasoning_evidence_dossier_for_run(
         )
         for evidence_group in evidence_groups
     ]
+
+
+def filter_reasoning_evidence_dossier_by_role(
+    evidence_groups: Iterable[ReasoningEvidenceGroup],
+    evidence_role: str,
+) -> list[ReasoningEvidenceGroup]:
+    """Select an exact evidence role without changing group or member order."""
+    filtered_groups = []
+
+    for evidence_group in evidence_groups:
+        matching_evidence = tuple(
+            evidence_item
+            for evidence_item in evidence_group.evidence
+            if evidence_item.evidence_role == evidence_role
+        )
+        if matching_evidence:
+            filtered_groups.append(ReasoningEvidenceGroup(
+                identity_kind=evidence_group.identity_kind,
+                identity_id=evidence_group.identity_id,
+                evidence=matching_evidence,
+            ))
+
+    return filtered_groups
+
+
+def render_reasoning_evidence_dossier(
+    evidence_groups: Iterable[ReasoningEvidenceGroup],
+) -> str:
+    """Render persisted evidence with explicit source-identity boundaries."""
+    evidence_groups = tuple(evidence_groups)
+    if not evidence_groups:
+        return ""
+
+    lines = [
+        "PERSISTED EVIDENCE DOSSIER",
+        (
+            "Items within one SOURCE IDENTITY GROUP share normalized source "
+            "identity and must not be counted as multiple independent confirmations."
+        ),
+        (
+            "Different SOURCE IDENTITY GROUPS are not guaranteed to be "
+            "editorially independent."
+        ),
+    ]
+
+    for group_index, evidence_group in enumerate(evidence_groups, start=1):
+        lines.extend([
+            "",
+            f"=== SOURCE IDENTITY GROUP {group_index} ===",
+            f"Identity kind: {evidence_group.identity_kind}",
+        ])
+
+        for item_index, evidence_item in enumerate(evidence_group.evidence, start=1):
+            lines.extend([
+                "",
+                f"--- EVIDENCE ITEM {item_index} ---",
+                f"Provider: {evidence_item.provider}",
+            ])
+            optional_fields = (
+                ("Evidence role", evidence_item.evidence_role),
+                ("Stance", evidence_item.stance),
+                ("Publisher", evidence_item.publisher),
+                ("Source type", evidence_item.source_type),
+                ("Title", evidence_item.title),
+                ("URL", evidence_item.url),
+                ("Canonical URL", evidence_item.canonical_url),
+                ("Published at", evidence_item.published_at),
+                ("Retrieved at", evidence_item.retrieved_at),
+                ("Relevance score", evidence_item.relevance_score),
+                ("Directness score", evidence_item.directness_score),
+                ("Recency score", evidence_item.recency_score),
+            )
+            lines.extend(
+                f"{label}: {value.isoformat() if isinstance(value, datetime) else value}"
+                for label, value in optional_fields
+                if value is not None
+            )
+            if evidence_item.content is not None:
+                lines.extend(["Content:", evidence_item.content])
+
+    return "\n".join(lines)
