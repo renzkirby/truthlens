@@ -125,6 +125,21 @@ export const API_ENDPOINTS = {
    EVIDENCE_CASE_DETAIL: (caseId) => `moderation/evidence/cases/${encodeURIComponent(caseId)}/`,
    EVIDENCE_CASE_ACTION: (caseId) => `moderation/evidence/cases/${encodeURIComponent(caseId)}/action/`,
    ADJUDICATION_CASES: "moderation/adjudication/cases/",
+   PUBLICATION_WORK_ITEMS: "moderation/publications/work-items/",
+   PUBLICATION_WORK_ITEM_DETAIL: (resourceType, resourceId) =>
+      `moderation/publications/work-items/${encodeURIComponent(resourceType)}/${encodeURIComponent(resourceId)}/`,
+   FACT_CHECK_DRAFT_CREATE: (claimId) =>
+      `moderation/claims/${encodeURIComponent(claimId)}/fact-checks/draft/`,
+   FACT_CHECK_DRAFT_UPDATE: (factCheckId) =>
+      `moderation/fact-checks/${encodeURIComponent(factCheckId)}/draft/`,
+   FACT_CHECK_SUBMIT: (factCheckId) =>
+      `moderation/fact-checks/${encodeURIComponent(factCheckId)}/submit/`,
+   FACT_CHECK_PUBLISH: (factCheckId) =>
+      `moderation/fact-checks/${encodeURIComponent(factCheckId)}/publish/`,
+   FACT_CHECK_RETURN_FOR_REWORK: (factCheckId) =>
+      `moderation/fact-checks/${encodeURIComponent(factCheckId)}/return-for-rework/`,
+   FACT_CHECK_ABANDON: (factCheckId) =>
+      `moderation/fact-checks/${encodeURIComponent(factCheckId)}/abandon/`,
 
    // Verification Workspace
    VERIFICATION_INTAKE: "verification/intake/",

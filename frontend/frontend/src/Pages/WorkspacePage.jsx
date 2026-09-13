@@ -19,6 +19,8 @@ import OrganizationAdminPanel from "../components/workspace/OrganizationAdminPan
 import SafetyReviewPanel from "../components/workspace/SafetyReviewPanel.jsx";
 import EvidenceReviewPanel from "../components/workspace/EvidenceReviewPanel.jsx";
 import AdjudicationReviewPanel from "../components/workspace/AdjudicationReviewPanel.jsx";
+import DraftingPanel from "../components/workspace/DraftingPanel.jsx";
+import PublishingPanel from "../components/workspace/PublishingPanel.jsx";
 
 const WORKLOAD_CAPABILITIES = [
    WorkspaceCapability.CLAIM_VERIFICATION_WORK,
@@ -350,6 +352,22 @@ function WorkspacePage() {
                               organizationId={selectedOrganizationId}
                               organizationName={selectedOrganization?.name}
                               canAdjudicate
+                           />
+                        ) : activeSection.id === "drafting" && organizationCapabilities.includes(
+                             WorkspaceCapability.CREATE_FACT_CHECK_DRAFT,
+                          ) ? (
+                           <DraftingPanel
+                              key={selectedOrganizationId ?? "no-organization"}
+                              organizationId={selectedOrganizationId}
+                              organizationName={selectedOrganization?.name}
+                           />
+                        ) : activeSection.id === "publishing" && organizationCapabilities.includes(
+                             WorkspaceCapability.PUBLISH_FACT_CHECK,
+                          ) ? (
+                           <PublishingPanel
+                              key={selectedOrganizationId ?? "no-organization"}
+                              organizationId={selectedOrganizationId}
+                              organizationName={selectedOrganization?.name}
                            />
                         ) : activeSection.id === "organization" ? (
                            <OrganizationAdminPanel
