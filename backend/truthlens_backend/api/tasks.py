@@ -1192,6 +1192,22 @@ def url_fact_check_process(url, claim_id):
                     evidence_dossier,
                     VerificationEvidence.EvidenceRole.FACT_CHECK,
                 )
+                if fact_check_groups:
+                    _assess_and_persist_reasoning_evidence(
+                        cleaned_claim,
+                        fact_check_groups,
+                        claim_id,
+                        stage_prefix="url_gfc",
+                    )
+                    evidence_dossier = load_reasoning_evidence_dossier_for_run(
+                        run
+                    )
+                    fact_check_groups = (
+                        filter_reasoning_evidence_dossier_by_role(
+                            evidence_dossier,
+                            VerificationEvidence.EvidenceRole.FACT_CHECK,
+                        )
+                    )
                 evidence_context = render_reasoning_evidence_dossier(
                     fact_check_groups
                 )
@@ -1380,6 +1396,22 @@ def url_fact_check_process(url, claim_id):
                     evidence_dossier,
                     VerificationEvidence.EvidenceRole.SECONDARY,
                 )
+                if secondary_groups:
+                    _assess_and_persist_reasoning_evidence(
+                        cleaned_claim,
+                        secondary_groups,
+                        claim_id,
+                        stage_prefix="url_tavily",
+                    )
+                    evidence_dossier = load_reasoning_evidence_dossier_for_run(
+                        run
+                    )
+                    secondary_groups = (
+                        filter_reasoning_evidence_dossier_by_role(
+                            evidence_dossier,
+                            VerificationEvidence.EvidenceRole.SECONDARY,
+                        )
+                    )
                 evidence_context = render_reasoning_evidence_dossier(
                     secondary_groups
                 )
