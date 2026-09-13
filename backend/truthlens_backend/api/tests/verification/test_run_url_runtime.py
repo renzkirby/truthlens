@@ -52,6 +52,25 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.evaluate_tavily = self._patch(
             "api.tasks.evaluate_url_claim_with_tavily", return_value=self.verdict,
         )
+        self.real_load_dossier = tasks.load_reasoning_evidence_dossier_for_run
+        self.real_filter_dossier = tasks.filter_reasoning_evidence_dossier_by_role
+        self.real_render_dossier = tasks.render_reasoning_evidence_dossier
+        self.evaluate_persisted = self._patch(
+            "api.tasks.evaluate_claim_with_persisted_evidence",
+            return_value=self.verdict,
+        )
+        self.load_dossier = self._patch(
+            "api.tasks.load_reasoning_evidence_dossier_for_run",
+            return_value=["persisted dossier"],
+        )
+        self.filter_dossier = self._patch(
+            "api.tasks.filter_reasoning_evidence_dossier_by_role",
+            return_value=["selected evidence"],
+        )
+        self.render_dossier = self._patch(
+            "api.tasks.render_reasoning_evidence_dossier",
+            return_value="Persisted evidence context.",
+        )
         self.retrieve_tavily = self._patch("api.tasks._retrieve_and_ingest_tavily")
         self.retrieve_tavily.return_value = {
             "answer": "Web evidence answer.",
@@ -61,7 +80,7 @@ class VerificationRunURLRuntimeTests(TestCase):
             }],
         }
         self._patch("api.embedding_service.generate_embedding", return_value=None)
-        self._patch("api.tasks._log_stage")
+        self.log_stage = self._patch("api.tasks._log_stage")
         self.save_claim = self._patch("api.tasks._save_claim", wraps=tasks._save_claim)
         self.create_run = self._patch(
             "api.tasks.create_verification_run", wraps=runs.create_verification_run,
@@ -122,6 +141,10 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.vault.assert_not_called()
         self.bridge.assert_not_called()
         self.retrieve_tavily.assert_not_called()
+        self.evaluate_persisted.assert_not_called()
+        self.load_dossier.assert_not_called()
+        self.filter_dossier.assert_not_called()
+        self.render_dossier.assert_not_called()
         self.save_claim.assert_not_called()
 
     def test_extraction_no_results_deletes_claim_without_run(self):
@@ -224,9 +247,10 @@ class VerificationRunURLRuntimeTests(TestCase):
             self.cleaned["search_query"], self.claim.pk,
             stage_prefix="url_", verification_run=run,
         )
-        self.evaluate_gfc.assert_called_once_with(
-            self.cleaned["cleaned_claim"], self.payload, "NEUTRAL",
+        self.evaluate_persisted.assert_called_once_with(
+            self.cleaned["cleaned_claim"], "Persisted evidence context.", "NEUTRAL",
         )
+        self.evaluate_gfc.assert_not_called()
         self.save_claim.assert_called_once_with(
             self.claim.pk, self.verdict, "Official Fact Check",
             self.cleaned_text, ["https://example.com/fact-check"],
@@ -242,6 +266,9 @@ class VerificationRunURLRuntimeTests(TestCase):
         )]
         with patch("api.tasks.GoogleFactCheckProvider") as provider:
             provider.return_value.search_with_payload.return_value = (self.payload, raw_sources)
+            self.load_dossier.side_effect = self.real_load_dossier
+            self.filter_dossier.side_effect = self.real_filter_dossier
+            self.render_dossier.side_effect = self.real_render_dossier
             run = self._execute()
         self._assert_terminal(run, VerificationRun.Status.COMPLETED)
         link = VerificationEvidence.objects.get()
@@ -252,6 +279,25 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assertIsNone(link.relevance_score)
         self.assertIsNone(link.directness_score)
         self.assertIsNone(link.recency_score)
+        persisted_source = EvidenceSource.objects.get()
+        self.assertIsNotNone(persisted_source.content)
+        self.evaluate_persisted.assert_called_once()
+        evidence_context = self.evaluate_persisted.call_args.args[1]
+        self.assertIn(persisted_source.content, evidence_context)
+        self.assertNotIn("claimReview", evidence_context)
+        self.evaluate_gfc.assert_not_called()
+
+    def test_persisted_gfc_unverified_result_abstains_without_tavily_fallback(self):
+        self.verdict["verdict"] = "UNVERIFIED"
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.ABSTAINED)
+        self.evaluate_persisted.assert_called_once_with(
+            self.cleaned["cleaned_claim"], "Persisted evidence context.", "NEUTRAL",
+        )
+        self.evaluate_gfc.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
 
     def test_gfc_failure_then_tavily_completes_same_run(self):
         observed = []
@@ -266,8 +312,59 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assertEqual(observed, [run.pk])
         self.assertEqual(self.claim.verification_runs.count(), 1)
         self.retrieve_tavily.assert_called_once()
+        self.evaluate_persisted.assert_called_once_with(
+            self.cleaned["cleaned_claim"], "Persisted evidence context.", "NEUTRAL",
+        )
+        self.evaluate_tavily.assert_not_called()
         self.fail_run.assert_not_called()
         self.assertEqual(VerificationEvidence.objects.count(), 0)
+
+    def test_missing_persisted_gfc_evidence_falls_through_to_tavily(self):
+        self.render_dossier.side_effect = ["", "Persisted Tavily evidence."]
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.evaluate_gfc.assert_not_called()
+        self.retrieve_tavily.assert_called_once()
+        self.evaluate_persisted.assert_called_once_with(
+            self.cleaned["cleaned_claim"], "Persisted Tavily evidence.", "NEUTRAL",
+        )
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("url_gfc_persisted_evidence_unavailable", stages)
+        self.assertNotIn("url_gfc_llm_evaluation", stages)
+
+    def test_persisted_gfc_evaluator_exception_falls_through_to_tavily(self):
+        self.evaluate_persisted.side_effect = [
+            RuntimeError("GFC evaluator unavailable"),
+            self.verdict,
+        ]
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.retrieve_tavily.assert_called_once()
+        self.assertEqual(self.evaluate_persisted.call_count, 2)
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("url_gfc_llm_evaluation_failed", stages)
+        self.assertNotIn("url_gfc_llm_evaluation", stages)
+
+    def test_missing_persisted_tavily_evidence_abstains_without_evaluation(self):
+        self.bridge.return_value = {"claims": []}
+        self.render_dossier.return_value = ""
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.ABSTAINED)
+        self.evaluate_gfc.assert_not_called()
+        self.evaluate_tavily.assert_not_called()
+        self.evaluate_persisted.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
+        self.assertEqual(self.save_claim.call_args.args[1]["confidence_score"], 0)
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("url_tavily_persisted_evidence_unavailable", stages)
+        self.assertNotIn("url_tavily_llm_evaluation", stages)
 
     def test_provider_verdicts_use_required_terminal_mapping(self):
         for provider in ("vault", "gfc", "tavily"):
@@ -306,6 +403,38 @@ class VerificationRunURLRuntimeTests(TestCase):
             self.cleaned["search_query"][:300], self.claim.pk, stage_prefix="url_",
             verification_run=run,
         )
+
+    def test_missing_claim_compatibility_uses_legacy_gfc_evaluator(self):
+        claim_queryset = Mock()
+        claim_queryset.first.return_value = None
+
+        with patch("api.tasks.Claim.objects.filter", return_value=claim_queryset):
+            self._invoke()
+
+        self.assertEqual(VerificationRun.objects.count(), 0)
+        self.evaluate_gfc.assert_called_once_with(
+            self.cleaned["cleaned_claim"], self.payload, "NEUTRAL",
+        )
+        self.evaluate_persisted.assert_not_called()
+        self.load_dossier.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
+
+    def test_missing_claim_compatibility_uses_legacy_tavily_evaluator(self):
+        self.bridge.return_value = {"claims": []}
+        claim_queryset = Mock()
+        claim_queryset.first.return_value = None
+
+        with patch("api.tasks.Claim.objects.filter", return_value=claim_queryset):
+            self._invoke()
+
+        self.assertEqual(VerificationRun.objects.count(), 0)
+        self.evaluate_tavily.assert_called_once()
+        combined_context = self.evaluate_tavily.call_args.args[1]
+        self.assertIn(self.cleaned_text, combined_context)
+        self.assertIn("Web evidence answer.", combined_context)
+        self.assertIn("Relevant web evidence.", combined_context)
+        self.evaluate_persisted.assert_not_called()
+        self.load_dossier.assert_not_called()
 
     def test_handled_tavily_failure_abstains(self):
         self.bridge.return_value = {"claims": []}

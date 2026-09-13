@@ -449,6 +449,25 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         claim_queryset = Mock()
         claim_queryset.first.return_value = Mock()
 
+        stack = ExitStack()
+        self.addCleanup(stack.close)
+        load_dossier = stack.enter_context(patch(
+            "api.tasks.load_reasoning_evidence_dossier_for_run",
+            return_value=["persisted dossier"],
+        ))
+        filter_dossier = stack.enter_context(patch(
+            "api.tasks.filter_reasoning_evidence_dossier_by_role",
+            return_value=["persisted fact-check group"],
+        ))
+        render_dossier = stack.enter_context(patch(
+            "api.tasks.render_reasoning_evidence_dossier",
+            return_value="Persisted URL GFC content. Rating: False",
+        ))
+        evaluate_persisted = stack.enter_context(patch(
+            "api.tasks.evaluate_claim_with_persisted_evidence",
+            return_value=ai_verdict,
+        ))
+
         with (
             patch("api.tasks.create_verification_run"),
             patch("api.tasks.start_verification_run") as start_run,
@@ -490,8 +509,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             ) as relevance_check,
             patch(
                 "api.tasks.evaluate_url_claim_with_gfc",
-                return_value=ai_verdict,
-            ) as evaluate_gfc,
+            ) as evaluate_legacy_gfc,
             patch("api.tasks._save_claim") as save_claim,
             patch("api.tasks._retrieve_and_ingest_tavily") as retrieve_tavily,
             patch("api.tasks._log_stage"),
@@ -513,11 +531,18 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             "Example public claim.",
         )
 
-        evaluate_gfc.assert_called_once_with(
+        load_dossier.assert_called_once_with(start_run.return_value)
+        filter_dossier.assert_called_once_with(
+            ["persisted dossier"],
+            VerificationEvidence.EvidenceRole.FACT_CHECK,
+        )
+        render_dossier.assert_called_once_with(["persisted fact-check group"])
+        evaluate_persisted.assert_called_once_with(
             cleaned_claim,
-            gfc_payload,
+            "Persisted URL GFC content. Rating: False",
             "NEUTRAL",
         )
+        evaluate_legacy_gfc.assert_not_called()
 
         save_claim.assert_called_once_with(
             claim_id,
@@ -571,6 +596,25 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         claim_queryset = Mock()
         claim_queryset.first.return_value = Mock()
 
+        stack = ExitStack()
+        self.addCleanup(stack.close)
+        load_dossier = stack.enter_context(patch(
+            "api.tasks.load_reasoning_evidence_dossier_for_run",
+            return_value=["persisted dossier"],
+        ))
+        filter_dossier = stack.enter_context(patch(
+            "api.tasks.filter_reasoning_evidence_dossier_by_role",
+            return_value=["persisted secondary group"],
+        ))
+        render_dossier = stack.enter_context(patch(
+            "api.tasks.render_reasoning_evidence_dossier",
+            return_value="Persisted URL Tavily evidence.",
+        ))
+        evaluate_persisted = stack.enter_context(patch(
+            "api.tasks.evaluate_claim_with_persisted_evidence",
+            return_value=ai_verdict,
+        ))
+
         with (
             patch("api.tasks.create_verification_run"),
             patch("api.tasks.start_verification_run") as start_run,
@@ -608,8 +652,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             ) as retrieve_gfc,
             patch(
                 "api.tasks.evaluate_url_claim_with_tavily",
-                return_value=ai_verdict,
-            ),
+            ) as evaluate_legacy_tavily,
             patch("api.tasks._save_claim") as save_claim,
             patch("api.tasks._retrieve_and_ingest_tavily") as retrieve_tavily,
             patch("api.tasks._log_stage"),
@@ -632,6 +675,19 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             search_query[:300], claim_id, stage_prefix="url_",
             verification_run=start_run.return_value,
         )
+
+        load_dossier.assert_called_once_with(start_run.return_value)
+        filter_dossier.assert_called_once_with(
+            ["persisted dossier"],
+            VerificationEvidence.EvidenceRole.SECONDARY,
+        )
+        render_dossier.assert_called_once_with(["persisted secondary group"])
+        evaluate_persisted.assert_called_once_with(
+            cleaned_claim,
+            "Persisted URL Tavily evidence.",
+            "NEUTRAL",
+        )
+        evaluate_legacy_tavily.assert_not_called()
 
         self.assertEqual(
             save_claim.call_args.args[2],
