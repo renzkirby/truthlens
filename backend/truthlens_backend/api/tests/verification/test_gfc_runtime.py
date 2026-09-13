@@ -503,6 +503,9 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             "api.tasks.evaluate_claim_with_persisted_evidence",
             return_value=ai_verdict,
         ))
+        assess_evidence = stack.enter_context(patch(
+            "api.tasks._assess_and_persist_reasoning_evidence"
+        ))
 
         with (
             patch("api.tasks.create_verification_run"),
@@ -567,10 +570,28 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             "Example public claim.",
         )
 
-        load_dossier.assert_called_once_with(start_run.return_value)
-        filter_dossier.assert_called_once_with(
-            ["persisted dossier"],
-            VerificationEvidence.EvidenceRole.FACT_CHECK,
+        self.assertEqual(
+            load_dossier.call_args_list,
+            [call(start_run.return_value), call(start_run.return_value)],
+        )
+        self.assertEqual(
+            filter_dossier.call_args_list,
+            [
+                call(
+                    ["persisted dossier"],
+                    VerificationEvidence.EvidenceRole.FACT_CHECK,
+                ),
+                call(
+                    ["persisted dossier"],
+                    VerificationEvidence.EvidenceRole.FACT_CHECK,
+                ),
+            ],
+        )
+        assess_evidence.assert_called_once_with(
+            cleaned_claim,
+            ["persisted fact-check group"],
+            claim_id,
+            stage_prefix="url_gfc",
         )
         render_dossier.assert_called_once_with(["persisted fact-check group"])
         evaluate_persisted.assert_called_once_with(
@@ -650,6 +671,9 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             "api.tasks.evaluate_claim_with_persisted_evidence",
             return_value=ai_verdict,
         ))
+        assess_evidence = stack.enter_context(patch(
+            "api.tasks._assess_and_persist_reasoning_evidence"
+        ))
 
         with (
             patch("api.tasks.create_verification_run"),
@@ -712,10 +736,28 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             verification_run=start_run.return_value,
         )
 
-        load_dossier.assert_called_once_with(start_run.return_value)
-        filter_dossier.assert_called_once_with(
-            ["persisted dossier"],
-            VerificationEvidence.EvidenceRole.SECONDARY,
+        self.assertEqual(
+            load_dossier.call_args_list,
+            [call(start_run.return_value), call(start_run.return_value)],
+        )
+        self.assertEqual(
+            filter_dossier.call_args_list,
+            [
+                call(
+                    ["persisted dossier"],
+                    VerificationEvidence.EvidenceRole.SECONDARY,
+                ),
+                call(
+                    ["persisted dossier"],
+                    VerificationEvidence.EvidenceRole.SECONDARY,
+                ),
+            ],
+        )
+        assess_evidence.assert_called_once_with(
+            cleaned_claim,
+            ["persisted secondary group"],
+            claim_id,
+            stage_prefix="url_tavily",
         )
         render_dossier.assert_called_once_with(["persisted secondary group"])
         evaluate_persisted.assert_called_once_with(
