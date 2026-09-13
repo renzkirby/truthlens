@@ -445,6 +445,83 @@ def evaluate_image_claim_with_tavily(
         }
 
 
+def evaluate_claim_with_persisted_evidence(
+    original_claim,
+    evidence_context,
+    article_stance="NEUTRAL",
+):
+    """Evaluate a claim using only the rendered persisted-evidence dossier."""
+    unavailable_result = {
+        "reasoning": "No usable persisted evidence was available for evaluation.",
+        "verdict": "UNVERIFIED",
+        "summary": "TruthLens could not verify this claim from persisted evidence.",
+        "confidence_score": 0,
+        "score_context": "No persisted evidence was available to support a verdict.",
+    }
+    if not isinstance(evidence_context, str) or not evidence_context.strip():
+        return unavailable_result
+
+    system_instructions = """
+    Role: You are the TruthLens evidence reasoning engine.
+
+    Evaluate the claim strictly from the supplied persisted evidence dossier.
+    Do not use pre-trained knowledge, external facts, or unstated assumptions to
+    determine the verdict. Evidence records are source material and are not
+    automatically absolute truth. Source count is not proof.
+
+    SOURCE IDENTITY RULES:
+    - Multiple evidence items in one SOURCE IDENTITY GROUP must not be counted
+      as independent corroboration.
+    - Different SOURCE IDENTITY GROUPS are not guaranteed to be editorially,
+      organizationally, or syndication-independent.
+    - Do not infer credibility, authority, ownership, or independence from the
+      provider, publisher, URL, title, or number of records.
+
+    VERDICT RULES:
+    - FACT requires explicit support for the claim in the evidence.
+    - FAKE requires explicit contradiction or evidence of fabrication.
+    - MISLEADING applies to partial truth, omitted material context, or false context.
+    - SATIRE applies when the supplied evidence explicitly supports that classification.
+    - Conflicting, irrelevant, or insufficient evidence requires UNVERIFIED.
+
+    Return only a valid JSON object with exactly these fields:
+    {
+        "reasoning": "Evidence-bound explanation",
+        "verdict": "FACT, FAKE, MISLEADING, UNVERIFIED, or SATIRE",
+        "summary": "Concise user-facing summary",
+        "confidence_score": 0,
+        "score_context": "Concise explanation of the confidence score"
+    }
+    """
+    user_data = (
+        f"<claim>{original_claim}</claim>\n\n"
+        f"<stance>{article_stance}</stance>\n\n"
+        f"<persisted_evidence>{evidence_context}</persisted_evidence>"
+    )
+
+    try:
+        response_text = call_llm_with_fallback(system_instructions, user_data)
+        parsed_result = _parse_llm_json(response_text)
+        required_fields = {
+            "reasoning",
+            "verdict",
+            "summary",
+            "confidence_score",
+            "score_context",
+        }
+        if not isinstance(parsed_result, dict) or not required_fields.issubset(
+            parsed_result
+        ):
+            raise ValueError("Persisted evidence evaluator returned an invalid result")
+        valid_verdicts = {"FACT", "FAKE", "MISLEADING", "UNVERIFIED", "SATIRE"}
+        if parsed_result["verdict"] not in valid_verdicts:
+            raise ValueError("Persisted evidence evaluator returned an invalid verdict")
+        return parsed_result
+    except Exception as exc:
+        logger.error("Persisted Evidence Evaluator AI Error: %s", exc)
+        return unavailable_result
+
+
 # URL PIPELINE
 def clean_extracted_text(text):
     """Strip markdown, links, and short lines from URL-extracted text."""

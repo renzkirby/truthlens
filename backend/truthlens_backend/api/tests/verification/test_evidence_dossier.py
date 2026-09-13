@@ -16,7 +16,9 @@ from api.models import (
 from api.verification.evidence_dossier import (
     ReasoningEvidenceGroup,
     ReasoningEvidenceItem,
+    filter_reasoning_evidence_dossier_by_role,
     load_reasoning_evidence_dossier_for_run,
+    render_reasoning_evidence_dossier,
 )
 from api.verification.grouping import (
     CANONICAL_SOURCE,
@@ -45,6 +47,26 @@ class ReasoningEvidenceDossierTests(TestCase):
             verification_run=self.run,
             evidence_source=evidence_source,
             **fields,
+        )
+
+    def _reasoning_item(self, *, evidence_role, content, provider="TAVILY"):
+        return ReasoningEvidenceItem(
+            evidence_link_id=uuid.uuid4(),
+            evidence_source_id=uuid.uuid4(),
+            provider=provider,
+            url="https://example.com/evidence",
+            canonical_url="https://example.com/evidence",
+            title="Evidence title",
+            publisher="Evidence Publisher",
+            source_type="WEB_SEARCH",
+            content=content,
+            published_at=None,
+            retrieved_at=timezone.now(),
+            evidence_role=evidence_role,
+            stance=VerificationEvidence.Stance.UNKNOWN,
+            relevance_score=None,
+            directness_score=None,
+            recency_score=None,
         )
 
     def test_empty_persisted_run_returns_empty_list(self):
@@ -308,3 +330,101 @@ class ReasoningEvidenceDossierTests(TestCase):
                     list(model.objects.order_by("pk").values()),
                     before[model],
                 )
+
+    def test_role_filter_preserves_order_and_does_not_mutate_input(self):
+        first_match = self._reasoning_item(
+            evidence_role=VerificationEvidence.EvidenceRole.FACT_CHECK,
+            content="First match",
+        )
+        nonmatch = self._reasoning_item(
+            evidence_role=VerificationEvidence.EvidenceRole.SECONDARY,
+            content="Nonmatch",
+        )
+        second_match = self._reasoning_item(
+            evidence_role=VerificationEvidence.EvidenceRole.FACT_CHECK,
+            content="Second match",
+            provider="GOOGLE_FACT_CHECK",
+        )
+        removed_group_item = self._reasoning_item(
+            evidence_role=VerificationEvidence.EvidenceRole.SECONDARY,
+            content="Removed group",
+        )
+        original_groups = (
+            ReasoningEvidenceGroup(
+                identity_kind=CANONICAL_SOURCE,
+                identity_id=uuid.uuid4(),
+                evidence=(first_match, nonmatch, second_match),
+            ),
+            ReasoningEvidenceGroup(
+                identity_kind=EVIDENCE_SOURCE,
+                identity_id=uuid.uuid4(),
+                evidence=(removed_group_item,),
+            ),
+        )
+
+        with self.assertNumQueries(0):
+            filtered = filter_reasoning_evidence_dossier_by_role(
+                original_groups,
+                VerificationEvidence.EvidenceRole.FACT_CHECK,
+            )
+
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0].identity_kind, original_groups[0].identity_kind)
+        self.assertEqual(filtered[0].identity_id, original_groups[0].identity_id)
+        self.assertEqual(filtered[0].evidence, (first_match, second_match))
+        self.assertEqual(
+            original_groups[0].evidence,
+            (first_match, nonmatch, second_match),
+        )
+        self.assertEqual(original_groups[1].evidence, (removed_group_item,))
+
+    def test_empty_dossier_renders_as_empty_string(self):
+        with self.assertNumQueries(0):
+            self.assertEqual(render_reasoning_evidence_dossier(iter(())), "")
+
+    def test_renderer_is_deterministic_and_preserves_boundaries_and_content(self):
+        first_content = "Exact first content.\nDo not rewrite this line."
+        second_content = "Exact second content."
+        first_item = self._reasoning_item(
+            evidence_role=VerificationEvidence.EvidenceRole.FACT_CHECK,
+            content=first_content,
+            provider="GOOGLE_FACT_CHECK",
+        )
+        second_item = self._reasoning_item(
+            evidence_role=VerificationEvidence.EvidenceRole.SECONDARY,
+            content=second_content,
+        )
+        groups = (
+            ReasoningEvidenceGroup(
+                identity_kind=CANONICAL_SOURCE,
+                identity_id=uuid.uuid4(),
+                evidence=(first_item,),
+            ),
+            ReasoningEvidenceGroup(
+                identity_kind=EVIDENCE_SOURCE,
+                identity_id=uuid.uuid4(),
+                evidence=(second_item,),
+            ),
+        )
+
+        with self.assertNumQueries(0):
+            first_render = render_reasoning_evidence_dossier(groups)
+            second_render = render_reasoning_evidence_dossier(iter(groups))
+
+        self.assertEqual(first_render, second_render)
+        self.assertLess(
+            first_render.index("=== SOURCE IDENTITY GROUP 1 ==="),
+            first_render.index("=== SOURCE IDENTITY GROUP 2 ==="),
+        )
+        self.assertIn("--- EVIDENCE ITEM 1 ---", first_render)
+        self.assertIn(first_content, first_render)
+        self.assertIn(second_content, first_render)
+        self.assertNotIn("raw_reference", first_render)
+        self.assertIn(
+            "must not be counted as multiple independent confirmations",
+            first_render,
+        )
+        self.assertIn(
+            "not guaranteed to be editorially independent",
+            first_render,
+        )
