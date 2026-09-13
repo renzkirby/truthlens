@@ -1,6 +1,7 @@
 """Read-only organization-scoped projections for publication work."""
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db.models import Prefetch
 
 from .evidence_snapshot_schema import (
     EvidenceSnapshotSchemaError,
@@ -34,6 +35,12 @@ RESOURCE_ELIGIBLE_CLAIM = "ELIGIBLE_CLAIM"
 RESOURCE_FACT_CHECK = "FACT_CHECK"
 QUEUE_DRAFTING = "DRAFTING"
 QUEUE_REVIEW = "REVIEW"
+
+SOURCE_ORIGIN_BY_TYPE = {
+    OfficialFactCheckSource.SourceType.VERIFIED_EVIDENCE: "DECISION_EVIDENCE",
+    OfficialFactCheckSource.SourceType.MODERATOR_ADDED: "ORGANIZATION_EDITORIAL",
+    OfficialFactCheckSource.SourceType.LEGACY_IMPORT: "LEGACY_IMPORT",
+}
 
 
 def _actor_payload(actor):
@@ -200,6 +207,10 @@ def _source_payloads(fact_check):
                 "url": source.url,
                 "title": source.title,
                 "source_type": source.source_type,
+                "source_origin": SOURCE_ORIGIN_BY_TYPE.get(
+                    source.source_type,
+                    "UNKNOWN",
+                ),
                 "provenance": "SEALED_EVIDENCE" if sealed else "EDITORIAL",
                 "immutable": sealed
                 or fact_check.publication_status
@@ -208,6 +219,7 @@ def _source_payloads(fact_check):
                     OfficialFactCheck.PublicationStatus.ARCHIVED,
                 },
                 "is_editorially_selected": source.is_editorially_selected,
+                "added_by": _actor_payload(source.added_by),
                 "captured_evidence_ids": [
                     str(link.captured_evidence_id) for link in links
                 ],
@@ -399,7 +411,14 @@ def _fact_check_queryset(organization):
             "reviewed_by",
             "published_by",
         )
-        .prefetch_related("source_items__evidence_links")
+        .prefetch_related(
+            Prefetch(
+                "source_items",
+                queryset=OfficialFactCheckSource.objects.select_related(
+                    "added_by"
+                ).prefetch_related("evidence_links"),
+            )
+        )
     )
 
 

@@ -2794,9 +2794,18 @@ class PublicationWorkflowSourceSerializer(serializers.Serializer):
     url = serializers.URLField()
     title = serializers.CharField(allow_blank=True, allow_null=True)
     source_type = serializers.CharField()
+    source_origin = serializers.ChoiceField(
+        choices=[
+            "DECISION_EVIDENCE",
+            "ORGANIZATION_EDITORIAL",
+            "LEGACY_IMPORT",
+            "UNKNOWN",
+        ]
+    )
     provenance = serializers.ChoiceField(choices=["SEALED_EVIDENCE", "EDITORIAL"])
     immutable = serializers.BooleanField()
     is_editorially_selected = serializers.BooleanField(allow_null=True)
+    added_by = PublicationWorkflowActorSerializer(allow_null=True)
     captured_evidence_ids = serializers.ListField(
         child=serializers.UUIDField(),
     )

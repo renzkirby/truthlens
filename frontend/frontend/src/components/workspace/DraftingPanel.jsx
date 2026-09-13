@@ -69,6 +69,26 @@ function actorName(actor, fallback = "Not recorded") {
    return actor?.username ? `@${actor.username}` : fallback;
 }
 
+function sourceOriginLabel(sourceOrigin) {
+   const labels = {
+      DECISION_EVIDENCE: "Decision evidence",
+      ORGANIZATION_EDITORIAL: "Organization editorial source",
+      LEGACY_IMPORT: "Legacy imported source",
+   };
+
+   return labels[sourceOrigin] || "Source origin unavailable";
+}
+
+function sourceSelectionLabel(isSelected) {
+   if (isSelected === true) {
+      return "Cited in article";
+   }
+   if (isSelected === false) {
+      return "Not cited in article";
+   }
+   return "Citation history unavailable";
+}
+
 function getAuthIdentity(user, token) {
    if (!token) {
       return "session:anonymous";
@@ -352,7 +372,10 @@ function PublicationSources({ sourceItems }) {
          <div className="drafting-section-heading">
             <div>
                <h4 id="drafting-publication-sources-heading">Publication sources</h4>
-               <p>Article source selection is separate from the sealed decision-time evidence record.</p>
+               <p>
+                  Publication sources show where each source entered the publication record. Citing a source in the
+                  article does not change the sealed decision evidence.
+               </p>
             </div>
             <span className="drafting-count-label">{sources.length} sources</span>
          </div>
@@ -363,12 +386,11 @@ function PublicationSources({ sourceItems }) {
             <ul className="drafting-source-list">
                {sources.map((source, index) => {
                   const externalUrl = safeExternalUrl(source?.url);
-                  const selectionCopy =
-                     source?.is_editorially_selected === true
-                        ? "Editorially selected"
-                        : source?.is_editorially_selected === false
-                          ? "Not editorially selected"
-                          : "Editorial selection provenance unknown";
+                  const isDecisionEvidence = source?.source_origin === "DECISION_EVIDENCE";
+                  const isOrganizationEditorial = source?.source_origin === "ORGANIZATION_EDITORIAL";
+                  const addedBy = isOrganizationEditorial && source?.added_by?.username
+                     ? `Added by @${source.added_by.username}`
+                     : null;
 
                   return (
                      <li key={source?.id || `${source?.url}-${index}`}>
@@ -384,10 +406,11 @@ function PublicationSources({ sourceItems }) {
                            {source?.title && source?.url ? <span>{source.url}</span> : null}
                         </div>
                         <div className="drafting-source-flags">
-                           <span>{formatLabel(source?.source_type, "Source type unavailable")}</span>
-                           <span>{formatLabel(source?.provenance, "Provenance unavailable")}</span>
-                           <span>{source?.immutable ? "Read only" : "Editable selection"}</span>
-                           <span>{selectionCopy}</span>
+                           <span>{sourceOriginLabel(source?.source_origin)}</span>
+                           {isDecisionEvidence ? <span>Sealed evidence</span> : null}
+                           {isOrganizationEditorial ? <span>Editorial source</span> : null}
+                           {addedBy ? <span>{addedBy}</span> : null}
+                           <span>{sourceSelectionLabel(source?.is_editorially_selected)}</span>
                         </div>
                      </li>
                   );

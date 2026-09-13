@@ -16,6 +16,7 @@ from api.models import (
     ModerationEvent,
     OfficialFactCheck,
     OfficialFactCheckPublicationSnapshot,
+    OfficialFactCheckSource,
     OrganizationMembership,
     VerificationAssignment,
 )
@@ -749,11 +750,41 @@ class PublicationWorkflowApiTests(PublicationWorkflowFixtures, APITestCase):
             source["provenance"]: source
             for source in detail.data["source_items"]
         }
-        self.assertTrue(provenance["SEALED_EVIDENCE"]["immutable"])
-        self.assertTrue(
-            provenance["SEALED_EVIDENCE"]["captured_evidence_ids"]
+        sealed_source = provenance["SEALED_EVIDENCE"]
+        editorial_source = provenance["EDITORIAL"]
+        backward_compatible_fields = {
+            "source_type",
+            "provenance",
+            "immutable",
+            "is_editorially_selected",
+            "captured_evidence_ids",
+        }
+        for source in detail.data["source_items"]:
+            self.assertTrue(backward_compatible_fields.issubset(source))
+
+        self.assertEqual(
+            sealed_source["source_type"],
+            OfficialFactCheckSource.SourceType.VERIFIED_EVIDENCE,
         )
-        self.assertFalse(provenance["EDITORIAL"]["immutable"])
+        self.assertEqual(sealed_source["source_origin"], "DECISION_EVIDENCE")
+        self.assertTrue(sealed_source["immutable"])
+        self.assertTrue(
+            sealed_source["captured_evidence_ids"]
+        )
+        self.assertFalse(sealed_source["is_editorially_selected"])
+        self.assertEqual(
+            editorial_source["source_type"],
+            OfficialFactCheckSource.SourceType.MODERATOR_ADDED,
+        )
+        self.assertEqual(
+            editorial_source["source_origin"],
+            "ORGANIZATION_EDITORIAL",
+        )
+        self.assertEqual(
+            editorial_source["added_by"],
+            {"id": self.lead.id, "username": self.lead.username},
+        )
+        self.assertFalse(editorial_source["immutable"])
 
     def test_live_evidence_changes_do_not_rewrite_detail_provenance(self):
         context = self.decided_context(suffix="immutable-provenance")
@@ -801,6 +832,11 @@ class PublicationWorkflowApiTests(PublicationWorkflowFixtures, APITestCase):
             if source["url"] == shared_url
         )
         self.assertEqual(shared["provenance"], "SEALED_EVIDENCE")
+        self.assertEqual(
+            shared["source_type"],
+            OfficialFactCheckSource.SourceType.VERIFIED_EVIDENCE,
+        )
+        self.assertEqual(shared["source_origin"], "DECISION_EVIDENCE")
         self.assertTrue(shared["captured_evidence_ids"])
         self.assertTrue(shared["is_editorially_selected"])
 
@@ -832,6 +868,7 @@ class PublicationWorkflowApiTests(PublicationWorkflowFixtures, APITestCase):
             if source["url"] == shared_url
         )
         self.assertEqual(shared_after["provenance"], "SEALED_EVIDENCE")
+        self.assertEqual(shared_after["source_origin"], "DECISION_EVIDENCE")
         self.assertTrue(shared_after["captured_evidence_ids"])
         self.assertFalse(shared_after["is_editorially_selected"])
 
@@ -856,6 +893,56 @@ class PublicationWorkflowApiTests(PublicationWorkflowFixtures, APITestCase):
             if item["id"] == str(source.id)
         )
         self.assertIsNone(projected["is_editorially_selected"])
+
+    def test_legacy_source_type_has_stable_origin_projection(self):
+        context = self.decided_context(suffix="legacy-source-origin")
+        draft = self.create_draft(context, suffix="legacy-source-origin")
+        legacy_source = OfficialFactCheckSource.objects.create(
+            fact_check=draft,
+            url="https://example.com/legacy-publication-source",
+            source_type=OfficialFactCheckSource.SourceType.LEGACY_IMPORT,
+            is_editorially_selected=None,
+        )
+
+        response = self.client_for(self.lead).get(
+            self.detail_url("FACT_CHECK", draft.id)
+        )
+        projected = next(
+            source
+            for source in response.data["source_items"]
+            if source["id"] == str(legacy_source.id)
+        )
+
+        self.assertEqual(
+            projected["source_type"],
+            OfficialFactCheckSource.SourceType.LEGACY_IMPORT,
+        )
+        self.assertEqual(projected["source_origin"], "LEGACY_IMPORT")
+        self.assertIsNone(projected["is_editorially_selected"])
+
+    def test_unknown_source_type_has_defensive_origin_projection(self):
+        context = self.decided_context(suffix="unknown-source-origin")
+        draft = self.create_draft(context, suffix="unknown-source-origin")
+        source = OfficialFactCheckSource.objects.create(
+            fact_check=draft,
+            url="https://example.com/future-publication-source",
+            source_type=OfficialFactCheckSource.SourceType.LEGACY_IMPORT,
+        )
+        OfficialFactCheckSource.objects.filter(pk=source.pk).update(
+            source_type="FUTURE_SOURCE_TYPE"
+        )
+
+        response = self.client_for(self.lead).get(
+            self.detail_url("FACT_CHECK", draft.id)
+        )
+        projected = next(
+            item
+            for item in response.data["source_items"]
+            if item["id"] == str(source.id)
+        )
+
+        self.assertEqual(projected["source_type"], "FUTURE_SOURCE_TYPE")
+        self.assertEqual(projected["source_origin"], "UNKNOWN")
 
     def test_cross_organization_resources_are_404_without_metadata(self):
         context = self.decided_context(suffix="tenant")
