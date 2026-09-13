@@ -2607,6 +2607,7 @@ class FactCheckInputProtectionMixin:
         "organization",
         "publication_status",
         "version",
+        "edit_generation",
         "drafted_by",
         "reviewed_by",
         "published_by",
@@ -2634,6 +2635,12 @@ class FactCheckDraftCreateSerializer(
     FactCheckInputProtectionMixin,
     serializers.Serializer,
 ):
+    organization_id = serializers.UUIDField()
+
+    expected_decision_revision = serializers.IntegerField(
+        min_value=1,
+    )
+
     headline = serializers.CharField(
         max_length=300,
         allow_blank=False,
@@ -2661,16 +2668,20 @@ class FactCheckDraftCreateSerializer(
         default=list,
     )
 
-    expected_revision = serializers.IntegerField(
-        required=False,
-        min_value=1,
-    )
-
-
 class FactCheckDraftUpdateSerializer(
     FactCheckInputProtectionMixin,
     serializers.Serializer,
 ):
+    organization_id = serializers.UUIDField()
+
+    expected_edit_generation = serializers.IntegerField(
+        min_value=1,
+    )
+
+    expected_decision_revision = serializers.IntegerField(
+        min_value=1,
+    )
+
     headline = serializers.CharField(
         max_length=300,
         required=False,
@@ -2701,12 +2712,204 @@ class FactCheckDraftUpdateSerializer(
     def validate(self, attrs):
         attrs = super().validate(attrs)
 
-        if not attrs:
+        editable_fields = {
+            "headline",
+            "summary",
+            "article_body",
+            "source_urls",
+        }
+        if not editable_fields.intersection(attrs):
             raise serializers.ValidationError(
                 "At least one editable field " "must be provided."
             )
 
         return attrs
+
+
+class FactCheckTransitionSerializer(serializers.Serializer):
+    organization_id = serializers.UUIDField()
+    expected_edit_generation = serializers.IntegerField(min_value=1)
+    expected_decision_revision = serializers.IntegerField(min_value=1)
+
+
+class FactCheckRecoverySerializer(serializers.Serializer):
+    organization_id = serializers.UUIDField()
+    expected_edit_generation = serializers.IntegerField(min_value=1)
+    reason = serializers.CharField(
+        max_length=2000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+
+class PublicationWorkflowQueueQuerySerializer(serializers.Serializer):
+    organization_id = serializers.UUIDField()
+    queue = serializers.ChoiceField(choices=["DRAFTING", "REVIEW"])
+    limit = serializers.IntegerField(default=20, min_value=1, max_value=100)
+    offset = serializers.IntegerField(default=0, min_value=0)
+
+
+class PublicationWorkflowDetailQuerySerializer(serializers.Serializer):
+    organization_id = serializers.UUIDField()
+
+
+class PublicationWorkflowActorSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    username = serializers.CharField()
+
+
+class PublicationWorkflowOrganizationSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    name = serializers.CharField()
+    slug = serializers.SlugField()
+
+
+class PublicationWorkflowClaimSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    claim_type = serializers.CharField()
+    context_text = serializers.CharField(allow_blank=True, allow_null=True)
+    url_link = serializers.URLField(allow_null=True, required=False)
+    source_link = serializers.URLField(allow_null=True, required=False)
+    media_url = serializers.CharField(allow_null=True, required=False)
+
+
+class PublicationWorkflowDecisionSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    revision_number = serializers.IntegerField()
+    canonical_claim = serializers.CharField(allow_blank=True)
+    verdict = serializers.CharField()
+    rationale = serializers.CharField(allow_blank=True)
+    decided_at = serializers.DateTimeField()
+    decided_by = PublicationWorkflowActorSerializer(allow_null=True)
+    is_current = serializers.BooleanField()
+
+
+class PublicationWorkflowBlockerSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    detail = serializers.CharField()
+
+
+class PublicationWorkflowSourceSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    url = serializers.URLField()
+    title = serializers.CharField(allow_blank=True, allow_null=True)
+    source_type = serializers.CharField()
+    provenance = serializers.ChoiceField(choices=["SEALED_EVIDENCE", "EDITORIAL"])
+    immutable = serializers.BooleanField()
+    is_editorially_selected = serializers.BooleanField(allow_null=True)
+    captured_evidence_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+    )
+
+
+class PublicationWorkflowSealedEvidenceEntrySerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    thread_id = serializers.UUIDField()
+    evidence_status = serializers.CharField()
+    evidence_type = serializers.CharField(allow_blank=True, allow_null=True)
+    evidence_caption = serializers.CharField(allow_blank=True, allow_null=True)
+    evidence_url = serializers.CharField(allow_blank=True, allow_null=True)
+    contributor_id = serializers.CharField()
+    reviewer_id = serializers.CharField(allow_null=True)
+    submitted_at = serializers.CharField(allow_null=True)
+    reviewed_at = serializers.CharField(allow_null=True)
+    moderator_notes = serializers.CharField(allow_blank=True, allow_null=True)
+    rejection_reason = serializers.CharField(allow_blank=True, allow_null=True)
+
+
+class PublicationWorkflowSealedEvidenceSerializer(serializers.Serializer):
+    basis = serializers.ChoiceField(choices=["SEALED_DECISION_EVIDENCE"])
+    decision_snapshot_id = serializers.UUIDField()
+    schema_version = serializers.IntegerField()
+    captured_at = serializers.DateTimeField()
+    count = serializers.IntegerField()
+    entries = PublicationWorkflowSealedEvidenceEntrySerializer(many=True)
+
+
+class PublicationWorkflowConcurrencySerializer(serializers.Serializer):
+    edit_generation = serializers.IntegerField(allow_null=True)
+    article_version = serializers.IntegerField(allow_null=True)
+    decision_revision = serializers.IntegerField()
+
+
+class PublicationWorkflowListArticleSerializer(serializers.Serializer):
+    publication_status = serializers.CharField()
+    version = serializers.IntegerField()
+    edit_generation = serializers.IntegerField()
+    headline = serializers.CharField(allow_blank=True)
+    summary = serializers.CharField(allow_blank=True)
+
+
+class PublicationWorkflowDetailArticleSerializer(
+    PublicationWorkflowListArticleSerializer
+):
+    article_body = serializers.CharField(allow_blank=True)
+
+
+class PublicationWorkflowLifecycleSerializer(serializers.Serializer):
+    actionable_at = serializers.DateTimeField()
+    created_at = serializers.DateTimeField(allow_null=True)
+    updated_at = serializers.DateTimeField(allow_null=True)
+    drafted_at = serializers.DateTimeField(allow_null=True)
+    drafted_by = PublicationWorkflowActorSerializer(allow_null=True)
+    submitted_for_review_at = serializers.DateTimeField(allow_null=True)
+    reviewed_at = serializers.DateTimeField(allow_null=True)
+    reviewed_by = PublicationWorkflowActorSerializer(allow_null=True)
+    published_at = serializers.DateTimeField(allow_null=True)
+    published_by = PublicationWorkflowActorSerializer(allow_null=True)
+    archived_at = serializers.DateTimeField(allow_null=True)
+
+
+class PublicationWorkflowListItemSerializer(serializers.Serializer):
+    resource_type = serializers.ChoiceField(
+        choices=["ELIGIBLE_CLAIM", "FACT_CHECK"]
+    )
+    resource_id = serializers.UUIDField()
+    workflow_kind = serializers.ChoiceField(choices=["INITIAL"])
+    fact_check_id = serializers.UUIDField(allow_null=True)
+    organization = PublicationWorkflowOrganizationSerializer()
+    claim = PublicationWorkflowClaimSerializer()
+    decision = PublicationWorkflowDecisionSerializer()
+    article = PublicationWorkflowListArticleSerializer(allow_null=True)
+    lifecycle = PublicationWorkflowLifecycleSerializer()
+    concurrency = PublicationWorkflowConcurrencySerializer()
+    allowed_actions = serializers.ListField(child=serializers.CharField())
+    blockers = PublicationWorkflowBlockerSerializer(many=True)
+
+
+class PublicationWorkflowDetailSerializer(PublicationWorkflowListItemSerializer):
+    article = PublicationWorkflowDetailArticleSerializer(allow_null=True)
+    id = serializers.UUIDField(allow_null=True)
+    claim_id = serializers.UUIDField()
+    adjudication_decision_id = serializers.UUIDField()
+    canonical_claim = serializers.CharField(allow_blank=True)
+    verdict = serializers.CharField()
+    headline = serializers.CharField(allow_blank=True, allow_null=True)
+    summary = serializers.CharField(allow_blank=True, allow_null=True)
+    article_body = serializers.CharField(allow_blank=True, allow_null=True)
+    publication_status = serializers.CharField(allow_null=True)
+    version = serializers.IntegerField(allow_null=True)
+    edit_generation = serializers.IntegerField(allow_null=True)
+    sources = serializers.ListField(child=serializers.URLField())
+    source_items = PublicationWorkflowSourceSerializer(many=True)
+    drafted_by = PublicationWorkflowActorSerializer(allow_null=True)
+    submitted_for_review_at = serializers.DateTimeField(allow_null=True)
+    reviewed_by = PublicationWorkflowActorSerializer(allow_null=True)
+    reviewed_at = serializers.DateTimeField(allow_null=True)
+    published_by = PublicationWorkflowActorSerializer(allow_null=True)
+    published_at = serializers.DateTimeField(allow_null=True)
+    archived_at = serializers.DateTimeField(allow_null=True)
+    created_at = serializers.DateTimeField(allow_null=True)
+    updated_at = serializers.DateTimeField(allow_null=True)
+    sealed_evidence = PublicationWorkflowSealedEvidenceSerializer(allow_null=True)
+
+
+class PublicationWorkflowPageSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    limit = serializers.IntegerField()
+    offset = serializers.IntegerField()
+    organization = PublicationWorkflowOrganizationSerializer()
+    results = PublicationWorkflowListItemSerializer(many=True)
 
 
 class OfficialFactCheckSourceSerializer(serializers.ModelSerializer):

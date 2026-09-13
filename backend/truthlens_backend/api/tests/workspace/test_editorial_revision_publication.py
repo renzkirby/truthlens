@@ -50,6 +50,8 @@ class EditorialReplacementFixtures(AdjudicationContractFixtures):
         draft = create_fact_check_draft(
             decision=context["decision"],
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_decision_revision=context["decision"].revision_number,
             headline=f"Published headline {suffix}",
             summary=f"Published summary {suffix}.",
             article_body=f"Published analysis {suffix}.",
@@ -58,10 +60,16 @@ class EditorialReplacementFixtures(AdjudicationContractFixtures):
         submitted = submit_fact_check_for_review(
             fact_check=draft,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
         )
         context["published"] = publish_fact_check(
             fact_check=submitted,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=submitted.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
         )["fact_check"]
         context["seal"] = context["published"].publication_snapshot
         return context
@@ -81,6 +89,9 @@ class EditorialReplacementFixtures(AdjudicationContractFixtures):
         return submit_fact_check_for_review(
             fact_check=revision,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=revision.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
         )
 
     def replace(self, context, revision, **overrides):
@@ -257,6 +268,8 @@ class EditorialRevisionPublicationTests(EditorialReplacementFixtures, TestCase):
         draft = create_fact_check_draft(
             decision=context["decision"],
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_decision_revision=context["decision"].revision_number,
             headline="Historical-null initial publication",
             summary="No prior publication history exists for this claim.",
             article_body="The initial metadata remains historically compatible.",
@@ -264,13 +277,20 @@ class EditorialRevisionPublicationTests(EditorialReplacementFixtures, TestCase):
         submitted = submit_fact_check_for_review(
             fact_check=draft,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
         )
         OfficialFactCheck.objects.filter(pk=submitted.pk).update(revision_kind=None)
         submitted.refresh_from_db()
 
-        published = publish_fact_check(fact_check=submitted, actor=self.lead)[
-            "fact_check"
-        ]
+        published = publish_fact_check(
+            fact_check=submitted,
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=submitted.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
+        )["fact_check"]
 
         self.assertIsNone(published.revision_kind)
         self.assertEqual(
@@ -659,6 +679,8 @@ class EditorialRevisionPublicationTests(EditorialReplacementFixtures, TestCase):
         draft = create_fact_check_draft(
             decision=context["decision"],
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_decision_revision=context["decision"].revision_number,
             headline="Shared-source predecessor",
             summary="Shared-source predecessor summary.",
             article_body="Shared-source predecessor analysis.",
@@ -668,8 +690,14 @@ class EditorialRevisionPublicationTests(EditorialReplacementFixtures, TestCase):
             fact_check=submit_fact_check_for_review(
                 fact_check=draft,
                 actor=self.lead,
+                organization_id=self.organization.id,
+                expected_edit_generation=draft.edit_generation,
+                expected_decision_revision=context["decision"].revision_number,
             ),
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation + 1,
+            expected_decision_revision=context["decision"].revision_number,
         )["fact_check"]
         context["seal"] = context["published"].publication_snapshot
         revision = self.make_submitted_revision(context)
@@ -695,7 +723,13 @@ class EditorialRevisionPublicationTests(EditorialReplacementFixtures, TestCase):
         )
 
         with self.assertRaises(PublishingConflict):
-            publish_fact_check(fact_check=revision, actor=self.lead)
+            publish_fact_check(
+                fact_check=revision,
+                actor=self.lead,
+                organization_id=self.organization.id,
+                expected_edit_generation=revision.edit_generation,
+                expected_decision_revision=context["decision"].revision_number,
+            )
 
         revision.refresh_from_db()
         self.assertEqual(revision.publication_status, "IN_REVIEW")
@@ -728,7 +762,13 @@ class EditorialRevisionPublicationTests(EditorialReplacementFixtures, TestCase):
         )
 
         with self.assertRaises(PublishingConflict):
-            publish_fact_check(fact_check=candidate, actor=self.lead)
+            publish_fact_check(
+                fact_check=candidate,
+                actor=self.lead,
+                organization_id=self.organization.id,
+                expected_edit_generation=candidate.edit_generation,
+                expected_decision_revision=context["decision"].revision_number,
+            )
 
         candidate.refresh_from_db()
         context["published"].refresh_from_db()

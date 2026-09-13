@@ -1599,6 +1599,14 @@ class ModerationEvent(models.Model):
             "ARTICLE_SUBMITTED",
             "Article Submitted for Review",
         )
+        ARTICLE_RETURNED_FOR_REWORK = (
+            "ARTICLE_RETURNED_FOR_REWORK",
+            "Article Returned for Rework",
+        )
+        ARTICLE_ABANDONED = (
+            "ARTICLE_ABANDONED",
+            "Article Abandoned",
+        )
         ARTICLE_PUBLISHED = (
             "ARTICLE_PUBLISHED",
             "Article Published",
@@ -1994,6 +2002,18 @@ class OfficialFactCheck(models.Model):
         EDITORIAL_REVISION = "EDITORIAL_REVISION", "Editorial revision"
         FACTUAL_CORRECTION = "FACTUAL_CORRECTION", "Factual correction"
 
+    @classmethod
+    def initial_workflow_queryset(cls):
+        """Return rows compatible with the INITIAL publication workflow."""
+        return cls.objects.filter(
+            Q(revision_kind=cls.RevisionKind.INITIAL)
+            | Q(revision_kind__isnull=True),
+            supersedes__isnull=True,
+            claim__isnull=False,
+            adjudication_decision__isnull=False,
+            organization__isnull=False,
+        )
+
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -2096,6 +2116,13 @@ class OfficialFactCheck(models.Model):
 
     version = models.PositiveIntegerField(
         default=1,
+    )
+
+    edit_generation = models.PositiveIntegerField(
+        default=1,
+        help_text=(
+            "Optimistic concurrency generation for mutable unpublished article work."
+        ),
     )
 
     created_at = models.DateTimeField(
@@ -2309,6 +2336,7 @@ class OfficialFactCheck(models.Model):
         "article_body",
         "sources",
         "version",
+        "edit_generation",
         "created_at",
         "drafted_by_id",
         "submitted_for_review_at",

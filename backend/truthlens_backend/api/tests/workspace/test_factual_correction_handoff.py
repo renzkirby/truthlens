@@ -678,6 +678,9 @@ class FactualCorrectionHandoffTests(FactualCorrectionHandoffFixtures, TestCase):
         editorial = submit_fact_check_for_review(
             fact_check=editorial,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=editorial.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
         )
         editorial = publish_editorial_revision(
             revision_id=editorial.id,

@@ -260,6 +260,19 @@ urlpatterns = [
         name=("moderation_fact_check_" "draft_create"),
     ),
     path(
+        "moderation/publications/work-items/",
+        views.publication_work_item_queue,
+        name="publication_work_item_queue",
+    ),
+    path(
+        (
+            "moderation/publications/work-items/"
+            "<str:resource_type>/<uuid:resource_id>/"
+        ),
+        views.publication_work_item_detail,
+        name="publication_work_item_detail",
+    ),
+    path(
         "moderation/fact-checks/" "<uuid:fact_check_id>/draft/",
         views.fact_check_draft_update,
         name=("moderation_fact_check_" "draft_update"),
@@ -273,6 +286,16 @@ urlpatterns = [
         "moderation/fact-checks/" "<uuid:fact_check_id>/publish/",
         views.fact_check_publish,
         name=("moderation_fact_check_publish"),
+    ),
+    path(
+        "moderation/fact-checks/" "<uuid:fact_check_id>/return-for-rework/",
+        views.fact_check_return_for_rework,
+        name="moderation_fact_check_return_for_rework",
+    ),
+    path(
+        "moderation/fact-checks/" "<uuid:fact_check_id>/abandon/",
+        views.fact_check_abandon,
+        name="moderation_fact_check_abandon",
     ),
     path(
         ("organization-invitations/" "<str:token>/"),

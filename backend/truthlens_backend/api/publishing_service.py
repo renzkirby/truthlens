@@ -89,23 +89,29 @@ def _queue_fact_check_index(
 
 
 class PublishingError(Exception):
-    pass
+    code = "INVALID_INPUT"
+
+    def __init__(self, message, *, code=None, current=None, blockers=None):
+        super().__init__(message)
+        self.code = code or self.code
+        self.current = current
+        self.blockers = list(blockers or [])
 
 
 class PublishingAuthorizationError(PublishingError):
-    pass
+    code = "FORBIDDEN"
 
 
 class InvalidPublicationTransition(PublishingError):
-    pass
+    code = "INVALID_PUBLICATION_STATE"
 
 
 class InvalidFactCheckContent(PublishingError):
-    pass
+    code = "INVALID_INPUT"
 
 
 class PublishingConflict(PublishingError):
-    pass
+    code = "PUBLICATION_NOT_READY"
 
 
 ACTIVE_DRAFT_STATUSES = {
@@ -222,6 +228,79 @@ def _parse_expected_version(value, field_name):
     return value
 
 
+def _parse_required_reason(value, field_name="reason"):
+    if not isinstance(value, str):
+        raise InvalidFactCheckContent(f"{field_name} must be a string.")
+    reason = value.strip()
+    if not reason:
+        raise InvalidFactCheckContent(f"A nonblank {field_name} is required.")
+    if len(reason) > 2000:
+        raise InvalidFactCheckContent(
+            f"{field_name} must be 2000 characters or fewer."
+        )
+    return reason
+
+
+def _current_publication_state(*, fact_check=None, decision=None):
+    return {
+        "resource_type": "FACT_CHECK" if fact_check is not None else "ELIGIBLE_CLAIM",
+        "resource_id": str(
+            fact_check.id if fact_check is not None else decision.claim_id
+        ),
+        "edit_generation": (
+            fact_check.edit_generation if fact_check is not None else None
+        ),
+        "article_version": fact_check.version if fact_check is not None else None,
+        "decision_revision": (
+            decision.revision_number if decision is not None else None
+        ),
+    }
+
+
+def _require_expected_edit_generation(
+    *,
+    fact_check,
+    decision,
+    expected_edit_generation,
+):
+    expected_edit_generation = _parse_expected_version(
+        expected_edit_generation,
+        "expected_edit_generation",
+    )
+    if fact_check.edit_generation != expected_edit_generation:
+        raise PublishingConflict(
+            "The fact-check changed after the publication workspace was opened. "
+            "Refresh before continuing.",
+            code="STALE_EDIT_GENERATION",
+            current=_current_publication_state(
+                fact_check=fact_check,
+                decision=decision,
+            ),
+        )
+
+
+def _require_expected_decision_revision(
+    *,
+    fact_check=None,
+    decision,
+    expected_decision_revision,
+):
+    expected_decision_revision = _parse_expected_version(
+        expected_decision_revision,
+        "expected_decision_revision",
+    )
+    if decision.revision_number != expected_decision_revision:
+        raise PublishingConflict(
+            "The adjudication decision changed after the publication workspace "
+            "was opened. Refresh before continuing.",
+            code="STALE_DECISION_REVISION",
+            current=_current_publication_state(
+                fact_check=fact_check,
+                decision=decision,
+            ),
+        )
+
+
 def _get_editorial_revision_identity(*, predecessor_id, organization_id):
     predecessor_id = _parse_uuid_identity(predecessor_id, "predecessor_id")
     organization_id = _parse_uuid_identity(organization_id, "organization_id")
@@ -312,7 +391,8 @@ def _lock_publication_context(*, identity, actor, capability):
     ):
         raise PublishingConflict(
             "The organization responsible for this claim changed after the "
-            "publication workflow was opened."
+            "publication workflow was opened.",
+            code="ASSIGNMENT_CONFLICT",
         )
 
     _require_locked_capability(
@@ -336,7 +416,30 @@ def _lock_publication_context(*, identity, actor, capability):
     ):
         raise PublishingConflict(
             "The adjudication decision used for this fact-check is no longer "
-            "current. Create a new draft from the latest decision."
+            "current. Create a new draft from the latest decision.",
+            code="STALE_DECISION_REVISION",
+            current=(
+                {
+                    "resource_type": (
+                        "FACT_CHECK"
+                        if identity["fact_check_id"] is not None
+                        else "ELIGIBLE_CLAIM"
+                    ),
+                    "resource_id": str(
+                        identity["fact_check_id"] or identity["claim_id"]
+                    ),
+                    "edit_generation": None,
+                    "article_version": None,
+                    "decision_revision": (
+                        current_decision.revision_number
+                        if current_decision is not None
+                        else None
+                    ),
+                }
+                if current_decision is not None
+                and current_decision.organization_id == organization.id
+                else None
+            ),
         )
 
     decision_snapshot = (
@@ -422,7 +525,8 @@ def _ensure_no_active_correction_reservation(context):
     ):
         raise PublishingConflict(
             "An active factual correction request reserves publication work for "
-            "this claim."
+            "this claim.",
+            code="ACTIVE_CORRECTION_RESERVATION",
         )
 
 
@@ -1201,22 +1305,26 @@ def _validate_publication_content(
 ):
     if not (fact_check.headline or "").strip():
         raise InvalidFactCheckContent(
-            "A headline is required before " "review or publication."
+            "A headline is required before " "review or publication.",
+            code="PUBLICATION_NOT_READY",
         )
 
     if not (fact_check.summary or "").strip():
         raise InvalidFactCheckContent(
-            "A summary is required before " "review or publication."
+            "A summary is required before " "review or publication.",
+            code="PUBLICATION_NOT_READY",
         )
 
     if not (fact_check.article_body or "").strip():
         raise InvalidFactCheckContent(
-            "Article analysis is required " "before review or publication."
+            "Article analysis is required " "before review or publication.",
+            code="PUBLICATION_NOT_READY",
         )
 
     if not (fact_check.source_items.exists()):
         raise InvalidFactCheckContent(
-            "At least one source is required " "before review or publication."
+            "At least one source is required " "before review or publication.",
+            code="PUBLICATION_NOT_READY",
         )
 
 
@@ -1255,6 +1363,8 @@ def create_fact_check_draft(
     *,
     decision,
     actor,
+    organization_id,
+    expected_decision_revision,
     headline,
     summary,
     article_body="",
@@ -1275,7 +1385,13 @@ def create_fact_check_draft(
     if len(headline) > 300:
         raise InvalidFactCheckContent("Headline must be 300 " "characters or fewer.")
 
+    organization_id = _parse_uuid_identity(organization_id, "organization_id")
+    expected_decision_revision = _parse_expected_version(
+        expected_decision_revision,
+        "expected_decision_revision",
+    )
     identity = _get_decision_publication_identity(decision)
+    identity["organization_id"] = organization_id
 
     with transaction.atomic():
         context = _lock_publication_context(
@@ -1286,6 +1402,10 @@ def create_fact_check_draft(
         locked_claim = context["claim"]
         current_decision = context["decision"]
         _ensure_no_active_correction_reservation(context)
+        _require_expected_decision_revision(
+            decision=current_decision,
+            expected_decision_revision=expected_decision_revision,
+        )
 
         if (
             any(
@@ -1296,7 +1416,8 @@ def create_fact_check_draft(
         ):
             raise PublishingConflict(
                 "A published or sealed fact-check requires an explicit revision "
-                "or correction workflow."
+                "or correction workflow.",
+                code="ACTIVE_PUBLICATION_WORK_EXISTS",
             )
 
         active_drafts = [
@@ -1318,7 +1439,8 @@ def create_fact_check_draft(
             raise PublishingConflict(
                 "An active fact-check draft "
                 "already exists for this "
-                "adjudication decision."
+                "adjudication decision.",
+                code="ACTIVE_PUBLICATION_WORK_EXISTS",
             )
 
         if any(
@@ -1331,7 +1453,8 @@ def create_fact_check_draft(
             for item in active_drafts
         ):
             raise PublishingConflict(
-                "An explicit revision or correction draft is already active."
+                "An explicit revision or correction draft is already active.",
+                code="ACTIVE_PUBLICATION_WORK_EXISTS",
             )
 
         # Any remaining active drafts belong to
@@ -1614,12 +1737,17 @@ def update_fact_check_draft(
     *,
     fact_check,
     actor,
+    organization_id,
+    expected_edit_generation,
+    expected_decision_revision,
     headline=None,
     summary=None,
     article_body=None,
     source_urls=None,
 ):
+    organization_id = _parse_uuid_identity(organization_id, "organization_id")
     identity = _get_fact_check_publication_identity(fact_check)
+    identity["organization_id"] = organization_id
 
     with transaction.atomic():
         context = _lock_publication_context(
@@ -1628,7 +1756,18 @@ def update_fact_check_draft(
             capability=PartnerCapability.CREATE_FACT_CHECK_DRAFT,
         )
         locked_fact_check = context["fact_check"]
+        current_decision = context["decision"]
         _ensure_no_active_correction_reservation(context)
+        _require_expected_edit_generation(
+            fact_check=locked_fact_check,
+            decision=current_decision,
+            expected_edit_generation=expected_edit_generation,
+        )
+        _require_expected_decision_revision(
+            fact_check=locked_fact_check,
+            decision=current_decision,
+            expected_decision_revision=expected_decision_revision,
+        )
 
         if locked_fact_check.publication_status != (
             OfficialFactCheck.PublicationStatus.DRAFT
@@ -1636,6 +1775,20 @@ def update_fact_check_draft(
             raise InvalidPublicationTransition(
                 "Only draft fact-checks " "can be edited."
             )
+
+        changed_fields = []
+        normalized_source_urls = (
+            _normalize_source_urls(source_urls) if source_urls is not None else None
+        )
+        current_editorial_urls = set(
+            locked_fact_check.source_items.filter(
+                is_editorially_selected=True,
+            ).values_list("url", flat=True)
+        )
+        source_selection_changed = (
+            normalized_source_urls is not None
+            and set(normalized_source_urls) != current_editorial_urls
+        )
 
         if headline is not None:
             headline = headline.strip()
@@ -1648,7 +1801,9 @@ def update_fact_check_draft(
                     "Headline must be 300 " "characters or fewer."
                 )
 
-            locked_fact_check.headline = headline
+            if locked_fact_check.headline != headline:
+                locked_fact_check.headline = headline
+                changed_fields.append("headline")
 
         if summary is not None:
             summary = summary.strip()
@@ -1656,26 +1811,39 @@ def update_fact_check_draft(
             if not summary:
                 raise InvalidFactCheckContent("Summary cannot be empty.")
 
-            locked_fact_check.summary = summary
+            if locked_fact_check.summary != summary:
+                locked_fact_check.summary = summary
+                changed_fields.append("summary")
 
         if article_body is not None:
-            locked_fact_check.article_body = article_body.strip()
+            article_body = article_body.strip()
+            if locked_fact_check.article_body != article_body:
+                locked_fact_check.article_body = article_body
+                changed_fields.append("article_body")
 
         locked_fact_check.full_clean(
             validate_unique=False,
             validate_constraints=False,
         )
 
-        locked_fact_check.save()
-
         _sync_fact_check_sources(
             locked_fact_check,
             actor=actor,
             snapshot=context["decision_snapshot"],
             snapshot_records=context["snapshot_records"],
-            source_urls=source_urls,
+            source_urls=normalized_source_urls,
             replace_moderator_sources=(source_urls is not None),
         )
+
+        if changed_fields or source_selection_changed:
+            locked_fact_check.edit_generation += 1
+            locked_fact_check.save(
+                update_fields=[
+                    *changed_fields,
+                    "edit_generation",
+                    "updated_at",
+                ]
+            )
 
         return locked_fact_check
 
@@ -1684,8 +1852,13 @@ def submit_fact_check_for_review(
     *,
     fact_check,
     actor,
+    organization_id,
+    expected_edit_generation,
+    expected_decision_revision,
 ):
+    organization_id = _parse_uuid_identity(organization_id, "organization_id")
     identity = _get_fact_check_publication_identity(fact_check)
+    identity["organization_id"] = organization_id
 
     with transaction.atomic():
         context = _lock_publication_context(
@@ -1694,7 +1867,18 @@ def submit_fact_check_for_review(
             capability=PartnerCapability.CREATE_FACT_CHECK_DRAFT,
         )
         locked_fact_check = context["fact_check"]
+        current_decision = context["decision"]
         _ensure_no_active_correction_reservation(context)
+        _require_expected_edit_generation(
+            fact_check=locked_fact_check,
+            decision=current_decision,
+            expected_edit_generation=expected_edit_generation,
+        )
+        _require_expected_decision_revision(
+            fact_check=locked_fact_check,
+            decision=current_decision,
+            expected_decision_revision=expected_decision_revision,
+        )
 
         if locked_fact_check.publication_status != (
             OfficialFactCheck.PublicationStatus.DRAFT
@@ -1719,11 +1903,13 @@ def submit_fact_check_for_review(
         )
 
         locked_fact_check.submitted_for_review_at = timezone.now()
+        locked_fact_check.edit_generation += 1
 
         locked_fact_check.save(
             update_fields=[
                 "publication_status",
                 ("submitted_for_" "review_at"),
+                "edit_generation",
                 "updated_at",
             ]
         )
@@ -1736,6 +1922,153 @@ def submit_fact_check_for_review(
             to_status=(OfficialFactCheck.PublicationStatus.IN_REVIEW),
         )
 
+        return locked_fact_check
+
+
+def return_fact_check_for_rework(
+    *,
+    fact_check,
+    actor,
+    organization_id,
+    expected_edit_generation,
+    reason,
+):
+    organization_id = _parse_uuid_identity(organization_id, "organization_id")
+    reason = _parse_required_reason(reason)
+    identity = _get_fact_check_publication_identity(fact_check)
+    identity["organization_id"] = organization_id
+
+    with transaction.atomic():
+        context = _lock_publication_context(
+            identity=identity,
+            actor=actor,
+            capability=PartnerCapability.PUBLISH_FACT_CHECK,
+        )
+        locked_fact_check = context["fact_check"]
+        current_decision = context["decision"]
+        _ensure_no_active_correction_reservation(context)
+        _require_expected_edit_generation(
+            fact_check=locked_fact_check,
+            decision=current_decision,
+            expected_edit_generation=expected_edit_generation,
+        )
+
+        if (
+            not OfficialFactCheck.initial_workflow_queryset()
+            .filter(pk=locked_fact_check.pk)
+            .exists()
+            or locked_fact_check.publication_status
+            != OfficialFactCheck.PublicationStatus.IN_REVIEW
+        ):
+            raise InvalidPublicationTransition(
+                "Only an initial fact-check in review can be returned for rework."
+            )
+
+        previous_generation = locked_fact_check.edit_generation
+        locked_fact_check.publication_status = OfficialFactCheck.PublicationStatus.DRAFT
+        locked_fact_check.submitted_for_review_at = None
+        locked_fact_check.reviewed_by = None
+        locked_fact_check.reviewed_at = None
+        locked_fact_check.published_by = None
+        locked_fact_check.published_at = None
+        locked_fact_check.edit_generation += 1
+        locked_fact_check.save(
+            update_fields=[
+                "publication_status",
+                "submitted_for_review_at",
+                "reviewed_by",
+                "reviewed_at",
+                "published_by",
+                "published_at",
+                "edit_generation",
+                "updated_at",
+            ]
+        )
+        event = _record_publication_event(
+            locked_fact_check,
+            actor=actor,
+            event_type=ModerationEvent.EventType.ARTICLE_RETURNED_FOR_REWORK,
+            from_status=OfficialFactCheck.PublicationStatus.IN_REVIEW,
+            to_status=OfficialFactCheck.PublicationStatus.DRAFT,
+            notes=reason,
+            metadata={
+                "previous_edit_generation": previous_generation,
+                "edit_generation": locked_fact_check.edit_generation,
+            },
+        )
+        if event is None:
+            raise PublishingConflict(
+                "The rework transition could not be attributed to its "
+                "adjudication case."
+            )
+        return locked_fact_check
+
+
+def abandon_fact_check_draft(
+    *,
+    fact_check,
+    actor,
+    organization_id,
+    expected_edit_generation,
+    reason,
+):
+    organization_id = _parse_uuid_identity(organization_id, "organization_id")
+    reason = _parse_required_reason(reason)
+    identity = _get_fact_check_publication_identity(fact_check)
+    identity["organization_id"] = organization_id
+
+    with transaction.atomic():
+        context = _lock_publication_context(
+            identity=identity,
+            actor=actor,
+            capability=PartnerCapability.CREATE_FACT_CHECK_DRAFT,
+        )
+        locked_fact_check = context["fact_check"]
+        current_decision = context["decision"]
+        _ensure_no_active_correction_reservation(context)
+        _require_expected_edit_generation(
+            fact_check=locked_fact_check,
+            decision=current_decision,
+            expected_edit_generation=expected_edit_generation,
+        )
+
+        if (
+            not OfficialFactCheck.initial_workflow_queryset()
+            .filter(pk=locked_fact_check.pk)
+            .exists()
+            or locked_fact_check.publication_status
+            != OfficialFactCheck.PublicationStatus.DRAFT
+        ):
+            raise InvalidPublicationTransition(
+                "Only an initial draft can be abandoned."
+            )
+
+        locked_fact_check.publication_status = (
+            OfficialFactCheck.PublicationStatus.ARCHIVED
+        )
+        locked_fact_check.archived_at = timezone.now()
+        locked_fact_check.save(
+            update_fields=[
+                "publication_status",
+                "archived_at",
+                "updated_at",
+            ]
+        )
+        event = _record_publication_event(
+            locked_fact_check,
+            actor=actor,
+            event_type=ModerationEvent.EventType.ARTICLE_ABANDONED,
+            from_status=OfficialFactCheck.PublicationStatus.DRAFT,
+            to_status=OfficialFactCheck.PublicationStatus.ARCHIVED,
+            notes=reason,
+            metadata={
+                "edit_generation": locked_fact_check.edit_generation,
+            },
+        )
+        if event is None:
+            raise PublishingConflict(
+                "The abandonment could not be attributed to its adjudication case."
+            )
         return locked_fact_check
 
 
@@ -2014,8 +2347,13 @@ def publish_fact_check(
     *,
     fact_check,
     actor,
+    organization_id,
+    expected_edit_generation,
+    expected_decision_revision,
 ):
+    organization_id = _parse_uuid_identity(organization_id, "organization_id")
     identity = _get_fact_check_publication_identity(fact_check)
+    identity["organization_id"] = organization_id
 
     with transaction.atomic():
         context = _lock_publication_context(
@@ -2026,6 +2364,16 @@ def publish_fact_check(
         locked_fact_check = context["fact_check"]
         current_decision = context["decision"]
         _ensure_no_active_correction_reservation(context)
+        _require_expected_edit_generation(
+            fact_check=locked_fact_check,
+            decision=current_decision,
+            expected_edit_generation=expected_edit_generation,
+        )
+        _require_expected_decision_revision(
+            fact_check=locked_fact_check,
+            decision=current_decision,
+            expected_decision_revision=expected_decision_revision,
+        )
 
         if locked_fact_check.publication_status != (
             OfficialFactCheck.PublicationStatus.IN_REVIEW
@@ -2142,12 +2490,16 @@ def publish_fact_check(
                 organization=context["organization"],
             )
         except VerificationAssignmentConflict as error:
-            raise PublishingConflict(str(error)) from error
+            raise PublishingConflict(
+                str(error),
+                code="ASSIGNMENT_CONFLICT",
+            ) from error
 
         if context["assignment"] is not None and completed_assignment is None:
             raise PublishingConflict(
                 "The verification assignment changed before publication "
-                "could be completed."
+                "could be completed.",
+                code="ASSIGNMENT_CONFLICT",
             )
 
         try:

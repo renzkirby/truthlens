@@ -4082,6 +4082,8 @@ class PublishingFoundationTests(APITestCase):
         return create_fact_check_draft(
             decision=self.decision,
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_decision_revision=self.decision.revision_number,
             headline=(f"Fact Check {suffix}"),
             summary=(
                 "The reviewed claim is " "not supported by the " "available evidence."
@@ -4101,11 +4103,17 @@ class PublishingFoundationTests(APITestCase):
         fact_check = submit_fact_check_for_review(
             fact_check=fact_check,
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_edit_generation=fact_check.edit_generation,
+            expected_decision_revision=self.decision.revision_number,
         )
 
         return publish_fact_check(
             fact_check=fact_check,
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_edit_generation=fact_check.edit_generation,
+            expected_decision_revision=self.decision.revision_number,
         )
 
     def test_create_draft_uses_authoritative_decision_snapshot(
@@ -4201,6 +4209,8 @@ class PublishingFoundationTests(APITestCase):
         draft = create_fact_check_draft(
             decision=self.decision,
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_decision_revision=self.decision.revision_number,
             headline="Incomplete article",
             summary=("The article has no " "analysis body yet."),
             article_body="",
@@ -4210,6 +4220,9 @@ class PublishingFoundationTests(APITestCase):
             submit_fact_check_for_review(
                 fact_check=draft,
                 actor=self.moderator,
+                organization_id=self.organization.id,
+                expected_edit_generation=draft.edit_generation,
+                expected_decision_revision=self.decision.revision_number,
             )
 
         draft.refresh_from_db()
@@ -4227,6 +4240,9 @@ class PublishingFoundationTests(APITestCase):
         submitted = submit_fact_check_for_review(
             fact_check=draft,
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=self.decision.revision_number,
         )
 
         self.assertEqual(
@@ -4251,6 +4267,9 @@ class PublishingFoundationTests(APITestCase):
             publish_fact_check(
                 fact_check=draft,
                 actor=self.moderator,
+                organization_id=self.organization.id,
+                expected_edit_generation=draft.edit_generation,
+                expected_decision_revision=self.decision.revision_number,
             )
 
         draft.refresh_from_db()
@@ -4318,6 +4337,9 @@ class PublishingFoundationTests(APITestCase):
             submit_fact_check_for_review(
                 fact_check=draft,
                 actor=self.moderator,
+                organization_id=self.organization.id,
+                expected_edit_generation=draft.edit_generation,
+                expected_decision_revision=self.decision.revision_number,
             )
 
         draft.refresh_from_db()
@@ -4336,26 +4358,15 @@ class PublishingFoundationTests(APITestCase):
 
         first_published = first_result["fact_check"]
 
-        second_draft = self._create_complete_draft(suffix="v2")
+        with self.assertRaises(PublishingConflict) as raised:
+            self._create_complete_draft(suffix="v2")
 
         self.assertEqual(
-            second_draft.version,
-            2,
+            raised.exception.code,
+            "ACTIVE_PUBLICATION_WORK_EXISTS",
         )
-
-        second_draft = submit_fact_check_for_review(
-            fact_check=second_draft,
-            actor=self.moderator,
-        )
-
-        with self.assertRaises(PublishingConflict):
-            publish_fact_check(
-                fact_check=second_draft,
-                actor=self.moderator,
-            )
 
         first_published.refresh_from_db()
-        second_draft.refresh_from_db()
 
         self.assertEqual(
             first_published.publication_status,
@@ -4365,16 +4376,21 @@ class PublishingFoundationTests(APITestCase):
         self.assertIsNone(first_published.archived_at)
 
         self.assertEqual(
-            second_draft.publication_status,
-            OfficialFactCheck.PublicationStatus.IN_REVIEW,
-        )
-
-        self.assertEqual(
             OfficialFactCheck.objects.filter(
                 claim=self.claim,
                 publication_status=(OfficialFactCheck.PublicationStatus.PUBLISHED),
             ).count(),
             1,
+        )
+
+        self.assertFalse(
+            OfficialFactCheck.objects.filter(
+                claim=self.claim,
+                publication_status__in=[
+                    OfficialFactCheck.PublicationStatus.DRAFT,
+                    OfficialFactCheck.PublicationStatus.IN_REVIEW,
+                ],
+            ).exists()
         )
 
     def test_update_draft_cannot_change_authoritative_fields(
@@ -4389,6 +4405,9 @@ class PublishingFoundationTests(APITestCase):
         updated = update_fact_check_draft(
             fact_check=draft,
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=self.decision.revision_number,
             headline=("Updated editorial " "headline"),
             summary=("Updated editorial " "summary."),
             article_body=(
@@ -4476,6 +4495,8 @@ class PublishingFoundationTests(APITestCase):
         draft = create_fact_check_draft(
             decision=self.decision,
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_decision_revision=self.decision.revision_number,
             headline=("Source provenance test"),
             summary=("Testing publication source " "replacement behavior."),
             article_body=(
@@ -4489,6 +4510,9 @@ class PublishingFoundationTests(APITestCase):
         updated = update_fact_check_draft(
             fact_check=draft,
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=self.decision.revision_number,
             source_urls=[
                 ("https://example.org/" "manual-source-two"),
             ],
@@ -4534,6 +4558,9 @@ class PublishingFoundationTests(APITestCase):
         stale_article = submit_fact_check_for_review(
             fact_check=stale_article,
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_edit_generation=stale_article.edit_generation,
+            expected_decision_revision=self.decision.revision_number,
         )
 
         self.assertEqual(
@@ -4557,6 +4584,8 @@ class PublishingFoundationTests(APITestCase):
         fresh_draft = create_fact_check_draft(
             decision=(revised["decision"]),
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_decision_revision=revised["decision"].revision_number,
             headline=("Updated Fact Check"),
             summary=("The updated adjudication " "requires a new article."),
             article_body=("This article reflects the " "new authoritative decision."),
@@ -4594,6 +4623,9 @@ class PublishingFoundationTests(APITestCase):
         draft = submit_fact_check_for_review(
             fact_check=draft,
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=self.decision.revision_number,
         )
 
         with patch(("api.publishing_service" "._queue_fact_check_index")) as queue_mock:
@@ -4601,6 +4633,9 @@ class PublishingFoundationTests(APITestCase):
                 result = publish_fact_check(
                     fact_check=draft,
                     actor=self.moderator,
+                    organization_id=self.organization.id,
+                    expected_edit_generation=draft.edit_generation,
+                    expected_decision_revision=self.decision.revision_number,
                 )
 
         published = result["fact_check"]
@@ -4799,9 +4834,12 @@ class PublishingApiAuthorizationTests(APITestCase):
     def _draft_payload(
         self,
         *,
+        organization=None,
         expected_revision=1,
     ):
+        organization = organization or self.organization
         return {
+            "organization_id": str(organization.id),
             "headline": ("TruthLens Fact Check"),
             "summary": ("The reviewed claim is " "not supported."),
             "article_body": (
@@ -4812,7 +4850,7 @@ class PublishingApiAuthorizationTests(APITestCase):
             "source_urls": [
                 ("https://example.com/" "publishing-api-source"),
             ],
-            "expected_revision": (expected_revision),
+            "expected_decision_revision": (expected_revision),
         }
 
     def _create_draft(
@@ -4820,6 +4858,10 @@ class PublishingApiAuthorizationTests(APITestCase):
         client,
         claim,
     ):
+        decision = AdjudicationDecision.objects.get(
+            claim=claim,
+            is_current=True,
+        )
         return client.post(
             reverse(
                 ("moderation_fact_check_" "draft_create"),
@@ -4827,7 +4869,10 @@ class PublishingApiAuthorizationTests(APITestCase):
                     "claim_id": claim.id,
                 },
             ),
-            self._draft_payload(),
+            self._draft_payload(
+                organization=decision.organization,
+                expected_revision=decision.revision_number,
+            ),
             format="json",
         )
 
@@ -4836,6 +4881,9 @@ class PublishingApiAuthorizationTests(APITestCase):
         client,
         fact_check_id,
     ):
+        fact_check = OfficialFactCheck.objects.select_related(
+            "adjudication_decision"
+        ).get(pk=fact_check_id)
         return client.post(
             reverse(
                 "moderation_fact_check_submit",
@@ -4843,7 +4891,13 @@ class PublishingApiAuthorizationTests(APITestCase):
                     "fact_check_id": fact_check_id,
                 },
             ),
-            {},
+            {
+                "organization_id": str(fact_check.organization_id),
+                "expected_edit_generation": fact_check.edit_generation,
+                "expected_decision_revision": (
+                    fact_check.adjudication_decision.revision_number
+                ),
+            },
             format="json",
         )
 
@@ -4852,6 +4906,9 @@ class PublishingApiAuthorizationTests(APITestCase):
         client,
         fact_check_id,
     ):
+        fact_check = OfficialFactCheck.objects.select_related(
+            "adjudication_decision"
+        ).get(pk=fact_check_id)
         return client.post(
             reverse(
                 ("moderation_fact_check_" "publish"),
@@ -4859,7 +4916,13 @@ class PublishingApiAuthorizationTests(APITestCase):
                     "fact_check_id": fact_check_id,
                 },
             ),
-            {},
+            {
+                "organization_id": str(fact_check.organization_id),
+                "expected_edit_generation": fact_check.edit_generation,
+                "expected_decision_revision": (
+                    fact_check.adjudication_decision.revision_number
+                ),
+            },
             format="json",
         )
 
@@ -5047,6 +5110,11 @@ class PublishingApiAuthorizationTests(APITestCase):
                 },
             ),
             {
+                "organization_id": str(self.organization.id),
+                "expected_edit_generation": create_response.data[
+                    "edit_generation"
+                ],
+                "expected_decision_revision": self.other_decision.revision_number,
                 "headline": "Unauthorized edit",
             },
             format="json",
@@ -5054,7 +5122,7 @@ class PublishingApiAuthorizationTests(APITestCase):
 
         self.assertEqual(
             response.status_code,
-            status.HTTP_403_FORBIDDEN,
+            status.HTTP_404_NOT_FOUND,
         )
 
     # ---------------------------------
@@ -5123,7 +5191,7 @@ class PublishingApiAuthorizationTests(APITestCase):
 
         self.assertEqual(
             response.status_code,
-            status.HTTP_400_BAD_REQUEST,
+            status.HTTP_409_CONFLICT,
         )
 
     # ---------------------------------
@@ -5159,6 +5227,9 @@ class PublishingApiAuthorizationTests(APITestCase):
                 },
             ),
             {
+                "organization_id": str(self.organization.id),
+                "expected_edit_generation": created.data["edit_generation"],
+                "expected_decision_revision": self.partner_decision.revision_number,
                 "headline": "Should not change",
             },
             format="json",
@@ -5166,7 +5237,7 @@ class PublishingApiAuthorizationTests(APITestCase):
 
         self.assertEqual(
             response.status_code,
-            status.HTTP_400_BAD_REQUEST,
+            status.HTTP_409_CONFLICT,
         )
 
     # ---------------------------------
@@ -5191,6 +5262,9 @@ class PublishingApiAuthorizationTests(APITestCase):
                 },
             ),
             {
+                "organization_id": str(self.organization.id),
+                "expected_edit_generation": created.data["edit_generation"],
+                "expected_decision_revision": self.partner_decision.revision_number,
                 "verdict": "FACT",
                 "canonical_claim": ("Editor attempted " "replacement."),
             },
@@ -5279,6 +5353,14 @@ class PublishingApiAuthorizationTests(APITestCase):
             verdict=(AdjudicationDecision.Verdict.MISLEADING),
             canonical_claim=("The revised claim is " "misleading."),
             rationale=("New evidence changed " "the authoritative result."),
+        )
+
+        AdjudicationDecisionEvidenceSnapshot.objects.create(
+            decision=revised["decision"],
+            claim_id=self.partner_claim.id,
+            evidence_records=(
+                self.partner_decision.evidence_snapshot.evidence_records
+            ),
         )
 
         second_response = self.lead_client.post(

@@ -156,13 +156,23 @@ from .trust_service import (
     recompute_user_trust_score,
 )
 from .publishing_service import (
+    InvalidPublicationTransition,
     PublishingError,
     PublishingAuthorizationError,
     PublishingConflict,
+    abandon_fact_check_draft,
     create_fact_check_draft,
+    return_fact_check_for_rework,
     update_fact_check_draft,
     submit_fact_check_for_review,
     publish_fact_check,
+)
+from .publication_workflow_query_service import (
+    RESOURCE_FACT_CHECK,
+    PublicationWorkflowAuthorizationError,
+    PublicationWorkflowNotFound,
+    get_publication_work_item_detail,
+    list_publication_work_items,
 )
 from .verification_assignment_service import (
     VerificationAssignmentAuthorizationError,
@@ -239,7 +249,12 @@ from .serializers import (
     AdjudicationQueueCaseSerializer,
     FactCheckDraftCreateSerializer,
     FactCheckDraftUpdateSerializer,
-    OfficialFactCheckSerializer,
+    FactCheckRecoverySerializer,
+    FactCheckTransitionSerializer,
+    PublicationWorkflowDetailQuerySerializer,
+    PublicationWorkflowDetailSerializer,
+    PublicationWorkflowPageSerializer,
+    PublicationWorkflowQueueQuerySerializer,
     VerificationAssignmentClaimSerializer,
     VerificationAssignmentSerializer,
     OrganizationMembershipAdminSerializer,
@@ -1489,18 +1504,46 @@ def _publishing_error_response(
 
     elif isinstance(
         error,
-        PublishingConflict,
+        (PublishingConflict, InvalidPublicationTransition),
     ):
         response_status = status.HTTP_409_CONFLICT
 
     else:
         response_status = status.HTTP_400_BAD_REQUEST
 
+    payload = {
+        "code": getattr(error, "code", "INVALID_INPUT"),
+        "detail": str(error),
+        "blockers": getattr(error, "blockers", []),
+    }
+    current = getattr(error, "current", None)
+    if current is not None:
+        payload["current"] = current
+    return Response(payload, status=response_status)
+
+
+def _publication_invalid_response(serializer):
     return Response(
         {
-            "detail": str(error),
+            "code": "INVALID_INPUT",
+            "detail": "Invalid publication request.",
+            "errors": serializer.errors,
+            "blockers": [],
         },
-        status=response_status,
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
+def _publication_detail_response(*, actor, organization, fact_check):
+    payload = get_publication_work_item_detail(
+        actor=actor,
+        organization=organization,
+        resource_type=RESOURCE_FACT_CHECK,
+        resource_id=fact_check.id,
+    )
+    return Response(
+        PublicationWorkflowDetailSerializer(payload).data,
+        status=status.HTTP_200_OK,
     )
 
 
@@ -1756,84 +1799,43 @@ def fact_check_draft_create(
     request,
     claim_id,
 ):
-    claim = get_object_or_404(
-        Claim,
-        id=claim_id,
-    )
-
     serializer = FactCheckDraftCreateSerializer(data=request.data)
-
-    serializer.is_valid(raise_exception=True)
-
-    decision = (
-        AdjudicationDecision.objects.filter(
-            claim=claim,
-            is_current=True,
-        )
-        .select_related(
-            "organization",
-        )
-        .first()
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(
+        Organization,
+        id=data["organization_id"],
     )
-
-    if not decision:
-        return Response(
-            {
-                "detail": "This claim does not "
-                "have a current "
-                "adjudication decision."
-            },
-            status=(status.HTTP_409_CONFLICT),
-        )
-
-    expected_revision = serializer.validated_data.get("expected_revision")
-
-    if expected_revision is not None and (
-        expected_revision != decision.revision_number
-    ):
-        return Response(
-            {
-                "detail": "The adjudication "
-                "decision changed after "
-                "the publishing workspace "
-                "was opened. Refresh "
-                "before creating a draft."
-            },
-            status=(status.HTTP_409_CONFLICT),
-        )
+    decision = get_object_or_404(
+        AdjudicationDecision.objects.select_related("organization"),
+        claim_id=claim_id,
+        organization=organization,
+        is_current=True,
+    )
 
     try:
         draft = create_fact_check_draft(
             decision=decision,
             actor=request.user,
-            headline=(serializer.validated_data["headline"]),
-            summary=(serializer.validated_data["summary"]),
-            article_body=(
-                serializer.validated_data.get(
-                    "article_body",
-                    "",
-                )
-            ),
-            source_urls=(
-                serializer.validated_data.get(
-                    "source_urls",
-                    [],
-                )
-            ),
+            organization_id=organization.id,
+            expected_decision_revision=data["expected_decision_revision"],
+            headline=data["headline"],
+            summary=data["summary"],
+            article_body=data.get("article_body", ""),
+            source_urls=data.get("source_urls", []),
         )
 
     except PublishingError as error:
         return _publishing_error_response(error)
 
-    return Response(
-        OfficialFactCheckSerializer(
-            draft,
-            context={
-                "request": request,
-            },
-        ).data,
-        status=status.HTTP_201_CREATED,
+    response = _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=draft,
     )
+    response.status_code = status.HTTP_201_CREATED
+    return response
 
 
 @api_view(["PATCH"])
@@ -1846,24 +1848,30 @@ def fact_check_draft_update(
     request,
     fact_check_id,
 ):
-    fact_check = get_object_or_404(
-        OfficialFactCheck,
-        id=fact_check_id,
-    )
-
     serializer = FactCheckDraftUpdateSerializer(
         data=request.data,
         partial=True,
     )
-
-    serializer.is_valid(raise_exception=True)
-
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
     data = serializer.validated_data
+    organization = get_object_or_404(
+        Organization,
+        id=data["organization_id"],
+    )
+    fact_check = get_object_or_404(
+        OfficialFactCheck.initial_workflow_queryset(),
+        id=fact_check_id,
+        organization=organization,
+    )
 
     try:
         updated = update_fact_check_draft(
             fact_check=fact_check,
             actor=request.user,
+            organization_id=organization.id,
+            expected_edit_generation=data["expected_edit_generation"],
+            expected_decision_revision=data["expected_decision_revision"],
             headline=data.get("headline"),
             summary=data.get("summary"),
             article_body=data.get("article_body"),
@@ -1873,14 +1881,10 @@ def fact_check_draft_update(
     except PublishingError as error:
         return _publishing_error_response(error)
 
-    return Response(
-        OfficialFactCheckSerializer(
-            updated,
-            context={
-                "request": request,
-            },
-        ).data,
-        status=status.HTTP_200_OK,
+    return _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=updated,
     )
 
 
@@ -1894,28 +1898,36 @@ def fact_check_submit(
     request,
     fact_check_id,
 ):
+    serializer = FactCheckTransitionSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(
+        Organization,
+        id=data["organization_id"],
+    )
     fact_check = get_object_or_404(
-        OfficialFactCheck,
+        OfficialFactCheck.initial_workflow_queryset(),
         id=fact_check_id,
+        organization=organization,
     )
 
     try:
         submitted = submit_fact_check_for_review(
             fact_check=fact_check,
             actor=request.user,
+            organization_id=organization.id,
+            expected_edit_generation=data["expected_edit_generation"],
+            expected_decision_revision=data["expected_decision_revision"],
         )
 
     except PublishingError as error:
         return _publishing_error_response(error)
 
-    return Response(
-        OfficialFactCheckSerializer(
-            submitted,
-            context={
-                "request": request,
-            },
-        ).data,
-        status=status.HTTP_200_OK,
+    return _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=submitted,
     )
 
 
@@ -1929,15 +1941,27 @@ def fact_check_publish(
     request,
     fact_check_id,
 ):
+    serializer = FactCheckTransitionSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(
+        Organization,
+        id=data["organization_id"],
+    )
     fact_check = get_object_or_404(
-        OfficialFactCheck,
+        OfficialFactCheck.initial_workflow_queryset(),
         id=fact_check_id,
+        organization=organization,
     )
 
     try:
         result = publish_fact_check(
             fact_check=fact_check,
             actor=request.user,
+            organization_id=organization.id,
+            expected_edit_generation=data["expected_edit_generation"],
+            expected_decision_revision=data["expected_decision_revision"],
         )
 
     except PublishingError as error:
@@ -1945,13 +1969,120 @@ def fact_check_publish(
 
     published = result["fact_check"]
 
+    return _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=published,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def fact_check_return_for_rework(request, fact_check_id):
+    serializer = FactCheckRecoverySerializer(data=request.data)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    fact_check = get_object_or_404(
+        OfficialFactCheck.initial_workflow_queryset(),
+        id=fact_check_id,
+        organization=organization,
+    )
+    try:
+        returned = return_fact_check_for_rework(
+            fact_check=fact_check,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_edit_generation=data["expected_edit_generation"],
+            reason=data["reason"],
+        )
+    except PublishingError as error:
+        return _publishing_error_response(error)
+    return _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=returned,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def fact_check_abandon(request, fact_check_id):
+    serializer = FactCheckRecoverySerializer(data=request.data)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    fact_check = get_object_or_404(
+        OfficialFactCheck.initial_workflow_queryset(),
+        id=fact_check_id,
+        organization=organization,
+    )
+    try:
+        abandoned = abandon_fact_check_draft(
+            fact_check=fact_check,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_edit_generation=data["expected_edit_generation"],
+            reason=data["reason"],
+        )
+    except PublishingError as error:
+        return _publishing_error_response(error)
+    return _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=abandoned,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def publication_work_item_queue(request):
+    serializer = PublicationWorkflowQueueQuerySerializer(data=request.query_params)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    try:
+        payload = list_publication_work_items(
+            actor=request.user,
+            organization=organization,
+            queue=data["queue"],
+            limit=data["limit"],
+            offset=data["offset"],
+        )
+    except PublicationWorkflowAuthorizationError as error:
+        raise PermissionDenied(str(error)) from error
     return Response(
-        OfficialFactCheckSerializer(
-            published,
-            context={
-                "request": request,
-            },
-        ).data,
+        PublicationWorkflowPageSerializer(payload).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def publication_work_item_detail(request, resource_type, resource_id):
+    serializer = PublicationWorkflowDetailQuerySerializer(data=request.query_params)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    organization = get_object_or_404(
+        Organization,
+        id=serializer.validated_data["organization_id"],
+    )
+    try:
+        payload = get_publication_work_item_detail(
+            actor=request.user,
+            organization=organization,
+            resource_type=resource_type,
+            resource_id=resource_id,
+        )
+    except PublicationWorkflowAuthorizationError as error:
+        raise PermissionDenied(str(error)) from error
+    except PublicationWorkflowNotFound as error:
+        raise NotFound(str(error)) from error
+    return Response(
+        PublicationWorkflowDetailSerializer(payload).data,
         status=status.HTTP_200_OK,
     )
 
