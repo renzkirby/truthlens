@@ -258,9 +258,22 @@
    background: var(--tl-color-bg-subtle);
 }
 
+.publishing-queue-row:disabled {
+   opacity: 0.58;
+   cursor: not-allowed;
+}
+
+.publishing-queue-row:disabled:hover {
+   background: var(--tl-color-bg-surface);
+}
+
 .publishing-queue-row.is-selected {
    background: var(--tl-color-status-info-bg);
    box-shadow: inset 3px 0 0 var(--tl-color-brand-primary);
+}
+
+.publishing-queue-row.is-selected:disabled:hover {
+   background: var(--tl-color-status-info-bg);
 }
 
 .publishing-queue-row:focus-visible,

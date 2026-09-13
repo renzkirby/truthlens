@@ -21,6 +21,7 @@ import EvidenceReviewPanel from "../components/workspace/EvidenceReviewPanel.jsx
 import AdjudicationReviewPanel from "../components/workspace/AdjudicationReviewPanel.jsx";
 import DraftingPanel from "../components/workspace/DraftingPanel.jsx";
 import PublishingPanel from "../components/workspace/PublishingPanel.jsx";
+import PublicationsPanel from "../components/workspace/PublicationsPanel.jsx";
 
 const WORKLOAD_CAPABILITIES = [
    WorkspaceCapability.CLAIM_VERIFICATION_WORK,
@@ -88,6 +89,14 @@ const WORKSPACE_SECTIONS = [
       capability: WorkspaceCapability.PUBLISH_FACT_CHECK,
    },
    {
+      id: "publications",
+      label: "Publications",
+      description: "Browse the selected organization's institutional publication library and version history.",
+      icon: "book-open",
+      scope: "organization",
+      capabilities: [WorkspaceCapability.CREATE_FACT_CHECK_DRAFT, WorkspaceCapability.PUBLISH_FACT_CHECK],
+   },
+   {
       id: "organization",
       label: "Organization",
       description: "Manage partner organization administration and membership.",
@@ -120,6 +129,10 @@ function WorkspacePage() {
    const [requestedSectionId, setRequestedSectionId] = useState(null);
 
    const [requestedOrganizationId, setRequestedOrganizationId] = useState(null);
+
+   const [draftingHandoff, setDraftingHandoff] = useState(null);
+
+   const [publicationHandoff, setPublicationHandoff] = useState(null);
 
    const selectedOrganizationId = useMemo(() => {
       if (memberships.length === 0) {
@@ -208,6 +221,35 @@ function WorkspacePage() {
    const isPlatformSection = activeSection?.scope === "platform";
 
    const selectedOrganization = selectedMembership?.organization ?? null;
+
+   const openRevisionInDrafting = (revision) => {
+      const revisionId = revision?.fact_check_id || revision?.id || revision?.resource_id;
+
+      if (!revisionId) {
+         return;
+      }
+
+      setDraftingHandoff({
+         resourceType: "FACT_CHECK",
+         resourceId: String(revisionId),
+      });
+      setRequestedSectionId("drafting");
+   };
+
+   const openCurrentPublication = (publication) => {
+      const publicationId =
+         publication?.selected_publication_id ||
+         publication?.current_publication_id ||
+         publication?.publication_id ||
+         publication?.id;
+
+      if (!publicationId) {
+         return;
+      }
+
+      setPublicationHandoff(String(publicationId));
+      setRequestedSectionId("publications");
+   };
 
    return (
       <div className="workspace-view">
@@ -360,6 +402,8 @@ function WorkspacePage() {
                               key={selectedOrganizationId ?? "no-organization"}
                               organizationId={selectedOrganizationId}
                               organizationName={selectedOrganization?.name}
+                              initialSelection={draftingHandoff}
+                              onInitialSelectionConsumed={() => setDraftingHandoff(null)}
                            />
                         ) : activeSection.id === "publishing" && organizationCapabilities.includes(
                              WorkspaceCapability.PUBLISH_FACT_CHECK,
@@ -368,6 +412,16 @@ function WorkspacePage() {
                               key={selectedOrganizationId ?? "no-organization"}
                               organizationId={selectedOrganizationId}
                               organizationName={selectedOrganization?.name}
+                              onPublicationPublished={openCurrentPublication}
+                           />
+                        ) : activeSection.id === "publications" ? (
+                           <PublicationsPanel
+                              key={selectedOrganizationId ?? "no-organization"}
+                              organizationId={selectedOrganizationId}
+                              organizationName={selectedOrganization?.name}
+                              initialPublicationId={publicationHandoff}
+                              onInitialPublicationConsumed={() => setPublicationHandoff(null)}
+                              onRevisionCreated={openRevisionInDrafting}
                            />
                         ) : activeSection.id === "organization" ? (
                            <OrganizationAdminPanel

@@ -279,6 +279,46 @@ function HumanAdjudication({ detail }) {
    );
 }
 
+function EditorialRevisionContext({ revision }) {
+   if (!revision) {
+      return null;
+   }
+
+   return (
+      <section className="drafting-article-context" aria-labelledby="drafting-revision-context-heading">
+         <div className="drafting-section-heading">
+            <div>
+               <h4 id="drafting-revision-context-heading">Editorial revision</h4>
+               <p>This work updates presentation and citation choices without changing the human factual decision.</p>
+            </div>
+         </div>
+         <dl className="drafting-compact-metadata drafting-compact-metadata--article">
+            <div className="drafting-metadata-wide">
+               <dt>Revision reason</dt>
+               <dd>{revision.reason || "No revision reason recorded."}</dd>
+            </div>
+            <div className="drafting-metadata-wide">
+               <dt>Predecessor</dt>
+               <dd>
+                  {revision.predecessor?.headline || "Untitled publication"} · Article v
+                  {revision.predecessor?.version ?? "–"}
+               </dd>
+            </div>
+            <div>
+               <dt>Requested by</dt>
+               <dd>{actorName(revision.requested_by)}</dd>
+            </div>
+            <div>
+               <dt>Requested</dt>
+               <dd>
+                  <FormattedDateTime value={revision.requested_at} />
+               </dd>
+            </div>
+         </dl>
+      </section>
+   );
+}
+
 function SealedEvidence({ sealedEvidence }) {
    const entries = Array.isArray(sealedEvidence?.entries) ? sealedEvidence.entries : [];
 
@@ -661,7 +701,14 @@ function ServerConflict({ conflict, editor, focusRef, onUseLatest, onContinue })
    );
 }
 
-function DraftingContent({ authFetch, authIdentity, organizationId, organizationName }) {
+function DraftingContent({
+   authFetch,
+   authIdentity,
+   organizationId,
+   organizationName,
+   initialSelection,
+   onInitialSelectionConsumed,
+}) {
    const [offset, setOffset] = useState(0);
    const [queue, setQueue] = useState({ count: 0, limit: PAGE_SIZE, offset: 0, results: [] });
    const [queueLoading, setQueueLoading] = useState(true);
@@ -669,7 +716,14 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
    const [queueError, setQueueError] = useState("");
    const [queueRequestVersion, setQueueRequestVersion] = useState(0);
 
-   const [selectedWork, setSelectedWork] = useState(null);
+   const [selectedWork, setSelectedWork] = useState(() =>
+      initialSelection?.resourceType && initialSelection?.resourceId
+         ? {
+              resourceType: initialSelection.resourceType,
+              resourceId: String(initialSelection.resourceId),
+           }
+         : null,
+   );
    const [detail, setDetail] = useState(null);
    const [detailLoading, setDetailLoading] = useState(false);
    const [detailError, setDetailError] = useState("");
@@ -694,7 +748,9 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
    const queueRequestIdRef = useRef(0);
    const detailRequestIdRef = useRef(0);
    const mutationRequestIdRef = useRef(0);
-   const selectedKeyRef = useRef("");
+   const selectedKeyRef = useRef(
+      selectionKey(initialSelection?.resourceType, initialSelection?.resourceId),
+   );
    const hasLoadedQueueRef = useRef(false);
    const skipNextDetailLoadRef = useRef("");
    const authorityRetryRef = useRef(null);
@@ -705,7 +761,7 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
    const conflictRef = useRef(null);
    const queueHeadingRef = useRef(null);
    const actionMessageRef = useRef(null);
-   const focusDetailAfterLoadRef = useRef(false);
+   const focusDetailAfterLoadRef = useRef(Boolean(initialSelection));
    const focusQueueAfterReturnRef = useRef(false);
    const focusActionMessageRef = useRef(false);
 
@@ -714,6 +770,8 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
    const authorityBlocked = Boolean(authorityError) || authorityRetrying;
    const allowedActions = Array.isArray(detail?.allowed_actions) ? detail.allowed_actions : [];
    const isInitialWork = !detail || detail.workflow_kind === "INITIAL";
+   const isEditorialRevision = detail?.workflow_kind === "EDITORIAL_REVISION";
+   const isSupportedWork = isInitialWork || isEditorialRevision;
    const isDraft = detail?.resource_type === "FACT_CHECK" && detail?.publication_status === "DRAFT";
    const isInReview = detail?.resource_type === "FACT_CHECK" && detail?.publication_status === "IN_REVIEW";
 
@@ -723,6 +781,7 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
       const query = new URLSearchParams({
          organization_id: organizationId,
          queue: "DRAFTING",
+         workflow_kind: "ALL",
          limit: String(PAGE_SIZE),
          offset: String(offset),
       });
@@ -823,6 +882,12 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
          mutationRequestIdRef.current += 1;
       };
    }, []);
+
+   useEffect(() => {
+      if (initialSelection) {
+         onInitialSelectionConsumed?.();
+      }
+   }, [initialSelection, onInitialSelectionConsumed]);
 
    useEffect(() => {
       selectedKeyRef.current = selectedKey;
@@ -979,7 +1044,10 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
       setDetailError("");
       setDetailUnavailable(false);
 
-      const query = new URLSearchParams({ organization_id: organizationId });
+      const query = new URLSearchParams({
+         organization_id: organizationId,
+         workflow_kind: "ALL",
+      });
       const url = `${resolveApiEndpoint(
          "PUBLICATION_WORK_ITEM_DETAIL",
          selectedWork.resourceType,
@@ -1106,7 +1174,10 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
          const requestId = detailRequestIdRef.current + 1;
          detailRequestIdRef.current = requestId;
          const requestKey = operation.selectionKey;
-         const query = new URLSearchParams({ organization_id: operation.organizationId });
+         const query = new URLSearchParams({
+            organization_id: operation.organizationId,
+            workflow_kind: "ALL",
+         });
          const url = `${resolveApiEndpoint(
             "PUBLICATION_WORK_ITEM_DETAIL",
             operation.resourceType,
@@ -1220,8 +1291,9 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
          selectionKey: selectedKeyRef.current,
          resourceType: selectedWork?.resourceType,
          resourceId: selectedWork?.resourceId,
+         workflowKind: detail?.workflow_kind ?? "INITIAL",
       }),
-      [authIdentity, organizationId, selectedWork],
+      [authIdentity, detail?.workflow_kind, organizationId, selectedWork],
    );
 
    const validateEditor = () => {
@@ -1330,7 +1402,11 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
       setNotice("");
 
       try {
-         const updated = await authFetch(resolveApiEndpoint("FACT_CHECK_DRAFT_UPDATE", operation.resourceId), {
+         const endpoint =
+            operation.workflowKind === "EDITORIAL_REVISION"
+               ? "EDITORIAL_REVISION_DRAFT_UPDATE"
+               : "FACT_CHECK_DRAFT_UPDATE";
+         const updated = await authFetch(resolveApiEndpoint(endpoint, operation.resourceId), {
             method: "PATCH",
             body: {
                organization_id: operation.organizationId,
@@ -1354,7 +1430,7 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
 
          setDetail(updated);
          applyEditorFromDetail(updated);
-         setNotice("Draft saved.");
+         setNotice(operation.workflowKind === "EDITORIAL_REVISION" ? "Editorial revision saved." : "Draft saved.");
          focusActionMessageRef.current = true;
       } catch (error) {
          if (isMutationContextCurrent(operation)) {
@@ -1379,7 +1455,9 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
       setNotice("");
 
       try {
-         const submitted = await authFetch(resolveApiEndpoint("FACT_CHECK_SUBMIT", operation.resourceId), {
+         const endpoint =
+            operation.workflowKind === "EDITORIAL_REVISION" ? "EDITORIAL_REVISION_SUBMIT" : "FACT_CHECK_SUBMIT";
+         const submitted = await authFetch(resolveApiEndpoint(endpoint, operation.resourceId), {
             method: "POST",
             body: {
                organization_id: operation.organizationId,
@@ -1437,7 +1515,9 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
       setNotice("");
 
       try {
-         await authFetch(resolveApiEndpoint("FACT_CHECK_ABANDON", operation.resourceId), {
+         const endpoint =
+            operation.workflowKind === "EDITORIAL_REVISION" ? "EDITORIAL_REVISION_ABANDON" : "FACT_CHECK_ABANDON";
+         await authFetch(resolveApiEndpoint(endpoint, operation.resourceId), {
             method: "POST",
             body: {
                organization_id: operation.organizationId,
@@ -1461,7 +1541,11 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
          applyEditorFromDetail(null);
          setAbandonOpen(false);
          setAbandonReason("");
-         setNotice("Draft abandoned. The claim remains available for future publication work.");
+         setNotice(
+            operation.workflowKind === "EDITORIAL_REVISION"
+               ? "Editorial revision abandoned. It was not added to publication history."
+               : "Draft abandoned. The claim remains available for future publication work.",
+         );
          focusActionMessageRef.current = true;
          focusQueueAfterReturnRef.current = true;
       } catch (error) {
@@ -1479,6 +1563,10 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
       !isDirty || window.confirm("Discard your unsaved draft changes and open another work item?");
 
    const handleSelectWork = (item) => {
+      if (mutation) {
+         return;
+      }
+
       const nextKey = selectionKey(item?.resource_type, item?.resource_id);
       if (!nextKey || nextKey === selectedKeyRef.current || !confirmDiscard()) {
          return;
@@ -1503,6 +1591,10 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
    };
 
    const handleReturnToQueue = () => {
+      if (mutation) {
+         return;
+      }
+
       if (!confirmDiscard()) {
          return;
       }
@@ -1673,6 +1765,7 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
                               const itemKey = selectionKey(item.resource_type, item.resource_id);
                               const selected = itemKey === selectedKey;
                               const status = getItemState(item);
+                              const isRevisionItem = item?.workflow_kind === "EDITORIAL_REVISION";
 
                               return (
                                  <li key={itemKey}>
@@ -1680,10 +1773,11 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
                                        type="button"
                                        className={`drafting-queue-row ${selected ? "is-selected" : ""}`}
                                        aria-current={selected ? "true" : undefined}
+                                       disabled={Boolean(mutation)}
                                        onClick={() => handleSelectWork(item)}
                                     >
                                        <span className="drafting-row-topline">
-                                          <span>{status}</span>
+                                          <span>{isRevisionItem ? `Editorial revision · ${status}` : status}</span>
                                           <VerdictBadge verdict={item?.decision?.verdict} />
                                        </span>
                                        <strong>{item?.article?.headline || getClaimText(item)}</strong>
@@ -1699,6 +1793,17 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
                                                      : item?.lifecycle?.actionable_at,
                                                )}`}
                                        </span>
+                                       {isRevisionItem ? (
+                                          <>
+                                             <span className="drafting-row-metadata">
+                                                Revision reason: {item?.revision?.reason || "Not recorded"}
+                                             </span>
+                                             <span className="drafting-row-metadata">
+                                                Predecessor: {item?.revision?.predecessor?.headline || "Untitled"} · v
+                                                {item?.revision?.predecessor?.version ?? "–"}
+                                             </span>
+                                          </>
+                                       ) : null}
                                        {Array.isArray(item?.blockers) && item.blockers.length > 0 ? (
                                           <span className="drafting-row-blockers">
                                              {item.blockers.length} readiness blocker
@@ -1755,6 +1860,7 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
                            density="compact"
                            className="drafting-return-to-queue"
                            leadingIcon={<Icons name="arrow-left" size={15} />}
+                           disabled={Boolean(mutation)}
                            onClick={handleReturnToQueue}
                         >
                            Back to queue
@@ -1783,7 +1889,13 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
                                        Try again
                                     </Button>
                                  ) : null}
-                                 <Button type="button" variant="ghost" density="compact" onClick={handleReturnToQueue}>
+                                 <Button
+                                    type="button"
+                                    variant="ghost"
+                                    density="compact"
+                                    disabled={Boolean(mutation)}
+                                    onClick={handleReturnToQueue}
+                                 >
                                     Return to queue
                                  </Button>
                               </div>
@@ -1802,7 +1914,9 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
                                     </h3>
                                     <p>
                                        {organizationName || detail.organization?.name || "Selected organization"} ·
-                                       Initial publication workflow
+                                       {isEditorialRevision
+                                          ? " Editorial revision workflow"
+                                          : " Initial publication workflow"}
                                     </p>
                                  </div>
                                  {detail.resource_type === "FACT_CHECK" ? (
@@ -1810,13 +1924,10 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
                                  ) : null}
                               </header>
 
-                              {!isInitialWork ? (
+                              {!isSupportedWork ? (
                                  <div className="drafting-message drafting-message--warning" role="alert">
                                     <Icons name="alert-triangle" size={18} />
-                                    <p>
-                                       This workspace supports initial publication work only. This item is read-only
-                                       here.
-                                    </p>
+                                    <p>This publication workflow is not available in Drafting.</p>
                                  </div>
                               ) : null}
 
@@ -1880,6 +1991,8 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
                                     </dl>
                                  </section>
                               ) : null}
+
+                              {isEditorialRevision ? <EditorialRevisionContext revision={detail.revision} /> : null}
 
                               <HumanAdjudication detail={detail} />
 
@@ -1963,11 +2076,11 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
                                  </form>
                               ) : null}
 
-                              {isDraft && isInitialWork ? (
+                              {isDraft && isSupportedWork ? (
                                  <form className="drafting-editor" onSubmit={handleSaveDraft}>
                                     <div className="drafting-section-heading">
                                        <div>
-                                          <h4>Article draft</h4>
+                                          <h4>{isEditorialRevision ? "Editorial revision draft" : "Article draft"}</h4>
                                           <p>Manual save only. Sealed evidence remains read-only.</p>
                                        </div>
                                        {isDirty ? (
@@ -2114,14 +2227,15 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
                               <PublicationSources sourceItems={detail.source_items} />
                               <SealedEvidence sealedEvidence={detail.sealed_evidence} />
 
-                              {isDraft && isInitialWork && allowedActions.includes("ABANDON") && !conflict ? (
+                              {isDraft && isSupportedWork && allowedActions.includes("ABANDON") && !conflict ? (
                                  <section className="drafting-danger-zone" aria-labelledby="drafting-abandon-heading">
                                     <div className="drafting-section-heading">
                                        <div>
                                           <h4 id="drafting-abandon-heading">Abandon draft</h4>
                                           <p>
-                                             Archive this unpublished draft without completing the verification
-                                             assignment.
+                                             {isEditorialRevision
+                                                ? "Archive this unpublished editorial revision without adding it to publication history."
+                                                : "Archive this unpublished draft without completing the verification assignment."}
                                           </p>
                                        </div>
                                     </div>
@@ -2148,8 +2262,9 @@ function DraftingContent({ authFetch, authIdentity, organizationId, organization
                                              Archive this unpublished draft?
                                           </h5>
                                           <p>
-                                             The verification assignment is not completed. A replacement initial draft
-                                             may be created later from an eligible decision.
+                                             {isEditorialRevision
+                                                ? "The current publication remains unchanged and this abandoned draft will not appear in version history."
+                                                : "The verification assignment is not completed. A replacement initial draft may be created later from an eligible decision."}
                                           </p>
                                           <div className="drafting-field">
                                              <label htmlFor="drafting-abandon-reason">Abandonment reason</label>

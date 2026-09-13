@@ -140,6 +140,21 @@ export const API_ENDPOINTS = {
       `moderation/fact-checks/${encodeURIComponent(factCheckId)}/return-for-rework/`,
    FACT_CHECK_ABANDON: (factCheckId) =>
       `moderation/fact-checks/${encodeURIComponent(factCheckId)}/abandon/`,
+   PUBLICATION_LIBRARY: "moderation/publications/library/",
+   PUBLICATION_LIBRARY_DETAIL: (publicationId) =>
+      `moderation/publications/library/${encodeURIComponent(publicationId)}/`,
+   EDITORIAL_REVISION_DRAFT_CREATE: (predecessorId) =>
+      `moderation/publications/${encodeURIComponent(predecessorId)}/editorial-revisions/draft/`,
+   EDITORIAL_REVISION_DRAFT_UPDATE: (revisionId) =>
+      `moderation/publications/editorial-revisions/${encodeURIComponent(revisionId)}/draft/`,
+   EDITORIAL_REVISION_SUBMIT: (revisionId) =>
+      `moderation/publications/editorial-revisions/${encodeURIComponent(revisionId)}/submit/`,
+   EDITORIAL_REVISION_RETURN_FOR_REWORK: (revisionId) =>
+      `moderation/publications/editorial-revisions/${encodeURIComponent(revisionId)}/return-for-rework/`,
+   EDITORIAL_REVISION_ABANDON: (revisionId) =>
+      `moderation/publications/editorial-revisions/${encodeURIComponent(revisionId)}/abandon/`,
+   EDITORIAL_REVISION_PUBLISH: (revisionId) =>
+      `moderation/publications/editorial-revisions/${encodeURIComponent(revisionId)}/publish/`,
 
    // Verification Workspace
    VERIFICATION_INTAKE: "verification/intake/",

@@ -167,6 +167,46 @@ function HumanJudgment({ detail }) {
    );
 }
 
+function EditorialRevisionContext({ revision }) {
+   if (!revision) {
+      return null;
+   }
+
+   return (
+      <section className="publishing-review-section" aria-labelledby="publishing-revision-context-heading">
+         <div className="publishing-section-heading">
+            <div>
+               <h4 id="publishing-revision-context-heading">Editorial revision</h4>
+               <p>Review the requested editorial change against its preserved predecessor publication.</p>
+            </div>
+         </div>
+         <dl className="publishing-metadata-grid">
+            <div className="publishing-metadata-wide">
+               <dt>Revision reason</dt>
+               <dd>{revision.reason || "No revision reason recorded."}</dd>
+            </div>
+            <div className="publishing-metadata-wide">
+               <dt>Predecessor</dt>
+               <dd>
+                  {revision.predecessor?.headline || "Untitled publication"} · Article v
+                  {revision.predecessor?.version ?? "–"}
+               </dd>
+            </div>
+            <div>
+               <dt>Requested by</dt>
+               <dd>{actorName(revision.requested_by)}</dd>
+            </div>
+            <div>
+               <dt>Requested</dt>
+               <dd>
+                  <FormattedDateTime value={revision.requested_at} />
+               </dd>
+            </div>
+         </dl>
+      </section>
+   );
+}
+
 function PublicationSources({ sourceItems }) {
    const sources = Array.isArray(sourceItems) ? sourceItems : [];
 
@@ -356,7 +396,7 @@ function Readiness({ detail }) {
    );
 }
 
-function PublishingContent({ authFetch, authIdentity, organizationId, organizationName }) {
+function PublishingContent({ authFetch, authIdentity, organizationId, organizationName, onPublicationPublished }) {
    const [offset, setOffset] = useState(0);
    const [queue, setQueue] = useState({ count: 0, limit: PAGE_SIZE, offset: 0, results: [] });
    const [queueLoading, setQueueLoading] = useState(true);
@@ -398,12 +438,15 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
 
    const allowedActions = Array.isArray(detail?.allowed_actions) ? detail.allowed_actions : [];
    const isInitialReview = detail?.workflow_kind === "INITIAL";
+   const isEditorialReview = detail?.workflow_kind === "EDITORIAL_REVISION";
+   const publishAction = isEditorialReview ? "PUBLISH_REPLACEMENT" : "PUBLISH";
    const authorityBlocked = Boolean(authorityError) || authorityRetrying || detailLoading;
 
    const queueUrl = useMemo(() => {
       const query = new URLSearchParams({
          organization_id: organizationId,
          queue: "REVIEW",
+         workflow_kind: "ALL",
          limit: String(PAGE_SIZE),
          offset: String(offset),
       });
@@ -574,7 +617,10 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
       setDetailError("");
       setDetailUnavailable(false);
 
-      const query = new URLSearchParams({ organization_id: organizationId });
+      const query = new URLSearchParams({
+         organization_id: organizationId,
+         workflow_kind: "ALL",
+      });
       const url = `${resolveApiEndpoint("PUBLICATION_WORK_ITEM_DETAIL", "FACT_CHECK", selectedId)}?${query.toString()}`;
 
       authFetch(url, { method: "GET" })
@@ -655,15 +701,19 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
          authorityGeneration: authorityGenerationRef.current,
          requestId: mutationRequestIdRef.current + 1,
          factCheckId: selectedIdRef.current,
+         workflowKind: detail?.workflow_kind,
       }),
-      [authIdentity, organizationId],
+      [authIdentity, detail?.workflow_kind, organizationId],
    );
 
    const refreshAfterConflict = useCallback(
       async (operation, error) => {
          const requestId = detailRequestIdRef.current + 1;
          detailRequestIdRef.current = requestId;
-         const query = new URLSearchParams({ organization_id: operation.organizationId });
+         const query = new URLSearchParams({
+            organization_id: operation.organizationId,
+            workflow_kind: "ALL",
+         });
          const url = `${resolveApiEndpoint(
             "PUBLICATION_WORK_ITEM_DETAIL",
             "FACT_CHECK",
@@ -769,7 +819,13 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
    );
 
    const handlePublish = async () => {
-      if (mutation || authorityBlocked || conflict || !isInitialReview || !allowedActions.includes("PUBLISH")) {
+      if (
+         mutation ||
+         authorityBlocked ||
+         conflict ||
+         !(isInitialReview || isEditorialReview) ||
+         !allowedActions.includes(publishAction)
+      ) {
          return;
       }
 
@@ -780,13 +836,27 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
       setNotice("");
 
       try {
-         const published = await authFetch(resolveApiEndpoint("FACT_CHECK_PUBLISH", operation.factCheckId), {
+         const endpoint =
+            operation.workflowKind === "EDITORIAL_REVISION" ? "EDITORIAL_REVISION_PUBLISH" : "FACT_CHECK_PUBLISH";
+         const body =
+            operation.workflowKind === "EDITORIAL_REVISION"
+               ? {
+                    organization_id: operation.organizationId,
+                    expected_predecessor_version: detail?.concurrency?.predecessor_version,
+                    expected_revision_version: detail?.concurrency?.article_version,
+                    expected_edit_generation: detail?.concurrency?.edit_generation ?? detail?.edit_generation,
+                    expected_decision_revision:
+                       detail?.concurrency?.decision_revision ?? detail?.decision?.revision_number,
+                 }
+               : {
+                    organization_id: operation.organizationId,
+                    expected_edit_generation: detail?.concurrency?.edit_generation ?? detail?.edit_generation,
+                    expected_decision_revision:
+                       detail?.concurrency?.decision_revision ?? detail?.decision?.revision_number,
+                 };
+         const published = await authFetch(resolveApiEndpoint(endpoint, operation.factCheckId), {
             method: "POST",
-            body: {
-               organization_id: operation.organizationId,
-               expected_edit_generation: detail?.concurrency?.edit_generation ?? detail?.edit_generation,
-               expected_decision_revision: detail?.concurrency?.decision_revision ?? detail?.decision?.revision_number,
-            },
+            body,
          });
 
          if (!isMutationContextCurrent(operation)) {
@@ -798,15 +868,22 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
             return;
          }
 
-         const headline = published?.headline || detail?.headline || "Fact check";
-         const version = published?.version ?? detail?.version;
+         const headline = published?.article?.headline || published?.headline || detail?.headline || "Fact check";
+         const version = published?.article?.version ?? published?.version ?? detail?.version;
          selectedIdRef.current = null;
          setSelectedId(null);
          setDetail(null);
          setConfirmation(null);
-         setNotice(`${headline}${version ? ` · article v${version}` : ""} was published.`);
+         setNotice(
+            `${headline}${version ? ` · article v${version}` : ""} was ${
+               operation.workflowKind === "EDITORIAL_REVISION" ? "published as the current replacement" : "published"
+            }.`,
+         );
          focusActionMessageRef.current = true;
          focusQueueAfterMutationRef.current = true;
+         if (operation.workflowKind === "EDITORIAL_REVISION") {
+            onPublicationPublished?.(published);
+         }
       } catch (error) {
          if (isMutationContextCurrent(operation)) {
             handleMutationError(error, operation, "Unable to publish this fact check.");
@@ -835,7 +912,7 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
          mutation ||
          authorityBlocked ||
          conflict ||
-         !isInitialReview ||
+         !(isInitialReview || isEditorialReview) ||
          !allowedActions.includes("RETURN_FOR_REWORK")
       ) {
          return;
@@ -848,7 +925,11 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
       setNotice("");
 
       try {
-         await authFetch(resolveApiEndpoint("FACT_CHECK_RETURN_FOR_REWORK", operation.factCheckId), {
+         const endpoint =
+            operation.workflowKind === "EDITORIAL_REVISION"
+               ? "EDITORIAL_REVISION_RETURN_FOR_REWORK"
+               : "FACT_CHECK_RETURN_FOR_REWORK";
+         await authFetch(resolveApiEndpoint(endpoint, operation.factCheckId), {
             method: "POST",
             body: {
                organization_id: operation.organizationId,
@@ -886,6 +967,10 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
    };
 
    const handleSelect = (item) => {
+      if (mutation) {
+         return;
+      }
+
       const factCheckId = item?.resource_id;
       if (!factCheckId || String(factCheckId) === String(selectedIdRef.current)) {
          return;
@@ -906,6 +991,10 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
    };
 
    const returnToQueue = () => {
+      if (mutation) {
+         return;
+      }
+
       detailRequestIdRef.current += 1;
       selectedIdRef.current = null;
       setSelectedId(null);
@@ -1038,16 +1127,18 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
                         <ul className="publishing-queue-list">
                            {queue.results.map((item) => {
                               const selected = String(item?.resource_id) === String(selectedId);
+                              const isRevisionItem = item?.workflow_kind === "EDITORIAL_REVISION";
                               return (
                                  <li key={item?.resource_id}>
                                     <button
                                        type="button"
                                        className={`publishing-queue-row ${selected ? "is-selected" : ""}`}
                                        aria-current={selected ? "true" : undefined}
+                                       disabled={Boolean(mutation)}
                                        onClick={() => handleSelect(item)}
                                     >
                                        <span className="publishing-row-topline">
-                                          <span>Awaiting review</span>
+                                          <span>{isRevisionItem ? "Editorial revision" : "Initial publication"}</span>
                                           <VerdictBadge verdict={item?.decision?.verdict} />
                                        </span>
                                        <strong>{item?.article?.headline || "Untitled fact check"}</strong>
@@ -1063,6 +1154,17 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
                                        <span className="publishing-row-metadata">
                                           Submitted {formatDateTime(item?.lifecycle?.submitted_for_review_at)}
                                        </span>
+                                       {isRevisionItem ? (
+                                          <>
+                                             <span className="publishing-row-metadata">
+                                                Revision reason: {item?.revision?.reason || "Not recorded"}
+                                             </span>
+                                             <span className="publishing-row-metadata">
+                                                Predecessor: {item?.revision?.predecessor?.headline || "Untitled"} · v
+                                                {item?.revision?.predecessor?.version ?? "–"}
+                                             </span>
+                                          </>
+                                       ) : null}
                                     </button>
                                  </li>
                               );
@@ -1113,6 +1215,7 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
                            density="compact"
                            className="publishing-return-to-queue"
                            leadingIcon={<Icons name="arrow-left" size={15} />}
+                           disabled={Boolean(mutation)}
                            onClick={returnToQueue}
                         >
                            Back to review queue
@@ -1141,7 +1244,13 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
                                        Try again
                                     </Button>
                                  ) : null}
-                                 <Button type="button" variant="ghost" density="compact" onClick={returnToQueue}>
+                                 <Button
+                                    type="button"
+                                    variant="ghost"
+                                    density="compact"
+                                    disabled={Boolean(mutation)}
+                                    onClick={returnToQueue}
+                                 >
                                     Return to queue
                                  </Button>
                               </div>
@@ -1151,7 +1260,11 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
                               <header className="publishing-detail-header">
                                  <div>
                                     <span className="publishing-status-label">
-                                       {detailUnavailable ? "Left review queue" : "Institutional review"}
+                                       {detailUnavailable
+                                          ? "Left review queue"
+                                          : isEditorialReview
+                                            ? "Editorial replacement review"
+                                            : "Initial publication review"}
                                     </span>
                                     <h3 id="publishing-detail-heading" ref={detailHeadingRef} tabIndex={-1}>
                                        {detail.headline || "Untitled fact check"}
@@ -1165,13 +1278,10 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
                                  <span className="publishing-version-label">Article v{detail.version ?? "–"}</span>
                               </header>
 
-                              {!isInitialReview ? (
+                              {!isInitialReview && !isEditorialReview ? (
                                  <div className="publishing-message publishing-message--warning" role="alert">
                                     <Icons name="alert-triangle" size={18} />
-                                    <p>
-                                       This workspace supports initial publication work only. This item is read-only
-                                       here.
-                                    </p>
+                                    <p>This publication workflow is not available in Publishing.</p>
                                  </div>
                               ) : null}
 
@@ -1212,6 +1322,7 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
                                           type="button"
                                           variant="secondary"
                                           density="compact"
+                                          disabled={Boolean(mutation)}
                                           onClick={returnToQueue}
                                        >
                                           Return to review queue
@@ -1258,6 +1369,8 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
                                  </dl>
                               </section>
 
+                              {isEditorialReview ? <EditorialRevisionContext revision={detail.revision} /> : null}
+
                               <HumanJudgment detail={detail} />
 
                               <section
@@ -1289,9 +1402,9 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
                               <Readiness detail={detail} />
 
                               {!detailUnavailable &&
-                              isInitialReview &&
+                              (isInitialReview || isEditorialReview) &&
                               !conflict &&
-                              (allowedActions.includes("RETURN_FOR_REWORK") || allowedActions.includes("PUBLISH")) ? (
+                              (allowedActions.includes("RETURN_FOR_REWORK") || allowedActions.includes(publishAction)) ? (
                                  <section
                                     className="publishing-action-gate"
                                     aria-labelledby="publishing-action-gate-heading"
@@ -1320,7 +1433,7 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
                                                 Return for rework
                                              </Button>
                                           ) : null}
-                                          {allowedActions.includes("PUBLISH") ? (
+                                          {allowedActions.includes(publishAction) ? (
                                              <Button
                                                 type="button"
                                                 variant="primary"
@@ -1332,7 +1445,7 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
                                                 }}
                                                 leadingIcon={<Icons name="check-circle" size={16} />}
                                              >
-                                                Review publication
+                                                {isEditorialReview ? "Review replacement publication" : "Review publication"}
                                              </Button>
                                           ) : null}
                                        </div>
@@ -1345,10 +1458,14 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
                                              <Icons name="landmark" size={20} />
                                              <div>
                                                 <h5 id="publishing-confirm-title">
-                                                   Publish this article for{" "}
+                                                   {isEditorialReview ? "Publish this replacement article for " : "Publish this article for "}
                                                    {organizationName || detail.organization?.name}?
                                                 </h5>
-                                                <p>Confirm the exact institutional publication record below.</p>
+                                                <p>
+                                                   {isEditorialReview
+                                                      ? "Confirm the replacement version and preserved factual authority below."
+                                                      : "Confirm the exact institutional publication record below."}
+                                                </p>
                                              </div>
                                           </div>
                                           <dl className="publishing-confirmation-facts">
@@ -1365,20 +1482,29 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
                                                 <dd>{detail.version ?? "Not recorded"}</dd>
                                              </div>
                                           </dl>
-                                          <ul>
-                                             <li>Publication seals this article version.</li>
-                                             <li>
-                                                {organizationName || detail.organization?.name} becomes the
-                                                institutional publisher.
-                                             </li>
-                                             <li>
-                                                The verification assignment completes only after successful publication.
-                                             </li>
-                                             <li>
-                                                The published article cannot be edited directly; later replacement
-                                                requires a separate revision or correction workflow.
-                                             </li>
-                                          </ul>
+                                          {isEditorialReview ? (
+                                             <ul>
+                                                <li>This publishes a replacement editorial version.</li>
+                                                <li>The previous publication remains preserved in version history.</li>
+                                                <li>The human factual verdict and adjudication decision do not change.</li>
+                                                <li>This action is an editorial revision, not a factual correction.</li>
+                                             </ul>
+                                          ) : (
+                                             <ul>
+                                                <li>Publication seals this article version.</li>
+                                                <li>
+                                                   {organizationName || detail.organization?.name} becomes the
+                                                   institutional publisher.
+                                                </li>
+                                                <li>
+                                                   The verification assignment completes only after successful publication.
+                                                </li>
+                                                <li>
+                                                   The published article cannot be edited directly; later replacement
+                                                   requires a separate revision or correction workflow.
+                                                </li>
+                                             </ul>
+                                          )}
                                           <div className="publishing-confirmation-actions">
                                              <Button
                                                 type="button"
@@ -1398,7 +1524,7 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
                                                 disabled={Boolean(mutation)}
                                                 onClick={handlePublish}
                                              >
-                                                Publish article
+                                                {isEditorialReview ? "Publish replacement" : "Publish article"}
                                              </Button>
                                           </div>
                                        </section>
@@ -1411,7 +1537,9 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
                                           <div className="publishing-confirmation-heading">
                                              <Icons name="arrow-left" size={20} />
                                              <div>
-                                                <h5 id="publishing-rework-title">Return this article to Drafting?</h5>
+                                                <h5 id="publishing-rework-title">
+                                                   Return this {isEditorialReview ? "editorial revision" : "article"} to Drafting?
+                                                </h5>
                                                 <p>
                                                    The factual adjudication remains unchanged and article content is not
                                                    deleted.
