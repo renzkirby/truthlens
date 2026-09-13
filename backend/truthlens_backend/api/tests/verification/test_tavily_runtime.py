@@ -283,6 +283,9 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         )
         self._patch("api.embedding_service.generate_embedding", return_value=None)
         self.log_stage = self._patch("api.tasks._log_stage")
+        self.assess_evidence = self._patch(
+            "api.tasks._assess_and_persist_reasoning_evidence"
+        )
         self.save_claim = self._patch("api.tasks._save_claim", wraps=tasks._save_claim)
         real_bridge = tasks._retrieve_and_ingest_tavily
         self.observed_runs = []

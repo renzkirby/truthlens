@@ -27,11 +27,15 @@ from .models import (
     VerificationEvidence,
 )
 from .trust_service import recompute_user_trust_score
+from .verification.evidence_assessment import (
+    assess_reasoning_evidence_against_claim,
+)
 from .verification.evidence_dossier import (
     filter_reasoning_evidence_dossier_by_role,
     load_reasoning_evidence_dossier_for_run,
     render_reasoning_evidence_dossier,
 )
+from .verification.evidence_enrichment import persist_evidence_assessment
 from .verification.ingestion import ingest_raw_evidence
 from .verification.linking import link_evidence_sources_to_run
 from .verification.providers.google_fact_check import (
@@ -239,6 +243,75 @@ def _log_stage(claim_id, stage, started_at, **metadata):
     if details:
         message = f"{message} {details}"
     logger.info(message)
+
+
+def _assess_and_persist_reasoning_evidence(
+    claim_text,
+    evidence_groups,
+    claim_id,
+    *,
+    stage_prefix,
+):
+    stage_name = f"{stage_prefix}_evidence_assessment"
+    for evidence_group in evidence_groups:
+        for evidence_item in evidence_group.evidence:
+            if (
+                evidence_item.stance != VerificationEvidence.Stance.UNKNOWN
+                or evidence_item.relevance_score is not None
+                or evidence_item.directness_score is not None
+            ):
+                continue
+
+            assessment_started_at = time.perf_counter()
+            try:
+                assessment = assess_reasoning_evidence_against_claim(
+                    claim_text,
+                    evidence_item,
+                )
+            except Exception as exc:
+                _log_stage(
+                    claim_id,
+                    stage_name,
+                    assessment_started_at,
+                    evidence_link_id=evidence_item.evidence_link_id,
+                    outcome="assessment_failed",
+                    error=str(exc)[:120],
+                )
+                logger.error(
+                    "Evidence assessment failed for claim %s, link %s: %s",
+                    claim_id,
+                    evidence_item.evidence_link_id,
+                    exc,
+                )
+                continue
+
+            try:
+                persisted = persist_evidence_assessment(evidence_item, assessment)
+            except Exception as exc:
+                _log_stage(
+                    claim_id,
+                    stage_name,
+                    assessment_started_at,
+                    evidence_link_id=evidence_item.evidence_link_id,
+                    outcome="persistence_failed",
+                    error=str(exc)[:120],
+                )
+                logger.error(
+                    "Evidence assessment persistence failed for claim %s, "
+                    "link %s: %s",
+                    claim_id,
+                    evidence_item.evidence_link_id,
+                    exc,
+                )
+                continue
+
+            _log_stage(
+                claim_id,
+                stage_name,
+                assessment_started_at,
+                evidence_link_id=evidence_item.evidence_link_id,
+                persisted=persisted,
+            )
 
 
 # IMAGE PIPELINE
@@ -618,6 +691,22 @@ def execute_core_text_pipeline(raw_text, claim_id):
                         evidence_dossier,
                         VerificationEvidence.EvidenceRole.FACT_CHECK,
                     )
+                    if fact_check_groups:
+                        _assess_and_persist_reasoning_evidence(
+                            cleaned_claim,
+                            fact_check_groups,
+                            claim_id,
+                            stage_prefix="gfc",
+                        )
+                        evidence_dossier = load_reasoning_evidence_dossier_for_run(
+                            run
+                        )
+                        fact_check_groups = (
+                            filter_reasoning_evidence_dossier_by_role(
+                                evidence_dossier,
+                                VerificationEvidence.EvidenceRole.FACT_CHECK,
+                            )
+                        )
                     evidence_context = render_reasoning_evidence_dossier(
                         fact_check_groups
                     )
@@ -763,6 +852,22 @@ def execute_core_text_pipeline(raw_text, claim_id):
                         evidence_dossier,
                         VerificationEvidence.EvidenceRole.SECONDARY,
                     )
+                    if secondary_groups:
+                        _assess_and_persist_reasoning_evidence(
+                            cleaned_claim,
+                            secondary_groups,
+                            claim_id,
+                            stage_prefix="tavily",
+                        )
+                        evidence_dossier = load_reasoning_evidence_dossier_for_run(
+                            run
+                        )
+                        secondary_groups = (
+                            filter_reasoning_evidence_dossier_by_role(
+                                evidence_dossier,
+                                VerificationEvidence.EvidenceRole.SECONDARY,
+                            )
+                        )
                     evidence_context = render_reasoning_evidence_dossier(
                         secondary_groups
                     )

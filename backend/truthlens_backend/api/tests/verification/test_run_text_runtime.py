@@ -5,7 +5,9 @@ from django.test import TestCase
 
 from api import tasks
 from api.models import Claim, EvidenceSource, VerificationEvidence, VerificationRun
+from api.verification.evidence_assessment import EvidenceAssessment
 from api.verification.contracts import RawEvidence
+from api.verification.evidence_dossier import ReasoningEvidenceItem
 from api.verification import runs
 
 
@@ -69,6 +71,9 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.render_dossier = self._patch(
             "api.tasks.render_reasoning_evidence_dossier",
             return_value="Persisted evidence context.",
+        )
+        self.assess_evidence = self._patch(
+            "api.tasks._assess_and_persist_reasoning_evidence"
         )
         self.retrieve_tavily = self._patch("api.tasks._retrieve_and_ingest_tavily")
         self.retrieve_tavily.return_value = {
@@ -141,7 +146,7 @@ class VerificationRunTextRuntimeTests(TestCase):
             self.fingerprint, self.match, self.clean, self.vault,
             self.retrieve_gfc, self.evaluate_gfc, self.retrieve_tavily,
             self.evaluate_tavily, self.evaluate_persisted, self.load_dossier,
-            self.filter_dossier, self.render_dossier,
+            self.filter_dossier, self.render_dossier, self.assess_evidence,
         ):
             mocked.assert_not_called()
 
@@ -225,6 +230,7 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.retrieve_gfc.assert_not_called()
         self.retrieve_tavily.assert_not_called()
         self.save_claim.assert_not_called()
+        self.assess_evidence.assert_not_called()
 
     def test_cached_abstaining_verdicts_abstain(self):
         for verdict in ("OUT_OF_SCOPE", "UNVERIFIED", None, "", "UNKNOWN"):
@@ -233,6 +239,7 @@ class VerificationRunTextRuntimeTests(TestCase):
                 self._assert_terminal(self._execute(), VerificationRun.Status.ABSTAINED)
         self.clean.assert_not_called()
         self.retrieve_tavily.assert_not_called()
+        self.assess_evidence.assert_not_called()
 
     def test_cached_human_verdict_is_not_copied_or_used_as_run_outcome(self):
         for ai_verdict, final_verdict, status in (
@@ -245,6 +252,7 @@ class VerificationRunTextRuntimeTests(TestCase):
                 self.claim.refresh_from_db()
                 self.assertEqual(self.claim.ai_verdict, ai_verdict)
                 self.assertIsNone(self.claim.final_verdict)
+        self.assess_evidence.assert_not_called()
 
     def test_self_match_continues_verification_with_one_run(self):
         self.match.return_value = self.claim
@@ -261,6 +269,7 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.vault.assert_not_called()
         self.retrieve_gfc.assert_not_called()
         self.retrieve_tavily.assert_not_called()
+        self.assess_evidence.assert_not_called()
 
     def test_satire_shortcut_completes(self):
         self.cleaned["article_stance"] = "SATIRE"
@@ -270,6 +279,7 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.vault.assert_not_called()
         self.retrieve_gfc.assert_not_called()
         self.retrieve_tavily.assert_not_called()
+        self.assess_evidence.assert_not_called()
 
     def test_vault_substantive_verdict_completes(self):
         self.vault.return_value = {
@@ -283,6 +293,7 @@ class VerificationRunTextRuntimeTests(TestCase):
         )
         self.retrieve_gfc.assert_not_called()
         self.retrieve_tavily.assert_not_called()
+        self.assess_evidence.assert_not_called()
 
     def test_gfc_substantive_verdict_completes(self):
         self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
@@ -478,7 +489,7 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         self.enterContext(patch("api.tasks.clean_ocr_text", return_value=self.cleaned))
         self.enterContext(patch("api.tasks.search_official_vault", return_value=None))
         self.enterContext(patch("api.embedding_service.generate_embedding", return_value=None))
-        self.enterContext(patch("api.tasks._log_stage"))
+        self.log_stage = self.enterContext(patch("api.tasks._log_stage"))
         self.relevance = self.enterContext(patch("api.tasks.is_fact_check_relevant", return_value=True))
         self.evaluate_gfc = self.enterContext(patch(
             "api.tasks.evaluate_image_claim_with_gfc", return_value=self.verdict,
@@ -487,6 +498,15 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         self.evaluate_persisted = self.enterContext(patch(
             "api.tasks.evaluate_claim_with_persisted_evidence",
             return_value=self.verdict,
+        ))
+        self.assessment = EvidenceAssessment(
+            stance=VerificationEvidence.Stance.REFUTES,
+            relevance_score=0.9,
+            directness_score=0.8,
+        )
+        self.assessor = self.enterContext(patch(
+            "api.tasks.assess_reasoning_evidence_against_claim",
+            return_value=self.assessment,
         ))
         self.provider = self.enterContext(patch("api.tasks.GoogleFactCheckProvider")).return_value
         self.provider.search_with_payload.return_value = (self.payload, self.raw_sources)
@@ -548,6 +568,23 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         )
         return self.tavily_response
 
+    def _record_assessed_tavily_link(
+        self, search_query, claim_id, *, verification_run
+    ):
+        tavily_source = EvidenceSource.objects.create(
+            provider="TAVILY",
+            content="Previously assessed Tavily evidence.",
+        )
+        VerificationEvidence.objects.create(
+            verification_run=verification_run,
+            evidence_source=tavily_source,
+            evidence_role=VerificationEvidence.EvidenceRole.SECONDARY,
+            stance=VerificationEvidence.Stance.CONTEXT,
+            relevance_score=0.6,
+            directness_score=0.3,
+        )
+        return self.tavily_response
+
     def test_text_runtime_passes_active_running_run_to_gfc_bridge(self):
         run = self._execute()
         self.bridge.assert_called_once_with(
@@ -563,6 +600,16 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         self.assertEqual(link.verification_run_id, run.pk)
         self.assertEqual(link.evidence_source_id, EvidenceSource.objects.get().pk)
         self.assertEqual(link.evidence_role, VerificationEvidence.EvidenceRole.FACT_CHECK)
+        self.assertEqual(link.stance, VerificationEvidence.Stance.REFUTES)
+        self.assertEqual(link.relevance_score, 0.9)
+        self.assertEqual(link.directness_score, 0.8)
+        self.assertIsNone(link.recency_score)
+        self.assessor.assert_called_once()
+        assessed_claim, assessed_item = self.assessor.call_args.args
+        self.assertEqual(assessed_claim, self.cleaned["cleaned_claim"])
+        self.assertIsInstance(assessed_item, ReasoningEvidenceItem)
+        self.assertEqual(assessed_item.evidence_link_id, link.pk)
+        self.assertEqual(assessed_item.evidence_source_id, link.evidence_source_id)
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "FAKE")
         self.assertIsNone(self.claim.final_verdict)
@@ -571,9 +618,33 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         self.evaluate_persisted.assert_called_once()
         persisted_context = self.evaluate_persisted.call_args.args[1]
         self.assertIn("Rating: False", persisted_context)
+        self.assertIn("Stance: REFUTES", persisted_context)
+        self.assertIn("Relevance score: 0.9", persisted_context)
+        self.assertIn("Directness score: 0.8", persisted_context)
         self.assertNotIn("claimReview", persisted_context)
         self.evaluate_gfc.assert_not_called()
         self.retrieve_tavily.assert_not_called()
+        self.assertIn(
+            "gfc_evidence_assessment",
+            [call.args[1] for call in self.log_stage.call_args_list],
+        )
+
+    def test_gfc_assessment_preserves_existing_recency_score(self):
+        record_running_run = self.bridge.side_effect
+
+        def add_recency_after_linking(*args, **kwargs):
+            payload = record_running_run(*args, **kwargs)
+            VerificationEvidence.objects.update(recency_score=0.55)
+            return payload
+
+        self.bridge.side_effect = add_recency_after_linking
+        self._execute()
+
+        link = VerificationEvidence.objects.get()
+        self.assertEqual(link.recency_score, 0.55)
+        self.assertEqual(link.stance, VerificationEvidence.Stance.REFUTES)
+        self.assessor.assert_called_once()
+        self.assertEqual(self.assessor.call_args.args[1].recency_score, 0.55)
 
     def test_irrelevant_gfc_evidence_remains_linked_before_tavily_fallback(self):
         self.relevance.return_value = False
@@ -590,9 +661,123 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         )
         self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
         self.evaluate_gfc.assert_not_called()
+        self.assessor.assert_called_once()
+        assessed_item = self.assessor.call_args.args[1]
+        self.assertEqual(assessed_item.provider, "TAVILY")
+        self.assertEqual(
+            assessed_item.evidence_role,
+            VerificationEvidence.EvidenceRole.SECONDARY,
+        )
+        gfc_link = VerificationEvidence.objects.get(
+            evidence_source__provider="GOOGLE_FACT_CHECK"
+        )
+        self.assertEqual(gfc_link.stance, VerificationEvidence.Stance.UNKNOWN)
+        self.assertIsNone(gfc_link.relevance_score)
+        self.assertIsNone(gfc_link.directness_score)
+        tavily_link = VerificationEvidence.objects.get(
+            evidence_source__provider="TAVILY"
+        )
+        self.assertEqual(tavily_link.stance, VerificationEvidence.Stance.REFUTES)
+        self.assertEqual(tavily_link.relevance_score, 0.9)
+        self.assertEqual(tavily_link.directness_score, 0.8)
         persisted_context = self.evaluate_persisted.call_args.args[1]
         self.assertIn("Persisted Tavily fallback evidence.", persisted_context)
+        self.assertIn("Stance: REFUTES", persisted_context)
         self.assertNotIn("Rating: False", persisted_context)
+        self.assertIn(
+            "tavily_evidence_assessment",
+            [call.args[1] for call in self.log_stage.call_args_list],
+        )
+
+    def test_already_assessed_secondary_evidence_skips_assessor(self):
+        self.provider.search_with_payload.return_value = ({"claims": []}, [])
+        self.retrieve_tavily.side_effect = self._record_assessed_tavily_link
+
+        run = self._execute()
+
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        self.assessor.assert_not_called()
+        link = VerificationEvidence.objects.get()
+        self.assertEqual(link.stance, VerificationEvidence.Stance.CONTEXT)
+        self.assertEqual(link.relevance_score, 0.6)
+        self.assertEqual(link.directness_score, 0.3)
+        persisted_context = self.evaluate_persisted.call_args.args[1]
+        self.assertIn("Stance: CONTEXT", persisted_context)
+        self.assertIn("Relevance score: 0.6", persisted_context)
+        self.assertIn("Directness score: 0.3", persisted_context)
+
+    def test_unknown_numeric_assessment_is_persisted_and_rendered(self):
+        self.assessor.return_value = EvidenceAssessment(
+            stance=VerificationEvidence.Stance.UNKNOWN,
+            relevance_score=0.4,
+            directness_score=0.2,
+        )
+
+        run = self._execute()
+
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        link = VerificationEvidence.objects.get()
+        self.assertEqual(link.stance, VerificationEvidence.Stance.UNKNOWN)
+        self.assertEqual(link.relevance_score, 0.4)
+        self.assertEqual(link.directness_score, 0.2)
+        persisted_context = self.evaluate_persisted.call_args.args[1]
+        self.assertIn("Stance: UNKNOWN", persisted_context)
+        self.assertIn("Relevance score: 0.4", persisted_context)
+        self.assertIn("Directness score: 0.2", persisted_context)
+
+    def test_unavailable_assessment_does_not_prevent_final_evaluation(self):
+        self.assessor.return_value = EvidenceAssessment(
+            stance=VerificationEvidence.Stance.UNKNOWN,
+            relevance_score=None,
+            directness_score=None,
+        )
+
+        run = self._execute()
+
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        link = VerificationEvidence.objects.get()
+        self.assertEqual(link.stance, VerificationEvidence.Stance.UNKNOWN)
+        self.assertIsNone(link.relevance_score)
+        self.assertIsNone(link.directness_score)
+        self.evaluate_persisted.assert_called_once()
+        self.assertIn(
+            "Rating: False",
+            self.evaluate_persisted.call_args.args[1],
+        )
+
+    def test_assessor_exception_is_best_effort(self):
+        self.assessor.side_effect = RuntimeError("Assessment unavailable")
+
+        with self.assertLogs("api.tasks", level="ERROR") as logs:
+            run = self._execute()
+
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        link = VerificationEvidence.objects.get()
+        self.assertEqual(link.stance, VerificationEvidence.Stance.UNKNOWN)
+        self.assertIsNone(link.relevance_score)
+        self.assertIsNone(link.directness_score)
+        self.evaluate_persisted.assert_called_once()
+        self.retrieve_tavily.assert_not_called()
+        self.assertIn("Evidence assessment failed", "\n".join(logs.output))
+
+    def test_persistence_exception_is_best_effort(self):
+        with patch(
+            "api.tasks.persist_evidence_assessment",
+            side_effect=RuntimeError("Assessment storage unavailable"),
+        ), self.assertLogs("api.tasks", level="ERROR") as logs:
+            run = self._execute()
+
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        link = VerificationEvidence.objects.get()
+        self.assertEqual(link.stance, VerificationEvidence.Stance.UNKNOWN)
+        self.assertIsNone(link.relevance_score)
+        self.assertIsNone(link.directness_score)
+        self.evaluate_persisted.assert_called_once()
+        self.retrieve_tavily.assert_not_called()
+        self.assertIn(
+            "Evidence assessment persistence failed",
+            "\n".join(logs.output),
+        )
 
     def test_gfc_evaluation_failure_keeps_links_before_tavily_fallback(self):
         self.evaluate_persisted.side_effect = [
