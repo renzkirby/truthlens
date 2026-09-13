@@ -689,6 +689,7 @@ class FactualCorrectionHandoffTests(FactualCorrectionHandoffFixtures, TestCase):
             organization_id=self.organization.id,
             expected_predecessor_version=first.version,
             expected_revision_version=editorial.version,
+            expected_edit_generation=editorial.edit_generation,
             expected_decision_revision=context["decision"].revision_number,
         )["fact_check"]
         context.update(published=editorial, seal=editorial.publication_snapshot)

@@ -741,6 +741,7 @@ class PublicationWorkflowApiTests(PublicationWorkflowFixtures, APITestCase):
                 "edit_generation": 1,
                 "article_version": 1,
                 "decision_revision": 1,
+                "predecessor_version": None,
             },
         )
         self.assertEqual(set(detail.data["drafted_by"]), {"id", "username"})

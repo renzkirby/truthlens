@@ -1645,13 +1645,13 @@ def create_editorial_revision_draft(
                 "Another fact-check draft is already active for this claim."
             )
 
-        publication_snapshot = next(
-            (
-                snapshot
-                for snapshot in context["publication_snapshots"]
-                if snapshot.fact_check_id == predecessor.id
-            ),
-            None,
+        publication_snapshot = _validate_editorial_revision_chain(
+            predecessor=predecessor,
+            fact_checks=context["fact_checks"],
+            publication_snapshots=context["publication_snapshots"],
+            decision=decision,
+            decision_snapshot=context["decision_snapshot"],
+            organization=context["organization"],
         )
         sealed_payload = _validate_predecessor_publication_snapshot(
             publication_snapshot,
@@ -2072,6 +2072,158 @@ def abandon_fact_check_draft(
         return locked_fact_check
 
 
+def return_editorial_revision_for_rework(
+    *,
+    revision,
+    actor,
+    organization_id,
+    expected_edit_generation,
+    reason,
+):
+    organization_id = _parse_uuid_identity(organization_id, "organization_id")
+    reason = _parse_required_reason(reason)
+    identity = _get_fact_check_publication_identity(revision)
+    identity["organization_id"] = organization_id
+
+    with transaction.atomic():
+        context = _lock_publication_context(
+            identity=identity,
+            actor=actor,
+            capability=PartnerCapability.PUBLISH_FACT_CHECK,
+        )
+        locked_revision = context["fact_check"]
+        current_decision = context["decision"]
+        _ensure_no_active_correction_reservation(context)
+        _require_expected_edit_generation(
+            fact_check=locked_revision,
+            decision=current_decision,
+            expected_edit_generation=expected_edit_generation,
+        )
+
+        if (
+            locked_revision.revision_kind
+            != OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
+            or locked_revision.supersedes_id is None
+            or locked_revision.publication_status
+            != OfficialFactCheck.PublicationStatus.IN_REVIEW
+        ):
+            raise InvalidPublicationTransition(
+                "Only an editorial revision in review can be returned for rework."
+            )
+
+        previous_generation = locked_revision.edit_generation
+        locked_revision.publication_status = OfficialFactCheck.PublicationStatus.DRAFT
+        locked_revision.submitted_for_review_at = None
+        locked_revision.reviewed_by = None
+        locked_revision.reviewed_at = None
+        locked_revision.published_by = None
+        locked_revision.published_at = None
+        locked_revision.edit_generation += 1
+        locked_revision.save(
+            update_fields=[
+                "publication_status",
+                "submitted_for_review_at",
+                "reviewed_by",
+                "reviewed_at",
+                "published_by",
+                "published_at",
+                "edit_generation",
+                "updated_at",
+            ]
+        )
+        event = _record_publication_event(
+            locked_revision,
+            actor=actor,
+            event_type=ModerationEvent.EventType.ARTICLE_RETURNED_FOR_REWORK,
+            from_status=OfficialFactCheck.PublicationStatus.IN_REVIEW,
+            to_status=OfficialFactCheck.PublicationStatus.DRAFT,
+            notes=reason,
+            metadata={
+                "revision_kind": locked_revision.revision_kind,
+                "supersedes_fact_check_id": str(locked_revision.supersedes_id),
+                "previous_edit_generation": previous_generation,
+                "edit_generation": locked_revision.edit_generation,
+            },
+        )
+        if event is None:
+            raise PublishingConflict(
+                "The editorial rework transition could not be attributed to its "
+                "adjudication case."
+            )
+        return locked_revision
+
+
+def abandon_editorial_revision_draft(
+    *,
+    revision,
+    actor,
+    organization_id,
+    expected_edit_generation,
+    reason,
+):
+    organization_id = _parse_uuid_identity(organization_id, "organization_id")
+    reason = _parse_required_reason(reason)
+    identity = _get_fact_check_publication_identity(revision)
+    identity["organization_id"] = organization_id
+
+    with transaction.atomic():
+        context = _lock_publication_context(
+            identity=identity,
+            actor=actor,
+            capability=PartnerCapability.CREATE_FACT_CHECK_DRAFT,
+        )
+        locked_revision = context["fact_check"]
+        current_decision = context["decision"]
+        _ensure_no_active_correction_reservation(context)
+        _require_expected_edit_generation(
+            fact_check=locked_revision,
+            decision=current_decision,
+            expected_edit_generation=expected_edit_generation,
+        )
+
+        if (
+            locked_revision.revision_kind
+            != OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
+            or locked_revision.supersedes_id is None
+            or locked_revision.publication_status
+            != OfficialFactCheck.PublicationStatus.DRAFT
+        ):
+            raise InvalidPublicationTransition(
+                "Only an editorial revision draft can be abandoned."
+            )
+
+        locked_revision.publication_status = (
+            OfficialFactCheck.PublicationStatus.ARCHIVED
+        )
+        locked_revision.archived_at = timezone.now()
+        locked_revision.save(
+            update_fields=[
+                "publication_status",
+                "archived_at",
+                "updated_at",
+            ]
+        )
+        event = _record_publication_event(
+            locked_revision,
+            actor=actor,
+            event_type=ModerationEvent.EventType.ARTICLE_ABANDONED,
+            from_status=OfficialFactCheck.PublicationStatus.DRAFT,
+            to_status=OfficialFactCheck.PublicationStatus.ARCHIVED,
+            notes=reason,
+            metadata={
+                "revision_kind": locked_revision.revision_kind,
+                "supersedes_fact_check_id": str(locked_revision.supersedes_id),
+                "edit_generation": locked_revision.edit_generation,
+            },
+        )
+        if event is None:
+            raise PublishingConflict(
+                "The editorial revision abandonment could not be attributed to "
+                "its adjudication case."
+            )
+        return locked_revision
+
+
 def publish_editorial_revision(
     *,
     revision_id,
@@ -2080,6 +2232,7 @@ def publish_editorial_revision(
     organization_id,
     expected_predecessor_version,
     expected_revision_version,
+    expected_edit_generation,
     expected_decision_revision,
 ):
     expected_predecessor_version = _parse_expected_version(
@@ -2089,6 +2242,10 @@ def publish_editorial_revision(
     expected_revision_version = _parse_expected_version(
         expected_revision_version,
         "expected_revision_version",
+    )
+    expected_edit_generation = _parse_expected_version(
+        expected_edit_generation,
+        "expected_edit_generation",
     )
     expected_decision_revision = _parse_expected_version(
         expected_decision_revision,
@@ -2109,6 +2266,11 @@ def publish_editorial_revision(
         revision = context["fact_check"]
         decision = context["decision"]
         _ensure_no_active_correction_reservation(context)
+        _require_expected_edit_generation(
+            fact_check=revision,
+            decision=decision,
+            expected_edit_generation=expected_edit_generation,
+        )
         predecessor = next(
             (
                 item

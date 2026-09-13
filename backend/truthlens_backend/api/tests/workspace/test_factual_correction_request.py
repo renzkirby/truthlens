@@ -796,6 +796,7 @@ class CorrectionReservationEnforcementTests(
                 organization_id=self.organization.id,
                 expected_predecessor_version=context["published"].version,
                 expected_revision_version=revision.version,
+                expected_edit_generation=revision.edit_generation,
                 expected_decision_revision=context["decision"].revision_number,
             )
         )

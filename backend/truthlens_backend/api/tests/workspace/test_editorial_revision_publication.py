@@ -102,6 +102,7 @@ class EditorialReplacementFixtures(AdjudicationContractFixtures):
             "organization_id": self.organization.id,
             "expected_predecessor_version": context["published"].version,
             "expected_revision_version": revision.version,
+            "expected_edit_generation": revision.edit_generation,
             "expected_decision_revision": context["decision"].revision_number,
         }
         values.update(overrides)
@@ -335,6 +336,7 @@ class EditorialRevisionPublicationTests(EditorialReplacementFixtures, TestCase):
                 organization_id=self.organization.id,
                 expected_predecessor_version=original.version,
                 expected_revision_version=second_revision.version,
+                expected_edit_generation=second_revision.edit_generation,
                 expected_decision_revision=context["decision"].revision_number,
             )
 
@@ -520,6 +522,7 @@ class EditorialRevisionPublicationTests(EditorialReplacementFixtures, TestCase):
             ("organization_id", False),
             ("expected_predecessor_version", 0),
             ("expected_revision_version", True),
+            ("expected_edit_generation", 0),
             ("expected_decision_revision", -1),
         ):
             with self.subTest(field=field):
@@ -529,6 +532,7 @@ class EditorialRevisionPublicationTests(EditorialReplacementFixtures, TestCase):
         for field, value in (
             ("expected_predecessor_version", context["published"].version + 1),
             ("expected_revision_version", revision.version + 1),
+            ("expected_edit_generation", revision.edit_generation + 1),
             ("expected_decision_revision", context["decision"].revision_number + 1),
         ):
             with self.subTest(field=field):
@@ -870,6 +874,7 @@ class EditorialRevisionPublicationPostgresTests(
                     organization_id=self.organization.id,
                     expected_predecessor_version=context["published"].version,
                     expected_revision_version=revision.version,
+                    expected_edit_generation=revision.edit_generation,
                     expected_decision_revision=context["decision"].revision_number,
                 )
 
@@ -980,6 +985,7 @@ class EditorialRevisionPublicationPostgresTests(
                     organization_id=self.organization.id,
                     expected_predecessor_version=context["published"].version,
                     expected_revision_version=revision.version,
+                    expected_edit_generation=revision.edit_generation,
                     expected_decision_revision=context["decision"].revision_number,
                 )
             except Exception as error:  # pragma: no cover - asserted below

@@ -161,7 +161,11 @@ from .publishing_service import (
     PublishingAuthorizationError,
     PublishingConflict,
     abandon_fact_check_draft,
+    abandon_editorial_revision_draft,
+    create_editorial_revision_draft,
     create_fact_check_draft,
+    publish_editorial_revision,
+    return_editorial_revision_for_rework,
     return_fact_check_for_rework,
     update_fact_check_draft,
     submit_fact_check_for_review,
@@ -173,6 +177,12 @@ from .publication_workflow_query_service import (
     PublicationWorkflowNotFound,
     get_publication_work_item_detail,
     list_publication_work_items,
+)
+from .organization_publication_query_service import (
+    OrganizationPublicationAuthorizationError,
+    OrganizationPublicationNotFound,
+    get_organization_publication_detail,
+    list_organization_publications,
 )
 from .verification_assignment_service import (
     VerificationAssignmentAuthorizationError,
@@ -249,12 +259,18 @@ from .serializers import (
     AdjudicationQueueCaseSerializer,
     FactCheckDraftCreateSerializer,
     FactCheckDraftUpdateSerializer,
+    EditorialRevisionDraftCreateSerializer,
+    EditorialRevisionPublishSerializer,
     FactCheckRecoverySerializer,
     FactCheckTransitionSerializer,
     PublicationWorkflowDetailQuerySerializer,
     PublicationWorkflowDetailSerializer,
     PublicationWorkflowPageSerializer,
     PublicationWorkflowQueueQuerySerializer,
+    OrganizationPublicationDetailQuerySerializer,
+    OrganizationPublicationDetailSerializer,
+    OrganizationPublicationLibraryQuerySerializer,
+    OrganizationPublicationPageSerializer,
     VerificationAssignmentClaimSerializer,
     VerificationAssignmentSerializer,
     OrganizationMembershipAdminSerializer,
@@ -1534,16 +1550,32 @@ def _publication_invalid_response(serializer):
     )
 
 
-def _publication_detail_response(*, actor, organization, fact_check):
+def _publication_detail_response(
+    *, actor, organization, fact_check, workflow_kind="INITIAL"
+):
     payload = get_publication_work_item_detail(
         actor=actor,
         organization=organization,
         resource_type=RESOURCE_FACT_CHECK,
         resource_id=fact_check.id,
+        workflow_kind=workflow_kind,
     )
     return Response(
         PublicationWorkflowDetailSerializer(payload).data,
         status=status.HTTP_200_OK,
+    )
+
+
+def _organization_publication_error_response(error):
+    if isinstance(error, OrganizationPublicationAuthorizationError):
+        response_status = status.HTTP_403_FORBIDDEN
+    elif isinstance(error, OrganizationPublicationNotFound):
+        response_status = status.HTTP_404_NOT_FOUND
+    else:
+        response_status = status.HTTP_400_BAD_REQUEST
+    return Response(
+        {"detail": str(error)},
+        status=response_status,
     )
 
 
@@ -2051,6 +2083,7 @@ def publication_work_item_queue(request):
             queue=data["queue"],
             limit=data["limit"],
             offset=data["offset"],
+            workflow_kind=data["workflow_kind"],
         )
     except PublicationWorkflowAuthorizationError as error:
         raise PermissionDenied(str(error)) from error
@@ -2076,6 +2109,7 @@ def publication_work_item_detail(request, resource_type, resource_id):
             organization=organization,
             resource_type=resource_type,
             resource_id=resource_id,
+            workflow_kind=serializer.validated_data["workflow_kind"],
         )
     except PublicationWorkflowAuthorizationError as error:
         raise PermissionDenied(str(error)) from error
@@ -2083,6 +2117,261 @@ def publication_work_item_detail(request, resource_type, resource_id):
         raise NotFound(str(error)) from error
     return Response(
         PublicationWorkflowDetailSerializer(payload).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def organization_publication_library(request):
+    serializer = OrganizationPublicationLibraryQuerySerializer(
+        data=request.query_params
+    )
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    try:
+        payload = list_organization_publications(
+            actor=request.user,
+            organization=organization,
+            search=data["search"],
+            limit=data["limit"],
+            offset=data["offset"],
+        )
+    except OrganizationPublicationAuthorizationError as error:
+        return _organization_publication_error_response(error)
+    return Response(
+        OrganizationPublicationPageSerializer(payload).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def organization_publication_detail(request, fact_check_id):
+    serializer = OrganizationPublicationDetailQuerySerializer(
+        data=request.query_params
+    )
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    organization = get_object_or_404(
+        Organization,
+        id=serializer.validated_data["organization_id"],
+    )
+    try:
+        payload = get_organization_publication_detail(
+            actor=request.user,
+            organization=organization,
+            fact_check_id=fact_check_id,
+        )
+    except (
+        OrganizationPublicationAuthorizationError,
+        OrganizationPublicationNotFound,
+    ) as error:
+        return _organization_publication_error_response(error)
+    return Response(
+        OrganizationPublicationDetailSerializer(payload).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+def _editorial_revision_queryset(organization):
+    return OfficialFactCheck.objects.filter(
+        organization=organization,
+        revision_kind=OfficialFactCheck.RevisionKind.EDITORIAL_REVISION,
+        supersedes__isnull=False,
+    ).select_related("supersedes")
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def editorial_revision_draft_create(request, predecessor_id):
+    serializer = EditorialRevisionDraftCreateSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    predecessor = get_object_or_404(
+        OfficialFactCheck.objects.filter(organization=organization),
+        id=predecessor_id,
+    )
+    try:
+        revision = create_editorial_revision_draft(
+            predecessor_id=predecessor.id,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_predecessor_version=data["expected_predecessor_version"],
+            expected_decision_revision=data["expected_decision_revision"],
+            revision_reason=data["revision_reason"],
+            headline=data.get("headline"),
+            summary=data.get("summary"),
+            article_body=data.get("article_body"),
+            source_urls=data.get("source_urls") if "source_urls" in data else None,
+        )
+    except PublishingError as error:
+        return _publishing_error_response(error)
+    response = _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=revision,
+        workflow_kind="EDITORIAL_REVISION",
+    )
+    response.status_code = status.HTTP_201_CREATED
+    return response
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def editorial_revision_draft_update(request, revision_id):
+    serializer = FactCheckDraftUpdateSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    revision = get_object_or_404(
+        _editorial_revision_queryset(organization), id=revision_id
+    )
+    try:
+        revision = update_fact_check_draft(
+            fact_check=revision,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_edit_generation=data["expected_edit_generation"],
+            expected_decision_revision=data["expected_decision_revision"],
+            headline=data.get("headline"),
+            summary=data.get("summary"),
+            article_body=data.get("article_body"),
+            source_urls=data["source_urls"] if "source_urls" in data else None,
+        )
+    except PublishingError as error:
+        return _publishing_error_response(error)
+    return _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=revision,
+        workflow_kind="EDITORIAL_REVISION",
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def editorial_revision_submit(request, revision_id):
+    serializer = FactCheckTransitionSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    revision = get_object_or_404(
+        _editorial_revision_queryset(organization), id=revision_id
+    )
+    try:
+        revision = submit_fact_check_for_review(
+            fact_check=revision,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_edit_generation=data["expected_edit_generation"],
+            expected_decision_revision=data["expected_decision_revision"],
+        )
+    except PublishingError as error:
+        return _publishing_error_response(error)
+    return _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=revision,
+        workflow_kind="EDITORIAL_REVISION",
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def editorial_revision_return_for_rework(request, revision_id):
+    serializer = FactCheckRecoverySerializer(data=request.data)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    revision = get_object_or_404(
+        _editorial_revision_queryset(organization), id=revision_id
+    )
+    try:
+        revision = return_editorial_revision_for_rework(
+            revision=revision,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_edit_generation=data["expected_edit_generation"],
+            reason=data["reason"],
+        )
+    except PublishingError as error:
+        return _publishing_error_response(error)
+    return _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=revision,
+        workflow_kind="EDITORIAL_REVISION",
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def editorial_revision_abandon(request, revision_id):
+    serializer = FactCheckRecoverySerializer(data=request.data)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    revision = get_object_or_404(
+        _editorial_revision_queryset(organization), id=revision_id
+    )
+    try:
+        revision = abandon_editorial_revision_draft(
+            revision=revision,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_edit_generation=data["expected_edit_generation"],
+            reason=data["reason"],
+        )
+    except PublishingError as error:
+        return _publishing_error_response(error)
+    return _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=revision,
+        workflow_kind="EDITORIAL_REVISION",
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def editorial_revision_publish(request, revision_id):
+    serializer = EditorialRevisionPublishSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    revision = get_object_or_404(
+        _editorial_revision_queryset(organization), id=revision_id
+    )
+    try:
+        result = publish_editorial_revision(
+            revision_id=revision.id,
+            predecessor_id=revision.supersedes_id,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_predecessor_version=data["expected_predecessor_version"],
+            expected_revision_version=data["expected_revision_version"],
+            expected_edit_generation=data["expected_edit_generation"],
+            expected_decision_revision=data["expected_decision_revision"],
+        )
+    except PublishingError as error:
+        return _publishing_error_response(error)
+    payload = get_organization_publication_detail(
+        actor=request.user,
+        organization=organization,
+        fact_check_id=result["fact_check"].id,
+    )
+    return Response(
+        OrganizationPublicationDetailSerializer(payload).data,
         status=status.HTTP_200_OK,
     )
 

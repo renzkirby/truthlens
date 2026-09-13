@@ -1,7 +1,7 @@
 """Read-only organization-scoped projections for publication work."""
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 
 from .evidence_snapshot_schema import (
     EvidenceSnapshotSchemaError,
@@ -35,6 +35,9 @@ RESOURCE_ELIGIBLE_CLAIM = "ELIGIBLE_CLAIM"
 RESOURCE_FACT_CHECK = "FACT_CHECK"
 QUEUE_DRAFTING = "DRAFTING"
 QUEUE_REVIEW = "REVIEW"
+WORKFLOW_INITIAL = OfficialFactCheck.RevisionKind.INITIAL
+WORKFLOW_EDITORIAL_REVISION = OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
+WORKFLOW_ALL = "ALL"
 
 SOURCE_ORIGIN_BY_TYPE = {
     OfficialFactCheckSource.SourceType.VERIFIED_EVIDENCE: "DECISION_EVIDENCE",
@@ -105,7 +108,7 @@ def _valid_decision_snapshot(decision):
     return snapshot, records
 
 
-def _sealed_evidence_payload(decision):
+def sealed_evidence_payload(decision):
     snapshot, records = _valid_decision_snapshot(decision)
     if snapshot is None or records is None:
         return None
@@ -161,6 +164,13 @@ def _assignment_conflict(decision):
     )
 
 
+def _open_assignment_exists(decision):
+    return VerificationAssignment.objects.filter(
+        claim_id=decision.claim_id,
+        status__in=OPEN_ASSIGNMENT_STATUSES,
+    ).exists()
+
+
 def _decision_blockers(decision):
     blockers = []
     if not decision.is_current:
@@ -196,7 +206,7 @@ def _decision_blockers(decision):
     return blockers
 
 
-def _source_payloads(fact_check):
+def publication_source_payloads(fact_check):
     sources = []
     for source in fact_check.source_items.all():
         links = list(source.evidence_links.all())
@@ -239,7 +249,7 @@ def _article_ready(fact_check):
 
 def _fact_check_blockers(fact_check):
     blockers = _decision_blockers(fact_check.adjudication_decision)
-    sources = _source_payloads(fact_check)
+    sources = publication_source_payloads(fact_check)
     if any(
         source["source_type"]
         == OfficialFactCheckSource.SourceType.VERIFIED_EVIDENCE
@@ -260,6 +270,43 @@ def _fact_check_blockers(fact_check):
                 "required before review or publication.",
             )
         )
+    if fact_check.revision_kind == WORKFLOW_EDITORIAL_REVISION:
+        predecessor = fact_check.supersedes
+        if (
+            predecessor is None
+            or predecessor.publication_status
+            != OfficialFactCheck.PublicationStatus.PUBLISHED
+        ):
+            blockers.append(
+                _blocker(
+                    "ACTIVE_PUBLICATION_WORK_EXISTS",
+                    "The editorial revision predecessor is no longer the current "
+                    "published fact-check.",
+                )
+            )
+        elif (
+            predecessor.claim_id != fact_check.claim_id
+            or predecessor.organization_id != fact_check.organization_id
+            or predecessor.adjudication_decision_id
+            != fact_check.adjudication_decision_id
+        ):
+            blockers.append(
+                _blocker(
+                    "INVALID_PUBLICATION_STATE",
+                    "The editorial revision no longer matches its predecessor.",
+                )
+            )
+        if (
+            _open_assignment_exists(fact_check.adjudication_decision)
+            and "ASSIGNMENT_CONFLICT" not in _blocking_codes(blockers)
+        ):
+            blockers.append(
+                _blocker(
+                    "ASSIGNMENT_CONFLICT",
+                    "Open verification work must be resolved before editorial "
+                    "revision work can continue.",
+                )
+            )
     return blockers
 
 
@@ -287,6 +334,8 @@ def _fact_check_actions(actor, organization, fact_check, blockers):
             "STALE_DECISION_REVISION",
             "ASSIGNMENT_CONFLICT",
             "ACTIVE_CORRECTION_RESERVATION",
+            "ACTIVE_PUBLICATION_WORK_EXISTS",
+            "INVALID_PUBLICATION_STATE",
         }
     )
     actions = []
@@ -309,7 +358,11 @@ def _fact_check_actions(actor, organization, fact_check, blockers):
         if can_publish and not stale_or_reserved:
             actions.append("RETURN_FOR_REWORK")
             if "PUBLICATION_NOT_READY" not in codes:
-                actions.append("PUBLISH")
+                actions.append(
+                    "PUBLISH_REPLACEMENT"
+                    if fact_check.revision_kind == WORKFLOW_EDITORIAL_REVISION
+                    else "PUBLISH"
+                )
     return actions
 
 
@@ -320,6 +373,29 @@ def _concurrency_payload(fact_check, decision):
         ),
         "article_version": fact_check.version if fact_check is not None else None,
         "decision_revision": decision.revision_number,
+        "predecessor_version": (
+            fact_check.supersedes.version
+            if fact_check is not None and fact_check.supersedes_id is not None
+            else None
+        ),
+    }
+
+
+def _revision_payload(fact_check):
+    if fact_check.revision_kind != WORKFLOW_EDITORIAL_REVISION:
+        return None
+    predecessor = fact_check.supersedes
+    return {
+        "kind": WORKFLOW_EDITORIAL_REVISION,
+        "reason": fact_check.revision_reason,
+        "requested_by": _actor_payload(fact_check.revision_requested_by),
+        "requested_at": fact_check.revision_requested_at,
+        "predecessor": {
+            "id": str(predecessor.id),
+            "version": predecessor.version,
+            "headline": predecessor.headline,
+            "published_at": predecessor.published_at,
+        },
     }
 
 
@@ -329,6 +405,7 @@ def _eligible_claim_list_item(actor, organization, decision, *, blockers=None):
         "resource_type": RESOURCE_ELIGIBLE_CLAIM,
         "resource_id": str(decision.claim_id),
         "workflow_kind": OfficialFactCheck.RevisionKind.INITIAL,
+        "revision": None,
         "fact_check_id": None,
         "organization": _organization_payload(organization),
         "claim": _claim_payload(decision.claim),
@@ -359,7 +436,12 @@ def _fact_check_list_item(actor, organization, fact_check):
     return {
         "resource_type": RESOURCE_FACT_CHECK,
         "resource_id": str(fact_check.id),
-        "workflow_kind": OfficialFactCheck.RevisionKind.INITIAL,
+        "workflow_kind": (
+            WORKFLOW_EDITORIAL_REVISION
+            if fact_check.revision_kind == WORKFLOW_EDITORIAL_REVISION
+            else WORKFLOW_INITIAL
+        ),
+        "revision": _revision_payload(fact_check),
         "fact_check_id": str(fact_check.id),
         "organization": _organization_payload(organization),
         "claim": _claim_payload(fact_check.claim),
@@ -395,12 +477,38 @@ def _fact_check_list_item(actor, organization, fact_check):
     }
 
 
-def _fact_check_queryset(organization):
-    return (
-        OfficialFactCheck.initial_workflow_queryset()
-        .filter(
-            organization=organization,
+def _fact_check_queryset(organization, workflow_kind=WORKFLOW_INITIAL):
+    if workflow_kind == WORKFLOW_INITIAL:
+        queryset = OfficialFactCheck.initial_workflow_queryset()
+    elif workflow_kind == WORKFLOW_EDITORIAL_REVISION:
+        queryset = OfficialFactCheck.objects.filter(
+            revision_kind=WORKFLOW_EDITORIAL_REVISION,
+            supersedes__isnull=False,
+            claim__isnull=False,
+            adjudication_decision__isnull=False,
+            organization__isnull=False,
         )
+    elif workflow_kind == WORKFLOW_ALL:
+        queryset = OfficialFactCheck.objects.filter(
+            (
+                (
+                    Q(revision_kind=WORKFLOW_INITIAL)
+                    | Q(revision_kind__isnull=True)
+                )
+                & Q(supersedes__isnull=True)
+                | Q(
+                    revision_kind=WORKFLOW_EDITORIAL_REVISION,
+                    supersedes__isnull=False,
+                )
+            ),
+            claim__isnull=False,
+            adjudication_decision__isnull=False,
+            organization__isnull=False,
+        )
+    else:
+        raise PublicationWorkflowNotFound("Publication workflow kind not found.")
+    return (
+        queryset.filter(organization=organization)
         .select_related(
             "organization",
             "claim",
@@ -410,6 +518,8 @@ def _fact_check_queryset(organization):
             "drafted_by",
             "reviewed_by",
             "published_by",
+            "revision_requested_by",
+            "supersedes",
         )
         .prefetch_related(
             Prefetch(
@@ -494,10 +604,18 @@ def _require_queue_capability(actor, organization, queue):
         )
 
 
-def list_publication_work_items(*, actor, organization, queue, limit, offset):
+def list_publication_work_items(
+    *,
+    actor,
+    organization,
+    queue,
+    limit,
+    offset,
+    workflow_kind=WORKFLOW_INITIAL,
+):
     _require_queue_capability(actor, organization, queue)
     active_fact_checks = list(
-        _fact_check_queryset(organization).filter(
+        _fact_check_queryset(organization, workflow_kind).filter(
             publication_status__in={
                 OfficialFactCheck.PublicationStatus.DRAFT,
                 OfficialFactCheck.PublicationStatus.IN_REVIEW,
@@ -525,18 +643,19 @@ def list_publication_work_items(*, actor, organization, queue, limit, offset):
             _fact_check_list_item(actor, organization, fact_check)
             for fact_check in active_fact_checks
         ]
-        for decision in _current_decision_queryset(organization):
-            blockers = _eligible_claim_blockers(decision)
-            if blockers is None:
-                continue
-            items.append(
-                _eligible_claim_list_item(
-                    actor,
-                    organization,
-                    decision,
-                    blockers=blockers,
+        if workflow_kind in {WORKFLOW_INITIAL, WORKFLOW_ALL}:
+            for decision in _current_decision_queryset(organization):
+                blockers = _eligible_claim_blockers(decision)
+                if blockers is None:
+                    continue
+                items.append(
+                    _eligible_claim_list_item(
+                        actor,
+                        organization,
+                        decision,
+                        blockers=blockers,
+                    )
                 )
-            )
         status_rank = {
             OfficialFactCheck.PublicationStatus.DRAFT: 0,
             OfficialFactCheck.PublicationStatus.IN_REVIEW: 1,
@@ -600,7 +719,7 @@ def _eligible_claim_detail(actor, organization, claim_id):
             "archived_at": None,
             "created_at": None,
             "updated_at": None,
-            "sealed_evidence": _sealed_evidence_payload(decision),
+            "sealed_evidence": sealed_evidence_payload(decision),
             "blockers": blockers,
         }
     )
@@ -609,7 +728,7 @@ def _eligible_claim_detail(actor, organization, claim_id):
 
 def _fact_check_detail(actor, organization, fact_check):
     item = _fact_check_list_item(actor, organization, fact_check)
-    source_items = _source_payloads(fact_check)
+    source_items = publication_source_payloads(fact_check)
     item.update(
         {
             "article": {
@@ -642,7 +761,7 @@ def _fact_check_detail(actor, organization, fact_check):
             "archived_at": fact_check.archived_at,
             "created_at": fact_check.created_at,
             "updated_at": fact_check.updated_at,
-            "sealed_evidence": _sealed_evidence_payload(
+            "sealed_evidence": sealed_evidence_payload(
                 fact_check.adjudication_decision
             ),
         }
@@ -651,18 +770,29 @@ def _fact_check_detail(actor, organization, fact_check):
 
 
 def get_publication_work_item_detail(
-    *, actor, organization, resource_type, resource_id
+    *,
+    actor,
+    organization,
+    resource_type,
+    resource_id,
+    workflow_kind=WORKFLOW_INITIAL,
 ):
     if resource_type not in {RESOURCE_ELIGIBLE_CLAIM, RESOURCE_FACT_CHECK}:
         raise PublicationWorkflowNotFound("Publication work item not found.")
     fact_check = None
     if resource_type == RESOURCE_ELIGIBLE_CLAIM:
+        if workflow_kind == WORKFLOW_EDITORIAL_REVISION:
+            raise PublicationWorkflowNotFound("Publication work item not found.")
         if not _current_decision_queryset(organization).filter(
             claim_id=resource_id
         ).exists():
             raise PublicationWorkflowNotFound("Publication work item not found.")
     else:
-        fact_check = _fact_check_queryset(organization).filter(id=resource_id).first()
+        fact_check = (
+            _fact_check_queryset(organization, workflow_kind)
+            .filter(id=resource_id)
+            .first()
+        )
         if fact_check is None:
             raise PublicationWorkflowNotFound("Publication work item not found.")
 
