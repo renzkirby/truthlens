@@ -128,6 +128,7 @@ def get_adjudication_case_queue(
             case_type=ModerationCase.CaseType.ADJUDICATION,
             organization=organization,
             claim__isnull=False,
+            factual_correction_request__isnull=True,
         )
         .select_related("claim")
         .only(
@@ -277,6 +278,7 @@ def get_adjudication_case_detail(
             case_type=ModerationCase.CaseType.ADJUDICATION,
             organization=organization,
             claim__isnull=False,
+            factual_correction_request__isnull=True,
         )
         .first()
     )

@@ -213,12 +213,31 @@ class OrganizationPublicationsApiTests(PublicationWorkflowFixtures, TestCase):
         self.assertEqual(superseded.status_code, status.HTTP_200_OK)
         self.assertEqual(superseded.data["history_state"], "SUPERSEDED")
         self.assertEqual(superseded.data["current_publication_id"], str(current.id))
+        superseded_correction = superseded.data["factual_correction_workflow"]
+        self.assertNotIn(
+            "REQUEST_FACTUAL_CORRECTION",
+            superseded_correction["allowed_actions"],
+        )
+        self.assertIn(
+            "HISTORICAL_PUBLICATION",
+            {
+                item["code"]
+                for item in superseded_correction["blockers"][
+                    "REQUEST_FACTUAL_CORRECTION"
+                ]
+            },
+        )
+        self.assertEqual(superseded.data["blockers"], [])
         current_detail = self.client_for(self.lead).get(self.detail_url(current))
         self.assertEqual(current_detail.data["history_state"], "CURRENT")
         self.assertEqual(current_detail.data["record_state"], "SEALED")
         self.assertEqual(
             current_detail.data["allowed_actions"],
             ["CREATE_EDITORIAL_REVISION"],
+        )
+        self.assertIn(
+            "REQUEST_FACTUAL_CORRECTION",
+            current_detail.data["factual_correction_workflow"]["allowed_actions"],
         )
         lineage_ids = {
             item["publication_id"] for item in current_detail.data["lineage"]
@@ -239,6 +258,10 @@ class OrganizationPublicationsApiTests(PublicationWorkflowFixtures, TestCase):
         self.assertEqual(sealed_detail.data["record_state"], "SEALED")
         self.assertEqual(
             sealed_detail.data["allowed_actions"], ["CREATE_EDITORIAL_REVISION"]
+        )
+        self.assertIn(
+            "REQUEST_FACTUAL_CORRECTION",
+            sealed_detail.data["factual_correction_workflow"]["allowed_actions"],
         )
 
         legacy_context = self.decided_context(suffix="library-legacy")
@@ -261,6 +284,19 @@ class OrganizationPublicationsApiTests(PublicationWorkflowFixtures, TestCase):
         legacy_detail = self.client_for(self.lead).get(self.detail_url(legacy))
         self.assertEqual(legacy_detail.data["record_state"], "LEGACY_UNSEALED")
         self.assertEqual(legacy_detail.data["allowed_actions"], [])
+        self.assertNotIn(
+            "REQUEST_FACTUAL_CORRECTION",
+            legacy_detail.data["factual_correction_workflow"]["allowed_actions"],
+        )
+        self.assertIn(
+            "PUBLICATION_NOT_READY",
+            {
+                item["code"]
+                for item in legacy_detail.data["factual_correction_workflow"][
+                    "blockers"
+                ]["REQUEST_FACTUAL_CORRECTION"]
+            },
+        )
 
         invalid = self.make_published(suffix="library-invalid")
         payload = deepcopy(invalid["published"].publication_snapshot.payload)
@@ -273,6 +309,19 @@ class OrganizationPublicationsApiTests(PublicationWorkflowFixtures, TestCase):
         )
         self.assertEqual(invalid_detail.data["record_state"], "INVALID_SEAL")
         self.assertEqual(invalid_detail.data["allowed_actions"], [])
+        self.assertNotIn(
+            "REQUEST_FACTUAL_CORRECTION",
+            invalid_detail.data["factual_correction_workflow"]["allowed_actions"],
+        )
+        self.assertIn(
+            "PUBLICATION_NOT_READY",
+            {
+                item["code"]
+                for item in invalid_detail.data["factual_correction_workflow"][
+                    "blockers"
+                ]["REQUEST_FACTUAL_CORRECTION"]
+            },
+        )
 
     def test_active_correction_and_active_revision_remove_create_action(self):
         correction = self.make_published(suffix="library-correction-reservation")

@@ -3008,6 +3008,108 @@ class OrganizationPublicationDetailQuerySerializer(serializers.Serializer):
     organization_id = serializers.UUIDField()
 
 
+class FactualCorrectionCollectionQuerySerializer(serializers.Serializer):
+    organization_id = serializers.UUIDField()
+    status = serializers.ChoiceField(
+        choices=["ACTIVE", "COMPLETED", "CANCELLED", "ALL"],
+        default="ACTIVE",
+    )
+    limit = serializers.IntegerField(default=20, min_value=1, max_value=100)
+    offset = serializers.IntegerField(default=0, min_value=0)
+
+
+class FactualCorrectionDetailQuerySerializer(serializers.Serializer):
+    organization_id = serializers.UUIDField()
+
+
+class FactualCorrectionRequestMutationSerializer(serializers.Serializer):
+    organization_id = serializers.UUIDField()
+    expected_predecessor_version = serializers.IntegerField(min_value=1)
+    expected_decision_revision = serializers.IntegerField(min_value=1)
+    correction_reason = serializers.CharField(
+        max_length=2000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+
+class FactualCorrectionEvidenceReviewSerializer(serializers.Serializer):
+    organization_id = serializers.UUIDField()
+    evidence_status = serializers.ChoiceField(
+        choices=[
+            EvidenceSubmission.EvidenceStatus.VERIFIED,
+            EvidenceSubmission.EvidenceStatus.REJECTED,
+        ]
+    )
+    expected_evidence_status = serializers.ChoiceField(
+        choices=EvidenceSubmission.EvidenceStatus.values
+    )
+    expected_case_id = serializers.UUIDField(required=False, allow_null=True)
+    moderator_notes = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        max_length=2000,
+        default="",
+    )
+    rejection_reason = serializers.ChoiceField(
+        choices=EvidenceSubmission.RejectionReason.values,
+        required=False,
+        allow_null=True,
+    )
+    expected_predecessor_version = serializers.IntegerField(min_value=1)
+    expected_decision_revision = serializers.IntegerField(min_value=1)
+
+
+class FactualCorrectionProposalSaveSerializer(serializers.Serializer):
+    organization_id = serializers.UUIDField()
+    expected_proposal_version = serializers.IntegerField(min_value=0)
+    expected_predecessor_version = serializers.IntegerField(min_value=1)
+    expected_decision_revision = serializers.IntegerField(min_value=1)
+    proposed_verdict = serializers.ChoiceField(
+        choices=AdjudicationDecision.Verdict.values
+    )
+    proposed_canonical_claim = serializers.CharField(
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    proposed_rationale = serializers.CharField(
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    headline = serializers.CharField(
+        max_length=300,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    summary = serializers.CharField(allow_blank=False, trim_whitespace=True)
+    article_body = serializers.CharField(allow_blank=False, trim_whitespace=True)
+    source_urls = serializers.ListField(
+        child=serializers.URLField(max_length=2000),
+        allow_empty=False,
+    )
+    verification_run_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+class FactualCorrectionConcurrencyMutationSerializer(serializers.Serializer):
+    organization_id = serializers.UUIDField()
+    expected_proposal_version = serializers.IntegerField(min_value=1)
+    expected_predecessor_version = serializers.IntegerField(min_value=1)
+    expected_decision_revision = serializers.IntegerField(min_value=1)
+
+
+class FactualCorrectionCancelSerializer(serializers.Serializer):
+    organization_id = serializers.UUIDField()
+    expected_proposal_version = serializers.IntegerField(min_value=0)
+    expected_predecessor_version = serializers.IntegerField(min_value=1)
+    expected_decision_revision = serializers.IntegerField(min_value=1)
+    cancellation_reason = serializers.CharField(
+        max_length=2000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+
 class OrganizationPublicationClaimSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     canonical_claim = serializers.CharField(allow_blank=True)
@@ -3113,6 +3215,21 @@ class OrganizationPublicationDetailConcurrencySerializer(serializers.Serializer)
     decision_revision = serializers.IntegerField(min_value=1)
 
 
+class FactualCorrectionConcurrencySerializer(serializers.Serializer):
+    expected_predecessor_version = serializers.IntegerField(min_value=1)
+    expected_decision_revision = serializers.IntegerField(min_value=1)
+    expected_proposal_version = serializers.IntegerField(min_value=0)
+
+
+class FactualCorrectionPublicationWorkflowSerializer(serializers.Serializer):
+    active_request_id = serializers.UUIDField(allow_null=True)
+    allowed_actions = serializers.ListField(child=serializers.CharField())
+    blockers = serializers.DictField(
+        child=serializers.ListField(child=PublicationWorkflowBlockerSerializer())
+    )
+    concurrency = FactualCorrectionConcurrencySerializer()
+
+
 class OrganizationPublicationDetailSerializer(serializers.Serializer):
     selected_publication_id = serializers.UUIDField()
     current_publication_id = serializers.UUIDField()
@@ -3135,6 +3252,165 @@ class OrganizationPublicationDetailSerializer(serializers.Serializer):
     concurrency = OrganizationPublicationDetailConcurrencySerializer()
     allowed_actions = serializers.ListField(child=serializers.CharField())
     blockers = PublicationWorkflowBlockerSerializer(many=True)
+    factual_correction_workflow = FactualCorrectionPublicationWorkflowSerializer()
+
+
+class FactualCorrectionRequestReadSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    status = serializers.ChoiceField(choices=["ACTIVE", "COMPLETED", "CANCELLED"])
+    correction_reason = serializers.CharField()
+    requested_at = serializers.DateTimeField()
+    requested_by = PublicationWorkflowActorSerializer()
+    updated_at = serializers.DateTimeField()
+
+
+class FactualCorrectionPredecessorPublicationSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    version = serializers.IntegerField(min_value=1)
+    headline = serializers.CharField(allow_blank=True)
+    summary = serializers.CharField(allow_blank=True)
+    publication_status = serializers.CharField()
+    revision_kind = serializers.CharField(allow_null=True)
+    published_at = serializers.DateTimeField(allow_null=True)
+
+
+class FactualCorrectionCaseSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    status = serializers.CharField()
+    priority = serializers.CharField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+    resolved_at = serializers.DateTimeField(allow_null=True)
+    resolved_by = PublicationWorkflowActorSerializer(allow_null=True)
+    resolution_code = serializers.CharField(allow_blank=True, allow_null=True)
+    resolution_summary = serializers.CharField(allow_blank=True, allow_null=True)
+
+
+class FactualCorrectionReviewProvenanceSerializer(serializers.Serializer):
+    review_event_id = serializers.UUIDField()
+    evidence_case_id = serializers.UUIDField()
+    reviewed_by = PublicationWorkflowActorSerializer(allow_null=True)
+    reviewed_at = serializers.DateTimeField()
+    previous_evidence_status = serializers.CharField(allow_null=True)
+    new_evidence_status = serializers.CharField(allow_null=True)
+    is_reaffirmation = serializers.BooleanField()
+    moderator_notes = serializers.CharField(allow_blank=True, allow_null=True)
+    rejection_reason = serializers.CharField(allow_blank=True, allow_null=True)
+
+
+class FactualCorrectionEvidenceItemSerializer(serializers.Serializer):
+    evidence_id = serializers.UUIDField()
+    evidence_case_id = serializers.UUIDField(allow_null=True)
+    evidence_caption = serializers.CharField(allow_blank=True, allow_null=True)
+    evidence_url = serializers.CharField(allow_blank=True, allow_null=True)
+    evidence_type = serializers.CharField(allow_blank=True, allow_null=True)
+    evidence_status = serializers.CharField()
+    moderator_notes = serializers.CharField(allow_blank=True, allow_null=True)
+    rejection_reason = serializers.CharField(allow_blank=True, allow_null=True)
+    submitted_at = serializers.DateTimeField()
+    contributor = PublicationWorkflowActorSerializer()
+    correction_review = FactualCorrectionReviewProvenanceSerializer(allow_null=True)
+    has_qualifying_correction_review = serializers.BooleanField()
+    is_reaffirmation = serializers.BooleanField()
+    allowed_actions = serializers.ListField(child=serializers.CharField())
+
+
+class FactualCorrectionEvidenceProjectionSerializer(serializers.Serializer):
+    count = serializers.IntegerField(min_value=0)
+    reviewed_count = serializers.IntegerField(min_value=0)
+    is_complete = serializers.BooleanField()
+    has_active_evidence_case = serializers.BooleanField()
+    items = FactualCorrectionEvidenceItemSerializer(many=True)
+
+
+class FactualCorrectionProposalReadSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    status = serializers.ChoiceField(choices=["DRAFT", "PREPARED"])
+    version = serializers.IntegerField(min_value=1)
+    proposed_verdict = serializers.CharField()
+    proposed_canonical_claim = serializers.CharField()
+    proposed_rationale = serializers.CharField()
+    headline = serializers.CharField()
+    summary = serializers.CharField()
+    article_body = serializers.CharField()
+    source_urls = serializers.ListField(child=serializers.URLField())
+    verification_run_id = serializers.UUIDField(allow_null=True)
+    prepared_by = PublicationWorkflowActorSerializer(allow_null=True)
+    prepared_at = serializers.DateTimeField(allow_null=True)
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class FactualCorrectionDetailSerializer(serializers.Serializer):
+    workflow_kind = serializers.ChoiceField(choices=["FACTUAL_CORRECTION"])
+    request = FactualCorrectionRequestReadSerializer()
+    organization = PublicationWorkflowOrganizationSerializer()
+    claim = PublicationWorkflowClaimSerializer()
+    predecessor_publication = FactualCorrectionPredecessorPublicationSerializer()
+    predecessor_decision = PublicationWorkflowDecisionSerializer()
+    current_decision = PublicationWorkflowDecisionSerializer(allow_null=True)
+    completed_publication = FactualCorrectionPredecessorPublicationSerializer(
+        allow_null=True
+    )
+    sealed_predecessor_evidence = PublicationWorkflowSealedEvidenceSerializer(
+        allow_null=True
+    )
+    correction_case = FactualCorrectionCaseSerializer()
+    evidence_review = FactualCorrectionEvidenceProjectionSerializer()
+    proposal = FactualCorrectionProposalReadSerializer(allow_null=True)
+    stage = serializers.ChoiceField(
+        choices=[
+            "EVIDENCE_REVIEW",
+            "PROPOSAL_DRAFT",
+            "PREPARED",
+            "COMPLETED",
+            "CANCELLED",
+        ]
+    )
+    allowed_actions = serializers.ListField(child=serializers.CharField())
+    blockers = serializers.DictField(
+        child=serializers.ListField(child=PublicationWorkflowBlockerSerializer())
+    )
+    concurrency = FactualCorrectionConcurrencySerializer()
+
+
+class FactualCorrectionQueueItemSerializer(serializers.Serializer):
+    request_id = serializers.UUIDField()
+    request_status = serializers.ChoiceField(
+        choices=["ACTIVE", "COMPLETED", "CANCELLED"]
+    )
+    workflow_kind = serializers.ChoiceField(choices=["FACTUAL_CORRECTION"])
+    stage = serializers.ChoiceField(
+        choices=[
+            "EVIDENCE_REVIEW",
+            "PROPOSAL_DRAFT",
+            "PREPARED",
+            "COMPLETED",
+            "CANCELLED",
+        ]
+    )
+    correction_reason = serializers.CharField()
+    requested_at = serializers.DateTimeField()
+    requested_by = PublicationWorkflowActorSerializer()
+    claim = PublicationWorkflowClaimSerializer()
+    predecessor_publication = FactualCorrectionPredecessorPublicationSerializer()
+    predecessor_decision = PublicationWorkflowDecisionSerializer()
+    current_decision = PublicationWorkflowDecisionSerializer(allow_null=True)
+    completed_publication = FactualCorrectionPredecessorPublicationSerializer(
+        allow_null=True
+    )
+    correction_case = FactualCorrectionCaseSerializer()
+    proposal = FactualCorrectionProposalReadSerializer(allow_null=True)
+    allowed_actions = serializers.ListField(child=serializers.CharField())
+    concurrency = FactualCorrectionConcurrencySerializer()
+
+
+class FactualCorrectionPageSerializer(serializers.Serializer):
+    count = serializers.IntegerField(min_value=0)
+    limit = serializers.IntegerField(min_value=1)
+    offset = serializers.IntegerField(min_value=0)
+    organization = PublicationWorkflowOrganizationSerializer()
+    results = FactualCorrectionQueueItemSerializer(many=True)
 
 
 class OfficialFactCheckSourceSerializer(serializers.ModelSerializer):

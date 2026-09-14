@@ -7,6 +7,7 @@ from django.utils import timezone
 from .models import (
     Claim,
     EvidenceSubmission,
+    FactualCorrectionProposal,
     FactualCorrectionRequest,
     ModerationCase,
     ModerationEvent,
@@ -497,6 +498,19 @@ def review_correction_evidence(
         ):
             raise EvidenceReviewConflict(
                 "The factual correction request is no longer active."
+            )
+
+        proposal = (
+            FactualCorrectionProposal.objects.select_for_update(of=("self",))
+            .filter(correction_request=correction_request)
+            .first()
+        )
+        if (
+            proposal is not None
+            and proposal.status == FactualCorrectionProposal.Status.PREPARED
+        ):
+            raise EvidenceReviewConflict(
+                "Correction evidence is frozen after proposal preparation."
             )
 
         decision = context["decision"]

@@ -283,6 +283,64 @@ urlpatterns = [
         name="organization_publication_detail",
     ),
     path(
+        "moderation/publications/factual-corrections/",
+        views.factual_correction_collection,
+        name="factual_correction_collection",
+    ),
+    path(
+        "moderation/publications/factual-corrections/<uuid:request_id>/",
+        views.factual_correction_detail,
+        name="factual_correction_detail",
+    ),
+    path(
+        (
+            "moderation/publications/<uuid:predecessor_id>/"
+            "factual-corrections/request/"
+        ),
+        views.factual_correction_request_create,
+        name="factual_correction_request_create",
+    ),
+    path(
+        (
+            "moderation/publications/factual-corrections/"
+            "<uuid:request_id>/evidence/<uuid:evidence_id>/review/"
+        ),
+        views.factual_correction_evidence_review,
+        name="factual_correction_evidence_review",
+    ),
+    path(
+        (
+            "moderation/publications/factual-corrections/"
+            "<uuid:request_id>/proposal/"
+        ),
+        views.factual_correction_proposal_save,
+        name="factual_correction_proposal_save",
+    ),
+    path(
+        (
+            "moderation/publications/factual-corrections/"
+            "<uuid:request_id>/proposal/prepare/"
+        ),
+        views.factual_correction_proposal_prepare,
+        name="factual_correction_proposal_prepare",
+    ),
+    path(
+        (
+            "moderation/publications/factual-corrections/"
+            "<uuid:request_id>/publish/"
+        ),
+        views.factual_correction_publish,
+        name="factual_correction_publish",
+    ),
+    path(
+        (
+            "moderation/publications/factual-corrections/"
+            "<uuid:request_id>/cancel/"
+        ),
+        views.factual_correction_cancel,
+        name="factual_correction_cancel",
+    ),
+    path(
         (
             "moderation/publications/<uuid:predecessor_id>/"
             "editorial-revisions/draft/"

@@ -10,11 +10,14 @@ from .evidence_snapshot_schema import (
 )
 from .models import (
     FactualCorrectionRequest,
+    ModerationCase,
     OfficialFactCheck,
     OfficialFactCheckSource,
     VerificationAssignment,
 )
 from .organization_service import PartnerCapability, has_capability
+from .factual_correction_query_service import can_access_factual_corrections
+from .moderation_service import ACTIVE_CASE_STATUSES
 from .publication_snapshot_schema import (
     EDITORIAL_REVISION_SCHEMA_VERSION,
     FACTUAL_CORRECTION_SCHEMA_VERSION,
@@ -337,15 +340,26 @@ def _lineage_item(fact_check, current_id):
     }
 
 
-def _action_context(current_items):
+def _action_context(current_items, *, include_correction_details=False):
     claim_ids = {item.claim_id for item in current_items}
+    correction_queryset = FactualCorrectionRequest.objects.filter(
+        claim_id__in=claim_ids,
+        status=FactualCorrectionRequest.Status.ACTIVE,
+    )
+    if include_correction_details:
+        active_corrections = {
+            item.claim_id: item
+            for item in correction_queryset.select_related(
+                "moderation_case",
+                "proposal",
+            )
+        }
+    else:
+        active_corrections = set(
+            correction_queryset.values_list("claim_id", flat=True)
+        )
     return {
-        "active_corrections": set(
-            FactualCorrectionRequest.objects.filter(
-                claim_id__in=claim_ids,
-                status=FactualCorrectionRequest.Status.ACTIVE,
-            ).values_list("claim_id", flat=True)
-        ),
+        "active_corrections": active_corrections,
         "active_work": set(
             OfficialFactCheck.objects.filter(
                 claim_id__in=claim_ids,
@@ -361,6 +375,142 @@ def _action_context(current_items):
                 status__in=OPEN_ASSIGNMENT_STATUSES,
             ).values_list("claim_id", flat=True)
         ),
+        "active_adjudication": set(
+            ModerationCase.objects.filter(
+                claim_id__in=claim_ids,
+                case_type=ModerationCase.CaseType.ADJUDICATION,
+                status__in=ACTIVE_CASE_STATUSES,
+                factual_correction_request__isnull=True,
+            ).values_list("claim_id", flat=True)
+        ),
+    }
+
+
+def _active_correction_proposal(request):
+    if request is None:
+        return None
+    try:
+        return request.proposal
+    except ObjectDoesNotExist:
+        return None
+
+
+def _factual_correction_workflow(
+    *,
+    actor,
+    organization,
+    current,
+    selected_is_current,
+    record_state,
+    lineage_valid,
+    lineage_records_sealed,
+    action_context,
+):
+    active_request = action_context["active_corrections"].get(current.claim_id)
+    proposal = _active_correction_proposal(active_request)
+    concurrency = {
+        "expected_predecessor_version": current.version,
+        "expected_decision_revision": current.adjudication_decision.revision_number,
+        "expected_proposal_version": proposal.version if proposal is not None else 0,
+    }
+    if active_request is not None:
+        return {
+            "active_request_id": str(active_request.id),
+            "allowed_actions": (
+                ["OPEN_FACTUAL_CORRECTION"]
+                if can_access_factual_corrections(actor, organization)
+                else []
+            ),
+            "blockers": {
+                "REQUEST_FACTUAL_CORRECTION": [
+                    {
+                        "code": "ACTIVE_CORRECTION_RESERVATION",
+                        "detail": (
+                            "An active factual-correction request already exists."
+                        ),
+                    }
+                ],
+                "OPEN_FACTUAL_CORRECTION": [],
+            },
+            "concurrency": concurrency,
+        }
+
+    request_blockers = []
+    if not selected_is_current:
+        request_blockers.append(
+            {
+                "code": "HISTORICAL_PUBLICATION",
+                "detail": "A historical publication cannot start correction work.",
+            }
+        )
+    if record_state != RECORD_SEALED:
+        request_blockers.append(
+            {
+                "code": "PUBLICATION_NOT_READY",
+                "detail": "A valid sealed current publication is required before "
+                "a factual correction can be requested.",
+            }
+        )
+    if not current.adjudication_decision.is_current:
+        request_blockers.append(
+            {
+                "code": "STALE_DECISION_REVISION",
+                "detail": "The publication is not bound to the current decision.",
+            }
+        )
+    if sealed_evidence_payload(current.adjudication_decision) is None:
+        request_blockers.append(
+            {
+                "code": "PUBLICATION_NOT_READY",
+                "detail": "The current decision has no valid sealed evidence basis.",
+            }
+        )
+    if not lineage_valid or not lineage_records_sealed:
+        request_blockers.append(
+            {
+                "code": "PUBLICATION_NOT_READY",
+                "detail": "The complete publication history must be valid and sealed.",
+            }
+        )
+    if current.claim_id in action_context["active_work"]:
+        request_blockers.append(
+            {
+                "code": "ACTIVE_PUBLICATION_WORK_EXISTS",
+                "detail": "Competing publication work is active for this claim.",
+            }
+        )
+    if current.claim_id in action_context["open_assignments"]:
+        request_blockers.append(
+            {
+                "code": "ASSIGNMENT_CONFLICT",
+                "detail": "Open verification work must be resolved first.",
+            }
+        )
+    if current.claim_id in action_context["active_adjudication"]:
+        request_blockers.append(
+            {
+                "code": "ACTIVE_ADJUDICATION_WORK_EXISTS",
+                "detail": "Active Adjudication work must be resolved first.",
+            }
+        )
+    allowed_actions = []
+    if (
+        not request_blockers
+        and has_capability(
+            actor,
+            PartnerCapability.ADJUDICATE,
+            organization=organization,
+        )
+    ):
+        allowed_actions.append("REQUEST_FACTUAL_CORRECTION")
+    return {
+        "active_request_id": None,
+        "allowed_actions": allowed_actions,
+        "blockers": {
+            "REQUEST_FACTUAL_CORRECTION": request_blockers,
+            "OPEN_FACTUAL_CORRECTION": [],
+        },
+        "concurrency": concurrency,
     }
 
 
@@ -623,7 +773,10 @@ def get_organization_publication_detail(
         lineage = []
         predecessor = None
         successor = None
-    action_context = _action_context([current])
+    action_context = _action_context(
+        [current],
+        include_correction_details=True,
+    )
     lineage_record_states = (
         {item.id: _record_state(item) for item in lineage}
         if lineage_valid
@@ -661,6 +814,16 @@ def get_organization_publication_detail(
         allowed_actions.append("CREATE_EDITORIAL_REVISION")
 
     source_items = publication_source_payloads(selected)
+    factual_correction_workflow = _factual_correction_workflow(
+        actor=actor,
+        organization=organization,
+        current=current,
+        selected_is_current=selected.id == current.id,
+        record_state=selected_record_state,
+        lineage_valid=lineage_valid,
+        lineage_records_sealed=lineage_records_sealed,
+        action_context=action_context,
+    )
     return {
         "selected_publication_id": str(selected.id),
         "current_publication_id": str(current.id),
@@ -724,4 +887,5 @@ def get_organization_publication_detail(
         },
         "allowed_actions": allowed_actions,
         "blockers": current_blockers if selected.id == current.id else [],
+        "factual_correction_workflow": factual_correction_workflow,
     }

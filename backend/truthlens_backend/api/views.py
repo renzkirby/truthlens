@@ -84,6 +84,7 @@ from .models import (
     OrganizationMembership,
     AdjudicationDecision,
     OfficialFactCheck,
+    FactualCorrectionRequest,
     VerificationAssignment,
 )
 from .moderation_service import (
@@ -134,6 +135,7 @@ from .evidence_review_service import (
     get_evidence_case_queryset,
     get_latest_evidence_case,
     review_evidence_submission,
+    review_correction_evidence,
     schedule_evidence_review_trust_updates,
 )
 from .adjudication_service import (
@@ -170,6 +172,27 @@ from .publishing_service import (
     update_fact_check_draft,
     submit_fact_check_for_review,
     publish_fact_check,
+    publish_factual_correction,
+)
+from .factual_correction_service import (
+    FactualCorrectionAuthorizationError,
+    FactualCorrectionConflict,
+    FactualCorrectionError,
+    cancel_factual_correction,
+    request_factual_correction,
+)
+from .factual_correction_proposal_service import (
+    FactualCorrectionProposalAuthorizationError,
+    FactualCorrectionProposalConflict,
+    FactualCorrectionProposalError,
+    prepare_factual_correction_proposal,
+    save_factual_correction_proposal,
+)
+from .factual_correction_query_service import (
+    FactualCorrectionQueryAuthorizationError,
+    FactualCorrectionQueryNotFound,
+    get_factual_correction_detail,
+    list_factual_corrections,
 )
 from .publication_workflow_query_service import (
     RESOURCE_FACT_CHECK,
@@ -271,6 +294,15 @@ from .serializers import (
     OrganizationPublicationDetailSerializer,
     OrganizationPublicationLibraryQuerySerializer,
     OrganizationPublicationPageSerializer,
+    FactualCorrectionCancelSerializer,
+    FactualCorrectionCollectionQuerySerializer,
+    FactualCorrectionConcurrencyMutationSerializer,
+    FactualCorrectionDetailQuerySerializer,
+    FactualCorrectionDetailSerializer,
+    FactualCorrectionEvidenceReviewSerializer,
+    FactualCorrectionPageSerializer,
+    FactualCorrectionProposalSaveSerializer,
+    FactualCorrectionRequestMutationSerializer,
     VerificationAssignmentClaimSerializer,
     VerificationAssignmentSerializer,
     OrganizationMembershipAdminSerializer,
@@ -1527,8 +1559,13 @@ def _publishing_error_response(
     else:
         response_status = status.HTTP_400_BAD_REQUEST
 
+    default_code = {
+        status.HTTP_403_FORBIDDEN: "FORBIDDEN",
+        status.HTTP_404_NOT_FOUND: "NOT_FOUND",
+        status.HTTP_409_CONFLICT: "CONFLICT",
+    }.get(response_status, "INVALID_INPUT")
     payload = {
-        "code": getattr(error, "code", "INVALID_INPUT"),
+        "code": getattr(error, "code", None) or default_code,
         "detail": str(error),
         "blockers": getattr(error, "blockers", []),
     }
@@ -2174,6 +2211,413 @@ def organization_publication_detail(request, fact_check_id):
         OrganizationPublicationDetailSerializer(payload).data,
         status=status.HTTP_200_OK,
     )
+
+
+def _factual_correction_invalid_response(serializer):
+    return Response(
+        {
+            "code": "INVALID_INPUT",
+            "detail": "Invalid factual correction request.",
+            "errors": serializer.errors,
+            "blockers": [],
+        },
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
+def _factual_correction_error_response(error):
+    if isinstance(
+        error,
+        (
+            FactualCorrectionQueryNotFound,
+        ),
+    ):
+        response_status = status.HTTP_404_NOT_FOUND
+    elif isinstance(
+        error,
+        (
+            FactualCorrectionQueryAuthorizationError,
+            FactualCorrectionAuthorizationError,
+            FactualCorrectionProposalAuthorizationError,
+            EvidenceReviewAuthorizationError,
+            PublishingAuthorizationError,
+        ),
+    ):
+        response_status = status.HTTP_403_FORBIDDEN
+    elif isinstance(
+        error,
+        (
+            FactualCorrectionConflict,
+            FactualCorrectionProposalConflict,
+            EvidenceReviewConflict,
+            PublishingConflict,
+        ),
+    ):
+        response_status = status.HTTP_409_CONFLICT
+    else:
+        response_status = status.HTTP_400_BAD_REQUEST
+    default_code = {
+        status.HTTP_403_FORBIDDEN: "FORBIDDEN",
+        status.HTTP_404_NOT_FOUND: "NOT_FOUND",
+        status.HTTP_409_CONFLICT: "CONFLICT",
+    }.get(response_status, "INVALID_INPUT")
+    payload = {
+        "code": getattr(error, "code", None) or default_code,
+        "detail": str(error),
+        "blockers": getattr(error, "blockers", []),
+    }
+    current = getattr(error, "current", None)
+    if current is not None:
+        payload["current"] = current
+    return Response(payload, status=response_status)
+
+
+def _factual_correction_detail_data(*, actor, organization, request_id):
+    return FactualCorrectionDetailSerializer(
+        get_factual_correction_detail(
+            actor=actor,
+            organization=organization,
+            correction_request_id=request_id,
+        )
+    ).data
+
+
+def _ensure_factual_correction_scope(*, request_id, organization, evidence_id=None):
+    correction = (
+        FactualCorrectionRequest.objects.filter(
+            pk=request_id,
+            organization=organization,
+        )
+        .only("id", "claim_id")
+        .first()
+    )
+    if correction is None:
+        raise NotFound("Factual correction request not found.")
+    if evidence_id is not None and not EvidenceSubmission.objects.filter(
+        pk=evidence_id,
+        thread__claim_id=correction.claim_id,
+    ).exists():
+        raise NotFound("Correction evidence not found.")
+    return correction
+
+
+def _ensure_factual_correction_capability(*, actor, organization, capability):
+    if not has_capability(actor, capability, organization=organization):
+        raise FactualCorrectionAuthorizationError(
+            "You do not have permission to perform this factual correction action."
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def factual_correction_collection(request):
+    serializer = FactualCorrectionCollectionQuerySerializer(
+        data=request.query_params
+    )
+    if not serializer.is_valid():
+        return _factual_correction_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    try:
+        payload = list_factual_corrections(
+            actor=request.user,
+            organization=organization,
+            request_status=data["status"],
+            limit=data["limit"],
+            offset=data["offset"],
+        )
+    except FactualCorrectionQueryAuthorizationError as error:
+        return _factual_correction_error_response(error)
+    return Response(
+        FactualCorrectionPageSerializer(payload).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def factual_correction_detail(request, request_id):
+    serializer = FactualCorrectionDetailQuerySerializer(data=request.query_params)
+    if not serializer.is_valid():
+        return _factual_correction_invalid_response(serializer)
+    organization = get_object_or_404(
+        Organization,
+        id=serializer.validated_data["organization_id"],
+    )
+    try:
+        payload = _factual_correction_detail_data(
+            actor=request.user,
+            organization=organization,
+            request_id=request_id,
+        )
+    except (
+        FactualCorrectionQueryAuthorizationError,
+        FactualCorrectionQueryNotFound,
+    ) as error:
+        return _factual_correction_error_response(error)
+    return Response(payload, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def factual_correction_request_create(request, predecessor_id):
+    serializer = FactualCorrectionRequestMutationSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _factual_correction_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    try:
+        _ensure_factual_correction_capability(
+            actor=request.user,
+            organization=organization,
+            capability=PartnerCapability.ADJUDICATE,
+        )
+        if not OfficialFactCheck.objects.filter(
+            pk=predecessor_id,
+            organization=organization,
+        ).exists():
+            raise NotFound("Publication not found.")
+        result = request_factual_correction(
+            predecessor_id=predecessor_id,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_predecessor_version=data["expected_predecessor_version"],
+            expected_decision_revision=data["expected_decision_revision"],
+            correction_reason=data["correction_reason"],
+        )
+        payload = _factual_correction_detail_data(
+            actor=request.user,
+            organization=organization,
+            request_id=result["request"].id,
+        )
+    except (FactualCorrectionError, FactualCorrectionQueryAuthorizationError) as error:
+        return _factual_correction_error_response(error)
+    return Response(payload, status=status.HTTP_201_CREATED)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def factual_correction_evidence_review(request, request_id, evidence_id):
+    serializer = FactualCorrectionEvidenceReviewSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _factual_correction_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    try:
+        _ensure_factual_correction_capability(
+            actor=request.user,
+            organization=organization,
+            capability=PartnerCapability.REVIEW_EVIDENCE,
+        )
+        _ensure_factual_correction_scope(
+            request_id=request_id,
+            organization=organization,
+            evidence_id=evidence_id,
+        )
+        review_correction_evidence(
+            correction_request_id=request_id,
+            evidence_id=evidence_id,
+            actor=request.user,
+            evidence_status=data["evidence_status"],
+            expected_evidence_status=data["expected_evidence_status"],
+            expected_case_id=data.get("expected_case_id"),
+            moderator_notes=data["moderator_notes"],
+            rejection_reason=data.get("rejection_reason"),
+            expected_predecessor_version=data["expected_predecessor_version"],
+            expected_decision_revision=data["expected_decision_revision"],
+        )
+        payload = _factual_correction_detail_data(
+            actor=request.user,
+            organization=organization,
+            request_id=request_id,
+        )
+    except (
+        EvidenceReviewError,
+        FactualCorrectionAuthorizationError,
+        FactualCorrectionQueryAuthorizationError,
+    ) as error:
+        return _factual_correction_error_response(error)
+    return Response(payload, status=status.HTTP_200_OK)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def factual_correction_proposal_save(request, request_id):
+    serializer = FactualCorrectionProposalSaveSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _factual_correction_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    try:
+        _ensure_factual_correction_capability(
+            actor=request.user,
+            organization=organization,
+            capability=PartnerCapability.CREATE_FACT_CHECK_DRAFT,
+        )
+        _ensure_factual_correction_scope(
+            request_id=request_id,
+            organization=organization,
+        )
+        save_factual_correction_proposal(
+            correction_request_id=request_id,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_proposal_version=data["expected_proposal_version"],
+            expected_predecessor_version=data["expected_predecessor_version"],
+            expected_decision_revision=data["expected_decision_revision"],
+            verdict=data["proposed_verdict"],
+            canonical_claim=data["proposed_canonical_claim"],
+            rationale=data["proposed_rationale"],
+            headline=data["headline"],
+            summary=data["summary"],
+            article_body=data["article_body"],
+            source_urls=data["source_urls"],
+            verification_run_id=data.get("verification_run_id"),
+        )
+        payload = _factual_correction_detail_data(
+            actor=request.user,
+            organization=organization,
+            request_id=request_id,
+        )
+    except (
+        FactualCorrectionAuthorizationError,
+        FactualCorrectionProposalError,
+        FactualCorrectionQueryAuthorizationError,
+    ) as error:
+        return _factual_correction_error_response(error)
+    return Response(payload, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def factual_correction_proposal_prepare(request, request_id):
+    serializer = FactualCorrectionConcurrencyMutationSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _factual_correction_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    try:
+        _ensure_factual_correction_capability(
+            actor=request.user,
+            organization=organization,
+            capability=PartnerCapability.ADJUDICATE,
+        )
+        _ensure_factual_correction_scope(
+            request_id=request_id,
+            organization=organization,
+        )
+        prepare_factual_correction_proposal(
+            correction_request_id=request_id,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_proposal_version=data["expected_proposal_version"],
+            expected_predecessor_version=data["expected_predecessor_version"],
+            expected_decision_revision=data["expected_decision_revision"],
+        )
+        payload = _factual_correction_detail_data(
+            actor=request.user,
+            organization=organization,
+            request_id=request_id,
+        )
+    except (
+        FactualCorrectionAuthorizationError,
+        FactualCorrectionProposalError,
+        FactualCorrectionQueryAuthorizationError,
+    ) as error:
+        return _factual_correction_error_response(error)
+    return Response(payload, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def factual_correction_publish(request, request_id):
+    serializer = FactualCorrectionConcurrencyMutationSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _factual_correction_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    try:
+        _ensure_factual_correction_capability(
+            actor=request.user,
+            organization=organization,
+            capability=PartnerCapability.PUBLISH_FACT_CHECK,
+        )
+        _ensure_factual_correction_scope(
+            request_id=request_id,
+            organization=organization,
+        )
+        result = publish_factual_correction(
+            correction_request_id=request_id,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_proposal_version=data["expected_proposal_version"],
+            expected_predecessor_version=data["expected_predecessor_version"],
+            expected_decision_revision=data["expected_decision_revision"],
+        )
+        correction_payload = _factual_correction_detail_data(
+            actor=request.user,
+            organization=organization,
+            request_id=request_id,
+        )
+        publication_payload = get_organization_publication_detail(
+            actor=request.user,
+            organization=organization,
+            fact_check_id=result["fact_check"].id,
+        )
+    except (
+        FactualCorrectionAuthorizationError,
+        PublishingError,
+        FactualCorrectionQueryAuthorizationError,
+        OrganizationPublicationAuthorizationError,
+        OrganizationPublicationNotFound,
+    ) as error:
+        return _factual_correction_error_response(error)
+    return Response(
+        {
+            "correction": correction_payload,
+            "publication": OrganizationPublicationDetailSerializer(
+                publication_payload
+            ).data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def factual_correction_cancel(request, request_id):
+    serializer = FactualCorrectionCancelSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _factual_correction_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    try:
+        _ensure_factual_correction_capability(
+            actor=request.user,
+            organization=organization,
+            capability=PartnerCapability.ADJUDICATE,
+        )
+        _ensure_factual_correction_scope(
+            request_id=request_id,
+            organization=organization,
+        )
+        cancel_factual_correction(
+            correction_request_id=request_id,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_proposal_version=data["expected_proposal_version"],
+            expected_predecessor_version=data["expected_predecessor_version"],
+            expected_decision_revision=data["expected_decision_revision"],
+            cancellation_reason=data["cancellation_reason"],
+        )
+        payload = _factual_correction_detail_data(
+            actor=request.user,
+            organization=organization,
+            request_id=request_id,
+        )
+    except (FactualCorrectionError, FactualCorrectionQueryAuthorizationError) as error:
+        return _factual_correction_error_response(error)
+    return Response(payload, status=status.HTTP_200_OK)
 
 
 def _editorial_revision_queryset(organization):
