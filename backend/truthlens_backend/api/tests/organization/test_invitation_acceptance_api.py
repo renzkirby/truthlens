@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
+from django.core.cache import cache
 
 from rest_framework import status
 from rest_framework.test import (
@@ -25,6 +26,13 @@ from api.organization_invitation_service import (
 
 class OrganizationInvitationAcceptanceApiTests(APITestCase):
     def setUp(self):
+        # Anonymous DRF throttles use Django's shared cache.
+        # Keep invitation API tests isolated from throttle state
+        # created by earlier tests while preserving throttling
+        # behavior within each individual test.
+        cache.clear()
+        self.addCleanup(cache.clear)
+
         self.owner = User.objects.create_user(
             username="invitation-owner",
             email="owner@example.com",

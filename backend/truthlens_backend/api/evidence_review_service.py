@@ -5,6 +5,7 @@ from django.db.models import Prefetch
 from django.utils import timezone
 
 from .models import (
+    AccountabilityEvent,
     Claim,
     EvidenceSubmission,
     FactualCorrectionProposal,
@@ -13,6 +14,7 @@ from .models import (
     ModerationEvent,
     OfficialFactCheck,
 )
+from .accountability_service import record_accountability_event
 
 from .moderation_service import (
     ACTIVE_CASE_STATUSES,
@@ -365,6 +367,22 @@ def _prepare_evidence_case_for_review(
             to_status=(ModerationCase.Status.REOPENED),
             reason_code="RE_REVIEW",
         )
+
+        if case.organization is not None:
+            record_accountability_event(
+                action_type=AccountabilityEvent.ActionType.EVIDENCE_REOPENED,
+                resource_type=AccountabilityEvent.ResourceType.EVIDENCE_SUBMISSION,
+                resource_id=case.evidence_submission_id,
+                authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+                actor=actor,
+                authority_organization=case.organization,
+                subject_organization=case.organization,
+                capability=PartnerCapability.REVIEW_EVIDENCE,
+                previous_state={"case_status": ModerationCase.Status.RESOLVED},
+                new_state={"case_status": ModerationCase.Status.REOPENED},
+                reason_code="RE_REVIEW",
+                context={"moderation_case_id": str(case.pk)},
+            )
 
     if case.status in {
         ModerationCase.Status.OPEN,
@@ -742,6 +760,31 @@ def review_correction_evidence(
                 "evidence_record": evidence_record,
             },
         )
+        accountability_action = (
+            AccountabilityEvent.ActionType.EVIDENCE_VERIFIED
+            if evidence_status == EvidenceSubmission.EvidenceStatus.VERIFIED
+            else AccountabilityEvent.ActionType.EVIDENCE_REJECTED
+        )
+        record_accountability_event(
+            action_type=accountability_action,
+            resource_type=AccountabilityEvent.ResourceType.EVIDENCE_SUBMISSION,
+            resource_id=locked_evidence.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            actor=actor,
+            authority_organization=context["organization"],
+            subject_organization=context["organization"],
+            capability=PartnerCapability.REVIEW_EVIDENCE,
+            previous_state={"evidence_status": previous_status},
+            new_state={"evidence_status": evidence_status},
+            reason_code=rejection_reason or evidence_status,
+            notes=moderator_notes,
+            context={
+                "correction_request_id": str(correction_request.pk),
+                "correction_case_id": str(correction_case.pk),
+                "evidence_case_id": str(case.pk),
+                "is_reaffirmation": previous_status == evidence_status,
+            },
+        )
         case = transition_moderation_case(
             case,
             next_status=ModerationCase.Status.RESOLVED,
@@ -1008,6 +1051,27 @@ def review_evidence_submission(
                 "previous_evidence_status": previous_status,
                 "new_evidence_status": evidence_status,
             },
+        )
+
+        accountability_action = (
+            AccountabilityEvent.ActionType.EVIDENCE_VERIFIED
+            if evidence_status == EvidenceSubmission.EvidenceStatus.VERIFIED
+            else AccountabilityEvent.ActionType.EVIDENCE_REJECTED
+        )
+        record_accountability_event(
+            action_type=accountability_action,
+            resource_type=AccountabilityEvent.ResourceType.EVIDENCE_SUBMISSION,
+            resource_id=locked_evidence.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            actor=actor,
+            authority_organization=organization,
+            subject_organization=organization,
+            capability=PartnerCapability.REVIEW_EVIDENCE,
+            previous_state={"evidence_status": previous_status},
+            new_state={"evidence_status": evidence_status},
+            reason_code=rejection_reason or evidence_status,
+            notes=moderator_notes,
+            context={"evidence_case_id": str(case.pk)},
         )
 
         case = transition_moderation_case(

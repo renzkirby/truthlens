@@ -26,8 +26,10 @@ from .factual_correction_proposal_schema import (
     FactualCorrectionProposalSchemaError,
     validate_factual_correction_proposal,
 )
+from .accountability_service import record_accountability_event
 
 from .models import (
+    AccountabilityEvent,
     AdjudicationDecision,
     AdjudicationDecisionEvidenceSnapshot,
     Claim,
@@ -1359,6 +1361,43 @@ def _record_publication_event(
     )
 
 
+def _record_publication_accountability(
+    fact_check,
+    *,
+    actor,
+    action_type,
+    capability,
+    previous_state=None,
+    new_state=None,
+    reason_code="",
+    notes="",
+    context=None,
+):
+    return record_accountability_event(
+        action_type=action_type,
+        resource_type=AccountabilityEvent.ResourceType.OFFICIAL_FACT_CHECK,
+        resource_id=fact_check.pk,
+        authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+        actor=actor,
+        authority_organization=fact_check.organization,
+        subject_organization=fact_check.organization,
+        capability=capability,
+        previous_state=previous_state,
+        new_state=new_state,
+        reason_code=reason_code,
+        notes=notes,
+        context={
+            "claim_id": str(fact_check.claim_id),
+            "decision_id": str(fact_check.adjudication_decision_id),
+            "decision_revision": fact_check.adjudication_decision.revision_number,
+            "article_version": fact_check.version,
+            "revision_kind": fact_check.revision_kind,
+            "edit_generation": fact_check.edit_generation,
+            **(context or {}),
+        },
+    )
+
+
 def create_fact_check_draft(
     *,
     decision,
@@ -1519,6 +1558,17 @@ def create_fact_check_draft(
             actor=actor,
             event_type=(ModerationEvent.EventType.ARTICLE_DRAFT_CREATED),
             to_status=(OfficialFactCheck.PublicationStatus.DRAFT),
+        )
+
+        _record_publication_accountability(
+            draft,
+            actor=actor,
+            action_type=AccountabilityEvent.ActionType.ARTICLE_DRAFT_CREATED,
+            capability=PartnerCapability.CREATE_FACT_CHECK_DRAFT,
+            new_state={
+                "publication_status": draft.publication_status,
+                "edit_generation": draft.edit_generation,
+            },
         )
 
         return draft
@@ -1730,6 +1780,18 @@ def create_editorial_revision_draft(
                 "supersedes_fact_check_id": str(predecessor.id),
             },
         )
+        _record_publication_accountability(
+            draft,
+            actor=actor,
+            action_type=AccountabilityEvent.ActionType.ARTICLE_REVISION_DRAFTED,
+            capability=PartnerCapability.CREATE_FACT_CHECK_DRAFT,
+            new_state={
+                "publication_status": draft.publication_status,
+                "edit_generation": draft.edit_generation,
+            },
+            notes=revision_reason,
+            context={"predecessor_id": str(predecessor.pk)},
+        )
         return draft
 
 
@@ -1836,6 +1898,7 @@ def update_fact_check_draft(
         )
 
         if changed_fields or source_selection_changed:
+            previous_generation = locked_fact_check.edit_generation
             locked_fact_check.edit_generation += 1
             locked_fact_check.save(
                 update_fields=[
@@ -1843,6 +1906,24 @@ def update_fact_check_draft(
                     "edit_generation",
                     "updated_at",
                 ]
+            )
+            _record_publication_accountability(
+                locked_fact_check,
+                actor=actor,
+                action_type=AccountabilityEvent.ActionType.ARTICLE_DRAFT_SAVED,
+                capability=PartnerCapability.CREATE_FACT_CHECK_DRAFT,
+                previous_state={
+                    "publication_status": locked_fact_check.publication_status,
+                    "edit_generation": previous_generation,
+                },
+                new_state={
+                    "publication_status": locked_fact_check.publication_status,
+                    "edit_generation": locked_fact_check.edit_generation,
+                },
+                context={
+                    "changed_fields": sorted(changed_fields),
+                    "source_selection_changed": source_selection_changed,
+                },
             )
 
         return locked_fact_check
@@ -1920,6 +2001,18 @@ def submit_fact_check_for_review(
             event_type=(ModerationEvent.EventType.ARTICLE_SUBMITTED),
             from_status=previous_status,
             to_status=(OfficialFactCheck.PublicationStatus.IN_REVIEW),
+        )
+
+        _record_publication_accountability(
+            locked_fact_check,
+            actor=actor,
+            action_type=AccountabilityEvent.ActionType.ARTICLE_SUBMITTED,
+            capability=PartnerCapability.CREATE_FACT_CHECK_DRAFT,
+            previous_state={"publication_status": previous_status},
+            new_state={
+                "publication_status": locked_fact_check.publication_status,
+                "edit_generation": locked_fact_check.edit_generation,
+            },
         )
 
         return locked_fact_check
@@ -2001,6 +2094,21 @@ def return_fact_check_for_rework(
                 "The rework transition could not be attributed to its "
                 "adjudication case."
             )
+        _record_publication_accountability(
+            locked_fact_check,
+            actor=actor,
+            action_type=AccountabilityEvent.ActionType.ARTICLE_RETURNED_FOR_REWORK,
+            capability=PartnerCapability.PUBLISH_FACT_CHECK,
+            previous_state={
+                "publication_status": OfficialFactCheck.PublicationStatus.IN_REVIEW,
+                "edit_generation": previous_generation,
+            },
+            new_state={
+                "publication_status": locked_fact_check.publication_status,
+                "edit_generation": locked_fact_check.edit_generation,
+            },
+            notes=reason,
+        )
         return locked_fact_check
 
 
@@ -2069,6 +2177,17 @@ def abandon_fact_check_draft(
             raise PublishingConflict(
                 "The abandonment could not be attributed to its adjudication case."
             )
+        _record_publication_accountability(
+            locked_fact_check,
+            actor=actor,
+            action_type=AccountabilityEvent.ActionType.ARTICLE_ABANDONED,
+            capability=PartnerCapability.CREATE_FACT_CHECK_DRAFT,
+            previous_state={
+                "publication_status": OfficialFactCheck.PublicationStatus.DRAFT,
+            },
+            new_state={"publication_status": locked_fact_check.publication_status},
+            notes=reason,
+        )
         return locked_fact_check
 
 
@@ -2150,6 +2269,22 @@ def return_editorial_revision_for_rework(
                 "The editorial rework transition could not be attributed to its "
                 "adjudication case."
             )
+        _record_publication_accountability(
+            locked_revision,
+            actor=actor,
+            action_type=AccountabilityEvent.ActionType.ARTICLE_RETURNED_FOR_REWORK,
+            capability=PartnerCapability.PUBLISH_FACT_CHECK,
+            previous_state={
+                "publication_status": OfficialFactCheck.PublicationStatus.IN_REVIEW,
+                "edit_generation": previous_generation,
+            },
+            new_state={
+                "publication_status": locked_revision.publication_status,
+                "edit_generation": locked_revision.edit_generation,
+            },
+            notes=reason,
+            context={"predecessor_id": str(locked_revision.supersedes_id)},
+        )
         return locked_revision
 
 
@@ -2221,6 +2356,18 @@ def abandon_editorial_revision_draft(
                 "The editorial revision abandonment could not be attributed to "
                 "its adjudication case."
             )
+        _record_publication_accountability(
+            locked_revision,
+            actor=actor,
+            action_type=AccountabilityEvent.ActionType.ARTICLE_ABANDONED,
+            capability=PartnerCapability.CREATE_FACT_CHECK_DRAFT,
+            previous_state={
+                "publication_status": OfficialFactCheck.PublicationStatus.DRAFT,
+            },
+            new_state={"publication_status": locked_revision.publication_status},
+            notes=reason,
+            context={"predecessor_id": str(locked_revision.supersedes_id)},
+        )
         return locked_revision
 
 
@@ -2484,6 +2631,27 @@ def publish_editorial_revision(
                         "The editorial replacement could not be attributed to its "
                         "adjudication case."
                     )
+                _record_publication_accountability(
+                    revision,
+                    actor=actor,
+                    action_type=AccountabilityEvent.ActionType.ARTICLE_REVISED,
+                    capability=PartnerCapability.PUBLISH_FACT_CHECK,
+                    previous_state={
+                        "publication_status": previous_status,
+                        "predecessor_publication_status": (
+                            OfficialFactCheck.PublicationStatus.PUBLISHED
+                        ),
+                    },
+                    new_state={
+                        "publication_status": revision.publication_status,
+                        "predecessor_publication_status": predecessor.publication_status,
+                    },
+                    notes=reason,
+                    context={
+                        "predecessor_id": str(predecessor.pk),
+                        "predecessor_version": predecessor.version,
+                    },
+                )
         except IntegrityError as error:
             if not _is_expected_publication_integrity_conflict(error):
                 raise
@@ -2644,6 +2812,15 @@ def publish_fact_check(
             event_type=ModerationEvent.EventType.ARTICLE_PUBLISHED,
             from_status=previous_status,
             to_status=(OfficialFactCheck.PublicationStatus.PUBLISHED),
+        )
+
+        _record_publication_accountability(
+            locked_fact_check,
+            actor=actor,
+            action_type=AccountabilityEvent.ActionType.ARTICLE_PUBLISHED,
+            capability=PartnerCapability.PUBLISH_FACT_CHECK,
+            previous_state={"publication_status": previous_status},
+            new_state={"publication_status": locked_fact_check.publication_status},
         )
 
         try:
@@ -3518,6 +3695,34 @@ def publish_factual_correction(
                 "revision_reason": successor.revision_reason,
             },
         )
+        record_accountability_event(
+            action_type=AccountabilityEvent.ActionType.VERDICT_REVISED,
+            resource_type=AccountabilityEvent.ResourceType.ADJUDICATION_DECISION,
+            resource_id=decision.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            actor=proposal.prepared_by,
+            actor_snapshot=proposal.prepared_by_snapshot,
+            authority_organization=context["organization"],
+            subject_organization=context["organization"],
+            capability=PartnerCapability.ADJUDICATE,
+            previous_state={
+                "verdict": predecessor_decision.verdict,
+                "revision_number": predecessor_decision.revision_number,
+                "decision_id": str(predecessor_decision.pk),
+            },
+            new_state={
+                "verdict": decision.verdict,
+                "revision_number": decision.revision_number,
+                "decision_id": str(decision.pk),
+            },
+            reason_code=decision.verdict,
+            notes=decision.rationale,
+            context={
+                "correction_request_id": str(request.pk),
+                "prepared_proposal_id": str(proposal.pk),
+                "fact_check_id": str(successor.pk),
+            },
+        )
         correction_case = _resolve_factual_correction_case(
             correction_case,
             actor=actor,
@@ -3527,6 +3732,37 @@ def publish_factual_correction(
         )
         request.status = FactualCorrectionRequest.Status.COMPLETED
         request.save(update_fields=["status", "updated_at"])
+        record_accountability_event(
+            action_type=AccountabilityEvent.ActionType.FACTUAL_CORRECTION_PUBLISHED,
+            resource_type=AccountabilityEvent.ResourceType.OFFICIAL_FACT_CHECK,
+            resource_id=successor.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            actor=actor,
+            authority_organization=context["organization"],
+            subject_organization=context["organization"],
+            capability=PartnerCapability.PUBLISH_FACT_CHECK,
+            previous_state={
+                "publication_status": OfficialFactCheck.PublicationStatus.PUBLISHED,
+                "fact_check_id": str(predecessor.pk),
+                "fact_check_version": predecessor.version,
+                "correction_request_status": FactualCorrectionRequest.Status.ACTIVE,
+            },
+            new_state={
+                "publication_status": successor.publication_status,
+                "fact_check_id": str(successor.pk),
+                "fact_check_version": successor.version,
+                "correction_request_status": request.status,
+            },
+            notes=request.correction_reason,
+            context={
+                "correction_request_id": str(request.pk),
+                "prepared_proposal_id": str(proposal.pk),
+                "decision_id": str(decision.pk),
+                "decision_revision": decision.revision_number,
+                "predecessor_id": str(predecessor.pk),
+                "revision_kind": successor.revision_kind,
+            },
+        )
 
         resulting_fact_checks = [*context["fact_checks"], successor]
         resulting_snapshots = [*context["publication_snapshots"], successor_seal]

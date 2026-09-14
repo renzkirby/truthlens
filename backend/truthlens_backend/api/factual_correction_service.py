@@ -3,7 +3,9 @@ import uuid
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from .accountability_service import record_accountability_event
 from .models import (
+    AccountabilityEvent,
     FactualCorrectionProposal,
     FactualCorrectionRequest,
     ModerationCase,
@@ -373,6 +375,30 @@ def request_factual_correction(
             },
         )
 
+        record_accountability_event(
+            action_type=AccountabilityEvent.ActionType.FACTUAL_CORRECTION_REQUESTED,
+            resource_type=AccountabilityEvent.ResourceType.FACTUAL_CORRECTION_REQUEST,
+            resource_id=correction_request.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            actor=actor,
+            authority_organization=organization,
+            subject_organization=organization,
+            capability=PartnerCapability.ADJUDICATE,
+            new_state={
+                "status": correction_request.status,
+                "predecessor_decision_revision": decision.revision_number,
+                "predecessor_fact_check_version": predecessor.version,
+            },
+            notes=reason,
+            context={
+                "authoritative": False,
+                "claim_id": str(context["claim"].pk),
+                "moderation_case_id": str(correction_case.pk),
+                "predecessor_decision_id": str(decision.pk),
+                "predecessor_fact_check_id": str(predecessor.pk),
+            },
+        )
+
         return {
             "request": correction_request,
             "case": correction_case,
@@ -604,8 +630,35 @@ def cancel_factual_correction(
                 "cancellation_reason": reason,
             },
         )
+
         correction_request.status = FactualCorrectionRequest.Status.CANCELLED
         correction_request.save(update_fields=["status", "updated_at"])
+        record_accountability_event(
+            action_type=AccountabilityEvent.ActionType.FACTUAL_CORRECTION_CANCELLED,
+            resource_type=AccountabilityEvent.ResourceType.FACTUAL_CORRECTION_REQUEST,
+            resource_id=correction_request.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            actor=actor,
+            authority_organization=context["organization"],
+            subject_organization=context["organization"],
+            capability=PartnerCapability.ADJUDICATE,
+            previous_state={
+                "status": FactualCorrectionRequest.Status.ACTIVE,
+                "case_status": previous_case_status,
+            },
+            new_state={
+                "status": correction_request.status,
+                "case_status": correction_case.status,
+            },
+            reason_code="FACTUAL_CORRECTION_CANCELLED",
+            notes=reason,
+            context={
+                "proposal_id": str(proposal.pk) if proposal is not None else None,
+                "proposal_version": actual_proposal_version,
+                "predecessor_decision_id": str(decision.pk),
+                "predecessor_fact_check_id": str(predecessor.pk),
+            },
+        )
         return {
             "request": correction_request,
             "case": correction_case,

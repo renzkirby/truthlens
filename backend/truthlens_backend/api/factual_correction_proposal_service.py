@@ -19,7 +19,9 @@ from .factual_correction_proposal_schema import (
     FactualCorrectionProposalSchemaError,
     validate_factual_correction_proposal,
 )
+from .accountability_service import record_accountability_event
 from .models import (
+    AccountabilityEvent,
     AdjudicationDecision,
     EvidenceSubmission,
     FactualCorrectionProposal,
@@ -361,6 +363,11 @@ def save_factual_correction_proposal(
             .filter(correction_request=request)
             .first()
         )
+        previous_proposal_state = (
+            {"status": proposal.status, "version": proposal.version}
+            if proposal is not None
+            else {}
+        )
         verification_run = _lock_verification_run(
             verification_run_id,
             claim=context["claim"],
@@ -406,6 +413,25 @@ def save_factual_correction_proposal(
                     "updated_at",
                 ]
             )
+        record_accountability_event(
+            action_type=AccountabilityEvent.ActionType.FACTUAL_CORRECTION_PROPOSAL_SAVED,
+            resource_type=AccountabilityEvent.ResourceType.FACTUAL_CORRECTION_PROPOSAL,
+            resource_id=proposal.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            actor=actor,
+            authority_organization=context["organization"],
+            subject_organization=context["organization"],
+            capability=PartnerCapability.CREATE_FACT_CHECK_DRAFT,
+            previous_state=previous_proposal_state,
+            new_state={"status": proposal.status, "version": proposal.version},
+            context={
+                "authoritative": False,
+                "correction_request_id": str(request.pk),
+                "claim_id": str(context["claim"].pk),
+                "predecessor_decision_revision": context["decision"].revision_number,
+                "predecessor_fact_check_version": context["fact_check"].version,
+            },
+        )
         return proposal
 
 
@@ -971,6 +997,32 @@ def prepare_factual_correction_proposal(
                 "predecessor_publication_snapshot_id": str(predecessor_seal.id),
                 "approver_snapshot": actor_snapshot,
                 "prepared_at": prepared_at.isoformat(),
+            },
+        )
+        record_accountability_event(
+            action_type=AccountabilityEvent.ActionType.FACTUAL_CORRECTION_PROPOSAL_PREPARED,
+            resource_type=AccountabilityEvent.ResourceType.FACTUAL_CORRECTION_PROPOSAL,
+            resource_id=proposal.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            actor=actor,
+            authority_organization=context["organization"],
+            subject_organization=context["organization"],
+            capability=PartnerCapability.ADJUDICATE,
+            previous_state={
+                "status": FactualCorrectionProposal.Status.DRAFT,
+                "version": proposal.version,
+            },
+            new_state={"status": proposal.status, "version": proposal.version},
+            notes=proposal.rationale,
+            context={
+                "authoritative": False,
+                "correction_request_id": str(request.pk),
+                "moderation_case_id": str(correction_case.pk),
+                "predecessor_decision_id": str(context["decision"].pk),
+                "predecessor_decision_revision": context["decision"].revision_number,
+                "predecessor_fact_check_id": str(context["fact_check"].pk),
+                "predecessor_fact_check_version": context["fact_check"].version,
+                "prepared_payload_schema_version": PROPOSAL_SCHEMA_VERSION,
             },
         )
         return {"proposal": proposal, "event": event, "case": correction_case}
