@@ -277,8 +277,15 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         self.evaluate_tavily = self._patch(
             "api.tasks.evaluate_image_claim_with_tavily", return_value=self.verdict,
         )
+        self.evaluate_persisted = self._patch(
+            "api.tasks.evaluate_claim_with_persisted_evidence",
+            return_value=self.verdict,
+        )
         self._patch("api.embedding_service.generate_embedding", return_value=None)
         self.log_stage = self._patch("api.tasks._log_stage")
+        self.assess_evidence = self._patch(
+            "api.tasks._assess_and_persist_reasoning_evidence"
+        )
         self.save_claim = self._patch("api.tasks._save_claim", wraps=tasks._save_claim)
         real_bridge = tasks._retrieve_and_ingest_tavily
         self.observed_runs = []
@@ -344,31 +351,69 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         )
         self.assertEqual(CanonicalSource.objects.filter(domain="example.com").count(), 1)
 
-    def _assert_original_evaluation_and_sources(self):
-        expected_context = (
-            "Text Extracted From Image (Do NOT use this as evidence to prove itself):\n"
-            "Raw submitted claim.\n\nWeb Search Answer:\nOriginal provider answer.\n\n"
-            "Top Search Results:\nSource 1: First result\nURL: https://example.com/first\n"
-            f"Content: {self.payload_before['results'][0]['content']}\n\n"
-            "Source 2: No Title\nURL: https://example.com/second\n"
-            "Content: Second source content.\n\n"
-            "Source 3: No Title\nURL: \nContent: Third source without URL.\n\n"
-        )
-        self.evaluate_tavily.assert_called_once_with(
-            self.cleaned["cleaned_claim"], expected_context, "NEUTRAL",
-        )
-        expected_sources = [
+    def _expected_sources(self):
+        return [
             {"url": "https://example.com/first", "title": "First result",
              "snippet": self.payload_before["results"][0]["content"][:250] + "..."},
             {"url": "https://example.com/second", "title": "External Source",
              "snippet": "Second source content...."},
         ]
+
+    def _assert_persisted_evaluation_and_sources(self):
+        self.evaluate_persisted.assert_called_once()
+        self.assertEqual(
+            self.evaluate_persisted.call_args.args[0],
+            self.cleaned["cleaned_claim"],
+        )
+        evidence_context = self.evaluate_persisted.call_args.args[1]
+        self.assertEqual(self.evaluate_persisted.call_args.args[2], "NEUTRAL")
+        self.assertIn("PERSISTED EVIDENCE DOSSIER", evidence_context)
+        first_source = EvidenceSource.objects.get(
+            provider="TAVILY",
+            canonical_url="https://example.com/first",
+        )
+        second_source = EvidenceSource.objects.get(
+            provider="TAVILY",
+            canonical_url="https://example.com/second",
+        )
+        third_source = EvidenceSource.objects.get(
+            provider="TAVILY",
+            canonical_url__isnull=True,
+        )
+        self.assertIsNotNone(first_source.content)
+        self.assertIsNotNone(second_source.content)
+        self.assertIsNotNone(third_source.content)
+        self.assertEqual(
+            first_source.content,
+            self.payload_before["results"][0]["content"].strip(),
+        )
+        self.assertIn(first_source.content, evidence_context)
+        self.assertIn(second_source.content, evidence_context)
+        self.assertIn(third_source.content, evidence_context)
+        self.assertNotIn("Original provider answer.", evidence_context)
+        self.assertNotIn("Raw submitted claim.", evidence_context)
+        self.assertNotIn("Fact-check evidence.", evidence_context)
+        self.evaluate_tavily.assert_not_called()
+        expected_sources = self._expected_sources()
         self.save_claim.assert_called_once_with(
             self.claim.pk, self.verdict, "Live Web Search",
             self.cleaned["cleaned_claim"], expected_sources,
         )
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, self.verdict["verdict"])
+        self.assertEqual(self.claim.ai_sources, expected_sources)
+        self.assertEqual(self.payload, self.payload_before)
+
+    def _assert_unavailable_evidence_abstains_and_preserves_sources(self):
+        self.evaluate_persisted.assert_not_called()
+        self.evaluate_tavily.assert_not_called()
+        expected_sources = self._expected_sources()
+        self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
+        self.assertEqual(self.save_claim.call_args.args[4], expected_sources)
+        self.assertEqual(self.save_claim.call_args.args[1]["verdict"], "UNVERIFIED")
+        self.assertEqual(self.save_claim.call_args.args[1]["confidence_score"], 0)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
         self.assertEqual(self.claim.ai_sources, expected_sources)
         self.assertEqual(self.payload, self.payload_before)
 
@@ -385,7 +430,7 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         stages = [call.args[1] for call in self.log_stage.call_args_list]
         self.assertIn("tavily_evidence_ingestion", stages)
         self.assertNotIn("url_tavily_evidence_ingestion", stages)
-        self._assert_original_evaluation_and_sources()
+        self._assert_persisted_evaluation_and_sources()
 
     def test_irrelevant_gfc_uses_tavily_bridge_after_relevance(self):
         self.gfc.return_value = {"claims": [{"text": "Unrelated claim."}]}
@@ -405,7 +450,7 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         self.assertEqual(events, ["gfc_relevance", "tavily_search"])
         self.evaluate_gfc.assert_not_called()
         self.assertEqual(EvidenceSource.objects.count(), 4)
-        self._assert_original_evaluation_and_sources()
+        self._assert_persisted_evaluation_and_sources()
 
     def test_gfc_and_tavily_evidence_coexist_on_the_same_run(self):
         gfc_payload = {"claims": [{"text": "Unrelated fact check."}]}
@@ -443,43 +488,46 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         self.relevance.assert_called_once_with(
             self.cleaned["cleaned_claim"], "Unrelated fact check.",
         )
-        self._assert_original_evaluation_and_sources()
+        self._assert_persisted_evaluation_and_sources()
 
-    def test_ingestion_failure_does_not_prevent_completion_or_evaluation(self):
+    def test_ingestion_failure_abstains_without_raw_evaluation(self):
         with patch("api.tasks.ingest_raw_evidence", side_effect=IntegrityError("Storage failed")):
             with self.assertLogs("api.tasks", level="ERROR") as logs:
-                self._execute(expected_links=0)
+                self._execute(VerificationRun.Status.ABSTAINED, expected_links=0)
         self.assertIn("Tavily evidence ingestion failed", "\n".join(logs.output))
-        self.assertIn("tavily_evidence_ingestion_failed", [
+        stages = [
             call.args[1] for call in self.log_stage.call_args_list
-        ])
+        ]
+        self.assertIn("tavily_evidence_ingestion_failed", stages)
+        self.assertIn("tavily_persisted_evidence_unavailable", stages)
+        self.assertNotIn("tavily_llm_evaluation", stages)
         self.assertEqual(EvidenceSource.objects.count(), 0)
         self.client.search.assert_called_once()
-        self._assert_original_evaluation_and_sources()
+        self._assert_unavailable_evidence_abstains_and_preserves_sources()
 
     def test_ingestion_failure_preserves_abstaining_verdict(self):
         self.verdict["verdict"] = "UNVERIFIED"
         with patch("api.tasks.ingest_raw_evidence", side_effect=IntegrityError("Storage failed")):
             self._execute(VerificationRun.Status.ABSTAINED, expected_links=0)
-        self._assert_original_evaluation_and_sources()
+        self._assert_unavailable_evidence_abstains_and_preserves_sources()
 
     def test_successful_ingestion_preserves_abstaining_verdict_and_links(self):
         self.verdict["verdict"] = "UNVERIFIED"
         self._execute(VerificationRun.Status.ABSTAINED)
-        self._assert_original_evaluation_and_sources()
+        self._assert_persisted_evaluation_and_sources()
 
-    def test_linking_failure_preserves_completion_and_evaluation(self):
+    def test_linking_failure_abstains_without_raw_evaluation(self):
         with patch(
             "api.tasks.link_evidence_sources_to_run",
             side_effect=RuntimeError("Link storage failed"),
         ):
             with self.assertLogs("api.tasks", level="ERROR") as logs:
-                self._execute(expected_links=0)
+                self._execute(VerificationRun.Status.ABSTAINED, expected_links=0)
         self.assertIn("Tavily evidence linking failed", "\n".join(logs.output))
         self.assertEqual(EvidenceSource.objects.filter(provider="TAVILY").count(), 4)
-        self._assert_original_evaluation_and_sources()
+        self._assert_unavailable_evidence_abstains_and_preserves_sources()
 
-    def test_linking_failure_preserves_abstention_and_evaluation(self):
+    def test_linking_failure_preserves_abstention_without_evaluation(self):
         self.verdict["verdict"] = "UNVERIFIED"
         with patch(
             "api.tasks.link_evidence_sources_to_run",
@@ -487,7 +535,7 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         ):
             self._execute(VerificationRun.Status.ABSTAINED, expected_links=0)
         self.assertEqual(EvidenceSource.objects.filter(provider="TAVILY").count(), 4)
-        self._assert_original_evaluation_and_sources()
+        self._assert_unavailable_evidence_abstains_and_preserves_sources()
 
     def test_provider_failure_reaches_existing_unverified_fallback(self):
         self.client.search.side_effect = requests.Timeout("Provider unavailable")
@@ -495,6 +543,7 @@ class TavilyTextRuntimeIngestionTests(TestCase):
             self._execute(VerificationRun.Status.ABSTAINED, expected_links=0)
         ingest.assert_not_called()
         self.evaluate_tavily.assert_not_called()
+        self.evaluate_persisted.assert_not_called()
         self.client.search.assert_called_once()
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
@@ -539,26 +588,42 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         self.assertIsNone(run.failure_message)
         return evaluate_url
 
-    def _assert_original_url_evaluation_and_sources(self, evaluate_url):
-        expected_context = (
-            "Original URL Content to Verify (Do NOT use this as evidence to prove itself):\n"
-            f"{self.url_cleaned_text[:1500]}\n\n"
-            "Web Search Answer:\nOriginal provider answer.\n\n"
-            "Top Search Results:\nSource 1: First result\nURL: https://example.com/first\n"
-            f"Content: {self.payload_before['results'][0]['content']}\n\n"
-            "Source 2: No Title\nURL: https://example.com/second\n"
-            "Content: Second source content.\n\n"
-            "Source 3: No Title\nURL: \nContent: Third source without URL.\n\n"
+    def _assert_persisted_url_evaluation_and_sources(self, evaluate_url):
+        self.evaluate_persisted.assert_called_once()
+        self.assertEqual(
+            self.evaluate_persisted.call_args.args[0],
+            self.cleaned["cleaned_claim"],
         )
-        evaluate_url.assert_called_once_with(
-            self.cleaned["cleaned_claim"], expected_context, "NEUTRAL",
+        evidence_context = self.evaluate_persisted.call_args.args[1]
+        self.assertEqual(self.evaluate_persisted.call_args.args[2], "NEUTRAL")
+        self.assertIn("PERSISTED EVIDENCE DOSSIER", evidence_context)
+        first_source = EvidenceSource.objects.get(
+            provider="TAVILY", canonical_url="https://example.com/first",
         )
-        expected_sources = [
-            {"url": "https://example.com/first", "title": "First result",
-             "snippet": self.payload_before["results"][0]["content"][:250] + "..."},
-            {"url": "https://example.com/second", "title": "External Source",
-             "snippet": "Second source content...."},
-        ]
+        second_source = EvidenceSource.objects.get(
+            provider="TAVILY", canonical_url="https://example.com/second",
+        )
+        third_source = EvidenceSource.objects.get(
+            provider="TAVILY", canonical_url__isnull=True,
+        )
+        self.assertIsNotNone(first_source.content)
+        self.assertIsNotNone(second_source.content)
+        self.assertIsNotNone(third_source.content)
+        self.assertEqual(
+            first_source.content,
+            self.payload_before["results"][0]["content"].strip(),
+        )
+        self.assertIn(first_source.content, evidence_context)
+        self.assertIn(second_source.content, evidence_context)
+        self.assertIn(third_source.content, evidence_context)
+        self.assertNotIn("Original provider answer.", evidence_context)
+        self.assertNotIn(self.url_cleaned_text, evidence_context)
+        self.assertNotIn("Original URL Content to Verify", evidence_context)
+        self.assertNotIn("Top Search Results:", evidence_context)
+        self.assertNotIn("Source 1:", evidence_context)
+        self.assertNotIn("Fact-check evidence.", evidence_context)
+        evaluate_url.assert_not_called()
+        expected_sources = self._expected_sources()
         self.save_claim.assert_called_once_with(
             self.claim.pk, self.verdict, "Live Web Search",
             self.url_cleaned_text, expected_sources,
@@ -569,9 +634,25 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         self.assertEqual(self.claim.context_text, self.url_cleaned_text)
         self.assertEqual(self.payload, self.payload_before)
 
+    def _assert_unavailable_url_evidence_abstains(self, evaluate_url):
+        self.evaluate_persisted.assert_not_called()
+        evaluate_url.assert_not_called()
+        expected_sources = self._expected_sources()
+        self.assertEqual(self.save_claim.call_args.args[1]["verdict"], "UNVERIFIED")
+        self.assertEqual(self.save_claim.call_args.args[1]["confidence_score"], 0)
+        self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
+        self.assertEqual(self.save_claim.call_args.args[3], self.url_cleaned_text)
+        self.assertEqual(self.save_claim.call_args.args[4], expected_sources)
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("url_tavily_persisted_evidence_unavailable", stages)
+        self.assertNotIn("url_tavily_llm_evaluation", stages)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
+        self.assertEqual(self.claim.ai_sources, expected_sources)
+
     def test_url_runtime_uses_bridge_and_preserves_payload_evaluation_and_sources(self):
         evaluate_url = self._execute_url()
-        self._assert_original_url_evaluation_and_sources(evaluate_url)
+        self._assert_persisted_url_evaluation_and_sources(evaluate_url)
         self.assertEqual(EvidenceSource.objects.filter(provider="TAVILY").count(), 4)
         self.assertFalse(EvidenceSource.objects.exclude(authority_score=None).exists())
         self._assert_tavily_host_identities()
@@ -579,11 +660,48 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         self.assertIn("url_tavily_evidence_ingestion", stages)
         self.assertNotIn("tavily_evidence_ingestion", stages)
 
-    def test_url_ingestion_failure_preserves_completion_and_evaluation(self):
+    def test_url_tavily_reasoning_excludes_persisted_fact_check_evidence(self):
+        gfc_payload = {"claims": [{"text": "Unrelated fact check."}]}
+        gfc_raw_items = [RawEvidence(
+            provider="GOOGLE_FACT_CHECK",
+            url="https://fact-check.example/review",
+            content="Fact-check evidence.",
+            source_type="FACT_CHECK",
+        )]
+        gfc_provider_class = self._patch("api.tasks.GoogleFactCheckProvider")
+        gfc_provider_class.return_value.search_with_payload.return_value = (
+            gfc_payload,
+            gfc_raw_items,
+        )
+        self.gfc.side_effect = self.real_gfc_bridge
+        self.relevance.return_value = False
+
+        evaluate_url = self._execute_url()
+
+        run = self.claim.verification_runs.get()
+        self.assertEqual(
+            VerificationEvidence.objects.filter(
+                verification_run=run,
+                evidence_role=VerificationEvidence.EvidenceRole.FACT_CHECK,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            VerificationEvidence.objects.filter(
+                verification_run=run,
+                evidence_role=VerificationEvidence.EvidenceRole.SECONDARY,
+            ).count(),
+            4,
+        )
+        self._assert_persisted_url_evaluation_and_sources(evaluate_url)
+
+    def test_url_ingestion_failure_abstains_without_raw_evaluation(self):
         with patch("api.tasks.ingest_raw_evidence", side_effect=IntegrityError("Storage failed")):
             with self.assertLogs("api.tasks", level="ERROR") as logs:
-                evaluate_url = self._execute_url(expected_links=0)
-        self._assert_original_url_evaluation_and_sources(evaluate_url)
+                evaluate_url = self._execute_url(
+                    VerificationRun.Status.ABSTAINED, expected_links=0,
+                )
+        self._assert_unavailable_url_evidence_abstains(evaluate_url)
         self.assertEqual(EvidenceSource.objects.count(), 0)
         self.assertIn("Tavily evidence ingestion failed", "\n".join(logs.output))
         self.assertIn("Storage failed", "\n".join(logs.output))
@@ -591,30 +709,32 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         self.assertIn("url_tavily_evidence_ingestion_failed", stages)
         self.assertNotIn("tavily_evidence_ingestion_failed", stages)
 
-    def test_url_ingestion_failure_preserves_abstention_and_evaluation(self):
+    def test_url_ingestion_failure_preserves_abstention_without_evaluation(self):
         self.verdict["verdict"] = "UNVERIFIED"
         with patch("api.tasks.ingest_raw_evidence", side_effect=IntegrityError("Storage failed")):
             evaluate_url = self._execute_url(VerificationRun.Status.ABSTAINED, expected_links=0)
-        self._assert_original_url_evaluation_and_sources(evaluate_url)
+        self._assert_unavailable_url_evidence_abstains(evaluate_url)
         self.assertEqual(EvidenceSource.objects.count(), 0)
 
     def test_url_successful_ingestion_preserves_abstention_and_links(self):
         self.verdict["verdict"] = "UNVERIFIED"
         evaluate_url = self._execute_url(VerificationRun.Status.ABSTAINED)
-        self._assert_original_url_evaluation_and_sources(evaluate_url)
+        self._assert_persisted_url_evaluation_and_sources(evaluate_url)
 
-    def test_url_linking_failure_preserves_completion_and_evaluation(self):
+    def test_url_linking_failure_abstains_without_raw_evaluation(self):
         with patch(
             "api.tasks.link_evidence_sources_to_run",
             side_effect=RuntimeError("Link storage failed"),
         ):
             with self.assertLogs("api.tasks", level="ERROR") as logs:
-                evaluate_url = self._execute_url(expected_links=0)
+                evaluate_url = self._execute_url(
+                    VerificationRun.Status.ABSTAINED, expected_links=0,
+                )
         self.assertIn("Tavily evidence linking failed", "\n".join(logs.output))
         self.assertEqual(EvidenceSource.objects.filter(provider="TAVILY").count(), 4)
-        self._assert_original_url_evaluation_and_sources(evaluate_url)
+        self._assert_unavailable_url_evidence_abstains(evaluate_url)
 
-    def test_url_linking_failure_preserves_abstention_and_evaluation(self):
+    def test_url_linking_failure_preserves_abstention_without_evaluation(self):
         self.verdict["verdict"] = "UNVERIFIED"
         with patch(
             "api.tasks.link_evidence_sources_to_run",
@@ -624,7 +744,7 @@ class TavilyTextRuntimeIngestionTests(TestCase):
                 VerificationRun.Status.ABSTAINED, expected_links=0,
             )
         self.assertEqual(EvidenceSource.objects.filter(provider="TAVILY").count(), 4)
-        self._assert_original_url_evaluation_and_sources(evaluate_url)
+        self._assert_unavailable_url_evidence_abstains(evaluate_url)
 
     def test_url_provider_failure_reaches_existing_unverified_fallback(self):
         self.client.search.side_effect = requests.Timeout("Provider unavailable")
@@ -632,6 +752,7 @@ class TavilyTextRuntimeIngestionTests(TestCase):
             evaluate_url = self._execute_url(VerificationRun.Status.ABSTAINED, expected_links=0)
         ingest.assert_not_called()
         evaluate_url.assert_not_called()
+        self.evaluate_persisted.assert_not_called()
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
         self.assertEqual(self.claim.ai_sources, [])

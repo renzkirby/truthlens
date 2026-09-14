@@ -12,6 +12,7 @@ from .services import (
     clean_extracted_text,
     extract_search_query,
     is_fact_check_relevant,
+    evaluate_claim_with_persisted_evidence,
     evaluate_image_claim_with_gfc,
     evaluate_image_claim_with_tavily,
     evaluate_url_claim_with_gfc,
@@ -26,6 +27,15 @@ from .models import (
     VerificationEvidence,
 )
 from .trust_service import recompute_user_trust_score
+from .verification.evidence_assessment import (
+    assess_reasoning_evidence_against_claim,
+)
+from .verification.evidence_dossier import (
+    filter_reasoning_evidence_dossier_by_role,
+    load_reasoning_evidence_dossier_for_run,
+    render_reasoning_evidence_dossier,
+)
+from .verification.evidence_enrichment import persist_evidence_assessment
 from .verification.ingestion import ingest_raw_evidence
 from .verification.linking import link_evidence_sources_to_run
 from .verification.providers.google_fact_check import (
@@ -233,6 +243,75 @@ def _log_stage(claim_id, stage, started_at, **metadata):
     if details:
         message = f"{message} {details}"
     logger.info(message)
+
+
+def _assess_and_persist_reasoning_evidence(
+    claim_text,
+    evidence_groups,
+    claim_id,
+    *,
+    stage_prefix,
+):
+    stage_name = f"{stage_prefix}_evidence_assessment"
+    for evidence_group in evidence_groups:
+        for evidence_item in evidence_group.evidence:
+            if (
+                evidence_item.stance != VerificationEvidence.Stance.UNKNOWN
+                or evidence_item.relevance_score is not None
+                or evidence_item.directness_score is not None
+            ):
+                continue
+
+            assessment_started_at = time.perf_counter()
+            try:
+                assessment = assess_reasoning_evidence_against_claim(
+                    claim_text,
+                    evidence_item,
+                )
+            except Exception as exc:
+                _log_stage(
+                    claim_id,
+                    stage_name,
+                    assessment_started_at,
+                    evidence_link_id=evidence_item.evidence_link_id,
+                    outcome="assessment_failed",
+                    error=str(exc)[:120],
+                )
+                logger.error(
+                    "Evidence assessment failed for claim %s, link %s: %s",
+                    claim_id,
+                    evidence_item.evidence_link_id,
+                    exc,
+                )
+                continue
+
+            try:
+                persisted = persist_evidence_assessment(evidence_item, assessment)
+            except Exception as exc:
+                _log_stage(
+                    claim_id,
+                    stage_name,
+                    assessment_started_at,
+                    evidence_link_id=evidence_item.evidence_link_id,
+                    outcome="persistence_failed",
+                    error=str(exc)[:120],
+                )
+                logger.error(
+                    "Evidence assessment persistence failed for claim %s, "
+                    "link %s: %s",
+                    claim_id,
+                    evidence_item.evidence_link_id,
+                    exc,
+                )
+                continue
+
+            _log_stage(
+                claim_id,
+                stage_name,
+                assessment_started_at,
+                evidence_link_id=evidence_item.evidence_link_id,
+                persisted=persisted,
+            )
 
 
 # IMAGE PIPELINE
@@ -560,6 +639,8 @@ def execute_core_text_pipeline(raw_text, claim_id):
 
             # Try GFC first — return early if relevant result found
             gfc_started_at = time.perf_counter()
+            gfc_claims = []
+            is_relevant = False
 
             try:
                 gfc_data = _retrieve_and_ingest_gfc(
@@ -589,48 +670,112 @@ def execute_core_text_pipeline(raw_text, claim_id):
                         relevance_started_at,
                         relevant=is_relevant,
                     )
-                    if is_relevant:
-                        gfc_eval_started_at = time.perf_counter()
-                        ai_verdict = evaluate_image_claim_with_gfc(
-                            cleaned_claim, gfc_data, article_stance
-                        )
-                        _log_stage(
-                            claim_id,
-                            "gfc_llm_evaluation",
-                            gfc_eval_started_at,
-                            verdict=ai_verdict.get("verdict"),
-                        )
-                        source_urls = []
-                        for c in gfc_claims[:3]:
-                            review_url = c.get("claimReview", [{}])[0].get("url", "")
-                            if review_url:
-                                source_urls.append(review_url)
-
-                        save_started_at = time.perf_counter()
-                        _save_claim(
-                            claim_id,
-                            ai_verdict,
-                            "Official Fact Check",
-                            cleaned_claim,
-                            source_urls,
-                        )
-                        _log_stage(
-                            claim_id,
-                            "save_claim",
-                            save_started_at,
-                            source_type="Official Fact Check",
-                        )
-                        outcome = "completed_gfc"
-                        selected_verdict = (
-                            ai_verdict.get("verdict") if isinstance(ai_verdict, dict) else None
-                        )
-                        return
-
             except Exception as e:
                 _log_stage(
                     claim_id, "gfc_search_failed", gfc_started_at, error=str(e)[:120]
                 )
                 logger.error("GFC error for claim %s: %s", claim_id, e)
+
+            if gfc_claims and is_relevant:
+                gfc_eval_started_at = time.perf_counter()
+                if run is None:
+                    ai_verdict = evaluate_image_claim_with_gfc(
+                        cleaned_claim,
+                        gfc_data,
+                        article_stance,
+                    )
+                    has_persisted_evidence = True
+                else:
+                    evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
+                    fact_check_groups = filter_reasoning_evidence_dossier_by_role(
+                        evidence_dossier,
+                        VerificationEvidence.EvidenceRole.FACT_CHECK,
+                    )
+                    if fact_check_groups:
+                        _assess_and_persist_reasoning_evidence(
+                            cleaned_claim,
+                            fact_check_groups,
+                            claim_id,
+                            stage_prefix="gfc",
+                        )
+                        evidence_dossier = load_reasoning_evidence_dossier_for_run(
+                            run
+                        )
+                        fact_check_groups = (
+                            filter_reasoning_evidence_dossier_by_role(
+                                evidence_dossier,
+                                VerificationEvidence.EvidenceRole.FACT_CHECK,
+                            )
+                        )
+                    evidence_context = render_reasoning_evidence_dossier(
+                        fact_check_groups
+                    )
+                    has_persisted_evidence = bool(evidence_context)
+                    if has_persisted_evidence:
+                        try:
+                            ai_verdict = evaluate_claim_with_persisted_evidence(
+                                cleaned_claim,
+                                evidence_context,
+                                article_stance,
+                            )
+                        except Exception as exc:
+                            has_persisted_evidence = False
+                            _log_stage(
+                                claim_id,
+                                "gfc_llm_evaluation_failed",
+                                gfc_eval_started_at,
+                                error=str(exc)[:120],
+                            )
+                            logger.error(
+                                "GFC persisted-evidence evaluation failed "
+                                "for claim %s: %s",
+                                claim_id,
+                                exc,
+                            )
+                    else:
+                        _log_stage(
+                            claim_id,
+                            "gfc_persisted_evidence_unavailable",
+                            gfc_eval_started_at,
+                            verification_run_id=run.pk,
+                        )
+
+                if has_persisted_evidence:
+                    _log_stage(
+                        claim_id,
+                        "gfc_llm_evaluation",
+                        gfc_eval_started_at,
+                        verdict=ai_verdict.get("verdict"),
+                    )
+                    source_urls = []
+                    for claim_data in gfc_claims[:3]:
+                        review_url = claim_data.get("claimReview", [{}])[0].get(
+                            "url", ""
+                        )
+                        if review_url:
+                            source_urls.append(review_url)
+
+                    save_started_at = time.perf_counter()
+                    _save_claim(
+                        claim_id,
+                        ai_verdict,
+                        "Official Fact Check",
+                        cleaned_claim,
+                        source_urls,
+                    )
+                    _log_stage(
+                        claim_id,
+                        "save_claim",
+                        save_started_at,
+                        source_type="Official Fact Check",
+                    )
+                    outcome = "completed_gfc"
+                    selected_verdict = (
+                        ai_verdict.get("verdict")
+                        if isinstance(ai_verdict, dict)
+                        else None
+                    )
+                    return
 
             # Fallback — Tavily web search
             tavily_started_at = time.perf_counter()
@@ -638,58 +783,6 @@ def execute_core_text_pipeline(raw_text, claim_id):
                 tavily_response = _retrieve_and_ingest_tavily(
                     search_query, claim_id, verification_run=run,
                 )
-                tavily_results = tavily_response.get("results", [])
-                tavily_answer = tavily_response.get(
-                    "answer", "No additional web context found."
-                )
-                _log_stage(
-                    claim_id,
-                    "tavily_search",
-                    tavily_started_at,
-                    results=len(tavily_results),
-                )
-
-                # BUILD RICHER CONTEXT: Give the AI the top 3 actual articles to read
-                results_context = ""
-                for i, res in enumerate(tavily_results[:3]):
-                    results_context += f"Source {i+1}: {res.get('title', 'No Title')}\nURL: {res.get('url', '')}\nContent: {res.get('content', '')}\n\n"
-
-                combined_context = f"Text Extracted From Image (Do NOT use this as evidence to prove itself):\n{raw_text}\n\nWeb Search Answer:\n{tavily_answer}\n\nTop Search Results:\n{results_context}"
-
-                tavily_eval_started_at = time.perf_counter()
-                ai_verdict = evaluate_image_claim_with_tavily(
-                    cleaned_claim, combined_context, article_stance
-                )
-                _log_stage(
-                    claim_id,
-                    "tavily_llm_evaluation",
-                    tavily_eval_started_at,
-                    verdict=ai_verdict.get("verdict"),
-                )
-
-                source_urls = [
-                    {
-                        "url": res.get("url"),
-                        "title": res.get("title", "External Source"),
-                        "snippet": res.get("content", "")[:250]
-                        + "...",  # Grab the first 250 characters
-                    }
-                    for res in tavily_results[:3]
-                    if res.get("url")
-                ]
-
-                save_started_at = time.perf_counter()
-                _save_claim(
-                    claim_id, ai_verdict, "Live Web Search", cleaned_claim, source_urls
-                )
-                _log_stage(
-                    claim_id, "save_claim", save_started_at, source_type="Live Web Search"
-                )
-                outcome = "completed_tavily"
-                selected_verdict = (
-                    ai_verdict.get("verdict") if isinstance(ai_verdict, dict) else None
-                )
-
             except Exception as e:
                 _log_stage(
                     claim_id, "tavily_search_failed", tavily_started_at, error=str(e)[:120]
@@ -708,6 +801,131 @@ def execute_core_text_pipeline(raw_text, claim_id):
                 )
                 outcome = "completed_tavily_fallback_unverified"
                 selected_verdict = "UNVERIFIED"
+            else:
+                tavily_results = tavily_response.get("results", [])
+                _log_stage(
+                    claim_id,
+                    "tavily_search",
+                    tavily_started_at,
+                    results=len(tavily_results),
+                )
+
+                source_urls = [
+                    {
+                        "url": result.get("url"),
+                        "title": result.get("title", "External Source"),
+                        "snippet": result.get("content", "")[:250] + "...",
+                    }
+                    for result in tavily_results[:3]
+                    if result.get("url")
+                ]
+
+                tavily_eval_started_at = time.perf_counter()
+                evaluator_invoked = False
+                if run is None:
+                    tavily_answer = tavily_response.get(
+                        "answer", "No additional web context found."
+                    )
+                    results_context = ""
+                    for index, result in enumerate(tavily_results[:3]):
+                        results_context += (
+                            f"Source {index + 1}: "
+                            f"{result.get('title', 'No Title')}\n"
+                            f"URL: {result.get('url', '')}\n"
+                            f"Content: {result.get('content', '')}\n\n"
+                        )
+                    combined_context = (
+                        "Text Extracted From Image "
+                        "(Do NOT use this as evidence to prove itself):\n"
+                        f"{raw_text}\n\nWeb Search Answer:\n{tavily_answer}\n\n"
+                        f"Top Search Results:\n{results_context}"
+                    )
+                    evaluator_invoked = True
+                    ai_verdict = evaluate_image_claim_with_tavily(
+                        cleaned_claim,
+                        combined_context,
+                        article_stance,
+                    )
+                else:
+                    evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
+                    secondary_groups = filter_reasoning_evidence_dossier_by_role(
+                        evidence_dossier,
+                        VerificationEvidence.EvidenceRole.SECONDARY,
+                    )
+                    if secondary_groups:
+                        _assess_and_persist_reasoning_evidence(
+                            cleaned_claim,
+                            secondary_groups,
+                            claim_id,
+                            stage_prefix="tavily",
+                        )
+                        evidence_dossier = load_reasoning_evidence_dossier_for_run(
+                            run
+                        )
+                        secondary_groups = (
+                            filter_reasoning_evidence_dossier_by_role(
+                                evidence_dossier,
+                                VerificationEvidence.EvidenceRole.SECONDARY,
+                            )
+                        )
+                    evidence_context = render_reasoning_evidence_dossier(
+                        secondary_groups
+                    )
+                    if evidence_context:
+                        evaluator_invoked = True
+                        ai_verdict = evaluate_claim_with_persisted_evidence(
+                            cleaned_claim,
+                            evidence_context,
+                            article_stance,
+                        )
+                    else:
+                        _log_stage(
+                            claim_id,
+                            "tavily_persisted_evidence_unavailable",
+                            tavily_eval_started_at,
+                            verification_run_id=run.pk,
+                        )
+                        ai_verdict = {
+                            "reasoning": (
+                                "No persisted Tavily evidence was available for evaluation."
+                            ),
+                            "verdict": "UNVERIFIED",
+                            "summary": (
+                                "Could not retrieve persisted evidence to verify the claim."
+                            ),
+                            "confidence_score": 0,
+                            "score_context": (
+                                "No persisted secondary evidence was available for verification."
+                            ),
+                        }
+
+                if evaluator_invoked:
+                    _log_stage(
+                        claim_id,
+                        "tavily_llm_evaluation",
+                        tavily_eval_started_at,
+                        verdict=ai_verdict.get("verdict"),
+                    )
+                save_started_at = time.perf_counter()
+                _save_claim(
+                    claim_id,
+                    ai_verdict,
+                    "Live Web Search",
+                    cleaned_claim,
+                    source_urls,
+                )
+                _log_stage(
+                    claim_id,
+                    "save_claim",
+                    save_started_at,
+                    source_type="Live Web Search",
+                )
+                outcome = "completed_tavily"
+                selected_verdict = (
+                    ai_verdict.get("verdict")
+                    if isinstance(ai_verdict, dict)
+                    else None
+                )
 
         # This catches catastrophic errors (like Groq going down completely)
         except Exception as e:
@@ -912,6 +1130,8 @@ def url_fact_check_process(url, claim_id):
 
         # Step 3 — Try GFC first, return early if relevant
         gfc_started_at = time.perf_counter()
+        gfc_claims = []
+        is_relevant = False
 
         try:
             gfc_data = _retrieve_and_ingest_gfc(
@@ -942,50 +1162,125 @@ def url_fact_check_process(url, claim_id):
                     relevance_started_at,
                     relevant=is_relevant,
                 )
-                if is_relevant:
-                    gfc_eval_started_at = time.perf_counter()
-                    ai_verdict = evaluate_url_claim_with_gfc(
-                        cleaned_claim, gfc_data, article_stance
-                    )
-                    _log_stage(
-                        claim_id,
-                        "url_gfc_llm_evaluation",
-                        gfc_eval_started_at,
-                        verdict=ai_verdict.get("verdict"),
-                    )
-
-                    source_urls = []
-                    for c in gfc_claims[:3]:
-                        review_url = c.get("claimReview", [{}])[0].get("url", "")
-                        if review_url:
-                            source_urls.append(review_url)
-
-                    save_started_at = time.perf_counter()
-                    _save_claim(
-                        claim_id,
-                        ai_verdict,
-                        "Official Fact Check",
-                        cleaned_text,
-                        source_urls,
-                    )
-                    _log_stage(
-                        claim_id,
-                        "save_claim",
-                        save_started_at,
-                        source_type="Official Fact Check",
-                    )
-                    outcome = "completed_gfc"
-                    selected_verdict = (
-                        ai_verdict.get("verdict") if isinstance(ai_verdict, dict) else None
-                    )
-                    _log_stage(
-                        claim_id, "url_task_total", pipeline_started_at, outcome=outcome
-                    )
-                    return
-
         except Exception as e:
             _log_stage(claim_id, "url_gfc_failed", gfc_started_at, error=str(e)[:120])
             logger.error("GFC error for claim %s: %s", claim_id, e)
+
+        if gfc_claims and is_relevant:
+            gfc_eval_started_at = time.perf_counter()
+            evaluation_completed = False
+            if run is None:
+                try:
+                    ai_verdict = evaluate_url_claim_with_gfc(
+                        cleaned_claim,
+                        gfc_data,
+                        article_stance,
+                    )
+                except Exception as e:
+                    _log_stage(
+                        claim_id,
+                        "url_gfc_failed",
+                        gfc_started_at,
+                        error=str(e)[:120],
+                    )
+                    logger.error("GFC error for claim %s: %s", claim_id, e)
+                else:
+                    evaluation_completed = True
+            else:
+                evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
+                fact_check_groups = filter_reasoning_evidence_dossier_by_role(
+                    evidence_dossier,
+                    VerificationEvidence.EvidenceRole.FACT_CHECK,
+                )
+                if fact_check_groups:
+                    _assess_and_persist_reasoning_evidence(
+                        cleaned_claim,
+                        fact_check_groups,
+                        claim_id,
+                        stage_prefix="url_gfc",
+                    )
+                    evidence_dossier = load_reasoning_evidence_dossier_for_run(
+                        run
+                    )
+                    fact_check_groups = (
+                        filter_reasoning_evidence_dossier_by_role(
+                            evidence_dossier,
+                            VerificationEvidence.EvidenceRole.FACT_CHECK,
+                        )
+                    )
+                evidence_context = render_reasoning_evidence_dossier(
+                    fact_check_groups
+                )
+                if evidence_context:
+                    try:
+                        ai_verdict = evaluate_claim_with_persisted_evidence(
+                            cleaned_claim,
+                            evidence_context,
+                            article_stance,
+                        )
+                    except Exception as e:
+                        _log_stage(
+                            claim_id,
+                            "url_gfc_llm_evaluation_failed",
+                            gfc_eval_started_at,
+                            error=str(e)[:120],
+                        )
+                        logger.error(
+                            "URL GFC persisted-evidence evaluation failed "
+                            "for claim %s: %s",
+                            claim_id,
+                            e,
+                        )
+                    else:
+                        evaluation_completed = True
+                else:
+                    _log_stage(
+                        claim_id,
+                        "url_gfc_persisted_evidence_unavailable",
+                        gfc_eval_started_at,
+                        verification_run_id=run.pk,
+                    )
+
+            if evaluation_completed:
+                _log_stage(
+                    claim_id,
+                    "url_gfc_llm_evaluation",
+                    gfc_eval_started_at,
+                    verdict=ai_verdict.get("verdict"),
+                )
+
+                source_urls = []
+                for claim_data in gfc_claims[:3]:
+                    review_url = claim_data.get("claimReview", [{}])[0].get(
+                        "url", ""
+                    )
+                    if review_url:
+                        source_urls.append(review_url)
+
+                save_started_at = time.perf_counter()
+                _save_claim(
+                    claim_id,
+                    ai_verdict,
+                    "Official Fact Check",
+                    cleaned_text,
+                    source_urls,
+                )
+                _log_stage(
+                    claim_id,
+                    "save_claim",
+                    save_started_at,
+                    source_type="Official Fact Check",
+                )
+                outcome = "completed_gfc"
+                selected_verdict = (
+                    ai_verdict.get("verdict")
+                    if isinstance(ai_verdict, dict)
+                    else None
+                )
+                _log_stage(
+                    claim_id, "url_task_total", pipeline_started_at, outcome=outcome
+                )
+                return
 
         # Step 4 — Fallback to Tavily web search
         tavily_search_started_at = time.perf_counter()
@@ -996,56 +1291,6 @@ def url_fact_check_process(url, claim_id):
                 stage_prefix="url_",
                 verification_run=run,
             )
-
-            tavily_results = search_response.get("results", [])
-            tavily_answer = search_response.get(
-                "answer", "No additional web context found."
-            )
-            _log_stage(
-                claim_id,
-                "url_tavily_search",
-                tavily_search_started_at,
-                results=len(tavily_results),
-            )
-
-            # BUILD RICHER CONTEXT: Give the AI the top 3 actual articles to read
-            results_context = ""
-            for i, res in enumerate(tavily_results[:3]):
-                results_context += f"Source {i+1}: {res.get('title', 'No Title')}\nURL: {res.get('url', '')}\nContent: {res.get('content', '')}\n\n"
-
-            # FIXED: Renamed the label to prevent circular reasoning
-            combined_context = f"Original URL Content to Verify (Do NOT use this as evidence to prove itself):\n{cleaned_text[:1500]}\n\nWeb Search Answer:\n{tavily_answer}\n\nTop Search Results:\n{results_context}"
-            tavily_eval_started_at = time.perf_counter()
-            ai_verdict = evaluate_url_claim_with_tavily(
-                cleaned_claim, combined_context, article_stance
-            )
-            _log_stage(
-                claim_id,
-                "url_tavily_llm_evaluation",
-                tavily_eval_started_at,
-                verdict=ai_verdict.get("verdict"),
-            )
-
-            source_urls = [
-                {
-                    "url": res.get("url"),
-                    "title": res.get("title", "External Source"),
-                    "snippet": res.get("content", "")[:250] + "...",
-                }
-                for res in tavily_results[:3]
-                if res.get("url")
-            ]
-
-            save_started_at = time.perf_counter()
-            _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_text, source_urls)
-            _log_stage(
-                claim_id, "save_claim", save_started_at, source_type="Live Web Search"
-            )
-            outcome = "completed_tavily"
-            selected_verdict = (
-                ai_verdict.get("verdict") if isinstance(ai_verdict, dict) else None
-            )
-
         except Exception as e:
             _log_stage(
                 claim_id, "url_tavily_failed", tavily_search_started_at, error=str(e)[:120]
@@ -1067,6 +1312,153 @@ def url_fact_check_process(url, claim_id):
                 logger.error("_save_claim also failed for claim %s: %s", claim_id, save_err)
             outcome = "completed_tavily_fallback_unverified"
             selected_verdict = "UNVERIFIED"
+        else:
+            tavily_results = search_response.get("results", [])
+            _log_stage(
+                claim_id,
+                "url_tavily_search",
+                tavily_search_started_at,
+                results=len(tavily_results),
+            )
+
+            source_urls = [
+                {
+                    "url": result.get("url"),
+                    "title": result.get("title", "External Source"),
+                    "snippet": result.get("content", "")[:250] + "...",
+                }
+                for result in tavily_results[:3]
+                if result.get("url")
+            ]
+
+            tavily_eval_started_at = time.perf_counter()
+            evaluator_invoked = False
+            if run is None:
+                tavily_answer = search_response.get(
+                    "answer", "No additional web context found."
+                )
+                results_context = ""
+                for index, result in enumerate(tavily_results[:3]):
+                    results_context += (
+                        f"Source {index + 1}: "
+                        f"{result.get('title', 'No Title')}\n"
+                        f"URL: {result.get('url', '')}\n"
+                        f"Content: {result.get('content', '')}\n\n"
+                    )
+                combined_context = (
+                    "Original URL Content to Verify "
+                    "(Do NOT use this as evidence to prove itself):\n"
+                    f"{cleaned_text[:1500]}\n\nWeb Search Answer:\n{tavily_answer}\n\n"
+                    f"Top Search Results:\n{results_context}"
+                )
+                evaluator_invoked = True
+                try:
+                    ai_verdict = evaluate_url_claim_with_tavily(
+                        cleaned_claim,
+                        combined_context,
+                        article_stance,
+                    )
+                except Exception as e:
+                    _log_stage(
+                        claim_id,
+                        "url_tavily_failed",
+                        tavily_search_started_at,
+                        error=str(e)[:120],
+                    )
+                    logger.error("Tavily search error for claim %s: %s", claim_id, e)
+                    try:
+                        _save_claim(
+                            claim_id,
+                            {
+                                "verdict": "UNVERIFIED",
+                                "summary": (
+                                    "Could not retrieve relevant information "
+                                    "to verify the claim."
+                                ),
+                                "confidence_score": 0,
+                            },
+                            "Live Web Search",
+                            cleaned_text,
+                            [],
+                        )
+                    except Exception as save_err:
+                        logger.error(
+                            "_save_claim also failed for claim %s: %s",
+                            claim_id,
+                            save_err,
+                        )
+                    outcome = "completed_tavily_fallback_unverified"
+                    selected_verdict = "UNVERIFIED"
+                    return
+            else:
+                evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
+                secondary_groups = filter_reasoning_evidence_dossier_by_role(
+                    evidence_dossier,
+                    VerificationEvidence.EvidenceRole.SECONDARY,
+                )
+                if secondary_groups:
+                    _assess_and_persist_reasoning_evidence(
+                        cleaned_claim,
+                        secondary_groups,
+                        claim_id,
+                        stage_prefix="url_tavily",
+                    )
+                    evidence_dossier = load_reasoning_evidence_dossier_for_run(
+                        run
+                    )
+                    secondary_groups = (
+                        filter_reasoning_evidence_dossier_by_role(
+                            evidence_dossier,
+                            VerificationEvidence.EvidenceRole.SECONDARY,
+                        )
+                    )
+                evidence_context = render_reasoning_evidence_dossier(
+                    secondary_groups
+                )
+                if evidence_context:
+                    evaluator_invoked = True
+                    ai_verdict = evaluate_claim_with_persisted_evidence(
+                        cleaned_claim,
+                        evidence_context,
+                        article_stance,
+                    )
+                else:
+                    _log_stage(
+                        claim_id,
+                        "url_tavily_persisted_evidence_unavailable",
+                        tavily_eval_started_at,
+                        verification_run_id=run.pk,
+                    )
+                    ai_verdict = {
+                        "reasoning": (
+                            "No persisted Tavily evidence was available for evaluation."
+                        ),
+                        "verdict": "UNVERIFIED",
+                        "summary": (
+                            "Could not retrieve persisted evidence to verify the claim."
+                        ),
+                        "confidence_score": 0,
+                        "score_context": (
+                            "No persisted secondary evidence was available for verification."
+                        ),
+                    }
+
+            if evaluator_invoked:
+                _log_stage(
+                    claim_id,
+                    "url_tavily_llm_evaluation",
+                    tavily_eval_started_at,
+                    verdict=ai_verdict.get("verdict"),
+                )
+            save_started_at = time.perf_counter()
+            _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_text, source_urls)
+            _log_stage(
+                claim_id, "save_claim", save_started_at, source_type="Live Web Search"
+            )
+            outcome = "completed_tavily"
+            selected_verdict = (
+                ai_verdict.get("verdict") if isinstance(ai_verdict, dict) else None
+            )
         finally:
             _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
 
