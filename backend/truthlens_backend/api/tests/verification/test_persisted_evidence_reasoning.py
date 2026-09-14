@@ -3,7 +3,10 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase
 
-from api.services import evaluate_claim_with_persisted_evidence
+from api.services import (
+    LLMProviderUnavailableError,
+    evaluate_claim_with_persisted_evidence,
+)
 
 
 class PersistedEvidenceEvaluatorTests(SimpleTestCase):
@@ -72,6 +75,19 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertEqual(result["verdict"], "UNVERIFIED")
         self.assertEqual(result["confidence_score"], 0)
         self.assertIn("persisted evidence", result["reasoning"].lower())
+
+    def test_provider_unavailable_exception_propagates(self):
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=LLMProviderUnavailableError(
+                "No configured LLM provider completed the request."
+            ),
+        ):
+            with self.assertRaises(LLMProviderUnavailableError):
+                evaluate_claim_with_persisted_evidence(
+                    "Example claim.",
+                    "Persisted evidence.",
+                )
 
     def test_valid_parsed_result_is_returned_unchanged(self):
         with patch(
