@@ -189,6 +189,8 @@ export const API_ENDPOINTS = {
       `organizations/${organizationId}/invitations/${invitationId}/resend/`,
    ORGANIZATION_INVITATION_CANCEL: (organizationId, invitationId) =>
       `organizations/${organizationId}/invitations/${invitationId}/cancel/`,
+   ACCOUNTABILITY_ORGANIZATION: "accountability/organization/",
+   ACCOUNTABILITY_PLATFORM_SAFETY: "accountability/platform-safety/",
 
    // Public Partner Presence
    PUBLIC_PARTNERS: "partners/",

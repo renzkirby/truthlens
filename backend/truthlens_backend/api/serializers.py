@@ -18,6 +18,15 @@ from .models import (
     Organization,
     OrganizationMembership,
     OrganizationInvitation,
+    AccountabilityEvent,
+)
+from .accountability_query_service import (
+    AccountabilityDomain,
+    DOMAIN_LABELS as ACCOUNTABILITY_DOMAIN_LABELS,
+    DOMAIN_RESOURCES as ACCOUNTABILITY_DOMAIN_RESOURCES,
+    ORGANIZATION_ACTIONS,
+    ORGANIZATION_DOMAINS,
+    SAFETY_ACTIONS,
 )
 from .services import validate_public_url, check_url_threat_reputation
 from .trust_service import calculate_trust_components
@@ -3611,3 +3620,161 @@ class ClaimMatchSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
     )
+
+
+class _StrictAccountabilityQuerySerializer(serializers.Serializer):
+    resource_id = serializers.CharField(required=False, allow_blank=True)
+    actor = serializers.CharField(required=False, allow_blank=True)
+    created_after = serializers.DateTimeField(required=False, allow_null=True)
+    created_before = serializers.DateTimeField(required=False, allow_null=True)
+    limit = serializers.IntegerField(default=25, min_value=1, max_value=100)
+    offset = serializers.IntegerField(default=0, min_value=0)
+
+    def to_internal_value(self, data):
+        unknown = sorted(set(data.keys()) - set(self.fields))
+        if unknown:
+            raise serializers.ValidationError(
+                {key: ["Unknown query parameter."] for key in unknown}
+            )
+        return super().to_internal_value(data)
+
+    def validate(self, attrs):
+        created_after = attrs.get("created_after")
+        created_before = attrs.get("created_before")
+        if created_after and created_before and created_after > created_before:
+            raise serializers.ValidationError(
+                {
+                    "created_before": (
+                        "created_before must be at or after created_after."
+                    )
+                }
+            )
+        return attrs
+
+
+_ORGANIZATION_RESOURCE_CHOICES = [
+    (value, label)
+    for value, label in AccountabilityEvent.ResourceType.choices
+    if any(
+        value in ACCOUNTABILITY_DOMAIN_RESOURCES[domain]
+        for domain in ORGANIZATION_DOMAINS
+    )
+]
+
+
+class OrganizationAccountabilityQuerySerializer(
+    _StrictAccountabilityQuerySerializer
+):
+    organization_id = serializers.UUIDField()
+    domain = serializers.ChoiceField(
+        choices=[(value, ACCOUNTABILITY_DOMAIN_LABELS[value]) for value in ORGANIZATION_DOMAINS],
+        required=False,
+        allow_blank=True,
+    )
+    action_type = serializers.ChoiceField(
+        choices=[
+            (value, dict(AccountabilityEvent.ActionType.choices)[value])
+            for value in ORGANIZATION_ACTIONS
+        ],
+        required=False,
+        allow_blank=True,
+    )
+    resource_type = serializers.ChoiceField(
+        choices=_ORGANIZATION_RESOURCE_CHOICES,
+        required=False,
+        allow_blank=True,
+    )
+
+
+class PlatformAccountabilityQuerySerializer(_StrictAccountabilityQuerySerializer):
+    domain = serializers.ChoiceField(
+        choices=[
+            (
+                AccountabilityDomain.SAFETY,
+                ACCOUNTABILITY_DOMAIN_LABELS[AccountabilityDomain.SAFETY],
+            )
+        ],
+        required=False,
+        allow_blank=True,
+    )
+    action_type = serializers.ChoiceField(
+        choices=[
+            (value, dict(AccountabilityEvent.ActionType.choices)[value])
+            for value in SAFETY_ACTIONS
+        ],
+        required=False,
+        allow_blank=True,
+    )
+    resource_type = serializers.ChoiceField(
+        choices=[AccountabilityEvent.ResourceType.MODERATION_CASE],
+        required=False,
+        allow_blank=True,
+    )
+
+
+class AccountabilityActorSerializer(serializers.Serializer):
+    id = serializers.CharField(allow_null=True, allow_blank=False)
+    username = serializers.CharField(allow_null=True, allow_blank=True)
+    historical = serializers.BooleanField()
+
+
+class AccountabilityOrganizationSerializer(serializers.Serializer):
+    id = serializers.UUIDField(allow_null=True)
+    name = serializers.CharField(allow_null=True, allow_blank=True)
+
+
+class AccountabilityAuthoritySerializer(serializers.Serializer):
+    scope = serializers.ChoiceField(choices=AccountabilityEvent.AuthorityScope.choices)
+    capability = serializers.CharField(allow_blank=True)
+    organization = AccountabilityOrganizationSerializer(allow_null=True)
+
+
+class AccountabilityResourceSerializer(serializers.Serializer):
+    type = serializers.ChoiceField(choices=AccountabilityEvent.ResourceType.choices)
+    label = serializers.CharField()
+    id = serializers.CharField()
+
+
+class AccountabilityEventSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    action_type = serializers.ChoiceField(choices=AccountabilityEvent.ActionType.choices)
+    action_label = serializers.CharField()
+    domain = serializers.ChoiceField(choices=list(ACCOUNTABILITY_DOMAIN_LABELS))
+    domain_label = serializers.CharField()
+    actor = AccountabilityActorSerializer(allow_null=True)
+    authority = AccountabilityAuthoritySerializer()
+    subject_organization = AccountabilityOrganizationSerializer(allow_null=True)
+    resource = AccountabilityResourceSerializer()
+    previous_state = serializers.DictField()
+    new_state = serializers.DictField()
+    reason_code = serializers.CharField(allow_blank=True)
+    notes = serializers.CharField(allow_blank=True)
+    context = serializers.DictField()
+    created_at = serializers.DateTimeField()
+
+
+class AccountabilityFilterOptionSerializer(serializers.Serializer):
+    value = serializers.CharField()
+    label = serializers.CharField()
+
+
+class AccountabilityActionFilterOptionSerializer(
+    AccountabilityFilterOptionSerializer
+):
+    domain = serializers.ChoiceField(choices=list(ACCOUNTABILITY_DOMAIN_LABELS))
+
+
+class AccountabilityFilterOptionsSerializer(serializers.Serializer):
+    domains = AccountabilityFilterOptionSerializer(many=True)
+    actions = AccountabilityActionFilterOptionSerializer(many=True)
+    resources = AccountabilityFilterOptionSerializer(many=True)
+
+
+class AccountabilityPageSerializer(serializers.Serializer):
+    count = serializers.IntegerField(min_value=0)
+    limit = serializers.IntegerField(min_value=1, max_value=100)
+    offset = serializers.IntegerField(min_value=0)
+    scope = serializers.ChoiceField(choices=["ORGANIZATION", "PLATFORM"])
+    organization = AccountabilityOrganizationSerializer(allow_null=True)
+    filter_options = AccountabilityFilterOptionsSerializer()
+    results = AccountabilityEventSerializer(many=True)

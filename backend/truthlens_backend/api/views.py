@@ -217,6 +217,12 @@ from .organization_publication_query_service import (
     get_organization_publication_detail,
     list_organization_publications,
 )
+from .accountability_query_service import (
+    AccountabilityQueryAuthorizationError,
+    AccountabilityQueryInputError,
+    list_organization_accountability_events,
+    list_platform_accountability_events,
+)
 from .verification_assignment_service import (
     VerificationAssignmentAuthorizationError,
     VerificationAssignmentConflict,
@@ -336,6 +342,9 @@ from .serializers import (
     EvidenceCaseQueueFilterSerializer,
     EvidenceCaseSummarySerializer,
     EvidenceReviewOrganizationSerializer,
+    AccountabilityPageSerializer,
+    OrganizationAccountabilityQuerySerializer,
+    PlatformAccountabilityQuerySerializer,
 )
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
@@ -2220,6 +2229,59 @@ def organization_publication_detail(request, fact_check_id):
     return Response(
         OrganizationPublicationDetailSerializer(payload).data,
         status=status.HTTP_200_OK,
+    )
+
+
+def _accountability_query_response(*, serializer, query_function, extra_args=None):
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+    query_args = {
+        "domain": data.get("domain", ""),
+        "action_type": data.get("action_type", ""),
+        "resource_type": data.get("resource_type", ""),
+        "resource_id": data.get("resource_id", ""),
+        "actor_search": data.get("actor", ""),
+        "created_after": data.get("created_after"),
+        "created_before": data.get("created_before"),
+        "limit": data["limit"],
+        "offset": data["offset"],
+        **(extra_args or {}),
+    }
+    try:
+        payload = query_function(**query_args)
+    except AccountabilityQueryAuthorizationError as error:
+        raise PermissionDenied(str(error)) from error
+    except AccountabilityQueryInputError as error:
+        raise ValidationError({"detail": str(error)}) from error
+    return Response(
+        AccountabilityPageSerializer(payload).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def organization_accountability(request):
+    serializer = OrganizationAccountabilityQuerySerializer(data=request.query_params)
+    serializer.is_valid(raise_exception=True)
+    organization = get_object_or_404(
+        Organization,
+        id=serializer.validated_data["organization_id"],
+    )
+    return _accountability_query_response(
+        serializer=serializer,
+        query_function=list_organization_accountability_events,
+        extra_args={"actor": request.user, "organization": organization},
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def platform_safety_accountability(request):
+    return _accountability_query_response(
+        serializer=PlatformAccountabilityQuerySerializer(data=request.query_params),
+        query_function=list_platform_accountability_events,
+        extra_args={"actor": request.user},
     )
 
 

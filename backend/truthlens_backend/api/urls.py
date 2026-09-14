@@ -76,6 +76,16 @@ urlpatterns = [
         name="toggle_save_claim",
     ),
     path("moderation/stats/", views.moderation_stats_view, name="moderation_stats"),
+    path(
+        "accountability/organization/",
+        views.organization_accountability,
+        name="organization_accountability",
+    ),
+    path(
+        "accountability/platform-safety/",
+        views.platform_safety_accountability,
+        name="platform_safety_accountability",
+    ),
     path("moderation/queue/", views.moderation_queue, name="moderation_queue"),
     path(
         "moderation/safety/cases/",

@@ -24,6 +24,7 @@ import DraftingPanel from "../components/workspace/DraftingPanel.jsx";
 import PublishingPanel from "../components/workspace/PublishingPanel.jsx";
 import PublicationsPanel from "../components/workspace/PublicationsPanel.jsx";
 import FactualCorrectionPanel, { CorrectionDialog } from "../components/workspace/FactualCorrectionPanel.jsx";
+import AccountabilityPanel from "../components/workspace/AccountabilityPanel.jsx";
 
 const WORKLOAD_CAPABILITIES = [
    WorkspaceCapability.CLAIM_VERIFICATION_WORK,
@@ -40,12 +41,29 @@ const FACTUAL_CORRECTION_CAPABILITIES = [
    WorkspaceCapability.PUBLISH_FACT_CHECK,
 ];
 
+const ORGANIZATION_ACCOUNTABILITY_CAPABILITIES = [
+   WorkspaceCapability.CLAIM_VERIFICATION_WORK,
+   WorkspaceCapability.REVIEW_EVIDENCE,
+   WorkspaceCapability.ADJUDICATE,
+   WorkspaceCapability.CREATE_FACT_CHECK_DRAFT,
+   WorkspaceCapability.PUBLISH_FACT_CHECK,
+   WorkspaceCapability.MANAGE_ORGANIZATION,
+];
+
 const WORKSPACE_SECTIONS = [
    {
       id: "safety",
       label: "Safety Review",
       description: "Review reports, abuse, spam, misuse, and platform policy issues.",
       icon: "shield",
+      scope: "platform",
+      capability: WorkspaceCapability.REVIEW_SAFETY,
+   },
+   {
+      id: "safety-audit",
+      label: "Safety Audit",
+      description: "Review the append-only accountability history for Platform Safety actions.",
+      icon: "activity",
       scope: "platform",
       capability: WorkspaceCapability.REVIEW_SAFETY,
    },
@@ -120,6 +138,14 @@ const WORKSPACE_SECTIONS = [
       icon: "settings",
       scope: "organization",
       capability: WorkspaceCapability.MANAGE_ORGANIZATION,
+   },
+   {
+      id: "accountability",
+      label: "Accountability",
+      description: "Review attributable actions and state changes affecting this organization.",
+      icon: "activity",
+      scope: "organization",
+      capabilities: ORGANIZATION_ACCOUNTABILITY_CAPABILITIES,
    },
 ];
 
@@ -748,6 +774,8 @@ function WorkspacePage() {
 
                         {activeSection.id === "safety" ? (
                            <SafetyReviewPanel />
+                        ) : activeSection.id === "safety-audit" ? (
+                           <AccountabilityPanel scope="platform" />
                         ) : activeSection.id === "intake" ? (
                            <VerificationIntakePanel
                               key={selectedOrganizationId ?? "no-organization"}
@@ -828,6 +856,13 @@ function WorkspacePage() {
                               key={selectedOrganizationId ?? "no-organization"}
                               organizationId={selectedOrganizationId}
                               membershipRole={selectedMembership?.role}
+                           />
+                        ) : activeSection.id === "accountability" ? (
+                           <AccountabilityPanel
+                              key={selectedOrganizationId ?? "no-organization"}
+                              scope="organization"
+                              organizationId={selectedOrganizationId}
+                              organizationName={selectedOrganization?.name}
                            />
                         ) : (
                            <div className="workspace-placeholder">
