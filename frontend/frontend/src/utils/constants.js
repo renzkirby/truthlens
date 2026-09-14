@@ -143,6 +143,21 @@ export const API_ENDPOINTS = {
    PUBLICATION_LIBRARY: "moderation/publications/library/",
    PUBLICATION_LIBRARY_DETAIL: (publicationId) =>
       `moderation/publications/library/${encodeURIComponent(publicationId)}/`,
+   FACTUAL_CORRECTION_COLLECTION: "moderation/publications/factual-corrections/",
+   FACTUAL_CORRECTION_DETAIL: (requestId) =>
+      `moderation/publications/factual-corrections/${encodeURIComponent(requestId)}/`,
+   FACTUAL_CORRECTION_REQUEST: (predecessorId) =>
+      `moderation/publications/${encodeURIComponent(predecessorId)}/factual-corrections/request/`,
+   FACTUAL_CORRECTION_EVIDENCE_REVIEW: (requestId, evidenceId) =>
+      `moderation/publications/factual-corrections/${encodeURIComponent(requestId)}/evidence/${encodeURIComponent(evidenceId)}/review/`,
+   FACTUAL_CORRECTION_PROPOSAL: (requestId) =>
+      `moderation/publications/factual-corrections/${encodeURIComponent(requestId)}/proposal/`,
+   FACTUAL_CORRECTION_PROPOSAL_PREPARE: (requestId) =>
+      `moderation/publications/factual-corrections/${encodeURIComponent(requestId)}/proposal/prepare/`,
+   FACTUAL_CORRECTION_PUBLISH: (requestId) =>
+      `moderation/publications/factual-corrections/${encodeURIComponent(requestId)}/publish/`,
+   FACTUAL_CORRECTION_CANCEL: (requestId) =>
+      `moderation/publications/factual-corrections/${encodeURIComponent(requestId)}/cancel/`,
    EDITORIAL_REVISION_DRAFT_CREATE: (predecessorId) =>
       `moderation/publications/${encodeURIComponent(predecessorId)}/editorial-revisions/draft/`,
    EDITORIAL_REVISION_DRAFT_UPDATE: (revisionId) =>

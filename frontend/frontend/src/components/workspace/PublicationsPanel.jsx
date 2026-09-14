@@ -169,6 +169,34 @@ function Blockers({ blockers }) {
    );
 }
 
+function CorrectionWorkflowBlockers({ blockers }) {
+   const groups = Object.entries(blockers || {}).filter(([, items]) => Array.isArray(items) && items.length > 0);
+   if (groups.length === 0) {
+      return null;
+   }
+
+   return (
+      <div className="publications-correction-blockers">
+         {groups.map(([action, items]) => (
+            <section key={action}>
+               <strong>{formatLabel(action, "Factual correction availability")}</strong>
+               <ul className="publications-blockers">
+                  {items.map((blocker, index) => (
+                     <li key={`${action}-${blocker?.code || "blocker"}-${index}`}>
+                        <Icons name="alert-circle" size={16} />
+                        <span>
+                           <strong>{formatLabel(blocker?.code, "Correction blocker")}</strong>
+                           {blocker?.detail || "This factual-correction action is not currently available."}
+                        </span>
+                     </li>
+                  ))}
+               </ul>
+            </section>
+         ))}
+      </div>
+   );
+}
+
 function HumanDecision({ detail }) {
    const decision = detail?.decision || {};
 
@@ -386,6 +414,7 @@ function PublicationsContent({
    initialPublicationId,
    onInitialPublicationConsumed,
    onRevisionCreated,
+   onCorrectionOpened,
 }) {
    const [searchInput, setSearchInput] = useState("");
    const [search, setSearch] = useState("");
@@ -409,6 +438,10 @@ function PublicationsContent({
    const [actionError, setActionError] = useState("");
    const [revisionOpen, setRevisionOpen] = useState(false);
    const [revisionReason, setRevisionReason] = useState("");
+   const [correctionOpen, setCorrectionOpen] = useState(false);
+   const [correctionReason, setCorrectionReason] = useState("");
+   const [correctionReasonError, setCorrectionReasonError] = useState("");
+   const [correctionConflict, setCorrectionConflict] = useState(null);
    const [mutation, setMutation] = useState(null);
 
    const mountedRef = useRef(true);
@@ -423,11 +456,19 @@ function PublicationsContent({
    const messageRef = useRef(null);
    const revisionReasonRef = useRef(null);
    const createRevisionButtonRef = useRef(null);
+   const correctionReasonRef = useRef(null);
+   const requestCorrectionButtonRef = useRef(null);
    const focusDetailAfterLoadRef = useRef(Boolean(initialPublicationId));
    const focusLibraryAfterReturnRef = useRef(false);
 
    const allowedActions = Array.isArray(detail?.allowed_actions) ? detail.allowed_actions : [];
    const canCreateRevision = allowedActions.includes("CREATE_EDITORIAL_REVISION");
+   const correctionWorkflow = detail?.factual_correction_workflow || null;
+   const correctionActions = Array.isArray(correctionWorkflow?.allowed_actions)
+      ? correctionWorkflow.allowed_actions
+      : [];
+   const canRequestCorrection = correctionActions.includes("REQUEST_FACTUAL_CORRECTION");
+   const canOpenCorrection = correctionActions.includes("OPEN_FACTUAL_CORRECTION");
 
    const libraryUrl = useMemo(() => {
       const query = new URLSearchParams({
@@ -451,6 +492,10 @@ function PublicationsContent({
       setDetailLoading(false);
       setMutation(null);
       setRevisionOpen(false);
+      setCorrectionOpen(false);
+      setCorrectionReason("");
+      setCorrectionReasonError("");
+      setCorrectionConflict(null);
       setNotice("");
       setActionError("");
       setAuthorityError("Your publication library access for this organization is no longer available.");
@@ -486,6 +531,24 @@ function PublicationsContent({
          requestAnimationFrame(() => revisionReasonRef.current?.focus());
       }
    }, [revisionOpen]);
+
+   useEffect(() => {
+      if (correctionOpen) {
+         requestAnimationFrame(() => correctionReasonRef.current?.focus());
+      }
+   }, [correctionOpen]);
+
+   useEffect(() => {
+      if (!correctionOpen || !correctionReason.trim()) {
+         return undefined;
+      }
+      const warnBeforeUnload = (event) => {
+         event.preventDefault();
+         event.returnValue = "";
+      };
+      window.addEventListener("beforeunload", warnBeforeUnload);
+      return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+   }, [correctionOpen, correctionReason]);
 
    useEffect(() => {
       if (notice || actionError || authorityError) {
@@ -655,6 +718,9 @@ function PublicationsContent({
       ) {
          return;
       }
+      if (correctionOpen && correctionReason.trim() && !window.confirm("Discard the factual-correction reason and open another publication?")) {
+         return;
+      }
       detailRequestIdRef.current += 1;
       selectedPublicationIdRef.current = String(publicationId);
       setSelectedPublicationId(String(publicationId));
@@ -662,6 +728,10 @@ function PublicationsContent({
       setDetailError("");
       setRevisionOpen(false);
       setRevisionReason("");
+      setCorrectionOpen(false);
+      setCorrectionReason("");
+      setCorrectionReasonError("");
+      setCorrectionConflict(null);
       setActionError("");
       setNotice("");
       focusDetailAfterLoadRef.current = true;
@@ -669,6 +739,9 @@ function PublicationsContent({
 
    const returnToLibrary = () => {
       if (mutation) {
+         return;
+      }
+      if (correctionOpen && correctionReason.trim() && !window.confirm("Discard the factual-correction reason and return to the publication list?")) {
          return;
       }
 
@@ -679,6 +752,10 @@ function PublicationsContent({
       setDetailError("");
       setRevisionOpen(false);
       setRevisionReason("");
+      setCorrectionOpen(false);
+      setCorrectionReason("");
+      setCorrectionReasonError("");
+      setCorrectionConflict(null);
       setActionError("");
       focusLibraryAfterReturnRef.current = true;
    };
@@ -688,6 +765,133 @@ function PublicationsContent({
       setRevisionReason("");
       setActionError("");
       requestAnimationFrame(() => createRevisionButtonRef.current?.focus());
+   };
+
+   const closeCorrectionForm = () => {
+      if (correctionReason.trim() && !window.confirm("Discard the factual-correction reason you entered?")) {
+         return;
+      }
+      setCorrectionOpen(false);
+      setCorrectionReason("");
+      setCorrectionReasonError("");
+      setCorrectionConflict(null);
+      setActionError("");
+      requestAnimationFrame(() => requestCorrectionButtonRef.current?.focus());
+   };
+
+   const handleRequestCorrection = async (event) => {
+      event.preventDefault();
+      const reason = correctionReason.trim();
+      if (!reason) {
+         setCorrectionReasonError("A correction reason is required.");
+         requestAnimationFrame(() => correctionReasonRef.current?.focus());
+         return;
+      }
+      if (reason.length > 2000) {
+         setCorrectionReasonError("Correction reason must be 2000 characters or fewer.");
+         requestAnimationFrame(() => correctionReasonRef.current?.focus());
+         return;
+      }
+      if (mutation || !canRequestCorrection || !detail || !correctionWorkflow) {
+         return;
+      }
+
+      const operation = {
+         authIdentity,
+         organizationId,
+         publicationId: selectedPublicationIdRef.current,
+         authorityGeneration: authorityGenerationRef.current,
+         requestId: mutationRequestIdRef.current + 1,
+      };
+      mutationRequestIdRef.current = operation.requestId;
+      setMutation("request-correction");
+      setCorrectionReasonError("");
+      setCorrectionConflict(null);
+      setActionError("");
+      setNotice("");
+
+      const isOperationCurrent = () =>
+         mountedRef.current &&
+         mutationRequestIdRef.current === operation.requestId &&
+         authorityGenerationRef.current === operation.authorityGeneration &&
+         operation.authIdentity === authIdentity &&
+         String(operation.organizationId) === String(organizationId) &&
+         String(selectedPublicationIdRef.current) === String(operation.publicationId);
+
+      try {
+         const created = await authFetch(resolveApiEndpoint("FACTUAL_CORRECTION_REQUEST", operation.publicationId), {
+            method: "POST",
+            body: {
+               organization_id: operation.organizationId,
+               expected_predecessor_version: correctionWorkflow.concurrency?.expected_predecessor_version,
+               expected_decision_revision: correctionWorkflow.concurrency?.expected_decision_revision,
+               correction_reason: reason,
+            },
+         });
+         if (!isOperationCurrent()) {
+            return;
+         }
+
+         const correctionRequestId = created?.request?.id;
+         setCorrectionOpen(false);
+         setCorrectionReason("");
+         setCorrectionConflict(null);
+         refreshLibrary();
+         if (correctionRequestId) {
+            onCorrectionOpened?.(String(correctionRequestId));
+         } else {
+            setActionError("The correction was created, but its request identifier was not returned.");
+            setDetailRequestVersion((current) => current + 1);
+         }
+      } catch (error) {
+         if (!isOperationCurrent()) {
+            return;
+         }
+         if (error?.status === 401 || error?.status === 403) {
+            revokeAuthority();
+            return;
+         }
+         if (error?.status === 400) {
+            const reasonErrors = error?.errors?.correction_reason;
+            const validationDetails = Object.entries(error?.errors || {})
+               .map(([name, value]) => `${formatLabel(name)}: ${Array.isArray(value) ? value.join(" ") : String(value)}`)
+               .join(" ");
+            if (reasonErrors) {
+               setCorrectionReasonError(Array.isArray(reasonErrors) ? reasonErrors.join(" ") : String(reasonErrors));
+               requestAnimationFrame(() => correctionReasonRef.current?.focus());
+            } else {
+               setActionError(
+                  `${error?.code || "INVALID_INPUT"}: ${validationDetails || error?.message || "Review the request and try again."}`,
+               );
+            }
+            return;
+         }
+         if (error?.status === 409) {
+            setCorrectionConflict({
+               code: error?.code || "CONFLICT",
+               detail: error?.message || "The publication changed before the correction request was created.",
+               blockers: error?.blockers,
+               current: error?.current,
+            });
+            setActionError(
+               `${error?.code || "CONFLICT"}: ${error?.message || "The publication changed before the correction request was created."} The correction reason is preserved; review the refreshed server state before submitting again.`,
+            );
+            refreshLibrary();
+            setDetailRequestVersion((current) => current + 1);
+            return;
+         }
+         if (error?.status === 404) {
+            setActionError("This publication is no longer available in the selected organization.");
+            refreshLibrary();
+            setDetailRequestVersion((current) => current + 1);
+            return;
+         }
+         setActionError(error?.message || "Unable to request this factual correction.");
+      } finally {
+         if (mountedRef.current && mutationRequestIdRef.current === operation.requestId) {
+            setMutation(null);
+         }
+      }
    };
 
    const handleCreateRevision = async (event) => {
@@ -1130,6 +1334,144 @@ function PublicationsContent({
                                  onSelect={selectPublication}
                               />
                               <Blockers blockers={detail.blockers} />
+
+                              {correctionWorkflow ? (
+                                 <section
+                                    className="publications-correction-action"
+                                    aria-labelledby="publications-correction-action-heading"
+                                 >
+                                    <div className="publications-section-heading">
+                                       <div>
+                                          <h4 id="publications-correction-action-heading">Factual correction</h4>
+                                          <p>
+                                             Start or open dedicated work when the published factual judgment may need
+                                             correction. This workflow is separate from editorial revision.
+                                          </p>
+                                       </div>
+                                    </div>
+
+                                    <div className="publications-correction-authority-note">
+                                       <Icons name="shield" size={17} />
+                                       <p>
+                                          A request or proposal is not factual authority. Only successful final
+                                          publication creates a new current human decision and institutional article.
+                                       </p>
+                                    </div>
+
+                                    {correctionConflict ? (
+                                       <div className="publications-correction-conflict" role="alert">
+                                          <strong>{correctionConflict.code}</strong>
+                                          <p>{correctionConflict.detail} No mutation was repeated. The server record was refreshed for explicit reconciliation.</p>
+                                          {Array.isArray(correctionConflict.blockers) && correctionConflict.blockers.length > 0 ? (
+                                             <ul>
+                                                {correctionConflict.blockers.map((blocker, index) => <li key={`${blocker?.code || "blocker"}-${index}`}><strong>{formatLabel(blocker?.code, "Conflict blocker")}</strong>{blocker?.detail || "The server rejected the stale request."}</li>)}
+                                             </ul>
+                                          ) : null}
+                                          {correctionConflict.current ? <pre>{JSON.stringify(correctionConflict.current, null, 2)}</pre> : null}
+                                       </div>
+                                    ) : null}
+
+                                    {canOpenCorrection && correctionWorkflow.active_request_id ? (
+                                       <Button
+                                          type="button"
+                                          variant="primary"
+                                          density="standard"
+                                          leadingIcon={<Icons name="badge-check" size={16} />}
+                                          disabled={Boolean(mutation)}
+                                          onClick={() =>
+                                             onCorrectionOpened?.(String(correctionWorkflow.active_request_id))
+                                          }
+                                       >
+                                          Open factual correction
+                                       </Button>
+                                    ) : null}
+
+                                    {canRequestCorrection ? (
+                                       !correctionOpen ? (
+                                          <Button
+                                             ref={requestCorrectionButtonRef}
+                                             type="button"
+                                             variant="primary"
+                                             density="standard"
+                                             leadingIcon={<Icons name="badge-check" size={16} />}
+                                             disabled={Boolean(mutation)}
+                                             onClick={() => {
+                                                setCorrectionOpen(true);
+                                                setCorrectionReasonError("");
+                                                setActionError("");
+                                             }}
+                                          >
+                                             Request factual correction
+                                          </Button>
+                                       ) : (
+                                          <form className="publications-correction-form" onSubmit={handleRequestCorrection}>
+                                             <div>
+                                                <label htmlFor="publications-correction-reason">Correction reason</label>
+                                                <Textarea
+                                                   ref={correctionReasonRef}
+                                                   id="publications-correction-reason"
+                                                   rows={5}
+                                                   maxLength={2000}
+                                                   required
+                                                   value={correctionReason}
+                                                   disabled={Boolean(mutation)}
+                                                   invalid={Boolean(correctionReasonError)}
+                                                   aria-describedby="publications-correction-help publications-correction-count publications-correction-error"
+                                                   onChange={(event) => {
+                                                      setCorrectionReason(event.target.value);
+                                                      setCorrectionReasonError("");
+                                                   }}
+                                                />
+                                                <div className="publications-revision-field-meta">
+                                                   <span id="publications-correction-help">
+                                                      Explain why the published factual judgment should enter dedicated
+                                                      correction review.
+                                                   </span>
+                                                   <span id="publications-correction-count">
+                                                      {correctionReason.length}/2000
+                                                   </span>
+                                                </div>
+                                                <span
+                                                   id="publications-correction-error"
+                                                   className="publications-correction-field-error"
+                                                   role={correctionReasonError ? "alert" : undefined}
+                                                >
+                                                   {correctionReasonError}
+                                                </span>
+                                             </div>
+                                             <div className="publications-correction-confirmation">
+                                                <strong>Request dedicated factual-correction work?</strong>
+                                                <p>
+                                                   The current human decision and publication remain authoritative while
+                                                   the correction is reviewed.
+                                                </p>
+                                             </div>
+                                             <div className="publications-action-row">
+                                                <Button
+                                                   type="button"
+                                                   variant="secondary"
+                                                   disabled={Boolean(mutation)}
+                                                   onClick={closeCorrectionForm}
+                                                >
+                                                   Cancel
+                                                </Button>
+                                                <Button
+                                                   type="submit"
+                                                   variant="primary"
+                                                   loading={mutation === "request-correction"}
+                                                   loadingLabel="Requesting correction…"
+                                                   disabled={!correctionReason.trim() || Boolean(mutation)}
+                                                >
+                                                   Request and open correction
+                                                </Button>
+                                             </div>
+                                          </form>
+                                       )
+                                    ) : null}
+
+                                    <CorrectionWorkflowBlockers blockers={correctionWorkflow.blockers} />
+                                 </section>
+                              ) : null}
 
                               {canCreateRevision ? (
                                  <section

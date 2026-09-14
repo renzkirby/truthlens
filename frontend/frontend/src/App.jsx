@@ -74,6 +74,8 @@ function App() {
                      <Route element={<PrivateRoute requireWorkspace />}>
                         <Route element={<WorkspaceShell />}>
                            <Route path="/workspace" element={<WorkspacePage />} />
+                           <Route path="/workspace/factual-corrections" element={<WorkspacePage />} />
+                           <Route path="/workspace/factual-corrections/:requestId" element={<WorkspacePage />} />
                         </Route>
 
                         <Route path="/moderation" element={<Navigate to="/workspace" replace />} />

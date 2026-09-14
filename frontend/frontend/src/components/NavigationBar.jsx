@@ -55,7 +55,7 @@ function NavigationBar() {
       location.pathname.startsWith("/thread/detail/");
    const isVerifyRoute = location.pathname === "/verify" || location.pathname.startsWith("/analysis/");
    const isDashboardRoute = location.pathname === "/dashboard";
-   const isWorkspaceRoute = location.pathname === "/workspace" || location.pathname === "/moderation";
+   const isWorkspaceRoute = location.pathname.startsWith("/workspace") || location.pathname === "/moderation";
    const isProfileRoute = location.pathname === "/profile";
 
    return (
