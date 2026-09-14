@@ -35,6 +35,16 @@ urlpatterns = [
     path("users/<str:username>/moderation-stats/", views.moderator_transparency_stats),
     path("partners/", views.public_partner_directory, name="public_partner_directory"),
     path(
+        "partners/<slug:slug>/fact-checks/",
+        views.public_partner_fact_checks,
+        name="public_partner_fact_checks",
+    ),
+    path(
+        "partners/<slug:slug>/fact-checks/<uuid:publication_id>/",
+        views.public_partner_fact_check_detail,
+        name="public_partner_fact_check_detail",
+    ),
+    path(
         "partners/<slug:slug>/",
         views.public_partner_detail,
         name="public_partner_detail",

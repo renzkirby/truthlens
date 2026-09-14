@@ -321,6 +321,55 @@ def _ordered_lineage(current, rows):
     return ordered, True
 
 
+def evaluate_publication_lineage_integrity(*, organization, current_publications):
+    """Batch-project existing publication lineage integrity for public reads."""
+
+    current_publications = list(current_publications)
+    current_ids = {item.id for item in current_publications}
+    histories = _historical_rows(
+        organization,
+        {item.claim_id for item in current_publications},
+    )
+    history_by_claim = {}
+    history_by_id = {}
+    for item in histories:
+        history_by_claim.setdefault(item.claim_id, []).append(item)
+        history_by_id[item.id] = item
+
+    evaluations = {}
+    for current_id in current_ids:
+        current = history_by_id.get(current_id)
+        if current is None:
+            evaluations[current_id] = {
+                "current": None,
+                "lineage": [],
+                "lineage_valid": False,
+                "record_states": {},
+                "all_records_sealed": False,
+            }
+            continue
+
+        lineage, lineage_valid = _ordered_lineage(
+            current,
+            history_by_claim.get(current.claim_id, []),
+        )
+        record_states = (
+            {item.id: _record_state(item) for item in lineage}
+            if lineage_valid
+            else {}
+        )
+        evaluations[current_id] = {
+            "current": current,
+            "lineage": lineage,
+            "lineage_valid": lineage_valid,
+            "record_states": record_states,
+            "all_records_sealed": bool(record_states)
+            and all(state == RECORD_SEALED for state in record_states.values()),
+        }
+
+    return evaluations
+
+
 def _revision_kind(fact_check):
     return fact_check.revision_kind or OfficialFactCheck.RevisionKind.INITIAL
 

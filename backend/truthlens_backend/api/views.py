@@ -113,6 +113,16 @@ from .organization_public_presence_service import (
     get_public_partner_by_slug,
     get_public_partner_directory,
 )
+from .public_publication_query_service import (
+    PublicPublicationNotFound,
+    get_public_partner_fact_check_detail,
+    list_public_partner_fact_checks,
+)
+from .public_publication_serializers import (
+    PublicFactCheckDetailSerializer,
+    PublicFactCheckPageSerializer,
+    PublicFactCheckQuerySerializer,
+)
 from .organization_public_profile_service import (
     InvalidOrganizationPublicProfileChanges,
     OrganizationPublicProfileAuthorizationError,
@@ -4751,6 +4761,48 @@ def public_partner_detail(
         PublicPartnerDetailSerializer(
             organization,
         ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@throttle_classes([PublicPartnerRateThrottle])
+def public_partner_fact_checks(request, slug):
+    organization = get_public_partner_by_slug(slug)
+    if organization is None:
+        raise NotFound()
+
+    query_serializer = PublicFactCheckQuerySerializer(data=request.query_params)
+    query_serializer.is_valid(raise_exception=True)
+    result = list_public_partner_fact_checks(
+        organization=organization,
+        limit=query_serializer.validated_data["limit"],
+        offset=query_serializer.validated_data["offset"],
+    )
+    return Response(
+        PublicFactCheckPageSerializer(result).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@throttle_classes([PublicPartnerRateThrottle])
+def public_partner_fact_check_detail(request, slug, publication_id):
+    organization = get_public_partner_by_slug(slug)
+    if organization is None:
+        raise NotFound()
+
+    try:
+        result = get_public_partner_fact_check_detail(
+            organization=organization,
+            publication_id=publication_id,
+        )
+    except PublicPublicationNotFound as error:
+        raise NotFound() from error
+    return Response(
+        PublicFactCheckDetailSerializer(result).data,
         status=status.HTTP_200_OK,
     )
 
