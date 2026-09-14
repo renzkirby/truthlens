@@ -2,6 +2,8 @@
 
 from collections import defaultdict
 
+from django.db.models import Count
+
 from .evidence_snapshot_schema import (
     EvidenceSnapshotSchemaError,
     validate_evidence_snapshot,
@@ -15,6 +17,7 @@ from .models import (
     ModerationEvent,
     OfficialFactCheck,
     VerificationAssignment,
+    VerificationRun,
 )
 from .moderation_service import ACTIVE_CASE_STATUSES
 from .organization_service import PartnerCapability, has_capability
@@ -572,6 +575,27 @@ def _proposal_payload(proposal):
     }
 
 
+def _eligible_verification_run_payloads(*, claim_id):
+    runs = (
+        VerificationRun.objects.filter(
+            claim_id=claim_id,
+            status=VerificationRun.Status.COMPLETED,
+            completed_at__isnull=False,
+        )
+        .annotate(evidence_count=Count("evidence"))
+        .order_by("-completed_at", "-created_at", "id")
+    )
+    return [
+        {
+            "id": str(run.id),
+            "pipeline_version": run.pipeline_version,
+            "completed_at": run.completed_at,
+            "evidence_count": run.evidence_count,
+        }
+        for run in runs
+    ]
+
+
 def _decision_payload(decision):
     if decision is None:
         return None
@@ -740,4 +764,8 @@ def get_factual_correction_detail(*, actor, organization, correction_request_id)
         )
     context = _load_projection_context([request])
     capabilities = _actor_capabilities(actor, organization)
-    return _build_detail(request, actor, organization, capabilities, context)
+    detail = _build_detail(request, actor, organization, capabilities, context)
+    detail["eligible_verification_runs"] = _eligible_verification_run_payloads(
+        claim_id=request.claim_id,
+    )
+    return detail

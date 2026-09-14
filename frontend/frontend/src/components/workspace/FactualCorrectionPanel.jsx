@@ -89,6 +89,28 @@ function actorName(actor, fallback = "Not recorded") {
    return actor?.username ? `@${actor.username}` : fallback;
 }
 
+function verificationRunLabel(run) {
+   const evidenceCount = run?.evidence_count;
+   const evidenceSummary = Number.isInteger(evidenceCount)
+      ? `${evidenceCount} ${evidenceCount === 1 ? "evidence item" : "evidence items"}`
+      : "Evidence count unavailable";
+   const pipelineVersion = String(run?.pipeline_version || "").trim();
+   const isNumericPipelineVersion = /^\d+(?:\.\d+)*$/.test(pipelineVersion);
+   const pipelineLabel = pipelineVersion
+      ? `Pipeline ${isNumericPipelineVersion ? `v${pipelineVersion}` : pipelineVersion}`
+      : "Pipeline version unavailable";
+
+   return `Completed ${formatDateTime(run?.completed_at)} · ${pipelineLabel} · ${evidenceSummary}`;
+}
+
+function resolveEligibleVerificationRun(eligibleRuns, verificationRunId) {
+   if (!Array.isArray(eligibleRuns) || !verificationRunId) {
+      return null;
+   }
+
+   return eligibleRuns.find((run) => String(run?.id) === String(verificationRunId)) || null;
+}
+
 function getAuthIdentity(user, token) {
    if (!token) {
       return "session:anonymous";
@@ -393,10 +415,18 @@ function Blockers({ blockers }) {
    );
 }
 
-function ProposalSummary({ proposal }) {
+function ProposalSummary({ proposal, eligibleVerificationRuns }) {
    if (!proposal) {
       return <p className="correction-inline-empty">No correction proposal has been recorded.</p>;
    }
+
+   const verificationRunId = proposal.verification_run_id || "";
+   const linkedVerificationRun = resolveEligibleVerificationRun(eligibleVerificationRuns, verificationRunId);
+   const verificationRunSummary = !verificationRunId
+      ? "Not linked"
+      : linkedVerificationRun
+        ? verificationRunLabel(linkedVerificationRun)
+        : "Linked verification run metadata unavailable";
 
    return (
       <div className="correction-proposal-readonly">
@@ -438,7 +468,7 @@ function ProposalSummary({ proposal }) {
             </div>
             <div>
                <dt>Supporting verification run</dt>
-               <dd>{proposal.verification_run_id || "Not linked"}</dd>
+               <dd>{verificationRunSummary}</dd>
             </div>
             <div>
                <dt>Proposal created</dt>
@@ -547,8 +577,18 @@ function FactualCorrectionContent({
    const isDirty = !sameEditor(editor, editorBase);
    const canEditProposal = allowedActions.includes("SAVE_CORRECTION_PROPOSAL");
    const completedHasReplacementDecision = hasMeaningfulReplacementDecision(detail);
-   const verificationRunSupported =
-      detail?.proposal === null || Object.prototype.hasOwnProperty.call(detail?.proposal || {}, "verification_run_id");
+   const eligibleVerificationRuns = Array.isArray(detail?.eligible_verification_runs)
+      ? detail.eligible_verification_runs
+      : null;
+   const selectedVerificationRunId = editor.verification_run_id.trim();
+   const selectedVerificationRun = resolveEligibleVerificationRun(
+      eligibleVerificationRuns,
+      selectedVerificationRunId,
+   );
+   const hasUnresolvedLinkedVerificationRun = Boolean(selectedVerificationRunId && !selectedVerificationRun);
+   const showVerificationRunSelect = Boolean(
+      eligibleVerificationRuns && (eligibleVerificationRuns.length > 0 || selectedVerificationRunId),
+   );
 
    const queueUrl = useMemo(() => {
       const query = new URLSearchParams({
@@ -1563,36 +1603,53 @@ function FactualCorrectionContent({
                   Add source
                </Button>
             </fieldset>
-            {verificationRunSupported ? (
-               <div className="correction-field correction-field--wide">
-                  <label htmlFor="correction-verification-run">
-                     Supporting verification run <span>(optional)</span>
-                  </label>
+            <div className="correction-field correction-field--wide">
+               <label htmlFor={showVerificationRunSelect ? "correction-verification-run" : undefined}>
+                  Supporting verification run <span>(optional)</span>
+               </label>
 
-                  <Input
+               {eligibleVerificationRuns === null ? (
+                  <span className="correction-field-help">Supporting verification run choices are unavailable.</span>
+               ) : eligibleVerificationRuns.length === 0 && !selectedVerificationRunId ? (
+                  <span className="correction-field-help">
+                     No completed verification runs are available for this claim.
+                  </span>
+               ) : (
+                  <Select
                      ref={proposalRefs.verification_run_id}
                      id="correction-verification-run"
                      value={editor.verification_run_id}
-                     placeholder="Paste a verification run ID if one is available"
                      disabled={!canEditProposal || Boolean(mutation)}
                      invalid={Boolean(fieldError(fieldErrors, "verification_run_id"))}
                      aria-describedby="correction-verification-run-help"
                      onChange={(event) => updateEditor("verification_run_id", event.target.value)}
-                  />
-
-                  <span
-                     id="correction-verification-run-help"
-                     className={
-                        fieldError(fieldErrors, "verification_run_id")
-                           ? "correction-field-error"
-                           : "correction-field-help"
-                     }
                   >
-                     {fieldError(fieldErrors, "verification_run_id") ||
-                        "Optional provenance link to an AI-assisted verification run used during this correction. It does not determine or replace the human factual decision."}
-                  </span>
-               </div>
-            ) : null}
+                     <option value="">No supporting verification run</option>
+                     {hasUnresolvedLinkedVerificationRun ? (
+                        <option value={editor.verification_run_id} disabled>
+                           Linked verification run metadata unavailable
+                        </option>
+                     ) : null}
+                     {eligibleVerificationRuns.map((run) => (
+                        <option key={run.id} value={run.id}>
+                           {verificationRunLabel(run)}
+                        </option>
+                     ))}
+                  </Select>
+               )}
+
+               <span
+                  id="correction-verification-run-help"
+                  className={
+                     fieldError(fieldErrors, "verification_run_id")
+                        ? "correction-field-error"
+                        : "correction-field-help"
+                  }
+               >
+                  {fieldError(fieldErrors, "verification_run_id") ||
+                     "Optional AI-assisted verification provenance. It does not determine or replace the human factual decision."}
+               </span>
+            </div>
          </div>
          <div className="correction-editor-footer">
             <span
@@ -1643,10 +1700,20 @@ function FactualCorrectionContent({
             <div className="correction-canonical-proposal">
                <h5>Current saved server proposal after conflict</h5>
                <p>Compare this canonical version with the preserved local editor before explicitly submitting again.</p>
-               <ProposalSummary proposal={detail.proposal} />
+               <ProposalSummary
+                  proposal={detail.proposal}
+                  eligibleVerificationRuns={eligibleVerificationRuns}
+               />
             </div>
          ) : null}
-         {canEditProposal ? renderProposalEditor() : <ProposalSummary proposal={detail.proposal} />}
+         {canEditProposal ? (
+            renderProposalEditor()
+         ) : (
+            <ProposalSummary
+               proposal={detail.proposal}
+               eligibleVerificationRuns={eligibleVerificationRuns}
+            />
+         )}
       </section>
    );
 

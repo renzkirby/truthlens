@@ -3323,6 +3323,13 @@ class FactualCorrectionEvidenceProjectionSerializer(serializers.Serializer):
     items = FactualCorrectionEvidenceItemSerializer(many=True)
 
 
+class FactualCorrectionEligibleVerificationRunSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    pipeline_version = serializers.CharField()
+    completed_at = serializers.DateTimeField()
+    evidence_count = serializers.IntegerField(min_value=0)
+
+
 class FactualCorrectionProposalReadSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     status = serializers.ChoiceField(choices=["DRAFT", "PREPARED"])
@@ -3358,6 +3365,9 @@ class FactualCorrectionDetailSerializer(serializers.Serializer):
     correction_case = FactualCorrectionCaseSerializer()
     evidence_review = FactualCorrectionEvidenceProjectionSerializer()
     proposal = FactualCorrectionProposalReadSerializer(allow_null=True)
+    eligible_verification_runs = FactualCorrectionEligibleVerificationRunSerializer(
+        many=True
+    )
     stage = serializers.ChoiceField(
         choices=[
             "EVIDENCE_REVIEW",

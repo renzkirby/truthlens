@@ -1,4 +1,5 @@
 from copy import deepcopy
+from datetime import timedelta
 import uuid
 
 from django.contrib.auth.models import User
@@ -6,17 +7,21 @@ from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from api.models import (
     AdjudicationDecision,
+    EvidenceSource,
     EvidenceSubmission,
     FactualCorrectionProposal,
     ModerationCase,
     ModerationEvent,
     OrganizationMembership,
     UserProfile,
+    VerificationEvidence,
+    VerificationRun,
 )
 from api.tests.workspace.test_factual_correction_handoff import (
     FactualCorrectionHandoffFixtures,
@@ -350,6 +355,140 @@ class FactualCorrectionWorkflowApiTests(
             correction_request=correction
         )
         self.assertEqual(proposal.status, FactualCorrectionProposal.Status.DRAFT)
+
+    def test_detail_projects_only_eligible_supporting_verification_runs(self):
+        context = self.make_correction_review_context(
+            suffix="api-supporting-verification-runs"
+        )
+        correction = context["correction_request"]
+        now = timezone.now()
+        older = VerificationRun.objects.create(
+            claim=context["claim"],
+            status=VerificationRun.Status.COMPLETED,
+            pipeline_version="supporting-v1",
+            completed_at=now - timedelta(days=2),
+        )
+        newer = VerificationRun.objects.create(
+            claim=context["claim"],
+            status=VerificationRun.Status.COMPLETED,
+            pipeline_version="supporting-v2",
+            completed_at=now - timedelta(days=1),
+        )
+        evidence_sources = [
+            EvidenceSource.objects.create(
+                provider="TEST",
+                url=f"https://example.com/supporting-run-{index}",
+            )
+            for index in range(2)
+        ]
+        for evidence_source in evidence_sources:
+            VerificationEvidence.objects.create(
+                verification_run=newer,
+                evidence_source=evidence_source,
+            )
+
+        excluded_status_runs = []
+        for run_status in (
+            VerificationRun.Status.PENDING,
+            VerificationRun.Status.RUNNING,
+            VerificationRun.Status.ABSTAINED,
+            VerificationRun.Status.FAILED,
+            VerificationRun.Status.CANCELLED,
+        ):
+            excluded_status_runs.append(
+                VerificationRun.objects.create(
+                    claim=context["claim"],
+                    status=run_status,
+                    pipeline_version=f"excluded-{run_status.lower()}",
+                    completed_at=now,
+                )
+            )
+        completed_without_timestamp = VerificationRun.objects.create(
+            claim=context["claim"],
+            status=VerificationRun.Status.COMPLETED,
+            pipeline_version="excluded-missing-completion",
+            completed_at=None,
+        )
+        other = self.make_published_context(suffix="api-supporting-run-other-claim")
+        other_claim_run = VerificationRun.objects.create(
+            claim=other["claim"],
+            status=VerificationRun.Status.COMPLETED,
+            pipeline_version="excluded-other-claim",
+            completed_at=now,
+        )
+
+        client = self.client_for(self.lead)
+        queue = client.get(self.collection_url())
+        detail = client.get(self.detail_url(correction))
+
+        self.assertEqual(queue.status_code, status.HTTP_200_OK)
+        self.assertTrue(
+            all(
+                "eligible_verification_runs" not in item
+                for item in queue.data["results"]
+            )
+        )
+        self.assertEqual(detail.status_code, status.HTTP_200_OK)
+        eligible_runs = detail.data["eligible_verification_runs"]
+        self.assertEqual(
+            [item["id"] for item in eligible_runs],
+            [str(newer.id), str(older.id)],
+        )
+        self.assertEqual(
+            [item["evidence_count"] for item in eligible_runs],
+            [2, 0],
+        )
+        self.assertTrue(
+            all(
+                set(item)
+                == {
+                    "id",
+                    "pipeline_version",
+                    "completed_at",
+                    "evidence_count",
+                }
+                for item in eligible_runs
+            )
+        )
+        excluded_ids = {
+            str(completed_without_timestamp.id),
+            str(other_claim_run.id),
+        }
+        excluded_ids.update(str(run.id) for run in excluded_status_runs)
+        self.assertTrue(
+            excluded_ids.isdisjoint({item["id"] for item in eligible_runs})
+        )
+
+        saved = self.client_for(self.researcher).put(
+            self.mutation_url("factual_correction_proposal_save", correction),
+            self.proposal_payload(
+                context,
+                verification_run_id=str(newer.id),
+            ),
+            format="json",
+        )
+        self.assertEqual(saved.status_code, status.HTTP_200_OK)
+        self.assertEqual(saved.data["proposal"]["verification_run_id"], str(newer.id))
+        self.assertIn(
+            str(newer.id),
+            {item["id"] for item in saved.data["eligible_verification_runs"]},
+        )
+
+        denied = self.client_for(self.owner).get(self.detail_url(correction))
+        self.assertEqual(denied.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertNotIn("eligible_verification_runs", denied.data)
+
+        OrganizationMembership.objects.create(
+            organization=self.other_organization,
+            user=self.lead,
+            role=OrganizationMembership.Role.LEAD_VERIFIER,
+            status=OrganizationMembership.Status.ACTIVE,
+        )
+        wrong_organization = client.get(
+            self.detail_url(correction, organization=self.other_organization)
+        )
+        self.assertEqual(wrong_organization.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertNotIn("eligible_verification_runs", wrong_organization.data)
 
     def test_proposal_prepare_publish_endpoints_expose_authoritative_results(self):
         context = self.make_correction_review_context(suffix="api-full-flow")
