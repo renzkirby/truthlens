@@ -198,6 +198,8 @@ export const API_ENDPOINTS = {
    // Public Partner Presence
    PUBLIC_PARTNERS: "partners/",
    PUBLIC_PARTNER_DETAIL: (slug) => `partners/${encodeURIComponent(slug)}/`,
+   PUBLIC_PARTNER_FACT_CHECK_DETAIL: (slug, publicationId) =>
+      `partners/${encodeURIComponent(slug)}/fact-checks/${encodeURIComponent(publicationId)}/`,
 
    // Other
    POLLING: "polling/",

@@ -24,6 +24,7 @@ import RootRedirect from "./components/RootRedirect";
 import OrganizationInvitationPage from "./Pages/OrganizationInvitationPage.jsx";
 import PartnersPage from "./Pages/PartnersPage.jsx";
 import PartnerProfilePage from "./Pages/PartnerProfilePage.jsx";
+import PublicFactCheckPage from "./Pages/PublicFactCheckPage.jsx";
 import AppShell from "./components/app/AppShell.jsx";
 import PublicShell from "./components/public/PublicShell.jsx";
 import AccountActionShell from "./components/account/AccountActionShell.jsx";
@@ -40,6 +41,10 @@ function App() {
                   <Route path="/landing-page" element={<LandingPage />} />
                   <Route path="/partners" element={<PartnersPage />} />
                   <Route path="/partners/:slug" element={<PartnerProfilePage />} />
+                  <Route
+                     path="/partners/:slug/fact-checks/:publicationId"
+                     element={<PublicFactCheckPage />}
+                  />
                </Route>
                <Route path="/login" element={<LoginPage />} />
                <Route path="/register" element={<RegisterPage />} />
