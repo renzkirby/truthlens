@@ -128,18 +128,13 @@ export const API_ENDPOINTS = {
    PUBLICATION_WORK_ITEMS: "moderation/publications/work-items/",
    PUBLICATION_WORK_ITEM_DETAIL: (resourceType, resourceId) =>
       `moderation/publications/work-items/${encodeURIComponent(resourceType)}/${encodeURIComponent(resourceId)}/`,
-   FACT_CHECK_DRAFT_CREATE: (claimId) =>
-      `moderation/claims/${encodeURIComponent(claimId)}/fact-checks/draft/`,
-   FACT_CHECK_DRAFT_UPDATE: (factCheckId) =>
-      `moderation/fact-checks/${encodeURIComponent(factCheckId)}/draft/`,
-   FACT_CHECK_SUBMIT: (factCheckId) =>
-      `moderation/fact-checks/${encodeURIComponent(factCheckId)}/submit/`,
-   FACT_CHECK_PUBLISH: (factCheckId) =>
-      `moderation/fact-checks/${encodeURIComponent(factCheckId)}/publish/`,
+   FACT_CHECK_DRAFT_CREATE: (claimId) => `moderation/claims/${encodeURIComponent(claimId)}/fact-checks/draft/`,
+   FACT_CHECK_DRAFT_UPDATE: (factCheckId) => `moderation/fact-checks/${encodeURIComponent(factCheckId)}/draft/`,
+   FACT_CHECK_SUBMIT: (factCheckId) => `moderation/fact-checks/${encodeURIComponent(factCheckId)}/submit/`,
+   FACT_CHECK_PUBLISH: (factCheckId) => `moderation/fact-checks/${encodeURIComponent(factCheckId)}/publish/`,
    FACT_CHECK_RETURN_FOR_REWORK: (factCheckId) =>
       `moderation/fact-checks/${encodeURIComponent(factCheckId)}/return-for-rework/`,
-   FACT_CHECK_ABANDON: (factCheckId) =>
-      `moderation/fact-checks/${encodeURIComponent(factCheckId)}/abandon/`,
+   FACT_CHECK_ABANDON: (factCheckId) => `moderation/fact-checks/${encodeURIComponent(factCheckId)}/abandon/`,
    PUBLICATION_LIBRARY: "moderation/publications/library/",
    PUBLICATION_LIBRARY_DETAIL: (publicationId) =>
       `moderation/publications/library/${encodeURIComponent(publicationId)}/`,
@@ -198,6 +193,7 @@ export const API_ENDPOINTS = {
    // Public Partner Presence
    PUBLIC_PARTNERS: "partners/",
    PUBLIC_PARTNER_DETAIL: (slug) => `partners/${encodeURIComponent(slug)}/`,
+   PUBLIC_PARTNER_FACT_CHECKS: (slug) => `partners/${encodeURIComponent(slug)}/fact-checks/`,
    PUBLIC_PARTNER_FACT_CHECK_DETAIL: (slug, publicationId) =>
       `partners/${encodeURIComponent(slug)}/fact-checks/${encodeURIComponent(publicationId)}/`,
 
