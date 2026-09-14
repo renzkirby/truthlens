@@ -38,15 +38,28 @@ groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+
+
+class LLMProviderUnavailableError(RuntimeError):
+    """No configured LLM provider successfully completed the request."""
+
+
+def _model_from_env(name, default):
+    return os.environ.get(name, "").strip() or default
+
+
+def _provider_error_label(error):
+    """Return useful error metadata without including provider secrets."""
+    return type(error).__name__
+
+
 def call_llm_with_fallback(system_instructions, user_prompt):
-    """
-    Attempts to call Gemini 2.5 Flash.
-    If it fails (e.g., 503 Overloaded), instantly falls back to Groq Llama 3.
-    """
+    """Call Gemini first, then Groq once if Gemini is unavailable."""
     try:
-        # PRIMARY: Google Gemini
         response = gemini_client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=_model_from_env("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
             contents=user_prompt,
             config=types.GenerateContentConfig(
                 system_instruction=system_instructions,
@@ -57,24 +70,31 @@ def call_llm_with_fallback(system_instructions, user_prompt):
         return response.text
 
     except Exception as gemini_err:
-        logger.warning(f"Gemini API Failed ({gemini_err}). Triggering Groq Fallback...")
+        logger.warning(
+            "Gemini API failed (%s); trying Groq fallback.",
+            _provider_error_label(gemini_err),
+        )
 
         try:
-            # FALLBACK: Groq (Llama 3.3 70B is excellent at strict JSON fact-checking)
             chat_completion = groq_client.chat.completions.create(
                 messages=[
                     {"role": "system", "content": system_instructions},
                     {"role": "user", "content": user_prompt},
                 ],
-                model="llama-3.3-70b-versatile",
+                model=_model_from_env("GROQ_MODEL", DEFAULT_GROQ_MODEL),
                 response_format={"type": "json_object"},
-                temperature=0.1,  # Low temperature for strict logic
+                temperature=0.1,
             )
             return chat_completion.choices[0].message.content
 
         except Exception as groq_err:
-            logger.error(f"Groq Fallback also failed: {groq_err}")
-            raise Exception("Both AI providers are currently unavailable.")
+            logger.error(
+                "Groq fallback also failed (%s).",
+                _provider_error_label(groq_err),
+            )
+            raise LLMProviderUnavailableError(
+                "No configured LLM provider successfully completed this request."
+            ) from groq_err
 
 
 def _parse_llm_json(raw_content):
@@ -517,6 +537,8 @@ def evaluate_claim_with_persisted_evidence(
         if parsed_result["verdict"] not in valid_verdicts:
             raise ValueError("Persisted evidence evaluator returned an invalid verdict")
         return parsed_result
+    except LLMProviderUnavailableError:
+        raise
     except Exception as exc:
         logger.error("Persisted Evidence Evaluator AI Error: %s", exc)
         return unavailable_result

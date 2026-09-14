@@ -7,6 +7,7 @@ import base64
 from django.contrib.auth.models import User
 from .ocr_service import extract_text_from_image
 from .services import (
+    LLMProviderUnavailableError,
     process_image,
     clean_ocr_text,
     clean_extracted_text,
@@ -28,7 +29,7 @@ from .models import (
 )
 from .trust_service import recompute_user_trust_score
 from .verification.evidence_assessment import (
-    assess_reasoning_evidence_against_claim,
+    assess_reasoning_evidence_batch_against_claim,
 )
 from .verification.evidence_dossier import (
     filter_reasoning_evidence_dossier_by_role,
@@ -253,6 +254,7 @@ def _assess_and_persist_reasoning_evidence(
     stage_prefix,
 ):
     stage_name = f"{stage_prefix}_evidence_assessment"
+    eligible_items = []
     for evidence_group in evidence_groups:
         for evidence_item in evidence_group.evidence:
             if (
@@ -261,57 +263,69 @@ def _assess_and_persist_reasoning_evidence(
                 or evidence_item.directness_score is not None
             ):
                 continue
+            eligible_items.append(evidence_item)
 
-            assessment_started_at = time.perf_counter()
-            try:
-                assessment = assess_reasoning_evidence_against_claim(
-                    claim_text,
-                    evidence_item,
-                )
-            except Exception as exc:
-                _log_stage(
-                    claim_id,
-                    stage_name,
-                    assessment_started_at,
-                    evidence_link_id=evidence_item.evidence_link_id,
-                    outcome="assessment_failed",
-                    error=str(exc)[:120],
-                )
-                logger.error(
-                    "Evidence assessment failed for claim %s, link %s: %s",
-                    claim_id,
-                    evidence_item.evidence_link_id,
-                    exc,
-                )
-                continue
+    if not eligible_items:
+        return
 
-            try:
-                persisted = persist_evidence_assessment(evidence_item, assessment)
-            except Exception as exc:
-                _log_stage(
-                    claim_id,
-                    stage_name,
-                    assessment_started_at,
-                    evidence_link_id=evidence_item.evidence_link_id,
-                    outcome="persistence_failed",
-                    error=str(exc)[:120],
-                )
-                logger.error(
-                    "Evidence assessment persistence failed for claim %s, "
-                    "link %s: %s",
-                    claim_id,
-                    evidence_item.evidence_link_id,
-                    exc,
-                )
-                continue
+    assessment_started_at = time.perf_counter()
+    try:
+        assessments = assess_reasoning_evidence_batch_against_claim(
+            claim_text,
+            eligible_items,
+        )
+    except Exception as exc:
+        _log_stage(
+            claim_id,
+            f"{stage_prefix}_evidence_assessment_batch",
+            assessment_started_at,
+            eligible_items=len(eligible_items),
+            outcome="assessment_failed",
+            error=str(exc)[:120],
+        )
+        logger.error(
+            "Evidence assessment failed for claim %s (batch): %s",
+            claim_id,
+            exc,
+        )
+        return
 
+    _log_stage(
+        claim_id,
+        f"{stage_prefix}_evidence_assessment_batch",
+        assessment_started_at,
+        eligible_items=len(eligible_items),
+    )
+
+    for evidence_item, assessment in zip(eligible_items, assessments):
+        persistence_started_at = time.perf_counter()
+        try:
+            persisted = persist_evidence_assessment(evidence_item, assessment)
+        except Exception as exc:
             _log_stage(
                 claim_id,
                 stage_name,
-                assessment_started_at,
+                persistence_started_at,
                 evidence_link_id=evidence_item.evidence_link_id,
-                persisted=persisted,
+                outcome="persistence_failed",
+                error=str(exc)[:120],
             )
+            logger.error(
+                "Evidence assessment persistence failed for claim %s, "
+                "link %s: %s",
+                claim_id,
+                evidence_item.evidence_link_id,
+                exc,
+            )
+            continue
+
+        _log_stage(
+            claim_id,
+            stage_name,
+            persistence_started_at,
+            evidence_link_id=evidence_item.evidence_link_id,
+            persisted=persisted,
+        )
 
 
 # IMAGE PIPELINE
@@ -718,6 +732,8 @@ def execute_core_text_pipeline(raw_text, claim_id):
                                 evidence_context,
                                 article_stance,
                             )
+                        except LLMProviderUnavailableError:
+                            raise
                         except Exception as exc:
                             has_persisted_evidence = False
                             _log_stage(
@@ -927,7 +943,16 @@ def execute_core_text_pipeline(raw_text, claim_id):
                     else None
                 )
 
-        # This catches catastrophic errors (like Groq going down completely)
+        except LLMProviderUnavailableError as e:
+            pipeline_error = e
+            outcome = "final_evaluator_unavailable"
+            logger.error(
+                "Final evaluator unavailable for claim %s.",
+                claim_id,
+            )
+            raise
+
+        # This catches other catastrophic errors.
         except Exception as e:
             pipeline_error = e
             outcome = "fatal_error"
@@ -961,12 +986,20 @@ def execute_core_text_pipeline(raw_text, claim_id):
         if run is not None:
             try:
                 if pipeline_error is not None:
-                    fail_verification_run(
-                        run,
-                        failure_stage="core_text_pipeline",
-                        failure_code="UNHANDLED_EXCEPTION",
-                        failure_message=str(pipeline_error),
-                    )
+                    if isinstance(pipeline_error, LLMProviderUnavailableError):
+                        fail_verification_run(
+                            run,
+                            failure_stage="final_evaluator",
+                            failure_code="LLM_UNAVAILABLE",
+                            failure_message=str(pipeline_error),
+                        )
+                    else:
+                        fail_verification_run(
+                            run,
+                            failure_stage="core_text_pipeline",
+                            failure_code="UNHANDLED_EXCEPTION",
+                            failure_message=str(pipeline_error),
+                        )
                 elif selected_verdict in ("FACT", "FAKE", "MISLEADING", "SATIRE"):
                     complete_verification_run(run)
                 else:
@@ -1218,6 +1251,8 @@ def url_fact_check_process(url, claim_id):
                             evidence_context,
                             article_stance,
                         )
+                    except LLMProviderUnavailableError:
+                        raise
                     except Exception as e:
                         _log_stage(
                             claim_id,
@@ -1471,12 +1506,20 @@ def url_fact_check_process(url, claim_id):
         if run is not None:
             try:
                 if pipeline_error is not None:
-                    fail_verification_run(
-                        run,
-                        failure_stage="url_fact_check_pipeline",
-                        failure_code="UNHANDLED_EXCEPTION",
-                        failure_message=str(pipeline_error),
-                    )
+                    if isinstance(pipeline_error, LLMProviderUnavailableError):
+                        fail_verification_run(
+                            run,
+                            failure_stage="final_evaluator",
+                            failure_code="LLM_UNAVAILABLE",
+                            failure_message=str(pipeline_error),
+                        )
+                    else:
+                        fail_verification_run(
+                            run,
+                            failure_stage="url_fact_check_pipeline",
+                            failure_code="UNHANDLED_EXCEPTION",
+                            failure_message=str(pipeline_error),
+                        )
                 elif selected_verdict in ("FACT", "FAKE", "MISLEADING", "SATIRE"):
                     complete_verification_run(run)
                 else:

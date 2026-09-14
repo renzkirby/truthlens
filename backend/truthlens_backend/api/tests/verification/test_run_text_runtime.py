@@ -9,6 +9,7 @@ from api.verification.evidence_assessment import EvidenceAssessment
 from api.verification.contracts import RawEvidence
 from api.verification.evidence_dossier import ReasoningEvidenceItem
 from api.verification import runs
+from api.services import LLMProviderUnavailableError
 
 
 class VerificationRunTextRuntimeTests(TestCase):
@@ -505,8 +506,8 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
             directness_score=0.8,
         )
         self.assessor = self.enterContext(patch(
-            "api.tasks.assess_reasoning_evidence_against_claim",
-            return_value=self.assessment,
+            "api.tasks.assess_reasoning_evidence_batch_against_claim",
+            return_value=[self.assessment],
         ))
         self.provider = self.enterContext(patch("api.tasks.GoogleFactCheckProvider")).return_value
         self.provider.search_with_payload.return_value = (self.payload, self.raw_sources)
@@ -605,7 +606,8 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         self.assertEqual(link.directness_score, 0.8)
         self.assertIsNone(link.recency_score)
         self.assessor.assert_called_once()
-        assessed_claim, assessed_item = self.assessor.call_args.args
+        assessed_claim, assessed_items = self.assessor.call_args.args
+        assessed_item = assessed_items[0]
         self.assertEqual(assessed_claim, self.cleaned["cleaned_claim"])
         self.assertIsInstance(assessed_item, ReasoningEvidenceItem)
         self.assertEqual(assessed_item.evidence_link_id, link.pk)
@@ -644,7 +646,7 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         self.assertEqual(link.recency_score, 0.55)
         self.assertEqual(link.stance, VerificationEvidence.Stance.REFUTES)
         self.assessor.assert_called_once()
-        self.assertEqual(self.assessor.call_args.args[1].recency_score, 0.55)
+        self.assertEqual(self.assessor.call_args.args[1][0].recency_score, 0.55)
 
     def test_irrelevant_gfc_evidence_remains_linked_before_tavily_fallback(self):
         self.relevance.return_value = False
@@ -662,7 +664,7 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
         self.evaluate_gfc.assert_not_called()
         self.assessor.assert_called_once()
-        assessed_item = self.assessor.call_args.args[1]
+        assessed_item = self.assessor.call_args.args[1][0]
         self.assertEqual(assessed_item.provider, "TAVILY")
         self.assertEqual(
             assessed_item.evidence_role,
@@ -707,11 +709,11 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         self.assertIn("Directness score: 0.3", persisted_context)
 
     def test_unknown_numeric_assessment_is_persisted_and_rendered(self):
-        self.assessor.return_value = EvidenceAssessment(
+        self.assessor.return_value = [EvidenceAssessment(
             stance=VerificationEvidence.Stance.UNKNOWN,
             relevance_score=0.4,
             directness_score=0.2,
-        )
+        )]
 
         run = self._execute()
 
@@ -726,11 +728,11 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         self.assertIn("Directness score: 0.2", persisted_context)
 
     def test_unavailable_assessment_does_not_prevent_final_evaluation(self):
-        self.assessor.return_value = EvidenceAssessment(
+        self.assessor.return_value = [EvidenceAssessment(
             stance=VerificationEvidence.Stance.UNKNOWN,
             relevance_score=None,
             directness_score=None,
-        )
+        )]
 
         run = self._execute()
 
@@ -844,3 +846,143 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
                 self.assertNotIn("Rating: False", persisted_context)
         self.assertEqual(self.retrieve_tavily.call_count, 3)
         self.terminals[2].assert_not_called()
+
+    def test_multiple_gfc_items_use_one_batch_and_persist_positionally(self):
+        self.raw_sources.append(RawEvidence(
+            provider="GOOGLE_FACT_CHECK",
+            url="https://example.com/second-fact-check",
+            content="Second persisted fact-check.",
+            source_type="FACT_CHECK",
+        ))
+        assessments = [
+            EvidenceAssessment(
+                stance=VerificationEvidence.Stance.SUPPORTS,
+                relevance_score=0.7,
+                directness_score=0.6,
+            ),
+            EvidenceAssessment(
+                stance=VerificationEvidence.Stance.REFUTES,
+                relevance_score=0.9,
+                directness_score=0.8,
+            ),
+        ]
+        self.assessor.return_value = assessments
+
+        run = self._execute()
+
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        self.assessor.assert_called_once()
+        assessed_items = self.assessor.call_args.args[1]
+        self.assertEqual(len(assessed_items), 2)
+        for item, assessment in zip(assessed_items, assessments):
+            link = VerificationEvidence.objects.get(pk=item.evidence_link_id)
+            self.assertEqual(link.stance, assessment.stance)
+            self.assertEqual(link.relevance_score, assessment.relevance_score)
+            self.assertEqual(link.directness_score, assessment.directness_score)
+
+    def test_tavily_batch_omits_assessed_item_and_includes_recency_only_item(self):
+        self.provider.search_with_payload.return_value = ({"claims": []}, [])
+        created_links = {}
+
+        def add_secondary_links(search_query, claim_id, *, verification_run):
+            values = (
+                (
+                    "assessed",
+                    {"stance": VerificationEvidence.Stance.CONTEXT},
+                ),
+                ("recency", {"recency_score": 0.45}),
+                ("pristine", {}),
+            )
+            for name, link_values in values:
+                source = EvidenceSource.objects.create(
+                    provider="TAVILY",
+                    canonical_url=f"https://example.com/{name}",
+                    content=f"Persisted {name} evidence.",
+                )
+                created_links[name] = VerificationEvidence.objects.create(
+                    verification_run=verification_run,
+                    evidence_source=source,
+                    evidence_role=VerificationEvidence.EvidenceRole.SECONDARY,
+                    **link_values,
+                )
+            return self.tavily_response
+
+        self.retrieve_tavily.side_effect = add_secondary_links
+        assessments = [
+            EvidenceAssessment(
+                stance=VerificationEvidence.Stance.SUPPORTS,
+                relevance_score=0.8,
+                directness_score=0.7,
+            ),
+            EvidenceAssessment(
+                stance=VerificationEvidence.Stance.REFUTES,
+                relevance_score=0.9,
+                directness_score=0.85,
+            ),
+        ]
+        self.assessor.return_value = assessments
+
+        run = self._execute()
+
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        self.assessor.assert_called_once()
+        assessed_items = self.assessor.call_args.args[1]
+        self.assertEqual(
+            {item.evidence_link_id for item in assessed_items},
+            {created_links["recency"].pk, created_links["pristine"].pk},
+        )
+        created_links["assessed"].refresh_from_db()
+        self.assertEqual(
+            created_links["assessed"].stance,
+            VerificationEvidence.Stance.CONTEXT,
+        )
+        created_links["recency"].refresh_from_db()
+        self.assertEqual(created_links["recency"].recency_score, 0.45)
+        for item, assessment in zip(assessed_items, assessments):
+            link = VerificationEvidence.objects.get(pk=item.evidence_link_id)
+            self.assertEqual(link.stance, assessment.stance)
+            self.assertEqual(link.relevance_score, assessment.relevance_score)
+            self.assertEqual(link.directness_score, assessment.directness_score)
+
+    def test_gfc_final_llm_unavailable_fails_without_tavily_or_fake_verdict(self):
+        error = LLMProviderUnavailableError(
+            "No configured LLM provider successfully completed this request."
+        )
+        self.evaluate_persisted.side_effect = error
+
+        with patch("api.tasks._save_claim") as save_claim:
+            with self.assertRaises(LLMProviderUnavailableError) as raised:
+                tasks.execute_core_text_pipeline(
+                    self.claim.context_text,
+                    self.claim.pk,
+                )
+
+        self.assertIs(raised.exception, error)
+        run = self.claim.verification_runs.get()
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "final_evaluator")
+        self.assertEqual(run.failure_code, "LLM_UNAVAILABLE")
+        self.retrieve_tavily.assert_not_called()
+        save_claim.assert_not_called()
+
+    def test_tavily_final_llm_unavailable_fails_without_fake_verdict(self):
+        self.provider.search_with_payload.return_value = ({"claims": []}, [])
+        self.retrieve_tavily.side_effect = self._record_links_at_fallback
+        error = LLMProviderUnavailableError(
+            "No configured LLM provider successfully completed this request."
+        )
+        self.evaluate_persisted.side_effect = error
+
+        with patch("api.tasks._save_claim") as save_claim:
+            with self.assertRaises(LLMProviderUnavailableError) as raised:
+                tasks.execute_core_text_pipeline(
+                    self.claim.context_text,
+                    self.claim.pk,
+                )
+
+        self.assertIs(raised.exception, error)
+        run = self.claim.verification_runs.get()
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "final_evaluator")
+        self.assertEqual(run.failure_code, "LLM_UNAVAILABLE")
+        save_claim.assert_not_called()
