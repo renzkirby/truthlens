@@ -3,7 +3,6 @@ import LandingPage from "./Pages/LandingPage";
 import CommunityFeed from "./Pages/CommunityFeed";
 import LoginPage from "./Pages/LoginPage";
 import RegisterPage from "./Pages/RegisterPage";
-import TruthLensWireframes from "./Pages/wireframe/TruthLens_Wireframes";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import PrivateRoute from "./components/PrivateRoute";
 import CreateThreadPage from "./Pages/CreateThreadPage";
@@ -51,7 +50,6 @@ function App() {
                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                <Route path="/reset-password/:uid/:token" element={<ResetPasswordPage />} />
                <Route path="/" element={<RootRedirect />} />
-               <Route path="/wireframes" element={<TruthLensWireframes />} />
                <Route path="/verify-email" element={<VerifyEmailPage />} />
                <Route element={<AccountActionShell />}>
                   <Route path="/organization-invitations/:token" element={<OrganizationInvitationPage />} />
