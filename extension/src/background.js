@@ -97,7 +97,7 @@ async function cacheGuestScanIfCurrentGuest(verdictPayload, scanType) {
 
       await appendGuestScan(verdictPayload, scanType);
       return true;
-   } catch (_error) {
+   } catch {
       return false;
    }
 }
@@ -256,7 +256,7 @@ function resolveSenderOrigin(sender) {
 
    try {
       return new URL(sender.url).origin;
-   } catch (_error) {
+   } catch {
       return null;
    }
 }

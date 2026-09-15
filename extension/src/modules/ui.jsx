@@ -138,7 +138,7 @@ export function displayResultCard(claim) {
                            "www.",
                            "",
                         );
-                     } catch (e) {
+                     } catch {
                         displayTitle = urlStr;
                      }
                   }

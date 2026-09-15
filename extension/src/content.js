@@ -1,6 +1,6 @@
 import "./content.css";
 import { state } from "./modules/state.js";
-import { startCropStudio, cleanupCropStudio } from "./modules/screenshot.jsx";
+import { startCropStudio } from "./modules/screenshot.jsx";
 
 console.log("TruthLens content script loaded");
 
@@ -59,7 +59,7 @@ function readTokensFromPageStorage() {
 
          refresh: window.localStorage.getItem("refresh") || window.sessionStorage.getItem("refresh"),
       });
-   } catch (_error) {
+   } catch {
       return { access: null, refresh: null };
    }
 }
@@ -228,13 +228,6 @@ function activateSnippingMode() {
    state.isSnipping = true;
 
    startCropStudio();
-}
-
-function onKeyDown(e) {
-   if (e.key === "Escape") {
-      console.log("Snipping canceled by user");
-      cleanupCropStudio();
-   }
 }
 
 function restoreTokensFromWorker(onComplete) {

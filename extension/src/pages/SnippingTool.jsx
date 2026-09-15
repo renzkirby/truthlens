@@ -2,7 +2,7 @@
 import "./SnippingTool.css";
 import { Crosshair, Sparkles } from "lucide-react";
 
-function SnippingTool({ handleSnipClick, isSnipping, onToggleDeepfake, checkDeepfake }) {
+function SnippingTool({ handleSnipClick, isSnipping }) {
    return (
       <div className="snipping-page">
          <div className="snip-action-box">
