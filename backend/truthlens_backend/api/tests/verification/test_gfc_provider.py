@@ -2,9 +2,12 @@ from datetime import timezone
 from unittest import TestCase
 from unittest.mock import Mock
 
+import requests
+
 from api.verification.providers.google_fact_check import (
     GOOGLE_FACT_CHECK_ENDPOINT,
     GoogleFactCheckProvider,
+    GoogleFactCheckProviderError,
     parse_google_fact_check_response,
 )
 
@@ -272,12 +275,16 @@ class GoogleFactCheckProviderTests(TestCase):
             GOOGLE_FACT_CHECK_ENDPOINT,
             params={
                 "query": "example claim",
-                "key": "test-api-key",
+                "pageSize": 3,
+            },
+            headers={
+                "X-Goog-Api-Key": "test-api-key",
             },
             timeout=7.5,
         )
 
         response.raise_for_status.assert_called_once_with()
+        response.json.assert_called_once_with()
 
         self.assertEqual(
             len(results),
@@ -417,3 +424,167 @@ class GoogleFactCheckProviderTests(TestCase):
         )
 
         http_client.get.assert_called_once()
+
+    def test_http_error_is_sanitized_and_keeps_safe_diagnostics(
+        self,
+    ):
+        secret = "super-secret-api-key"
+
+        response = Mock()
+        response.status_code = 400
+        response.json.return_value = {
+            "error": {
+                "code": 400,
+                "message": (
+                    "Invalid request for "
+                    f"https://example.test/?key={secret}"
+                ),
+                "status": "INVALID_ARGUMENT",
+            }
+        }
+        response.raise_for_status.side_effect = requests.HTTPError(
+            "400 Client Error for url: "
+            "https://factchecktools.googleapis.com/"
+            "v1alpha1/claims:search?"
+            f"query=test&key={secret}"
+        )
+
+        http_client = Mock()
+        http_client.get.return_value = response
+
+        provider = GoogleFactCheckProvider(
+            api_key=secret,
+            http_client=http_client,
+        )
+
+        with self.assertRaises(
+            GoogleFactCheckProviderError
+        ) as raised:
+            provider.search("example claim")
+
+        error = raised.exception
+        error_text = str(error)
+
+        self.assertEqual(
+            error.status_code,
+            400,
+        )
+        self.assertEqual(
+            error.provider_code,
+            400,
+        )
+        self.assertEqual(
+            error.provider_status,
+            "INVALID_ARGUMENT",
+        )
+
+        self.assertIn(
+            "HTTP 400",
+            error_text,
+        )
+        self.assertIn(
+            "INVALID_ARGUMENT",
+            error_text,
+        )
+        self.assertIn(
+            "Invalid request for",
+            error_text,
+        )
+
+        self.assertNotIn(
+            secret,
+            error_text,
+        )
+        self.assertNotIn(
+            f"?key={secret}",
+            error_text,
+        )
+        self.assertIn(
+            "?key=[REDACTED]",
+            error_text,
+        )
+
+
+    def test_non_json_http_error_is_still_sanitized(
+        self,
+    ):
+        secret = "super-secret-api-key"
+
+        response = Mock()
+        response.status_code = 500
+        response.json.side_effect = ValueError(
+            "not json"
+        )
+        response.raise_for_status.side_effect = requests.HTTPError(
+            "500 error for "
+            f"https://example.test/?key={secret}"
+        )
+
+        http_client = Mock()
+        http_client.get.return_value = response
+
+        provider = GoogleFactCheckProvider(
+            api_key=secret,
+            http_client=http_client,
+        )
+
+        with self.assertRaises(
+            GoogleFactCheckProviderError
+        ) as raised:
+            provider.search("example claim")
+
+        error_text = str(
+            raised.exception
+        )
+
+        self.assertIn(
+            "HTTP 500",
+            error_text,
+        )
+        self.assertNotIn(
+            secret,
+            error_text,
+        )
+        self.assertNotIn(
+            "?key=",
+            error_text,
+        )
+
+
+    def test_transport_error_does_not_expose_secret(
+        self,
+    ):
+        secret = "super-secret-api-key"
+
+        http_client = Mock()
+        http_client.get.side_effect = requests.ConnectionError(
+            "connection failed for "
+            f"https://example.test/?key={secret}"
+        )
+
+        provider = GoogleFactCheckProvider(
+            api_key=secret,
+            http_client=http_client,
+        )
+
+        with self.assertRaises(
+            GoogleFactCheckProviderError
+        ) as raised:
+            provider.search("example claim")
+
+        error_text = str(
+            raised.exception
+        )
+
+        self.assertIn(
+            "ConnectionError",
+            error_text,
+        )
+        self.assertNotIn(
+            secret,
+            error_text,
+        )
+        self.assertNotIn(
+            "?key=",
+            error_text,
+        )

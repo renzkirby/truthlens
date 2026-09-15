@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -14,6 +15,125 @@ GOOGLE_FACT_CHECK_ENDPOINT = (
 
 PROVIDER_NAME = "GOOGLE_FACT_CHECK"
 
+class GoogleFactCheckProviderError(RuntimeError):
+    """Sanitized Google Fact Check provider failure."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        provider_code: int | None = None,
+        provider_status: str | None = None,
+    ):
+        super().__init__(message)
+        self.status_code = status_code
+        self.provider_code = provider_code
+        self.provider_status = provider_status
+
+
+_API_KEY_PARAM_PATTERN = re.compile(
+    r"([?&](?:key|api_key|apikey)=)[^&\s]+",
+    flags=re.IGNORECASE,
+)
+
+
+def _sanitize_diagnostic_text(
+    value: Any,
+    *,
+    api_key: str | None = None,
+) -> str | None:
+    if not isinstance(value, str):
+        return None
+
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+
+    if api_key:
+        cleaned = cleaned.replace(
+            api_key,
+            "[REDACTED]",
+        )
+
+    cleaned = _API_KEY_PARAM_PATTERN.sub(
+        r"\1[REDACTED]",
+        cleaned,
+    )
+
+    return cleaned[:500]
+
+
+def _build_http_provider_error(
+    response,
+    *,
+    api_key: str | None,
+) -> GoogleFactCheckProviderError:
+    raw_status_code = getattr(
+        response,
+        "status_code",
+        None,
+    )
+    status_code = (
+        raw_status_code
+        if isinstance(raw_status_code, int)
+        else None
+    )
+
+    provider_code = None
+    provider_status = None
+    provider_message = None
+
+    try:
+        payload = response.json()
+    except Exception:
+        payload = None
+
+    if isinstance(payload, dict):
+        error_payload = payload.get("error")
+
+        if isinstance(error_payload, dict):
+            raw_provider_code = error_payload.get("code")
+            if isinstance(raw_provider_code, int):
+                provider_code = raw_provider_code
+
+            provider_status = _sanitize_diagnostic_text(
+                error_payload.get("status"),
+                api_key=api_key,
+            )
+
+            provider_message = _sanitize_diagnostic_text(
+                error_payload.get("message"),
+                api_key=api_key,
+            )
+
+    details = []
+
+    if status_code is not None:
+        details.append(
+            f"HTTP {status_code}"
+        )
+
+    if provider_status:
+        details.append(provider_status)
+
+    if provider_message:
+        details.append(provider_message)
+
+    if details:
+        message = (
+            "Google Fact Check request failed: "
+            + " | ".join(details)
+        )
+    else:
+        message = "Google Fact Check request failed."
+
+    return GoogleFactCheckProviderError(
+        message,
+        status_code=status_code,
+        provider_code=provider_code,
+        provider_status=provider_status,
+    )
 
 def _clean_optional_text(
     value: Any,
@@ -291,18 +411,38 @@ class GoogleFactCheckProvider:
                 "for Google Fact Check search."
             )
 
-        response = self.http_client.get(
-            GOOGLE_FACT_CHECK_ENDPOINT,
-            params={
-                "query": cleaned_query[:200],
-                "key": self.api_key,
-            },
-            timeout=self.timeout,
-        )
+        try:
+            response = self.http_client.get(
+                GOOGLE_FACT_CHECK_ENDPOINT,
+                params={
+                    "query": cleaned_query[:200],
+                    "pageSize": limit,
+                },
+                headers={
+                    "X-Goog-Api-Key": self.api_key,
+                },
+                timeout=self.timeout,
+            )
+        except requests.RequestException as exc:
+            raise GoogleFactCheckProviderError(
+                "Google Fact Check transport failure "
+                f"({type(exc).__name__})."
+            ) from exc
 
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            raise _build_http_provider_error(
+                response,
+                api_key=self.api_key,
+            ) from exc
 
-        payload = response.json()
+        try:
+            payload = response.json()
+        except (TypeError, ValueError) as exc:
+            raise GoogleFactCheckProviderError(
+                "Google Fact Check returned an invalid JSON response."
+            ) from exc
 
         if not isinstance(payload, dict):
             return {}, []
