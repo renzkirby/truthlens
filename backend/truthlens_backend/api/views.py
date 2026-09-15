@@ -110,6 +110,10 @@ from .verification_metrics_query_service import (
 from .verification_metrics_service import VerificationMetricsIntegrityError
 from .verification_activity_metrics_service import VerificationActivityMetricsIntegrityError
 from .verification_activity_trends_service import VerificationActivityTrendInputError
+from .verification_resolution_metrics_service import VerificationResolutionMetricsIntegrityError
+from .verification_reviewer_participation_metrics_service import (
+    VerificationReviewerParticipationMetricsIntegrityError,
+)
 from .organization_public_presence_service import (
     get_public_partner_by_slug,
     get_public_partner_directory,
@@ -2541,6 +2545,8 @@ def organization_verification_metrics(request, organization_id):
     except (
         VerificationMetricsIntegrityError,
         VerificationActivityMetricsIntegrityError,
+        VerificationResolutionMetricsIntegrityError,
+        VerificationReviewerParticipationMetricsIntegrityError,
         VerificationMetricsCompositionError,
     ):
         logger.exception("Organization verification metrics projection failed.")

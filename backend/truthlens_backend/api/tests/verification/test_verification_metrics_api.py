@@ -19,6 +19,10 @@ from api.verification_metrics_query_service import (
 from api.verification_metrics_service import VerificationMetricsIntegrityError
 from api.verification_activity_metrics_service import VerificationActivityMetricsIntegrityError
 from api.verification_activity_trends_service import VerificationActivityTrendInputError
+from api.verification_resolution_metrics_service import VerificationResolutionMetricsIntegrityError
+from api.verification_reviewer_participation_metrics_service import (
+    VerificationReviewerParticipationMetricsIntegrityError,
+)
 
 
 BASELINE_PATCH = (
@@ -30,6 +34,53 @@ ACTIVITY_PATCH = (
 TREND_PATCH = (
     "api.verification_metrics_query_service.get_organization_verification_activity_trend"
 )
+RESOLUTION_PATCH = (
+    "api.verification_metrics_query_service.get_organization_verification_resolution_distribution"
+)
+REVIEWERS_PATCH = (
+    "api.verification_metrics_query_service.get_organization_verification_reviewer_participation"
+)
+
+
+def make_resolution_payload(organization):
+    return {
+        "organization_id": str(organization.pk),
+        "measurement_basis": {
+            "source": "ACCOUNTABILITY_EVENT",
+            "coverage": "OBSERVED_AUTHORITATIVE_RESOLUTION_EVENTS_ONLY",
+            "historical_backfill": False,
+            "first_observed_resolution_at": datetime(
+                2026, 9, 10, 8, 0, 0, 345678, tzinfo=timezone.utc,
+            ),
+            "last_observed_resolution_at": datetime(
+                2026, 9, 16, 9, 0, 0, 456789, tzinfo=timezone.utc,
+            ),
+        },
+        "latest_observed_resolutions": {
+            "count": 4, "by_verdict": {"FACT": 1, "FAKE": 2, "MISLEADING": 1, "SATIRE": 0},
+        },
+    }
+
+
+def make_reviewer_participation_payload(organization):
+    return {
+        "organization_id": str(organization.pk),
+        "measurement_basis": {
+            "source": "ACCOUNTABILITY_EVENT",
+            "identity_source": "ACTOR_ID_SNAPSHOT",
+            "coverage": "DURABLE_ACTOR_ID_SNAPSHOT_EVENTS_ONLY",
+            "historical_backfill": False,
+            "first_observed_participation_at": datetime(
+                2026, 9, 16, 10, 0, 0, 567890, tzinfo=timezone.utc,
+            ),
+            "last_observed_participation_at": datetime(
+                2026, 9, 16, 11, 0, 0, 678901, tzinfo=timezone.utc,
+            ),
+        },
+        "reviewer_participation": {
+            "unique_reviewers": 3, "by_stage": {"evidence_review": 2, "adjudication": 2},
+        },
+    }
 
 
 class VerificationMetricsApiTests(APITestCase):
@@ -113,6 +164,15 @@ class VerificationMetricsApiTests(APITestCase):
             "adjudication": {"started": 2, "verdicts_issued": 1},
             "publication": {"initial_published": 1},
         }
+        self.resolution_payload = make_resolution_payload(self.organization)
+        self.reviewer_participation_payload = make_reviewer_participation_payload(self.organization)
+        # Default trusted mocks keep existing transport cases independent of raw history.
+        resolution_patch = patch(RESOLUTION_PATCH, return_value=self.resolution_payload)
+        self.resolution = resolution_patch.start()
+        self.addCleanup(resolution_patch.stop)
+        reviewers_patch = patch(REVIEWERS_PATCH, return_value=self.reviewer_participation_payload)
+        self.reviewers = reviewers_patch.start()
+        self.addCleanup(reviewers_patch.stop)
         # Windowed fixture activity differs from the earlier full-history summaries.
         self.created_after = datetime(2026, 9, 20, 10, tzinfo=timezone.utc)
         self.created_before = datetime(2026, 9, 22, 12, tzinfo=timezone.utc)
@@ -155,6 +215,14 @@ class VerificationMetricsApiTests(APITestCase):
                 "adjudication": self.activity_payload["adjudication"],
                 "publication": self.activity_payload["publication"],
             },
+            "resolution_distribution": {
+                "measurement_basis": self.resolution_payload["measurement_basis"],
+                "latest_observed_resolutions": self.resolution_payload["latest_observed_resolutions"],
+            },
+            "reviewer_participation": {
+                "measurement_basis": self.reviewer_participation_payload["measurement_basis"],
+                **self.reviewer_participation_payload["reviewer_participation"],
+            },
         }
 
     def metrics_url(self, organization_id):
@@ -171,9 +239,13 @@ class VerificationMetricsApiTests(APITestCase):
     def assert_allowed(self, actor):
         original_baseline = deepcopy(self.baseline)
         original_activity = deepcopy(self.activity_payload)
+        original_resolution = deepcopy(self.resolution_payload)
+        original_reviewers = deepcopy(self.reviewer_participation_payload)
         with (
             patch(BASELINE_PATCH, return_value=self.baseline) as baseline,
             patch(ACTIVITY_PATCH, return_value=self.activity_payload) as activity,
+            patch(RESOLUTION_PATCH, return_value=self.resolution_payload) as resolution,
+            patch(REVIEWERS_PATCH, return_value=self.reviewer_participation_payload) as reviewers,
             patch(TREND_PATCH) as trend,
         ):
             response = self.request_metrics(actor)
@@ -183,19 +255,37 @@ class VerificationMetricsApiTests(APITestCase):
         self.assertIsNot(response.data["activity"], self.activity_payload)
         self.assertEqual(self.baseline, original_baseline)
         self.assertEqual(self.activity_payload, original_activity)
+        self.assertEqual(self.resolution_payload, original_resolution)
+        self.assertEqual(self.reviewer_participation_payload, original_reviewers)
+        self.assertIsNot(response.data["resolution_distribution"], self.resolution_payload)
+        self.assertIsNot(response.data["reviewer_participation"], self.reviewer_participation_payload)
+        self.assertIsNot(response.data["reviewer_participation"],
+                         self.reviewer_participation_payload["reviewer_participation"])
         self.assertEqual(set(response.data), {
             "organization_id", "measurement_basis", "attempts", "reliability",
-            "completed_turnaround", "activity",
+            "completed_turnaround", "activity", "resolution_distribution", "reviewer_participation",
         })
         self.assertEqual(set(response.data["activity"]), {
             "measurement_basis", "evidence_review", "adjudication", "publication",
         })
+        self.assertEqual(set(response.data["resolution_distribution"]), {
+            "measurement_basis", "latest_observed_resolutions",
+        })
+        self.assertEqual(set(response.data["reviewer_participation"]), {
+            "measurement_basis", "unique_reviewers", "by_stage",
+        })
+        self.assertEqual(response.data["resolution_distribution"]["measurement_basis"],
+                         original_resolution["measurement_basis"])
+        self.assertEqual(response.data["reviewer_participation"]["measurement_basis"],
+                         original_reviewers["measurement_basis"])
         for key, value in self.baseline.items():
             self.assertEqual(response.data[key], value)
         self.assertEqual(response.data["activity"]["measurement_basis"],
                          original_activity["measurement_basis"])
         baseline.assert_called_once_with(organization=self.organization)
         activity.assert_called_once_with(organization=self.organization)
+        resolution.assert_called_once_with(organization=self.organization)
+        reviewers.assert_called_once_with(organization=self.organization)
         trend.assert_not_called()
         return response
 
@@ -203,6 +293,8 @@ class VerificationMetricsApiTests(APITestCase):
         with (
             patch(BASELINE_PATCH) as baseline,
             patch(ACTIVITY_PATCH) as activity,
+            patch(RESOLUTION_PATCH) as resolution,
+            patch(REVIEWERS_PATCH) as reviewers,
             patch(TREND_PATCH) as trend,
         ):
             response = self.request_metrics(actor, url=url, params=params)
@@ -210,6 +302,8 @@ class VerificationMetricsApiTests(APITestCase):
         self.assertEqual(set(response.data), {"detail"})
         baseline.assert_not_called()
         activity.assert_not_called()
+        resolution.assert_not_called()
+        reviewers.assert_not_called()
         trend.assert_not_called()
 
     def test_unauthenticated_request_returns_401(self):
@@ -224,6 +318,8 @@ class VerificationMetricsApiTests(APITestCase):
                 self.assertEqual(response.status_code, 401)
                 baseline.assert_not_called()
                 activity.assert_not_called()
+                self.resolution.assert_not_called()
+                self.reviewers.assert_not_called()
                 trend.assert_not_called()
 
     def test_owner_can_read_metrics(self):
@@ -291,7 +387,11 @@ class VerificationMetricsApiTests(APITestCase):
                 )
 
     def test_unknown_organization_returns_404(self):
-        with patch(BASELINE_PATCH) as baseline, patch(ACTIVITY_PATCH) as activity:
+        with (
+            patch(BASELINE_PATCH) as baseline,
+            patch(ACTIVITY_PATCH) as activity,
+            patch(TREND_PATCH) as trend,
+        ):
             response = self.request_metrics(
                 self.members[OrganizationMembership.Role.OWNER],
                 url=self.metrics_url(uuid.uuid4()),
@@ -299,6 +399,9 @@ class VerificationMetricsApiTests(APITestCase):
         self.assertEqual(response.status_code, 404)
         baseline.assert_not_called()
         activity.assert_not_called()
+        self.resolution.assert_not_called()
+        self.reviewers.assert_not_called()
+        trend.assert_not_called()
 
     def test_success_preserves_baseline_and_activity_coverage_on_the_wire(self):
         response = self.assert_allowed(self.members[OrganizationMembership.Role.OWNER])
@@ -315,6 +418,22 @@ class VerificationMetricsApiTests(APITestCase):
                     **self.activity_payload["measurement_basis"],
                     "first_observed_activity_at": "2026-09-15T10:00:00.234567Z",
                     "last_observed_activity_at": "2026-09-15T11:00:00.765432Z",
+                },
+            },
+            "resolution_distribution": {
+                **self.expected_payload()["resolution_distribution"],
+                "measurement_basis": {
+                    **self.resolution_payload["measurement_basis"],
+                    "first_observed_resolution_at": "2026-09-10T08:00:00.345678Z",
+                    "last_observed_resolution_at": "2026-09-16T09:00:00.456789Z",
+                },
+            },
+            "reviewer_participation": {
+                **self.expected_payload()["reviewer_participation"],
+                "measurement_basis": {
+                    **self.reviewer_participation_payload["measurement_basis"],
+                    "first_observed_participation_at": "2026-09-16T10:00:00.567890Z",
+                    "last_observed_participation_at": "2026-09-16T11:00:00.678901Z",
                 },
             },
         }
@@ -337,6 +456,16 @@ class VerificationMetricsApiTests(APITestCase):
         self.activity_payload["evidence_review"] = {"decisions": 0, "verified": 0, "rejected": 0}
         self.activity_payload["adjudication"] = {"started": 0, "verdicts_issued": 0}
         self.activity_payload["publication"] = {"initial_published": 0}
+        for field in ("first_observed_resolution_at", "last_observed_resolution_at"):
+            self.resolution_payload["measurement_basis"][field] = None
+        self.resolution_payload["latest_observed_resolutions"] = {
+            "count": 0, "by_verdict": {"FACT": 0, "FAKE": 0, "MISLEADING": 0, "SATIRE": 0},
+        }
+        for field in ("first_observed_participation_at", "last_observed_participation_at"):
+            self.reviewer_participation_payload["measurement_basis"][field] = None
+        self.reviewer_participation_payload["reviewer_participation"] = {
+            "unique_reviewers": 0, "by_stage": {"evidence_review": 0, "adjudication": 0},
+        }
         response = self.assert_allowed(self.members[OrganizationMembership.Role.ADMIN])
         self.assertEqual(response.json(), self.expected_payload())
 
@@ -396,12 +525,17 @@ class VerificationMetricsApiTests(APITestCase):
         self.assertNotIn(str(error), response.content.decode())
 
     def test_missing_or_mismatched_service_identities_return_generic_503(self):
-        for service in ("baseline", "activity"):
+        for service in ("baseline", "activity", "resolution", "reviewers"):
             for identity in (None, str(self.other_organization.pk)):
                 with self.subTest(service=service, identity=identity):
                     baseline_payload = deepcopy(self.baseline)
                     activity_payload = deepcopy(self.activity_payload)
-                    malformed = baseline_payload if service == "baseline" else activity_payload
+                    resolution_payload = deepcopy(self.resolution_payload)
+                    reviewer_payload = deepcopy(self.reviewer_participation_payload)
+                    malformed = {
+                        "baseline": baseline_payload, "activity": activity_payload,
+                        "resolution": resolution_payload, "reviewers": reviewer_payload,
+                    }[service]
                     if identity is None:
                         del malformed["organization_id"]
                     else:
@@ -409,6 +543,9 @@ class VerificationMetricsApiTests(APITestCase):
                     with (
                         patch(BASELINE_PATCH, return_value=baseline_payload) as baseline,
                         patch(ACTIVITY_PATCH, return_value=activity_payload) as activity,
+                        patch(RESOLUTION_PATCH, return_value=resolution_payload) as resolution,
+                        patch(REVIEWERS_PATCH, return_value=reviewer_payload) as reviewers,
+                        patch(TREND_PATCH) as trend,
                         patch("api.views.logger.exception") as log_exception,
                     ):
                         response = self.request_metrics(
@@ -417,6 +554,9 @@ class VerificationMetricsApiTests(APITestCase):
                     self.assert_generic_unavailable(response, log_exception)
                     baseline.assert_called_once_with(organization=self.organization)
                     activity.assert_called_once_with(organization=self.organization)
+                    resolution.assert_called_once_with(organization=self.organization)
+                    reviewers.assert_called_once_with(organization=self.organization)
+                    trend.assert_not_called()
 
 
     def assert_window_allowed(self, actor, *, params=None, after=None, before=None):
@@ -427,14 +567,21 @@ class VerificationMetricsApiTests(APITestCase):
         original_trend = deepcopy(payload)
         original_baseline = deepcopy(self.baseline)
         original_activity = deepcopy(self.activity_payload)
+        original_resolution = deepcopy(self.resolution_payload)
+        original_reviewers = deepcopy(self.reviewer_participation_payload)
         with (
             patch(BASELINE_PATCH, return_value=self.baseline) as baseline,
             patch(ACTIVITY_PATCH, return_value=self.activity_payload) as activity,
+            patch(RESOLUTION_PATCH, return_value=self.resolution_payload) as resolution,
+            patch(REVIEWERS_PATCH, return_value=self.reviewer_participation_payload) as reviewers,
             patch(TREND_PATCH, return_value=payload) as trend,
         ):
             response = self.request_metrics(actor, params=self.window if params is None else params)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(set(response.data), set(self.expected_payload()) | {"trend"})
+        self.assertEqual(set(response.data), {
+            "organization_id", "measurement_basis", "attempts", "reliability",
+            "completed_turnaround", "activity", "resolution_distribution", "reviewer_participation", "trend",
+        })
         for key, value in self.expected_payload().items():
             self.assertEqual(response.data[key], value)
         self.assertEqual(response.data["trend"], {
@@ -447,8 +594,12 @@ class VerificationMetricsApiTests(APITestCase):
         self.assertEqual(payload, original_trend)
         self.assertEqual(self.baseline, original_baseline)
         self.assertEqual(self.activity_payload, original_activity)
+        self.assertEqual(self.resolution_payload, original_resolution)
+        self.assertEqual(self.reviewer_participation_payload, original_reviewers)
         baseline.assert_called_once_with(organization=self.organization)
         activity.assert_called_once_with(organization=self.organization)
+        resolution.assert_called_once_with(organization=self.organization)
+        reviewers.assert_called_once_with(organization=self.organization)
         trend.assert_called_once_with(
             organization=self.organization, created_after=after, created_before=before,
         )
@@ -460,12 +611,16 @@ class VerificationMetricsApiTests(APITestCase):
         with (
             patch(BASELINE_PATCH) as baseline,
             patch(ACTIVITY_PATCH) as activity,
+            patch(RESOLUTION_PATCH) as resolution,
+            patch(REVIEWERS_PATCH) as reviewers,
             patch(TREND_PATCH) as trend,
         ):
             response = self.request_metrics(self.members[OrganizationMembership.Role.OWNER], params=params)
         self.assertEqual(response.status_code, 400)
         baseline.assert_not_called()
         activity.assert_not_called()
+        resolution.assert_not_called()
+        reviewers.assert_not_called()
         trend.assert_not_called()
         return response
 
@@ -602,6 +757,8 @@ class VerificationMetricsApiTests(APITestCase):
         self.assertEqual(response.status_code, 404)
         baseline.assert_not_called()
         activity.assert_not_called()
+        self.resolution.assert_not_called()
+        self.reviewers.assert_not_called()
         trend.assert_not_called()
 
     def assert_windowed_integrity_failure(self, source, error):
@@ -610,6 +767,10 @@ class VerificationMetricsApiTests(APITestCase):
                   side_effect=error if source == "baseline" else None) as baseline,
             patch(ACTIVITY_PATCH, return_value=self.activity_payload,
                   side_effect=error if source == "activity" else None) as activity,
+            patch(RESOLUTION_PATCH, return_value=self.resolution_payload,
+                  side_effect=error if source == "resolution" else None) as resolution,
+            patch(REVIEWERS_PATCH, return_value=self.reviewer_participation_payload,
+                  side_effect=error if source == "reviewers" else None) as reviewers,
             patch(TREND_PATCH, return_value=self.trend_payload,
                   side_effect=error if source == "trend" else None) as trend,
             patch("api.views.logger.exception") as log_exception,
@@ -622,6 +783,14 @@ class VerificationMetricsApiTests(APITestCase):
             activity.assert_not_called()
         else:
             activity.assert_called_once_with(organization=self.organization)
+        if source in ("baseline", "activity"):
+            resolution.assert_not_called()
+        else:
+            resolution.assert_called_once_with(organization=self.organization)
+        if source in ("baseline", "activity", "resolution"):
+            reviewers.assert_not_called()
+        else:
+            reviewers.assert_called_once_with(organization=self.organization)
         if source == "trend":
             trend.assert_called_once_with(organization=self.organization,
                                           created_after=self.created_after, created_before=self.created_before)
@@ -635,6 +804,42 @@ class VerificationMetricsApiTests(APITestCase):
         ):
             with self.subTest(source=source):
                 self.assert_windowed_integrity_failure(source, error)
+
+    def test_new_measurement_integrity_failures_return_generic_503_in_both_modes(self):
+        for source, error_type in (
+            ("resolution", VerificationResolutionMetricsIntegrityError),
+            ("reviewers", VerificationReviewerParticipationMetricsIntegrityError),
+        ):
+            for params in ({}, self.window):
+                with self.subTest(source=source, params=params):
+                    error = error_type("Internal actor-id claim-id event-id integrity details.")
+                    original_resolution = deepcopy(self.resolution_payload)
+                    original_reviewers = deepcopy(self.reviewer_participation_payload)
+                    with (
+                        patch(BASELINE_PATCH, return_value=self.baseline) as baseline,
+                        patch(ACTIVITY_PATCH, return_value=self.activity_payload) as activity,
+                        patch(RESOLUTION_PATCH, return_value=self.resolution_payload,
+                              side_effect=error if source == "resolution" else None) as resolution,
+                        patch(REVIEWERS_PATCH, return_value=self.reviewer_participation_payload,
+                              side_effect=error if source == "reviewers" else None) as reviewers,
+                        patch(TREND_PATCH) as trend,
+                        patch("api.views.logger.exception") as log_exception,
+                    ):
+                        response = self.request_metrics(
+                            self.members[OrganizationMembership.Role.OWNER], params=params,
+                        )
+                    self.assert_generic_unavailable(response, log_exception)
+                    self.assertNotIn(str(error), response.content.decode())
+                    baseline.assert_called_once_with(organization=self.organization)
+                    activity.assert_called_once_with(organization=self.organization)
+                    resolution.assert_called_once_with(organization=self.organization)
+                    if source == "resolution":
+                        reviewers.assert_not_called()
+                    else:
+                        reviewers.assert_called_once_with(organization=self.organization)
+                    trend.assert_not_called()
+                    self.assertEqual(self.resolution_payload, original_resolution)
+                    self.assertEqual(self.reviewer_participation_payload, original_reviewers)
 
     def test_each_trend_projection_integrity_failure_is_generic_503(self):
         for error in (
@@ -700,9 +905,44 @@ class VerificationMetricsApiTests(APITestCase):
         self.assertEqual(response.json()["trend"]["totals"], zeros)
         self.assertEqual(response.json()["trend"]["daily"], self.trend_payload["daily"])
 
+    def test_existing_route_name_and_path_are_preserved(self):
+        self.assertTrue(self.url.endswith(
+            f"/organizations/{self.organization.pk}/analytics/verification/"
+        ))
+
+    def test_new_sections_expose_only_structural_aggregate_metrics(self):
+        response = self.assert_allowed(self.members[OrganizationMembership.Role.OWNER])
+        resolution = response.json()["resolution_distribution"]
+        reviewers = response.json()["reviewer_participation"]
+        self.assertEqual(set(resolution["latest_observed_resolutions"]), {"count", "by_verdict"})
+        self.assertEqual(set(resolution["latest_observed_resolutions"]["by_verdict"]), {
+            "FACT", "FAKE", "MISLEADING", "SATIRE",
+        })
+        self.assertEqual(set(reviewers["by_stage"]), {"evidence_review", "adjudication"})
+        self.assertEqual(reviewers["unique_reviewers"], 3)
+        self.assertEqual(reviewers["by_stage"], {"evidence_review": 2, "adjudication": 2})
+        self.assertEqual(set(reviewers["measurement_basis"]), {
+            "source", "identity_source", "coverage", "historical_backfill",
+            "first_observed_participation_at", "last_observed_participation_at",
+        })
+        self.assertEqual(set(resolution["measurement_basis"]), {
+            "source", "coverage", "historical_backfill",
+            "first_observed_resolution_at", "last_observed_resolution_at",
+        })
+        for actor in self.members.values():
+            self.assertNotIn(actor.username, response.content.decode())
+
 
 class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
     """No database access is permitted at this delegation boundary."""
+
+    def setUp(self):
+        resolution_patch = patch(RESOLUTION_PATCH, side_effect=make_resolution_payload)
+        self.resolution = resolution_patch.start()
+        self.addCleanup(resolution_patch.stop)
+        reviewers_patch = patch(REVIEWERS_PATCH, side_effect=make_reviewer_participation_payload)
+        self.reviewers = reviewers_patch.start()
+        self.addCleanup(reviewers_patch.stop)
 
     def test_each_qualifying_capability_delegates_and_composes_without_mutation(self):
         actor = object()
@@ -717,6 +957,10 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
         }
         original_baseline = deepcopy(payload)
         original_activity = deepcopy(activity_payload)
+        resolution_payload = make_resolution_payload(organization)
+        reviewers_payload = make_reviewer_participation_payload(organization)
+        original_resolution = deepcopy(resolution_payload)
+        original_reviewers = deepcopy(reviewers_payload)
         for results, capabilities in (
             ([True], [PartnerCapability.MANAGE_ORGANIZATION]),
             ([False, True], [
@@ -732,6 +976,8 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
                 ) as capability,
                 patch(BASELINE_PATCH, return_value=payload) as baseline,
                 patch(ACTIVITY_PATCH, return_value=activity_payload) as activity,
+                patch(RESOLUTION_PATCH, return_value=resolution_payload) as resolution,
+                patch(REVIEWERS_PATCH, return_value=reviewers_payload) as reviewers,
                 patch(TREND_PATCH) as trend,
             ):
                 result = get_organization_verification_metrics(
@@ -746,20 +992,35 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
                     "adjudication": {"started": 0, "verdicts_issued": 0},
                     "publication": {"initial_published": 0},
                 },
+                "resolution_distribution": {
+                    "measurement_basis": original_resolution["measurement_basis"],
+                    "latest_observed_resolutions": original_resolution["latest_observed_resolutions"],
+                },
+                "reviewer_participation": {
+                    "measurement_basis": original_reviewers["measurement_basis"],
+                    "unique_reviewers": 3,
+                    "by_stage": {"evidence_review": 2, "adjudication": 2},
+                },
             })
             self.assertIsNot(result, payload)
             self.assertIsNot(result["activity"], activity_payload)
             self.assertEqual(payload, original_baseline)
             self.assertEqual(activity_payload, original_activity)
+            self.assertEqual(resolution_payload, original_resolution)
+            self.assertEqual(reviewers_payload, original_reviewers)
+            self.assertIsNot(result["resolution_distribution"], resolution_payload)
+            self.assertIsNot(result["reviewer_participation"], reviewers_payload["reviewer_participation"])
             self.assertEqual(capability.call_args_list, [
                 call(actor, required, organization=organization)
                 for required in capabilities
             ])
             baseline.assert_called_once_with(organization=organization)
             activity.assert_called_once_with(organization=organization)
+            resolution.assert_called_once_with(organization=organization)
+            reviewers.assert_called_once_with(organization=organization)
             trend.assert_not_called()
 
-    def test_missing_capabilities_raise_without_reading_either_service(self):
+    def test_missing_capabilities_raise_without_reading_any_service(self):
         actor = object()
         organization = SimpleNamespace(pk=uuid.uuid4())
         with (
@@ -779,23 +1040,32 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
         ])
         baseline.assert_not_called()
         activity.assert_not_called()
+        self.resolution.assert_not_called()
+        self.reviewers.assert_not_called()
         trend.assert_not_called()
 
     def test_missing_or_mismatched_service_identity_raises_composition_error(self):
         actor = object()
         organization = SimpleNamespace(pk=uuid.uuid4())
-        for service in ("baseline", "activity"):
+        for service in ("baseline", "activity", "resolution", "reviewers"):
             for identity in (None, str(uuid.uuid4())):
                 with self.subTest(service=service, identity=identity):
                     baseline_payload = {"organization_id": str(organization.pk)}
                     activity_payload = {"organization_id": str(organization.pk)}
-                    malformed = baseline_payload if service == "baseline" else activity_payload
+                    resolution_payload = make_resolution_payload(organization)
+                    reviewers_payload = make_reviewer_participation_payload(organization)
+                    malformed = {
+                        "baseline": baseline_payload, "activity": activity_payload,
+                        "resolution": resolution_payload, "reviewers": reviewers_payload,
+                    }[service]
                     if identity is None:
                         del malformed["organization_id"]
                     else:
                         malformed["organization_id"] = identity
                     original_baseline = deepcopy(baseline_payload)
                     original_activity = deepcopy(activity_payload)
+                    original_resolution = deepcopy(resolution_payload)
+                    original_reviewers = deepcopy(reviewers_payload)
                     with (
                         patch(
                             "api.verification_metrics_query_service.has_capability",
@@ -803,6 +1073,9 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
                         ),
                         patch(BASELINE_PATCH, return_value=baseline_payload) as baseline,
                         patch(ACTIVITY_PATCH, return_value=activity_payload) as activity,
+                        patch(RESOLUTION_PATCH, return_value=resolution_payload) as resolution,
+                        patch(REVIEWERS_PATCH, return_value=reviewers_payload) as reviewers,
+                        patch(TREND_PATCH) as trend,
                     ):
                         with self.assertRaises(VerificationMetricsCompositionError):
                             get_organization_verification_metrics(
@@ -810,8 +1083,13 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
                             )
                     baseline.assert_called_once_with(organization=organization)
                     activity.assert_called_once_with(organization=organization)
+                    resolution.assert_called_once_with(organization=organization)
+                    reviewers.assert_called_once_with(organization=organization)
+                    trend.assert_not_called()
                     self.assertEqual(baseline_payload, original_baseline)
                     self.assertEqual(activity_payload, original_activity)
+                    self.assertEqual(resolution_payload, original_resolution)
+                    self.assertEqual(reviewers_payload, original_reviewers)
 
     def test_direct_partial_window_fails_after_authorization_before_all_measurements(self):
         actor = object()
@@ -835,6 +1113,8 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
                 )
                 baseline.assert_not_called()
                 activity.assert_not_called()
+                self.resolution.assert_not_called()
+                self.reviewers.assert_not_called()
                 trend.assert_not_called()
 
     def test_direct_partial_window_does_not_bypass_authorization(self):
@@ -858,6 +1138,8 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
         ])
         baseline.assert_not_called()
         activity.assert_not_called()
+        self.resolution.assert_not_called()
+        self.reviewers.assert_not_called()
         trend.assert_not_called()
 
     def test_direct_missing_or_mismatched_trend_identity_raises_composition_error(self):
