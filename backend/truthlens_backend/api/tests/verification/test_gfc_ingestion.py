@@ -12,6 +12,7 @@ from api.verification.ingestion import (
 )
 from api.verification.providers.google_fact_check import (
     GoogleFactCheckProvider,
+    GoogleFactCheckProviderError,
 )
 
 
@@ -269,7 +270,9 @@ class GoogleFactCheckIngestionTests(TestCase):
             http_client=http_client,
         )
 
-        with self.assertRaises(requests.HTTPError):
+        with self.assertRaises(
+            GoogleFactCheckProviderError
+        ):
             ingest_provider_evidence(
                 provider,
                 "example claim",
