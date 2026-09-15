@@ -104,9 +104,11 @@ from .organization_service import (
 )
 from .verification_metrics_query_service import (
     VerificationMetricsAuthorizationError,
+    VerificationMetricsCompositionError,
     get_organization_verification_metrics,
 )
 from .verification_metrics_service import VerificationMetricsIntegrityError
+from .verification_activity_metrics_service import VerificationActivityMetricsIntegrityError
 from .organization_public_presence_service import (
     get_public_partner_by_slug,
     get_public_partner_directory,
@@ -2525,7 +2527,11 @@ def organization_verification_metrics(request, organization_id):
         )
     except VerificationMetricsAuthorizationError as error:
         return Response({"detail": str(error)}, status=status.HTTP_403_FORBIDDEN)
-    except VerificationMetricsIntegrityError:
+    except (
+        VerificationMetricsIntegrityError,
+        VerificationActivityMetricsIntegrityError,
+        VerificationMetricsCompositionError,
+    ):
         logger.exception("Organization verification metrics projection failed.")
         return Response(
             {"detail": "Verification metrics are temporarily unavailable."},
