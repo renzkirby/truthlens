@@ -240,6 +240,68 @@ class AccountabilityInstrumentationTests(TestCase):
         self.assertIsNone(completed.actor)
         self.assertEqual(completed.context["claim_id"], str(claim.pk))
 
+    def test_evidence_decisions_and_reopen_are_correlated_to_claim(self):
+        claim = Claim.objects.create(context_text="Evidence correlation claim")
+        thread = Thread.objects.create(
+            claim=claim,
+            author=self.contributor,
+            caption="Evidence correlation thread",
+        )
+        assignment = ensure_verification_assignment(claim=claim)
+        claim_verification_assignment(
+            assignment=assignment,
+            organization=self.organization,
+            actor=self.actor,
+        )
+        evidence = EvidenceSubmission.objects.create(
+            thread=thread,
+            contributor=self.contributor,
+            evidence_caption="Evidence correlation source",
+            evidence_url="https://example.com/evidence-correlation",
+        )
+        for status, action, reason in (
+            (
+                EvidenceSubmission.EvidenceStatus.VERIFIED,
+                AccountabilityEvent.ActionType.EVIDENCE_VERIFIED,
+                None,
+            ),
+            (
+                EvidenceSubmission.EvidenceStatus.REJECTED,
+                AccountabilityEvent.ActionType.EVIDENCE_REJECTED,
+                EvidenceSubmission.RejectionReason.OUTDATED,
+            ),
+        ):
+            with self.subTest(status=status):
+                result = review_evidence_submission(
+                    evidence=evidence,
+                    actor=self.actor,
+                    evidence_status=status,
+                    rejection_reason=reason,
+                )
+                event = AccountabilityEvent.objects.get(
+                    action_type=action,
+                    resource_id=str(evidence.pk),
+                )
+                self.assertEqual(
+                    event.context,
+                    {
+                        "evidence_case_id": str(result["case"].pk),
+                        "claim_id": str(claim.pk),
+                    },
+                )
+
+        reopened = AccountabilityEvent.objects.get(
+            action_type=AccountabilityEvent.ActionType.EVIDENCE_REOPENED,
+            resource_id=str(evidence.pk),
+        )
+        self.assertEqual(
+            reopened.context,
+            {
+                "moderation_case_id": str(result["case"].pk),
+                "claim_id": str(claim.pk),
+            },
+        )
+
     def test_release_conflict_unauthorized_action_and_rollback_leave_no_extra_event(self):
         claim = Claim.objects.create(context_text="Assignment release audit")
         assignment = ensure_verification_assignment(claim=claim)
@@ -467,6 +529,57 @@ class FactualCorrectionAccountabilityInstrumentationTests(
     FactualCorrectionHandoffFixtures,
     TestCase,
 ):
+    def test_correction_evidence_decisions_and_reopen_are_correlated_to_claim(self):
+        for status, action, reason in (
+            (
+                EvidenceSubmission.EvidenceStatus.VERIFIED,
+                AccountabilityEvent.ActionType.EVIDENCE_VERIFIED,
+                None,
+            ),
+            (
+                EvidenceSubmission.EvidenceStatus.REJECTED,
+                AccountabilityEvent.ActionType.EVIDENCE_REJECTED,
+                EvidenceSubmission.RejectionReason.OUTDATED,
+            ),
+        ):
+            with self.subTest(status=status):
+                context = self.make_correction_review_context(
+                    suffix=f"accountability-correlation-{status}",
+                )
+                result = self.review_correction(
+                    context,
+                    evidence_status=status,
+                    rejection_reason=reason,
+                )
+                event = AccountabilityEvent.objects.get(
+                    action_type=action,
+                    resource_id=str(result["evidence"].pk),
+                    context__correction_request_id=str(context["correction_request"].pk),
+                )
+                self.assertEqual(
+                    event.context,
+                    {
+                        "correction_request_id": str(context["correction_request"].pk),
+                        "correction_case_id": str(context["correction_case"].pk),
+                        "evidence_case_id": str(result["case"].pk),
+                        "is_reaffirmation": (
+                            status == EvidenceSubmission.EvidenceStatus.VERIFIED
+                        ),
+                        "claim_id": str(context["claim"].pk),
+                    },
+                )
+                reopened = AccountabilityEvent.objects.get(
+                    action_type=AccountabilityEvent.ActionType.EVIDENCE_REOPENED,
+                    resource_id=str(result["evidence"].pk),
+                )
+                self.assertEqual(
+                    reopened.context,
+                    {
+                        "moderation_case_id": str(result["case"].pk),
+                        "claim_id": str(context["claim"].pk),
+                    },
+                )
+
     def test_preparation_and_handoff_keep_decision_and_publication_authority_distinct(self):
         context = self.make_prepared_context(suffix="accountability-handoff")
         result = self.handoff(context)

@@ -344,6 +344,7 @@ def _prepare_evidence_case_for_review(
     case,
     *,
     actor,
+    claim_id,
     allow_reopen=True,
 ):
     if case.status == ModerationCase.Status.RESOLVED:
@@ -381,7 +382,10 @@ def _prepare_evidence_case_for_review(
                 previous_state={"case_status": ModerationCase.Status.RESOLVED},
                 new_state={"case_status": ModerationCase.Status.REOPENED},
                 reason_code="RE_REVIEW",
-                context={"moderation_case_id": str(case.pk)},
+                context={
+                    "moderation_case_id": str(case.pk),
+                    "claim_id": str(claim_id),
+                },
             )
 
     if case.status in {
@@ -699,6 +703,7 @@ def review_correction_evidence(
         case = _prepare_evidence_case_for_review(
             case,
             actor=actor,
+            claim_id=context["claim"].pk,
             allow_reopen=True,
         )
         previous_status = locked_evidence.evidence_status
@@ -783,6 +788,7 @@ def review_correction_evidence(
                 "correction_case_id": str(correction_case.pk),
                 "evidence_case_id": str(case.pk),
                 "is_reaffirmation": previous_status == evidence_status,
+                "claim_id": str(context["claim"].pk),
             },
         )
         case = transition_moderation_case(
@@ -1005,6 +1011,7 @@ def review_evidence_submission(
         case = _prepare_evidence_case_for_review(
             case,
             actor=actor,
+            claim_id=locked_claim.pk,
             allow_reopen=allow_reopen,
         )
 
@@ -1071,7 +1078,10 @@ def review_evidence_submission(
             new_state={"evidence_status": evidence_status},
             reason_code=rejection_reason or evidence_status,
             notes=moderator_notes,
-            context={"evidence_case_id": str(case.pk)},
+            context={
+                "evidence_case_id": str(case.pk),
+                "claim_id": str(locked_claim.pk),
+            },
         )
 
         case = transition_moderation_case(
