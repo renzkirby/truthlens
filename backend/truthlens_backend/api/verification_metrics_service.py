@@ -1,3 +1,5 @@
+from statistics import mean, median
+
 from .models import AccountabilityEvent
 
 
@@ -86,3 +88,50 @@ def project_organization_assignment_lifecycles(*, organization):
     return sorted(attempts, key=lambda attempt: (
         attempt["claimed_at"], attempt["assignment_id"],
     ))
+
+
+def get_organization_verification_baseline(*, organization):
+    """Aggregate observed operational attempts from the trusted projection.
+
+    Coverage begins with recorded organization activity, without historical
+    backfill. Reliability uses terminal outcomes; turnaround uses completions.
+    """
+    lifecycles = project_organization_assignment_lifecycles(organization=organization)
+    counts = {"ACTIVE": 0, "RELEASED": 0, "COMPLETED": 0}
+    claimed_times = []
+    completed_durations = []
+    for attempt in lifecycles:
+        counts[attempt["status"]] += 1
+        claimed_times.append(attempt["claimed_at"])
+        if attempt["status"] == "COMPLETED":
+            completed_durations.append(attempt["duration_seconds"])
+
+    terminal = counts["RELEASED"] + counts["COMPLETED"]
+    return {
+        "organization_id": str(organization.pk),
+        "measurement_basis": {
+            "source": "ACCOUNTABILITY_EVENT",
+            "coverage": "INSTRUMENTATION_ERA_ONLY",
+            "historical_backfill": False,
+            "first_observed_claimed_at": min(claimed_times) if claimed_times else None,
+            "last_observed_claimed_at": max(claimed_times) if claimed_times else None,
+        },
+        "attempts": {
+            "claimed": len(lifecycles),
+            "active": counts["ACTIVE"],
+            "released": counts["RELEASED"],
+            "completed": counts["COMPLETED"],
+            "terminal": terminal,
+        },
+        "reliability": {
+            "terminal_completion_rate": counts["COMPLETED"] / terminal if terminal else None,
+            "terminal_release_rate": counts["RELEASED"] / terminal if terminal else None,
+        },
+        "completed_turnaround": {
+            "count": len(completed_durations),
+            "average_seconds": float(mean(completed_durations)) if completed_durations else None,
+            "median_seconds": float(median(completed_durations)) if completed_durations else None,
+            "minimum_seconds": float(min(completed_durations)) if completed_durations else None,
+            "maximum_seconds": float(max(completed_durations)) if completed_durations else None,
+        },
+    }
