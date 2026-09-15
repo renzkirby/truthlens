@@ -7,12 +7,12 @@ class VerificationActivityMetricsIntegrityError(Exception):
     pass
 
 
-def get_organization_verification_activity(*, organization):
-    """Count instrumented activity without reconstructing mutable workflow rows.
+def project_organization_verification_activity_events(*, organization):
+    """Validate complete selected history and project ordinary activity events.
 
     Correction evidence and revision/correction publications are outside ordinary
-    activity. Malformed selected history fails closed; no historical backfill is
-    inferred, and no relationship between started and issued counts is required.
+    activity. No time window is applied: malformed selected history anywhere in
+    the organization's instrumentation history fails closed before returning.
     """
     actions = AccountabilityEvent.ActionType
     resources = AccountabilityEvent.ResourceType
@@ -30,14 +30,12 @@ def get_organization_verification_activity(*, organization):
         "id", "action_type", "resource_type", "context", "created_at",
     )
 
-    counts = dict.fromkeys(expected_resources, 0)
+    projected_events = []
     seen_claims = {
         actions.ADJUDICATION_STARTED: set(),
         actions.VERDICT_ISSUED: set(),
         actions.ARTICLE_PUBLISHED: set(),
     }
-    first_observed_at = None
-    last_observed_at = None
     for event in events:
         action = event["action_type"]
         if event["resource_type"] != expected_resources[action]:
@@ -68,7 +66,30 @@ def get_organization_verification_activity(*, organization):
                 )
             seen_claims[action].add(claim_id)
 
-        counts[action] += 1
+        projected_events.append({
+            "action_type": action,
+            "claim_id": claim_id,
+            "created_at": event["created_at"],
+        })
+
+    return projected_events
+
+
+def get_organization_verification_activity(*, organization):
+    """Aggregate ordinary instrumented activity without historical backfill."""
+    events = project_organization_verification_activity_events(organization=organization)
+    actions = AccountabilityEvent.ActionType
+    counts = dict.fromkeys((
+        actions.EVIDENCE_VERIFIED,
+        actions.EVIDENCE_REJECTED,
+        actions.ADJUDICATION_STARTED,
+        actions.VERDICT_ISSUED,
+        actions.ARTICLE_PUBLISHED,
+    ), 0)
+    first_observed_at = None
+    last_observed_at = None
+    for event in events:
+        counts[event["action_type"]] += 1
         created_at = event["created_at"]
         first_observed_at = (
             min(first_observed_at, created_at)
