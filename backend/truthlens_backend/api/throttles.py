@@ -17,6 +17,10 @@ class FactCheckRateThrottle(SimpleRateThrottle):
         return self.cache_format % {"scope": self.scope, "ident": ident}
 
 
+class ClaimPollingRateThrottle(FactCheckRateThrottle):
+    scope = "claim_polling"
+
+
 class PublicPartnerRateThrottle(SimpleRateThrottle):
     scope = "public_partner"
 

@@ -81,6 +81,10 @@ REST_FRAMEWORK = {
         'anon': '5/minute',
         'user': '100/minute',
         'fact_check': os.getenv('DRF_FACT_CHECK_THROTTLE_RATE', '5/minute'),
+        "claim_polling": os.getenv(
+            "DRF_CLAIM_POLLING_THROTTLE_RATE",
+            "60/minute",
+        ),
         "password_reset": "3/hour",
         "email_verification": "3/hour",
         "public_partner": os.getenv(

@@ -251,6 +251,7 @@ from .organization_membership_service import (
     suspend_organization_membership,
 )
 from .throttles import (
+    ClaimPollingRateThrottle,
     FactCheckRateThrottle,
     PasswordResetRateThrottle,
     EmailVerificationRateThrottle,
@@ -497,7 +498,7 @@ def receive_snippet(request):
 
 @csrf_exempt
 @api_view(["GET"])
-@throttle_classes([])
+@throttle_classes([ClaimPollingRateThrottle])
 def claim_polling_endpoint(request, claim_id):
     if not claim_id:
         return JsonResponse({"error": "Claim ID is required"}, status=400)
