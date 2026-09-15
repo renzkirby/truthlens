@@ -411,10 +411,29 @@ def record_knowledge_reuse(
     Do not call this for ordinary page views.
     """
 
+    if fact_check is None or fact_check.pk is None or fact_check._state.adding:
+        raise InvalidKnowledgeReuse("Knowledge reuse requires a persisted fact-check.")
+
     if fact_check.publication_status != (OfficialFactCheck.PublicationStatus.PUBLISHED):
         raise InvalidKnowledgeReuse(
             "Only published fact-checks " "may generate knowledge reuse " "events."
         )
+
+    if fact_check.organization_id is None:
+        raise InvalidKnowledgeReuse("Knowledge reuse requires a source organization.")
+    source_organization_id_snapshot = str(fact_check.organization_id).strip()
+    if not source_organization_id_snapshot:
+        raise InvalidKnowledgeReuse(
+            "Knowledge reuse requires a nonblank source organization ID."
+        )
+
+    target_claim_id_snapshot = ""
+    if target_claim is not None:
+        if target_claim.pk is None or target_claim._state.adding:
+            raise InvalidKnowledgeReuse("Knowledge reuse requires a persisted target claim.")
+        target_claim_id_snapshot = str(target_claim.pk).strip()
+        if not target_claim_id_snapshot:
+            raise InvalidKnowledgeReuse("Knowledge reuse requires a nonblank target claim ID.")
 
     valid_reuse_types = {
         value for value, _label in (KnowledgeReuseEvent.ReuseType.choices)
@@ -439,6 +458,8 @@ def record_knowledge_reuse(
     return KnowledgeReuseEvent.objects.create(
         fact_check=fact_check,
         target_claim=target_claim,
+        source_organization_id_snapshot=source_organization_id_snapshot,
+        target_claim_id_snapshot=target_claim_id_snapshot,
         triggered_by=triggered_by,
         reuse_type=reuse_type,
         match_method=match_method,

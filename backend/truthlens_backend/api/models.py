@@ -4477,6 +4477,17 @@ class KnowledgeReuseEvent(models.Model):
         related_name="knowledge_reuse_events",
     )
 
+    source_organization_id_snapshot = models.CharField(
+        max_length=255,
+        blank=True,
+        db_index=True,
+    )
+
+    target_claim_id_snapshot = models.CharField(
+        max_length=255,
+        blank=True,
+    )
+
     reuse_type = models.CharField(
         max_length=30,
         choices=ReuseType.choices,
@@ -4549,3 +4560,15 @@ class KnowledgeReuseEvent(models.Model):
 
     def __str__(self):
         return f"{self.reuse_type} - " f"Fact Check {self.fact_check_id}"
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError(
+                "Knowledge reuse events are immutable and cannot be modified."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            "Knowledge reuse events are durable and cannot be deleted directly."
+        )
