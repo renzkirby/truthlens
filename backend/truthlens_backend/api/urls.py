@@ -27,12 +27,10 @@ urlpatterns = [
     path("users/<str:username>/", views.get_public_user_profile),
     path("users/<str:username>/threads/", views.public_user_threads),
     path("users/<str:username>/evidence/", views.public_user_evidence),
-    path("users/<str:username>/verdicts/", views.public_user_verdicts),
     path("users/<str:username>/follow/", views.toggle_follow_user),
     path("users/<str:username>/followers/", views.get_user_followers),
     path("users/<str:username>/following/", views.get_user_following),
     path("users/<str:username>/claims/", views.public_user_claims),
-    path("users/<str:username>/moderation-stats/", views.moderator_transparency_stats),
     path("partners/", views.public_partner_directory, name="public_partner_directory"),
     path(
         "partners/<slug:slug>/fact-checks/",
@@ -75,7 +73,6 @@ urlpatterns = [
         views.toggle_save_claim,
         name="toggle_save_claim",
     ),
-    path("moderation/stats/", views.moderation_stats_view, name="moderation_stats"),
     path(
         "accountability/organization/",
         views.organization_accountability,
@@ -86,7 +83,6 @@ urlpatterns = [
         views.platform_safety_accountability,
         name="platform_safety_accountability",
     ),
-    path("moderation/queue/", views.moderation_queue, name="moderation_queue"),
     path(
         "moderation/safety/cases/",
         views.safety_case_queue,
@@ -111,11 +107,6 @@ urlpatterns = [
         "moderation/safety/cases/<uuid:case_id>/action/",
         views.safety_case_action,
         name="safety_case_action",
-    ),
-    path(
-        "moderation/evidence-queue/",
-        views.evidence_moderation_queue,
-        name="moderation_evidence_queue",
     ),
     path(
         "moderation/evidence/cases/",
@@ -146,11 +137,6 @@ urlpatterns = [
         "moderation/adjudication/cases/<uuid:case_id>/action/",
         views.adjudication_case_action,
         name="adjudication_case_action",
-    ),
-    path(
-        "moderation/verdict-queue/",
-        views.verdict_queue,
-        name="moderation_verdict_queue",
     ),
     # Partner verification intake
     path(
@@ -258,21 +244,6 @@ urlpatterns = [
         ),
         views.organization_invitation_cancel,
         name="organization_invitation_cancel",
-    ),
-    path(
-        "moderation/threads/<uuid:thread_id>/resolve/",
-        views.moderation_resolve_thread,
-        name="moderation_resolve_thread",
-    ),
-    path(
-        "moderation/threads/<uuid:thread_id>/safety-action/",
-        views.moderation_resolve_safety_thread,
-        name="moderation_safety_action",
-    ),
-    path(
-        "moderation/claims/" "<uuid:claim_id>/adjudicate/",
-        views.adjudicate_claim,
-        name="adjudicate_claim",
     ),
     path(
         "moderation/claims/" "<uuid:claim_id>/" "fact-checks/draft/",

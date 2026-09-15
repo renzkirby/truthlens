@@ -685,51 +685,6 @@ class AdjudicationActionApiContractTests(
             {self.contributor.id, self.second_contributor.id},
         )
 
-    def test_legacy_claim_and_thread_adapters_require_same_hardened_identity(self):
-        for route_name in ("adjudicate_claim", "moderation_resolve_thread"):
-            with self.subTest(route=route_name):
-                context = self.make_context(
-                    evidence_statuses=[EvidenceSubmission.EvidenceStatus.VERIFIED]
-                )
-                route_kwargs = (
-                    {"claim_id": context["claim"].id}
-                    if route_name == "adjudicate_claim"
-                    else {"thread_id": context["thread"].id}
-                )
-                url = (
-                    reverse(route_name, kwargs=route_kwargs)
-                    + f"?organization_id={self.organization.id}"
-                )
-                payload = self.action_payload(case_id=str(context["case"].id))
-
-                response = self.client.post(url, payload, format="json")
-
-                self.assertEqual(response.status_code, status.HTTP_200_OK)
-                self.assertEqual(
-                    AdjudicationDecision.objects.filter(
-                        claim=context["claim"],
-                        is_current=True,
-                    ).count(),
-                    1,
-                )
-
-    def test_legacy_adapter_does_not_select_a_case_when_case_id_is_missing(self):
-        context = self.make_context(
-            evidence_statuses=[EvidenceSubmission.EvidenceStatus.VERIFIED]
-        )
-        url = (
-            reverse("adjudicate_claim", kwargs={"claim_id": context["claim"].id})
-            + f"?organization_id={self.organization.id}"
-        )
-
-        response = self.client.post(url, self.action_payload(), format="json")
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertFalse(
-            AdjudicationDecision.objects.filter(claim=context["claim"]).exists()
-        )
-
-
 class AdjudicationPostgresConcurrencyTests(
     AdjudicationContractFixtures,
     TransactionTestCase,

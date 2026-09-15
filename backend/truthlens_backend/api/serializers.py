@@ -156,23 +156,6 @@ class PublicUserCommentSerializer(serializers.ModelSerializer):
         ]
 
 
-class PublicModeratorVerdictSerializer(serializers.ModelSerializer):
-    thread_id = serializers.UUIDField(source="id", read_only=True)
-    claim_id = serializers.UUIDField(read_only=True)
-
-    class Meta:
-        model = Thread
-        fields = [
-            "thread_id",
-            "claim_id",
-            "caption",
-            "status",
-            "moderator_verdict",
-            "moderator_notes",
-            "moderated_at",
-        ]
-
-
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
         write_only=True,
@@ -1989,22 +1972,6 @@ class AdjudicationActionSerializer(
     )
 
 
-class ModerationDecisionSerializer(AdjudicationActionSerializer):
-    case_id = serializers.UUIDField(required=True)
-
-    # Temporary compatibility with the
-    # existing moderation frontend.
-    #
-    # Adjudication no longer owns Thread.status.
-    status = serializers.ChoiceField(
-        choices=[
-            Thread.Status.CLOSED,
-        ],
-        required=False,
-        write_only=True,
-    )
-
-
 class AdjudicationDecisionSerializer(serializers.ModelSerializer):
     decided_by = UserSerializer(read_only=True)
 
@@ -2052,53 +2019,6 @@ class AdjudicationDecisionSerializer(serializers.ModelSerializer):
             "supersedes",
             "is_current",
             "decided_at",
-        ]
-
-        read_only_fields = fields
-
-
-class AdjudicationQueueCaseSerializer(serializers.ModelSerializer):
-    claim = ClaimSerializer(read_only=True)
-
-    assigned_to = UserSerializer(read_only=True)
-
-    organization = serializers.SerializerMethodField()
-
-    total_evidence = serializers.IntegerField(read_only=True)
-
-    verified_evidence = serializers.IntegerField(read_only=True)
-
-    rejected_evidence = serializers.IntegerField(read_only=True)
-
-    def get_organization(
-        self,
-        obj,
-    ):
-        if not obj.organization:
-            return None
-
-        return {
-            "id": str(obj.organization.id),
-            "name": obj.organization.name,
-            "slug": obj.organization.slug,
-        }
-
-    class Meta:
-        model = ModerationCase
-
-        fields = [
-            "id",
-            "claim",
-            "status",
-            "priority",
-            "source",
-            "organization",
-            "assigned_to",
-            "total_evidence",
-            "verified_evidence",
-            "rejected_evidence",
-            "created_at",
-            "updated_at",
         ]
 
         read_only_fields = fields

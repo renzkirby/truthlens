@@ -792,40 +792,6 @@ class EvidenceCaseApiTests(APITestCase):
         self.assertEqual(self.case.status, ModerationCase.Status.RESOLVED)
         async_recompute.assert_called_once_with(self.contributor.id)
 
-    def test_legacy_verify_also_contains_reputation_dispatch_failure(self):
-        self._authenticate(self.lead)
-        legacy_url = reverse("evidence-verify", args=[self.evidence.id])
-        with patch(
-            "api.trust_service.recompute_user_trust_score",
-            side_effect=RuntimeError("trust unavailable"),
-        ), patch(
-            "api.tasks.recompute_user_trust_score_task.delay",
-            side_effect=RuntimeError("broker unavailable"),
-        ):
-            with self.captureOnCommitCallbacks(execute=True):
-                response = self.client.patch(
-                    legacy_url,
-                    {
-                        "evidence_status": "VERIFIED",
-                        "expected_status": "UNVERIFIED",
-                    },
-                    format="json",
-                )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.evidence.refresh_from_db()
-        self.assertEqual(self.evidence.evidence_status, "VERIFIED")
-
-    def test_legacy_evidence_queue_remains_available(self):
-        self._authenticate(self.lead)
-        url = (
-            f"{reverse('moderation_evidence_queue')}"
-            f"?organization_id={self.organization.id}"
-        )
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["count"], 1)
-
     def test_methods_are_read_or_action_only(self):
         self._authenticate(self.lead)
         self.assertEqual(

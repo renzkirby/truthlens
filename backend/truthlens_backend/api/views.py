@@ -14,12 +14,11 @@ from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from django.utils import timezone
 from django.db import IntegrityError, transaction
-from django.db.models import Q, Count, F, Max
+from django.db.models import Q, F, Max
 from rest_framework.decorators import (
     api_view,
     parser_classes,
     permission_classes,
-    action,
     throttle_classes,
 )
 from rest_framework import status, viewsets
@@ -87,13 +86,7 @@ from .models import (
     FactualCorrectionRequest,
     VerificationAssignment,
 )
-from .moderation_service import (
-    ACTIVE_CASE_STATUSES,
-    ModerationCaseError,
-    ensure_safety_case,
-    escalate_safety_case,
-    resolve_safety_case,
-)
+from .moderation_service import ModerationCaseError, ensure_safety_case
 from .safety_review_service import (
     SafetyCaseConflict,
     SafetyReviewAuthorizationError,
@@ -107,7 +100,6 @@ from .safety_review_service import (
 from .organization_service import (
     PartnerCapability,
     has_capability,
-    has_case_capability,
 )
 from .organization_public_presence_service import (
     get_public_partner_by_slug,
@@ -143,7 +135,6 @@ from .evidence_review_service import (
     ensure_evidence_case,
     get_evidence_case_queue,
     get_evidence_case_queryset,
-    get_latest_evidence_case,
     review_evidence_submission,
     review_correction_evidence,
     schedule_evidence_review_trust_updates,
@@ -279,7 +270,6 @@ from .serializers import (
     PublicUserThreadSerializer,
     PublicUserEvidenceSerializer,
     PublicUserCommentSerializer,
-    PublicModeratorVerdictSerializer,
     ThreadDetailSerializer,
     VoteSerializer,
     ThreadFlagSerializer,
@@ -290,12 +280,10 @@ from .serializers import (
     AdjudicationCaseQueueOrganizationSerializer,
     AdjudicationCaseQueueSerializer,
     AdjudicationOrganizationQuerySerializer,
-    ModerationDecisionSerializer,
     ClaimMatchSerializer,
     UserWithTrustBreakdownSerializer,
     ClaimDeepAnalysisSerializer,
     AdjudicationDecisionSerializer,
-    AdjudicationQueueCaseSerializer,
     FactCheckDraftCreateSerializer,
     FactCheckDraftUpdateSerializer,
     EditorialRevisionDraftCreateSerializer,
@@ -413,65 +401,12 @@ class IsVoterOrReadOnly(BasePermission):
         return obj.voter == request.user
 
 
-def _has_moderator_role(user):
-    profile = getattr(user, "profile", None)
-    if not profile:
-        return False
-    # Backward-compatible during migration from MODERATOR -> MOD.
-    return profile.role in {UserProfile.Role.MOD, "MODERATOR"}
-
-
-class IsModerator(BasePermission):
-    """
-    Legacy class name.
-
-    MOD now represents the TruthLens Platform
-    Safety Moderator role, not a factual verifier.
-    """
-
+class CanReviewSafety(BasePermission):
     def has_permission(self, request, view):
         return has_capability(
             request.user,
             PartnerCapability.REVIEW_SAFETY,
         )
-
-
-class CanReviewEvidence(BasePermission):
-    def has_permission(
-        self,
-        request,
-        view,
-    ):
-        return request.user and request.user.is_authenticated
-
-    def has_object_permission(
-        self,
-        request,
-        view,
-        obj,
-    ):
-        # Nobody may issue an authoritative
-        # review of their own evidence.
-        if obj.contributor_id == request.user.id:
-            return False
-
-        case = get_latest_evidence_case(obj)
-
-        if case is None:
-            return False
-
-        return has_case_capability(
-            request.user,
-            case,
-            PartnerCapability.REVIEW_EVIDENCE,
-        )
-
-
-class IsNotModerator(BasePermission):
-    def has_permission(self, request, view):
-        if not request.user.is_authenticated:
-            return False
-        return not _has_moderator_role(request.user)
 
 
 def _authenticated_user_or_none(request):
@@ -994,65 +929,6 @@ def verify_email(request):
     )
 
 
-@api_view(["GET"])
-@permission_classes(
-    [
-        IsAuthenticated,
-        IsModerator,
-    ]
-)
-def moderation_queue(request):
-    """
-    Return threads with active Safety moderation cases.
-    """
-
-    status_filter = request.query_params.get(
-        "status",
-        "ALL",
-    )
-
-    allowed = {
-        "ALL",
-        Thread.Status.PENDING,
-        Thread.Status.OPEN,
-        Thread.Status.CLOSED,
-        Thread.Status.REJECTED,
-    }
-
-    if status_filter not in allowed:
-        return Response(
-            {"detail": "Invalid status filter."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    queryset = (
-        Thread.objects.filter(
-            moderation_cases__case_type=(ModerationCase.CaseType.SAFETY),
-            moderation_cases__status__in=(ACTIVE_CASE_STATUSES),
-        )
-        .select_related(
-            "claim",
-            "author",
-            "author__profile",
-        )
-        .distinct()
-        .order_by("-created_at")
-    )
-
-    if status_filter != "ALL":
-        queryset = queryset.filter(status=status_filter)
-
-    serializer = ThreadSerializer(
-        queryset,
-        many=True,
-    )
-
-    return Response(
-        serializer.data,
-        status=status.HTTP_200_OK,
-    )
-
-
 def _get_safety_case_or_404(case_id, *, include_events=False):
     return get_object_or_404(
         get_safety_case_queryset(include_events=include_events),
@@ -1079,7 +955,7 @@ def _safety_case_detail_response(case_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsModerator])
+@permission_classes([IsAuthenticated, CanReviewSafety])
 def safety_case_queue(request):
     filters = SafetyCaseQueueFilterSerializer(data=request.query_params)
     filters.is_valid(raise_exception=True)
@@ -1103,13 +979,13 @@ def safety_case_queue(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsModerator])
+@permission_classes([IsAuthenticated, CanReviewSafety])
 def safety_case_detail(request, case_id):
     return _safety_case_detail_response(case_id)
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated, IsModerator])
+@permission_classes([IsAuthenticated, CanReviewSafety])
 def safety_case_claim(request, case_id):
     case = _get_safety_case_or_404(case_id)
 
@@ -1127,7 +1003,7 @@ def safety_case_claim(request, case_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated, IsModerator])
+@permission_classes([IsAuthenticated, CanReviewSafety])
 def safety_case_release(request, case_id):
     case = _get_safety_case_or_404(case_id)
 
@@ -1145,7 +1021,7 @@ def safety_case_release(request, case_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated, IsModerator])
+@permission_classes([IsAuthenticated, CanReviewSafety])
 def safety_case_action(request, case_id):
     payload = SafetyCaseActionSerializer(data=request.data)
     payload.is_valid(raise_exception=True)
@@ -1312,175 +1188,6 @@ def evidence_case_action(request, case_id):
         case_id,
         organization=organization,
         request=request,
-    )
-
-
-@api_view(["GET"])
-@permission_classes(
-    [
-        IsAuthenticated,
-    ]
-)
-def verdict_queue(request):
-    reviewed_filter = (
-        request.query_params.get(
-            "reviewed",
-            "pending",
-        )
-        .strip()
-        .lower()
-    )
-
-    allowed = {
-        "all",
-        "pending",
-        "resolved",
-    }
-
-    if reviewed_filter not in allowed:
-        return Response(
-            {"detail": "Invalid reviewed filter. " "Use all, pending, or " "resolved."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    try:
-        limit = int(
-            request.query_params.get(
-                "limit",
-                20,
-            )
-        )
-
-        offset = int(
-            request.query_params.get(
-                "offset",
-                0,
-            )
-        )
-
-    except (
-        TypeError,
-        ValueError,
-    ):
-        return Response(
-            {"detail": "limit and offset must " "be integers."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if limit < 1 or limit > 100 or offset < 0:
-        return Response(
-            {
-                "detail": "limit must be between "
-                "1 and 100, and offset "
-                "must be zero or greater."
-            },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    organization_id = request.query_params.get("organization_id")
-
-    if not organization_id:
-        return Response(
-            {"detail": "organization_id is required " "for adjudication review."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    organization = get_object_or_404(
-        Organization,
-        id=organization_id,
-    )
-
-    if not has_capability(
-        request.user,
-        PartnerCapability.ADJUDICATE,
-        organization=organization,
-    ):
-        return Response(
-            {
-                "detail": "You do not have permission "
-                "to adjudicate for this "
-                "organization."
-            },
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    queryset = ModerationCase.objects.filter(
-        case_type=(ModerationCase.CaseType.ADJUDICATION)
-    )
-
-    if reviewed_filter == "pending":
-        queryset = queryset.filter(status__in=ACTIVE_CASE_STATUSES)
-
-    elif reviewed_filter == "resolved":
-        queryset = queryset.filter(status=(ModerationCase.Status.RESOLVED))
-
-    else:
-        queryset = queryset.exclude(status=(ModerationCase.Status.CANCELLED))
-
-    queryset = queryset.filter(organization=organization)
-
-    queryset = (
-        queryset.select_related(
-            "claim",
-            "organization",
-            "assigned_to",
-            "assigned_to__profile",
-        )
-        .annotate(
-            total_evidence=Count(
-                "claim__threads__evidence_submissions",
-                distinct=True,
-            ),
-            verified_evidence=Count(
-                "claim__threads__evidence_submissions",
-                filter=Q(
-                    claim__threads__evidence_submissions__evidence_status=(
-                        EvidenceSubmission.EvidenceStatus.VERIFIED
-                    )
-                ),
-                distinct=True,
-            ),
-            rejected_evidence=Count(
-                "claim__threads__evidence_submissions",
-                filter=Q(
-                    claim__threads__evidence_submissions__evidence_status=(
-                        EvidenceSubmission.EvidenceStatus.REJECTED
-                    )
-                ),
-                distinct=True,
-            ),
-        )
-        .order_by(
-            "-priority",
-            "-created_at",
-        )
-    )
-    queryset = prefetch_claim_adjudication_provenance(
-        queryset,
-        claim_path="claim",
-        include_legacy_threads=True,
-    )
-
-    total_count = queryset.count()
-
-    cases = queryset[offset : offset + limit]
-
-    serializer = AdjudicationQueueCaseSerializer(
-        cases,
-        many=True,
-        context={
-            "request": request,
-        },
-    )
-
-    return Response(
-        {
-            "count": total_count,
-            "limit": limit,
-            "offset": offset,
-            "results": serializer.data,
-        },
-        status=status.HTTP_200_OK,
     )
 
 
@@ -1697,22 +1404,6 @@ def _adjudication_error_response(error):
     )
 
 
-def _ensure_legacy_adjudication_identity(
-    *,
-    case_id,
-    organization_id,
-    claim_id,
-):
-    case_matches = ModerationCase.objects.filter(
-        pk=case_id,
-        case_type=ModerationCase.CaseType.ADJUDICATION,
-        claim_id=claim_id,
-        organization_id=organization_id,
-    ).exists()
-    if not case_matches:
-        raise NotFound("Adjudication case not found.")
-
-
 def _execute_claim_adjudication(
     *,
     actor,
@@ -1755,123 +1446,6 @@ def adjudication_case_action(request, case_id):
         AdjudicationDecisionSerializer(
             decision,
             context={"request": request},
-        ).data,
-        status=status.HTTP_200_OK,
-    )
-
-
-@api_view(["POST"])
-@permission_classes(
-    [
-        IsAuthenticated,
-    ]
-)
-def moderation_resolve_thread(
-    request,
-    thread_id,
-):
-    """
-    Legacy thread-addressed adjudication endpoint.
-
-    The authoritative decision is Claim-centric.
-    Thread moderation fields remain temporary
-    compatibility mirrors only.
-
-    Thread.status is intentionally not changed.
-    Publication is intentionally not performed here.
-    """
-
-    organization_id = _adjudication_organization_id(request)
-    serializer = ModerationDecisionSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
-
-    thread = get_object_or_404(
-        Thread.objects.select_related("claim"),
-        id=thread_id,
-    )
-    claim = thread.claim
-
-    _ensure_legacy_adjudication_identity(
-        case_id=serializer.validated_data["case_id"],
-        organization_id=organization_id,
-        claim_id=claim.id,
-    )
-
-    try:
-        decision = _execute_claim_adjudication(
-            actor=request.user,
-            case_id=serializer.validated_data["case_id"],
-            organization_id=organization_id,
-            validated_data=serializer.validated_data,
-        )
-    except (AdjudicationError, ModerationCaseError) as error:
-        return _adjudication_error_response(error)
-
-    thread.refresh_from_db()
-
-    response_data = dict(
-        ThreadDetailSerializer(
-            thread,
-            context={
-                "request": request,
-            },
-        ).data
-    )
-
-    response_data["adjudication"] = AdjudicationDecisionSerializer(
-        decision,
-        context={
-            "request": request,
-        },
-    ).data
-
-    return Response(
-        response_data,
-        status=status.HTTP_200_OK,
-    )
-
-
-@api_view(["POST"])
-@permission_classes(
-    [
-        IsAuthenticated,
-    ]
-)
-def adjudicate_claim(
-    request,
-    claim_id,
-):
-    organization_id = _adjudication_organization_id(request)
-    serializer = ModerationDecisionSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
-
-    claim = get_object_or_404(
-        Claim,
-        id=claim_id,
-    )
-
-    _ensure_legacy_adjudication_identity(
-        case_id=serializer.validated_data["case_id"],
-        organization_id=organization_id,
-        claim_id=claim.id,
-    )
-
-    try:
-        decision = _execute_claim_adjudication(
-            actor=request.user,
-            case_id=serializer.validated_data["case_id"],
-            organization_id=organization_id,
-            validated_data=serializer.validated_data,
-        )
-    except (AdjudicationError, ModerationCaseError) as error:
-        return _adjudication_error_response(error)
-
-    return Response(
-        AdjudicationDecisionSerializer(
-            decision,
-            context={
-                "request": request,
-            },
         ).data,
         status=status.HTTP_200_OK,
     )
@@ -2892,243 +2466,6 @@ def editorial_revision_publish(request, revision_id):
     )
 
 
-@api_view(["POST"])
-@permission_classes(
-    [
-        IsAuthenticated,
-        IsModerator,
-    ]
-)
-def moderation_resolve_safety_thread(
-    request,
-    thread_id,
-):
-    thread = get_object_or_404(
-        Thread,
-        id=thread_id,
-    )
-
-    action = request.data.get("action", "").strip().upper()
-
-    moderator_notes = request.data.get("moderator_notes", "").strip()
-
-    allowed_actions = {
-        "DISMISS",
-        "REMOVE",
-        "ESCALATE",
-    }
-
-    if action not in allowed_actions:
-        return Response(
-            {"detail": "Invalid action. Use DISMISS, " "REMOVE, or ESCALATE."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    try:
-        if action == "ESCALATE":
-            escalate_safety_case(
-                thread=thread,
-                actor=request.user,
-                notes=moderator_notes,
-            )
-
-            thread.refresh_from_db()
-
-            return Response(
-                ThreadSerializer(
-                    thread,
-                    context={"request": request},
-                ).data,
-                status=status.HTTP_200_OK,
-            )
-
-        result = resolve_safety_case(
-            thread=thread,
-            actor=request.user,
-            action=action,
-            notes=moderator_notes,
-        )
-
-    except ModerationCaseError as error:
-        return Response(
-            {
-                "detail": str(error),
-            },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    schedule_safety_resolution_trust_updates(
-        result,
-        action=action,
-    )
-
-    return Response(
-        ThreadSerializer(
-            result["thread"],
-            context={"request": request},
-        ).data,
-        status=status.HTTP_200_OK,
-    )
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def evidence_moderation_queue(request):
-    """
-    Evidence review queue.
-
-    Professional evidence review is available only
-    through an explicitly scoped verified partner
-    organization with REVIEW_EVIDENCE capability.
-    """
-
-    evidence_status_filter = (
-        request.query_params.get(
-            "status",
-            EvidenceSubmission.EvidenceStatus.UNVERIFIED,
-        )
-        .strip()
-        .upper()
-    )
-
-    allowed_statuses = {
-        value for value, _label in EvidenceSubmission.EvidenceStatus.choices
-    }
-
-    if evidence_status_filter not in allowed_statuses:
-        return Response(
-            {"detail": "Invalid evidence status."},
-            status=(status.HTTP_400_BAD_REQUEST),
-        )
-
-    try:
-        limit = int(
-            request.query_params.get(
-                "limit",
-                20,
-            )
-        )
-
-        offset = int(
-            request.query_params.get(
-                "offset",
-                0,
-            )
-        )
-
-    except (
-        TypeError,
-        ValueError,
-    ):
-        return Response(
-            {"detail": "limit and offset must " "be integers."},
-            status=(status.HTTP_400_BAD_REQUEST),
-        )
-
-    if limit < 1 or limit > 100 or offset < 0:
-        return Response(
-            {
-                "detail": "limit must be between "
-                "1 and 100, and offset "
-                "must be zero or greater."
-            },
-            status=(status.HTTP_400_BAD_REQUEST),
-        )
-
-    thread_id = request.query_params.get("thread_id")
-
-    organization_id = request.query_params.get("organization_id")
-
-    if not organization_id:
-        return Response(
-            {"detail": "organization_id is required " "for evidence review."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    organization = get_object_or_404(
-        Organization,
-        id=organization_id,
-    )
-
-    if not has_capability(
-        request.user,
-        PartnerCapability.REVIEW_EVIDENCE,
-        organization=organization,
-    ):
-        return Response(
-            {
-                "detail": "You do not have permission "
-                "to review evidence for this "
-                "organization."
-            },
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    evidence_query = EvidenceSubmission.objects.filter(
-        evidence_status=(evidence_status_filter)
-    )
-
-    # UNVERIFIED is an operational queue,
-    # so it must correspond to an active
-    # Evidence ModerationCase.
-    if evidence_status_filter == EvidenceSubmission.EvidenceStatus.UNVERIFIED:
-        evidence_query = evidence_query.filter(
-            moderation_cases__case_type=(ModerationCase.CaseType.EVIDENCE),
-            moderation_cases__status__in=(ACTIVE_CASE_STATUSES),
-        )
-
-    evidence_query = evidence_query.filter(
-        moderation_cases__case_type=(ModerationCase.CaseType.EVIDENCE),
-        moderation_cases__organization=organization,
-    )
-
-    if thread_id:
-        evidence_query = evidence_query.filter(thread_id=thread_id)
-
-    evidence_query = (
-        evidence_query.select_related(
-            "contributor",
-            "contributor__profile",
-            "thread",
-            "thread__claim",
-            "verified_by",
-            "verified_by__profile",
-        )
-        .prefetch_related(
-            "votes",
-        )
-        .distinct()
-        .order_by("-submitted_at")
-    )
-    evidence_query = prefetch_claim_adjudication_provenance(
-        evidence_query,
-        claim_path="thread__claim",
-        include_legacy_threads=True,
-    )
-
-    total_count = evidence_query.count()
-
-    evidence = evidence_query[offset : offset + limit]
-
-    serializer = EvidenceSubmissionSerializer(
-        evidence,
-        many=True,
-        context={
-            "request": request,
-        },
-    )
-
-    return Response(
-        {
-            "count": total_count,
-            "limit": limit,
-            "offset": offset,
-            "results": serializer.data,
-        },
-        status=status.HTTP_200_OK,
-    )
-
-
 VERIFICATION_WORKLOAD_CAPABILITIES = {
     PartnerCapability.CLAIM_VERIFICATION_WORK,
     PartnerCapability.REVIEW_EVIDENCE,
@@ -3562,9 +2899,8 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
     serializer_class = EvidenceSubmissionSerializer
     permission_classes = [
         IsAuthenticated,
-        IsNotModerator,
         IsEvidenceContributorOrReadOnly,
-    ]  # If moderator submits evidence, returns an error
+    ]
 
     def get_queryset(self):
         return EvidenceSubmission.objects.all()
@@ -3600,89 +2936,6 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
                 organization=organization,
             )
 
-    @action(
-        detail=True,
-        methods=["patch"],
-        permission_classes=[
-            IsAuthenticated,
-            CanReviewEvidence,
-        ],
-    )
-    def verify(
-        self,
-        request,
-        pk=None,
-    ):
-        evidence = self.get_object()
-
-        evidence_status = request.data.get("evidence_status")
-
-        notes = request.data.get(
-            "moderator_notes",
-            "",
-        ).strip()
-
-        rejection_reason = request.data.get("rejection_reason")
-
-        expected_status = request.data.get(
-            "expected_status",
-            evidence.evidence_status,
-        )
-
-        try:
-            result = review_evidence_submission(
-                evidence=evidence,
-                actor=request.user,
-                evidence_status=evidence_status,
-                moderator_notes=notes,
-                rejection_reason=rejection_reason,
-                expected_status=expected_status,
-            )
-
-        except EvidenceReviewConflict as error:
-            return Response(
-                {
-                    "detail": str(error),
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
-
-        except EvidenceReviewAuthorizationError as error:
-            return Response(
-                {
-                    "detail": str(error),
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        except (
-            EvidenceReviewError,
-            ModerationCaseError,
-        ) as error:
-            return Response(
-                {
-                    "detail": str(error),
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        reviewed_evidence = result["evidence"]
-
-        schedule_evidence_review_trust_updates(result)
-
-        serializer = EvidenceSubmissionSerializer(
-            reviewed_evidence,
-            context={
-                "request": request,
-            },
-        )
-
-        return Response(
-            serializer.data,
-            status=status.HTTP_200_OK,
-        )
-
-
 class ThreadCommentViewSet(viewsets.ModelViewSet):
     serializer_class = ThreadCommentSerializer
     permission_classes = [IsAuthenticated, IsCommenterOrReadOnly]
@@ -3708,7 +2961,10 @@ class ThreadFlagViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
-        if _has_moderator_role(self.request.user):
+        if has_capability(
+            self.request.user,
+            PartnerCapability.REVIEW_SAFETY,
+        ):
             return ThreadFlag.objects.select_related("thread", "flagged_by").order_by(
                 "-flagged_at"
             )
@@ -4043,31 +3299,6 @@ def public_user_evidence(request, username):
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny])
-def public_user_verdicts(request, username):
-    """Fetch public moderator verdict activity for a specific moderator user."""
-    target_user = get_object_or_404(
-        User.objects.select_related("profile"), username=username
-    )
-
-    if not _has_moderator_role(target_user):
-        return Response([], status=200)
-
-    verdict_threads = Thread.objects.filter(
-        moderated_by=target_user,
-        moderator_verdict__isnull=False,
-        status=Thread.Status.CLOSED,
-    ).order_by("-moderated_at", "-created_at")
-
-    serializer = PublicModeratorVerdictSerializer(
-        verdict_threads,
-        many=True,
-        context={"request": request},
-    )
-    return Response(serializer.data, status=200)
-
-
-@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def public_user_claims(request, username):
     """Fetch public claims submitted by a specific user."""
@@ -4084,39 +3315,6 @@ def public_user_claims(request, username):
 
     serializer = ClaimSerializer(claims, many=True)
     return Response(serializer.data)
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def moderator_transparency_stats(request, username):
-    """Return moderator activity metrics for institutional transparency cards."""
-    target_user = get_object_or_404(
-        User.objects.select_related("profile"), username=username
-    )
-
-    if not _has_moderator_role(target_user):
-        return Response({"detail": "This user is not a moderator."}, status=400)
-
-    resolved_threads = Thread.objects.filter(
-        moderated_by=target_user,
-        moderator_verdict__isnull=False,
-    )
-
-    stats = {
-        "total_claims_resolved": resolved_threads.count(),
-        "fact_verdicts_issued": resolved_threads.filter(
-            moderator_verdict="FACT"
-        ).count(),
-        "fake_verdicts_issued": resolved_threads.filter(
-            moderator_verdict="FAKE"
-        ).count(),
-        "pending_moderator_review": Thread.objects.filter(
-            status=Thread.Status.PENDING,
-            moderator_verdict__isnull=True,
-        ).count(),
-    }
-
-    return Response(stats, status=200)
 
 
 @api_view(["POST"])
@@ -4202,42 +3400,6 @@ def update_profile(request):
     # Return the updated user data
     serializer = UserWithTrustBreakdownSerializer(user, context={"request": request})
     return Response(serializer.data, status=200)
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated, IsModerator])
-def moderation_stats_view(request):
-    """
-    Returns system-wide aggregates for the Moderation Page.
-    """
-    from django.db.models import Q
-
-    flagged_threads = (
-        ModerationCase.objects.filter(
-            case_type=ModerationCase.CaseType.SAFETY,
-            status__in=ACTIVE_CASE_STATUSES,
-        )
-        .exclude(thread__isnull=True)
-        .values("thread_id")
-        .distinct()
-        .count()
-    )
-    closed_threads = Thread.objects.filter(status=Thread.Status.CLOSED).count()
-    open_threads = Thread.objects.filter(
-        Q(status=Thread.Status.OPEN) | Q(status=Thread.Status.PENDING)
-    ).count()
-    pending_verdicts = Thread.objects.filter(moderator_verdict__isnull=True).count()
-    total_claims = Claim.objects.count()
-
-    return Response(
-        {
-            "flagged_threads": flagged_threads,
-            "closed_threads": closed_threads,
-            "open_threads": open_threads,
-            "pending_verdicts": pending_verdicts,
-            "total_claims": total_claims,
-        }
-    )
 
 
 class UserHubView(APIView):
