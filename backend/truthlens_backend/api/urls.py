@@ -160,6 +160,11 @@ urlpatterns = [
         name="verification_workload",
     ),
     path(
+        "organizations/<uuid:organization_id>/analytics/verification/",
+        views.organization_verification_metrics,
+        name="organization_verification_metrics",
+    ),
+    path(
         "organizations/" "<uuid:organization_id>/" "public-profile/",
         views.organization_public_profile,
         name="organization_public_profile",

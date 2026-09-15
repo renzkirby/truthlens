@@ -102,6 +102,11 @@ from .organization_service import (
     PartnerCapability,
     has_capability,
 )
+from .verification_metrics_query_service import (
+    VerificationMetricsAuthorizationError,
+    get_organization_verification_metrics,
+)
+from .verification_metrics_service import VerificationMetricsIntegrityError
 from .organization_public_presence_service import (
     get_public_partner_by_slug,
     get_public_partner_directory,
@@ -2507,6 +2512,26 @@ def _verification_assignment_error_response(
         },
         status=response_status,
     )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def organization_verification_metrics(request, organization_id):
+    organization = get_object_or_404(Organization, id=organization_id)
+    try:
+        metrics = get_organization_verification_metrics(
+            actor=request.user,
+            organization=organization,
+        )
+    except VerificationMetricsAuthorizationError as error:
+        return Response({"detail": str(error)}, status=status.HTTP_403_FORBIDDEN)
+    except VerificationMetricsIntegrityError:
+        logger.exception("Organization verification metrics projection failed.")
+        return Response(
+            {"detail": "Verification metrics are temporarily unavailable."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    return Response(metrics)
 
 
 @api_view(["GET"])
