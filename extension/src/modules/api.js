@@ -56,7 +56,6 @@ export async function fetchClaimResult(claim_id) {
          throw new ApiRequestError("Claim polling returned an invalid response.", response.status);
       }
 
-      console.log("Polled claim status:", data);
       return data;
    } catch (error) {
       console.error("Error polling claim status:", error);
@@ -90,7 +89,6 @@ export async function checkClaimMatch(fingerprint, claimType) {
          throw new Error(`Status ${response.status}`);
       }
       const data = await response.json();
-      console.log("Claim match check:", data);
       return data.match || null;
    } catch (error) {
       console.error("Error checking claim match:", error);

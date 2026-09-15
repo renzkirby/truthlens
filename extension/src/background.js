@@ -8,8 +8,6 @@ import {
 } from "./modules/auth.js";
 import { state } from "./modules/state.js";
 
-console.log("TruthLens background service worker loaded");
-
 const GUEST_SCANS_STORAGE_KEY = "guest_scans";
 const GUEST_SCANS_CAP = 3;
 const GUEST_SCAN_SYNC_ENDPOINT = "auth/guest-scan-sync/";
@@ -464,8 +462,6 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
    }
 
    if (request.type === "CAPTURE_SCREENSHOT") {
-      console.log("Capturing full tab screenshot");
-
       chrome.tabs.captureVisibleTab(null, { format: "png" }, function (dataUrl) {
          if (chrome.runtime.lastError) {
             console.error("Screenshot error:", chrome.runtime.lastError);
@@ -473,7 +469,6 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             return;
          }
 
-         console.log("Screenshot captured, sending back to popup");
          sendResponse({ screenshot: dataUrl });
       });
 

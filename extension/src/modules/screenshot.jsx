@@ -9,8 +9,6 @@ let cropRoot = null;
 let cropRootNode = null;
 
 export function startCropStudio() {
-   console.log("Requesting full screenshot for Crop Studio...");
-
    setTimeout(() => {
       chrome.runtime.sendMessage(
          {
@@ -18,7 +16,6 @@ export function startCropStudio() {
          },
          function (response) {
             if (response && response.screenshot) {
-               console.log("Full screenshot received, rendering CropStudio...");
                renderCropStudioUI(response.screenshot);
             } else {
                console.error("Screenshot capture failed");
@@ -60,11 +57,9 @@ function renderCropStudioUI(fullScreenshot) {
       <CropStudio
          imageSrc={fullScreenshot}
          onConfirm={(croppedDataUrl) => {
-            console.log("Crop confirmed via UI");
             processCroppedImage(croppedDataUrl);
          }}
          onCancel={() => {
-            console.log("Crop canceled via UI");
             cleanupCropStudio();
          }}
       />,

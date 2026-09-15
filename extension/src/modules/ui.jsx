@@ -112,8 +112,6 @@ export function displayResultCard(claim) {
    let sourcesHTML = "";
    const evidenceList =
       sources && sources.length > 0 ? sources : source_url ? [source_url] : [];
-   console.log(sources);
-   console.log(evidenceList);
 
    if (displayVerdict !== "OUT_OF_SCOPE" && evidenceList.length > 0) {
       sourcesHTML = `
@@ -462,12 +460,8 @@ export function displayCachedResultCard(match) {
                               typeof src === "object" && src.title
                                  ? src.title
                                  : new URL(urlStr).hostname.replace("www.", "");
-                        } catch (e) {
+                        } catch {
                            displayTitle = urlStr;
-                           console.log(
-                              "Error parsing URL for display title:",
-                              e,
-                           );
                         }
 
                         return `

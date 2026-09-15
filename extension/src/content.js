@@ -2,8 +2,6 @@ import "./content.css";
 import { state } from "./modules/state.js";
 import { startCropStudio } from "./modules/screenshot.jsx";
 
-console.log("TruthLens content script loaded");
-
 const BRIDGE_EVENT_SOURCE = "TRUTHLENS_WEB_AUTH_BRIDGE";
 const EXTENSION_EVENT_SOURCE = "TRUTHLENS_EXTENSION";
 const BRIDGE_SCRIPT_ID = "truthlens-auth-bridge-script";
@@ -144,7 +142,6 @@ initializeAuthBridge();
 
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
    if (request.type === "ACTIVATE_SNIPPING") {
-      console.log("Snipping mode activated!");
       state.snipIntent = request.intent || "factcheck";
       activateSnippingMode();
       sendResponse({ success: true });
