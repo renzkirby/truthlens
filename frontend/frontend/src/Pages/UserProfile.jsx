@@ -20,7 +20,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
 // ── Utilities & Hooks ──
-import { VERDICT_CONFIG, API_BASE_URL } from "../utils/constants";
+import { API_BASE_URL } from "../utils/constants";
 import Icons from "../components/Icons.jsx";
 
 // ── Styles ──
@@ -41,7 +41,7 @@ function getTrustLevel(score) {
    return { label: "Newcomer", color: "var(--text-muted)" };
 }
 
-function isModeratorRole(role) {
+function isPlatformModeratorRole(role) {
    return role === "MOD" || role === "MODERATOR";
 }
 
@@ -82,14 +82,9 @@ function getTabDescription(activeTab, isOwnProfile) {
    if (activeTab === "threads") {
       return isOwnProfile ? "Threads you started for community verification." : "Threads initiated by this user.";
    }
-   if (activeTab === "evidence") {
-      return isOwnProfile
-         ? "Evidence and comments you contributed across threads."
-         : "Evidence and comments contributed by this user.";
-   }
    return isOwnProfile
-      ? "Official moderation verdicts you have issued."
-      : "Official moderation verdicts issued by this moderator.";
+      ? "Evidence and comments you contributed across threads."
+      : "Evidence and comments contributed by this user.";
 }
 
 function getEmptyTabMessage(activeTab, isOwnProfile) {
@@ -98,14 +93,9 @@ function getEmptyTabMessage(activeTab, isOwnProfile) {
          ? "You have not opened any community threads yet."
          : "This user has not opened any community threads yet.";
    }
-   if (activeTab === "evidence") {
-      return isOwnProfile
-         ? "You have not submitted evidence or comments yet."
-         : "This user has not submitted evidence or comments yet.";
-   }
    return isOwnProfile
-      ? "You have not issued any moderator verdicts yet."
-      : "No moderator verdicts have been published yet.";
+      ? "You have not submitted evidence or comments yet."
+      : "This user has not submitted evidence or comments yet.";
 }
 
 /**
@@ -124,30 +114,25 @@ function UserProfile() {
    const [activityError, setActivityError] = useState(null);
    const [threadActivity, setThreadActivity] = useState([]);
    const [evidenceActivity, setEvidenceActivity] = useState([]);
-   const [verdictActivity, setVerdictActivity] = useState([]);
    const [loadedActivityTabs, setLoadedActivityTabs] = useState({
       threads: false,
       evidence: false,
-      verdicts: false,
    });
    const [visibleCounts, setVisibleCounts] = useState({
       threads: TAB_PAGE_SIZE,
       evidence: TAB_PAGE_SIZE,
-      verdicts: TAB_PAGE_SIZE,
    });
 
    // Determine if we are viewing our own profile or someone else's
    const isOwnProfile = !username || username === authUser?.username;
    const displayUser = isOwnProfile ? authUser : publicUser;
    const displayUsername = displayUser?.username;
-   const isModeratorProfile = isModeratorRole(displayUser?.role);
-   const organizationName = displayUser?.organization_name?.trim() || "Institution not listed";
+   const isPlatformModerator = isPlatformModeratorRole(displayUser?.role);
 
    const activeTabItems = useMemo(() => {
       if (activeTab === "threads") return threadActivity;
-      if (activeTab === "evidence") return evidenceActivity;
-      return verdictActivity;
-   }, [activeTab, evidenceActivity, threadActivity, verdictActivity]);
+      return evidenceActivity;
+   }, [activeTab, evidenceActivity, threadActivity]);
 
    const currentTabLoading = activityLoading;
    const currentTabError = activityError;
@@ -162,10 +147,6 @@ function UserProfile() {
    const currentVisibleCount = visibleCounts[activeTab] ?? TAB_PAGE_SIZE;
    const hasMoreTabItems = activeTabItems.length > currentVisibleCount;
    const canShowLessTabItems = currentVisibleCount > TAB_PAGE_SIZE && activeTabItems.length > TAB_PAGE_SIZE;
-   const [moderatorStats, setModeratorStats] = useState(null);
-   const [isLoadingModeratorStats, setIsLoadingModeratorStats] = useState(false);
-   const [moderatorStatsError, setModeratorStatsError] = useState(false);
-
    // ── Follow System State ──
    const [isFollowing, setIsFollowing] = useState(false);
    const [followersCount, setFollowersCount] = useState(0);
@@ -179,40 +160,6 @@ function UserProfile() {
          setFollowingCount(displayUser.following_count || 0);
       }
    }, [displayUser]);
-
-   useEffect(() => {
-      if (!displayUsername || !isModeratorProfile) {
-         setModeratorStats(null);
-         setIsLoadingModeratorStats(false);
-         setModeratorStatsError(false);
-         return;
-      }
-
-      let isCancelled = false;
-      setIsLoadingModeratorStats(true);
-      setModeratorStatsError(false);
-
-      authFetch(`${API_BASE_URL}/users/${displayUsername}/moderation-stats/`, { method: "GET" })
-         .then((data) => {
-            if (isCancelled) return;
-            setModeratorStats(data || null);
-            setModeratorStatsError(false);
-         })
-         .catch(() => {
-            if (isCancelled) return;
-            setModeratorStats(null);
-            setModeratorStatsError(true);
-         })
-         .finally(() => {
-            if (!isCancelled) {
-               setIsLoadingModeratorStats(false);
-            }
-         });
-
-      return () => {
-         isCancelled = true;
-      };
-   }, [authFetch, displayUsername, isModeratorProfile]);
 
    // Handle follow button click
    const handleFollowToggle = async () => {
@@ -283,26 +230,18 @@ function UserProfile() {
       setActivityLoading(false);
       setThreadActivity([]);
       setEvidenceActivity([]);
-      setVerdictActivity([]);
       setLoadedActivityTabs({
          threads: false,
          evidence: false,
-         verdicts: false,
       });
       setVisibleCounts({
          threads: TAB_PAGE_SIZE,
          evidence: TAB_PAGE_SIZE,
-         verdicts: TAB_PAGE_SIZE,
       });
    }, [displayUsername, isOwnProfile]);
 
    useEffect(() => {
       if (!displayUsername) {
-         return;
-      }
-
-      if (activeTab === "verdicts" && !isModeratorProfile) {
-         setActiveTab("threads");
          return;
       }
 
@@ -313,7 +252,6 @@ function UserProfile() {
       const endpointMap = {
          threads: `${API_BASE_URL}/users/${displayUsername}/threads/`,
          evidence: `${API_BASE_URL}/users/${displayUsername}/evidence/`,
-         verdicts: `${API_BASE_URL}/users/${displayUsername}/verdicts/`,
       };
 
       let isCancelled = false;
@@ -330,10 +268,8 @@ function UserProfile() {
 
             if (activeTab === "threads") {
                setThreadActivity(normalized);
-            } else if (activeTab === "evidence") {
-               setEvidenceActivity(normalized);
             } else {
-               setVerdictActivity(normalized);
+               setEvidenceActivity(normalized);
             }
 
             setLoadedActivityTabs((prev) => ({
@@ -356,7 +292,7 @@ function UserProfile() {
       return () => {
          isCancelled = true;
       };
-   }, [activeTab, authFetch, displayUsername, isModeratorProfile, isActiveTabLoaded]);
+   }, [activeTab, authFetch, displayUsername, isActiveTabLoaded]);
 
    const handleLoadMore = () => {
       setVisibleCounts((prev) => ({
@@ -393,35 +329,9 @@ function UserProfile() {
    }
 
    // ── Compute Profile Stats ──
-   const moderatorStatsSnapshot = moderatorStats || {
-      total_claims_resolved: 0,
-      fact_verdicts_issued: 0,
-      fake_verdicts_issued: 0,
-      pending_moderator_review: 0,
-   };
-
    const trustBreakdown = displayUser?.trust_breakdown || {};
    const displayTrustScore = Number(trustBreakdown.trust_score ?? displayUser?.trust_score ?? 0);
    const trustLevel = getTrustLevel(displayTrustScore);
-
-   const transparencyStats = [
-      {
-         label: "Total Claims Resolved",
-         value: Number(moderatorStatsSnapshot.total_claims_resolved ?? 0),
-      },
-      {
-         label: "FACT Verdicts Issued",
-         value: Number(moderatorStatsSnapshot.fact_verdicts_issued ?? 0),
-      },
-      {
-         label: "FAKE Verdicts Issued",
-         value: Number(moderatorStatsSnapshot.fake_verdicts_issued ?? 0),
-      },
-      {
-         label: "Pending Moderator Review",
-         value: Number(moderatorStatsSnapshot.pending_moderator_review ?? 0),
-      },
-   ];
 
    const breakdownRows = [
       {
@@ -546,10 +456,10 @@ function UserProfile() {
                   <div className="profile-identity">
                      <div className="profile-title-row">
                         <h1 className="profile-username">{displayUser?.username || "—"}</h1>
-                        {isModeratorProfile ? (
+                        {isPlatformModerator ? (
                            <span className="official-moderator-badge">
                               <Icons name="shield-user" size={14} />
-                              Official Moderator
+                              Platform Moderator
                            </span>
                         ) : (
                            <span className="trust-level-badge" style={{ backgroundColor: trustLevel.color }}>
@@ -559,16 +469,6 @@ function UserProfile() {
                      </div>
 
                      <p className="profile-handle">@{displayUser?.username?.toLowerCase() || "—"}</p>
-
-                     {isModeratorProfile && (
-                        <div className="profile-organization-row">
-                           <p className="organization-name">{organizationName}</p>
-                           <span className="institutional-trust-chip">
-                              <Icons name="shield-user" size={12} />
-                              Institutional Trust
-                           </span>
-                        </div>
-                     )}
                   </div>
 
                   {displayUser?.bio && <p className="user-bio">{displayUser.bio}</p>}
@@ -595,98 +495,57 @@ function UserProfile() {
             {/* ── End Header ── */}
 
             {/* ── Reputation Dashboard ── */}
-            {!isModeratorProfile && (
-               <div className="box-panel">
-                  <h2 className="section-title">Reputation Dashboard</h2>
-                  <div className="stats-grid">
-                     <div className="stat-card" style={{ gridColumn: "1 / -1" }}>
-                        <p className="stat-label">Trust Score</p>
-                        <p className="stat-value">{displayTrustScore.toFixed(1)}</p>
-                        <div className="trust-bar-track">
-                           <div
-                              className="trust-bar-fill"
-                              style={{
-                                 width: `${Math.min(displayTrustScore, 100)}%`,
-                                 backgroundColor: trustLevel.color,
-                              }}
-                           />
-                        </div>
-                        <p className="stat-sublabel">{trustLevel.label} Level</p>
+            <div className="box-panel">
+               <h2 className="section-title">Reputation Dashboard</h2>
+               <div className="stats-grid">
+                  <div className="stat-card" style={{ gridColumn: "1 / -1" }}>
+                     <p className="stat-label">Trust Score</p>
+                     <p className="stat-value">{displayTrustScore.toFixed(1)}</p>
+                     <div className="trust-bar-track">
+                        <div
+                           className="trust-bar-fill"
+                           style={{
+                              width: `${Math.min(displayTrustScore, 100)}%`,
+                              backgroundColor: trustLevel.color,
+                           }}
+                        />
                      </div>
+                     <p className="stat-sublabel">{trustLevel.label} Level</p>
                   </div>
+               </div>
 
-                  <div className="trust-breakdown-card">
-                     <div className="trust-breakdown-header">
-                        <h3 className="trust-breakdown-title">Trust Score Breakdown</h3>
-                        <span className="trust-breakdown-formula">T = B + C + V + t - P</span>
-                     </div>
-                     <div className="trust-breakdown-list">
-                        {breakdownRows.map((row) => {
-                           const width = Math.max(0, Math.min(100, Number(row.share || 0)));
-                           return (
-                              <div className="trust-breakdown-row" key={row.label}>
-                                 <div className="trust-breakdown-row-top">
-                                    <span className="trust-breakdown-row-label">{row.label}</span>
-                                    <span className="trust-breakdown-row-value" style={{ color: row.color }}>
-                                       {width.toFixed(1)}%
-                                    </span>
-                                 </div>
-                                 <div className="trust-breakdown-track">
-                                    <div
-                                       className="trust-breakdown-fill"
-                                       style={{ width: `${width}%`, backgroundColor: row.color }}
-                                    />
-                                 </div>
-                                 <p className="trust-breakdown-impact">
-                                    Impact: {row.label === "Conduct Penalties" ? "-" : "+"}
-                                    {Math.abs(Number(row.value || 0)).toFixed(1)} pts
-                                 </p>
+               <div className="trust-breakdown-card">
+                  <div className="trust-breakdown-header">
+                     <h3 className="trust-breakdown-title">Trust Score Breakdown</h3>
+                     <span className="trust-breakdown-formula">T = B + C + V + t - P</span>
+                  </div>
+                  <div className="trust-breakdown-list">
+                     {breakdownRows.map((row) => {
+                        const width = Math.max(0, Math.min(100, Number(row.share || 0)));
+                        return (
+                           <div className="trust-breakdown-row" key={row.label}>
+                              <div className="trust-breakdown-row-top">
+                                 <span className="trust-breakdown-row-label">{row.label}</span>
+                                 <span className="trust-breakdown-row-value" style={{ color: row.color }}>
+                                    {width.toFixed(1)}%
+                                 </span>
                               </div>
-                           );
-                        })}
-                     </div>
+                              <div className="trust-breakdown-track">
+                                 <div
+                                    className="trust-breakdown-fill"
+                                    style={{ width: `${width}%`, backgroundColor: row.color }}
+                                 />
+                              </div>
+                              <p className="trust-breakdown-impact">
+                                 Impact: {row.label === "Conduct Penalties" ? "-" : "+"}
+                                 {Math.abs(Number(row.value || 0)).toFixed(1)} pts
+                              </p>
+                           </div>
+                        );
+                     })}
                   </div>
                </div>
-            )}
-
-            {isModeratorProfile && (
-               <div className="box-panel">
-                  <h2 className="section-title">Institutional Trust Profile</h2>
-
-                  <div className="moderator-profile-summary">
-                     <p className="moderator-summary-title">Official Moderator</p>
-                     <p className="moderator-summary-desc">
-                        Affiliated with {organizationName}. This profile uses institutional trust verification instead
-                        of gamified scoring.
-                     </p>
-                  </div>
-
-                  <div className="moderator-transparency-grid">
-                     {transparencyStats.map((stat) => (
-                        <div key={stat.label} className="moderator-transparency-card">
-                           <p className="moderator-transparency-label">{stat.label}</p>
-                           <p className="moderator-transparency-value">
-                              {isLoadingModeratorStats ? (
-                                 <span className="moderator-transparency-skeleton skeleton-box" aria-hidden="true" />
-                              ) : moderatorStatsError ? (
-                                 "--"
-                              ) : (
-                                 stat.value
-                              )}
-                           </p>
-                        </div>
-                     ))}
-                  </div>
-
-                  <p className="moderator-transparency-note">
-                     {isLoadingModeratorStats
-                        ? "Syncing moderator activity records..."
-                        : moderatorStatsError
-                          ? "Transparency stats are temporarily unavailable. Please try again shortly."
-                          : "Transparency stats are shown for public accountability and may update as moderation records are finalized."}
-                  </p>
-               </div>
-            )}
+            </div>
 
             {/* ── Activity History & Claims ── */}
             <div className="box-panel">
@@ -703,14 +562,6 @@ function UserProfile() {
                   >
                      {isOwnProfile ? "My Evidence" : "Evidence"}
                   </button>
-                  {isModeratorProfile && (
-                     <button
-                        className={`tab-btn ${activeTab === "verdicts" ? "active" : ""}`}
-                        onClick={() => setActiveTab("verdicts")}
-                     >
-                        {isOwnProfile ? "My Verdicts" : "Verdicts"}
-                     </button>
-                  )}
                </div>
 
                <div className="tab-summary-row">
@@ -803,35 +654,6 @@ function UserProfile() {
                                  </div>
                               ))}
 
-                           {activeTab === "verdicts" &&
-                              visibleTabItems.map((entry) => {
-                                 const verdict = VERDICT_CONFIG[entry.moderator_verdict] || VERDICT_CONFIG.UNVERIFIED;
-
-                                 return (
-                                    <div className="claim-card" key={entry.thread_id}>
-                                       <div className="claim-top">
-                                          <span
-                                             className="claim-verdict-badge"
-                                             style={{
-                                                backgroundColor: verdict.bg,
-                                                color: verdict.color,
-                                                border: `1px solid ${verdict.border}`,
-                                             }}
-                                          >
-                                             {entry.moderator_verdict || "UNVERIFIED"}
-                                          </span>
-                                          <span className="claim-time">{timeAgo(entry.moderated_at)}</span>
-                                       </div>
-                                       <p className="claim-summary">{entry.caption || "Moderator-reviewed thread."}</p>
-                                       <p className="claim-summary claim-meta-summary">Claim ID: {entry.claim_id}</p>
-                                       {entry.moderator_notes && (
-                                          <p className="claim-summary claim-meta-summary">
-                                             Notes: {entry.moderator_notes}
-                                          </p>
-                                       )}
-                                    </div>
-                                 );
-                              })}
                         </div>
 
                         <div className="activity-pagination-row">
@@ -909,8 +731,8 @@ function UserProfile() {
                                  <div className="modal-user-info">
                                     <strong>{u?.username || "Unknown"}</strong>
                                     <span>
-                                       {isModeratorRole(u?.role)
-                                          ? "Official Moderator"
+                                       {isPlatformModeratorRole(u?.role)
+                                          ? "Platform Moderator"
                                           : getTrustLevel(u?.trust_score || 0).label}
                                     </span>
                                  </div>
@@ -1019,9 +841,9 @@ function UserProfile() {
                <div className="mobile-profile-nav">
                   <button
                      className="mobile-nav-pill"
-                     onClick={() => navigate(isModeratorRole(authUser?.role) ? "/moderation" : "/dashboard")}
+                     onClick={() => navigate("/dashboard")}
                   >
-                     <Icons name={isModeratorRole(authUser?.role) ? "shield" : "dashboard"} size={16} /> Dashboard
+                     <Icons name="dashboard" size={16} /> Dashboard
                   </button>
                   <button className="mobile-nav-pill" onClick={() => navigate("/settings")}>
                      <Icons name="settings" size={16} /> Settings

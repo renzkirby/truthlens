@@ -17,7 +17,7 @@ export const STATUS_OPTIONS = ["OPEN", "CLOSED", "REJECTED", "PENDING"];
 
 // ── Verdict Configuration ──
 // Maps each verdict type to its visual properties (color, background, label)
-// Used in Dashboard, CommunityFeed, ThreadDetailPage, ModerationPage
+// Used in Dashboard, CommunityFeed, and ThreadDetailPage
 export const VERDICT_CONFIG = {
    FACT: {
       color: "var(--verdict-fact-text)",
@@ -113,9 +113,6 @@ export const API_ENDPOINTS = {
    THREADS: "threads/",
 
    // Moderation
-   MOD_QUEUE: "moderation/queue/",
-   MOD_VERDICT_QUEUE: "moderation/verdict-queue/",
-   MOD_RESOLVE_THREAD: (threadId) => `moderation/threads/${threadId}/resolve/`,
    SAFETY_CASES: "moderation/safety/cases/",
    SAFETY_CASE_DETAIL: (caseId) => `moderation/safety/cases/${encodeURIComponent(caseId)}/`,
    SAFETY_CASE_CLAIM: (caseId) => `moderation/safety/cases/${encodeURIComponent(caseId)}/claim/`,
@@ -249,15 +246,6 @@ export const VERDICT_COLORS = {
    UNVERIFIED: VERDICT_CONFIG.UNVERIFIED.color,
    OUT_OF_SCOPE: VERDICT_CONFIG.OUT_OF_SCOPE.color,
    PENDING: VERDICT_CONFIG.PENDING.color,
-};
-
-// ── Moderation State Transitions ──
-// Valid status transitions for moderation workflow
-export const MODERATION_TRANSITIONS = {
-   PENDING: new Set(["OPEN", "CLOSED", "REJECTED"]),
-   OPEN: new Set(["CLOSED", "REJECTED"]),
-   CLOSED: new Set(["OPEN"]),
-   REJECTED: new Set([]),
 };
 
 // ── Verdict Metadata (Lowercase) ──
