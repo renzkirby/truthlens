@@ -174,6 +174,14 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       sendResponse({ success: true });
    }
 
+   if (request.type === "DISPLAY_URL_ERROR") {
+      import("./modules/ui.jsx").then(({ displayErrorCard, removeLoadingCard }) => {
+         removeLoadingCard();
+         displayErrorCard(request.message || "Unable to verify this URL. Please try again.");
+      });
+      sendResponse({ success: true });
+   }
+
    if (request.type === "DISPLAY_SNIPPET_RESULT") {
       import("./modules/ui.jsx").then(({ displayResultCard, removeLoadingCard, successCard }) => {
          setTimeout(() => {
@@ -253,12 +261,18 @@ function restoreTokensFromWorker(onComplete) {
             typeof response.refresh === "string" && response.refresh.trim() ? response.refresh.trim() : null;
 
          try {
-            if (!window.localStorage.getItem("access") && !window.sessionStorage.getItem("access") && access) {
-               window.sessionStorage.setItem("access", access);
-            }
+            const pageAccess = window.localStorage.getItem("access") || window.sessionStorage.getItem("access");
+            const pageRefresh = window.localStorage.getItem("refresh") || window.sessionStorage.getItem("refresh");
+            const pageHasAuthMaterial = Boolean(pageAccess || pageRefresh);
 
-            if (!window.localStorage.getItem("refresh") && !window.sessionStorage.getItem("refresh") && refresh) {
-               window.sessionStorage.setItem("refresh", refresh);
+            if (!pageHasAuthMaterial) {
+               if (access) {
+                  window.sessionStorage.setItem("access", access);
+               }
+
+               if (refresh) {
+                  window.sessionStorage.setItem("refresh", refresh);
+               }
             }
          } catch (error) {
             console.warn("Failed to restore TruthLens web session:", error);

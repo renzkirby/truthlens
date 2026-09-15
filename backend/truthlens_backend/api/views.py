@@ -506,13 +506,8 @@ def claim_polling_endpoint(request, claim_id):
         claim = Claim.objects.get(id=claim_id)
     except Claim.DoesNotExist:
         return JsonResponse(
-            {
-                "verdict": "OUT_OF_SCOPE",
-                "summary": "The content of the image is not a claim that can be fact-checked.",
-                "confidence_score": 100,
-                "source_type": "N/A",
-            },
-            status=200,
+            {"detail": "Claim not found."},
+            status=404,
         )
 
     ai_verdict = claim.ai_verdict
@@ -690,79 +685,22 @@ def sync_guest_scan(request):
     if not isinstance(scan, dict):
         return Response({"detail": "scan payload is required."}, status=400)
 
-    # If the scan already references a known claim, just link it to this user history.
     raw_claim_id = scan.get("claim_id")
-    if raw_claim_id:
-        try:
-            claim_uuid = uuid.UUID(str(raw_claim_id))
-            existing_claim = Claim.objects.filter(id=claim_uuid).first()
-        except (ValueError, TypeError, AttributeError):
-            existing_claim = None
-
-        if existing_claim:
-            _record_authenticated_claim_check(request.user, existing_claim)
-            return Response(
-                {"id": str(existing_claim.id), "mode": "linked"}, status=200
-            )
-
-    scan_type = str(scan.get("scan_type") or "SCAN").upper()
-    verdict = str(scan.get("verdict") or "UNVERIFIED").upper()
-    summary = str(scan.get("summary") or "").strip()
-    source_type = str(scan.get("source_type") or "Extension Guest Sync").strip()[:50]
-    source_url = str(scan.get("source_url") or "").strip()
-    scanned_at = str(scan.get("scanned_at") or "").strip()
-
-    allowed_verdicts = {
-        "FACT",
-        "FAKE",
-        "MISLEADING",
-        "SATIRE",
-        "UNVERIFIED",
-        "OUT_OF_SCOPE",
-    }
-    if verdict not in allowed_verdicts:
-        verdict = "UNVERIFIED"
+    if not raw_claim_id:
+        return Response({"detail": "claim_id is required."}, status=400)
 
     try:
-        consensus_score = float(scan.get("confidence_score", 0))
-    except (TypeError, ValueError):
-        consensus_score = 0.0
-    consensus_score = max(0.0, min(consensus_score, 100.0))
+        claim_uuid = uuid.UUID(str(raw_claim_id))
+    except (ValueError, TypeError, AttributeError):
+        return Response({"detail": "claim_id must be a valid UUID."}, status=400)
 
-    normalized_source_url = (
-        source_url
-        if source_url.startswith("http://") or source_url.startswith("https://")
-        else None
-    )
-
-    if scan_type == "URL":
-        claim_type = Claim.ClaimType.URL
-    elif scan_type == "TEXT":
-        claim_type = Claim.ClaimType.TEXT
-    else:
-        claim_type = Claim.ClaimType.IMAGE
-
-    context_text = (
-        f"Synced from extension guest scan ({scan_type}) at {scanned_at}"
-        if scanned_at
-        else f"Synced from extension guest scan ({scan_type})"
-    )
-
-    claim = Claim.objects.create(
-        claim_type=claim_type,
-        url_link=normalized_source_url if claim_type == Claim.ClaimType.URL else None,
-        ai_summary=summary or "Synced from extension guest scan.",
-        ai_verdict=verdict,
-        consensus_score=consensus_score,
-        context_text=context_text,
-        source_type=source_type,
-        source_link=normalized_source_url,
-        top_verdict_source=normalized_source_url,
-        verified_via=Claim.VerificationSource.AI_EXTENSION,
-    )
+    try:
+        claim = Claim.objects.get(id=claim_uuid)
+    except Claim.DoesNotExist:
+        return Response({"detail": "Claim not found."}, status=404)
 
     _record_authenticated_claim_check(request.user, claim)
-    return Response({"id": str(claim.id), "mode": "created"}, status=201)
+    return Response({"id": str(claim.id), "mode": "linked"}, status=200)
 
 
 @api_view(["POST"])

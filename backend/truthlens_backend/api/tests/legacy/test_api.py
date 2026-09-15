@@ -1,3 +1,5 @@
+import uuid
+
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.test import override_settings
@@ -5000,6 +5002,112 @@ class KnowledgeReuseFoundationTests(APITestCase):
         new_claim.refresh_from_db()
 
         self.assertIsNone(new_claim.final_verdict)
+
+
+class ExtensionFailureIntegrityTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="extension_user",
+            email="extension@test.com",
+            password="pass1234",
+        )
+        self.client.force_authenticate(user=self.user)
+        self.claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.URL,
+            url_link="https://example.com/existing-claim",
+            ai_summary="Existing backend claim.",
+            ai_verdict="FACT",
+        )
+        self.sync_url = "/api/auth/guest-scan-sync/"
+
+    def test_polling_nonexistent_claim_returns_non_factual_404(self):
+        initial_claim_count = Claim.objects.count()
+
+        response = self.client.get(
+            reverse(
+                "claim_status",
+                kwargs={"claim_id": uuid.uuid4()},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.json(), {"detail": "Claim not found."})
+        self.assertNotEqual(response.json().get("verdict"), "OUT_OF_SCOPE")
+        self.assertEqual(Claim.objects.count(), initial_claim_count)
+
+    def test_guest_scan_sync_links_existing_claim_without_creating_claim(self):
+        initial_claim_count = Claim.objects.count()
+
+        response = self.client.post(
+            self.sync_url,
+            {"scan": {"claim_id": str(self.claim.id)}},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.json(),
+            {"id": str(self.claim.id), "mode": "linked"},
+        )
+        self.assertEqual(Claim.objects.count(), initial_claim_count)
+        self.assertTrue(
+            ClaimCheckHistory.objects.filter(
+                user=self.user,
+                claim=self.claim,
+            ).exists()
+        )
+
+    def test_guest_scan_sync_without_claim_id_rejects_client_verdict_data(self):
+        initial_claim_count = Claim.objects.count()
+
+        response = self.client.post(
+            self.sync_url,
+            {
+                "scan": {
+                    "scan_type": "URL",
+                    "verdict": "FACT",
+                    "summary": "Client-supplied factual assertion.",
+                    "confidence_score": 100,
+                    "source_type": "Client",
+                    "source_url": "https://example.com/client-source",
+                    "scanned_at": "2026-09-15T00:00:00Z",
+                }
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Claim.objects.count(), initial_claim_count)
+
+    def test_guest_scan_sync_with_malformed_claim_id_creates_no_claim(self):
+        initial_claim_count = Claim.objects.count()
+
+        response = self.client.post(
+            self.sync_url,
+            {
+                "scan": {
+                    "claim_id": "not-a-uuid",
+                    "verdict": "FAKE",
+                    "summary": "Untrusted client summary.",
+                }
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Claim.objects.count(), initial_claim_count)
+
+    def test_guest_scan_sync_with_nonexistent_claim_returns_404(self):
+        initial_claim_count = Claim.objects.count()
+
+        response = self.client.post(
+            self.sync_url,
+            {"scan": {"claim_id": str(uuid.uuid4())}},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(Claim.objects.count(), initial_claim_count)
 
 
 class OptionalFactCheckAuthTests(APITestCase):
