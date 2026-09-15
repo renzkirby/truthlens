@@ -108,14 +108,16 @@ function LoginPage() {
          const data = await response.json().catch(() => ({}));
 
          if (response.ok && data?.access && data?.refresh) {
-            login(data.access, data.refresh, formValues.remember_me);
-            setJustLoggedIn(true); // Flag that we're waiting for user data to load
+            await login(data.access, data.refresh, formValues.remember_me);
+            setJustLoggedIn(true);
             return;
          }
 
          setError(data?.detail || "Invalid credentials. Please try again.");
       } catch (err) {
-         setError("Unable to sign in right now. Please try again.");
+         setError(err?.code === "SESSION_INITIALIZATION_FAILED"
+            ? err.message
+            : "Unable to sign in right now. Please try again.");
          console.error("Login error:", err);
       } finally {
          setIsSigningIn(false);
@@ -144,7 +146,7 @@ function LoginPage() {
 
             if (response.ok && data?.access) {
                // If refresh is empty or undefined, it just passes null/undefined to AuthContext
-               login(data.access, data.refresh, true);
+               await login(data.access, data.refresh, true);
                setJustLoggedIn(true);
                return;
             }
@@ -152,7 +154,9 @@ function LoginPage() {
             setError(data?.detail || "Unable to sign in with Google right now. Please try again.");
          } catch (err) {
             console.error("Google Login error:", err);
-            setError("Unable to sign in with Google right now. Please try again.");
+            setError(err?.code === "SESSION_INITIALIZATION_FAILED"
+               ? err.message
+               : "Unable to sign in with Google right now. Please try again.");
          } finally {
             setIsSigningIn(false);
          }

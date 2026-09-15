@@ -17,31 +17,89 @@ export function AuthProvider({ children }) {
    const [token, setToken] = useState(getAccessToken() || null);
    const [user, setUser] = useState(null);
    const [loading, setLoading] = useState(Boolean(getAccessToken()));
+   const authGenerationRef = useRef(0);
+   const sessionHydratingRef = useRef(Boolean(getAccessToken()));
    const apiClientRef = useRef(
       axios.create({
          timeout: 30000,
       }),
    );
 
-   const login = (access, refresh, rememberMe = false) => {
-      storeAuthTokens(access, refresh, rememberMe);
-
-      if (!access) {
-         setToken(null);
-         return Promise.resolve(null);
-      }
-
-      setToken(access);
-
-      return fetchUser(access);
-   };
-
-   const logout = () => {
+   const logout = useCallback(() => {
+      authGenerationRef.current += 1;
+      sessionHydratingRef.current = false;
       clearAuthTokens();
 
       setToken(null);
       setUser(null);
       setLoading(false);
+   }, []);
+
+   const fetchUser = useCallback(async (accessToken, generation = authGenerationRef.current) => {
+      try {
+         const response = await apiClientRef.current.get(`${API_BASE_URL}/auth/me/`, {
+            _authGeneration: generation,
+            headers: {
+               Authorization: `Bearer ${accessToken}`,
+            },
+         });
+         const data = response.data;
+
+         if (!data || typeof data !== "object" || Array.isArray(data)) {
+            throw new Error("Invalid authenticated user response");
+         }
+
+         const normalizedTrustScore = Number(data?.trust_breakdown?.trust_score ?? data?.trust_score ?? 0);
+         const normalizedUser = {
+            ...data,
+            trust_score: normalizedTrustScore,
+         };
+
+         if (authGenerationRef.current !== generation) {
+            throw new Error("Authentication session changed");
+         }
+
+         setUser(normalizedUser);
+         return normalizedUser;
+      } finally {
+         if (authGenerationRef.current === generation) {
+            setLoading(false);
+         }
+      }
+   }, []);
+
+   const login = async (access, refresh, rememberMe = false) => {
+      const generation = ++authGenerationRef.current;
+      sessionHydratingRef.current = true;
+      setToken(null);
+      setUser(null);
+      setLoading(true);
+
+      try {
+         storeAuthTokens(access, refresh, rememberMe);
+
+         if (!access) {
+            throw new Error("Missing access token");
+         }
+
+         const hydratedUser = await fetchUser(access, generation);
+
+         if (authGenerationRef.current !== generation) {
+            throw new Error("Authentication session changed");
+         }
+
+         sessionHydratingRef.current = false;
+         setToken(getAccessToken());
+         return hydratedUser;
+      } catch {
+         if (authGenerationRef.current === generation) {
+            logout();
+         }
+
+         const error = new Error("Unable to initialize your authenticated session. Please sign in again.");
+         error.code = "SESSION_INITIALIZATION_FAILED";
+         throw error;
+      }
    };
 
    useEffect(() => {
@@ -50,6 +108,12 @@ export function AuthProvider({ children }) {
       let pendingRequests = [];
 
       const requestInterceptor = apiClient.interceptors.request.use((config) => {
+         config._authGeneration ??= authGenerationRef.current;
+
+         if (config._authGeneration !== authGenerationRef.current) {
+            return Promise.reject(new Error("Authentication session changed"));
+         }
+
          const accessToken = getAccessToken();
          config.headers = config.headers || {};
 
@@ -66,6 +130,10 @@ export function AuthProvider({ children }) {
             const originalRequest = error?.config;
             const statusCode = error?.response?.status;
             const requestUrl = originalRequest?.url || "";
+
+            if (originalRequest && originalRequest._authGeneration !== authGenerationRef.current) {
+               return Promise.reject(error);
+            }
 
             if (!originalRequest || statusCode !== 401) {
                return Promise.reject(error);
@@ -93,6 +161,10 @@ export function AuthProvider({ children }) {
                   pendingRequests.push({ resolve, reject });
                })
                   .then((newAccessToken) => {
+                     if (originalRequest._authGeneration !== authGenerationRef.current) {
+                        throw new Error("Authentication session changed");
+                     }
+
                      originalRequest.headers = originalRequest.headers || {};
                      originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
                      return apiClient(originalRequest);
@@ -116,8 +188,15 @@ export function AuthProvider({ children }) {
                   throw new Error("Session refresh failed");
                }
 
+               if (originalRequest._authGeneration !== authGenerationRef.current) {
+                  throw new Error("Authentication session changed");
+               }
+
                updateAuthTokens(newAccessToken, nextRefreshToken);
-               setToken(newAccessToken);
+
+               if (!sessionHydratingRef.current) {
+                  setToken(newAccessToken);
+               }
 
                pendingRequests.forEach(({ resolve }) => resolve(newAccessToken));
                pendingRequests = [];
@@ -128,7 +207,11 @@ export function AuthProvider({ children }) {
             } catch (refreshError) {
                pendingRequests.forEach(({ reject }) => reject(refreshError));
                pendingRequests = [];
-               logout();
+
+               if (originalRequest._authGeneration === authGenerationRef.current) {
+                  logout();
+               }
+
                return Promise.reject(refreshError);
             } finally {
                isRefreshing = false;
@@ -140,7 +223,7 @@ export function AuthProvider({ children }) {
          apiClient.interceptors.request.eject(requestInterceptor);
          apiClient.interceptors.response.eject(responseInterceptor);
       };
-   }, []);
+   }, [logout]);
 
    const authFetch = useCallback(async (url, options = {}, accessToken = null) => {
       try {
@@ -157,6 +240,7 @@ export function AuthProvider({ children }) {
             method: options.method || "GET",
             headers,
             data: options.body,
+            _authGeneration: authGenerationRef.current,
          });
 
          return response.status === 204 ? null : response.data;
@@ -168,7 +252,6 @@ export function AuthProvider({ children }) {
             (typeof responseData === "string" ? responseData : null);
 
          const normalizedError = new Error(detailMessage || error.message || "Request failed");
-
          normalizedError.status = error?.response?.status ?? null;
 
          if (responseData && typeof responseData === "object") {
@@ -179,48 +262,39 @@ export function AuthProvider({ children }) {
       }
    }, []);
 
-   const fetchUser = async (accessToken) => {
-      try {
-         const response = await apiClientRef.current.get(`${API_BASE_URL}/auth/me/`, {
-            headers: {
-               Authorization: `Bearer ${accessToken}`,
-            },
-         });
-         const data = response.data;
-         const normalizedTrustScore = Number(data?.trust_breakdown?.trust_score ?? data?.trust_score ?? 0);
-         const normalizedUser = {
-            ...data,
-            trust_score: normalizedTrustScore,
-         };
-         setUser(normalizedUser);
-         return normalizedUser; // Return user data so caller can use it
-      } catch (error) {
-         console.error("Failed to fetch user:", error);
-         return null;
-      } finally {
-         setLoading(false);
-      }
-   };
-
    const refreshUser = useCallback(() => {
-      const activeToken = token || getAccessToken();
+      const activeToken = getAccessToken();
 
       if (!activeToken) {
          return Promise.resolve(null);
       }
 
-      return fetchUser(activeToken);
-   }, [token]);
+      return fetchUser(activeToken).catch(() => null);
+   }, [fetchUser]);
 
    useEffect(() => {
       const savedToken = getAccessToken();
 
       if (savedToken) {
-         fetchUser(savedToken);
+         const generation = authGenerationRef.current;
+
+         fetchUser(savedToken, generation)
+            .then(() => {
+               if (authGenerationRef.current === generation) {
+                  sessionHydratingRef.current = false;
+                  setToken(getAccessToken());
+               }
+            })
+            .catch(() => {
+               if (authGenerationRef.current === generation) {
+                  logout();
+               }
+            });
       } else {
+         sessionHydratingRef.current = false;
          setLoading(false);
       }
-   }, []);
+   }, [fetchUser, logout]);
 
    return (
       <AuthContext.Provider value={{ token, login, logout, authFetch, user, loading, refreshUser }}>

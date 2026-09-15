@@ -15,7 +15,7 @@
  *   - Centralized constants
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
@@ -106,6 +106,15 @@ function UserProfile() {
    const { username } = useParams(); // Get username from URL if it exists
    const navigate = useNavigate();
    const { user: authUser, authFetch, refreshUser, logout } = useAuth();
+   const explicitLogoutRef = useRef(false);
+
+   useEffect(() => () => {
+      // Finish ordinary logout after navigation removes the protected page.
+      if (explicitLogoutRef.current) {
+         explicitLogoutRef.current = false;
+         logout();
+      }
+   }, [logout]);
 
    const [activeTab, setActiveTab] = useState("threads");
    const [publicUser, setPublicUser] = useState(null);
@@ -851,8 +860,8 @@ function UserProfile() {
                   <button
                      className="mobile-nav-pill danger"
                      onClick={() => {
-                        logout();
-                        navigate("/login");
+                        explicitLogoutRef.current = true;
+                        navigate("/login", { replace: true, state: null });
                      }}
                   >
                      <Icons name="logout" size={16} /> Log Out

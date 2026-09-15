@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../../hooks/useAuth";
 import { resolveApiEndpoint } from "../../utils/api";
+import { getAuthSessionIdentity } from "../../utils/authIdentity";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
 import Input from "../ui/Input.jsx";
@@ -89,31 +90,6 @@ function sourceSelectionLabel(isSelected) {
    return "Citation history unavailable";
 }
 
-function getAuthIdentity(user, token) {
-   if (!token) {
-      return "session:anonymous";
-   }
-
-   try {
-      const encodedPayload = token.split(".")[1];
-      const normalizedPayload = encodedPayload.replaceAll("-", "+").replaceAll("_", "/");
-      const paddedPayload = normalizedPayload.padEnd(Math.ceil(normalizedPayload.length / 4) * 4, "=");
-      const payload = JSON.parse(window.atob(paddedPayload));
-      const userId = payload?.user_id ?? payload?.sub;
-
-      if (userId !== undefined && userId !== null) {
-         return `user:${userId}`;
-      }
-   } catch {
-      // Fall through to the authenticated user or opaque-token identity.
-   }
-
-   if (user?.id !== undefined && user?.id !== null) {
-      return `user:${user.id}:token:${token}`;
-   }
-
-   return `token:${token}`;
-}
 
 function safeExternalUrl(value) {
    if (!value) {
@@ -2321,7 +2297,7 @@ function DraftingContent({
 
 function DraftingPanel(props) {
    const { authFetch, token, user } = useAuth();
-   const authIdentity = getAuthIdentity(user, token);
+   const authIdentity = getAuthSessionIdentity(user, token);
 
    return (
       <DraftingContent

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../../hooks/useAuth";
 import { resolveApiEndpoint } from "../../utils/api";
+import { getAuthSessionIdentity } from "../../utils/authIdentity";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
 import Input from "../ui/Input.jsx";
@@ -19,29 +20,6 @@ const EMPTY_FILTERS = Object.freeze({
    created_before: "",
 });
 
-function getAuthIdentity(user, token) {
-   if (token) {
-      try {
-         const encodedPayload = token.split(".")[1];
-         const normalizedPayload = encodedPayload.replaceAll("-", "+").replaceAll("_", "/");
-         const paddedPayload = normalizedPayload.padEnd(Math.ceil(normalizedPayload.length / 4) * 4, "=");
-         const payload = JSON.parse(window.atob(paddedPayload));
-         const userId = payload?.user_id ?? payload?.sub;
-
-         if ((typeof userId === "string" && userId.trim()) || (typeof userId === "number" && Number.isFinite(userId))) {
-            return `user:${String(userId).trim()}`;
-         }
-      } catch {
-         // Fall through to a non-secret authenticated-session marker.
-      }
-   }
-
-   if ((typeof user?.id === "string" && user.id.trim()) || (typeof user?.id === "number" && Number.isFinite(user.id))) {
-      return `user:${String(user.id).trim()}`;
-   }
-
-   return token ? "session:authenticated" : "session:anonymous";
-}
 
 function formatDateTime(value) {
    const date = value ? new Date(value) : null;
@@ -345,7 +323,7 @@ function AccountabilityPanel({ scope, organizationId, organizationName }) {
       return `${resolveApiEndpoint(endpoint)}?${query.toString()}`;
    }, [appliedFilters, offset, organizationId, scope]);
 
-   const authIdentity = getAuthIdentity(user, token);
+   const authIdentity = getAuthSessionIdentity(user, token);
    const requestKey = `${authIdentity}:${scope}:${organizationId || "platform"}:${requestUrl || "unavailable"}:${requestVersion}`;
 
    useEffect(() => {

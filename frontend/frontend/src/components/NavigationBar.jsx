@@ -16,8 +16,18 @@ function NavigationBar() {
    const [isOpen, setIsOpen] = useState(false);
    const dropdownRef = useRef(null);
    const accountTriggerRef = useRef(null);
+   const explicitLogoutRef = useRef(false);
    const location = useLocation();
    const navigate = useNavigate();
+
+   useEffect(() => () => {
+      // BrowserRouter commits navigation in a transition. Clear auth only
+      // after this protected surface has left the route tree.
+      if (explicitLogoutRef.current) {
+         explicitLogoutRef.current = false;
+         logout();
+      }
+   }, [logout]);
 
    useEffect(() => {
       function handleClickOutside(e) {
@@ -124,8 +134,8 @@ function NavigationBar() {
                         <span className="tl-app-nav__account-trust">Trust {displayTrustScore.toFixed(1)}</span>
                      </span>
                      {isModeratorUser && (
-                        <span className="tl-app-nav__platform-role" aria-label="Platform moderator">
-                           MOD
+                        <span className="tl-app-nav__platform-role" aria-label="Platform Safety moderator">
+                           Safety
                         </span>
                      )}
                      <span className={`tl-app-nav__chevron ${isOpen ? "rotated" : ""}`} aria-hidden="true">
@@ -143,7 +153,7 @@ function NavigationBar() {
                                  Trust {displayTrustScore.toFixed(1)}
                               </span>
                               {isModeratorUser && (
-                                 <span className="tl-app-nav__panel-role">Platform moderator</span>
+                                 <span className="tl-app-nav__panel-role">Platform Safety moderator</span>
                               )}
                            </div>
                         </div>
@@ -176,8 +186,8 @@ function NavigationBar() {
                               className="tl-app-nav__logout"
                               onClick={() => {
                                  setIsOpen(false);
-                                 logout();
-                                 navigate("/login");
+                                 explicitLogoutRef.current = true;
+                                 navigate("/login", { replace: true, state: null });
                               }}
                            >
                               Log Out
