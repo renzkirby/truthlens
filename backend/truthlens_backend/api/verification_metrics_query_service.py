@@ -3,6 +3,10 @@
 from .organization_service import PartnerCapability, has_capability
 from .verification_activity_metrics_service import get_organization_verification_activity
 from .verification_metrics_service import get_organization_verification_baseline
+from .verification_activity_trends_service import (
+    VerificationActivityTrendInputError,
+    get_organization_verification_activity_trend,
+)
 
 
 class VerificationMetricsAuthorizationError(Exception):
@@ -13,7 +17,9 @@ class VerificationMetricsCompositionError(Exception):
     pass
 
 
-def get_organization_verification_metrics(*, actor, organization):
+def get_organization_verification_metrics(
+    *, actor, organization, created_after=None, created_before=None,
+):
     if not (
         has_capability(
             actor,
@@ -30,6 +36,11 @@ def get_organization_verification_metrics(*, actor, organization):
             "You do not have permission to view this organization's verification metrics."
         )
 
+    if (created_after is None) != (created_before is None):
+        raise VerificationActivityTrendInputError(
+            "created_after and created_before must be supplied together."
+        )
+
     baseline = get_organization_verification_baseline(organization=organization)
     activity = get_organization_verification_activity(organization=organization)
     organization_id = str(organization.pk)
@@ -41,7 +52,7 @@ def get_organization_verification_metrics(*, actor, organization):
             "Measurement service organization identity is missing or mismatched."
         )
 
-    return {
+    metrics = {
         **baseline,
         "activity": {
             "measurement_basis": activity["measurement_basis"],
@@ -50,3 +61,19 @@ def get_organization_verification_metrics(*, actor, organization):
             "publication": activity["publication"],
         },
     }
+    if created_after is not None and created_before is not None:
+        trend = get_organization_verification_activity_trend(
+            organization=organization,
+            created_after=created_after,
+            created_before=created_before,
+        )
+        if trend.get("organization_id") != organization_id:
+            raise VerificationMetricsCompositionError(
+                "Trend service organization identity is missing or mismatched."
+            )
+        metrics["trend"] = {
+            "measurement_basis": trend["measurement_basis"],
+            "totals": trend["totals"],
+            "daily": trend["daily"],
+        }
+    return metrics

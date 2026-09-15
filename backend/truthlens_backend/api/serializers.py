@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.core.validators import URLValidator
+from django.utils.dateparse import parse_datetime
+from datetime import timezone as datetime_timezone
 from .models import (
     Claim,
     Thread,
@@ -3540,6 +3542,60 @@ class ClaimMatchSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
     )
+
+
+class _ExplicitTimezoneDateTimeField(serializers.DateTimeField):
+    default_error_messages = {
+        "invalid": "Use an ISO-8601 datetime with Z or an explicit UTC offset.",
+    }
+
+    def get_value(self, dictionary):
+        # An explicitly blank query parameter is invalid, not an omitted field.
+        return dictionary.get(self.field_name, serializers.empty)
+
+    def to_internal_value(self, data):
+        # Parse the supplied zone before DRF can apply Django's current timezone.
+        if not isinstance(data, str):
+            self.fail("invalid")
+        try:
+            value = parse_datetime(data)
+            if value is None or value.utcoffset() is None:
+                self.fail("invalid")
+            return value.astimezone(datetime_timezone.utc)
+        except (ValueError, OverflowError):
+            self.fail("invalid")
+
+
+class OrganizationVerificationMetricsQuerySerializer(serializers.Serializer):
+    created_after = _ExplicitTimezoneDateTimeField(required=False)
+    created_before = _ExplicitTimezoneDateTimeField(required=False)
+
+    def to_internal_value(self, data):
+        unknown = sorted(set(data.keys()) - set(self.fields))
+        if unknown:
+            raise serializers.ValidationError(
+                {key: ["Unknown query parameter."] for key in unknown}
+            )
+        return super().to_internal_value(data)
+
+    def validate(self, attrs):
+        if ("created_after" in attrs) != ("created_before" in attrs):
+            raise serializers.ValidationError(
+                "created_after and created_before must be supplied together."
+            )
+        if "created_after" not in attrs:
+            return attrs
+        created_after = attrs["created_after"]
+        created_before = attrs["created_before"]
+        if created_after > created_before:
+            raise serializers.ValidationError({
+                "created_before": "created_before must be at or after created_after.",
+            })
+        if (created_before.date() - created_after.date()).days + 1 > 90:
+            raise serializers.ValidationError({
+                "created_before": "The time window may intersect at most 90 UTC calendar dates.",
+            })
+        return attrs
 
 
 class _StrictAccountabilityQuerySerializer(serializers.Serializer):

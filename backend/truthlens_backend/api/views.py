@@ -109,6 +109,7 @@ from .verification_metrics_query_service import (
 )
 from .verification_metrics_service import VerificationMetricsIntegrityError
 from .verification_activity_metrics_service import VerificationActivityMetricsIntegrityError
+from .verification_activity_trends_service import VerificationActivityTrendInputError
 from .organization_public_presence_service import (
     get_public_partner_by_slug,
     get_public_partner_directory,
@@ -341,6 +342,7 @@ from .serializers import (
     EvidenceReviewOrganizationSerializer,
     AccountabilityPageSerializer,
     OrganizationAccountabilityQuerySerializer,
+    OrganizationVerificationMetricsQuerySerializer,
     PlatformAccountabilityQuerySerializer,
 )
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
@@ -2520,13 +2522,22 @@ def _verification_assignment_error_response(
 @permission_classes([IsAuthenticated])
 def organization_verification_metrics(request, organization_id):
     organization = get_object_or_404(Organization, id=organization_id)
+    query = OrganizationVerificationMetricsQuerySerializer(data=request.query_params)
+    query.is_valid(raise_exception=True)
     try:
         metrics = get_organization_verification_metrics(
             actor=request.user,
             organization=organization,
+            created_after=query.validated_data.get("created_after"),
+            created_before=query.validated_data.get("created_before"),
         )
     except VerificationMetricsAuthorizationError as error:
         return Response({"detail": str(error)}, status=status.HTTP_403_FORBIDDEN)
+    except VerificationActivityTrendInputError:
+        return Response(
+            {"detail": "Invalid verification analytics time window."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     except (
         VerificationMetricsIntegrityError,
         VerificationActivityMetricsIntegrityError,
