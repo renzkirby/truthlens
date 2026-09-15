@@ -833,7 +833,7 @@ def generate_deepfake_explanation(base64_string, fake_category):
         return chat_completion.choices[0].message.content
 
     except Exception as e:
-        print(f"Vision AI Error: {str(e)}")
+        logger.warning("Vision AI explanation generation failed: %s", e)
         return f"Forensic analysis indicates this is a {fake_category}. However, a detailed visual summary could not be generated at this time."
 
 

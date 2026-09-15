@@ -259,8 +259,8 @@ def find_matching_claim(
     # --- 3. Semantic similarity match for TEXT/URL claims (Phase 2 Fallback) ---
     # Only applies if we have context_text and didn't find an exact match above
     if allow_semantic_fallback and claim_type in ["TEXT", "URL"] and context_text:
-        print(
-            f"No exact match found for {claim_type}. Generating embedding for semantic check..."
+        logger.debug(
+            "No exact match found. Generating embedding for semantic check..."
         )
         embedding = generate_embedding(context_text)
         if embedding:
@@ -268,12 +268,10 @@ def find_matching_claim(
                 embedding, claim_type, semantic_threshold
             )
             if semantic_match:
-                print(
-                    f"Semantic match found! (Threshold {semantic_threshold}) -> Claim ID: {semantic_match.id}"
-                )
+                logger.debug("Semantic match found.")
                 return semantic_match
             else:
-                print("No semantic match found above threshold.")
+                logger.debug("No semantic match found above threshold.")
 
     return None
 

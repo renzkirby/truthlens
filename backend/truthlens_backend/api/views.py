@@ -45,6 +45,7 @@ from datetime import timedelta
 from django.shortcuts import get_object_or_404
 from PIL import Image
 import json
+import logging
 import secrets
 import base64
 import uuid
@@ -341,6 +342,9 @@ from dj_rest_auth.registration.views import SocialLoginView
 from .email_verification import send_email_verification
 
 
+logger = logging.getLogger(__name__)
+
+
 # GoogleLogin
 class GoogleLogin(SocialLoginView):
     adapter_class = GoogleOAuth2Adapter
@@ -473,9 +477,6 @@ def receive_snippet(request):
 
     media_url = upload_image_to_database(base64_string)
 
-    print("IMAGE HASH:", image_hash)
-    print("DEEPFAKE CHECK ENABLED:", check_deepfake)
-
     claim = Claim.objects.create(
         claim_type=Claim.ClaimType.IMAGE,
         media_hash=image_hash,
@@ -553,7 +554,6 @@ def claim_polling_endpoint(request, claim_id):
 def verify_url(request):
     # gets the data from fronted ('yung URL)
     url = request.data.get("url")
-    print(f"Received URL: {url}")
     safe_url, url_error = validate_public_url(url)
     if url_error:
         return Response({"detail": url_error}, status=400)
@@ -639,10 +639,7 @@ def register_user(request):
         send_email_verification(user)
         verification_email_sent = True
     except Exception as error:
-        print(
-            "Failed to send verification email:",
-            error,
-        )
+        logger.exception("Failed to send registration verification email.")
 
     tokens = get_tokens_for_user(user)
 
@@ -752,10 +749,7 @@ def send_verification_email(request):
     try:
         send_email_verification(request.user)
     except Exception as error:
-        print(
-            "Failed to send verification email:",
-            error,
-        )
+        logger.exception("Failed to resend verification email.")
 
         return Response(
             {"detail": "Unable to send the verification " "email right now."},
@@ -3030,7 +3024,7 @@ def test_deepfake(request):
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON payload"}, status=400)
     except Exception as e:
-        print(f"Deepfake view error: {str(e)}")
+        logger.exception("Unexpected deepfake image processing failure.")
         return JsonResponse({"error": "Failed to process image format."}, status=400)
 
 
@@ -3044,8 +3038,6 @@ def verify_text(request):
 
     if not text_content:
         return Response({"error": "Text is required"}, status=400)
-
-    print(f"Received Text: {text_content[:100]}...")
 
     # ── Claim Deduplication Pre-Check ──
     fingerprint = compute_fingerprint("TEXT", text_content)
@@ -3786,7 +3778,7 @@ def request_password_reset(request):
             email_message.send(fail_silently=False)
 
         except Exception as error:
-            print(f"Password reset email failed: {error}")
+            logger.exception("Failed to deliver password reset email.")
 
     return Response(
         {"detail": generic_message},
@@ -3820,16 +3812,12 @@ def confirm_password_reset(request):
         user = User.objects.get(pk=user_id)
 
     except (TypeError, ValueError, OverflowError, User.DoesNotExist) as error:
-        print("RESET DEBUG uid decode/user lookup failed:", error)
-
         return Response(
             {"detail": "This password reset link is invalid or has expired."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
     token_is_valid = default_token_generator.check_token(user, token)
-
-    print("RESET DEBUG token valid:", token_is_valid)
 
     if not token_is_valid:
         return Response(
