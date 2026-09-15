@@ -18,29 +18,17 @@ import { state } from "./state.js";
 const COMMUNITY_PLATFORM_URL = state.WEB_APP_ORIGINS[0];
 
 // Pre-render icons
-const iconSparkles = renderToString(
-   React.createElement(Sparkles, { size: 14 }),
-);
-const iconShield = renderToString(
-   React.createElement(ShieldCheck, { size: 16 }),
-);
+const iconSparkles = renderToString(React.createElement(Sparkles, { size: 14 }));
+const iconShield = renderToString(React.createElement(ShieldCheck, { size: 16 }));
 const iconFlag = renderToString(React.createElement(Flag, { size: 16 }));
-const iconCheck = renderToString(
-   React.createElement(CheckCircle, { size: 16 }),
-);
+const iconCheck = renderToString(React.createElement(CheckCircle, { size: 16 }));
 const iconX = renderToString(React.createElement(XCircle, { size: 16 }));
-const iconAlert = renderToString(
-   React.createElement(AlertTriangle, { size: 16 }),
-);
+const iconAlert = renderToString(React.createElement(AlertTriangle, { size: 16 }));
 const iconHelp = renderToString(React.createElement(HelpCircle, { size: 16 }));
-const iconActivity = renderToString(
-   React.createElement(Activity, { size: 12 }),
-);
+const iconActivity = renderToString(React.createElement(Activity, { size: 12 }));
 const iconSearch = renderToString(React.createElement(Search, { size: 16 }));
 const iconUsers = renderToString(React.createElement(Users, { size: 16 }));
-const iconExternal = renderToString(
-   React.createElement(ExternalLink, { size: 12 }),
-);
+const iconExternal = renderToString(React.createElement(ExternalLink, { size: 12 }));
 
 // Helper function to get UI properties based on verdict
 function getVerdictUI(verdict) {
@@ -93,16 +81,7 @@ function getVerdictUI(verdict) {
 }
 
 export function displayResultCard(claim) {
-   const {
-      id,
-      verdict,
-      summary,
-      confidence_score,
-      thread_id,
-      final_verdict,
-      sources,
-      source_url,
-   } = claim;
+   const { id, verdict, summary, confidence_score, thread_id, final_verdict, sources, source_url } = claim;
    const deepAnalysisUrl = `${COMMUNITY_PLATFORM_URL}/analysis/${id}`;
 
    const displayVerdict = final_verdict || verdict;
@@ -110,8 +89,7 @@ export function displayResultCard(claim) {
 
    // 1. Generate Sources HTML
    let sourcesHTML = "";
-   const evidenceList =
-      sources && sources.length > 0 ? sources : source_url ? [source_url] : [];
+   const evidenceList = sources && sources.length > 0 ? sources : source_url ? [source_url] : [];
 
    if (displayVerdict !== "OUT_OF_SCOPE" && evidenceList.length > 0) {
       sourcesHTML = `
@@ -132,10 +110,7 @@ export function displayResultCard(claim) {
                      displayTitle = src.title;
                   } else if (urlStr.startsWith("http")) {
                      try {
-                        displayTitle = new URL(urlStr).hostname.replace(
-                           "www.",
-                           "",
-                        );
+                        displayTitle = new URL(urlStr).hostname.replace("www.", "");
                      } catch {
                         displayTitle = urlStr;
                      }
@@ -161,9 +136,7 @@ export function displayResultCard(claim) {
    const communityLink = thread_id
       ? `${COMMUNITY_PLATFORM_URL}/thread/detail/${thread_id}`
       : `${COMMUNITY_PLATFORM_URL}/thread/create?claim_id=${id}`;
-   const communityText = thread_id
-      ? "View Community Discussion"
-      : "Ask the Community";
+   const communityText = thread_id ? "View Community Discussion" : "Ask the Community";
 
    if (displayVerdict === "UNVERIFIED") {
       // UNVERIFIED: Primary CTA is asking the community. Secondary is full report.
@@ -226,15 +199,16 @@ export function displayResultCard(claim) {
    void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
 
-   document
-      .getElementById("truthlens-close-btn")
-      .addEventListener("click", () => {
-         card.classList.remove("show");
-         setTimeout(() => card.remove(), 300);
-      });
+   document.getElementById("truthlens-close-btn").addEventListener("click", () => {
+      card.classList.remove("show");
+      setTimeout(() => card.remove(), 300);
+   });
 }
 
 export function displayLoadingCard(customMsg) {
+   document.querySelectorAll("#truthlens-error-card").forEach((errorCard) => {
+      errorCard.remove();
+   });
    const msg = typeof customMsg === "string" ? customMsg : "Analyzing claim...";
 
    const card = document.createElement("div");
@@ -255,9 +229,7 @@ export function displayLoadingCard(customMsg) {
    void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
 
-   document
-      .getElementById("truthlens-load-close-btn")
-      .addEventListener("click", removeLoadingCard);
+   document.getElementById("truthlens-load-close-btn").addEventListener("click", removeLoadingCard);
 }
 
 export function displayDeepfakeResultCard(data) {
@@ -301,12 +273,10 @@ export function displayDeepfakeResultCard(data) {
    void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
 
-   document
-      .getElementById("truthlens-close-btn")
-      .addEventListener("click", () => {
-         card.classList.remove("show");
-         setTimeout(() => card.remove(), 300);
-      });
+   document.getElementById("truthlens-close-btn").addEventListener("click", () => {
+      card.classList.remove("show");
+      setTimeout(() => card.remove(), 300);
+   });
 }
 
 export function removeLoadingCard() {
@@ -319,21 +289,145 @@ export function removeLoadingCard() {
 }
 
 export function displayErrorCard(message) {
+   document.querySelectorAll("#truthlens-error-card").forEach((errorCard) => {
+      errorCard.remove();
+   });
+
    const card = document.createElement("div");
    card.id = "truthlens-error-card";
    card.className = "truthlens-card";
    card.innerHTML = `
-      <div class="truthlens-header">
-         <strong class="truthlens-title">TruthLens</strong>
+      <div class="truthlens-header" style="align-items: center; gap: 12px;">
+         <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+            <strong class="truthlens-title" style="color: #111827;">TRUTHLENS</strong>
+            <span
+               style="
+                  display: inline-flex;
+                  align-items: center;
+                  padding: 3px 7px;
+                  border-radius: 999px;
+                  background: #fef2f2;
+                  color: #b91c1c;
+                  font-size: 9px;
+                  font-weight: 700;
+                  letter-spacing: 0.06em;
+                  line-height: 1.2;
+                  white-space: nowrap;
+               "
+            >
+               SERVICE ISSUE
+            </span>
+         </div>
+
+         <button
+            type="button"
+            id="truthlens-error-close-btn"
+            class="truthlens-close-btn"
+            aria-label="Dismiss error"
+            title="Dismiss"
+            style="
+               flex-shrink: 0;
+               width: 28px;
+               height: 28px;
+               display: inline-flex;
+               align-items: center;
+               justify-content: center;
+               border-radius: 8px;
+            "
+         >
+            &times;
+         </button>
       </div>
-      <div class="truthlens-error">
-         <div class="truthlens-error-icon">!</div>
-         <div class="truthlens-error-text">${message}</div>
+
+      <div
+         class="truthlens-error"
+         role="alert"
+         style="
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            margin-top: 14px;
+         "
+      >
+         <div
+            aria-hidden="true"
+            style="
+               width: 36px;
+               height: 36px;
+               flex: 0 0 36px;
+               display: inline-flex;
+               align-items: center;
+               justify-content: center;
+               border-radius: 10px;
+               background: #fef2f2;
+               color: #dc2626;
+            "
+         >
+            ${iconAlert}
+         </div>
+
+         <div style="min-width: 0; flex: 1;">
+            <div
+               style="
+                  margin-bottom: 4px;
+                  color: #111827;
+                  font-size: 14px;
+                  font-weight: 700;
+                  line-height: 1.35;
+               "
+            >
+               Analysis unavailable
+            </div>
+
+            <div
+               class="truthlens-error-text"
+               style="
+                  color: #4b5563;
+                  font-size: 13px;
+                  line-height: 1.45;
+                  overflow-wrap: anywhere;
+               "
+            >
+               ${message}
+            </div>
+
+            <div
+               style="
+                  display: flex;
+                  align-items: flex-start;
+                  gap: 6px;
+                  margin-top: 10px;
+                  padding-top: 9px;
+                  border-top: 1px solid #f3f4f6;
+                  color: #6b7280;
+                  font-size: 11px;
+                  line-height: 1.4;
+               "
+            >
+               <span
+                  aria-hidden="true"
+                  style="
+                     display: inline-flex;
+                     align-items: center;
+                     flex-shrink: 0;
+                     margin-top: 1px;
+                     color: #6b7280;
+                  "
+               >
+                  ${iconShield}
+               </span>
+               <span>No verdict was generated. Start a new scan to try again.</span>
+            </div>
+         </div>
       </div>
    `;
+
    document.body.appendChild(card);
-   setTimeout(() => card.classList.add("show"), 100);
-   setTimeout(() => {
+
+   const showTimer = setTimeout(() => card.classList.add("show"), 100);
+
+   card.querySelector("#truthlens-error-close-btn").addEventListener("click", () => {
+      clearTimeout(showTimer);
       card.classList.remove("show");
       setTimeout(() => card.remove(), 300);
    });
@@ -384,14 +478,10 @@ export function displayCachedResultCard(match) {
 
    let confidence_bar_color = "#6b7280";
    if (confidence_score < 40) confidence_bar_color = "#e02424";
-   else if (confidence_score >= 40 && confidence_score < 70)
-      confidence_bar_color = "#ebdc09";
+   else if (confidence_score >= 40 && confidence_score < 70) confidence_bar_color = "#ebdc09";
    else if (confidence_score >= 70) confidence_bar_color = "#0e9f6e";
 
-   const displaySummary =
-      moderator_notes ||
-      summary ||
-      "This claim has been reviewed by the community.";
+   const displaySummary = moderator_notes || summary || "This claim has been reviewed by the community.";
 
    const aiWarningHTML = is_ai_generated
       ? `<div class="truthlens-banner truthlens-ai-warning">
@@ -440,8 +530,7 @@ export function displayCachedResultCard(match) {
    }
 
    let sourcesHTML = "";
-   const evidenceList =
-      sources && sources.length > 0 ? sources : source_url ? [source_url] : [];
+   const evidenceList = sources && sources.length > 0 ? sources : source_url ? [source_url] : [];
 
    if (displayVerdict !== "OUT_OF_SCOPE" && evidenceList.length > 0) {
       sourcesHTML = `
@@ -530,10 +619,8 @@ export function displayCachedResultCard(match) {
    void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
 
-   document
-      .getElementById("truthlens-close-btn")
-      .addEventListener("click", () => {
-         card.classList.remove("show");
-         setTimeout(() => card.remove(), 300);
-      });
+   document.getElementById("truthlens-close-btn").addEventListener("click", () => {
+      card.classList.remove("show");
+      setTimeout(() => card.remove(), 300);
+   });
 }
