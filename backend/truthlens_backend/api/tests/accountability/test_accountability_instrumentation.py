@@ -1,7 +1,11 @@
 import json
+import uuid
 from datetime import timedelta
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone
@@ -225,12 +229,15 @@ class AccountabilityInstrumentationTests(TestCase):
         }
         for action_type, capability in expected_capabilities.items():
             with self.subTest(action_type=action_type):
-                self.assertTrue(
-                    organization_events.filter(
-                        action_type=action_type,
-                        capability=capability,
-                    ).exists()
+                events = organization_events.filter(
+                    action_type=action_type,
+                    capability=capability,
                 )
+                self.assertTrue(events.exists())
+                for event in events:
+                    self.assertEqual(event.actor_id_snapshot, str(self.actor.pk))
+                    self.assertEqual(event.actor_username_snapshot, self.actor.username)
+                    self.assertNotIn("actor_snapshot", event.context)
 
         completed = AccountabilityEvent.objects.get(
             action_type=AccountabilityEvent.ActionType.VERIFICATION_ASSIGNMENT_COMPLETED,
@@ -238,6 +245,7 @@ class AccountabilityInstrumentationTests(TestCase):
         )
         self.assertEqual(completed.authority_scope, AccountabilityEvent.AuthorityScope.SYSTEM)
         self.assertIsNone(completed.actor)
+        self.assertEqual(completed.actor_id_snapshot, "")
         self.assertEqual(completed.context["claim_id"], str(claim.pk))
 
     def test_evidence_decisions_and_reopen_are_correlated_to_claim(self):
@@ -282,6 +290,8 @@ class AccountabilityInstrumentationTests(TestCase):
                     action_type=action,
                     resource_id=str(evidence.pk),
                 )
+                self.assertEqual(event.actor_id_snapshot, str(self.actor.pk))
+                self.assertEqual(event.actor_username_snapshot, self.actor.username)
                 self.assertEqual(
                     event.context,
                     {
@@ -463,6 +473,9 @@ class AccountabilityInstrumentationTests(TestCase):
             resource_id=str(accepted_invitation.pk),
         )
         self.assertEqual(acceptance.authority_scope, AccountabilityEvent.AuthorityScope.PERSONAL)
+        self.assertEqual(acceptance.actor_id_snapshot, str(invitee.pk))
+        self.assertEqual(acceptance.actor_username_snapshot, invitee.username)
+        self.assertNotIn("actor_snapshot", acceptance.context)
         self.assertIsNone(acceptance.authority_organization)
         self.assertEqual(acceptance.subject_organization, self.organization)
         invite_events = AccountabilityEvent.objects.filter(
@@ -520,9 +533,207 @@ class AccountabilityInstrumentationTests(TestCase):
         )
         self.assertTrue(events.exists())
         for event in events:
+            self.assertEqual(event.actor_id_snapshot, str(self.actor.pk))
+            self.assertEqual(event.actor_username_snapshot, self.actor.username)
+            self.assertNotIn("actor_snapshot", event.context)
             self.assertEqual(event.authority_scope, AccountabilityEvent.AuthorityScope.PLATFORM)
             self.assertEqual(event.capability, PartnerCapability.REVIEW_SAFETY)
             self.assertIsNone(event.authority_organization)
+
+
+class DurableActorIdentityInstrumentationTests(TestCase):
+    def setUp(self):
+        self.actor = User.objects.create_user(username="durable-actor")
+        self.organization = Organization.objects.create(
+            name="Durable Actor Partner", slug="durable-actor-partner",
+        )
+
+    def record(self, **overrides):
+        values = {
+            "action_type": AccountabilityEvent.ActionType.EVIDENCE_VERIFIED,
+            "resource_type": AccountabilityEvent.ResourceType.EVIDENCE_SUBMISSION,
+            "resource_id": "durable-evidence",
+            "authority_scope": AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            "actor": self.actor,
+            "authority_organization": self.organization,
+            "capability": PartnerCapability.REVIEW_EVIDENCE,
+        }
+        values.update(overrides)
+        return record_accountability_event(**values)
+
+    def revision(self, **overrides):
+        values = {
+            "action_type": AccountabilityEvent.ActionType.VERDICT_REVISED,
+            "resource_type": AccountabilityEvent.ResourceType.ADJUDICATION_DECISION,
+            "capability": PartnerCapability.ADJUDICATE,
+        }
+        values.update(overrides)
+        return self.record(**values)
+
+    def test_live_actor_snapshots_preserve_exact_ordinary_context(self):
+        context = {"evidence_case_id": "case-id", "claim_id": "claim-id"}
+        event = self.record(context=context)
+        event.refresh_from_db()
+        self.assertEqual(event.actor_id_snapshot, str(self.actor.pk))
+        self.assertEqual(event.actor_username_snapshot, self.actor.username)
+        self.assertEqual(event.context, {
+            "evidence_case_id": "case-id", "claim_id": "claim-id",
+        })
+        self.assertEqual(context, event.context)
+        self.assertNotIn("actor_snapshot", event.context)
+
+    def test_username_rename_preserves_both_recorded_snapshots(self):
+        actor_id = str(self.actor.pk)
+        username = self.actor.username
+        event = self.record()
+        self.actor.username = "durable-actor-renamed"
+        self.actor.save(update_fields=["username"])
+        event.refresh_from_db()
+        self.assertEqual(event.actor.username, "durable-actor-renamed")
+        self.assertEqual(event.actor_id_snapshot, actor_id)
+        self.assertEqual(event.actor_username_snapshot, username)
+
+    def test_actor_deletion_nulls_fk_and_preserves_both_snapshots(self):
+        actor_id = str(self.actor.pk)
+        username = self.actor.username
+        event = self.record()
+        self.actor.delete()
+        event.refresh_from_db()
+        self.assertIsNone(event.actor)
+        self.assertEqual(event.actor_id_snapshot, actor_id)
+        self.assertEqual(event.actor_username_snapshot, username)
+
+    def test_live_historical_preparer_uses_supplied_id_and_username(self):
+        snapshot = {"id": str(self.actor.pk), "username": "preparer-before-rename"}
+        context = {"correction_request_id": "correction-id"}
+        event = self.revision(actor_snapshot=snapshot, context=context)
+        event.refresh_from_db()
+        self.assertEqual(event.actor, self.actor)
+        self.assertEqual(event.actor_id_snapshot, snapshot["id"])
+        self.assertEqual(event.actor_username_snapshot, snapshot["username"])
+        self.assertEqual(event.context, {
+            "correction_request_id": "correction-id", "actor_snapshot": snapshot,
+        })
+        self.assertEqual(context, {"correction_request_id": "correction-id"})
+
+    def test_deleted_historical_preparer_retains_recorded_id_and_username(self):
+        snapshot = {"id": str(self.actor.pk), "username": self.actor.username}
+        self.actor.delete()
+        event = self.revision(actor=None, actor_snapshot=snapshot)
+        event.refresh_from_db()
+        self.assertIsNone(event.actor)
+        self.assertEqual(event.actor_id_snapshot, snapshot["id"])
+        self.assertEqual(event.actor_username_snapshot, snapshot["username"])
+        self.assertEqual(event.context, {"actor_snapshot": snapshot})
+
+    def test_historical_id_normalization_preserves_existing_context_behavior(self):
+        snapshot = {"id": f" {self.actor.pk} ", "username": self.actor.username}
+        event = self.revision(actor_snapshot=snapshot)
+        normalized = {"id": str(self.actor.pk), "username": self.actor.username}
+        self.assertEqual(event.actor_id_snapshot, normalized["id"])
+        self.assertEqual(event.context, {"actor_snapshot": normalized})
+        self.assertEqual(snapshot["id"], f" {self.actor.pk} ")
+
+    def test_historical_snapshot_remains_restricted_to_revision_resource_and_capability(self):
+        snapshot = {"id": str(self.actor.pk), "username": self.actor.username}
+        before = AccountabilityEvent.objects.count()
+        for overrides in (
+            {"action_type": AccountabilityEvent.ActionType.EVIDENCE_VERIFIED},
+            {"resource_type": AccountabilityEvent.ResourceType.EVIDENCE_SUBMISSION},
+            {"capability": PartnerCapability.REVIEW_EVIDENCE},
+        ):
+            with self.subTest(overrides=overrides), self.assertRaises(ValidationError):
+                self.revision(actor_snapshot=snapshot, **overrides)
+        self.assertEqual(AccountabilityEvent.objects.count(), before)
+
+    def test_historical_snapshot_must_identify_same_live_actor(self):
+        with self.assertRaises(ValidationError):
+            self.revision(actor_snapshot={"id": "another-person", "username": "past-name"})
+        self.assertFalse(AccountabilityEvent.objects.exists())
+
+    def test_malformed_historical_snapshot_remains_rejected(self):
+        for snapshot in (
+            [], {}, {"username": "past-name"}, {"id": "past-id"},
+            *({"id": value, "username": "past-name"}
+              for value in (None, "", " \t", 123, False, [], {})),
+            *({"id": "past-id", "username": value}
+              for value in (None, "", " \t", 123, "x" * 151)),
+            {"id": "past-id", "username": "past-name", "extra": "not-permitted"},
+        ):
+            with self.subTest(snapshot=snapshot), self.assertRaises(ValidationError):
+                self.revision(actor=None, actor_snapshot=snapshot)
+        self.assertFalse(AccountabilityEvent.objects.exists())
+
+    def test_authenticated_unsaved_actor_is_rejected_with_validation_error(self):
+        for actor in (User(username="unsaved"), User(pk=123456, username="unsaved-with-id")):
+            with self.subTest(pk=actor.pk):
+                self.assertTrue(actor.is_authenticated)
+                with self.assertRaises(ValidationError):
+                    self.record(actor=actor)
+        self.assertFalse(AccountabilityEvent.objects.exists())
+
+    def test_blank_live_actor_identity_is_rejected(self):
+        self.actor.pk = " \t"
+        with self.assertRaises(ValidationError):
+            self.record()
+        self.assertFalse(AccountabilityEvent.objects.exists())
+
+    def test_live_identifier_is_normalized_without_assuming_uuid_or_integer_type(self):
+        for actor_pk in (123, uuid.uuid4(), " stable-identifier "):
+            actor = SimpleNamespace(
+                pk=actor_pk, is_authenticated=True, username="observed-name",
+                _state=SimpleNamespace(adding=False),
+            )
+            with self.subTest(pk=actor_pk):
+                with patch("api.accountability_service.AccountabilityEvent.objects.create") as create:
+                    self.record(actor=actor)
+                self.assertEqual(create.call_args.kwargs["actor_id_snapshot"], str(actor_pk).strip())
+                self.assertEqual(create.call_args.kwargs["actor_username_snapshot"], "observed-name")
+
+    def test_system_event_has_empty_actor_snapshots_and_unchanged_context(self):
+        event = self.record(
+            actor=None, authority_scope=AccountabilityEvent.AuthorityScope.SYSTEM,
+            authority_organization=None, capability="", context={"claim_id": "claim-id"},
+        )
+        self.assertIsNone(event.actor)
+        self.assertEqual(event.actor_id_snapshot, "")
+        self.assertEqual(event.actor_username_snapshot, "")
+        self.assertEqual(event.context, {"claim_id": "claim-id"})
+
+    def test_rollback_removes_live_actor_event_with_identity_snapshot(self):
+        with self.assertRaises(RuntimeError):
+            with transaction.atomic():
+                event = self.record()
+                self.assertEqual(event.actor_id_snapshot, str(self.actor.pk))
+                raise RuntimeError("force rollback")
+        self.assertFalse(AccountabilityEvent.objects.exists())
+
+    def test_authority_scope_validations_remain_unchanged(self):
+        scopes = AccountabilityEvent.AuthorityScope
+        snapshot = {"id": str(self.actor.pk), "username": self.actor.username}
+        for scope, overrides in (
+            (scopes.ORGANIZATION, {"actor": None}),
+            (scopes.ORGANIZATION, {"authority_organization": None}),
+            (scopes.ORGANIZATION, {"capability": ""}),
+            (scopes.PLATFORM, {"actor": None, "authority_organization": None}),
+            (scopes.PLATFORM, {}),
+            (scopes.PLATFORM, {"authority_organization": None, "capability": ""}),
+            (scopes.PERSONAL, {"actor": None, "authority_organization": None, "capability": ""}),
+            (scopes.PERSONAL, {"capability": ""}),
+            (scopes.PERSONAL, {"authority_organization": None}),
+            (scopes.SYSTEM, {"authority_organization": None, "capability": ""}),
+            (scopes.SYSTEM, {"actor": None, "capability": ""}),
+            (scopes.SYSTEM, {"actor": None, "authority_organization": None}),
+            *(
+                (scope, {"actor": None if scope == scopes.SYSTEM else self.actor,
+                         "actor_snapshot": snapshot, "authority_organization": None,
+                         "capability": PartnerCapability.ADJUDICATE if scope == scopes.PLATFORM else ""})
+                for scope in (scopes.PLATFORM, scopes.PERSONAL, scopes.SYSTEM)
+            ),
+        ):
+            with self.subTest(scope=scope, overrides=overrides), self.assertRaises(ValidationError):
+                self.revision(authority_scope=scope, **overrides)
+        self.assertFalse(AccountabilityEvent.objects.exists())
 
 
 class FactualCorrectionAccountabilityInstrumentationTests(
@@ -605,6 +816,14 @@ class FactualCorrectionAccountabilityInstrumentationTests(
         )
         self.assertEqual(prepared.capability, PartnerCapability.ADJUDICATE)
         self.assertEqual(verdict.actor, context["prepared_proposal"].prepared_by)
+        self.assertEqual(
+            verdict.actor_id_snapshot,
+            context["prepared_proposal"].prepared_by_snapshot["id"],
+        )
+        self.assertEqual(
+            verdict.actor_username_snapshot,
+            context["prepared_proposal"].prepared_by_snapshot["username"],
+        )
         self.assertEqual(verdict.capability, PartnerCapability.ADJUDICATE)
         self.assertEqual(publication.actor, self.publisher)
         self.assertEqual(publication.capability, PartnerCapability.PUBLISH_FACT_CHECK)
@@ -630,6 +849,7 @@ class FactualCorrectionAccountabilityInstrumentationTests(
         )
 
         self.assertIsNone(verdict.actor)
+        self.assertEqual(verdict.actor_id_snapshot, approver_snapshot["id"])
         self.assertEqual(
             verdict.authority_scope,
             AccountabilityEvent.AuthorityScope.ORGANIZATION,

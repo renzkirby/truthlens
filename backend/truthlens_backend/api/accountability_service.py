@@ -110,6 +110,18 @@ def record_accountability_event(
     if actor is not None and not is_authenticated_actor:
         raise ValidationError({"actor": "Actor must be an authenticated user."})
 
+    actor_id_snapshot = ""
+    if is_authenticated_actor:
+        if actor.pk is None or actor._state.adding:
+            raise ValidationError(
+                {"actor": "Actor must have a persisted primary-key identity."}
+            )
+        actor_id_snapshot = str(actor.pk).strip()
+        if not actor_id_snapshot:
+            raise ValidationError(
+                {"actor": "Actor must have a nonblank primary-key identity."}
+            )
+
     historical_snapshot_allowed = _allows_historical_actor_snapshot(
         action_type=action_type,
         resource_type=resource_type,
@@ -217,9 +229,12 @@ def record_accountability_event(
         if actor_snapshot is not None
         else (str(actor.username) if actor is not None else "")
     )
+    if actor_snapshot is not None:
+        actor_id_snapshot = actor_snapshot["id"]
 
     return AccountabilityEvent.objects.create(
         actor=actor,
+        actor_id_snapshot=actor_id_snapshot,
         actor_username_snapshot=actor_username_snapshot,
         authority_scope=authority_scope,
         authority_organization=authority_organization,

@@ -1873,6 +1873,7 @@ class AccountabilityEvent(models.Model):
         blank=True,
         related_name="accountability_events",
     )
+    actor_id_snapshot = models.CharField(max_length=255, blank=True)
     actor_username_snapshot = models.CharField(max_length=150, blank=True)
     authority_scope = models.CharField(
         max_length=20,
