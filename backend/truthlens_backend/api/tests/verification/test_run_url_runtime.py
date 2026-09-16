@@ -9,8 +9,7 @@ from api.verification import runs
 from api.verification.contracts import RawEvidence
 from api.verification.evidence_assessment import EvidenceAssessment
 from api.verification.evidence_dossier import ReasoningEvidenceItem
-from api.services import LLMProviderUnavailableError
-
+from api.services import ClaimGateError, LLMProviderUnavailableError
 
 class VerificationRunURLRuntimeTests(TestCase):
     def setUp(self):
@@ -167,34 +166,95 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assertFalse(Claim.objects.filter(pk=self.claim.pk).exists())
         self._assert_no_run_or_verification()
 
-    def test_query_extraction_failure_preserves_deletion_without_run(self):
-        self.query.side_effect = RuntimeError("Query extraction unavailable")
-        self._invoke()
-        self.assertFalse(Claim.objects.filter(pk=self.claim.pk).exists())
-        self._assert_no_run_or_verification()
+    def test_claim_gate_failure_preserves_claim_and_marks_run_failed(self):
+        self.query.side_effect = ClaimGateError(
+            "ClaimGate analysis failed."
+        )
 
-    def test_run_starts_only_after_extraction_and_before_verification(self):
-        def observe_extraction(*args):
-            self.assertEqual(VerificationRun.objects.count(), 0)
+        with self.assertRaises(ClaimGateError):
+            self._invoke()
+
+        self.assertTrue(
+            Claim.objects.filter(pk=self.claim.pk).exists()
+        )
+
+        run = self.claim.verification_runs.get()
+
+        self._assert_terminal(
+            run,
+            VerificationRun.Status.FAILED,
+        )
+
+        self.assertEqual(
+            run.failure_stage,
+            "claim_gate",
+        )
+        self.assertEqual(
+            run.failure_code,
+            "CLAIM_GATE_FAILED",
+        )
+
+        self.claim.refresh_from_db()
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.final_verdict)
+
+        self.save_claim.assert_not_called()
+        self.vault.assert_not_called()
+        self.bridge.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
+        self.assess_evidence.assert_not_called()
+
+    def test_run_is_running_during_claim_gate_and_verification(self):
+        def observe_claim_gate(*args):
+            run = self.claim.verification_runs.get()
+
+            self.assertEqual(
+                run.status,
+                VerificationRun.Status.RUNNING,
+            )
+
             return self.cleaned
 
         def observe_vault(*args, **kwargs):
+            run = self.claim.verification_runs.get()
+
             self.assertEqual(
-                self.claim.verification_runs.get().status, VerificationRun.Status.RUNNING,
+                run.status,
+                VerificationRun.Status.RUNNING,
             )
+
             return None
 
-        self.query.side_effect = observe_extraction
+        self.query.side_effect = observe_claim_gate
         self.vault.side_effect = observe_vault
+
         run = self._execute()
-        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+
+        self._assert_terminal(
+            run,
+            VerificationRun.Status.COMPLETED,
+        )
+
         self.create_run.assert_called_once_with(self.claim)
         self.start_run.assert_called_once()
-        self.assertEqual(self.start_run.call_args.args[0].pk, run.pk)
-        self.assertEqual(VerificationRun.objects.count(), 1)
-        self.assertIsNone(run.triggered_by_id)
+
         self.assertEqual(
-            run.pipeline_version, VerificationRun._meta.get_field("pipeline_version").get_default(),
+            self.start_run.call_args.args[0].pk,
+            run.pk,
+        )
+
+        self.assertEqual(
+            VerificationRun.objects.count(),
+            1,
+        )
+
+        self.assertIsNone(run.triggered_by_id)
+
+        self.assertEqual(
+            run.pipeline_version,
+            VerificationRun._meta.get_field(
+                "pipeline_version"
+            ).get_default(),
         )
 
     def test_repeated_url_attempts_create_distinct_runs(self):
@@ -203,11 +263,20 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assertNotEqual(first.pk, second.pk)
         self.assertEqual(self.claim.verification_runs.count(), 2)
 
-    def test_out_of_scope_abstains(self):
+    def test_out_of_scope_abstains_without_persisting_verdict(self):
         self.cleaned["cleaned_claim"] = "OUT_OF_SCOPE"
-        self._assert_terminal(self._execute(), VerificationRun.Status.ABSTAINED)
+
+        self._assert_terminal(
+            self._execute(),
+            VerificationRun.Status.ABSTAINED,
+        )
+
         self.claim.refresh_from_db()
-        self.assertEqual(self.claim.ai_verdict, "OUT_OF_SCOPE")
+
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.final_verdict)
+
+        self.save_claim.assert_not_called()
         self.vault.assert_not_called()
         self.bridge.assert_not_called()
         self.retrieve_tavily.assert_not_called()
