@@ -261,12 +261,20 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.clean.assert_called_once()
         self.assertEqual(self.claim.verification_runs.count(), 1)
 
-    def test_out_of_scope_abstains(self):
+    def test_out_of_scope_abstains_without_persisting_verdict(self):
         self.cleaned["cleaned_claim"] = "OUT_OF_SCOPE"
-        self._assert_terminal(self._execute(), VerificationRun.Status.ABSTAINED)
+
+        self._assert_terminal(
+            self._execute(),
+            VerificationRun.Status.ABSTAINED,
+        )
+
         self.claim.refresh_from_db()
-        self.assertEqual(self.claim.ai_verdict, "OUT_OF_SCOPE")
+
+        self.assertIsNone(self.claim.ai_verdict)
         self.assertIsNone(self.claim.final_verdict)
+
+        self.save_claim.assert_not_called()
         self.vault.assert_not_called()
         self.retrieve_gfc.assert_not_called()
         self.retrieve_tavily.assert_not_called()

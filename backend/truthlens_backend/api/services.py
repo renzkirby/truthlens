@@ -46,6 +46,51 @@ class LLMProviderUnavailableError(RuntimeError):
     """No configured LLM provider successfully completed the request."""
 
 
+class ClaimGateError(RuntimeError):
+    """Raised when claim-gate analysis cannot complete reliably."""
+
+
+KNOWN_SATIRE_SOURCE_DOMAINS = {
+    "theonion.com",
+    "babylonbee.com",
+}
+
+
+def _is_known_satire_source_url(source_url):
+    if not isinstance(source_url, str) or not source_url.strip():
+        return False
+
+    try:
+        hostname = urlparse(source_url.strip()).hostname
+    except (TypeError, ValueError):
+        return False
+
+    if not hostname:
+        return False
+
+    normalized_hostname = hostname.lower()
+    return any(
+        normalized_hostname == domain
+        or normalized_hostname.endswith(f".{domain}")
+        for domain in KNOWN_SATIRE_SOURCE_DOMAINS
+    )
+
+
+def _normalize_claim_gate_stance(result, *, has_known_satire_provenance):
+    normalized_result = result.copy()
+    if has_known_satire_provenance:
+        normalized_result["article_stance"] = "SATIRE"
+        return normalized_result
+
+    stance = normalized_result.get("article_stance")
+    if isinstance(stance, str):
+        stance = stance.strip().upper()
+    if stance not in {"DEBUNKING", "REPORTING", "NEUTRAL"}:
+        stance = "NEUTRAL"
+    normalized_result["article_stance"] = stance
+    return normalized_result
+
+
 def _model_from_env(name, default):
     return os.environ.get(name, "").strip() or default
 
@@ -246,39 +291,53 @@ def clean_ocr_text(raw_text):
     Task: Your job is to extract the core claim from the text by strictly following these steps:
     1. Identify the CENTRAL NARRATIVE of the provided text.
     2. Extract the primary verifiable claim. Translate any local slang or Taglish to English.
-    3. UNDERLYING CLAIM EXTRACTION: If the text is actively debunking a rumor, your cleaned_claim MUST be the original fake rumor itself. If the text is SATIRE, extract the absurd claim as if it were stated seriously. NEVER use meta-phrases like "The satirical publication claims..." or "A fact-checker stated...". Just extract the raw claim.
+    3. UNDERLYING CLAIM EXTRACTION: If the text is actively debunking a rumor, your cleaned_claim MUST be the original fake rumor itself. If the text looks humorous or parody-like, still extract its underlying factual proposition as if it were stated seriously. NEVER use meta-phrases like "The satirical publication claims..." or "A fact-checker stated...". Just extract the raw claim.
     4. QUOTE CARDS & ATTRIBUTIONS (CRITICAL): If the text is a quote attributed to a specific person, journalist, or publication (e.g., a quote card), the `cleaned_claim` MUST explicitly state who said it (e.g., "Ogie Diaz stated that..."). Do not strip the speaker's name.
     5. CONTEXT RETENTION: You MUST include essential context in the cleaned_claim (e.g., specific names, dates, locations). Do not over-prune. 
     6. SEARCH QUERY OPTIMIZATION: Generate a highly optimized search query of exactly 6-10 keywords. You MUST prioritize proper nouns, the speaker's name, and unique identifiers to prevent ambiguous search results.
     7. Determine the article's own stance toward the extracted claim:
         - DEBUNKING: The article is a fact-check disproving the extracted claim.
         - REPORTING: The article neutrally reports the extracted claim as true.
-        - SATIRE: The text is from a parody source OR the text is deeply absurd/comedic.
+        - NEUTRAL: The text presents the claim without clearly endorsing or debunking it.
     8. OUT OF SCOPE DETECTION (CRITICAL GATEKEEPER): If the text is a personal message, a greeting, a menu, a recipe, song lyrics, random UI buttons, a selfie with no text, or contains NO verifiable public factual claim or rumor, you MUST set "cleaned_claim" to exactly "OUT_OF_SCOPE".
 
-    SPECIAL RULE — KNOWN SATIRE & MEME TROPES:
-    1. If the text or Source URL originates from known satire (e.g., theonion.com, babylonbee), set "article_stance" to "SATIRE".
-    2. MEME DETECTION: Be highly vigilant for misspelled news logos (e.g., "INQIURER" instead of "INQUIRER") or the use of fictional/pop-culture characters (e.g., TV doctors, actors, adult film stars) placed in real-world news contexts. If detected, you MUST set "article_stance" to "SATIRE".
+    ANTI-FALSE-SATIRE RULES:
+    - Absurdity alone is NOT evidence of satire.
+    - Humor alone is NOT evidence of satire.
+    - Sensational or clickbait language is NOT evidence of satire.
+    - Meme formatting is NOT evidence of satire.
+    - Altered or misspelled logos are NOT evidence of satire.
+    - Fictional, pop-culture, or celebrity characters appearing in a claim are NOT by themselves evidence of satire.
+    - Fabricated or implausible claims must still be extracted and passed to evidence verification.
+    - Do not decide that a claim is satire merely because it looks ridiculous.
+    - For humorous or parody-looking text, still extract the underlying factual proposition normally.
     
     JSON Schema:
     {
         "cleaned_claim": "A complete sentence detailing the core claim AND its specific context.",
         "search_query": "Keyword1 Keyword2 Keyword3...",
-        "article_stance": "DEBUNKING, REPORTING, or SATIRE"
+        "article_stance": "DEBUNKING, REPORTING, or NEUTRAL"
     }
     """
 
     try:
         response_text = call_llm_with_fallback(system_instructions, f"Text: {raw_text}")
-        logger.debug("clean_ocr_text OUTPUT: %s", response_text)
-        return _parse_llm_json(response_text)
-    except Exception as e:
-        logger.error("Gatekeeper AI Error: %s", e)
-        return {
-            "cleaned_claim": "OUT_OF_SCOPE",
-            "search_query": "error",
-            "article_stance": "NEUTRAL",
-        }
+        result = _parse_llm_json(response_text)
+        cleaned_claim = result.get("cleaned_claim") if isinstance(result, dict) else None
+        if not isinstance(cleaned_claim, str) or not cleaned_claim.strip():
+            raise ValueError("ClaimGate returned an unusable result")
+        return _normalize_claim_gate_stance(
+            result,
+            has_known_satire_provenance=False,
+        )
+    except Exception as exc:
+        logger.error(
+            "ClaimGate analysis failed in clean_ocr_text (%s).",
+            _provider_error_label(exc),
+        )
+        raise ClaimGateError(
+            "ClaimGate analysis could not complete reliably."
+        ) from exc
 
 
 def is_fact_check_relevant(original_text, fact_check_text):
@@ -564,40 +623,54 @@ def extract_search_query(text, source_url=""):
     Task: Your job is to extract the core claim from the text by strictly following these steps:
     1. Identify the CENTRAL NARRATIVE of the provided text.
     2. Extract the primary verifiable claim. Translate any local slang or Taglish to English.
-    3. UNDERLYING CLAIM EXTRACTION: If the text is actively debunking a rumor, your cleaned_claim MUST be the original fake rumor itself. If the text is SATIRE, extract the absurd claim as if it were stated seriously. NEVER use meta-phrases like "The satirical publication claims..." or "A fact-checker stated...". Just extract the raw claim.
+    3. UNDERLYING CLAIM EXTRACTION: If the text is actively debunking a rumor, your cleaned_claim MUST be the original fake rumor itself. If the text looks humorous or parody-like, still extract its underlying factual proposition as if it were stated seriously. NEVER use meta-phrases like "The satirical publication claims..." or "A fact-checker stated...". Just extract the raw claim.
     4. QUOTE CARDS & ATTRIBUTIONS (CRITICAL): If the text is a quote attributed to a specific person, journalist, or publication (e.g., a quote card), the `cleaned_claim` MUST explicitly state who said it (e.g., "Ogie Diaz stated that..."). Do not strip the speaker's name.
     5. CONTEXT RETENTION: You MUST include essential context in the cleaned_claim (e.g., specific names, dates, locations). Do not over-prune. 
     6. SEARCH QUERY OPTIMIZATION: Generate a highly optimized search query of exactly 6-10 keywords. You MUST prioritize proper nouns, the speaker's name, and unique identifiers to prevent ambiguous search results.
     7. Determine the article's own stance toward the extracted claim:
         - DEBUNKING: The article is a fact-check disproving the extracted claim.
         - REPORTING: The article neutrally reports the extracted claim as true.
-        - SATIRE: The text is from a parody source OR the text is deeply absurd/comedic.
+        - NEUTRAL: The text presents the claim without clearly endorsing or debunking it.
     8. OUT OF SCOPE DETECTION (CRITICAL GATEKEEPER): If the text is a personal message, a greeting, a menu, a recipe, song lyrics, random UI buttons, a selfie with no text, or contains NO verifiable public factual claim or rumor, you MUST set "cleaned_claim" to exactly "OUT_OF_SCOPE".
 
-    SPECIAL RULE — KNOWN SATIRE & MEME TROPES:
-    1. If the text or Source URL originates from known satire (e.g., theonion.com, babylonbee), set "article_stance" to "SATIRE".
-    2. MEME DETECTION: Be highly vigilant for misspelled news logos (e.g., "INQIURER" instead of "INQUIRER") or the use of fictional/pop-culture characters (e.g., TV doctors, actors, adult film stars) placed in real-world news contexts. If detected, you MUST set "article_stance" to "SATIRE".
+    ANTI-FALSE-SATIRE RULES:
+    - Absurdity alone is NOT evidence of satire.
+    - Humor alone is NOT evidence of satire.
+    - Sensational or clickbait language is NOT evidence of satire.
+    - Meme formatting is NOT evidence of satire.
+    - Altered or misspelled logos are NOT evidence of satire.
+    - Fictional, pop-culture, or celebrity characters appearing in a claim are NOT by themselves evidence of satire.
+    - Fabricated or implausible claims must still be extracted and passed to evidence verification.
+    - Do not decide that a claim is satire merely because it looks ridiculous.
+    - For humorous or parody-looking text, still extract the underlying factual proposition normally.
     
     JSON Schema:
     {
         "cleaned_claim": "A complete sentence detailing the core claim, OR exactly 'OUT_OF_SCOPE'.",
         "search_query": "Keyword1 Keyword2 Keyword3...",
-        "article_stance": "DEBUNKING, REPORTING, or SATIRE"
+        "article_stance": "DEBUNKING, REPORTING, or NEUTRAL"
     }
     """
     try:
         response_text = call_llm_with_fallback(
             system_instructions, f"Source URL: {source_url}\n\nText: {text}"
         )
-        logger.debug("extract_search_query OUTPUT: %s", response_text)
-        return _parse_llm_json(response_text)
-    except Exception as e:
-        logger.error("extract_search_query AI Error: %s", e)
-        return {
-            "cleaned_claim": "OUT_OF_SCOPE",
-            "search_query": "error",
-            "article_stance": "NEUTRAL",
-        }
+        result = _parse_llm_json(response_text)
+        cleaned_claim = result.get("cleaned_claim") if isinstance(result, dict) else None
+        if not isinstance(cleaned_claim, str) or not cleaned_claim.strip():
+            raise ValueError("ClaimGate returned an unusable result")
+        return _normalize_claim_gate_stance(
+            result,
+            has_known_satire_provenance=_is_known_satire_source_url(source_url),
+        )
+    except Exception as exc:
+        logger.error(
+            "ClaimGate analysis failed in extract_search_query (%s).",
+            _provider_error_label(exc),
+        )
+        raise ClaimGateError(
+            "ClaimGate analysis could not complete reliably."
+        ) from exc
 
 
 def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRAL"):

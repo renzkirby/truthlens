@@ -1,12 +1,15 @@
 from celery import shared_task
+import math
 import os
 import logging
 import time
 import requests
 import base64
+from numbers import Number
 from django.contrib.auth.models import User
 from .ocr_service import extract_text_from_image
 from .services import (
+    ClaimGateError,
     LLMProviderUnavailableError,
     process_image,
     clean_ocr_text,
@@ -52,6 +55,10 @@ from .verification.runs import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class ClaimPersistenceError(RuntimeError):
+    """Raised when automated analysis cannot be persisted to a Claim."""
 
 
 def _float_env(name, default):
@@ -560,19 +567,8 @@ def execute_core_text_pipeline(raw_text, claim_id):
             article_stance = cleaned.get("article_stance", "NEUTRAL")
 
             if cleaned_claim == "OUT_OF_SCOPE":
-                _save_claim(
-                    claim_id,
-                    {
-                        "verdict": "OUT_OF_SCOPE",
-                        "summary": "This content appears to be a personal statement, opinion, greeting, or non-factual text. TruthLens can only verify objective claims, news, and rumors.",
-                        "confidence_score": 0,
-                        "score_context": "No verifiable factual claim detected.",
-                    },
-                    "System Filter",
-                    raw_text,
-                    [],
-                )
-                outcome = "completed_out_of_scope"
+                logger.info("Claim %s was gated as out of scope.", claim_id)
+                outcome = "abstained_out_of_scope"
                 selected_verdict = "OUT_OF_SCOPE"
                 _log_stage(
                     claim_id,
@@ -943,6 +939,18 @@ def execute_core_text_pipeline(raw_text, claim_id):
                     else None
                 )
 
+        except ClaimGateError as e:
+            pipeline_error = e
+            outcome = "claim_gate_failed"
+            logger.error("ClaimGate processing failed for claim %s.", claim_id)
+            raise
+
+        except ClaimPersistenceError as e:
+            pipeline_error = e
+            outcome = "claim_persistence_failed"
+            logger.error("Claim persistence failed for claim %s.", claim_id)
+            raise
+
         except LLMProviderUnavailableError as e:
             pipeline_error = e
             outcome = "final_evaluator_unavailable"
@@ -986,7 +994,25 @@ def execute_core_text_pipeline(raw_text, claim_id):
         if run is not None:
             try:
                 if pipeline_error is not None:
-                    if isinstance(pipeline_error, LLMProviderUnavailableError):
+                    if isinstance(pipeline_error, ClaimGateError):
+                        fail_verification_run(
+                            run,
+                            failure_stage="claim_gate",
+                            failure_code="CLAIM_GATE_FAILED",
+                            failure_message=(
+                                f"ClaimGate processing failed for claim {claim_id}."
+                            ),
+                        )
+                    elif isinstance(pipeline_error, ClaimPersistenceError):
+                        fail_verification_run(
+                            run,
+                            failure_stage="claim_persistence",
+                            failure_code="CLAIM_SAVE_FAILED",
+                            failure_message=(
+                                f"Claim persistence failed for claim {claim_id}."
+                            ),
+                        )
+                    elif isinstance(pipeline_error, LLMProviderUnavailableError):
                         fail_verification_run(
                             run,
                             failure_stage="final_evaluator",
@@ -1048,14 +1074,6 @@ def url_fact_check_process(url, claim_id):
         raw_text = tavily_data["results"][0]["raw_content"]
         cleaned_text = clean_extracted_text(raw_text)
 
-        query_extract_started_at = time.perf_counter()
-        result = extract_search_query(cleaned_text, url)
-        _log_stage(claim_id, "extract_search_query", query_extract_started_at)
-
-        cleaned_claim = result.get("cleaned_claim")
-        search_query = result.get("search_query")
-        article_stance = result.get("article_stance", "NEUTRAL")
-
     except Exception as e:
         logger.error("URL extraction error for claim %s: %s", claim_id, e)
         _log_stage(
@@ -1077,22 +1095,18 @@ def url_fact_check_process(url, claim_id):
     pipeline_error = None
     runtime_error_propagating = False
     try:
+        query_extract_started_at = time.perf_counter()
+        result = extract_search_query(cleaned_text, url)
+        _log_stage(claim_id, "extract_search_query", query_extract_started_at)
+
+        cleaned_claim = result.get("cleaned_claim")
+        search_query = result.get("search_query")
+        article_stance = result.get("article_stance", "NEUTRAL")
+
         # Step 2 — OUT_OF_SCOPE check
         if cleaned_claim == "OUT_OF_SCOPE":
-            logger.info("Claim is out of scope. Saving rejection verdict.")
-            _save_claim(
-                claim_id,
-                {
-                    "verdict": "OUT_OF_SCOPE",
-                    "summary": "This content appears to be a personal statement, opinion, greeting, or non-factual text. TruthLens can only verify objective claims, news, and rumors.",
-                    "confidence_score": 0,
-                    "score_context": "No verifiable factual claim detected.",
-                },
-                "System Filter",
-                cleaned_text,
-                [],
-            )
-            outcome = "completed_out_of_scope"
+            logger.info("Claim %s was gated as out of scope.", claim_id)
+            outcome = "abstained_out_of_scope"
             selected_verdict = "OUT_OF_SCOPE"
             _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
             return
@@ -1331,20 +1345,17 @@ def url_fact_check_process(url, claim_id):
                 claim_id, "url_tavily_failed", tavily_search_started_at, error=str(e)[:120]
             )
             logger.error("Tavily search error for claim %s: %s", claim_id, e)
-            try:
-                _save_claim(
-                    claim_id,
-                    {
-                        "verdict": "UNVERIFIED",
-                        "summary": "Could not retrieve relevant information to verify the claim.",
-                        "confidence_score": 0,
-                    },
-                    "Live Web Search",
-                    cleaned_text,
-                    [],
-                )
-            except Exception as save_err:
-                logger.error("_save_claim also failed for claim %s: %s", claim_id, save_err)
+            _save_claim(
+                claim_id,
+                {
+                    "verdict": "UNVERIFIED",
+                    "summary": "Could not retrieve relevant information to verify the claim.",
+                    "confidence_score": 0,
+                },
+                "Live Web Search",
+                cleaned_text,
+                [],
+            )
             outcome = "completed_tavily_fallback_unverified"
             selected_verdict = "UNVERIFIED"
         else:
@@ -1401,27 +1412,20 @@ def url_fact_check_process(url, claim_id):
                         error=str(e)[:120],
                     )
                     logger.error("Tavily search error for claim %s: %s", claim_id, e)
-                    try:
-                        _save_claim(
-                            claim_id,
-                            {
-                                "verdict": "UNVERIFIED",
-                                "summary": (
-                                    "Could not retrieve relevant information "
-                                    "to verify the claim."
-                                ),
-                                "confidence_score": 0,
-                            },
-                            "Live Web Search",
-                            cleaned_text,
-                            [],
-                        )
-                    except Exception as save_err:
-                        logger.error(
-                            "_save_claim also failed for claim %s: %s",
-                            claim_id,
-                            save_err,
-                        )
+                    _save_claim(
+                        claim_id,
+                        {
+                            "verdict": "UNVERIFIED",
+                            "summary": (
+                                "Could not retrieve relevant information "
+                                "to verify the claim."
+                            ),
+                            "confidence_score": 0,
+                        },
+                        "Live Web Search",
+                        cleaned_text,
+                        [],
+                    )
                     outcome = "completed_tavily_fallback_unverified"
                     selected_verdict = "UNVERIFIED"
                     return
@@ -1497,6 +1501,13 @@ def url_fact_check_process(url, claim_id):
         finally:
             _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
 
+    except ClaimGateError as exc:
+        pipeline_error = exc
+        outcome = "claim_gate_failed"
+        runtime_error_propagating = True
+        logger.error("ClaimGate processing failed for claim %s.", claim_id)
+        _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
+        raise
     except BaseException as exc:
         pipeline_error = exc
         runtime_error_propagating = True
@@ -1506,7 +1517,25 @@ def url_fact_check_process(url, claim_id):
         if run is not None:
             try:
                 if pipeline_error is not None:
-                    if isinstance(pipeline_error, LLMProviderUnavailableError):
+                    if isinstance(pipeline_error, ClaimGateError):
+                        fail_verification_run(
+                            run,
+                            failure_stage="claim_gate",
+                            failure_code="CLAIM_GATE_FAILED",
+                            failure_message=(
+                                f"ClaimGate processing failed for claim {claim_id}."
+                            ),
+                        )
+                    elif isinstance(pipeline_error, ClaimPersistenceError):
+                        fail_verification_run(
+                            run,
+                            failure_stage="claim_persistence",
+                            failure_code="CLAIM_SAVE_FAILED",
+                            failure_message=(
+                                f"Claim persistence failed for claim {claim_id}."
+                            ),
+                        )
+                    elif isinstance(pipeline_error, LLMProviderUnavailableError):
                         fail_verification_run(
                             run,
                             failure_stage="final_evaluator",
@@ -1538,31 +1567,73 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
     """Save AI analysis output to the Claim record without setting final moderator verdict."""
     from .claim_matching import compute_fingerprint
 
-    if source_urls is None:
-        source_urls = []
-    elif isinstance(source_urls, str):
-        source_urls = [source_urls]
-
-    first = source_urls[0] if source_urls else None
-    if isinstance(first, dict):
-        top_url = first.get("url", "")
-    elif isinstance(first, str):
-        top_url = first
-    else:
-        top_url = verdict.get("source_url") or ""
-
     try:
-        claim = Claim.objects.get(id=claim_id)
+        if not isinstance(verdict, dict):
+            raise TypeError("verdict must be a dictionary")
+
+        if source_urls is None:
+            source_urls = []
+        elif isinstance(source_urls, str):
+            source_urls = [source_urls]
+
+        first = source_urls[0] if source_urls else None
+        if isinstance(first, dict):
+            top_url = first.get("url", "")
+        elif isinstance(first, str):
+            top_url = first
+        else:
+            top_url = verdict.get("source_url") or ""
+
         ai_verdict_value = verdict.get("verdict")
+        if "verdict" in verdict:
+            ai_verdict_max_length = Claim._meta.get_field("ai_verdict").max_length
+            if ai_verdict_value is not None:
+                if not isinstance(ai_verdict_value, str):
+                    raise TypeError("verdict value must be a string or None")
+                if len(ai_verdict_value) > ai_verdict_max_length:
+                    raise ValueError("verdict value exceeds the model field length")
+
+        confidence = verdict.get("confidence_score", 0)
+        if isinstance(confidence, bool):
+            raise TypeError("confidence score must not be boolean")
+        if confidence is None:
+            if ai_verdict_value == "UNVERIFIED":
+                confidence = 40
+        else:
+            if not isinstance(confidence, Number):
+                raise TypeError("confidence score must be numeric")
+            try:
+                normalized_confidence = float(confidence)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise ValueError("confidence score cannot be stored") from exc
+            if not math.isfinite(normalized_confidence):
+                raise ValueError("confidence score must be finite")
+            confidence = normalized_confidence
+            if ai_verdict_value == "UNVERIFIED" and confidence == 0:
+                confidence = 40
+
+        score_context = verdict.get("score_context")
+        if score_context is not None:
+            score_context = str(score_context)
+            score_context_max_length = Claim._meta.get_field(
+                "score_context"
+            ).max_length
+            original_score_context_length = len(score_context)
+            if original_score_context_length > score_context_max_length:
+                logger.warning(
+                    "Truncating score_context for claim %s from %s to %s characters.",
+                    claim_id,
+                    original_score_context_length,
+                    score_context_max_length,
+                )
+                score_context = score_context[:score_context_max_length]
+
+        claim = Claim.objects.get(id=claim_id)
         claim.ai_verdict = ai_verdict_value
         # Keep final_verdict reserved for the authoritative adjudication service.
         claim.ai_summary = verdict.get("summary")
         claim.ai_reasoning = verdict.get("reasoning")
-        claim.score_context = verdict.get("score_context")
-
-        confidence = verdict.get("confidence_score", 0)
-        if ai_verdict_value == "UNVERIFIED" and (confidence == 0 or confidence is None):
-            confidence = 40
+        claim.score_context = score_context
         claim.consensus_score = confidence
         claim.source_type = source_type
         claim.context_text = context_text
@@ -1589,11 +1660,10 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
                 embedding = generate_embedding(context_text)
                 if embedding:
                     claim.claim_embedding = embedding
-            except Exception as e:
+            except Exception:
                 logger.warning(
-                    "Failed to generate embedding during _save_claim for claim %s: %s",
+                    "Failed to generate embedding during _save_claim for claim %s.",
                     claim_id,
-                    e,
                 )
 
         claim.save(
@@ -1620,13 +1690,14 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
             claim.ai_verdict,
             claim.claim_fingerprint,
         )
-    except Claim.DoesNotExist:
-        logger.warning("Claim %s not found — skipping save", claim_id)
-    except Exception as e:
-        logger.error("Save failed for claim %s: %s", claim_id, e)
-        import traceback
-
-        traceback.print_exc()
+        return claim
+    except ClaimPersistenceError:
+        raise
+    except Exception as exc:
+        logger.error("Claim persistence failed for claim %s.", claim_id)
+        raise ClaimPersistenceError(
+            f"Claim persistence failed for claim {claim_id}."
+        ) from exc
 
 
 @shared_task
