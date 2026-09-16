@@ -16,6 +16,7 @@ from .models import (
     KnowledgeReuseEvent,
     OfficialFactCheck,
 )
+from .organization_public_presence_service import is_public_partner_eligible
 
 SEMANTIC_MATCH_THRESHOLD = 0.80
 FULL_TEXT_RANK_THRESHOLD = 0.08
@@ -369,10 +370,18 @@ def build_published_fact_check_payload(
     organization = None
 
     if fact_check.organization:
+        partner = fact_check.organization
+        public_profile_available = is_public_partner_eligible(partner)
         organization = {
-            "id": str(fact_check.organization.id),
-            "name": (fact_check.organization.name),
-            "slug": (fact_check.organization.slug),
+            "id": str(partner.id),
+            "name": partner.name,
+            "slug": partner.slug,
+            "public_profile_available": public_profile_available,
+            "logo_url": (
+                partner.logo_url
+                if public_profile_available and partner.public_logo_enabled
+                else None
+            ),
         }
 
     return {
@@ -383,6 +392,7 @@ def build_published_fact_check_payload(
         "verdict": (fact_check.verdict),
         "summary": (fact_check.summary),
         "version": (fact_check.version),
+        "revision_kind": fact_check.revision_kind,
         "organization": organization,
         "published_at": (
             fact_check.published_at.isoformat() if fact_check.published_at else None
