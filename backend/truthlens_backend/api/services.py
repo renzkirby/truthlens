@@ -91,6 +91,64 @@ def _normalize_claim_gate_stance(result, *, has_known_satire_provenance):
     return normalized_result
 
 
+def _normalize_claim_gate_queries(result):
+    """Normalize bounded retrieval queries while preserving the primary query."""
+    normalized_result = result.copy()
+
+    cleaned_claim = normalized_result.get("cleaned_claim")
+    if not isinstance(cleaned_claim, str) or not cleaned_claim.strip():
+        raise ValueError("ClaimGate returned an unusable cleaned claim")
+
+    cleaned_claim = cleaned_claim.strip()
+    normalized_result["cleaned_claim"] = cleaned_claim
+
+    primary_query = normalized_result.get("search_query")
+    if isinstance(primary_query, str):
+        primary_query = " ".join(primary_query.split())
+    else:
+        primary_query = ""
+
+    if cleaned_claim == "OUT_OF_SCOPE":
+        normalized_result["search_query"] = primary_query
+        normalized_result["search_queries"] = []
+        return normalized_result
+
+    if not primary_query:
+        raise ValueError("ClaimGate returned no usable search query")
+
+    candidates = [primary_query]
+
+    raw_queries = normalized_result.get("search_queries")
+    if isinstance(raw_queries, list):
+        candidates.extend(raw_queries)
+
+    normalized_queries = []
+    seen_queries = set()
+
+    for candidate in candidates:
+        if not isinstance(candidate, str):
+            continue
+
+        query = " ".join(candidate.split())
+        if not query:
+            continue
+
+        identity = query.casefold()
+        if identity in seen_queries:
+            continue
+
+        seen_queries.add(identity)
+        normalized_queries.append(query)
+
+        if len(normalized_queries) >= 3:
+            break
+
+    normalized_result["search_query"] = normalized_queries[0]
+    normalized_result["search_queries"] = normalized_queries
+
+    return normalized_result
+
+
 def _model_from_env(name, default):
     return os.environ.get(name, "").strip() or default
 
@@ -291,10 +349,28 @@ def clean_ocr_text(raw_text):
     Task: Your job is to extract the core claim from the text by strictly following these steps:
     1. Identify the CENTRAL NARRATIVE of the provided text.
     2. Extract the primary verifiable claim. Translate any local slang or Taglish to English.
+
+    ATOMIC CLAIM RULE:
+    - cleaned_claim must represent ONE independently verifiable factual proposition.
+    - If the input contains multiple separate factual claims, select the single claim that best represents the central narrative.
+    - Do not merge unrelated assertions.
+    - Preserve the actor, action, object, location, date/time, quantity, and negation when necessary.
+    - A conjunction is acceptable only when the parts describe the same inseparable factual event.
+    - Do not invent missing details.
+
     3. UNDERLYING CLAIM EXTRACTION: If the text is actively debunking a rumor, your cleaned_claim MUST be the original fake rumor itself. If the text looks humorous or parody-like, still extract its underlying factual proposition as if it were stated seriously. NEVER use meta-phrases like "The satirical publication claims..." or "A fact-checker stated...". Just extract the raw claim.
     4. QUOTE CARDS & ATTRIBUTIONS (CRITICAL): If the text is a quote attributed to a specific person, journalist, or publication (e.g., a quote card), the `cleaned_claim` MUST explicitly state who said it (e.g., "Ogie Diaz stated that..."). Do not strip the speaker's name.
     5. CONTEXT RETENTION: You MUST include essential context in the cleaned_claim (e.g., specific names, dates, locations). Do not over-prune. 
-    6. SEARCH QUERY OPTIMIZATION: Generate a highly optimized search query of exactly 6-10 keywords. You MUST prioritize proper nouns, the speaker's name, and unique identifiers to prevent ambiguous search results.
+
+    SEARCH QUERY GENERATION:
+    - Generate 1 to 3 distinct search queries for the SAME atomic claim.
+    - search_query is the primary query and MUST exactly equal search_queries[0].
+    - Each query should normally contain 6-10 useful keywords.
+    - Preserve important proper nouns, organizations, dates, locations, numbers, quoted phrases, and named people when relevant.
+    - Alternative queries should vary wording or retrieval angle without changing the factual proposition.
+    - Do NOT introduce facts, entities, dates, or events absent from the source claim.
+    - Prefer precise retrieval queries over generic topic searches.
+
     7. Determine the article's own stance toward the extracted claim:
         - DEBUNKING: The article is a fact-check disproving the extracted claim.
         - REPORTING: The article neutrally reports the extracted claim as true.
@@ -315,17 +391,21 @@ def clean_ocr_text(raw_text):
     JSON Schema:
     {
         "cleaned_claim": "A complete sentence detailing the core claim AND its specific context.",
-        "search_query": "Keyword1 Keyword2 Keyword3...",
+        "search_query": "Primary 6-10 keyword retrieval query.",
+        "search_queries": [
+            "Primary query identical to search_query.",
+            "Optional alternate query for the same claim.",
+            "Optional second alternate query for the same claim."
+        ],
         "article_stance": "DEBUNKING, REPORTING, or NEUTRAL"
     }
+    For OUT_OF_SCOPE, search_queries may be empty.
     """
 
     try:
         response_text = call_llm_with_fallback(system_instructions, f"Text: {raw_text}")
         result = _parse_llm_json(response_text)
-        cleaned_claim = result.get("cleaned_claim") if isinstance(result, dict) else None
-        if not isinstance(cleaned_claim, str) or not cleaned_claim.strip():
-            raise ValueError("ClaimGate returned an unusable result")
+        result = _normalize_claim_gate_queries(result)
         return _normalize_claim_gate_stance(
             result,
             has_known_satire_provenance=False,
@@ -623,10 +703,28 @@ def extract_search_query(text, source_url=""):
     Task: Your job is to extract the core claim from the text by strictly following these steps:
     1. Identify the CENTRAL NARRATIVE of the provided text.
     2. Extract the primary verifiable claim. Translate any local slang or Taglish to English.
+
+    ATOMIC CLAIM RULE:
+    - cleaned_claim must represent ONE independently verifiable factual proposition.
+    - If the input contains multiple separate factual claims, select the single claim that best represents the central narrative.
+    - Do not merge unrelated assertions.
+    - Preserve the actor, action, object, location, date/time, quantity, and negation when necessary.
+    - A conjunction is acceptable only when the parts describe the same inseparable factual event.
+    - Do not invent missing details.
+
     3. UNDERLYING CLAIM EXTRACTION: If the text is actively debunking a rumor, your cleaned_claim MUST be the original fake rumor itself. If the text looks humorous or parody-like, still extract its underlying factual proposition as if it were stated seriously. NEVER use meta-phrases like "The satirical publication claims..." or "A fact-checker stated...". Just extract the raw claim.
     4. QUOTE CARDS & ATTRIBUTIONS (CRITICAL): If the text is a quote attributed to a specific person, journalist, or publication (e.g., a quote card), the `cleaned_claim` MUST explicitly state who said it (e.g., "Ogie Diaz stated that..."). Do not strip the speaker's name.
     5. CONTEXT RETENTION: You MUST include essential context in the cleaned_claim (e.g., specific names, dates, locations). Do not over-prune. 
-    6. SEARCH QUERY OPTIMIZATION: Generate a highly optimized search query of exactly 6-10 keywords. You MUST prioritize proper nouns, the speaker's name, and unique identifiers to prevent ambiguous search results.
+
+    SEARCH QUERY GENERATION:
+    - Generate 1 to 3 distinct search queries for the SAME atomic claim.
+    - search_query is the primary query and MUST exactly equal search_queries[0].
+    - Each query should normally contain 6-10 useful keywords.
+    - Preserve important proper nouns, organizations, dates, locations, numbers, quoted phrases, and named people when relevant.
+    - Alternative queries should vary wording or retrieval angle without changing the factual proposition.
+    - Do NOT introduce facts, entities, dates, or events absent from the source claim.
+    - Prefer precise retrieval queries over generic topic searches.
+
     7. Determine the article's own stance toward the extracted claim:
         - DEBUNKING: The article is a fact-check disproving the extracted claim.
         - REPORTING: The article neutrally reports the extracted claim as true.
@@ -647,18 +745,22 @@ def extract_search_query(text, source_url=""):
     JSON Schema:
     {
         "cleaned_claim": "A complete sentence detailing the core claim, OR exactly 'OUT_OF_SCOPE'.",
-        "search_query": "Keyword1 Keyword2 Keyword3...",
+        "search_query": "Primary 6-10 keyword retrieval query.",
+        "search_queries": [
+            "Primary query identical to search_query.",
+            "Optional alternate query for the same claim.",
+            "Optional second alternate query for the same claim."
+        ],
         "article_stance": "DEBUNKING, REPORTING, or NEUTRAL"
     }
+    For OUT_OF_SCOPE, search_queries may be empty.
     """
     try:
         response_text = call_llm_with_fallback(
             system_instructions, f"Source URL: {source_url}\n\nText: {text}"
         )
         result = _parse_llm_json(response_text)
-        cleaned_claim = result.get("cleaned_claim") if isinstance(result, dict) else None
-        if not isinstance(cleaned_claim, str) or not cleaned_claim.strip():
-            raise ValueError("ClaimGate returned an unusable result")
+        result = _normalize_claim_gate_queries(result)
         return _normalize_claim_gate_stance(
             result,
             has_known_satire_provenance=_is_known_satire_source_url(source_url),
