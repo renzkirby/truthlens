@@ -440,6 +440,8 @@ def evaluate_image_claim_with_gfc(
         response_text = call_llm_with_fallback(system_instructions, user_data)
         logger.debug("evaluate_image_claim_with_gfc OUTPUT: %s", response_text)
         return _parse_llm_json(response_text)
+    except LLMProviderUnavailableError:
+        raise
     except Exception as e:
         logger.error("GFC AI Error: %s", e)
         return {
