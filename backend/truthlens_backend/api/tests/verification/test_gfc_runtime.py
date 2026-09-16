@@ -1,8 +1,6 @@
 from contextlib import ExitStack
 from unittest.mock import Mock, call, patch
 
-import requests
-
 from django.db import IntegrityError
 from django.test import SimpleTestCase, TestCase
 
@@ -16,6 +14,10 @@ from api.tasks import (
     _retrieve_and_ingest_gfc,
     execute_core_text_pipeline,
     url_fact_check_process,
+)
+
+from api.verification.providers.google_fact_check import (
+    GoogleFactCheckProviderError,
 )
 
 
@@ -123,11 +125,15 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         ):
             provider = provider_class.return_value
 
-            provider.search_with_payload.side_effect = requests.HTTPError(
-                "Google unavailable"
+            provider.search_with_payload.side_effect = (
+                GoogleFactCheckProviderError(
+                    "Google Fact Check request failed: HTTP 400"
+                )
             )
 
-            with self.assertRaises(requests.HTTPError):
+            with self.assertRaises(
+                GoogleFactCheckProviderError
+            ):
                 _retrieve_and_ingest_gfc(
                     "example claim",
                     "claim-id",
@@ -377,7 +383,9 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             ),
             patch(
                 "api.tasks._retrieve_and_ingest_gfc",
-                side_effect=requests.HTTPError("Google unavailable"),
+                side_effect=GoogleFactCheckProviderError(
+                    "Google Fact Check request failed: HTTP 400"
+                ),
             ) as retrieve_gfc,
             patch(
                 "api.tasks.evaluate_image_claim_with_tavily",
@@ -708,7 +716,9 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             ),
             patch(
                 "api.tasks._retrieve_and_ingest_gfc",
-                side_effect=requests.HTTPError("Google unavailable"),
+                side_effect=GoogleFactCheckProviderError(
+                    "Google Fact Check request failed: HTTP 400"
+                ),
             ) as retrieve_gfc,
             patch(
                 "api.tasks.evaluate_url_claim_with_tavily",
@@ -862,17 +872,34 @@ class GoogleFactCheckEvidenceLinkingTests(TestCase):
         self.assertIsNone(self.run.failure_code)
 
     def test_provider_failure_skips_ingestion_and_linking(self):
-        self.provider.search_with_payload.side_effect = requests.HTTPError("Provider unavailable")
+        self.provider.search_with_payload.side_effect = (
+            GoogleFactCheckProviderError(
+                "Google Fact Check request failed: HTTP 400"
+            )
+        )
+
         with (
             patch("api.tasks.ingest_raw_evidence") as ingest,
             patch("api.tasks.link_evidence_sources_to_run") as link_sources,
         ):
-            with self.assertRaisesMessage(requests.HTTPError, "Provider unavailable"):
-                self._retrieve(verification_run=self.run)
+            with self.assertRaisesMessage(
+                GoogleFactCheckProviderError,
+                "Google Fact Check request failed: HTTP 400",
+            ):
+                self._retrieve(
+                    verification_run=self.run
+                )
+
         ingest.assert_not_called()
         link_sources.assert_not_called()
-        self.assertEqual(EvidenceSource.objects.count(), 0)
-        self.assertEqual(VerificationEvidence.objects.count(), 0)
+        self.assertEqual(
+            EvidenceSource.objects.count(),
+            0,
+        )
+        self.assertEqual(
+            VerificationEvidence.objects.count(),
+            0,
+        )
 
     def test_reused_evidence_source_links_without_source_duplication(self):
         existing = ingest_raw_evidence(self.raw_sources)[0]

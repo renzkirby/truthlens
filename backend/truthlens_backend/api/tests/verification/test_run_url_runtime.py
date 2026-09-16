@@ -9,7 +9,7 @@ from api.verification import runs
 from api.verification.contracts import RawEvidence
 from api.verification.evidence_assessment import EvidenceAssessment
 from api.verification.evidence_dossier import ReasoningEvidenceItem
-
+from api.services import ClaimGateError, LLMProviderUnavailableError
 
 class VerificationRunURLRuntimeTests(TestCase):
     def setUp(self):
@@ -166,34 +166,95 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assertFalse(Claim.objects.filter(pk=self.claim.pk).exists())
         self._assert_no_run_or_verification()
 
-    def test_query_extraction_failure_preserves_deletion_without_run(self):
-        self.query.side_effect = RuntimeError("Query extraction unavailable")
-        self._invoke()
-        self.assertFalse(Claim.objects.filter(pk=self.claim.pk).exists())
-        self._assert_no_run_or_verification()
+    def test_claim_gate_failure_preserves_claim_and_marks_run_failed(self):
+        self.query.side_effect = ClaimGateError(
+            "ClaimGate analysis failed."
+        )
 
-    def test_run_starts_only_after_extraction_and_before_verification(self):
-        def observe_extraction(*args):
-            self.assertEqual(VerificationRun.objects.count(), 0)
+        with self.assertRaises(ClaimGateError):
+            self._invoke()
+
+        self.assertTrue(
+            Claim.objects.filter(pk=self.claim.pk).exists()
+        )
+
+        run = self.claim.verification_runs.get()
+
+        self._assert_terminal(
+            run,
+            VerificationRun.Status.FAILED,
+        )
+
+        self.assertEqual(
+            run.failure_stage,
+            "claim_gate",
+        )
+        self.assertEqual(
+            run.failure_code,
+            "CLAIM_GATE_FAILED",
+        )
+
+        self.claim.refresh_from_db()
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.final_verdict)
+
+        self.save_claim.assert_not_called()
+        self.vault.assert_not_called()
+        self.bridge.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
+        self.assess_evidence.assert_not_called()
+
+    def test_run_is_running_during_claim_gate_and_verification(self):
+        def observe_claim_gate(*args):
+            run = self.claim.verification_runs.get()
+
+            self.assertEqual(
+                run.status,
+                VerificationRun.Status.RUNNING,
+            )
+
             return self.cleaned
 
         def observe_vault(*args, **kwargs):
+            run = self.claim.verification_runs.get()
+
             self.assertEqual(
-                self.claim.verification_runs.get().status, VerificationRun.Status.RUNNING,
+                run.status,
+                VerificationRun.Status.RUNNING,
             )
+
             return None
 
-        self.query.side_effect = observe_extraction
+        self.query.side_effect = observe_claim_gate
         self.vault.side_effect = observe_vault
+
         run = self._execute()
-        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+
+        self._assert_terminal(
+            run,
+            VerificationRun.Status.COMPLETED,
+        )
+
         self.create_run.assert_called_once_with(self.claim)
         self.start_run.assert_called_once()
-        self.assertEqual(self.start_run.call_args.args[0].pk, run.pk)
-        self.assertEqual(VerificationRun.objects.count(), 1)
-        self.assertIsNone(run.triggered_by_id)
+
         self.assertEqual(
-            run.pipeline_version, VerificationRun._meta.get_field("pipeline_version").get_default(),
+            self.start_run.call_args.args[0].pk,
+            run.pk,
+        )
+
+        self.assertEqual(
+            VerificationRun.objects.count(),
+            1,
+        )
+
+        self.assertIsNone(run.triggered_by_id)
+
+        self.assertEqual(
+            run.pipeline_version,
+            VerificationRun._meta.get_field(
+                "pipeline_version"
+            ).get_default(),
         )
 
     def test_repeated_url_attempts_create_distinct_runs(self):
@@ -202,11 +263,20 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assertNotEqual(first.pk, second.pk)
         self.assertEqual(self.claim.verification_runs.count(), 2)
 
-    def test_out_of_scope_abstains(self):
+    def test_out_of_scope_abstains_without_persisting_verdict(self):
         self.cleaned["cleaned_claim"] = "OUT_OF_SCOPE"
-        self._assert_terminal(self._execute(), VerificationRun.Status.ABSTAINED)
+
+        self._assert_terminal(
+            self._execute(),
+            VerificationRun.Status.ABSTAINED,
+        )
+
         self.claim.refresh_from_db()
-        self.assertEqual(self.claim.ai_verdict, "OUT_OF_SCOPE")
+
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.final_verdict)
+
+        self.save_claim.assert_not_called()
         self.vault.assert_not_called()
         self.bridge.assert_not_called()
         self.retrieve_tavily.assert_not_called()
@@ -598,8 +668,8 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
             directness_score=0.8,
         )
         self.assessor = self.enterContext(patch(
-            "api.tasks.assess_reasoning_evidence_against_claim",
-            return_value=self.assessment,
+            "api.tasks.assess_reasoning_evidence_batch_against_claim",
+            return_value=[self.assessment],
         ))
         self.gfc_provider = self.enterContext(patch(
             "api.tasks.GoogleFactCheckProvider"
@@ -702,7 +772,8 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
         self.assertEqual(link.directness_score, 0.8)
         self.assertEqual(link.recency_score, 0.55)
         self.assessor.assert_called_once()
-        assessed_claim, assessed_item = self.assessor.call_args.args
+        assessed_claim, assessed_items = self.assessor.call_args.args
+        assessed_item = assessed_items[0]
         self.assertEqual(assessed_claim, self.cleaned["cleaned_claim"])
         self.assertIsInstance(assessed_item, ReasoningEvidenceItem)
         self.assertEqual(assessed_item.evidence_link_id, link.pk)
@@ -745,7 +816,7 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
         self.assertEqual(tavily_link.relevance_score, 0.9)
         self.assertEqual(tavily_link.directness_score, 0.8)
         self.assessor.assert_called_once()
-        assessed_item = self.assessor.call_args.args[1]
+        assessed_item = self.assessor.call_args.args[1][0]
         self.assertEqual(assessed_item.evidence_link_id, tavily_link.pk)
         self.assertEqual(
             assessed_item.evidence_role,
@@ -801,11 +872,11 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
         self.evaluate_persisted.assert_called_once()
 
     def test_unknown_numeric_assessment_is_persisted_and_rendered(self):
-        self.assessor.return_value = EvidenceAssessment(
+        self.assessor.return_value = [EvidenceAssessment(
             stance=VerificationEvidence.Stance.UNKNOWN,
             relevance_score=0.4,
             directness_score=0.2,
-        )
+        )]
 
         run = self._execute()
 
@@ -821,11 +892,11 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
         self.assertIn("Directness score: 0.2", evidence_context)
 
     def test_unavailable_assessment_preserves_empty_fields_and_evaluates(self):
-        self.assessor.return_value = EvidenceAssessment(
+        self.assessor.return_value = [EvidenceAssessment(
             stance=VerificationEvidence.Stance.UNKNOWN,
             relevance_score=None,
             directness_score=None,
-        )
+        )]
 
         run = self._execute()
 
@@ -893,3 +964,137 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
         stages = [call.args[1] for call in self.log_stage.call_args_list]
         self.assertIn("url_tavily_persisted_evidence_unavailable", stages)
         self.assertNotIn("url_tavily_llm_evaluation", stages)
+
+    def test_multiple_gfc_items_use_one_batch_and_persist_positionally(self):
+        self.gfc_raw_sources.append(RawEvidence(
+            provider="GOOGLE_FACT_CHECK",
+            url="https://example.com/second-fact-check",
+            content="Second persisted fact-check.",
+            source_type="FACT_CHECK",
+        ))
+        assessments = [
+            EvidenceAssessment(
+                stance=VerificationEvidence.Stance.SUPPORTS,
+                relevance_score=0.7,
+                directness_score=0.6,
+            ),
+            EvidenceAssessment(
+                stance=VerificationEvidence.Stance.REFUTES,
+                relevance_score=0.9,
+                directness_score=0.8,
+            ),
+        ]
+        self.assessor.return_value = assessments
+
+        run = self._execute()
+
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        self.assessor.assert_called_once()
+        assessed_items = self.assessor.call_args.args[1]
+        self.assertEqual(len(assessed_items), 2)
+        for item, assessment in zip(assessed_items, assessments):
+            link = VerificationEvidence.objects.get(pk=item.evidence_link_id)
+            self.assertEqual(link.stance, assessment.stance)
+            self.assertEqual(link.relevance_score, assessment.relevance_score)
+            self.assertEqual(link.directness_score, assessment.directness_score)
+
+    def test_tavily_batch_omits_assessed_item_and_includes_recency_only_item(self):
+        self.gfc_provider.search_with_payload.return_value = ({"claims": []}, [])
+        created_links = {}
+
+        def add_secondary_links(
+            search_query, claim_id, *, stage_prefix, verification_run
+        ):
+            values = (
+                (
+                    "assessed",
+                    {"stance": VerificationEvidence.Stance.CONTEXT},
+                ),
+                ("recency", {"recency_score": 0.45}),
+                ("pristine", {}),
+            )
+            for name, link_values in values:
+                source = EvidenceSource.objects.create(
+                    provider="TAVILY",
+                    canonical_url=f"https://example.com/{name}",
+                    content=f"Persisted {name} evidence.",
+                )
+                created_links[name] = VerificationEvidence.objects.create(
+                    verification_run=verification_run,
+                    evidence_source=source,
+                    evidence_role=VerificationEvidence.EvidenceRole.SECONDARY,
+                    **link_values,
+                )
+            return self.tavily_response
+
+        self.retrieve_tavily.side_effect = add_secondary_links
+        assessments = [
+            EvidenceAssessment(
+                stance=VerificationEvidence.Stance.SUPPORTS,
+                relevance_score=0.8,
+                directness_score=0.7,
+            ),
+            EvidenceAssessment(
+                stance=VerificationEvidence.Stance.REFUTES,
+                relevance_score=0.9,
+                directness_score=0.85,
+            ),
+        ]
+        self.assessor.return_value = assessments
+
+        run = self._execute()
+
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        self.assessor.assert_called_once()
+        assessed_items = self.assessor.call_args.args[1]
+        self.assertEqual(
+            {item.evidence_link_id for item in assessed_items},
+            {created_links["recency"].pk, created_links["pristine"].pk},
+        )
+        created_links["assessed"].refresh_from_db()
+        self.assertEqual(
+            created_links["assessed"].stance,
+            VerificationEvidence.Stance.CONTEXT,
+        )
+        created_links["recency"].refresh_from_db()
+        self.assertEqual(created_links["recency"].recency_score, 0.45)
+        for item, assessment in zip(assessed_items, assessments):
+            link = VerificationEvidence.objects.get(pk=item.evidence_link_id)
+            self.assertEqual(link.stance, assessment.stance)
+            self.assertEqual(link.relevance_score, assessment.relevance_score)
+            self.assertEqual(link.directness_score, assessment.directness_score)
+
+    def test_gfc_final_llm_unavailable_fails_without_tavily_or_fake_verdict(self):
+        error = LLMProviderUnavailableError(
+            "No configured LLM provider successfully completed this request."
+        )
+        self.evaluate_persisted.side_effect = error
+
+        with self.assertRaises(LLMProviderUnavailableError) as raised:
+            tasks.url_fact_check_process.run(self.url, self.claim.pk)
+
+        self.assertIs(raised.exception, error)
+        run = self.claim.verification_runs.get()
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "final_evaluator")
+        self.assertEqual(run.failure_code, "LLM_UNAVAILABLE")
+        self.retrieve_tavily.assert_not_called()
+        self.save_claim.assert_not_called()
+
+    def test_tavily_final_llm_unavailable_fails_without_fake_verdict(self):
+        self.gfc_provider.search_with_payload.return_value = ({"claims": []}, [])
+        self.retrieve_tavily.side_effect = self._record_tavily_link
+        error = LLMProviderUnavailableError(
+            "No configured LLM provider successfully completed this request."
+        )
+        self.evaluate_persisted.side_effect = error
+
+        with self.assertRaises(LLMProviderUnavailableError) as raised:
+            tasks.url_fact_check_process.run(self.url, self.claim.pk)
+
+        self.assertIs(raised.exception, error)
+        run = self.claim.verification_runs.get()
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "final_evaluator")
+        self.assertEqual(run.failure_code, "LLM_UNAVAILABLE")
+        self.save_claim.assert_not_called()
