@@ -46,6 +46,10 @@ class LLMProviderUnavailableError(RuntimeError):
     """No configured LLM provider successfully completed the request."""
 
 
+class ClaimGateError(RuntimeError):
+    """Raised when claim-gate analysis cannot complete reliably."""
+
+
 def _model_from_env(name, default):
     return os.environ.get(name, "").strip() or default
 
@@ -270,15 +274,19 @@ def clean_ocr_text(raw_text):
 
     try:
         response_text = call_llm_with_fallback(system_instructions, f"Text: {raw_text}")
-        logger.debug("clean_ocr_text OUTPUT: %s", response_text)
-        return _parse_llm_json(response_text)
-    except Exception as e:
-        logger.error("Gatekeeper AI Error: %s", e)
-        return {
-            "cleaned_claim": "OUT_OF_SCOPE",
-            "search_query": "error",
-            "article_stance": "NEUTRAL",
-        }
+        result = _parse_llm_json(response_text)
+        cleaned_claim = result.get("cleaned_claim") if isinstance(result, dict) else None
+        if not isinstance(cleaned_claim, str) or not cleaned_claim.strip():
+            raise ValueError("ClaimGate returned an unusable result")
+        return result
+    except Exception as exc:
+        logger.error(
+            "ClaimGate analysis failed in clean_ocr_text (%s).",
+            _provider_error_label(exc),
+        )
+        raise ClaimGateError(
+            "ClaimGate analysis could not complete reliably."
+        ) from exc
 
 
 def is_fact_check_relevant(original_text, fact_check_text):
@@ -589,15 +597,19 @@ def extract_search_query(text, source_url=""):
         response_text = call_llm_with_fallback(
             system_instructions, f"Source URL: {source_url}\n\nText: {text}"
         )
-        logger.debug("extract_search_query OUTPUT: %s", response_text)
-        return _parse_llm_json(response_text)
-    except Exception as e:
-        logger.error("extract_search_query AI Error: %s", e)
-        return {
-            "cleaned_claim": "OUT_OF_SCOPE",
-            "search_query": "error",
-            "article_stance": "NEUTRAL",
-        }
+        result = _parse_llm_json(response_text)
+        cleaned_claim = result.get("cleaned_claim") if isinstance(result, dict) else None
+        if not isinstance(cleaned_claim, str) or not cleaned_claim.strip():
+            raise ValueError("ClaimGate returned an unusable result")
+        return result
+    except Exception as exc:
+        logger.error(
+            "ClaimGate analysis failed in extract_search_query (%s).",
+            _provider_error_label(exc),
+        )
+        raise ClaimGateError(
+            "ClaimGate analysis could not complete reliably."
+        ) from exc
 
 
 def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRAL"):

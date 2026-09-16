@@ -9,6 +9,7 @@ from numbers import Number
 from django.contrib.auth.models import User
 from .ocr_service import extract_text_from_image
 from .services import (
+    ClaimGateError,
     LLMProviderUnavailableError,
     process_image,
     clean_ocr_text,
@@ -566,19 +567,8 @@ def execute_core_text_pipeline(raw_text, claim_id):
             article_stance = cleaned.get("article_stance", "NEUTRAL")
 
             if cleaned_claim == "OUT_OF_SCOPE":
-                _save_claim(
-                    claim_id,
-                    {
-                        "verdict": "OUT_OF_SCOPE",
-                        "summary": "This content appears to be a personal statement, opinion, greeting, or non-factual text. TruthLens can only verify objective claims, news, and rumors.",
-                        "confidence_score": 0,
-                        "score_context": "No verifiable factual claim detected.",
-                    },
-                    "System Filter",
-                    raw_text,
-                    [],
-                )
-                outcome = "completed_out_of_scope"
+                logger.info("Claim %s was gated as out of scope.", claim_id)
+                outcome = "abstained_out_of_scope"
                 selected_verdict = "OUT_OF_SCOPE"
                 _log_stage(
                     claim_id,
@@ -949,6 +939,12 @@ def execute_core_text_pipeline(raw_text, claim_id):
                     else None
                 )
 
+        except ClaimGateError as e:
+            pipeline_error = e
+            outcome = "claim_gate_failed"
+            logger.error("ClaimGate processing failed for claim %s.", claim_id)
+            raise
+
         except ClaimPersistenceError as e:
             pipeline_error = e
             outcome = "claim_persistence_failed"
@@ -998,7 +994,16 @@ def execute_core_text_pipeline(raw_text, claim_id):
         if run is not None:
             try:
                 if pipeline_error is not None:
-                    if isinstance(pipeline_error, ClaimPersistenceError):
+                    if isinstance(pipeline_error, ClaimGateError):
+                        fail_verification_run(
+                            run,
+                            failure_stage="claim_gate",
+                            failure_code="CLAIM_GATE_FAILED",
+                            failure_message=(
+                                f"ClaimGate processing failed for claim {claim_id}."
+                            ),
+                        )
+                    elif isinstance(pipeline_error, ClaimPersistenceError):
                         fail_verification_run(
                             run,
                             failure_stage="claim_persistence",
@@ -1069,14 +1074,6 @@ def url_fact_check_process(url, claim_id):
         raw_text = tavily_data["results"][0]["raw_content"]
         cleaned_text = clean_extracted_text(raw_text)
 
-        query_extract_started_at = time.perf_counter()
-        result = extract_search_query(cleaned_text, url)
-        _log_stage(claim_id, "extract_search_query", query_extract_started_at)
-
-        cleaned_claim = result.get("cleaned_claim")
-        search_query = result.get("search_query")
-        article_stance = result.get("article_stance", "NEUTRAL")
-
     except Exception as e:
         logger.error("URL extraction error for claim %s: %s", claim_id, e)
         _log_stage(
@@ -1098,22 +1095,18 @@ def url_fact_check_process(url, claim_id):
     pipeline_error = None
     runtime_error_propagating = False
     try:
+        query_extract_started_at = time.perf_counter()
+        result = extract_search_query(cleaned_text, url)
+        _log_stage(claim_id, "extract_search_query", query_extract_started_at)
+
+        cleaned_claim = result.get("cleaned_claim")
+        search_query = result.get("search_query")
+        article_stance = result.get("article_stance", "NEUTRAL")
+
         # Step 2 — OUT_OF_SCOPE check
         if cleaned_claim == "OUT_OF_SCOPE":
-            logger.info("Claim is out of scope. Saving rejection verdict.")
-            _save_claim(
-                claim_id,
-                {
-                    "verdict": "OUT_OF_SCOPE",
-                    "summary": "This content appears to be a personal statement, opinion, greeting, or non-factual text. TruthLens can only verify objective claims, news, and rumors.",
-                    "confidence_score": 0,
-                    "score_context": "No verifiable factual claim detected.",
-                },
-                "System Filter",
-                cleaned_text,
-                [],
-            )
-            outcome = "completed_out_of_scope"
+            logger.info("Claim %s was gated as out of scope.", claim_id)
+            outcome = "abstained_out_of_scope"
             selected_verdict = "OUT_OF_SCOPE"
             _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
             return
@@ -1508,6 +1501,13 @@ def url_fact_check_process(url, claim_id):
         finally:
             _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
 
+    except ClaimGateError as exc:
+        pipeline_error = exc
+        outcome = "claim_gate_failed"
+        runtime_error_propagating = True
+        logger.error("ClaimGate processing failed for claim %s.", claim_id)
+        _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
+        raise
     except BaseException as exc:
         pipeline_error = exc
         runtime_error_propagating = True
@@ -1517,7 +1517,16 @@ def url_fact_check_process(url, claim_id):
         if run is not None:
             try:
                 if pipeline_error is not None:
-                    if isinstance(pipeline_error, ClaimPersistenceError):
+                    if isinstance(pipeline_error, ClaimGateError):
+                        fail_verification_run(
+                            run,
+                            failure_stage="claim_gate",
+                            failure_code="CLAIM_GATE_FAILED",
+                            failure_message=(
+                                f"ClaimGate processing failed for claim {claim_id}."
+                            ),
+                        )
+                    elif isinstance(pipeline_error, ClaimPersistenceError):
                         fail_verification_run(
                             run,
                             failure_stage="claim_persistence",
