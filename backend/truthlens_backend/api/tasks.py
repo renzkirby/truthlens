@@ -12,6 +12,7 @@ from .knowledge_reuse_service import (
     find_exact_canonical_published_fact_check,
     record_authoritative_claim_fact_check_reference,
     record_equivalent_claim_fact_check_reference,
+    record_related_claim_fact_check_reference,
 )
 from .ocr_service import extract_text_from_image
 from .services import (
@@ -32,6 +33,8 @@ from .services import (
 )
 from .models import (
     Claim,
+    ClaimFactCheckReference,
+    KnowledgeReuseEvent,
     OfficialFactCheck,
     UserProfile,
     VerificationEvidence,
@@ -115,6 +118,52 @@ def _resolve_equivalent_published_claim(claim, cleaned_claim, vault_match):
             f"Published equivalence resolution failed for claim {claim.pk}."
         ) from exc
     return True
+
+
+def _record_related_published_claim(claim, query_text, vault_match):
+    """Best-effort provenance after the authority gate has declined resolution."""
+    if claim is None or not vault_match:
+        return
+    try:
+        # Isolate database failures with a savepoint, including failures before
+        # the service is entered, so the eventual AI result can still be saved.
+        with transaction.atomic():
+            publication = OfficialFactCheck.objects.filter(
+                pk=vault_match.get("fact_check_id"),
+                publication_status=OfficialFactCheck.PublicationStatus.PUBLISHED,
+            ).first()
+            if publication is None:
+                return
+            method = vault_match.get("match_method")
+            if method == KnowledgeReuseEvent.MatchMethod.EXACT_TEXT:
+                normalized_query = " ".join(query_text.split()).casefold()
+                canonical = " ".join((publication.canonical_claim or "").split()).casefold()
+                headline = " ".join((publication.headline or "").split()).casefold()
+                if normalized_query == canonical:
+                    method = ClaimFactCheckReference.MatchMethod.EXACT_CANONICAL
+                elif normalized_query == headline:
+                    method = ClaimFactCheckReference.MatchMethod.EXACT_HEADLINE
+                else:
+                    return
+            elif method == KnowledgeReuseEvent.MatchMethod.SEMANTIC:
+                method = ClaimFactCheckReference.MatchMethod.SEMANTIC
+            elif method == KnowledgeReuseEvent.MatchMethod.FULL_TEXT:
+                method = ClaimFactCheckReference.MatchMethod.FULL_TEXT
+            else:
+                return
+            record_related_claim_fact_check_reference(
+                target_claim=claim,
+                fact_check=publication,
+                query_text=query_text,
+                match_method=method,
+                similarity_score=vault_match.get("similarity_score"),
+            )
+    except Exception:
+        logger.warning(
+            "Failed to record related publication provenance for claim %s.",
+            claim.pk,
+            exc_info=True,
+        )
 
 
 def _reuse_second_chance_ai_analysis(matched_claim, claim_id):
@@ -678,6 +727,9 @@ def execute_core_text_pipeline(raw_text, claim_id):
                     ):
                         published_resolution = True
                         return
+                    _record_related_published_claim(
+                        target_claim, cleaned_claim, vault_match
+                    )
 
                 if has_second_chance_match:
                     selected_verdict = _reuse_second_chance_ai_analysis(
@@ -1247,6 +1299,7 @@ def url_fact_check_process(url, claim_id):
             ):
                 published_resolution = True
                 return
+            _record_related_published_claim(target_claim, cleaned_claim, vault_match)
 
         if article_stance == "SATIRE":
             _save_claim(

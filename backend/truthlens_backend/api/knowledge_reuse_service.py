@@ -341,6 +341,87 @@ def record_equivalent_claim_fact_check_reference(
     return reference
 
 
+def record_related_claim_fact_check_reference(
+    *,
+    target_claim,
+    fact_check,
+    query_text,
+    match_method,
+    similarity_score=None,
+):
+    """Persist context provenance only; never transfer a publication's verdict."""
+    query_text = _normalize_query_text(query_text)
+    if len(query_text) < 10:
+        raise InvalidKnowledgeReuse("An adequate incoming query is required.")
+    if (
+        not isinstance(target_claim, Claim)
+        or target_claim.pk is None
+        or target_claim._state.adding
+        or not isinstance(fact_check, OfficialFactCheck)
+        or fact_check.pk is None
+        or fact_check._state.adding
+    ):
+        raise InvalidKnowledgeReuse("Persisted target and publication are required.")
+    if target_claim.claim_type not in (Claim.ClaimType.IMAGE, Claim.ClaimType.URL):
+        return None
+    if match_method not in (
+        ClaimFactCheckReference.MatchMethod.EXACT_CANONICAL,
+        ClaimFactCheckReference.MatchMethod.EXACT_HEADLINE,
+        ClaimFactCheckReference.MatchMethod.SEMANTIC,
+        ClaimFactCheckReference.MatchMethod.FULL_TEXT,
+    ):
+        raise InvalidKnowledgeReuse("Invalid related match method.")
+    if similarity_score is not None:
+        similarity_score = float(similarity_score)
+        if not math.isfinite(similarity_score) or not 0 <= similarity_score <= 1:
+            raise InvalidKnowledgeReuse("similarity_score must be between 0 and 1.")
+
+    with transaction.atomic():
+        target_claim = Claim.objects.select_for_update(of=("self",)).get(
+            pk=target_claim.pk
+        )
+        if target_claim.claim_type not in (Claim.ClaimType.IMAGE, Claim.ClaimType.URL):
+            return None
+        publication = (
+            OfficialFactCheck.objects.select_for_update(of=("self",))
+            .filter(
+                pk=fact_check.pk,
+                publication_status=OfficialFactCheck.PublicationStatus.PUBLISHED,
+            )
+            .first()
+        )
+        if publication is None:
+            return None
+
+        # Revalidate exact labels against the current locked publication. Generic
+        # Vault EXACT_TEXT is not itself a durable match method or authority.
+        canonical_matches = (
+            _normalize_query_text(publication.canonical_claim).casefold()
+            == query_text.casefold()
+        )
+        if match_method == ClaimFactCheckReference.MatchMethod.EXACT_CANONICAL:
+            if not canonical_matches:
+                return None
+        elif match_method == ClaimFactCheckReference.MatchMethod.EXACT_HEADLINE:
+            if canonical_matches or (
+                _normalize_query_text(publication.headline).casefold()
+                != query_text.casefold()
+            ):
+                return None
+
+        reference, _created = ClaimFactCheckReference.objects.get_or_create(
+            target_claim=target_claim,
+            fact_check=publication,
+            relationship_kind=ClaimFactCheckReference.RelationshipKind.RELATED,
+            defaults={
+                "match_method": match_method,
+                "similarity_score": similarity_score,
+                "query_fingerprint": build_query_fingerprint(query_text),
+            },
+        )
+    return reference
+
+
 def get_published_fact_check_resolution_for_claim(claim):
     """Direct publication retains priority; only valid authoritative methods resolve."""
     publication = get_published_fact_check_for_claim(claim)

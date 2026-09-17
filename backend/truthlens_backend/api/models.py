@@ -4452,6 +4452,10 @@ class ClaimFactCheckReference(models.Model):
                 condition=Q(relationship_kind="AUTHORITATIVE"),
                 name="uniq_authoritative_claim_reference",
             ),
+            models.UniqueConstraint(
+                fields=["target_claim", "fact_check", "relationship_kind"],
+                name="uniq_claim_fact_check_relationship",
+            ),
             models.CheckConstraint(
                 condition=Q(query_fingerprint__regex=r"^[0-9a-f]{64}$"),
                 name="claim_reference_sha256_only",

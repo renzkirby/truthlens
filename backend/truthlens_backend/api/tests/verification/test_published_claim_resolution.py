@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 from django.contrib.auth.models import User
 from django.contrib.postgres.search import SearchVector
 from django.core.cache import cache
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, OperationalError, transaction
 from django.db.models.deletion import ProtectedError
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
@@ -26,8 +26,10 @@ from api.knowledge_reuse_service import (
     find_exact_canonical_published_fact_check,
     find_published_fact_check_candidates,
     find_published_fact_check_match,
+    get_published_fact_check_resolution_for_claim,
     record_authoritative_claim_fact_check_reference,
     record_equivalent_claim_fact_check_reference,
+    record_related_claim_fact_check_reference,
     record_knowledge_reuse,
 )
 from api.models import (
@@ -696,6 +698,189 @@ class EquivalentReferencePersistenceTests(PublicationResolutionFixture):
         self.assertEqual(result["verdict"], self.publication.verdict)
 
 
+class RelatedReferencePersistenceTests(PublicationResolutionFixture):
+    def related_reference(self, **overrides):
+        values = {
+            "target_claim": self.target,
+            "fact_check": self.publication,
+            "query_text": "Vaccines contain tracking microchips.",
+            "match_method": ClaimFactCheckReference.MatchMethod.SEMANTIC,
+            "similarity_score": 0.91,
+        }
+        values.update(overrides)
+        return record_related_claim_fact_check_reference(**values)
+
+    def test_generated_migration_adds_only_relationship_uniqueness(self):
+        migration = import_module(
+            "api.migrations.0069_claim_fact_check_relationship_unique"
+        ).Migration
+        self.assertEqual(
+            migration.dependencies, [("api", "0068_claim_reference_equivalent_claim")]
+        )
+        self.assertEqual(len(migration.operations), 1)
+        operation = migration.operations[0]
+        self.assertEqual(type(operation).__name__, "AddConstraint")
+        self.assertEqual(operation.model_name, "claimfactcheckreference")
+        self.assertEqual(operation.constraint.name, "uniq_claim_fact_check_relationship")
+        self.assertEqual(
+            operation.constraint.fields,
+            ("target_claim", "fact_check", "relationship_kind"),
+        )
+        self.assertIn(
+            "uniq_authoritative_claim_reference",
+            {constraint.name for constraint in ClaimFactCheckReference._meta.constraints},
+        )
+
+    def test_only_provenance_and_normalized_fingerprint_are_written(self):
+        publication_before = OfficialFactCheck.objects.values().get(pk=self.publication.pk)
+        claim_before = Claim.objects.values().get(pk=self.target.pk)
+        query = "  Vaccines  CONTAIN tracking microchips.  "
+        reference = self.related_reference(query_text=query)
+        self.assertEqual(reference.relationship_kind, "RELATED")
+        self.assertEqual(reference.match_method, "SEMANTIC")
+        self.assertEqual(reference.similarity_score, 0.91)
+        self.assertEqual(reference.query_fingerprint, build_query_fingerprint(query))
+        self.assertEqual(
+            Claim.objects.values().get(pk=self.target.pk), claim_before
+        )
+        self.assertEqual(
+            OfficialFactCheck.objects.values().get(pk=self.publication.pk),
+            publication_before,
+        )
+        self.assert_no_target_verdicts()
+        self.assertFalse(KnowledgeReuseEvent.objects.exists())
+        self.assertIsNone(get_published_fact_check_resolution_for_claim(self.target))
+        result = get_match_result(self.target)
+        self.assertIsNone(result["resolution_source"])
+        self.assertIsNone(result["official_fact_check"])
+        self.assertIsNone(result["verdict"])
+
+    def test_existing_verdict_caches_are_not_overwritten(self):
+        self.target.ai_verdict = "MISLEADING"
+        self.target.final_verdict = "FAKE"
+        self.target.save()
+        before = Claim.objects.values().get(pk=self.target.pk)
+        self.related_reference()
+        self.assertEqual(Claim.objects.values().get(pk=self.target.pk), before)
+
+    def test_retry_preserves_first_provenance_across_queries_and_methods(self):
+        first = self.related_reference()
+        before = ClaimFactCheckReference.objects.values().get(pk=first.pk)
+        second = self.related_reference(
+            query_text="Another related incoming factual proposition.",
+            match_method="FULL_TEXT",
+            similarity_score=None,
+        )
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(self.target.fact_check_references.count(), 1)
+        self.assertEqual(
+            ClaimFactCheckReference.objects.values().get(pk=first.pk), before
+        )
+
+    def test_database_rejects_duplicate_related_relationship_across_methods(self):
+        self.related_reference()
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self.raw_reference(relationship_kind="RELATED", match_method="FULL_TEXT")
+        self.assertEqual(self.target.fact_check_references.count(), 1)
+
+    def test_different_publications_may_each_have_a_related_relationship(self):
+        self.related_reference()
+        other = self.create_competing_publication()
+        self.related_reference(fact_check=other)
+        self.assertEqual(self.target.fact_check_references.count(), 2)
+        self.assertIsNone(get_published_fact_check_resolution_for_claim(self.target))
+
+    def test_existing_authoritative_reference_is_not_changed_or_downgraded(self):
+        authoritative = self.record()
+        before = ClaimFactCheckReference.objects.values().get(pk=authoritative.pk)
+        related = self.related_reference()
+        self.assertEqual(related.relationship_kind, "RELATED")
+        self.assertEqual(
+            ClaimFactCheckReference.objects.values().get(pk=authoritative.pk), before
+        )
+        self.assertEqual(self.target.fact_check_references.count(), 2)
+        self.assertEqual(
+            get_published_fact_check_resolution_for_claim(self.target).fact_check.pk,
+            self.publication.pk,
+        )
+
+    def test_all_allowed_related_methods_have_no_authority(self):
+        for method, query in (
+            ("EXACT_CANONICAL", self.canonical),
+            ("EXACT_HEADLINE", self.publication.headline),
+            ("SEMANTIC", "Vaccines contain tracking microchips."),
+            ("FULL_TEXT", "vaccines tracking microchips"),
+        ):
+            with self.subTest(method=method):
+                reference = self.related_reference(
+                    match_method=method, query_text=f"  {query.upper()}  "
+                )
+                self.assertEqual(reference.match_method, method)
+                self.assertIsNone(get_published_fact_check_resolution_for_claim(self.target))
+                self.assert_no_target_verdicts()
+                reference.delete()
+
+    def test_rejects_equivalence_generic_vault_and_invalid_methods(self):
+        for method in ("EQUIVALENT_CLAIM", "EXACT_TEXT", "CLAIM_CACHE", "invalid", None):
+            with self.subTest(method=method), self.assertRaises(InvalidKnowledgeReuse):
+                self.related_reference(match_method=method)
+        self.assertFalse(self.target.fact_check_references.exists())
+
+    def test_rejects_insufficient_queries_and_unpersisted_objects(self):
+        for overrides in (
+            {"query_text": " "},
+            {"query_text": "short"},
+            {"query_text": "  ab   cd  "},
+            {"query_text": None},
+            {"target_claim": Claim()},
+            {"fact_check": OfficialFactCheck()},
+        ):
+            with self.subTest(overrides=overrides), self.assertRaises(InvalidKnowledgeReuse):
+                self.related_reference(**overrides)
+        self.assertFalse(self.target.fact_check_references.exists())
+
+    def test_validates_similarity_like_equivalence_authority(self):
+        for score in (-0.01, 1.01, float("nan"), float("inf"), float("-inf")):
+            with self.subTest(score=score), self.assertRaises(InvalidKnowledgeReuse):
+                self.related_reference(similarity_score=score)
+        for score in (None, 0, 1, "0.91"):
+            with self.subTest(score=score):
+                reference = self.related_reference(similarity_score=score)
+                self.assertEqual(
+                    reference.similarity_score, None if score is None else float(score)
+                )
+                reference.delete()
+
+    def test_current_locked_publication_status_and_exact_text_are_revalidated(self):
+        for status in ("DRAFT", "IN_REVIEW", "ARCHIVED"):
+            with self.subTest(status=status):
+                OfficialFactCheck.objects.filter(pk=self.publication.pk).update(
+                    publication_status=status
+                )
+                self.assertIsNone(self.related_reference())
+        OfficialFactCheck.objects.filter(pk=self.publication.pk).update(
+            publication_status="PUBLISHED", canonical_claim="A changed canonical claim.",
+            headline="A changed headline.",
+        )
+        for method, query in (
+            ("EXACT_CANONICAL", self.canonical),
+            ("EXACT_HEADLINE", self.publication.headline),
+        ):
+            with self.subTest(method=method):
+                self.assertIsNone(self.related_reference(match_method=method, query_text=query))
+        self.assertFalse(self.target.fact_check_references.exists())
+
+    def test_image_url_only_including_database_type_revalidation(self):
+        self.target.claim_type = Claim.ClaimType.TEXT
+        self.target.save()
+        self.assertIsNone(self.related_reference())
+        self.target.claim_type = Claim.ClaimType.IMAGE  # stale caller
+        self.assertIsNone(self.related_reference())
+        self.assertFalse(self.target.fact_check_references.exists())
+        Claim.objects.filter(pk=self.target.pk).update(claim_type=Claim.ClaimType.URL)
+        self.assertIsNotNone(self.related_reference())
+
+
 class ExactCanonicalLookupTests(PublicationResolutionFixture):
     def setUp(self):
         super().setUp()
@@ -1247,16 +1432,36 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             )
         )
 
-    def assert_ai_path(self, evaluator):
+    def assert_related_context(self, method):
+        reference = self.target.fact_check_references.get()
+        self.assertEqual(reference.relationship_kind, "RELATED")
+        self.assertEqual(reference.match_method, method)
+        self.assertEqual(reference.fact_check_id, self.publication.pk)
+        self.assertEqual(
+            reference.query_fingerprint,
+            build_query_fingerprint(self.cleaned["cleaned_claim"]),
+        )
+        self.assertFalse(
+            self.target.fact_check_references.filter(relationship_kind="AUTHORITATIVE").exists()
+        )
+        self.assertIsNone(get_published_fact_check_resolution_for_claim(self.target))
+
+    def assert_ai_path(self, evaluator, *, related_method=None):
         evaluator.assert_called_once()
         self.vault.assert_called_once_with(
             self.cleaned["cleaned_claim"], target_claim=self.target
         )
         self.save_claim.assert_called_once()
-        self.assertFalse(self.target.fact_check_references.exists())
+        if related_method is None:
+            self.assertFalse(self.target.fact_check_references.exists())
+        else:
+            self.assert_related_context(related_method)
         self.target.refresh_from_db()
         self.assertEqual(self.target.ai_verdict, self.ai_result["verdict"])
         self.assertIsNone(self.target.final_verdict)
+        result = get_match_result(self.target)
+        self.assertEqual(result["resolution_source"], "AI")
+        self.assertIsNone(result["official_fact_check"])
         self.assertEqual(
             self.target.verification_runs.get().status, VerificationRun.Status.COMPLETED
         )
@@ -1289,7 +1494,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.image()
 
         self.clean_ocr.assert_called_once_with(self.canonical)
-        self.assert_ai_path(self.image_gfc)
+        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
 
     def test_image_exact_canonical_bypasses_evaluators_and_completes_run(self):
         self.image()
@@ -1369,17 +1574,17 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
 
         self.image()
 
-        self.assert_ai_path(self.image_gfc)
+        self.assert_ai_path(self.image_gfc, related_method="EXACT_CANONICAL")
 
     def test_image_semantic_match_retains_existing_ai_vault_path(self):
         self.semantic_context()
         self.image()
-        self.assert_ai_path(self.image_gfc)
+        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
 
     def test_url_semantic_match_retains_existing_ai_vault_path(self):
         self.semantic_context()
         self.url()
-        self.assert_ai_path(self.url_gfc)
+        self.assert_ai_path(self.url_gfc, related_method="SEMANTIC")
 
     def test_image_headline_exact_retains_ai_evaluation(self):
         self.cleaned["cleaned_claim"] = self.publication.headline
@@ -1391,7 +1596,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             )
         )
         self.image()
-        self.assert_ai_path(self.image_gfc)
+        self.assert_ai_path(self.image_gfc, related_method="EXACT_HEADLINE")
 
     def test_image_full_text_match_retains_ai_evaluation(self):
         self.cleaned["cleaned_claim"] = "vaccines tracking microchips"
@@ -1403,7 +1608,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             )
         )
         self.image()
-        self.assert_ai_path(self.image_gfc)
+        self.assert_ai_path(self.image_gfc, related_method="FULL_TEXT")
 
     def test_url_nonexact_without_vault_retains_gfc_evidence_evaluator(self):
         self.cleaned["cleaned_claim"] = "An unrelated public factual claim."
@@ -1433,7 +1638,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.assert_exact_bypass()
         self.assertEqual(get_match_result(self.target)["verdict"], "UNVERIFIED")
 
-    def assert_provider_failure_integrity(self, error):
+    def assert_provider_failure_integrity(self, error, *, related_method=None):
         run = self.target.verification_runs.get()
         self.assertEqual(run.status, VerificationRun.Status.FAILED)
         self.assertEqual(run.failure_stage, "final_evaluator")
@@ -1441,7 +1646,10 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.assertEqual(run.failure_message, str(error))
         self.assert_no_target_verdicts()
         self.assertIsNone(self.target.consensus_score)
-        self.assertFalse(self.target.fact_check_references.exists())
+        if related_method is None:
+            self.assertFalse(self.target.fact_check_references.exists())
+        else:
+            self.assert_related_context(related_method)
         self.save_claim.assert_not_called()
         self.tavily_retrieval.assert_not_called()
 
@@ -1455,7 +1663,9 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         with self.assertRaises(LLMProviderUnavailableError) as raised:
             self.image()
         self.assertIs(raised.exception, error)
-        self.assert_provider_failure_integrity(error)
+        # Context retrieval was already recorded before the final AI evaluator
+        # exhausted its providers; provenance remains without any verdict.
+        self.assert_provider_failure_integrity(error, related_method="SEMANTIC")
 
     def test_url_nonexact_provider_exhaustion_preserves_failure_integrity(self):
         self.cleaned["cleaned_claim"] = "An unrelated public factual claim."
@@ -1521,7 +1731,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         candidate = PublishedFactCheckMatch(
             self.publication,
             method,
-            0.91 if method == "SEMANTIC" else 1.0,
+            0.91 if method == "SEMANTIC" else (None if method == "FULL_TEXT" else 1.0),
         )
         self.vault.return_value = build_published_fact_check_payload(candidate)
         self.authority_candidates.return_value = [candidate]
@@ -1556,6 +1766,9 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.assertEqual(reference.relationship_kind, "AUTHORITATIVE")
         self.assertEqual(reference.match_method, "EQUIVALENT_CLAIM")
         self.assertEqual(reference.fact_check_id, self.publication.pk)
+        self.assertFalse(
+            self.target.fact_check_references.filter(relationship_kind="RELATED").exists()
+        )
         self.assertEqual(
             reference.query_fingerprint,
             build_query_fingerprint(self.cleaned["cleaned_claim"]),
@@ -1663,7 +1876,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             self.target.score_context,
             "This result was matched from a prior analysis of the same claim.",
         )
-        self.assertFalse(self.target.fact_check_references.exists())
+        self.assert_related_context("SEMANTIC")
         self.vault.assert_called_once_with(
             self.cleaned["cleaned_claim"], target_claim=self.target
         )
@@ -1687,7 +1900,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.target.refresh_from_db()
         self.assertEqual(self.target.ai_verdict, "SATIRE")
         self.assertEqual(self.target.source_type, "Satire Detection")
-        self.assertFalse(self.target.fact_check_references.exists())
+        self.assert_related_context("SEMANTIC")
         self.vault.assert_called_once_with(
             self.cleaned["cleaned_claim"], target_claim=self.target
         )
@@ -1711,7 +1924,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.target.refresh_from_db()
         self.assertEqual(self.target.ai_verdict, "SATIRE")
         self.assertEqual(self.target.source_type, "Satire Detection")
-        self.assertFalse(self.target.fact_check_references.exists())
+        self.assert_related_context("SEMANTIC")
         self.vault.assert_called_once_with(
             self.cleaned["cleaned_claim"], target_claim=self.target
         )
@@ -1747,9 +1960,8 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
 
         self.image()
 
-        self.assert_ai_path(self.image_gfc)
+        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
         self.assertEqual(self.llm.call_count, 2)
-        self.assertFalse(self.target.fact_check_references.exists())
 
     def test_image_complete_partial_conflict_keeps_vault_ai_evaluator(self):
         canonical = "Hoshi suffered a complete ACL tear during rehearsal."
@@ -1762,7 +1974,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             "Hoshi suffered a partial ACL tear during rehearsal."
         )
         self.image()
-        self.assert_ai_path(self.image_gfc)
+        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
         self.llm.assert_called_once()
         self.assertEqual(
             json.loads(self.llm.call_args.args[1])["published_canonical_claim"],
@@ -1778,20 +1990,20 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.equivalent_context(equivalent=False)
         self.cleaned["cleaned_claim"] = "Hoshi injured his knee during rehearsal."
         self.image()
-        self.assert_ai_path(self.image_gfc)
+        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
         self.llm.assert_called_once()
 
     def test_url_non_equivalent_candidate_keeps_existing_vault_ai_path(self):
         self.equivalent_context(equivalent=False)
         self.url()
-        self.assert_ai_path(self.url_gfc)
+        self.assert_ai_path(self.url_gfc, related_method="SEMANTIC")
         self.llm.assert_called_once()
 
     def test_image_invalid_equivalence_output_keeps_existing_ai_path(self):
         self.equivalent_context()
         self.llm.return_value = '{"equivalent": true}'
         self.image()
-        self.assert_ai_path(self.image_gfc)
+        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
 
     def test_image_equivalence_provider_exhaustion_has_no_authority_or_verdict_copy(
         self,
@@ -1830,6 +2042,136 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         tasks.execute_core_text_pipeline("Submitted text", self.target.pk)
         self.assert_ai_path(self.image_gfc)
         self.llm.assert_not_called()
+
+    def test_non_equivalent_image_semantic_context_keeps_telemetry_and_durable_provenance(self):
+        self.equivalent_context(equivalent=False)
+        candidate = self.authority_candidates.return_value[0]
+        self.vault.side_effect = services.search_official_vault
+
+        def evaluate_after_provenance(*args):
+            # Both records must exist before AI evaluation, with no copied verdict.
+            event = KnowledgeReuseEvent.objects.get(target_claim=self.target)
+            self.assertEqual(event.fact_check_id, self.publication.pk)
+            self.assertEqual(event.reuse_type, "VERIFICATION_CONTEXT")
+            self.assertEqual(event.match_method, "SEMANTIC")
+            self.assertEqual(event.metadata, {"source": "KNOWLEDGE_VAULT"})
+            self.assert_related_context("SEMANTIC")
+            self.assert_no_target_verdicts()
+            self.llm.assert_called_once()
+            return self.ai_result
+
+        self.image_gfc.side_effect = evaluate_after_provenance
+        with patch(
+            "api.knowledge_reuse_service.find_published_fact_check_match",
+            return_value=candidate,
+        ):
+            self.image()
+        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
+        self.assertEqual(KnowledgeReuseEvent.objects.filter(target_claim=self.target).count(), 1)
+
+    def test_non_equivalent_image_full_text_context_creates_related_full_text(self):
+        self.equivalent_context(method="FULL_TEXT", equivalent=False)
+        self.image()
+        self.assert_ai_path(self.image_gfc, related_method="FULL_TEXT")
+        self.llm.assert_called_once()
+        self.assertIsNone(self.target.fact_check_references.get().similarity_score)
+
+    def test_non_equivalent_image_headline_context_creates_related_headline(self):
+        self.equivalent_context(method="EXACT_TEXT", equivalent=False)
+        self.cleaned["cleaned_claim"] = f"  {self.publication.headline.upper()}  "
+        # Mapping must compare the current publication, rather than payload text.
+        self.vault.return_value["canonical_claim"] = self.cleaned["cleaned_claim"]
+        self.vault.return_value["headline"] = "A stale unrelated headline."
+        self.image()
+        self.assert_ai_path(self.image_gfc, related_method="EXACT_HEADLINE")
+        self.llm.assert_called_once()
+
+    def test_non_equivalent_url_full_text_context_creates_related_full_text(self):
+        self.equivalent_context(method="FULL_TEXT", equivalent=False)
+        self.url()
+        self.assert_ai_path(self.url_gfc, related_method="FULL_TEXT")
+        self.llm.assert_called_once()
+
+    def test_non_equivalent_url_headline_context_creates_related_headline(self):
+        self.equivalent_context(method="EXACT_TEXT", equivalent=False)
+        self.cleaned["cleaned_claim"] = self.publication.headline
+        self.url()
+        self.assert_ai_path(self.url_gfc, related_method="EXACT_HEADLINE")
+        self.llm.assert_called_once()
+
+    def test_stale_exact_text_candidate_fails_closed_without_affecting_ai(self):
+        self.equivalent_context(method="EXACT_TEXT", equivalent=False)
+        # Neither the current canonical claim nor current headline matches.
+        self.image()
+        self.assert_ai_path(self.image_gfc)
+        self.llm.assert_called_once()
+
+    def test_archived_related_candidate_is_not_recorded(self):
+        self.semantic_context()
+        OfficialFactCheck.objects.filter(pk=self.publication.pk).update(
+            publication_status="ARCHIVED"
+        )
+        self.image()
+        self.assert_ai_path(self.image_gfc)
+
+    def assert_related_operational_failure_continues(self, process, evaluator):
+        self.equivalent_context(equivalent=False)
+        with patch(
+            "api.tasks.record_related_claim_fact_check_reference",
+            side_effect=OperationalError("Provenance storage unavailable"),
+        ) as recorder, self.assertLogs("api.tasks", level="WARNING") as logs:
+            process()
+        recorder.assert_called_once()
+        self.assertIn("related publication provenance", " ".join(logs.output))
+        self.assert_ai_path(evaluator)
+        self.llm.assert_called_once()
+
+    def test_image_related_operational_failure_preserves_ai_result(self):
+        self.assert_related_operational_failure_continues(self.image, self.image_gfc)
+
+    def test_url_related_operational_failure_preserves_ai_result(self):
+        self.assert_related_operational_failure_continues(self.url, self.url_gfc)
+
+    def test_related_database_failure_rolls_back_savepoint_and_preserves_ai_result(self):
+        self.equivalent_context(equivalent=False)
+
+        def failing_related_storage(**kwargs):
+            self.raw_reference(relationship_kind="RELATED", query_fingerprint="invalid")
+
+        with transaction.atomic():
+            with patch(
+                "api.tasks.record_related_claim_fact_check_reference",
+                side_effect=failing_related_storage,
+            ), self.assertLogs("api.tasks", level="WARNING"):
+                self.image()
+            self.assert_ai_path(self.image_gfc)
+
+    def test_provider_exhaustion_never_enters_related_persistence(self):
+        self.equivalent_context()
+        error = LLMProviderUnavailableError("Equivalence unavailable")
+        self.llm.side_effect = error
+        with patch("api.tasks.record_related_claim_fact_check_reference") as recorder:
+            with self.assertRaises(LLMProviderUnavailableError):
+                self.image()
+        recorder.assert_not_called()
+        self.assert_provider_failure_integrity(error)
+
+    def test_out_of_scope_claim_never_retrieves_or_records_related_context(self):
+        self.cleaned["cleaned_claim"] = "OUT_OF_SCOPE"
+        with patch("api.tasks.record_related_claim_fact_check_reference") as recorder:
+            self.image()
+        recorder.assert_not_called()
+        self.vault.assert_not_called()
+        self.assertFalse(self.target.fact_check_references.exists())
+
+    def test_text_vault_use_never_enters_related_persistence(self):
+        self.semantic_context()
+        self.target.claim_type = Claim.ClaimType.TEXT
+        self.target.save()
+        with patch("api.tasks.record_related_claim_fact_check_reference") as recorder:
+            tasks.execute_core_text_pipeline("Submitted text", self.target.pk)
+        recorder.assert_not_called()
+        self.assert_ai_path(self.image_gfc)
 
     def test_vault_analytics_failure_does_not_suppress_equivalent_resolution(self):
         self.equivalent_context()
