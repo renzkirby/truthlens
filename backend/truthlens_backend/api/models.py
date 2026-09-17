@@ -1042,6 +1042,11 @@ class VerificationEvidence(models.Model):
         null=True,
     )
 
+    retrieval_provenance = models.JSONField(
+        default=list,
+        blank=True,
+    )
+
     created_at = models.DateTimeField(
         auto_now_add=True,
     )
