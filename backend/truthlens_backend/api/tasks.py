@@ -41,11 +41,18 @@ from .verification.evidence_dossier import (
 )
 from .verification.evidence_enrichment import persist_evidence_assessment
 from .verification.ingestion import ingest_raw_evidence
-from .verification.linking import link_evidence_sources_to_run
+from .verification.linking import (
+    link_evidence_sources_to_run,
+    record_retrieval_provenance,
+)
 from .verification.providers.google_fact_check import (
     GoogleFactCheckProvider,
+    PROVIDER_NAME as GFC_PROVIDER_NAME,
 )
-from .verification.providers.tavily import TavilyProvider
+from .verification.providers.tavily import (
+    PROVIDER_NAME as TAVILY_PROVIDER_NAME,
+    TavilyProvider,
+)
 from .verification.runs import (
     abstain_verification_run,
     complete_verification_run,
@@ -117,6 +124,7 @@ def _retrieve_and_ingest_gfc(
     *,
     stage_prefix="",
     verification_run=None,
+    retrieval_query_index=0,
 ):
     """
     Retrieve Google Fact Check data once and persist the parsed
@@ -202,6 +210,32 @@ def _retrieve_and_ingest_gfc(
                     verification_run.pk,
                     exc,
                 )
+            else:
+                provenance_started_at = time.perf_counter()
+                provenance_stage = f"{stage_prefix}gfc_retrieval_provenance"
+                try:
+                    record_retrieval_provenance(
+                        links,
+                        provider=GFC_PROVIDER_NAME,
+                        query=search_query,
+                        query_index=retrieval_query_index,
+                    )
+                except Exception as exc:
+                    error_label = type(exc).__name__
+                    _log_stage(
+                        claim_id,
+                        f"{provenance_stage}_failed",
+                        provenance_started_at,
+                        verification_run_id=verification_run.pk,
+                        error=error_label,
+                    )
+                    logger.error(
+                        "GFC retrieval provenance failed for claim %s, "
+                        "run %s (error=%s).",
+                        claim_id,
+                        verification_run.pk,
+                        error_label,
+                    )
 
     return payload
 
@@ -214,20 +248,17 @@ def _retrieve_and_ingest_gfc_queries(
     verification_run=None,
 ):
     last_payload = {}
-    for search_query in search_queries[:3]:
+    for query_index, search_query in enumerate(search_queries[:3]):
+        bridge_kwargs = {"verification_run": verification_run}
         if stage_prefix:
-            payload = _retrieve_and_ingest_gfc(
-                search_query,
-                claim_id,
-                stage_prefix=stage_prefix,
-                verification_run=verification_run,
-            )
-        else:
-            payload = _retrieve_and_ingest_gfc(
-                search_query,
-                claim_id,
-                verification_run=verification_run,
-            )
+            bridge_kwargs["stage_prefix"] = stage_prefix
+        if query_index:
+            bridge_kwargs["retrieval_query_index"] = query_index
+        payload = _retrieve_and_ingest_gfc(
+            search_query,
+            claim_id,
+            **bridge_kwargs,
+        )
         last_payload = payload
         if payload.get("claims", []):
             return payload
@@ -236,7 +267,12 @@ def _retrieve_and_ingest_gfc_queries(
 
 
 def _retrieve_and_ingest_tavily(
-    search_query, claim_id, *, stage_prefix="", verification_run=None,
+    search_query,
+    claim_id,
+    *,
+    stage_prefix="",
+    verification_run=None,
+    retrieval_query_index=0,
 ):
     """Retrieve once, preserving usable payloads if evidence persistence fails."""
     provider = TavilyProvider(timeout=DEFAULT_HTTP_TIMEOUT_SEC)
@@ -295,6 +331,32 @@ def _retrieve_and_ingest_tavily(
                     verification_run.pk,
                     exc,
                 )
+            else:
+                provenance_started_at = time.perf_counter()
+                provenance_stage = f"{stage_prefix}tavily_retrieval_provenance"
+                try:
+                    record_retrieval_provenance(
+                        links,
+                        provider=TAVILY_PROVIDER_NAME,
+                        query=search_query,
+                        query_index=retrieval_query_index,
+                    )
+                except Exception as exc:
+                    error_label = type(exc).__name__
+                    _log_stage(
+                        claim_id,
+                        f"{provenance_stage}_failed",
+                        provenance_started_at,
+                        verification_run_id=verification_run.pk,
+                        error=error_label,
+                    )
+                    logger.error(
+                        "Tavily retrieval provenance failed for claim %s, "
+                        "run %s (error=%s).",
+                        claim_id,
+                        verification_run.pk,
+                        error_label,
+                    )
 
     return payload
 
@@ -371,32 +433,30 @@ def _retrieve_and_ingest_tavily_queries(
 
     payloads = []
     query_count = len(bounded_queries)
-    for query_index, search_query in enumerate(bounded_queries, start=1):
+    for query_index, search_query in enumerate(bounded_queries):
         query_started_at = time.perf_counter()
         try:
+            bridge_kwargs = {"verification_run": verification_run}
             if stage_prefix:
-                payload = _retrieve_and_ingest_tavily(
-                    search_query,
-                    claim_id,
-                    stage_prefix=stage_prefix,
-                    verification_run=verification_run,
-                )
-            else:
-                payload = _retrieve_and_ingest_tavily(
-                    search_query,
-                    claim_id,
-                    verification_run=verification_run,
-                )
+                bridge_kwargs["stage_prefix"] = stage_prefix
+            if query_index:
+                bridge_kwargs["retrieval_query_index"] = query_index
+            payload = _retrieve_and_ingest_tavily(
+                search_query,
+                claim_id,
+                **bridge_kwargs,
+            )
         except Exception as exc:
-            if query_index == 1:
+            if query_index == 0:
                 raise
 
             error_label = type(exc).__name__
+            logged_query_index = query_index + 1
             _log_stage(
                 claim_id,
                 f"{stage_prefix}tavily_alternate_query_failed",
                 query_started_at,
-                query_index=query_index,
+                query_index=logged_query_index,
                 query_count=query_count,
                 error=error_label,
             )
@@ -404,7 +464,7 @@ def _retrieve_and_ingest_tavily_queries(
                 "Tavily alternate query failed for claim %s "
                 "(query_index=%s, query_count=%s, error=%s).",
                 claim_id,
-                query_index,
+                logged_query_index,
                 query_count,
                 error_label,
             )
