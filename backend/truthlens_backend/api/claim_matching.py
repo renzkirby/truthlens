@@ -20,13 +20,13 @@ import logging
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
 from django.db.models import Q
+from django.db import transaction
 from pgvector.django import CosineDistance
 
 from .embedding_service import generate_embedding
 from .knowledge_reuse_service import (
-    PublishedFactCheckMatch,
     build_published_fact_check_payload,
-    get_published_fact_check_for_claim,
+    get_published_fact_check_resolution_for_claim,
     record_knowledge_reuse,
 )
 from .adjudication_provenance import get_claim_adjudication_provenance
@@ -296,6 +296,7 @@ def get_match_result(
         return None
 
     from .models import (
+        ClaimFactCheckReference,
         KnowledgeReuseEvent,
     )
 
@@ -326,18 +327,20 @@ def get_match_result(
     # 1. AUTHORITATIVE RESOLVED CLAIM
     # =====================================
 
-    published_fact_check = get_published_fact_check_for_claim(matched_claim)
+    published_match = get_published_fact_check_resolution_for_claim(matched_claim)
+    published_fact_check = published_match.fact_check if published_match else None
+    is_reference_resolution = bool(
+        published_match
+        and published_match.match_method in (
+            ClaimFactCheckReference.MatchMethod.EXACT_CANONICAL,
+            ClaimFactCheckReference.MatchMethod.EQUIVALENT_CLAIM,
+        )
+    )
 
     if published_fact_check or adjudication_provenance["is_attributable"]:
         match_type = "resolved"
 
         if published_fact_check:
-            published_match = PublishedFactCheckMatch(
-                fact_check=(published_fact_check),
-                match_method=(KnowledgeReuseEvent.MatchMethod.CLAIM_CACHE),
-                similarity_score=None,
-            )
-
             official_fact_check = build_published_fact_check_payload(published_match)
 
             # Public-facing truth comes from
@@ -363,6 +366,8 @@ def get_match_result(
 
             if sources:
                 source_url = sources[0]
+            elif is_reference_resolution:
+                source_url = None
 
             # Material user-facing reuse is
             # recorded only when the caller
@@ -370,17 +375,18 @@ def get_match_result(
             # was actually served.
             if record_reuse:
                 try:
-                    record_knowledge_reuse(
-                        fact_check=(published_fact_check),
-                        reuse_type=(KnowledgeReuseEvent.ReuseType.USER_RESPONSE),
-                        match_method=(KnowledgeReuseEvent.MatchMethod.CLAIM_CACHE),
-                        target_claim=(matched_claim),
-                        triggered_by=(triggered_by),
-                        query_text=(query_text),
-                        metadata={
-                            "source": ("CLAIM_CACHE"),
-                        },
-                    )
+                    with transaction.atomic():
+                        record_knowledge_reuse(
+                            fact_check=(published_fact_check),
+                            reuse_type=(KnowledgeReuseEvent.ReuseType.USER_RESPONSE),
+                            match_method=(KnowledgeReuseEvent.MatchMethod.CLAIM_CACHE),
+                            target_claim=(matched_claim),
+                            triggered_by=(triggered_by),
+                            query_text=(query_text),
+                            metadata={
+                                "source": ("CLAIM_CACHE"),
+                            },
+                        )
 
                 except Exception as error:
                     # Analytics must never
@@ -425,7 +431,7 @@ def get_match_result(
     # 4. SOURCE FALLBACK
     # =====================================
 
-    if not sources and active_thread:
+    if not is_reference_resolution and not sources and active_thread:
         verified_evidence = active_thread.evidence_submissions.filter(
             evidence_status="VERIFIED"
         )[:3]
@@ -440,12 +446,20 @@ def get_match_result(
             )
         ]
 
-    if not sources and matched_claim.ai_sources:
+    if (
+        not is_reference_resolution
+        and not sources
+        and matched_claim.ai_sources
+    ):
         # Preserve the existing AI-source
         # response structure for compatibility.
         sources = matched_claim.ai_sources
 
-    elif not sources and matched_claim.top_verdict_source:
+    elif (
+        not is_reference_resolution
+        and not sources
+        and matched_claim.top_verdict_source
+    ):
         sources = [matched_claim.top_verdict_source]
 
     return {

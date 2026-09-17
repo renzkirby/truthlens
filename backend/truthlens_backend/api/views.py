@@ -526,11 +526,10 @@ def claim_polling_endpoint(request, claim_id):
         )
 
     ai_verdict = claim.ai_verdict
-    if ai_verdict is None:
+    match_result = get_match_result(claim)
+    if match_result["resolution_source"] != "OFFICIAL_FACT_CHECK" and ai_verdict is None:
         return JsonResponse({"verdict": "PENDING"}, status=200)
     else:
-        match_result = get_match_result(claim)
-
         return JsonResponse(
             {
                 "id": str(claim_id),

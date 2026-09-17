@@ -4416,6 +4416,49 @@ class FactualCorrectionProposal(models.Model):
         )
 
 
+class ClaimFactCheckReference(models.Model):
+    """Durable publication resolution/provenance, separate from AI and analytics."""
+
+    class RelationshipKind(models.TextChoices):
+        AUTHORITATIVE = "AUTHORITATIVE", "Authoritative"
+        RELATED = "RELATED", "Related"
+
+    class MatchMethod(models.TextChoices):
+        EXACT_CANONICAL = "EXACT_CANONICAL", "Exact canonical"
+        EQUIVALENT_CLAIM = "EQUIVALENT_CLAIM", "Equivalent claim"
+        EXACT_HEADLINE = "EXACT_HEADLINE", "Exact headline"
+        SEMANTIC = "SEMANTIC", "Semantic"
+        FULL_TEXT = "FULL_TEXT", "Full text"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    target_claim = models.ForeignKey(
+        Claim, on_delete=models.CASCADE, related_name="fact_check_references",
+    )
+    fact_check = models.ForeignKey(
+        OfficialFactCheck, on_delete=models.PROTECT, related_name="claim_references",
+    )
+    relationship_kind = models.CharField(
+        max_length=20, choices=RelationshipKind.choices,
+    )
+    match_method = models.CharField(max_length=20, choices=MatchMethod.choices)
+    similarity_score = models.FloatField(null=True, blank=True)
+    query_fingerprint = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["target_claim"],
+                condition=Q(relationship_kind="AUTHORITATIVE"),
+                name="uniq_authoritative_claim_reference",
+            ),
+            models.CheckConstraint(
+                condition=Q(query_fingerprint__regex=r"^[0-9a-f]{64}$"),
+                name="claim_reference_sha256_only",
+            ),
+        ]
+
+
 class KnowledgeReuseEvent(models.Model):
     class ReuseType(models.TextChoices):
         USER_RESPONSE = (
