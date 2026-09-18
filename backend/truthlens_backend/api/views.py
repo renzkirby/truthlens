@@ -114,6 +114,8 @@ from .verification_resolution_metrics_service import VerificationResolutionMetri
 from .verification_reviewer_participation_metrics_service import (
     VerificationReviewerParticipationMetricsIntegrityError,
 )
+from .verification_public_reach_metrics_service import VerificationPublicReachMetricsIntegrityError
+from .verification_knowledge_reuse_metrics_service import VerificationKnowledgeReuseMetricsIntegrityError
 from .public_reach_serializers import PublicReachRequestSerializer
 from .public_reach_service import (
     InvalidPublicReach,
@@ -2555,6 +2557,8 @@ def organization_verification_metrics(request, organization_id):
         VerificationActivityMetricsIntegrityError,
         VerificationResolutionMetricsIntegrityError,
         VerificationReviewerParticipationMetricsIntegrityError,
+        VerificationPublicReachMetricsIntegrityError,
+        VerificationKnowledgeReuseMetricsIntegrityError,
         VerificationMetricsCompositionError,
     ):
         logger.exception("Organization verification metrics projection failed.")
