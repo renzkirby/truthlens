@@ -114,6 +114,13 @@ from .verification_resolution_metrics_service import VerificationResolutionMetri
 from .verification_reviewer_participation_metrics_service import (
     VerificationReviewerParticipationMetricsIntegrityError,
 )
+from .public_reach_serializers import PublicReachRequestSerializer
+from .public_reach_service import (
+    InvalidPublicReach,
+    PublicReachConflict,
+    PublicReachTargetNotFound,
+    record_public_reach_event,
+)
 from .organization_public_presence_service import (
     get_public_partner_by_slug,
     get_public_partner_directory,
@@ -269,6 +276,7 @@ from .throttles import (
     PasswordResetRateThrottle,
     EmailVerificationRateThrottle,
     PublicPartnerRateThrottle,
+    PublicReachRateThrottle,
 )
 from .serializers import (
     RegisterSerializer,
@@ -4004,6 +4012,40 @@ def public_partner_fact_check_detail(request, slug, publication_id):
         PublicFactCheckDetailSerializer(result).data,
         status=status.HTTP_200_OK,
     )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([PublicReachRateThrottle])
+def public_reach_events(request):
+    serializer = PublicReachRequestSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    payload = serializer.validated_data
+    organization = get_public_partner_by_slug(payload["organization_slug"])
+    if organization is None:
+        raise NotFound()
+    fact_check = None
+    if payload.get("publication_id") is not None:
+        fact_check = OfficialFactCheck.objects.filter(
+            pk=payload["publication_id"], organization=organization,
+        ).first()
+        if fact_check is None:
+            raise NotFound()
+    try:
+        _, created = record_public_reach_event(
+            client_event_id=payload["client_event_id"],
+            event_type=payload["event_type"],
+            source_surface=payload["source_surface"],
+            organization=organization,
+            fact_check=fact_check,
+        )
+    except PublicReachTargetNotFound as error:
+        raise NotFound() from error
+    except PublicReachConflict:
+        return Response({"detail": "Conflicting client_event_id."}, status=status.HTTP_409_CONFLICT)
+    except InvalidPublicReach:
+        return Response({"detail": "Invalid reach event."}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({"recorded": True}, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
 
 def _organization_public_profile_error_response(error):

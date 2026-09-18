@@ -95,6 +95,7 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localho
 
 // Common API endpoints (relative paths)
 export const API_ENDPOINTS = {
+   PUBLIC_REACH_EVENTS: "public-reach/events/",
    // Auth & User
    LOGIN: "auth/login/",
    REGISTER: "auth/register/",

@@ -349,7 +349,41 @@ function startPollingClaim({
    }, pollEveryMs);
 }
 
+async function recordExtensionPublicReach(request) {
+   const allowedFields = ["type", "event_type", "source_surface", "organization_slug", "publication_id"];
+   if (!request || Object.keys(request).some((key) => !allowedFields.includes(key))
+      || !["EXTENSION_PUBLICATION_IMPRESSION", "EXTENSION_PUBLICATION_CLICK"].includes(request.event_type)
+      || !["EXTENSION_OFFICIAL_FACT_CHECK", "EXTENSION_RELATED_FACT_CHECK"].includes(request.source_surface)
+      || typeof request.organization_slug !== "string" || !/^[a-zA-Z0-9_-]{1,255}$/.test(request.organization_slug)
+      || typeof request.publication_id !== "string"
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(request.publication_id)
+      || !state.API_BASE_URL) return;
+   try {
+      await fetch(`${state.API_BASE_URL}/public-reach/events/`, {
+         method: "POST",
+         credentials: "omit",
+         referrerPolicy: "no-referrer",
+         headers: { "Content-Type": "application/json" },
+         body: JSON.stringify({
+            client_event_id: crypto.randomUUID(),
+            event_type: request.event_type,
+            source_surface: request.source_surface,
+            organization_slug: request.organization_slug,
+            publication_id: request.publication_id,
+         }),
+      });
+   } catch {
+      // Best effort only, with no auth session access, refresh, clearing, or retry.
+   }
+}
+
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
+   if (request.type === "RECORD_PUBLIC_REACH") {
+      recordExtensionPublicReach(request)
+         .then(() => sendResponse({ accepted: true }))
+         .catch(() => sendResponse({ accepted: false }));
+      return true;
+   }
    if (request.type === "REQUEST_WEB_AUTH_SESSION") {
       (async () => {
          const session = await getAuthSession();

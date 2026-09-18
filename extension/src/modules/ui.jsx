@@ -128,6 +128,40 @@ function pathComponent(value) {
    }
 }
 
+function publicReachAttributes(organizationSlug, publicationId, surface) {
+   if (typeof organizationSlug !== "string" || !/^[a-zA-Z0-9_-]{1,255}$/.test(organizationSlug)
+      || typeof publicationId !== "string"
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(publicationId)) return "";
+   return `data-reach-organization-slug="${escapeHtml(organizationSlug)}" data-reach-publication-id="${escapeHtml(publicationId)}" data-reach-surface="${escapeHtml(surface)}"`;
+}
+
+function instrumentPublicPublicationLinks(card) {
+   if (!card.isConnected) return;
+   for (const link of card.querySelectorAll("a[data-reach-surface]")) {
+      const send = (eventType) => {
+         try {
+            const pending = chrome.runtime.sendMessage({
+               type: "RECORD_PUBLIC_REACH",
+               event_type: eventType,
+               source_surface: link.dataset.reachSurface,
+               organization_slug: link.dataset.reachOrganizationSlug,
+               publication_id: link.dataset.reachPublicationId,
+            });
+            pending?.catch(() => {});
+         } catch {
+            // A disconnected extension must never interfere with the card/link.
+         }
+      };
+      send("EXTENSION_PUBLICATION_IMPRESSION");
+      link.addEventListener("click", (event) => {
+         if (event.isTrusted) send("EXTENSION_PUBLICATION_CLICK");
+      });
+      link.addEventListener("auxclick", (event) => {
+         if (event.isTrusted && event.button === 1) send("EXTENSION_PUBLICATION_CLICK");
+      });
+   }
+}
+
 function relatedPublicationsHTML(claim) {
    if (claim.resolution_source === "OFFICIAL_FACT_CHECK" || !Array.isArray(claim.related_fact_checks)) return "";
    const baseUrl = communityBaseUrl();
@@ -151,7 +185,7 @@ function relatedPublicationsHTML(claim) {
          <div class="truthlens-related-publication">
             <p class="truthlens-related-publication-headline">${escapeHtml(headline)}</p>
             <p class="truthlens-related-publication-org">Published by ${escapeHtml(organizationName)}</p>
-            <a class="truthlens-related-publication-link" href="${escapeHtml(articleUrl)}" target="_blank" rel="noopener noreferrer">Read related fact-check ${iconExternal}</a>
+            <a class="truthlens-related-publication-link" ${publicReachAttributes(rawSlug, rawId, "EXTENSION_RELATED_FACT_CHECK")} href="${escapeHtml(articleUrl)}" target="_blank" rel="noopener noreferrer">Read related fact-check ${iconExternal}</a>
          </div>
       `);
       if (entries.length === 3) break;
@@ -241,7 +275,7 @@ function displayPublishedResultCard(claim, publication) {
          </div>
          ${metadata.length ? `<div class="truthlens-publication-metadata">${metadata.join("")}</div>` : ""}
          ${sourceLinks ? `<section class="truthlens-publication-sources"><h3 class="truthlens-publication-label">Sources</h3><ul>${sourceLinks}</ul></section>` : ""}
-         ${articleUrl ? `<a href="${escapeHtml(articleUrl)}" target="_blank" rel="noopener noreferrer" class="truthlens-primary-btn">Read Full Fact-Check ${iconExternal}</a>` : ""}
+         ${articleUrl ? `<a ${publicReachAttributes(organization.slug, publication.fact_check_id, "EXTENSION_OFFICIAL_FACT_CHECK")} href="${escapeHtml(articleUrl)}" target="_blank" rel="noopener noreferrer" class="truthlens-primary-btn">Read Full Fact-Check ${iconExternal}</a>` : ""}
       </div>
    `;
 
@@ -261,6 +295,7 @@ function displayPublishedResultCard(claim, publication) {
       if (logo.complete) showLogo();
    }
    document.body.appendChild(card);
+   instrumentPublicPublicationLinks(card);
    void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
    card.querySelector(".truthlens-close-btn").addEventListener("click", () => {
@@ -394,6 +429,7 @@ export function displayResultCard(claim) {
    `;
 
    document.body.appendChild(card);
+   instrumentPublicPublicationLinks(card);
    void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
 
