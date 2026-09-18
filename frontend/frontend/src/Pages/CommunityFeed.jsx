@@ -35,10 +35,9 @@ import "./CommunityFeed.css";
  * @param {string} verdict - Verdict value (FACT, FAKE, etc.)
  * @returns {string} Action text describing what to do next
  */
-function getActionText(verdict) {
+function getAiActionText(verdict) {
    if (!verdict || verdict === "UNVERIFIED") return "Needs Evidence";
-   if (verdict === "FACT" || verdict === "FAKE") return "Verified";
-   return "Pending";
+   return "AI Analysis";
 }
 
 const FEED_FILTERS = {
@@ -440,19 +439,19 @@ function CommunityFeed() {
       }
    };
 
-   const isModeratorVerified = (thread) => Boolean(thread?.claim?.moderator_verdict_info);
-   const isPendingConsensus = (thread) => {
+   const isHumanReviewed = (thread) => Boolean(thread?.claim?.moderator_verdict_info);
+   const isAwaitingHumanAdjudication = (thread) => {
       const verifiedEvidenceCount = thread?.claim?.verified_evidence_count ?? 0;
-      return !isModeratorVerified(thread) && verifiedEvidenceCount > 0;
+      return !isHumanReviewed(thread) && verifiedEvidenceCount > 0;
    };
 
    const filteredThreads = useMemo(() => {
       return threads.filter((thread) => {
          // 1. Status Filter
          if (activeFilter === FEED_FILTERS.VERIFIED) {
-            if (!isModeratorVerified(thread)) return false;
+            if (!isHumanReviewed(thread)) return false;
          } else if (activeFilter === FEED_FILTERS.NEEDS_EVIDENCE) {
-            if (isModeratorVerified(thread)) return false;
+            if (isHumanReviewed(thread)) return false;
          }
 
          // 2. Category Filter
@@ -692,10 +691,14 @@ function CommunityFeed() {
                      filteredThreads.map((thread) => {
                         const verdict = getEffectiveVerdict(thread.claim);
                         const verdictClass = verdict?.toLowerCase();
-                        const hasModeratorVerdict = isModeratorVerified(thread);
-                        const pendingConsensus = isPendingConsensus(thread);
+                        const hasHumanReviewedVerdict = isHumanReviewed(thread);
+                        const awaitingHumanAdjudication = isAwaitingHumanAdjudication(thread);
                         const pendingEvidenceCount = thread.claim?.verified_evidence_count ?? 0;
-                        const actionText = pendingConsensus ? "Pending" : getActionText(verdict);
+                        const actionText = hasHumanReviewedVerdict
+                           ? "Reviewed"
+                           : awaitingHumanAdjudication
+                             ? "Pending"
+                             : getAiActionText(verdict);
 
                         return (
                            <div key={thread.id} className="post-card">
@@ -816,7 +819,7 @@ function CommunityFeed() {
                                              fontSize: "0.75rem",
                                           }}
                                        >
-                                          {hasModeratorVerdict ? (
+                                          {hasHumanReviewedVerdict ? (
                                              <span
                                                 style={{
                                                    display: "flex",
@@ -826,7 +829,7 @@ function CommunityFeed() {
                                                    marginRight: "2px",
                                                 }}
                                              >
-                                                <Icons name="shield-check" size={12} /> Mod:
+                                                <Icons name="shield-check" size={12} /> Reviewed:
                                              </span>
                                           ) : (
                                              <span
@@ -997,15 +1000,15 @@ function CommunityFeed() {
                                  )}
                               </div>
 
-                              {/* ── AI Analysis Bar or Moderator Verdict (NOW WITH CONTEXT INSIDE) ── */}
+                              {/* ── AI Analysis Bar or Human-Reviewed Verdict (NOW WITH CONTEXT INSIDE) ── */}
                               <div className={`ai-analysis-bar bar-${verdictClass}`}>
                                  {/* TOP ROW: Verdict Info & Button */}
                                  <div className="ai-analysis-top-row">
-                                    {hasModeratorVerdict ? (
-                                       // Show Moderator Verdict
+                                    {hasHumanReviewedVerdict ? (
+                                       // Show human-reviewed verdict
                                        <div className="ai-info">
                                           <span className="ai-confidence-text">
-                                             Final Verdict:{" "}
+                                             Human-reviewed verdict:{" "}
                                              <strong>{thread.claim.moderator_verdict_info.verdict}</strong> (
                                              {thread.claim.moderator_verdict_info.verified_evidence_count} evidence)
                                              {thread.claim.moderator_verdict_info.verdict === "MISLEADING" && (
@@ -1013,7 +1016,7 @@ function CommunityFeed() {
                                              )}
                                           </span>
                                        </div>
-                                    ) : pendingConsensus ? (
+                                    ) : awaitingHumanAdjudication ? (
                                        // Show pending state
                                        <div className="ai-info">
                                           <span className="ai-confidence-text">
@@ -1035,12 +1038,11 @@ function CommunityFeed() {
                                  {/* BOTTOM ROW: Context / Reasoning Text */}
                                  <div className="ai-analysis-context">
                                     <strong className="context-label">Context: </strong>
-                                    {hasModeratorVerdict
+                                    {hasHumanReviewedVerdict
                                        ? thread.claim.moderator_verdict_info?.notes ||
-                                         thread.claim.ai_summary ||
-                                         "No additional context provided by moderators."
-                                       : pendingConsensus
-                                         ? `${pendingEvidenceCount} verified evidence submissions are currently under review by moderators to form a final consensus.`
+                                         "Human adjudication context is not available in this view."
+                                       : awaitingHumanAdjudication
+                                         ? `${pendingEvidenceCount} verified evidence submissions are awaiting human adjudication.`
                                          : thread.claim.ai_summary || "No AI summary available."}
                                  </div>
                               </div>

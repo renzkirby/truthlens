@@ -7,6 +7,13 @@ import requests
 import base64
 from numbers import Number
 from django.contrib.auth.models import User
+from django.db import transaction
+from .knowledge_reuse_service import (
+    find_exact_canonical_published_fact_check,
+    record_authoritative_claim_fact_check_reference,
+    record_equivalent_claim_fact_check_reference,
+    record_related_claim_fact_check_reference,
+)
 from .ocr_service import extract_text_from_image
 from .services import (
     ClaimGateError,
@@ -26,6 +33,8 @@ from .services import (
 )
 from .models import (
     Claim,
+    ClaimFactCheckReference,
+    KnowledgeReuseEvent,
     OfficialFactCheck,
     UserProfile,
     VerificationEvidence,
@@ -66,6 +75,142 @@ logger = logging.getLogger(__name__)
 
 class ClaimPersistenceError(RuntimeError):
     """Raised when automated analysis cannot be persisted to a Claim."""
+
+
+def _resolve_exact_published_claim(claim, cleaned_claim):
+    """Resolve cleaned factual text without storing AI/human verdict copies."""
+    if claim is None:
+        return False
+    try:
+        match = find_exact_canonical_published_fact_check(cleaned_claim)
+        if match is None:
+            return False
+        with transaction.atomic():
+            reference = record_authoritative_claim_fact_check_reference(
+                target_claim=claim,
+                fact_check=match.fact_check,
+                query_text=cleaned_claim,
+            )
+            if reference is None:
+                return False
+            claim.context_text = cleaned_claim
+            claim.save(update_fields=["context_text", "last_updated"])
+    except Exception as exc:
+        raise ClaimPersistenceError(
+            f"Published resolution persistence failed for claim {claim.pk}."
+        ) from exc
+    return True
+
+
+def _resolve_equivalent_published_claim(claim, cleaned_claim, vault_match):
+    """A Vault candidate only opens the strict multi-candidate authority gate."""
+    if claim is None or not vault_match:
+        return False
+    try:
+        # The recorder independently considers the bounded plausible publication
+        # set and only writes authority when exactly one publication is equivalent.
+        with transaction.atomic():
+            reference = record_equivalent_claim_fact_check_reference(
+                target_claim=claim,
+                query_text=cleaned_claim,
+            )
+            if reference is None:
+                return False
+            claim.context_text = cleaned_claim
+            claim.save(update_fields=["context_text", "last_updated"])
+    except LLMProviderUnavailableError:
+        raise
+    except Exception as exc:
+        raise ClaimPersistenceError(
+            f"Published equivalence resolution failed for claim {claim.pk}."
+        ) from exc
+    return True
+
+
+def _record_related_published_claim(claim, query_text, vault_match):
+    """Best-effort provenance after the authority gate has declined resolution."""
+    if claim is None or not vault_match:
+        return
+    try:
+        # Isolate database failures with a savepoint, including failures before
+        # the service is entered, so the eventual AI result can still be saved.
+        with transaction.atomic():
+            publication = OfficialFactCheck.objects.filter(
+                pk=vault_match.get("fact_check_id"),
+                publication_status=OfficialFactCheck.PublicationStatus.PUBLISHED,
+            ).first()
+            if publication is None:
+                return
+            method = vault_match.get("match_method")
+            if method == KnowledgeReuseEvent.MatchMethod.EXACT_TEXT:
+                normalized_query = " ".join(query_text.split()).casefold()
+                canonical = " ".join((publication.canonical_claim or "").split()).casefold()
+                headline = " ".join((publication.headline or "").split()).casefold()
+                if normalized_query == canonical:
+                    method = ClaimFactCheckReference.MatchMethod.EXACT_CANONICAL
+                elif normalized_query == headline:
+                    method = ClaimFactCheckReference.MatchMethod.EXACT_HEADLINE
+                else:
+                    return
+            elif method == KnowledgeReuseEvent.MatchMethod.SEMANTIC:
+                method = ClaimFactCheckReference.MatchMethod.SEMANTIC
+            elif method == KnowledgeReuseEvent.MatchMethod.FULL_TEXT:
+                method = ClaimFactCheckReference.MatchMethod.FULL_TEXT
+            else:
+                return
+            record_related_claim_fact_check_reference(
+                target_claim=claim,
+                fact_check=publication,
+                query_text=query_text,
+                match_method=method,
+                similarity_score=vault_match.get("similarity_score"),
+            )
+    except Exception:
+        logger.warning(
+            "Failed to record related publication provenance for claim %s.",
+            claim.pk,
+            exc_info=True,
+        )
+
+
+def _reuse_second_chance_ai_analysis(matched_claim, claim_id):
+    """Reuse prior automated analysis without conferring human authority."""
+    logger.info(
+        "Second-chance deduplication hit! OCR text matches existing claim %s ",
+        matched_claim.id,
+    )
+
+    try:
+        current_claim = Claim.objects.get(id=claim_id)
+        current_claim.ai_verdict = matched_claim.ai_verdict
+        current_claim.ai_summary = matched_claim.ai_summary
+        current_claim.consensus_score = matched_claim.consensus_score
+        current_claim.source_type = matched_claim.source_type
+        current_claim.source_link = matched_claim.source_link
+        current_claim.top_verdict_source = matched_claim.top_verdict_source
+        current_claim.ai_sources = matched_claim.ai_sources
+        current_claim.is_ai_generated = matched_claim.is_ai_generated
+        current_claim.score_context = (
+            "This result was matched from a prior analysis of the same claim."
+        )
+        current_claim.save(
+            update_fields=[
+                "ai_verdict",
+                "ai_summary",
+                "consensus_score",
+                "source_type",
+                "source_link",
+                "top_verdict_source",
+                "ai_sources",
+                "is_ai_generated",
+                "score_context",
+                "last_updated",
+            ]
+        )
+    except Claim.DoesNotExist:
+        pass
+
+    return matched_claim.ai_verdict
 
 
 def _float_env(name, default):
@@ -139,30 +284,22 @@ def _retrieve_and_ingest_gfc(
         timeout=GFC_HTTP_TIMEOUT_SEC,
     )
 
-    payload, raw_evidence_items = (
-        provider.search_with_payload(
-            search_query,
-            limit=5,
-        )
+    payload, raw_evidence_items = provider.search_with_payload(
+        search_query,
+        limit=5,
     )
 
     ingestion_started_at = time.perf_counter()
-    stage_name = (
-        f"{stage_prefix}gfc_evidence_ingestion"
-    )
+    stage_name = f"{stage_prefix}gfc_evidence_ingestion"
 
     try:
-        evidence_sources = ingest_raw_evidence(
-            raw_evidence_items
-        )
+        evidence_sources = ingest_raw_evidence(raw_evidence_items)
 
         _log_stage(
             claim_id,
             stage_name,
             ingestion_started_at,
-            evidence_sources=len(
-                evidence_sources
-            ),
+            evidence_sources=len(evidence_sources),
         )
 
     except Exception as exc:
@@ -174,8 +311,7 @@ def _retrieve_and_ingest_gfc(
         )
 
         logger.error(
-            "GFC evidence ingestion failed "
-            "for claim %s: %s",
+            "GFC evidence ingestion failed " "for claim %s: %s",
             claim_id,
             exc,
         )
@@ -554,8 +690,7 @@ def _assess_and_persist_reasoning_evidence(
                 error=str(exc)[:120],
             )
             logger.error(
-                "Evidence assessment persistence failed for claim %s, "
-                "link %s: %s",
+                "Evidence assessment persistence failed for claim %s, " "link %s: %s",
                 claim_id,
                 evidence_item.evidence_link_id,
                 exc,
@@ -729,6 +864,7 @@ def execute_core_text_pipeline(raw_text, claim_id):
         run = start_verification_run(run)
 
     selected_verdict = None
+    published_resolution = False
     pipeline_error = None
     runtime_error_propagating = False
     try:
@@ -742,47 +878,29 @@ def execute_core_text_pipeline(raw_text, claim_id):
             allow_semantic_fallback=False,
         )
 
-        if matched_claim and str(matched_claim.id) != str(claim_id):
-            logger.info(
-                "Second-chance deduplication hit! OCR text matches existing claim %s ",
-                matched_claim.id,
+        has_second_chance_match = matched_claim is not None and str(
+            matched_claim.id
+        ) != str(claim_id)
+        is_image_claim = (
+            run_claim is not None and run_claim.claim_type == Claim.ClaimType.IMAGE
+        )
+
+        # IMAGE claims get a deterministic exact-authority opportunity on
+        # raw OCR text before any LLM ClaimGate rewriting. This preserves the
+        # B.1A authority rule: AI may assist verification, but it must not be
+        # required to restate a claim before deterministic identity can match.
+        if is_image_claim and _resolve_exact_published_claim(run_claim, raw_text):
+            published_resolution = True
+            return
+
+        # Preserve the historical TEXT/non-IMAGE ordering. IMAGE claims defer
+        # automated cache reuse until canonical publication authority has had
+        # the first opportunity to resolve the claim.
+        if has_second_chance_match and not is_image_claim:
+            selected_verdict = _reuse_second_chance_ai_analysis(
+                matched_claim,
+                claim_id,
             )
-
-            try:
-                current_claim = Claim.objects.get(id=claim_id)
-                # Reuse prior automated analysis without copying an
-                # authoritative human decision onto a distinct Claim.
-                current_claim.ai_verdict = matched_claim.ai_verdict
-                current_claim.ai_summary = matched_claim.ai_summary
-                current_claim.consensus_score = matched_claim.consensus_score
-                current_claim.source_type = matched_claim.source_type
-                current_claim.source_link = matched_claim.source_link
-                current_claim.top_verdict_source = matched_claim.top_verdict_source
-                current_claim.ai_sources = matched_claim.ai_sources
-                current_claim.is_ai_generated = matched_claim.is_ai_generated
-                current_claim.score_context = (
-                    "This result was matched from a prior analysis of the same claim."
-                )
-                current_claim.save(
-                    update_fields=[
-                        "ai_verdict",
-                        "ai_summary",
-                        "consensus_score",
-                        "source_type",
-                        "source_link",
-                        "top_verdict_source",
-                        "ai_sources",
-                        "is_ai_generated",
-                        "score_context",
-                        "last_updated",
-                    ]
-                )
-            except Claim.DoesNotExist:
-                pass
-
-            selected_verdict = matched_claim.ai_verdict
-
-            # ABORT the pipeline so we don't waste LLM/Tavily API calls!
             return
         # -------------------------------------------
 
@@ -815,6 +933,44 @@ def execute_core_text_pipeline(raw_text, claim_id):
                 )
                 return
 
+            target_claim = Claim.objects.filter(id=claim_id).first()
+
+            # This shared pipeline also serves TEXT. IMAGE claims get both
+            # deterministic canonical authority and strict proposition-equivalence
+            # authority before any copied AI cache or automated SATIRE shortcut.
+            vault_started_at = None
+            vault_match = None
+            if (
+                target_claim is not None
+                and target_claim.claim_type == Claim.ClaimType.IMAGE
+            ):
+                if _resolve_exact_published_claim(target_claim, cleaned_claim):
+                    published_resolution = True
+                    return
+
+                vault_started_at = time.perf_counter()
+                vault_match = search_official_vault(
+                    cleaned_claim,
+                    target_claim=target_claim,
+                )
+                if vault_match:
+                    logger.info("Vault match found for claim %s!", claim_id)
+                    if _resolve_equivalent_published_claim(
+                        target_claim, cleaned_claim, vault_match
+                    ):
+                        published_resolution = True
+                        return
+                    _record_related_published_claim(
+                        target_claim, cleaned_claim, vault_match
+                    )
+
+                if has_second_chance_match:
+                    selected_verdict = _reuse_second_chance_ai_analysis(
+                        matched_claim,
+                        claim_id,
+                    )
+                    return
+
             if article_stance == "SATIRE":
                 _save_claim(
                     claim_id,
@@ -837,13 +993,14 @@ def execute_core_text_pipeline(raw_text, claim_id):
                 )
                 return
 
-            vault_started_at = time.perf_counter()
-            target_claim = Claim.objects.filter(id=claim_id).first()
-
-            vault_match = search_official_vault(
-                cleaned_claim,
-                target_claim=target_claim,
-            )
+            # Preserve historical TEXT ordering. IMAGE already performed this
+            # Vault lookup above and reuses the same payload for AI context.
+            if not is_image_claim:
+                vault_started_at = time.perf_counter()
+                vault_match = search_official_vault(
+                    cleaned_claim,
+                    target_claim=target_claim,
+                )
 
             if vault_match:
                 logger.info("Vault match found for claim %s!", claim_id)
@@ -860,7 +1017,9 @@ def execute_core_text_pipeline(raw_text, claim_id):
                                 "claimReview": [
                                     {
                                         "textualRating": vault_match["verdict"],
-                                        "publisher": {"name": "TruthLens Official Vault"},
+                                        "publisher": {
+                                            "name": "TruthLens Official Vault"
+                                        },
                                     }
                                 ],
                             }
@@ -910,7 +1069,9 @@ def execute_core_text_pipeline(raw_text, claim_id):
                 if gfc_claims:
                     first_claim_text = gfc_claims[0].get("text", "")
                     relevance_started_at = time.perf_counter()
-                    is_relevant = is_fact_check_relevant(cleaned_claim, first_claim_text)
+                    is_relevant = is_fact_check_relevant(
+                        cleaned_claim, first_claim_text
+                    )
                     _log_stage(
                         claim_id,
                         "gfc_relevance_check",
@@ -945,14 +1106,10 @@ def execute_core_text_pipeline(raw_text, claim_id):
                             claim_id,
                             stage_prefix="gfc",
                         )
-                        evidence_dossier = load_reasoning_evidence_dossier_for_run(
-                            run
-                        )
-                        fact_check_groups = (
-                            filter_reasoning_evidence_dossier_by_role(
-                                evidence_dossier,
-                                VerificationEvidence.EvidenceRole.FACT_CHECK,
-                            )
+                        evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
+                        fact_check_groups = filter_reasoning_evidence_dossier_by_role(
+                            evidence_dossier,
+                            VerificationEvidence.EvidenceRole.FACT_CHECK,
                         )
                     evidence_context = render_reasoning_evidence_dossier(
                         fact_check_groups
@@ -1030,11 +1187,16 @@ def execute_core_text_pipeline(raw_text, claim_id):
             tavily_started_at = time.perf_counter()
             try:
                 tavily_response = _retrieve_and_ingest_tavily_queries(
-                    search_queries, claim_id, verification_run=run,
+                    search_queries,
+                    claim_id,
+                    verification_run=run,
                 )
             except Exception as e:
                 _log_stage(
-                    claim_id, "tavily_search_failed", tavily_started_at, error=str(e)[:120]
+                    claim_id,
+                    "tavily_search_failed",
+                    tavily_started_at,
+                    error=str(e)[:120],
                 )
                 logger.error("Tavily error for claim %s: %s", claim_id, e)
                 _save_claim(
@@ -1108,14 +1270,10 @@ def execute_core_text_pipeline(raw_text, claim_id):
                             claim_id,
                             stage_prefix="tavily",
                         )
-                        evidence_dossier = load_reasoning_evidence_dossier_for_run(
-                            run
-                        )
-                        secondary_groups = (
-                            filter_reasoning_evidence_dossier_by_role(
-                                evidence_dossier,
-                                VerificationEvidence.EvidenceRole.SECONDARY,
-                            )
+                        evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
+                        secondary_groups = filter_reasoning_evidence_dossier_by_role(
+                            evidence_dossier,
+                            VerificationEvidence.EvidenceRole.SECONDARY,
                         )
                     evidence_context = render_reasoning_evidence_dossier(
                         secondary_groups
@@ -1171,9 +1329,7 @@ def execute_core_text_pipeline(raw_text, claim_id):
                 )
                 outcome = "completed_tavily"
                 selected_verdict = (
-                    ai_verdict.get("verdict")
-                    if isinstance(ai_verdict, dict)
-                    else None
+                    ai_verdict.get("verdict") if isinstance(ai_verdict, dict) else None
                 )
 
         except ClaimGateError as e:
@@ -1217,7 +1373,10 @@ def execute_core_text_pipeline(raw_text, claim_id):
                 pass
         finally:
             _log_stage(
-                claim_id, "core_text_pipeline_total", pipeline_started_at, outcome=outcome
+                claim_id,
+                "core_text_pipeline_total",
+                pipeline_started_at,
+                outcome=outcome,
             )
     except BaseException as exc:
         # Dedup errors historically propagate; retain that behavior and their cause.
@@ -1263,7 +1422,12 @@ def execute_core_text_pipeline(raw_text, claim_id):
                             failure_code="UNHANDLED_EXCEPTION",
                             failure_message=str(pipeline_error),
                         )
-                elif selected_verdict in ("FACT", "FAKE", "MISLEADING", "SATIRE"):
+                elif published_resolution or selected_verdict in (
+                    "FACT",
+                    "FAKE",
+                    "MISLEADING",
+                    "SATIRE",
+                ):
                     complete_verification_run(run)
                 else:
                     abstain_verification_run(run)
@@ -1329,6 +1493,7 @@ def url_fact_check_process(url, claim_id):
         run = start_verification_run(run)
 
     selected_verdict = None
+    published_resolution = False
     pipeline_error = None
     runtime_error_propagating = False
     try:
@@ -1349,6 +1514,27 @@ def url_fact_check_process(url, claim_id):
             _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
             return
 
+        target_claim = Claim.objects.filter(id=claim_id).first()
+
+        # Human publication authority precedes automated SATIRE classification.
+        if _resolve_exact_published_claim(target_claim, cleaned_claim):
+            published_resolution = True
+            return
+
+        vault_started_at = time.perf_counter()
+        vault_match = search_official_vault(
+            cleaned_claim,
+            target_claim=target_claim,
+        )
+        if vault_match:
+            logger.info("Vault match found for URL claim %s!", claim_id)
+            if _resolve_equivalent_published_claim(
+                target_claim, cleaned_claim, vault_match
+            ):
+                published_resolution = True
+                return
+            _record_related_published_claim(target_claim, cleaned_claim, vault_match)
+
         if article_stance == "SATIRE":
             _save_claim(
                 claim_id,
@@ -1366,18 +1552,8 @@ def url_fact_check_process(url, claim_id):
             _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
             return
 
-        vault_started_at = time.perf_counter()
-        target_claim = Claim.objects.filter(id=claim_id).first()
-
-        vault_match = search_official_vault(
-            cleaned_claim,
-            target_claim=target_claim,
-        )
-
         if vault_match:
-            logger.info("Vault match found for URL claim %s!", claim_id)
-
-            # We inject the vault data into the Gemini prompt to avoid the Negation Trap
+            # Reuse the already-retrieved Vault payload for AI evaluation.
             vault_eval_started_at = time.perf_counter()
             ai_verdict = evaluate_url_claim_with_gfc(
                 cleaned_claim,
@@ -1484,18 +1660,12 @@ def url_fact_check_process(url, claim_id):
                         claim_id,
                         stage_prefix="url_gfc",
                     )
-                    evidence_dossier = load_reasoning_evidence_dossier_for_run(
-                        run
+                    evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
+                    fact_check_groups = filter_reasoning_evidence_dossier_by_role(
+                        evidence_dossier,
+                        VerificationEvidence.EvidenceRole.FACT_CHECK,
                     )
-                    fact_check_groups = (
-                        filter_reasoning_evidence_dossier_by_role(
-                            evidence_dossier,
-                            VerificationEvidence.EvidenceRole.FACT_CHECK,
-                        )
-                    )
-                evidence_context = render_reasoning_evidence_dossier(
-                    fact_check_groups
-                )
+                evidence_context = render_reasoning_evidence_dossier(fact_check_groups)
                 if evidence_context:
                     try:
                         ai_verdict = evaluate_claim_with_persisted_evidence(
@@ -1538,9 +1708,7 @@ def url_fact_check_process(url, claim_id):
 
                 source_urls = []
                 for claim_data in gfc_claims[:3]:
-                    review_url = claim_data.get("claimReview", [{}])[0].get(
-                        "url", ""
-                    )
+                    review_url = claim_data.get("claimReview", [{}])[0].get("url", "")
                     if review_url:
                         source_urls.append(review_url)
 
@@ -1560,9 +1728,7 @@ def url_fact_check_process(url, claim_id):
                 )
                 outcome = "completed_gfc"
                 selected_verdict = (
-                    ai_verdict.get("verdict")
-                    if isinstance(ai_verdict, dict)
-                    else None
+                    ai_verdict.get("verdict") if isinstance(ai_verdict, dict) else None
                 )
                 _log_stage(
                     claim_id, "url_task_total", pipeline_started_at, outcome=outcome
@@ -1580,7 +1746,10 @@ def url_fact_check_process(url, claim_id):
             )
         except Exception as e:
             _log_stage(
-                claim_id, "url_tavily_failed", tavily_search_started_at, error=str(e)[:120]
+                claim_id,
+                "url_tavily_failed",
+                tavily_search_started_at,
+                error=str(e)[:120],
             )
             logger.error("Tavily search error for claim %s: %s", claim_id, e)
             _save_claim(
@@ -1680,18 +1849,12 @@ def url_fact_check_process(url, claim_id):
                         claim_id,
                         stage_prefix="url_tavily",
                     )
-                    evidence_dossier = load_reasoning_evidence_dossier_for_run(
-                        run
+                    evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
+                    secondary_groups = filter_reasoning_evidence_dossier_by_role(
+                        evidence_dossier,
+                        VerificationEvidence.EvidenceRole.SECONDARY,
                     )
-                    secondary_groups = (
-                        filter_reasoning_evidence_dossier_by_role(
-                            evidence_dossier,
-                            VerificationEvidence.EvidenceRole.SECONDARY,
-                        )
-                    )
-                evidence_context = render_reasoning_evidence_dossier(
-                    secondary_groups
-                )
+                evidence_context = render_reasoning_evidence_dossier(secondary_groups)
                 if evidence_context:
                     evaluator_invoked = True
                     ai_verdict = evaluate_claim_with_persisted_evidence(
@@ -1728,7 +1891,9 @@ def url_fact_check_process(url, claim_id):
                     verdict=ai_verdict.get("verdict"),
                 )
             save_started_at = time.perf_counter()
-            _save_claim(claim_id, ai_verdict, "Live Web Search", cleaned_text, source_urls)
+            _save_claim(
+                claim_id, ai_verdict, "Live Web Search", cleaned_text, source_urls
+            )
             _log_stage(
                 claim_id, "save_claim", save_started_at, source_type="Live Web Search"
             )
@@ -1787,7 +1952,12 @@ def url_fact_check_process(url, claim_id):
                             failure_code="UNHANDLED_EXCEPTION",
                             failure_message=str(pipeline_error),
                         )
-                elif selected_verdict in ("FACT", "FAKE", "MISLEADING", "SATIRE"):
+                elif published_resolution or selected_verdict in (
+                    "FACT",
+                    "FAKE",
+                    "MISLEADING",
+                    "SATIRE",
+                ):
                     complete_verification_run(run)
                 else:
                     abstain_verification_run(run)
@@ -1853,9 +2023,7 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
         score_context = verdict.get("score_context")
         if score_context is not None:
             score_context = str(score_context)
-            score_context_max_length = Claim._meta.get_field(
-                "score_context"
-            ).max_length
+            score_context_max_length = Claim._meta.get_field("score_context").max_length
             original_score_context_length = len(score_context)
             if original_score_context_length > score_context_max_length:
                 logger.warning(

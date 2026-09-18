@@ -5,13 +5,16 @@ from django.db.models import Prefetch
 from django.utils import timezone
 
 from .models import (
+    AccountabilityEvent,
     Claim,
     EvidenceSubmission,
+    FactualCorrectionProposal,
     FactualCorrectionRequest,
     ModerationCase,
     ModerationEvent,
     OfficialFactCheck,
 )
+from .accountability_service import record_accountability_event
 
 from .moderation_service import (
     ACTIVE_CASE_STATUSES,
@@ -341,6 +344,7 @@ def _prepare_evidence_case_for_review(
     case,
     *,
     actor,
+    claim_id,
     allow_reopen=True,
 ):
     if case.status == ModerationCase.Status.RESOLVED:
@@ -364,6 +368,25 @@ def _prepare_evidence_case_for_review(
             to_status=(ModerationCase.Status.REOPENED),
             reason_code="RE_REVIEW",
         )
+
+        if case.organization is not None:
+            record_accountability_event(
+                action_type=AccountabilityEvent.ActionType.EVIDENCE_REOPENED,
+                resource_type=AccountabilityEvent.ResourceType.EVIDENCE_SUBMISSION,
+                resource_id=case.evidence_submission_id,
+                authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+                actor=actor,
+                authority_organization=case.organization,
+                subject_organization=case.organization,
+                capability=PartnerCapability.REVIEW_EVIDENCE,
+                previous_state={"case_status": ModerationCase.Status.RESOLVED},
+                new_state={"case_status": ModerationCase.Status.REOPENED},
+                reason_code="RE_REVIEW",
+                context={
+                    "moderation_case_id": str(case.pk),
+                    "claim_id": str(claim_id),
+                },
+            )
 
     if case.status in {
         ModerationCase.Status.OPEN,
@@ -497,6 +520,19 @@ def review_correction_evidence(
         ):
             raise EvidenceReviewConflict(
                 "The factual correction request is no longer active."
+            )
+
+        proposal = (
+            FactualCorrectionProposal.objects.select_for_update(of=("self",))
+            .filter(correction_request=correction_request)
+            .first()
+        )
+        if (
+            proposal is not None
+            and proposal.status == FactualCorrectionProposal.Status.PREPARED
+        ):
+            raise EvidenceReviewConflict(
+                "Correction evidence is frozen after proposal preparation."
             )
 
         decision = context["decision"]
@@ -667,6 +703,7 @@ def review_correction_evidence(
         case = _prepare_evidence_case_for_review(
             case,
             actor=actor,
+            claim_id=context["claim"].pk,
             allow_reopen=True,
         )
         previous_status = locked_evidence.evidence_status
@@ -726,6 +763,32 @@ def review_correction_evidence(
                 "is_reaffirmation": previous_status == evidence_status,
                 "evidence_snapshot_schema_version": (EVIDENCE_SNAPSHOT_SCHEMA_VERSION),
                 "evidence_record": evidence_record,
+            },
+        )
+        accountability_action = (
+            AccountabilityEvent.ActionType.EVIDENCE_VERIFIED
+            if evidence_status == EvidenceSubmission.EvidenceStatus.VERIFIED
+            else AccountabilityEvent.ActionType.EVIDENCE_REJECTED
+        )
+        record_accountability_event(
+            action_type=accountability_action,
+            resource_type=AccountabilityEvent.ResourceType.EVIDENCE_SUBMISSION,
+            resource_id=locked_evidence.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            actor=actor,
+            authority_organization=context["organization"],
+            subject_organization=context["organization"],
+            capability=PartnerCapability.REVIEW_EVIDENCE,
+            previous_state={"evidence_status": previous_status},
+            new_state={"evidence_status": evidence_status},
+            reason_code=rejection_reason or evidence_status,
+            notes=moderator_notes,
+            context={
+                "correction_request_id": str(correction_request.pk),
+                "correction_case_id": str(correction_case.pk),
+                "evidence_case_id": str(case.pk),
+                "is_reaffirmation": previous_status == evidence_status,
+                "claim_id": str(context["claim"].pk),
             },
         )
         case = transition_moderation_case(
@@ -948,6 +1011,7 @@ def review_evidence_submission(
         case = _prepare_evidence_case_for_review(
             case,
             actor=actor,
+            claim_id=locked_claim.pk,
             allow_reopen=allow_reopen,
         )
 
@@ -993,6 +1057,30 @@ def review_evidence_submission(
             metadata={
                 "previous_evidence_status": previous_status,
                 "new_evidence_status": evidence_status,
+            },
+        )
+
+        accountability_action = (
+            AccountabilityEvent.ActionType.EVIDENCE_VERIFIED
+            if evidence_status == EvidenceSubmission.EvidenceStatus.VERIFIED
+            else AccountabilityEvent.ActionType.EVIDENCE_REJECTED
+        )
+        record_accountability_event(
+            action_type=accountability_action,
+            resource_type=AccountabilityEvent.ResourceType.EVIDENCE_SUBMISSION,
+            resource_id=locked_evidence.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            actor=actor,
+            authority_organization=organization,
+            subject_organization=organization,
+            capability=PartnerCapability.REVIEW_EVIDENCE,
+            previous_state={"evidence_status": previous_status},
+            new_state={"evidence_status": evidence_status},
+            reason_code=rejection_reason or evidence_status,
+            notes=moderator_notes,
+            context={
+                "evidence_case_id": str(case.pk),
+                "claim_id": str(locked_claim.pk),
             },
         )
 

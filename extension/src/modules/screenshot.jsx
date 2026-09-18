@@ -9,8 +9,6 @@ let cropRoot = null;
 let cropRootNode = null;
 
 export function startCropStudio() {
-   console.log("Requesting full screenshot for Crop Studio...");
-
    setTimeout(() => {
       chrome.runtime.sendMessage(
          {
@@ -18,7 +16,6 @@ export function startCropStudio() {
          },
          function (response) {
             if (response && response.screenshot) {
-               console.log("Full screenshot received, rendering CropStudio...");
                renderCropStudioUI(response.screenshot);
             } else {
                console.error("Screenshot capture failed");
@@ -60,11 +57,9 @@ function renderCropStudioUI(fullScreenshot) {
       <CropStudio
          imageSrc={fullScreenshot}
          onConfirm={(croppedDataUrl) => {
-            console.log("Crop confirmed via UI");
             processCroppedImage(croppedDataUrl);
          }}
          onCancel={() => {
-            console.log("Crop canceled via UI");
             cleanupCropStudio();
          }}
       />,
@@ -72,8 +67,7 @@ function renderCropStudioUI(fullScreenshot) {
 }
 
 function processCroppedImage(croppedScreenshot) {
-   // helper function to finalize payload and send to server, called after fetching deepfake toggle state
-   const finalizePayload = (isDeepfakeCheckEnabled) => {
+   const finalizePayload = () => {
       const payload = { image_data: croppedScreenshot };
 
       if (state.snipIntent === "deepfake") {
@@ -83,7 +77,7 @@ function processCroppedImage(croppedScreenshot) {
 
          // Import this new function dynamically to avoid circular dependencies
          import("./api.js").then(({ sendDeepfakeToServer }) => {
-            sendDeepfakeToServer(payload).catch((error) => {
+            sendDeepfakeToServer(payload).catch(() => {
                removeLoadingCard();
                displayErrorCard("Failed to analyze image forensics.");
             });
@@ -92,7 +86,7 @@ function processCroppedImage(croppedScreenshot) {
          state.isAnalyzing = true;
          displayLoadingCard();
          payload.check_deepfake = false; // We default to false now
-         sendImageToServer(payload).catch((error) => {
+         sendImageToServer(payload).catch(() => {
             removeLoadingCard();
             displayErrorCard("Failed to send image to server.");
          });
@@ -100,13 +94,5 @@ function processCroppedImage(croppedScreenshot) {
       cleanupCropStudio();
    };
 
-   // Fetch the Deepfake toggle state
-   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.get(["checkDeepfake"], function (result) {
-         finalizePayload(result.checkDeepfake || false);
-      });
-   } else {
-      console.warn("Chrome storage API not accessible. Defaulting to false.");
-      finalizePayload(false);
-   }
+   finalizePayload();
 }

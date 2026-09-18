@@ -1,8 +1,10 @@
 from django.db import transaction
 
 from .models import (
+    AccountabilityEvent,
     OrganizationMembership,
 )
+from .accountability_service import record_accountability_event
 from .organization_service import (
     PartnerCapability,
     get_manageable_membership_roles,
@@ -181,12 +183,26 @@ def change_organization_membership_role(
             "This member already has " "that organization role."
         )
 
+    previous_role = membership.role
     membership.role = new_role
 
     membership.save(
         update_fields=[
             "role",
         ]
+    )
+
+    record_accountability_event(
+        action_type=AccountabilityEvent.ActionType.ORGANIZATION_MEMBERSHIP_ROLE_CHANGED,
+        resource_type=AccountabilityEvent.ResourceType.ORGANIZATION_MEMBERSHIP,
+        resource_id=membership.pk,
+        authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+        actor=actor,
+        authority_organization=organization,
+        subject_organization=organization,
+        capability=PartnerCapability.MANAGE_ORGANIZATION,
+        previous_state={"role": previous_role, "status": membership.status},
+        new_state={"role": membership.role, "status": membership.status},
     )
 
     return membership
@@ -212,12 +228,26 @@ def suspend_organization_membership(
             "Only an active membership " "can be suspended."
         )
 
+    previous_status = membership.status
     membership.status = OrganizationMembership.Status.SUSPENDED
 
     membership.save(
         update_fields=[
             "status",
         ]
+    )
+
+    record_accountability_event(
+        action_type=AccountabilityEvent.ActionType.ORGANIZATION_MEMBERSHIP_SUSPENDED,
+        resource_type=AccountabilityEvent.ResourceType.ORGANIZATION_MEMBERSHIP,
+        resource_id=membership.pk,
+        authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+        actor=actor,
+        authority_organization=organization,
+        subject_organization=organization,
+        capability=PartnerCapability.MANAGE_ORGANIZATION,
+        previous_state={"role": membership.role, "status": previous_status},
+        new_state={"role": membership.role, "status": membership.status},
     )
 
     return membership
@@ -243,12 +273,26 @@ def restore_organization_membership(
             "Only a suspended membership " "can be restored."
         )
 
+    previous_status = membership.status
     membership.status = OrganizationMembership.Status.ACTIVE
 
     membership.save(
         update_fields=[
             "status",
         ]
+    )
+
+    record_accountability_event(
+        action_type=AccountabilityEvent.ActionType.ORGANIZATION_MEMBERSHIP_RESTORED,
+        resource_type=AccountabilityEvent.ResourceType.ORGANIZATION_MEMBERSHIP,
+        resource_id=membership.pk,
+        authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+        actor=actor,
+        authority_organization=organization,
+        subject_organization=organization,
+        capability=PartnerCapability.MANAGE_ORGANIZATION,
+        previous_state={"role": membership.role, "status": previous_status},
+        new_state={"role": membership.role, "status": membership.status},
     )
 
     return membership
@@ -274,12 +318,26 @@ def remove_organization_membership(
             "This person has already left " "the organization."
         )
 
+    previous_status = membership.status
     membership.status = OrganizationMembership.Status.LEFT
 
     membership.save(
         update_fields=[
             "status",
         ]
+    )
+
+    record_accountability_event(
+        action_type=AccountabilityEvent.ActionType.ORGANIZATION_MEMBERSHIP_REMOVED,
+        resource_type=AccountabilityEvent.ResourceType.ORGANIZATION_MEMBERSHIP,
+        resource_id=membership.pk,
+        authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+        actor=actor,
+        authority_organization=organization,
+        subject_organization=organization,
+        capability=PartnerCapability.MANAGE_ORGANIZATION,
+        previous_state={"role": membership.role, "status": previous_status},
+        new_state={"role": membership.role, "status": membership.status},
     )
 
     return membership

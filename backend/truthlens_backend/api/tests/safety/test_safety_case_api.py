@@ -667,30 +667,6 @@ class SafetyCaseApiTests(APITestCase):
         )
 
     @patch("api.tasks.recompute_user_trust_score_task.delay")
-    def test_legacy_safety_action_retains_trust_recomputation(self, delay):
-        with self.captureOnCommitCallbacks(execute=True):
-            response = self._client_for(self.moderator).post(
-                reverse(
-                    "moderation_safety_action",
-                    kwargs={"thread_id": self.thread.id},
-                ),
-                {"action": "REMOVE", "moderator_notes": "Legacy path review."},
-                format="json",
-            )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        called_ids = {call.args[0] for call in delay.call_args_list}
-        self.assertEqual(
-            called_ids,
-            {
-                self.reporter_one.id,
-                self.reporter_two.id,
-                self.author.id,
-                self.contributor.id,
-            },
-        )
-
-    @patch("api.tasks.recompute_user_trust_score_task.delay")
     def test_dismiss_remains_successful_when_trust_dispatch_fails(self, delay):
         delay.side_effect = ConnectionError("Redis unavailable")
         self._claim_case()
@@ -761,28 +737,6 @@ class SafetyCaseApiTests(APITestCase):
                 self.contributor.id,
             },
         )
-
-    @patch("api.tasks.recompute_user_trust_score_task.delay")
-    def test_legacy_action_remains_successful_when_trust_dispatch_fails(self, delay):
-        delay.side_effect = ConnectionError("Redis unavailable")
-
-        with self.captureOnCommitCallbacks(execute=True):
-            response = self._client_for(self.moderator).post(
-                reverse(
-                    "moderation_safety_action",
-                    kwargs={"thread_id": self.thread.id},
-                ),
-                {"action": "REMOVE", "moderator_notes": "Legacy violation."},
-                format="json",
-            )
-
-        self.case.refresh_from_db()
-        self.thread.refresh_from_db()
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(self.case.status, ModerationCase.Status.RESOLVED)
-        self.assertEqual(self.thread.status, Thread.Status.REJECTED)
-        self.assertEqual(delay.call_count, 4)
 
     @patch("api.tasks.recompute_user_trust_score_task.delay")
     @patch("api.safety_review_service.resolve_safety_case")

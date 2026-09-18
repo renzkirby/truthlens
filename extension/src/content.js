@@ -1,8 +1,6 @@
 import "./content.css";
 import { state } from "./modules/state.js";
-import { startCropStudio, cleanupCropStudio } from "./modules/screenshot.jsx";
-
-console.log("TruthLens content script loaded");
+import { startCropStudio } from "./modules/screenshot.jsx";
 
 const BRIDGE_EVENT_SOURCE = "TRUTHLENS_WEB_AUTH_BRIDGE";
 const EXTENSION_EVENT_SOURCE = "TRUTHLENS_EXTENSION";
@@ -59,7 +57,7 @@ function readTokensFromPageStorage() {
 
          refresh: window.localStorage.getItem("refresh") || window.sessionStorage.getItem("refresh"),
       });
-   } catch (_error) {
+   } catch {
       return { access: null, refresh: null };
    }
 }
@@ -144,7 +142,6 @@ initializeAuthBridge();
 
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
    if (request.type === "ACTIVATE_SNIPPING") {
-      console.log("Snipping mode activated!");
       state.snipIntent = request.intent || "factcheck";
       activateSnippingMode();
       sendResponse({ success: true });
@@ -170,6 +167,14 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       import("./modules/ui.jsx").then(({ displayResultCard, removeLoadingCard }) => {
          removeLoadingCard();
          setTimeout(() => displayResultCard(request.data), 2000);
+      });
+      sendResponse({ success: true });
+   }
+
+   if (request.type === "DISPLAY_URL_ERROR") {
+      import("./modules/ui.jsx").then(({ displayErrorCard, removeLoadingCard }) => {
+         removeLoadingCard();
+         displayErrorCard(request.message || "Unable to verify this URL. Please try again.");
       });
       sendResponse({ success: true });
    }
@@ -222,13 +227,6 @@ function activateSnippingMode() {
    startCropStudio();
 }
 
-function onKeyDown(e) {
-   if (e.key === "Escape") {
-      console.log("Snipping canceled by user");
-      cleanupCropStudio();
-   }
-}
-
 function restoreTokensFromWorker(onComplete) {
    chrome.runtime.sendMessage(
       {
@@ -253,12 +251,18 @@ function restoreTokensFromWorker(onComplete) {
             typeof response.refresh === "string" && response.refresh.trim() ? response.refresh.trim() : null;
 
          try {
-            if (!window.localStorage.getItem("access") && !window.sessionStorage.getItem("access") && access) {
-               window.sessionStorage.setItem("access", access);
-            }
+            const pageAccess = window.localStorage.getItem("access") || window.sessionStorage.getItem("access");
+            const pageRefresh = window.localStorage.getItem("refresh") || window.sessionStorage.getItem("refresh");
+            const pageHasAuthMaterial = Boolean(pageAccess || pageRefresh);
 
-            if (!window.localStorage.getItem("refresh") && !window.sessionStorage.getItem("refresh") && refresh) {
-               window.sessionStorage.setItem("refresh", refresh);
+            if (!pageHasAuthMaterial) {
+               if (access) {
+                  window.sessionStorage.setItem("access", access);
+               }
+
+               if (refresh) {
+                  window.sessionStorage.setItem("refresh", refresh);
+               }
             }
          } catch (error) {
             console.warn("Failed to restore TruthLens web session:", error);

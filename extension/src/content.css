@@ -334,3 +334,213 @@
    gap: 8px;
    margin-bottom: 8px;
 }
+
+/* Institutional publications retain their own human-authority hierarchy. */
+.truthlens-card.truthlens-institutional-card {
+   width: min(360px, calc(100vw - 32px));
+   padding: 16px;
+   overflow: visible;
+   display: flex;
+   flex-direction: column;
+}
+
+.truthlens-card.truthlens-institutional-card.verdict-out-of-scope {
+   border: 2px solid #9ca3af;
+}
+
+.truthlens-institutional-card .truthlens-header {
+   flex-shrink: 0;
+   align-items: center;
+   gap: 8px;
+   margin-bottom: 12px;
+}
+
+.truthlens-institutional-card .truthlens-title {
+   min-width: 0;
+   overflow-wrap: anywhere;
+}
+
+.truthlens-institutional-card .truthlens-title svg,
+.truthlens-institutional-card .truthlens-summary-title svg {
+   flex-shrink: 0;
+}
+
+.truthlens-institutional-card .truthlens-close-btn {
+   flex-shrink: 0;
+}
+
+.truthlens-institutional-card .truthlens-publication-body {
+   flex-shrink: 0;
+   overflow: visible;
+   overflow-wrap: anywhere;
+}
+
+.truthlens-institutional-card .truthlens-publication-label {
+   display: block;
+   margin: 0 0 4px;
+   font-size: 11px;
+   font-weight: 600;
+   line-height: 1.5;
+   color: #6b7280;
+}
+
+.truthlens-institutional-card .truthlens-badge {
+   width: fit-content;
+   margin-bottom: 10px;
+}
+
+.truthlens-institutional-card .truthlens-publication-headline {
+   margin: 0 0 10px;
+   font-size: 16px;
+   line-height: 1.3;
+   font-weight: 700;
+   color: #111827;
+   display: -webkit-box;
+   -webkit-box-orient: vertical;
+   -webkit-line-clamp: 3;
+   line-clamp: 3;
+   overflow: hidden;
+}
+
+.truthlens-institutional-card .truthlens-publication-partner {
+   display: flex;
+   align-items: center;
+   min-width: 0;
+   gap: 6px;
+   margin-bottom: 6px;
+}
+
+.truthlens-institutional-card .truthlens-partner-mark {
+   width: 24px;
+   height: 24px;
+   flex-shrink: 0;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   background: #f9fafb;
+   border-radius: 6px;
+   color: #374151;
+   font-weight: 600;
+}
+
+.truthlens-institutional-card .truthlens-partner-mark img {
+   width: 100%;
+   height: 100%;
+   object-fit: contain;
+   border-radius: inherit;
+}
+
+.truthlens-institutional-card [hidden] {
+   display: none !important;
+}
+
+.truthlens-institutional-card .truthlens-partner-identity {
+   min-width: 0;
+   font-size: 12px;
+   font-weight: 600;
+   line-height: 1.4;
+}
+
+.truthlens-institutional-card .truthlens-partner-identity .truthlens-publication-label {
+   margin-bottom: 0;
+}
+
+.truthlens-institutional-card .truthlens-partner-identity a,
+.truthlens-institutional-card .truthlens-publication-sources a {
+   color: #4f46e5;
+   text-decoration: none;
+}
+
+.truthlens-institutional-card .truthlens-partner-identity a:hover,
+.truthlens-institutional-card .truthlens-publication-sources a:hover {
+   text-decoration: underline;
+}
+
+.truthlens-institutional-card .truthlens-publication-summary {
+   margin: 0 0 10px;
+   padding: 12px;
+}
+
+.truthlens-institutional-card .truthlens-summary-title {
+   margin: 0 0 8px;
+}
+
+/* Only summary prose scrolls; verdict, provenance, sources and CTA stay in flow. */
+.truthlens-institutional-card .truthlens-publication-summary-scroll {
+   max-height: 140px;
+   overflow-y: auto;
+   overscroll-behavior-y: contain;
+   scrollbar-gutter: stable;
+}
+
+.truthlens-institutional-card .truthlens-publication-summary p {
+   margin: 0;
+}
+
+.truthlens-institutional-card .truthlens-publication-metadata {
+   display: flex;
+   flex-wrap: wrap;
+   gap: 0 8px;
+   margin-bottom: 10px;
+   font-size: 11px;
+   line-height: 1.5;
+   color: #6b7280;
+}
+
+.truthlens-institutional-card .truthlens-publication-sources {
+   margin-bottom: 10px;
+}
+
+.truthlens-institutional-card .truthlens-publication-sources .truthlens-publication-label {
+   margin: 0 0 4px;
+   color: #374151;
+}
+
+.truthlens-institutional-card .truthlens-publication-sources ul {
+   display: flex;
+   flex-wrap: wrap;
+   gap: 4px;
+   min-width: 0;
+   list-style: none;
+   margin: 0;
+   padding: 0;
+}
+
+.truthlens-institutional-card .truthlens-publication-sources li {
+   max-width: 100%;
+   margin: 0;
+   font-size: 11px;
+   line-height: 1.4;
+}
+
+.truthlens-institutional-card .truthlens-publication-sources a {
+   display: block;
+   max-width: 100%;
+   padding: 6px 10px;
+   background: #f9fafb;
+   border: 1px solid #e5e7eb;
+   border-radius: 6px;
+   font-weight: 600;
+   box-sizing: border-box;
+}
+
+.truthlens-institutional-card a:focus-visible,
+.truthlens-institutional-card button:focus-visible,
+.truthlens-institutional-card .truthlens-publication-summary-scroll:focus-visible {
+   outline: 2px solid #4f46e5;
+   outline-offset: 2px;
+}
+
+@media (max-width: 400px) {
+   .truthlens-card.truthlens-institutional-card {
+      top: 16px;
+      right: 16px;
+      padding: 12px;
+   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+   .truthlens-card.truthlens-institutional-card {
+      transition: none;
+   }
+}

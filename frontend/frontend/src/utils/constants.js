@@ -17,7 +17,7 @@ export const STATUS_OPTIONS = ["OPEN", "CLOSED", "REJECTED", "PENDING"];
 
 // ── Verdict Configuration ──
 // Maps each verdict type to its visual properties (color, background, label)
-// Used in Dashboard, CommunityFeed, ThreadDetailPage, ModerationPage
+// Used in Dashboard, CommunityFeed, and ThreadDetailPage
 export const VERDICT_CONFIG = {
    FACT: {
       color: "var(--verdict-fact-text)",
@@ -113,9 +113,6 @@ export const API_ENDPOINTS = {
    THREADS: "threads/",
 
    // Moderation
-   MOD_QUEUE: "moderation/queue/",
-   MOD_VERDICT_QUEUE: "moderation/verdict-queue/",
-   MOD_RESOLVE_THREAD: (threadId) => `moderation/threads/${threadId}/resolve/`,
    SAFETY_CASES: "moderation/safety/cases/",
    SAFETY_CASE_DETAIL: (caseId) => `moderation/safety/cases/${encodeURIComponent(caseId)}/`,
    SAFETY_CASE_CLAIM: (caseId) => `moderation/safety/cases/${encodeURIComponent(caseId)}/claim/`,
@@ -125,6 +122,46 @@ export const API_ENDPOINTS = {
    EVIDENCE_CASE_DETAIL: (caseId) => `moderation/evidence/cases/${encodeURIComponent(caseId)}/`,
    EVIDENCE_CASE_ACTION: (caseId) => `moderation/evidence/cases/${encodeURIComponent(caseId)}/action/`,
    ADJUDICATION_CASES: "moderation/adjudication/cases/",
+   PUBLICATION_WORK_ITEMS: "moderation/publications/work-items/",
+   PUBLICATION_WORK_ITEM_DETAIL: (resourceType, resourceId) =>
+      `moderation/publications/work-items/${encodeURIComponent(resourceType)}/${encodeURIComponent(resourceId)}/`,
+   FACT_CHECK_DRAFT_CREATE: (claimId) => `moderation/claims/${encodeURIComponent(claimId)}/fact-checks/draft/`,
+   FACT_CHECK_DRAFT_UPDATE: (factCheckId) => `moderation/fact-checks/${encodeURIComponent(factCheckId)}/draft/`,
+   FACT_CHECK_SUBMIT: (factCheckId) => `moderation/fact-checks/${encodeURIComponent(factCheckId)}/submit/`,
+   FACT_CHECK_PUBLISH: (factCheckId) => `moderation/fact-checks/${encodeURIComponent(factCheckId)}/publish/`,
+   FACT_CHECK_RETURN_FOR_REWORK: (factCheckId) =>
+      `moderation/fact-checks/${encodeURIComponent(factCheckId)}/return-for-rework/`,
+   FACT_CHECK_ABANDON: (factCheckId) => `moderation/fact-checks/${encodeURIComponent(factCheckId)}/abandon/`,
+   PUBLICATION_LIBRARY: "moderation/publications/library/",
+   PUBLICATION_LIBRARY_DETAIL: (publicationId) =>
+      `moderation/publications/library/${encodeURIComponent(publicationId)}/`,
+   FACTUAL_CORRECTION_COLLECTION: "moderation/publications/factual-corrections/",
+   FACTUAL_CORRECTION_DETAIL: (requestId) =>
+      `moderation/publications/factual-corrections/${encodeURIComponent(requestId)}/`,
+   FACTUAL_CORRECTION_REQUEST: (predecessorId) =>
+      `moderation/publications/${encodeURIComponent(predecessorId)}/factual-corrections/request/`,
+   FACTUAL_CORRECTION_EVIDENCE_REVIEW: (requestId, evidenceId) =>
+      `moderation/publications/factual-corrections/${encodeURIComponent(requestId)}/evidence/${encodeURIComponent(evidenceId)}/review/`,
+   FACTUAL_CORRECTION_PROPOSAL: (requestId) =>
+      `moderation/publications/factual-corrections/${encodeURIComponent(requestId)}/proposal/`,
+   FACTUAL_CORRECTION_PROPOSAL_PREPARE: (requestId) =>
+      `moderation/publications/factual-corrections/${encodeURIComponent(requestId)}/proposal/prepare/`,
+   FACTUAL_CORRECTION_PUBLISH: (requestId) =>
+      `moderation/publications/factual-corrections/${encodeURIComponent(requestId)}/publish/`,
+   FACTUAL_CORRECTION_CANCEL: (requestId) =>
+      `moderation/publications/factual-corrections/${encodeURIComponent(requestId)}/cancel/`,
+   EDITORIAL_REVISION_DRAFT_CREATE: (predecessorId) =>
+      `moderation/publications/${encodeURIComponent(predecessorId)}/editorial-revisions/draft/`,
+   EDITORIAL_REVISION_DRAFT_UPDATE: (revisionId) =>
+      `moderation/publications/editorial-revisions/${encodeURIComponent(revisionId)}/draft/`,
+   EDITORIAL_REVISION_SUBMIT: (revisionId) =>
+      `moderation/publications/editorial-revisions/${encodeURIComponent(revisionId)}/submit/`,
+   EDITORIAL_REVISION_RETURN_FOR_REWORK: (revisionId) =>
+      `moderation/publications/editorial-revisions/${encodeURIComponent(revisionId)}/return-for-rework/`,
+   EDITORIAL_REVISION_ABANDON: (revisionId) =>
+      `moderation/publications/editorial-revisions/${encodeURIComponent(revisionId)}/abandon/`,
+   EDITORIAL_REVISION_PUBLISH: (revisionId) =>
+      `moderation/publications/editorial-revisions/${encodeURIComponent(revisionId)}/publish/`,
 
    // Verification Workspace
    VERIFICATION_INTAKE: "verification/intake/",
@@ -149,10 +186,15 @@ export const API_ENDPOINTS = {
       `organizations/${organizationId}/invitations/${invitationId}/resend/`,
    ORGANIZATION_INVITATION_CANCEL: (organizationId, invitationId) =>
       `organizations/${organizationId}/invitations/${invitationId}/cancel/`,
+   ACCOUNTABILITY_ORGANIZATION: "accountability/organization/",
+   ACCOUNTABILITY_PLATFORM_SAFETY: "accountability/platform-safety/",
 
    // Public Partner Presence
    PUBLIC_PARTNERS: "partners/",
    PUBLIC_PARTNER_DETAIL: (slug) => `partners/${encodeURIComponent(slug)}/`,
+   PUBLIC_PARTNER_FACT_CHECKS: (slug) => `partners/${encodeURIComponent(slug)}/fact-checks/`,
+   PUBLIC_PARTNER_FACT_CHECK_DETAIL: (slug, publicationId) =>
+      `partners/${encodeURIComponent(slug)}/fact-checks/${encodeURIComponent(publicationId)}/`,
 
    // Other
    POLLING: "polling/",
@@ -204,15 +246,6 @@ export const VERDICT_COLORS = {
    UNVERIFIED: VERDICT_CONFIG.UNVERIFIED.color,
    OUT_OF_SCOPE: VERDICT_CONFIG.OUT_OF_SCOPE.color,
    PENDING: VERDICT_CONFIG.PENDING.color,
-};
-
-// ── Moderation State Transitions ──
-// Valid status transitions for moderation workflow
-export const MODERATION_TRANSITIONS = {
-   PENDING: new Set(["OPEN", "CLOSED", "REJECTED"]),
-   OPEN: new Set(["CLOSED", "REJECTED"]),
-   CLOSED: new Set(["OPEN"]),
-   REJECTED: new Set([]),
 };
 
 // ── Verdict Metadata (Lowercase) ──

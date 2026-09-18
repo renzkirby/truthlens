@@ -43,6 +43,8 @@ class PublicationSourceLineageTests(
         return create_fact_check_draft(
             decision=context["decision"],
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_decision_revision=context["decision"].revision_number,
             headline=f"Snapshot-backed fact check {suffix}",
             summary="A professional summary of the adjudicated claim.",
             article_body="The article explains the reviewed evidence.",
@@ -385,11 +387,17 @@ class PublicationSourceLineageTests(
         update_fact_check_draft(
             fact_check=draft,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
             headline="Updated without changing lineage",
         )
         update_fact_check_draft(
             fact_check=draft,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation + 1,
+            expected_decision_revision=context["decision"].revision_number,
             summary="Updated again without changing lineage.",
         )
 
@@ -423,6 +431,9 @@ class PublicationSourceLineageTests(
         updated = update_fact_check_draft(
             fact_check=draft,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
             source_urls=[second_manual],
         )
 
@@ -475,6 +486,9 @@ class PublicationSourceLineageTests(
         update_fact_check_draft(
             fact_check=draft,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
             headline="Updated pre-lineage editorial draft",
         )
 
@@ -513,6 +527,9 @@ class PublicationSourceLineageTests(
         update_fact_check_draft(
             fact_check=draft,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
             source_urls=[],
         )
 
@@ -572,11 +589,17 @@ class PublicationSourceLineageTests(
         submitted = submit_fact_check_for_review(
             fact_check=draft,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
         )
 
         result = publish_fact_check(
             fact_check=submitted,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=submitted.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
         )
 
         context["assignment"].refresh_from_db()

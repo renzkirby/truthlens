@@ -17,10 +17,12 @@ from django.db import (
 from django.utils import timezone
 
 from .models import (
+    AccountabilityEvent,
     Organization,
     OrganizationInvitation,
     OrganizationMembership,
 )
+from .accountability_service import record_accountability_event
 from .organization_service import (
     ADMIN_MANAGEABLE_MEMBERSHIP_ROLES,
     OWNER_MANAGEABLE_MEMBERSHIP_ROLES,
@@ -174,6 +176,15 @@ def get_organization_invitation_by_token(
                     "updated_at",
                 ]
             )
+            record_accountability_event(
+                action_type=AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_EXPIRED,
+                resource_type=AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION,
+                resource_id=invitation.pk,
+                authority_scope=AccountabilityEvent.AuthorityScope.SYSTEM,
+                subject_organization=invitation.organization,
+                previous_state={"status": OrganizationInvitation.Status.PENDING},
+                new_state={"status": OrganizationInvitation.Status.EXPIRED},
+            )
 
         return invitation
 
@@ -214,6 +225,16 @@ def accept_organization_invitation(
                     "status",
                     "updated_at",
                 ]
+            )
+
+            record_accountability_event(
+                action_type=AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_EXPIRED,
+                resource_type=AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION,
+                resource_id=invitation.pk,
+                authority_scope=AccountabilityEvent.AuthorityScope.SYSTEM,
+                subject_organization=invitation.organization,
+                previous_state={"status": OrganizationInvitation.Status.PENDING},
+                new_state={"status": OrganizationInvitation.Status.EXPIRED},
             )
 
             expired = True
@@ -361,6 +382,22 @@ def accept_organization_invitation(
                 ]
             )
 
+            record_accountability_event(
+                action_type=AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_ACCEPTED,
+                resource_type=AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION,
+                resource_id=invitation.pk,
+                authority_scope=AccountabilityEvent.AuthorityScope.PERSONAL,
+                actor=actor,
+                subject_organization=invitation.organization,
+                previous_state={"status": OrganizationInvitation.Status.PENDING},
+                new_state={
+                    "status": OrganizationInvitation.Status.ACCEPTED,
+                    "membership_id": str(membership.pk),
+                    "membership_role": membership.role,
+                    "membership_status": membership.status,
+                },
+            )
+
             accepted_invitation = invitation
 
     # Raise only AFTER leaving the transaction so
@@ -465,25 +502,38 @@ def expire_stale_invitations(
     organization=None,
     email=None,
 ):
-    queryset = OrganizationInvitation.objects.filter(
-        status=(OrganizationInvitation.Status.PENDING),
-        expires_at__lte=timezone.now(),
-    )
-
-    if organization is not None:
-        queryset = queryset.filter(
-            organization=organization,
+    with transaction.atomic():
+        queryset = (
+            OrganizationInvitation.objects.select_for_update(of=("self",))
+            .select_related("organization")
+            .filter(
+                status=(OrganizationInvitation.Status.PENDING),
+                expires_at__lte=timezone.now(),
+            )
         )
 
-    if email is not None:
-        queryset = queryset.filter(
-            email=normalize_invitation_email(email),
-        )
+        if organization is not None:
+            queryset = queryset.filter(organization=organization)
 
-    return queryset.update(
-        status=(OrganizationInvitation.Status.EXPIRED),
-        updated_at=timezone.now(),
-    )
+        if email is not None:
+            queryset = queryset.filter(email=normalize_invitation_email(email))
+
+        invitations = list(queryset.order_by("created_at", "id"))
+        now = timezone.now()
+        for invitation in invitations:
+            invitation.status = OrganizationInvitation.Status.EXPIRED
+            invitation.save(update_fields=["status", "updated_at"])
+            record_accountability_event(
+                action_type=AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_EXPIRED,
+                resource_type=AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION,
+                resource_id=invitation.pk,
+                authority_scope=AccountabilityEvent.AuthorityScope.SYSTEM,
+                subject_organization=invitation.organization,
+                previous_state={"status": OrganizationInvitation.Status.PENDING},
+                new_state={"status": OrganizationInvitation.Status.EXPIRED},
+                context={"expired_at": now.isoformat()},
+            )
+        return len(invitations)
 
 
 @transaction.atomic
@@ -588,6 +638,22 @@ def create_organization_invitation(
         raise OrganizationInvitationConflict(
             "A pending invitation already " "exists for this email address."
         ) from error
+
+    record_accountability_event(
+        action_type=AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CREATED,
+        resource_type=AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION,
+        resource_id=invitation.pk,
+        authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+        actor=actor,
+        authority_organization=organization,
+        subject_organization=organization,
+        capability=PartnerCapability.MANAGE_ORGANIZATION,
+        new_state={
+            "status": invitation.status,
+            "invited_role": invitation.invited_role,
+            "send_count": invitation.send_count,
+        },
+    )
 
     return invitation, raw_token
 
@@ -780,6 +846,25 @@ def resend_organization_invitation(
             raw_token,
         )
 
+        record_accountability_event(
+            action_type=AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_RESENT,
+            resource_type=AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION,
+            resource_id=locked.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            actor=actor,
+            authority_organization=organization,
+            subject_organization=organization,
+            capability=PartnerCapability.MANAGE_ORGANIZATION,
+            previous_state={
+                "status": locked.status,
+                "send_count": locked.send_count - 1,
+            },
+            new_state={
+                "status": locked.status,
+                "send_count": locked.send_count,
+            },
+        )
+
         return locked
 
 
@@ -848,6 +933,19 @@ def cancel_organization_invitation(
                 "token_digest",
                 "updated_at",
             ]
+        )
+
+        record_accountability_event(
+            action_type=AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED,
+            resource_type=AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION,
+            resource_id=locked.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            actor=actor,
+            authority_organization=organization,
+            subject_organization=organization,
+            capability=PartnerCapability.MANAGE_ORGANIZATION,
+            previous_state={"status": OrganizationInvitation.Status.PENDING},
+            new_state={"status": locked.status},
         )
 
         return locked

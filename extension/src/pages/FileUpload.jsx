@@ -1,7 +1,5 @@
 import React, { useState } from "react";
 import { UploadCloud, FileText } from "lucide-react";
-import { displayLoadingCard, displayResultCard, displayErrorCard, removeLoadingCard } from "../modules/ui.jsx";
-import { state } from "../modules/state.js";
 import "./FileUpload.css";
 
 function FileUpload() {

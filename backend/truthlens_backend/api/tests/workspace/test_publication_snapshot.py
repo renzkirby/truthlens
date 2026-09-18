@@ -45,6 +45,8 @@ class PublicationSnapshotTests(AdjudicationContractFixtures, TestCase):
         draft = create_fact_check_draft(
             decision=context["decision"],
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_decision_revision=context["decision"].revision_number,
             headline=f"Sealed publication {suffix}",
             summary="A professional summary of the adjudicated claim.",
             article_body="The article documents the reviewed source basis.",
@@ -53,6 +55,9 @@ class PublicationSnapshotTests(AdjudicationContractFixtures, TestCase):
         return submit_fact_check_for_review(
             fact_check=draft,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
         )
 
     def publish_context(self, context, *, source_urls=None, suffix="seal"):
@@ -61,7 +66,13 @@ class PublicationSnapshotTests(AdjudicationContractFixtures, TestCase):
             source_urls=source_urls,
             suffix=suffix,
         )
-        result = publish_fact_check(fact_check=submitted, actor=self.lead)
+        result = publish_fact_check(
+            fact_check=submitted,
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=submitted.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
+        )
         return result["fact_check"], result
 
     def test_first_publication_creates_one_exact_sealed_record(self):
@@ -185,6 +196,9 @@ class PublicationSnapshotTests(AdjudicationContractFixtures, TestCase):
         fact_check = publish_fact_check(
             fact_check=submitted,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=submitted.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
         )["fact_check"]
         expected_source_ids = [
             str(source_id)
@@ -246,7 +260,13 @@ class PublicationSnapshotTests(AdjudicationContractFixtures, TestCase):
         event_count = ModerationEvent.objects.filter(case=context["case"]).count()
 
         with self.assertRaises(PublishingConflict):
-            publish_fact_check(fact_check=submitted, actor=self.lead)
+            publish_fact_check(
+                fact_check=submitted,
+                actor=self.lead,
+                organization_id=self.organization.id,
+                expected_edit_generation=submitted.edit_generation,
+                expected_decision_revision=context["decision"].revision_number,
+            )
 
         submitted.refresh_from_db()
         context["assignment"].refresh_from_db()
@@ -279,7 +299,13 @@ class PublicationSnapshotTests(AdjudicationContractFixtures, TestCase):
         )
 
         with self.assertRaises(PublishingConflict):
-            publish_fact_check(fact_check=submitted, actor=self.lead)
+            publish_fact_check(
+                fact_check=submitted,
+                actor=self.lead,
+                organization_id=self.organization.id,
+                expected_edit_generation=submitted.edit_generation,
+                expected_decision_revision=context["decision"].revision_number,
+            )
 
         submitted.refresh_from_db()
         self.assertEqual(
@@ -306,7 +332,13 @@ class PublicationSnapshotTests(AdjudicationContractFixtures, TestCase):
                 RuntimeError,
                 "sealed record storage unavailable",
             ):
-                publish_fact_check(fact_check=submitted, actor=self.lead)
+                publish_fact_check(
+                    fact_check=submitted,
+                    actor=self.lead,
+                    organization_id=self.organization.id,
+                    expected_edit_generation=submitted.edit_generation,
+                    expected_decision_revision=context["decision"].revision_number,
+                )
 
         submitted.refresh_from_db()
         context["assignment"].refresh_from_db()
@@ -384,6 +416,8 @@ class PublicationSnapshotTests(AdjudicationContractFixtures, TestCase):
         draft = create_fact_check_draft(
             decision=draft_context["decision"],
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_decision_revision=draft_context["decision"].revision_number,
             headline="Editable draft",
             summary="Draft summary.",
             article_body="Draft analysis.",
@@ -392,6 +426,9 @@ class PublicationSnapshotTests(AdjudicationContractFixtures, TestCase):
         update_fact_check_draft(
             fact_check=draft,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=draft_context["decision"].revision_number,
             headline="Still editable draft",
             source_urls=["https://example.com/replaced-draft-source"],
         )
@@ -448,6 +485,8 @@ class PublicationSnapshotTests(AdjudicationContractFixtures, TestCase):
         draft = create_fact_check_draft(
             decision=draft_context["decision"],
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_decision_revision=draft_context["decision"].revision_number,
             headline="Unsealed destination",
             summary="Draft summary.",
             article_body="Draft analysis.",

@@ -65,7 +65,7 @@ export default function CropStudio({ imageSrc, onConfirm, onCancel }) {
                   <img
                      ref={imgRef}
                      src={imageSrc}
-                     onLoad={(e) => {
+                     onLoad={() => {
                         setCrop({
                            unit: "%",
                            width: 50,

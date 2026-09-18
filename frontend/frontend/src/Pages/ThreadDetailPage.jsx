@@ -44,11 +44,9 @@ function tierColor(score) {
 /**
  * Generate user avatar background/text colors deterministically from username
  * @param {string} username - Username to hash
- * @param {boolean} isMod - Whether user is a moderator
  * @returns {object} { bg, color } for avatar styling
  */
-function avatarStyle(username = "", isMod = false) {
-   if (isMod) return { bg: "#d1fae5", color: "#059669" };
+function avatarStyle(username = "") {
    const palettes = [
       { bg: "#ede9fe", color: "#7c3aed" },
       { bg: "#fce7f3", color: "#db2777" },
@@ -118,8 +116,8 @@ function TrustGauge({ score = 0 }) {
 /**
  * UserAvatar: Colored circle with user initials
  */
-function UserAvatar({ username = "", isMod = false, size = 36 }) {
-   const style = avatarStyle(username, isMod);
+function UserAvatar({ username = "", size = 36 }) {
+   const style = avatarStyle(username);
    const initials = username.replace("@", "").slice(0, 1).toUpperCase();
    return (
       <div
@@ -318,7 +316,6 @@ function ThreadDetailPage() {
 
    const { authFetch, user } = useAuth();
    const { addToast } = useNotification();
-   const isModerator = user?.role === "MOD" || user?.role === "MODERATOR";
    const { threadId } = useParams();
    const navigate = useNavigate();
 
@@ -926,7 +923,7 @@ function ThreadDetailPage() {
                   {/* Right: verdict card */}
                   <div className="tdp-verdict-card">
                      {thread.claim?.moderator_verdict_info ? (
-                        // MODERATOR VERDICT VERSION
+                        // HUMAN-REVIEWED VERDICT VERSION
                         <>
                            <div style={{ marginBottom: "12px" }}>
                               <span
@@ -938,13 +935,13 @@ function ThreadDetailPage() {
                                     letterSpacing: "0.05em",
                                  }}
                               >
-                                 Final Verdict (Moderator-Verified)
+                                 Human-Reviewed Verdict
                               </span>
                            </div>
                            <VerdictBadge verdict={thread.claim.moderator_verdict_info.verdict.toUpperCase()} />
                            <p className="tdp-verdict-desc">
                               {VERDICT_META[thread.claim.moderator_verdict_info.verdict.toLowerCase()]?.desc ||
-                                 "Moderators have reviewed the evidence."}
+                                 "Evidence has been reviewed through human adjudication."}
                            </p>
                            <div className="tdp-evidence-count-row">
                               <span className="tdp-confidence-label">Verified Evidence</span>
@@ -977,7 +974,7 @@ function ThreadDetailPage() {
                            )}
                         </>
                      ) : thread.claim?.verified_evidence_count > 0 && !thread.claim?.moderator_verdict_info ? (
-                        // REFINEMENT #7: Pending Consensus - Evidence Under Review
+                         // Evidence awaiting human adjudication
                         <>
                            <div style={{ marginBottom: "12px" }}>
                               <span
@@ -993,7 +990,7 @@ function ThreadDetailPage() {
                               </span>
                            </div>
                            <VerdictBadge verdict="unverified" />
-                           <p className="tdp-verdict-desc">Evidence under review by moderators</p>
+                           <p className="tdp-verdict-desc">Evidence awaiting human adjudication</p>
                            <div className="tdp-evidence-count-row">
                               <span className="tdp-confidence-label">Evidence Under Review</span>
                               <span className="tdp-evidence-count-val" style={{ color: "#d97706" }}>
@@ -1009,7 +1006,7 @@ function ThreadDetailPage() {
                                  fontStyle: "italic",
                               }}
                            >
-                              Final verdict will be determined once moderators reach consensus
+                              Final verdict will be determined once human adjudication is complete
                            </p>
                         </>
                      ) : (
@@ -1292,7 +1289,7 @@ function ThreadDetailPage() {
                                  <p className="tdp-empty">No comments yet. Be the first!</p>
                               )}
                               {sortedComments.map((comment, i) => {
-                                 const isMod =
+                                 const isPlatformModerator =
                                     comment.commenter?.role === "MOD" || comment.commenter?.role === "MODERATOR";
                                  const username = comment.commenter?.username || "Unknown";
                                  const isOwner = comment.commenter?.id === user?.id;
@@ -1329,10 +1326,10 @@ function ThreadDetailPage() {
                                           <div className="tdp-comment-bubble">
                                              <div className="tdp-comment-header">
                                                 <span className="tdp-comment-user">{username}</span>
-                                                {isMod && (
+                                                {isPlatformModerator && (
                                                    <span className="tdp-mod-badge">
                                                       <Icons name="shield" size={8} color="#059669" strokeWidth={2.5} />
-                                                      MOD
+                                                      Platform Moderator
                                                    </span>
                                                 )}
                                                 <span className="tdp-comment-time">{commentDateTime}</span>
@@ -1433,7 +1430,6 @@ function ThreadDetailPage() {
                               <EvidenceCard
                                  key={ev.id || i}
                                  evidence={ev}
-                                 isModerator={isModerator}
                                  isOwner={ev.contributor?.id === user?.id}
                                  currentUserId={user?.id}
                                  isTop={i === 0 && evidenceList.length > 1}
@@ -1441,24 +1437,6 @@ function ThreadDetailPage() {
                                  onDelete={handleDeleteEvidence}
                                  onVote={handleVote}
                                  votingEvidenceId={votingEvidenceId}
-                                 onVerify={async (evidenceId, status, notes) => {
-                                    const API_BASE_URL =
-                                       import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
-                                    try {
-                                       await authFetch(`${API_BASE_URL}/evidence/${evidenceId}/verify/`, {
-                                          method: "PATCH",
-                                          headers: { "Content-Type": "application/json" },
-                                          body: JSON.stringify({
-                                             evidence_status: status,
-                                             moderator_notes: notes,
-                                          }),
-                                       });
-                                       await refreshThreadData();
-                                    } catch (error) {
-                                       console.error("Error verifying evidence:", error);
-                                       setError("Error verifying evidence");
-                                    }
-                                 }}
                                  editingId={editingEvidenceId}
                                  editingText={editingEvidenceText}
                                  editingVerdict={editingEvidenceVerdict}

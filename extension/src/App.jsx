@@ -86,7 +86,6 @@ function getVerdictToneClass(verdict) {
 function App() {
    const [isSnipping, setIsSnipping] = useState(false);
    const [activeLink, setActiveLink] = useState("snipping");
-   const [checkDeepfake, setCheckDeepfake] = useState(false);
    const [isGuestMode, setIsGuestMode] = useState(true);
    const [ghostScans, setGhostScans] = useState([]);
    const [loggedInUsername, setLoggedInUsername] = useState(null);
@@ -99,17 +98,6 @@ function App() {
          chrome.storage.local.remove([GUEST_SCAN_SYNC_STATUS_STORAGE_KEY]);
       }
    };
-
-   // load checkDeepfake choice from switch
-   useEffect(() => {
-      if (typeof chrome !== "undefined" && chrome.storage) {
-         chrome.storage.local.get(["checkDeepfake"], (result) => {
-            if (result.checkDeepfake !== undefined) {
-               setCheckDeepfake(result.checkDeepfake);
-            }
-         });
-      }
-   }, []);
 
    useEffect(() => {
       if (typeof chrome === "undefined" || !chrome.storage?.local) {
@@ -252,7 +240,7 @@ function App() {
       return () => {
          window.clearTimeout(dismissTimer);
       };
-   }, [guestSyncStatus?.updatedAt, guestSyncStatus?.status, isGuestMode]);
+   }, [guestSyncStatus, isGuestMode]);
 
    const handleOpenCommunityPlatform = () => {
       const communityUrl = `${WEB_APP_BASE_URL}/community`;
@@ -262,13 +250,6 @@ function App() {
       }
 
       window.open(communityUrl, "_blank", "noopener,noreferrer");
-   };
-
-   const handleToggleDeepfake = (checked) => {
-      setCheckDeepfake(checked);
-      if (typeof chrome !== "undefined" && chrome.storage) {
-         chrome.storage.local.set({ checkDeepfake: checked });
-      }
    };
 
    const handleSnipClick = async () => {
@@ -281,7 +262,7 @@ function App() {
          });
          // Close the extension popup so we can see the CropStudio on the page
          window.close();
-      } catch (error) {
+      } catch {
          setIsSnipping(false);
       }
    };
@@ -296,7 +277,7 @@ function App() {
          });
          // Close the extension popup so we can see the CropStudio on the page
          window.close();
-      } catch (error) {
+      } catch {
          setIsSnipping(false);
       }
    };

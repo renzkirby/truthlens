@@ -3,7 +3,10 @@ import uuid
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from .accountability_service import record_accountability_event
 from .models import (
+    AccountabilityEvent,
+    FactualCorrectionProposal,
     FactualCorrectionRequest,
     ModerationCase,
     ModerationEvent,
@@ -74,6 +77,31 @@ def _normalize_reason(value):
             "Correction reason must be 2000 characters or fewer."
         )
     return reason
+
+
+def _normalize_cancellation_reason(value):
+    if not isinstance(value, str):
+        raise InvalidFactualCorrectionRequest(
+            "cancellation_reason must be a string."
+        )
+    reason = value.strip()
+    if not reason:
+        raise InvalidFactualCorrectionRequest(
+            "A nonblank cancellation reason is required."
+        )
+    if len(reason) > 2000:
+        raise InvalidFactualCorrectionRequest(
+            "Cancellation reason must be 2000 characters or fewer."
+        )
+    return reason
+
+
+def _parse_expected_proposal_version(value):
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise InvalidFactualCorrectionRequest(
+            "expected_proposal_version must be a nonnegative integer."
+        )
+    return value
 
 
 def _get_request_identity(*, predecessor_id, organization_id):
@@ -347,7 +375,293 @@ def request_factual_correction(
             },
         )
 
+        record_accountability_event(
+            action_type=AccountabilityEvent.ActionType.FACTUAL_CORRECTION_REQUESTED,
+            resource_type=AccountabilityEvent.ResourceType.FACTUAL_CORRECTION_REQUEST,
+            resource_id=correction_request.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            actor=actor,
+            authority_organization=organization,
+            subject_organization=organization,
+            capability=PartnerCapability.ADJUDICATE,
+            new_state={
+                "status": correction_request.status,
+                "predecessor_decision_revision": decision.revision_number,
+                "predecessor_fact_check_version": predecessor.version,
+            },
+            notes=reason,
+            context={
+                "authoritative": False,
+                "claim_id": str(context["claim"].pk),
+                "moderation_case_id": str(correction_case.pk),
+                "predecessor_decision_id": str(decision.pk),
+                "predecessor_fact_check_id": str(predecessor.pk),
+            },
+        )
+
         return {
             "request": correction_request,
             "case": correction_case,
+        }
+
+
+def cancel_factual_correction(
+    *,
+    correction_request_id,
+    actor,
+    organization_id,
+    expected_proposal_version,
+    expected_predecessor_version,
+    expected_decision_revision,
+    cancellation_reason,
+):
+    """Atomically cancel active correction work without changing authority."""
+
+    if not actor or not actor.is_authenticated:
+        raise FactualCorrectionAuthorizationError("Authentication is required.")
+    correction_request_id = _parse_uuid(
+        correction_request_id,
+        "correction_request_id",
+    )
+    organization_id = _parse_uuid(organization_id, "organization_id")
+    expected_proposal_version = _parse_expected_proposal_version(
+        expected_proposal_version
+    )
+    expected_predecessor_version = _parse_positive_integer(
+        expected_predecessor_version,
+        "expected_predecessor_version",
+    )
+    expected_decision_revision = _parse_positive_integer(
+        expected_decision_revision,
+        "expected_decision_revision",
+    )
+    reason = _normalize_cancellation_reason(cancellation_reason)
+
+    identity = (
+        FactualCorrectionRequest.objects.filter(pk=correction_request_id)
+        .values(
+            "claim_id",
+            "organization_id",
+            "predecessor_decision_id",
+            "predecessor_fact_check_id",
+        )
+        .first()
+    )
+    if identity is None:
+        raise FactualCorrectionConflict(
+            "The factual correction request is no longer available."
+        )
+    if identity["organization_id"] != organization_id:
+        raise FactualCorrectionConflict(
+            "The factual correction request does not belong to this organization."
+        )
+    lock_identity = {
+        "correction_request_id": correction_request_id,
+        "claim_id": identity["claim_id"],
+        "organization_id": organization_id,
+        "decision_id": identity["predecessor_decision_id"],
+        "fact_check_id": identity["predecessor_fact_check_id"],
+    }
+
+    with transaction.atomic():
+        try:
+            context = _lock_publication_context(
+                identity=lock_identity,
+                actor=actor,
+                capability=PartnerCapability.ADJUDICATE,
+            )
+        except PublishingAuthorizationError as error:
+            raise FactualCorrectionAuthorizationError(
+                "You do not have permission to cancel this factual correction."
+            ) from error
+        except PublishingConflict as error:
+            raise FactualCorrectionConflict(str(error)) from error
+
+        correction_request = next(
+            (
+                item
+                for item in context["correction_requests"]
+                if item.id == correction_request_id
+            ),
+            None,
+        )
+        if (
+            correction_request is None
+            or correction_request.status != FactualCorrectionRequest.Status.ACTIVE
+        ):
+            raise FactualCorrectionConflict(
+                "The factual correction request has already reached a terminal state."
+            )
+
+        proposals = list(
+            FactualCorrectionProposal.objects.select_for_update(of=("self",))
+            .filter(correction_request__in=context["correction_requests"])
+            .order_by("correction_request_id", "id")
+        )
+        proposal = next(
+            (
+                item
+                for item in proposals
+                if item.correction_request_id == correction_request.id
+            ),
+            None,
+        )
+        actual_proposal_version = proposal.version if proposal is not None else 0
+        if actual_proposal_version != expected_proposal_version:
+            raise FactualCorrectionConflict(
+                "The correction proposal changed before cancellation."
+            )
+
+        adjudication_cases = list(
+            ModerationCase.objects.select_for_update(of=("self",))
+            .filter(
+                case_type=ModerationCase.CaseType.ADJUDICATION,
+                claim=context["claim"],
+            )
+            .order_by("created_at", "id")
+        )
+        correction_case = next(
+            (
+                case
+                for case in adjudication_cases
+                if case.id == correction_request.moderation_case_id
+            ),
+            None,
+        )
+        predecessor = context["fact_check"]
+        decision = context["decision"]
+        if (
+            correction_request.claim_id != context["claim"].id
+            or correction_request.organization_id != context["organization"].id
+            or correction_request.predecessor_fact_check_id != predecessor.id
+            or correction_request.predecessor_decision_id != decision.id
+            or predecessor.claim_id != context["claim"].id
+            or predecessor.organization_id != context["organization"].id
+            or predecessor.adjudication_decision_id != decision.id
+            or correction_case is None
+            or correction_case.id == decision.moderation_case_id
+            or correction_case.claim_id != context["claim"].id
+            or correction_case.organization_id != context["organization"].id
+            or correction_case.status not in ACTIVE_CASE_STATUSES
+        ):
+            raise FactualCorrectionConflict(
+                "The correction request no longer matches its recorded authority."
+            )
+        if predecessor.version != expected_predecessor_version:
+            raise FactualCorrectionConflict(
+                "The published predecessor changed before cancellation."
+            )
+        if decision.revision_number != expected_decision_revision:
+            raise FactualCorrectionConflict(
+                "The adjudication decision changed before cancellation."
+            )
+        published = [
+            item
+            for item in context["fact_checks"]
+            if item.publication_status
+            == OfficialFactCheck.PublicationStatus.PUBLISHED
+        ]
+        if len(published) != 1 or published[0].id != predecessor.id:
+            raise FactualCorrectionConflict(
+                "The correction predecessor is no longer the current publication."
+            )
+        seal = next(
+            (
+                item
+                for item in context["publication_snapshots"]
+                if item.id
+                == correction_request.predecessor_publication_snapshot_id
+            ),
+            None,
+        )
+        if (
+            seal is None
+            or seal.fact_check_id != predecessor.id
+            or context["decision_snapshot"] is None
+            or seal.decision_snapshot_id != context["decision_snapshot"].id
+        ):
+            raise FactualCorrectionConflict(
+                "The correction request no longer matches its sealed predecessor."
+            )
+
+        cancelled_at = timezone.now()
+        previous_case_status = correction_case.status
+        correction_case.status = ModerationCase.Status.CANCELLED
+        correction_case.resolution_code = "FACTUAL_CORRECTION_CANCELLED"
+        correction_case.resolution_summary = reason
+        correction_case.resolved_by = actor
+        correction_case.resolved_at = cancelled_at
+        correction_case.full_clean(
+            validate_unique=False,
+            validate_constraints=False,
+        )
+        correction_case.save(
+            update_fields=[
+                "status",
+                "resolution_code",
+                "resolution_summary",
+                "resolved_by",
+                "resolved_at",
+                "updated_at",
+            ]
+        )
+        event = ModerationEvent.objects.create(
+            case=correction_case,
+            actor=actor,
+            event_type=ModerationEvent.EventType.CASE_CANCELLED,
+            from_status=previous_case_status,
+            to_status=ModerationCase.Status.CANCELLED,
+            reason_code="FACTUAL_CORRECTION_CANCELLED",
+            notes=reason,
+            metadata={
+                "correction_request_id": str(correction_request.id),
+                "predecessor_decision_id": str(decision.id),
+                "predecessor_decision_revision": decision.revision_number,
+                "predecessor_fact_check_id": str(predecessor.id),
+                "predecessor_fact_check_version": predecessor.version,
+                "predecessor_publication_snapshot_id": str(seal.id),
+                "proposal_id": str(proposal.id) if proposal is not None else None,
+                "proposal_version": actual_proposal_version,
+                "cancelled_by": {
+                    "id": str(actor.pk),
+                    "username": actor.username,
+                },
+                "cancelled_at": cancelled_at.isoformat(),
+                "cancellation_reason": reason,
+            },
+        )
+
+        correction_request.status = FactualCorrectionRequest.Status.CANCELLED
+        correction_request.save(update_fields=["status", "updated_at"])
+        record_accountability_event(
+            action_type=AccountabilityEvent.ActionType.FACTUAL_CORRECTION_CANCELLED,
+            resource_type=AccountabilityEvent.ResourceType.FACTUAL_CORRECTION_REQUEST,
+            resource_id=correction_request.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            actor=actor,
+            authority_organization=context["organization"],
+            subject_organization=context["organization"],
+            capability=PartnerCapability.ADJUDICATE,
+            previous_state={
+                "status": FactualCorrectionRequest.Status.ACTIVE,
+                "case_status": previous_case_status,
+            },
+            new_state={
+                "status": correction_request.status,
+                "case_status": correction_case.status,
+            },
+            reason_code="FACTUAL_CORRECTION_CANCELLED",
+            notes=reason,
+            context={
+                "proposal_id": str(proposal.pk) if proposal is not None else None,
+                "proposal_version": actual_proposal_version,
+                "predecessor_decision_id": str(decision.pk),
+                "predecessor_fact_check_id": str(predecessor.pk),
+            },
+        )
+        return {
+            "request": correction_request,
+            "case": correction_case,
+            "proposal": proposal,
+            "event": event,
         }

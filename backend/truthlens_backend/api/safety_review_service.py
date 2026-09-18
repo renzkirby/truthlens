@@ -4,7 +4,14 @@ from collections import Counter
 from django.db import transaction
 from django.db.models import Prefetch
 
-from .models import ModerationCase, ModerationEvent, Thread, ThreadFlag
+from .accountability_service import record_accountability_event
+from .models import (
+    AccountabilityEvent,
+    ModerationCase,
+    ModerationEvent,
+    Thread,
+    ThreadFlag,
+)
 from .moderation_service import (
     ACTIVE_CASE_STATUSES,
     assign_moderation_case,
@@ -155,11 +162,23 @@ def claim_safety_case(*, case, actor):
                 "This Safety case is assigned to another moderator."
             )
 
-        return assign_moderation_case(
+        claimed_case = assign_moderation_case(
             locked_case,
             assignee=actor,
             actor=actor,
         )
+        record_accountability_event(
+            action_type=AccountabilityEvent.ActionType.SAFETY_CASE_CLAIMED,
+            resource_type=AccountabilityEvent.ResourceType.MODERATION_CASE,
+            resource_id=claimed_case.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+            actor=actor,
+            capability=PartnerCapability.REVIEW_SAFETY,
+            previous_state={"assigned_to_id": None, "status": locked_case.status},
+            new_state={"assigned_to_id": str(actor.pk), "status": claimed_case.status},
+            context={"thread_id": str(claimed_case.thread_id)},
+        )
+        return claimed_case
 
 
 def release_safety_case(*, case, actor):
@@ -169,11 +188,25 @@ def release_safety_case(*, case, actor):
         locked_case = _get_locked_safety_case(case)
         _ensure_active_case(locked_case)
         _ensure_case_owner(locked_case, actor)
-
-        return unassign_moderation_case(
+        released_case = unassign_moderation_case(
             locked_case,
             actor=actor,
         )
+        record_accountability_event(
+            action_type=AccountabilityEvent.ActionType.SAFETY_CASE_RELEASED,
+            resource_type=AccountabilityEvent.ResourceType.MODERATION_CASE,
+            resource_id=released_case.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+            actor=actor,
+            capability=PartnerCapability.REVIEW_SAFETY,
+            previous_state={
+                "assigned_to_id": str(actor.pk),
+                "status": locked_case.status,
+            },
+            new_state={"assigned_to_id": None, "status": released_case.status},
+            context={"thread_id": str(released_case.thread_id)},
+        )
+        return released_case
 
 
 def perform_safety_case_action(*, case, actor, action, notes=""):
@@ -189,12 +222,28 @@ def perform_safety_case_action(*, case, actor, action, notes=""):
             locked_case = _get_locked_safety_case(case)
             _ensure_active_case(locked_case)
             _ensure_case_owner(locked_case, actor)
+            previous_status = locked_case.status
 
             escalated_case = escalate_safety_case(
                 thread=locked_case.thread,
                 actor=actor,
                 notes=notes,
             )
+
+            if previous_status != ModerationCase.Status.ESCALATED:
+                record_accountability_event(
+                    action_type=AccountabilityEvent.ActionType.SAFETY_CASE_ESCALATED,
+                    resource_type=AccountabilityEvent.ResourceType.MODERATION_CASE,
+                    resource_id=escalated_case.pk,
+                    authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+                    actor=actor,
+                    capability=PartnerCapability.REVIEW_SAFETY,
+                    previous_state={"status": previous_status},
+                    new_state={"status": escalated_case.status},
+                    reason_code="NEEDS_FURTHER_REVIEW",
+                    notes=notes,
+                    context={"thread_id": str(escalated_case.thread_id)},
+                )
 
             return {
                 "case": escalated_case,
@@ -214,6 +263,8 @@ def perform_safety_case_action(*, case, actor, action, notes=""):
         locked_case = _get_locked_safety_case(case)
         _ensure_active_case(locked_case)
         _ensure_case_owner(locked_case, actor)
+        previous_case_status = locked_case.status
+        previous_thread_status = locked_thread.status
 
         result = resolve_safety_case(
             thread=locked_thread,
@@ -222,6 +273,32 @@ def perform_safety_case_action(*, case, actor, action, notes=""):
             notes=notes,
         )
         result["action"] = action
+        resolved_case = result["case"]
+        resolved_thread = result["thread"]
+        action_type = (
+            AccountabilityEvent.ActionType.SAFETY_CONTENT_REMOVED
+            if action == "REMOVE"
+            else AccountabilityEvent.ActionType.SAFETY_DISMISSED
+        )
+        record_accountability_event(
+            action_type=action_type,
+            resource_type=AccountabilityEvent.ResourceType.MODERATION_CASE,
+            resource_id=resolved_case.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+            actor=actor,
+            capability=PartnerCapability.REVIEW_SAFETY,
+            previous_state={
+                "case_status": previous_case_status,
+                "thread_status": previous_thread_status,
+            },
+            new_state={
+                "case_status": resolved_case.status,
+                "thread_status": resolved_thread.status,
+            },
+            reason_code=action,
+            notes=notes,
+            context={"thread_id": str(resolved_thread.pk)},
+        )
         return result
 
 

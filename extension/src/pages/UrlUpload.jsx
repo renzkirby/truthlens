@@ -5,8 +5,6 @@ import { Link as LinkIcon, ScanLine, Lightbulb } from "lucide-react";
 
 function UrlUpload() {
    const [url, setUrl] = useState("");
-   const [loading, setLoading] = useState(false);
-   const [result, setResult] = useState(null);
 
    const handleVerify = async () => {
       if (!url) return;
@@ -35,11 +33,6 @@ function UrlUpload() {
       }
    };
 
-   const statusInfo = result && result.verdict ? STATUS_CONFIG[result.verdict] : null;
-
-   console.log(statusInfo);
-   console.log("Result:", result);
-
    return (
       <div className="url-page">
          {/* Label */}
@@ -65,13 +58,12 @@ function UrlUpload() {
             </div>
             <button
                className="url-scan-btn"
-               onClick={handleVerify}
-               disabled={loading}>
+               onClick={handleVerify}>
                <ScanLine
                   size={13}
                   strokeWidth={2.5}
                />
-               {loading ? "Scanning…" : "Scan"}
+               Scan
             </button>
          </div>
 
@@ -87,18 +79,6 @@ function UrlUpload() {
             </span>
          </div>
 
-         {/* Result feedback */}
-         {result && (
-            <div className="url-result">
-               {result.error ? (
-                  <p className="url-result-error">{result.error}</p>
-               ) : (
-                  <p className="url-result-success">
-                     Verification complete! Check the result card on the page.
-                  </p>
-               )}
-            </div>
-         )}
       </div>
    );
 }

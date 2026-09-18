@@ -3,7 +3,6 @@ import LandingPage from "./Pages/LandingPage";
 import CommunityFeed from "./Pages/CommunityFeed";
 import LoginPage from "./Pages/LoginPage";
 import RegisterPage from "./Pages/RegisterPage";
-import TruthLensWireframes from "./Pages/wireframe/TruthLens_Wireframes";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import PrivateRoute from "./components/PrivateRoute";
 import CreateThreadPage from "./Pages/CreateThreadPage";
@@ -24,6 +23,7 @@ import RootRedirect from "./components/RootRedirect";
 import OrganizationInvitationPage from "./Pages/OrganizationInvitationPage.jsx";
 import PartnersPage from "./Pages/PartnersPage.jsx";
 import PartnerProfilePage from "./Pages/PartnerProfilePage.jsx";
+import PublicFactCheckPage from "./Pages/PublicFactCheckPage.jsx";
 import AppShell from "./components/app/AppShell.jsx";
 import PublicShell from "./components/public/PublicShell.jsx";
 import AccountActionShell from "./components/account/AccountActionShell.jsx";
@@ -40,13 +40,16 @@ function App() {
                   <Route path="/landing-page" element={<LandingPage />} />
                   <Route path="/partners" element={<PartnersPage />} />
                   <Route path="/partners/:slug" element={<PartnerProfilePage />} />
+                  <Route
+                     path="/partners/:slug/fact-checks/:publicationId"
+                     element={<PublicFactCheckPage />}
+                  />
                </Route>
                <Route path="/login" element={<LoginPage />} />
                <Route path="/register" element={<RegisterPage />} />
                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                <Route path="/reset-password/:uid/:token" element={<ResetPasswordPage />} />
                <Route path="/" element={<RootRedirect />} />
-               <Route path="/wireframes" element={<TruthLensWireframes />} />
                <Route path="/verify-email" element={<VerifyEmailPage />} />
                <Route element={<AccountActionShell />}>
                   <Route path="/organization-invitations/:token" element={<OrganizationInvitationPage />} />
@@ -74,6 +77,8 @@ function App() {
                      <Route element={<PrivateRoute requireWorkspace />}>
                         <Route element={<WorkspaceShell />}>
                            <Route path="/workspace" element={<WorkspacePage />} />
+                           <Route path="/workspace/factual-corrections" element={<WorkspacePage />} />
+                           <Route path="/workspace/factual-corrections/:requestId" element={<WorkspacePage />} />
                         </Route>
 
                         <Route path="/moderation" element={<Navigate to="/workspace" replace />} />

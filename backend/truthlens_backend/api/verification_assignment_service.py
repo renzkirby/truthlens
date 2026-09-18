@@ -7,6 +7,7 @@ from .adjudication_provenance import (
     prefetch_claim_adjudication_provenance,
 )
 from .models import (
+    AccountabilityEvent,
     AdjudicationDecision,
     Claim,
     EvidenceSubmission,
@@ -15,6 +16,7 @@ from .models import (
     OfficialFactCheck,
     VerificationAssignment,
 )
+from .accountability_service import record_accountability_event
 from .moderation_service import ACTIVE_CASE_STATUSES
 from .organization_service import (
     PartnerCapability,
@@ -268,6 +270,18 @@ def ensure_verification_assignment(
                     status=(VerificationAssignment.Status.AVAILABLE),
                 )
 
+                record_accountability_event(
+                    action_type=AccountabilityEvent.ActionType.VERIFICATION_ASSIGNMENT_CREATED,
+                    resource_type=AccountabilityEvent.ResourceType.VERIFICATION_ASSIGNMENT,
+                    resource_id=assignment.pk,
+                    authority_scope=AccountabilityEvent.AuthorityScope.SYSTEM,
+                    subject_organization=None,
+                    new_state={
+                        "status": assignment.status,
+                        "claim_id": str(locked_claim.pk),
+                    },
+                )
+
         except IntegrityError:
             assignment = get_open_verification_assignment(
                 locked_claim,
@@ -404,6 +418,28 @@ def claim_verification_assignment(
         _attach_active_cases_to_organization(
             claim=locked_claim,
             organization=organization,
+        )
+
+        record_accountability_event(
+            action_type=AccountabilityEvent.ActionType.VERIFICATION_ASSIGNMENT_CLAIMED,
+            resource_type=AccountabilityEvent.ResourceType.VERIFICATION_ASSIGNMENT,
+            resource_id=locked_assignment.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            actor=actor,
+            authority_organization=organization,
+            subject_organization=organization,
+            capability=PartnerCapability.CLAIM_VERIFICATION_WORK,
+            previous_state={
+                "status": VerificationAssignment.Status.AVAILABLE,
+                "organization_id": None,
+                "claimed_by_id": None,
+            },
+            new_state={
+                "status": locked_assignment.status,
+                "organization_id": str(organization.pk),
+                "claimed_by_id": str(actor.pk),
+            },
+            context={"claim_id": str(locked_claim.pk)},
         )
 
         return locked_assignment
@@ -553,6 +589,39 @@ def release_verification_assignment(
             status=(VerificationAssignment.Status.AVAILABLE),
         )
 
+        record_accountability_event(
+            action_type=AccountabilityEvent.ActionType.VERIFICATION_ASSIGNMENT_RELEASED,
+            resource_type=AccountabilityEvent.ResourceType.VERIFICATION_ASSIGNMENT,
+            resource_id=locked_assignment.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            actor=actor,
+            authority_organization=organization,
+            subject_organization=organization,
+            capability=PartnerCapability.CLAIM_VERIFICATION_WORK,
+            previous_state={
+                "status": VerificationAssignment.Status.ACTIVE,
+                "organization_id": str(organization.pk),
+                "claimed_by_id": str(locked_assignment.claimed_by_id),
+            },
+            new_state={
+                "status": VerificationAssignment.Status.RELEASED,
+                "organization_id": str(organization.pk),
+                "claimed_by_id": str(locked_assignment.claimed_by_id),
+            },
+            context={"claim_id": str(claim.pk)},
+        )
+        record_accountability_event(
+            action_type=AccountabilityEvent.ActionType.VERIFICATION_ASSIGNMENT_CREATED,
+            resource_type=AccountabilityEvent.ResourceType.VERIFICATION_ASSIGNMENT,
+            resource_id=replacement.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.SYSTEM,
+            new_state={
+                "status": replacement.status,
+                "claim_id": str(claim.pk),
+            },
+            context={"replaces_assignment_id": str(locked_assignment.pk)},
+        )
+
         return {
             "released_assignment": locked_assignment,
             "available_assignment": replacement,
@@ -563,6 +632,7 @@ def complete_verification_assignment(
     *,
     claim,
     organization,
+    trigger_context=None,
 ):
     """
     Mark the active institutional assignment complete.
@@ -601,6 +671,20 @@ def complete_verification_assignment(
                 "completed_at",
                 "updated_at",
             ]
+        )
+
+        record_accountability_event(
+            action_type=AccountabilityEvent.ActionType.VERIFICATION_ASSIGNMENT_COMPLETED,
+            resource_type=AccountabilityEvent.ResourceType.VERIFICATION_ASSIGNMENT,
+            resource_id=assignment.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.SYSTEM,
+            subject_organization=organization,
+            previous_state={"status": VerificationAssignment.Status.ACTIVE},
+            new_state={"status": VerificationAssignment.Status.COMPLETED},
+            context={
+                "claim_id": str(locked_claim.pk),
+                **(trigger_context or {}),
+            },
         )
 
         return assignment

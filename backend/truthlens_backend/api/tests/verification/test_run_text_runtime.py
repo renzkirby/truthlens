@@ -3,7 +3,7 @@ from unittest.mock import patch
 import requests
 from django.test import TestCase
 
-from api import tasks
+from api import services, tasks
 from api.models import Claim, EvidenceSource, VerificationEvidence, VerificationRun
 from api.verification.evidence_assessment import EvidenceAssessment
 from api.verification.contracts import RawEvidence
@@ -302,6 +302,61 @@ class VerificationRunTextRuntimeTests(TestCase):
         )
         self.retrieve_gfc.assert_not_called()
         self.retrieve_tavily.assert_not_called()
+        self.assess_evidence.assert_not_called()
+
+    def test_vault_final_llm_unavailable_fails_without_verdict_or_fallback(self):
+        self.vault.return_value = {
+            "canonical_claim": "Verified public claim.", "verdict": "FAKE",
+            "summary": "Verified summary.", "sources": ["https://example.com/vault"],
+        }
+        original_ai_verdict = self.claim.ai_verdict
+        original_final_verdict = self.claim.final_verdict
+        original_score = self.claim.consensus_score
+        self.evaluate_gfc.side_effect = services.evaluate_image_claim_with_gfc
+        error = LLMProviderUnavailableError(
+            "No configured LLM provider successfully completed this request."
+        )
+
+        with patch("api.services.call_llm_with_fallback", side_effect=error) as call_llm:
+            with self.assertRaises(LLMProviderUnavailableError) as raised:
+                self._execute()
+
+        self.assertIs(raised.exception, error)
+        self.clean.assert_called_once()
+        self.vault.assert_called_once_with(
+            self.cleaned["cleaned_claim"], target_claim=self.claim,
+        )
+        self.evaluate_gfc.assert_called_once_with(
+            self.cleaned["cleaned_claim"],
+            {"claims": [{
+                "text": self.vault.return_value["canonical_claim"],
+                "claimReview": [{
+                    "textualRating": self.vault.return_value["verdict"],
+                    "publisher": {"name": "TruthLens Official Vault"},
+                }],
+            }]},
+            self.cleaned["article_stance"],
+        )
+        call_llm.assert_called_once()
+        self.save_claim.assert_not_called()
+        run = self.claim.verification_runs.get()
+        self._assert_terminal(run, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "final_evaluator")
+        self.assertEqual(run.failure_code, "LLM_UNAVAILABLE")
+        self.assertEqual(self._terminal_count(), 1)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, original_ai_verdict)
+        self.assertEqual(self.claim.final_verdict, original_final_verdict)
+        self.assertEqual(self.claim.consensus_score, original_score)
+        self.assertNotEqual(self.claim.ai_verdict, "UNVERIFIED")
+        self.assertNotEqual(self.claim.consensus_score, 40)
+        self.assertNotEqual(self.claim.ai_verdict, self.vault.return_value["verdict"])
+        self.assertNotEqual(self.claim.final_verdict, self.vault.return_value["verdict"])
+        self.retrieve_gfc.assert_not_called()
+        self.relevance.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
+        self.evaluate_tavily.assert_not_called()
+        self.evaluate_persisted.assert_not_called()
         self.assess_evidence.assert_not_called()
 
     def test_gfc_substantive_verdict_completes(self):

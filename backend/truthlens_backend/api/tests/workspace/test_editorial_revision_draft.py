@@ -46,6 +46,8 @@ class EditorialRevisionDraftTests(AdjudicationContractFixtures, TestCase):
         draft = create_fact_check_draft(
             decision=context["decision"],
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_decision_revision=context["decision"].revision_number,
             headline=f"Published headline {suffix}",
             summary=f"Published summary {suffix}.",
             article_body=f"Published analysis {suffix}.",
@@ -54,10 +56,16 @@ class EditorialRevisionDraftTests(AdjudicationContractFixtures, TestCase):
         submitted = submit_fact_check_for_review(
             fact_check=draft,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
         )
         context["published"] = publish_fact_check(
             fact_check=submitted,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=submitted.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
         )["fact_check"]
         context["seal"] = context["published"].publication_snapshot
         return context
@@ -320,6 +328,8 @@ class EditorialRevisionDraftTests(AdjudicationContractFixtures, TestCase):
         draft = create_fact_check_draft(
             decision=context["decision"],
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_decision_revision=context["decision"].revision_number,
             headline="Unknown-origin predecessor",
             summary="Unknown-origin summary.",
             article_body="Unknown-origin analysis.",
@@ -329,10 +339,16 @@ class EditorialRevisionDraftTests(AdjudicationContractFixtures, TestCase):
         submitted = submit_fact_check_for_review(
             fact_check=draft,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
         )
         context["published"] = publish_fact_check(
             fact_check=submitted,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=submitted.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
         )["fact_check"]
         context["seal"] = context["published"].publication_snapshot
 
@@ -380,11 +396,17 @@ class EditorialRevisionDraftTests(AdjudicationContractFixtures, TestCase):
         updated = update_fact_check_draft(
             fact_check=revision,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=revision.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
             headline="Edited revision headline",
         )
         submitted = submit_fact_check_for_review(
             fact_check=updated,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=updated.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
         )
         self.assertEqual(
             submitted.publication_status,
@@ -396,7 +418,13 @@ class EditorialRevisionDraftTests(AdjudicationContractFixtures, TestCase):
         )
 
         with self.assertRaises(PublishingConflict):
-            publish_fact_check(fact_check=submitted, actor=self.lead)
+            publish_fact_check(
+                fact_check=submitted,
+                actor=self.lead,
+                organization_id=self.organization.id,
+                expected_edit_generation=submitted.edit_generation,
+                expected_decision_revision=context["decision"].revision_number,
+            )
         context["published"].refresh_from_db()
         self.assertEqual(
             context["published"].publication_status,
@@ -409,6 +437,8 @@ class EditorialRevisionDraftTests(AdjudicationContractFixtures, TestCase):
             create_fact_check_draft(
                 decision=context["decision"],
                 actor=self.lead,
+                organization_id=self.organization.id,
+                expected_decision_revision=context["decision"].revision_number,
                 headline="Improper ordinary draft",
                 summary="This must use the revision workflow.",
             )

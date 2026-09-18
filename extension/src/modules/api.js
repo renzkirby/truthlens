@@ -1,24 +1,12 @@
 import { state } from "./state.js";
-import { buildAuthHeaders, clearAuthSession } from "./auth.js";
+import { authenticatedFetch } from "./auth.js";
 
-async function fetchWithAuthFallback(url, options = {}) {
-   const baseHeaders = options.headers || {};
-   const headersWithAuth = await buildAuthHeaders(baseHeaders);
-
-   let response = await fetch(url, {
-      ...options,
-      headers: headersWithAuth,
-   });
-
-   if (response.status === 401 && headersWithAuth.Authorization) {
-      await clearAuthSession();
-      response = await fetch(url, {
-         ...options,
-         headers: baseHeaders,
-      });
+export class ApiRequestError extends Error {
+   constructor(message, status = null) {
+      super(message);
+      this.name = "ApiRequestError";
+      this.status = status;
    }
-
-   return response;
 }
 
 // Send snipped image payload to the background service worker.
@@ -32,11 +20,7 @@ export async function sendImageToServer(image) {
          },
          (response) => {
             if (chrome.runtime.lastError) {
-               reject(
-                  new Error(
-                     chrome.runtime.lastError.message || "Failed to contact extension worker.",
-                  ),
-               );
+               reject(new Error(chrome.runtime.lastError.message || "Failed to contact extension worker."));
                return;
             }
 
@@ -54,24 +38,34 @@ export async function sendImageToServer(image) {
 // Getting claim result
 export async function fetchClaimResult(claim_id) {
    try {
-      const response = await fetchWithAuthFallback(
+      const response = await authenticatedFetch(
          `${state.API_BASE_URL}/claims/${claim_id}/status`,
+         {},
+         { allowGuestAfterAuthFailure: true },
       );
       if (!response.ok) {
-         throw new Error(`Status ${response.status}`);
+         const errorPayload = await response.json().catch(() => null);
+         throw new ApiRequestError(
+            errorPayload?.detail || errorPayload?.error || `Claim polling failed with status ${response.status}.`,
+            response.status,
+         );
       }
-      const data = await response.json();
-      console.log("Polled claim status:", data);
+
+      const data = await response.json().catch(() => null);
+      if (!data || typeof data !== "object" || typeof data.verdict !== "string") {
+         throw new ApiRequestError("Claim polling returned an invalid response.", response.status);
+      }
+
       return data;
    } catch (error) {
       console.error("Error polling claim status:", error);
-      return {
-         verdict: "OUT_OF_SCOPE",
-         summary: "The content of the image is not a claim that can be fact-checked.",
-         confidence_score: 100,
-         source_type: "N/A",
-         source_url: "",
-      };
+      if (error instanceof ApiRequestError) {
+         throw error;
+      }
+
+      throw new ApiRequestError(
+         error?.message ? `Claim polling request failed: ${error.message}` : "Claim polling request failed.",
+      );
    }
 }
 
@@ -86,12 +80,15 @@ export async function fetchClaimResult(claim_id) {
 export async function checkClaimMatch(fingerprint, claimType) {
    try {
       const params = new URLSearchParams({ fingerprint, claim_type: claimType });
-      const response = await fetchWithAuthFallback(`${state.API_BASE_URL}/claims/match/?${params}`);
+      const response = await authenticatedFetch(
+         `${state.API_BASE_URL}/claims/match/?${params}`,
+         {},
+         { allowGuestAfterAuthFailure: true },
+      );
       if (!response.ok) {
          throw new Error(`Status ${response.status}`);
       }
       const data = await response.json();
-      console.log("Claim match check:", data);
       return data.match || null;
    } catch (error) {
       console.error("Error checking claim match:", error);
