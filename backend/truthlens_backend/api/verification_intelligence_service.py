@@ -64,6 +64,133 @@ def _fields(record, names):
     return {name: getattr(record, name) for name in names}
 
 
+def _build_prior_knowledge_intelligence(resolution, related_publications):
+    """Explain approved payloads only; never resolve authority or retrieve records."""
+    authoritative_reasons = {
+        "CLAIM_CACHE": {
+            "code": "DIRECT_PUBLISHED_CLAIM",
+            "detail": "The current claim has a current published institutional fact-check. "
+                      "Authority comes from that published institutional record.",
+        },
+        "EXACT_CANONICAL": {
+            "code": "EXACT_CANONICAL_AUTHORITY",
+            "detail": "A durable authoritative reference connects this claim to the publication "
+                      "under the existing exact-canonical resolution contract. Authority comes "
+                      "from that durable contract and published institutional record; exact text "
+                      "alone does not universally establish factual equivalence.",
+        },
+        "EQUIVALENT_CLAIM": {
+            "code": "EQUIVALENT_CLAIM_AUTHORITY",
+            "detail": "A durable authoritative reference records that this claim was previously "
+                      "resolved as proposition-equivalent to the publication. The published "
+                      "institutional record supplies the verdict; a similarity score alone "
+                      "does not supply authority.",
+        },
+    }
+    related_reasons = {
+        "EXACT_CANONICAL": {
+            "code": "RELATED_EXACT_CANONICAL",
+            "detail": "The publication is stored as RELATED context. Exact canonical text in "
+                      "a RELATED record does not transfer the publication verdict.",
+        },
+        "EXACT_HEADLINE": {
+            "code": "RELATED_EXACT_HEADLINE",
+            "detail": "The publication was associated through headline equality/context. "
+                      "Headline equality is contextual evidence only and does not transfer "
+                      "institutional verdict authority.",
+        },
+        "SEMANTIC": {
+            "code": "RELATED_SEMANTIC",
+            "detail": "The durable relationship originated from semantic similarity/context. "
+                      "Semantic similarity does not establish proposition equivalence and "
+                      "does not transfer the publication verdict.",
+        },
+        "FULL_TEXT": {
+            "code": "RELATED_FULL_TEXT",
+            "detail": "The durable relationship originated from full-text retrieval/context. "
+                      "Full-text relevance does not establish proposition equivalence and "
+                      "does not transfer the publication verdict.",
+        },
+    }
+    has_resolution = resolution is not None
+    has_related = bool(related_publications)
+    if has_resolution:
+        state = ("AUTHORITATIVE_WITH_RELATED_CONTEXT" if has_related
+                 else "AUTHORITATIVE_RESOLUTION")
+    else:
+        state = ("RELATED_CONTEXT_ONLY" if has_related
+                 else "NO_PRIOR_INSTITUTIONAL_KNOWLEDGE")
+
+    limitations = []
+    if not has_resolution:
+        limitations.append({
+            "code": "NO_AUTHORITATIVE_RESOLUTION" if has_related
+                    else "NO_PRIOR_INSTITUTIONAL_KNOWLEDGE",
+            "detail": "Related context exists, but no authoritative publication resolution exists."
+                      if has_related else "No authoritative resolution or related publication is surfaced.",
+        })
+    if has_related:
+        limitations.append({
+            "code": "RELATED_PUBLICATIONS_CONTEXT_ONLY",
+            "detail": "Related publications provide background context only; their verdicts "
+                      "do not transfer to this claim.",
+        })
+
+    authoritative = None
+    if has_resolution:
+        method = resolution.get("match_method")
+        reason = authoritative_reasons.get(method)
+        if reason is None:
+            limitations.append({
+                "code": "UNSUPPORTED_AUTHORITATIVE_MATCH_METHOD",
+                "detail": "The authoritative payload's match method has no supported explanation.",
+            })
+        else:
+            authoritative = {
+                "authority": "DURABLE_INSTITUTIONAL_KNOWLEDGE",
+                "fact_check_id": resolution["fact_check_id"],
+                "match_method": method,
+                "why_surfaced": reason,
+                "permitted_use": "AUTHORITATIVE_RESOLUTION",
+            }
+
+    related = []
+    unsupported_related = False
+    for publication in related_publications:
+        reason = related_reasons.get(publication.get("match_method"))
+        if reason is None:
+            # Keep the approved payload unchanged, but do not invent an explanation.
+            unsupported_related = True
+            continue
+        related.append({
+            "authority": "CONTEXT_ONLY_NO_VERDICT_TRANSFER",
+            **{key: publication[key] for key in (
+                "fact_check_id", "headline", "published_at", "organization", "match_method",
+            )},
+            "why_surfaced": reason,
+            "permitted_use": "BACKGROUND_CONTEXT_ONLY",
+        })
+    if unsupported_related:
+        limitations.append({
+            "code": "UNSUPPORTED_RELATED_MATCH_METHOD",
+            "detail": "A related payload's match method has no supported explanation; "
+                      "it supplies no institutional verdict authority.",
+        })
+
+    return {
+        "basis": "PERSISTED_INSTITUTIONAL_PROVENANCE",
+        "state": state,
+        "summary": {
+            "authoritative_resolution_available": has_resolution,
+            "related_publication_count": len(related_publications),
+            "prior_knowledge_available": has_resolution or has_related,
+        },
+        "authoritative": authoritative,
+        "related": related,
+        "limitations": limitations,
+    }
+
+
 def _current_decision(claim, organization):
     # Mirror adjudication workspace visibility before classifying provenance.
     decision = (
@@ -175,6 +302,7 @@ def get_verification_intelligence_context(*, actor, organization, claim_id):
     resolution = build_published_fact_check_payload(
         get_published_fact_check_resolution_for_claim(claim)
     )
+    related_publications = get_related_published_fact_check_payloads(claim, limit=3)
     limitations = []
     if run is None:
         limitations.append({"code": "NO_VERIFICATION_RUN",
@@ -255,7 +383,8 @@ def get_verification_intelligence_context(*, actor, organization, claim_id):
         },
         "institutional_knowledge": {
             "authoritative_resolution": resolution,
-            "related_publications": get_related_published_fact_check_payloads(claim, limit=3),
+            "related_publications": related_publications,
+            "intelligence": _build_prior_knowledge_intelligence(resolution, related_publications),
         },
         "authority_contract": dict(AUTHORITY_CONTRACT),
         "limitations": limitations,
