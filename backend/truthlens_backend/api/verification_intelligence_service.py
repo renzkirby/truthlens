@@ -1,5 +1,7 @@
 """Deterministic workspace context over persisted facts; no intelligence generation."""
 
+from collections import Counter
+
 from django.db.models import Q
 
 from .adjudication_provenance import get_adjudication_decision_provenance
@@ -18,6 +20,7 @@ from .models import (
 )
 from .moderation_service import ACTIVE_CASE_STATUSES
 from .organization_service import PartnerCapability, has_capability
+from .verification.grouping import group_verification_evidence_by_source_identity
 
 
 WORKLOAD_CAPABILITIES = frozenset({
@@ -191,6 +194,145 @@ def _build_prior_knowledge_intelligence(resolution, related_publications):
     }
 
 
+def _build_evidence_intelligence(
+    *, run, automated_evidence_links, human_evidence, active_evidence_cases,
+):
+    """Summarize loaded records only; readiness is evidence-side review state."""
+    assessment = {"fully_assessed": 0, "partially_assessed": 0, "unassessed": 0}
+    stance_counts = {key: 0 for key in ("SUPPORTS", "REFUTES", "CONTEXT", "UNKNOWN")}
+    role_counts = {key: 0 for key in (
+        "PRIMARY", "SECONDARY", "FACT_CHECK", "CONTEXTUAL", "UNSPECIFIED",
+    )}
+    for item in automated_evidence_links:
+        if (item.stance != VerificationEvidence.Stance.UNKNOWN
+                and item.relevance_score is not None and item.directness_score is not None):
+            assessment["fully_assessed"] += 1
+        elif (item.stance == VerificationEvidence.Stance.UNKNOWN
+              and item.relevance_score is None and item.directness_score is None):
+            assessment["unassessed"] += 1
+        else:
+            assessment["partially_assessed"] += 1
+        stance_counts[item.stance if item.stance in stance_counts else "UNKNOWN"] += 1
+        role_counts[item.evidence_role if item.evidence_role in role_counts else "UNSPECIFIED"] += 1
+
+    groups = group_verification_evidence_by_source_identity(automated_evidence_links)
+    shared_sizes = [len(group.evidence) for group in groups if len(group.evidence) > 1]
+    source_identity = {
+        "group_count": len(groups), "shared_group_count": len(shared_sizes),
+        "items_in_shared_groups": sum(shared_sizes),
+    }
+    statuses = Counter(item.evidence_status for item in human_evidence)
+    verified = statuses[EvidenceSubmission.EvidenceStatus.VERIFIED]
+    rejected = statuses[EvidenceSubmission.EvidenceStatus.REJECTED]
+    unreviewed = statuses[EvidenceSubmission.EvidenceStatus.UNVERIFIED]
+    type_mapping = {
+        EvidenceSubmission.EvidenceType.SUPPORTS: "SUPPORTS_CLAIM",
+        EvidenceSubmission.EvidenceType.CONTRADICTS: "CONTRADICTS_CLAIM",
+        EvidenceSubmission.EvidenceType.PROVIDES_CONTEXT: "PROVIDES_CONTEXT",
+        EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION: "SOURCE_VERIFICATION",
+    }
+    type_counts = {key: 0 for key in (
+        "SUPPORTS_CLAIM", "CONTRADICTS_CLAIM", "PROVIDES_CONTEXT",
+        "SOURCE_VERIFICATION", "UNSPECIFIED",
+    )}
+    for item in human_evidence:
+        if item.evidence_status == EvidenceSubmission.EvidenceStatus.VERIFIED:
+            type_counts[type_mapping.get(item.evidence_type, "UNSPECIFIED")] += 1
+
+    automated_total = len(automated_evidence_links)
+    human_total = len(human_evidence)
+    blocking_codes = []
+    if not human_total:
+        blocking_codes.append("NO_HUMAN_EVIDENCE")
+    if unreviewed:
+        blocking_codes.append("UNREVIEWED_HUMAN_EVIDENCE")
+    if active_evidence_cases:
+        blocking_codes.append("ACTIVE_EVIDENCE_CASES")
+    if human_total:
+        if unreviewed or active_evidence_cases:
+            state = "HUMAN_REVIEW_PENDING"
+        else:
+            state = ("HUMAN_REVIEW_COMPLETE_WITH_AUTOMATED_CONTEXT" if automated_total
+                     else "HUMAN_REVIEW_COMPLETE")
+    else:
+        state = "AUTOMATED_CONTEXT_ONLY" if automated_total else "NO_EVIDENCE"
+
+    human_basis = "CURRENT_HUMAN_EVIDENCE_REVIEW_STATE"
+    questions = [
+        (not human_total, "NO_HUMAN_EVIDENCE",
+         "What human-submitted evidence should be gathered and reviewed before adjudication?",
+         human_basis, True),
+        (unreviewed > 0, "HUMAN_EVIDENCE_PENDING_REVIEW",
+         "Which submitted evidence items still require human review?", human_basis, True),
+        (active_evidence_cases > 0, "ACTIVE_EVIDENCE_CASES",
+         "Which active evidence-review cases must be resolved before the evidence side is adjudication-ready?",
+         human_basis, True),
+        (assessment["partially_assessed"] + assessment["unassessed"] > 0,
+         "AUTOMATED_EVIDENCE_ASSESSMENT_GAPS",
+         "Which persisted automated evidence items still lack a complete claim-relationship assessment?",
+         "LATEST_VERIFICATION_RUN", False),
+        (source_identity["shared_group_count"] > 0, "SHARED_AUTOMATED_SOURCE_IDENTITY",
+         "Are multiple automated evidence items from the same source identity being treated as independent corroboration?",
+         "PERSISTED_SOURCE_IDENTITY_GROUPING", False),
+        (stance_counts["SUPPORTS"] > 0 and stance_counts["REFUTES"] > 0,
+         "CONFLICTING_AUTOMATED_STANCES",
+         "How should the human reviewer evaluate persisted automated evidence that includes both supporting and refuting signals?",
+         "LATEST_VERIFICATION_RUN", False),
+        (type_counts["SUPPORTS_CLAIM"] > 0 and type_counts["CONTRADICTS_CLAIM"] > 0,
+         "REVIEWED_SUBMISSION_TYPE_TENSION",
+         "How should the adjudicator evaluate verified submissions labeled as both supporting and contradicting the claim?",
+         human_basis, False),
+    ]
+    limitations = [
+        (not automated_total and not human_total, "NO_EVIDENCE",
+         "No persisted evidence is available in the current projection."),
+        (automated_total > 0, "AUTOMATED_EVIDENCE_CONTEXT_ONLY",
+         "Automated evidence is contextual review support and does not determine the claim verdict."),
+        (assessment["fully_assessed"] + assessment["partially_assessed"] > 0,
+         "AUTOMATED_ASSESSMENTS_NON_AUTHORITATIVE",
+         "Persisted stance, relevance, and directness assessments are non-authoritative and do not determine truth."),
+        (automated_total > 0, "SOURCE_IDENTITY_NOT_EDITORIAL_INDEPENDENCE",
+         "Grouping distinguishes shared normalized source identity, but different groups are not proof of editorial independence or corroboration. "
+         "Items sharing one identity must not be counted as multiple independent confirmations."),
+        (human_total > 0, "HUMAN_EVIDENCE_NOT_FINAL_JUDGMENT",
+         "Review status validates or rejects submitted evidence records but is not the final claim judgment."),
+        (run is not None and run.status != VerificationRun.Status.COMPLETED,
+         "AUTOMATED_RUN_NOT_COMPLETED",
+         "Persisted automated evidence may be incomplete because the latest run did not complete."),
+    ]
+    return {
+        "basis": "PERSISTED_EVIDENCE_STATE",
+        "authority": "NON_AUTHORITATIVE_REVIEW_SUPPORT",
+        "state": state,
+        "automated": {
+            "authority": "CONTEXT_ONLY",
+            "verification_run_id": str(run.pk) if run is not None else None,
+            "run_status": run.status if run is not None else None,
+            "total": automated_total, "assessment": assessment,
+            "stance_counts": stance_counts, "role_counts": role_counts,
+            "source_identity": source_identity,
+        },
+        "human": {
+            "authority": "REVIEWED_INPUT_NOT_FINAL_JUDGMENT",
+            "total": human_total, "reviewed": verified + rejected,
+            "verified": verified, "rejected": rejected, "unreviewed": unreviewed,
+            "active_evidence_cases": active_evidence_cases,
+            "verified_submission_type_counts": type_counts,
+            "evidence_side_adjudication_readiness": {
+                "ready": not blocking_codes, "basis": human_basis,
+                "blocking_codes": blocking_codes,
+            },
+        },
+        "unresolved_questions": [
+            {"code": code, "question": question, "basis": basis, "blocking": blocking}
+            for applies, code, question, basis, blocking in questions if applies
+        ],
+        "limitations": [
+            {"code": code, "detail": detail} for applies, code, detail in limitations if applies
+        ],
+    }
+
+
 def _current_decision(claim, organization):
     # Mirror adjudication workspace visibility before classifying provenance.
     decision = (
@@ -257,10 +399,12 @@ def get_verification_intelligence_context(*, actor, organization, claim_id):
         "-created_at", "id",
     ).first()
     automated_evidence = []
+    automated_evidence_links = []
     if run is not None:
-        for item in VerificationEvidence.objects.filter(
+        automated_evidence_links = list(VerificationEvidence.objects.filter(
             verification_run=run,
-        ).select_related("evidence_source").order_by("-created_at", "id"):
+        ).select_related("evidence_source").order_by("-created_at", "id"))
+        for item in automated_evidence_links:
             source = item.evidence_source
             automated_evidence.append({
                 "id": str(item.pk),
@@ -388,4 +532,8 @@ def get_verification_intelligence_context(*, actor, organization, claim_id):
         },
         "authority_contract": dict(AUTHORITY_CONTRACT),
         "limitations": limitations,
+        "evidence_intelligence": _build_evidence_intelligence(
+            run=run, automated_evidence_links=automated_evidence_links,
+            human_evidence=evidence, active_evidence_cases=counts["active_evidence_cases"],
+        ),
     }

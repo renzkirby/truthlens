@@ -290,6 +290,7 @@ class VerificationIntelligenceTests(TestCase):
                 "human_evidence",
                 "adjudication",
                 "institutional_knowledge",
+                "evidence_intelligence",
                 "authority_contract",
                 "limitations",
             },
