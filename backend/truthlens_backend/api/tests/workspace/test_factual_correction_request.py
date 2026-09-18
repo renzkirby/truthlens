@@ -47,12 +47,17 @@ from api.moderation_service import create_moderation_case
 from api.organization_service import PartnerCapability
 from api.publishing_service import (
     PublishingConflict,
+    abandon_fact_check_draft,
     create_editorial_revision_draft,
     create_fact_check_draft,
     publish_editorial_revision,
     publish_fact_check,
     submit_fact_check_for_review,
     update_fact_check_draft,
+)
+from api.publication_workflow_query_service import (
+    RESOURCE_FACT_CHECK,
+    get_publication_work_item_detail,
 )
 from api.adjudication_service import (
     AdjudicationConflict,
@@ -693,6 +698,8 @@ class CorrectionReservationEnforcementTests(
             lambda: create_fact_check_draft(
                 decision=initial["decision"],
                 actor=self.lead,
+                organization_id=self.organization.id,
+                expected_decision_revision=initial["decision"].revision_number,
                 headline="Blocked initial draft",
                 summary="An active correction owns this publication work.",
             )
@@ -711,8 +718,8 @@ class CorrectionReservationEnforcementTests(
             )
         )
 
-    def test_active_request_blocks_update_submission_and_first_publication(self):
-        for action_name in ("update", "submit", "publish"):
+    def test_active_request_blocks_ordinary_mutation_and_abandonment(self):
+        for action_name in ("update", "submit", "publish", "abandon"):
             with self.subTest(action=action_name):
                 context = self.make_published_context(
                     suffix=f"block-{action_name}"
@@ -730,17 +737,45 @@ class CorrectionReservationEnforcementTests(
                     "update": lambda: update_fact_check_draft(
                         fact_check=draft,
                         actor=self.lead,
+                        organization_id=self.organization.id,
+                        expected_edit_generation=draft.edit_generation,
+                        expected_decision_revision=context["decision"].revision_number,
                         summary="This update must remain blocked.",
                     ),
                     "submit": lambda: submit_fact_check_for_review(
                         fact_check=draft,
                         actor=self.lead,
+                        organization_id=self.organization.id,
+                        expected_edit_generation=draft.edit_generation,
+                        expected_decision_revision=context["decision"].revision_number,
                     ),
                     "publish": lambda: publish_fact_check(
                         fact_check=draft,
                         actor=self.lead,
+                        organization_id=self.organization.id,
+                        expected_edit_generation=draft.edit_generation,
+                        expected_decision_revision=context["decision"].revision_number,
+                    ),
+                    "abandon": lambda: abandon_fact_check_draft(
+                        fact_check=draft,
+                        actor=self.lead,
+                        organization_id=self.organization.id,
+                        expected_edit_generation=draft.edit_generation,
+                        reason="Ordinary abandonment cannot bypass the reservation.",
                     ),
                 }
+                if action_name == "abandon":
+                    detail = get_publication_work_item_detail(
+                        actor=self.lead,
+                        organization=self.organization,
+                        resource_type=RESOURCE_FACT_CHECK,
+                        resource_id=draft.id,
+                    )
+                    self.assertNotIn("ABANDON", detail["allowed_actions"])
+                    self.assertIn(
+                        "ACTIVE_CORRECTION_RESERVATION",
+                        {blocker["code"] for blocker in detail["blockers"]},
+                    )
                 self.assert_reserved(actions[action_name])
 
     def test_active_request_blocks_editorial_replacement(self):
@@ -761,6 +796,7 @@ class CorrectionReservationEnforcementTests(
                 organization_id=self.organization.id,
                 expected_predecessor_version=context["published"].version,
                 expected_revision_version=revision.version,
+                expected_edit_generation=revision.edit_generation,
                 expected_decision_revision=context["decision"].revision_number,
             )
         )

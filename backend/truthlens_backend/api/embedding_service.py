@@ -10,7 +10,11 @@ Used by:
   - backfill_embeddings management command
 """
 
+import logging
+
 from sentence_transformers import SentenceTransformer
+
+logger = logging.getLogger(__name__)
 
 # Singleton model instance — loaded lazily on first use
 _model = None
@@ -20,9 +24,9 @@ def _get_model():
     """Load the embedding model (singleton — only loaded once per process)."""
     global _model
     if _model is None:
-        print("Loading sentence-transformers model (all-MiniLM-L6-v2)...")
+        logger.info("Loading sentence-transformers model (all-MiniLM-L6-v2)...")
         _model = SentenceTransformer("all-MiniLM-L6-v2")
-        print("Embedding model loaded successfully!")
+        logger.info("Embedding model loaded successfully!")
     return _model
 
 
@@ -46,5 +50,5 @@ def generate_embedding(text):
         embedding = model.encode(text.strip(), normalize_embeddings=True)
         return embedding.tolist()
     except Exception as e:
-        print(f"Embedding generation failed: {e}")
+        logger.warning("Embedding generation failed: %s", e)
         return None

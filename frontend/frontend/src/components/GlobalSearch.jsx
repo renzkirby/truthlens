@@ -95,8 +95,8 @@ function SearchResults({ idPrefix, query, loading, error, users, threads, onNavi
                                  Trust {Number(searchUser.trust_score || 0).toFixed(1)}
                               </span>
                               {isModeratorRole(searchUser.role) && (
-                                 <span className="tl-global-search__platform-role" aria-label="Platform moderator">
-                                    MOD
+                                 <span className="tl-global-search__platform-role" aria-label="Platform Safety moderator">
+                                    Safety
                                  </span>
                               )}
                            </span>

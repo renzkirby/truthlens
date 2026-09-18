@@ -543,6 +543,10 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
                 return_value=claim_queryset,
             ),
             patch(
+                "api.tasks._resolve_exact_published_claim",
+                return_value=False,
+            ),
+            patch(
                 "api.tasks.search_official_vault",
                 return_value=None,
             ),
@@ -709,6 +713,10 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             patch(
                 "api.tasks.Claim.objects.filter",
                 return_value=claim_queryset,
+            ),
+            patch(
+                "api.tasks._resolve_exact_published_claim",
+                return_value=False,
             ),
             patch(
                 "api.tasks.search_official_vault",

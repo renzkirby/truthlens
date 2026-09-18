@@ -45,6 +45,8 @@ class PublicationTransactionFixtures(AdjudicationContractFixtures):
         return create_fact_check_draft(
             decision=context["decision"],
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_decision_revision=context["decision"].revision_number,
             headline=f"Fact Check {suffix}",
             summary="A professional summary of the reviewed claim.",
             article_body="The article explains the reviewed evidence.",
@@ -52,9 +54,13 @@ class PublicationTransactionFixtures(AdjudicationContractFixtures):
         )
 
     def make_submitted_draft(self, context, *, suffix="default"):
+        draft = self.make_draft(context, suffix=suffix)
         return submit_fact_check_for_review(
-            fact_check=self.make_draft(context, suffix=suffix),
+            fact_check=draft,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
         )
 
     def create_test_revision(self, context):
@@ -90,6 +96,9 @@ class PublicationTransactionSafetyTests(
         result = publish_fact_check(
             fact_check=submitted,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=submitted.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
         )
 
         context["assignment"].refresh_from_db()
@@ -124,6 +133,9 @@ class PublicationTransactionSafetyTests(
             update_fact_check_draft(
                 fact_check=draft,
                 actor=self.lead,
+                organization_id=self.organization.id,
+                expected_edit_generation=draft.edit_generation,
+                expected_decision_revision=context["decision"].revision_number,
                 headline="Unsafe stale edit",
             )
 
@@ -139,6 +151,9 @@ class PublicationTransactionSafetyTests(
             publish_fact_check(
                 fact_check=submitted,
                 actor=self.lead,
+                organization_id=self.organization.id,
+                expected_edit_generation=submitted.edit_generation,
+                expected_decision_revision=context["decision"].revision_number,
             )
 
         submitted.refresh_from_db()
@@ -164,6 +179,9 @@ class PublicationTransactionSafetyTests(
             submit_fact_check_for_review(
                 fact_check=draft,
                 actor=self.lead,
+                organization_id=self.organization.id,
+                expected_edit_generation=draft.edit_generation,
+                expected_decision_revision=context["decision"].revision_number,
             )
 
         draft.refresh_from_db()
@@ -185,6 +203,8 @@ class PublicationTransactionSafetyTests(
             create_fact_check_draft(
                 decision=context["decision"],
                 actor=self.author,
+                organization_id=self.organization.id,
+                expected_decision_revision=context["decision"].revision_number,
                 headline="Cross-organization draft",
                 summary="This action must remain organization-scoped.",
             )
@@ -205,12 +225,18 @@ class PublicationTransactionSafetyTests(
             update_fact_check_draft(
                 fact_check=draft,
                 actor=self.lead,
+                organization_id=self.organization.id,
+                expected_edit_generation=draft.edit_generation,
+                expected_decision_revision=context["decision"].revision_number,
                 headline="Unauthorized edit",
             )
         with self.assertRaises(PublishingAuthorizationError):
             submit_fact_check_for_review(
                 fact_check=draft,
                 actor=self.lead,
+                organization_id=self.organization.id,
+                expected_edit_generation=draft.edit_generation,
+                expected_decision_revision=context["decision"].revision_number,
             )
 
         draft.refresh_from_db()
@@ -232,6 +258,9 @@ class PublicationTransactionSafetyTests(
             publish_fact_check(
                 fact_check=submitted,
                 actor=self.lead,
+                organization_id=self.organization.id,
+                expected_edit_generation=submitted.edit_generation,
+                expected_decision_revision=context["decision"].revision_number,
             )
 
         submitted.refresh_from_db()
@@ -248,7 +277,13 @@ class PublicationTransactionSafetyTests(
     def test_existing_publication_blocks_ordinary_replacement_without_changes(self):
         context = self.make_decided_context()
         first = self.make_submitted_draft(context, suffix="published-first")
-        first = publish_fact_check(fact_check=first, actor=self.lead)["fact_check"]
+        first = publish_fact_check(
+            fact_check=first,
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=first.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
+        )["fact_check"]
         event_count = ModerationEvent.objects.filter(case=context["case"]).count()
 
         with self.assertRaises(PublishingConflict):
@@ -298,6 +333,9 @@ class PublicationTransactionSafetyTests(
                 publish_fact_check(
                     fact_check=submitted,
                     actor=self.lead,
+                    organization_id=self.organization.id,
+                    expected_edit_generation=submitted.edit_generation,
+                    expected_decision_revision=context["decision"].revision_number,
                 )
 
         submitted.refresh_from_db()
@@ -323,6 +361,9 @@ class PublicationTransactionSafetyTests(
         result = publish_fact_check(
             fact_check=submitted,
             actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=submitted.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
         )
 
         self.assertEqual(
@@ -346,6 +387,8 @@ class PublicationPostgresLockingTests(
         self.require_postgres()
         context = self.make_decided_context()
         submitted = self.make_submitted_draft(context, suffix="lock-order")
+        organization_id = self.organization.id
+        expected_decision_revision = context["decision"].revision_number
         barrier = threading.Barrier(2)
         outcomes = []
 
@@ -375,7 +418,13 @@ class PublicationPostgresLockingTests(
             actor = User.objects.get(pk=self.lead.pk)
             barrier.wait(timeout=10)
             try:
-                publish_fact_check(fact_check=fact_check, actor=actor)
+                publish_fact_check(
+                    fact_check=fact_check,
+                    actor=actor,
+                    organization_id=organization_id,
+                    expected_edit_generation=fact_check.edit_generation,
+                    expected_decision_revision=expected_decision_revision,
+                )
             except Exception as error:  # pragma: no cover - asserted below
                 outcomes.append(f"publish-error:{type(error).__name__}")
             else:
@@ -412,6 +461,8 @@ class PublicationPostgresLockingTests(
         self.require_postgres()
         context = self.make_decided_context()
         submitted = self.make_submitted_draft(context, suffix="decision-race")
+        organization_id = self.organization.id
+        expected_decision_revision = context["decision"].revision_number
         revision_holds_claim = threading.Event()
         publisher_started = threading.Event()
         allow_revision_commit = threading.Event()
@@ -459,7 +510,13 @@ class PublicationPostgresLockingTests(
             actor = User.objects.get(pk=self.lead.pk)
             publisher_started.set()
             try:
-                publish_fact_check(fact_check=fact_check, actor=actor)
+                publish_fact_check(
+                    fact_check=fact_check,
+                    actor=actor,
+                    organization_id=organization_id,
+                    expected_edit_generation=fact_check.edit_generation,
+                    expected_decision_revision=expected_decision_revision,
+                )
             except PublishingConflict:
                 outcomes.append("publication-conflict")
             except Exception as error:  # pragma: no cover - asserted below

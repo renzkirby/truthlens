@@ -18,7 +18,9 @@ from .adjudication_provenance import (
     get_current_adjudication_decision,
     prefetch_claim_adjudication_provenance,
 )
+from .accountability_service import record_accountability_event
 from .models import (
+    AccountabilityEvent,
     AdjudicationDecision,
     AdjudicationDecisionEvidenceSnapshot,
     Claim,
@@ -128,6 +130,7 @@ def get_adjudication_case_queue(
             case_type=ModerationCase.CaseType.ADJUDICATION,
             organization=organization,
             claim__isnull=False,
+            factual_correction_request__isnull=True,
         )
         .select_related("claim")
         .only(
@@ -277,6 +280,7 @@ def get_adjudication_case_detail(
             case_type=ModerationCase.CaseType.ADJUDICATION,
             organization=organization,
             claim__isnull=False,
+            factual_correction_request__isnull=True,
         )
         .first()
     )
@@ -605,6 +609,19 @@ def _prepare_first_adjudication_case(case, *, actor):
             event_type=ModerationEvent.EventType.ADJUDICATION_STARTED,
             from_status=previous_status,
             to_status=ModerationCase.Status.IN_REVIEW,
+        )
+        record_accountability_event(
+            action_type=AccountabilityEvent.ActionType.ADJUDICATION_STARTED,
+            resource_type=AccountabilityEvent.ResourceType.MODERATION_CASE,
+            resource_id=case.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            actor=actor,
+            authority_organization=case.organization,
+            subject_organization=case.organization,
+            capability=PartnerCapability.ADJUDICATE,
+            previous_state={"case_status": previous_status},
+            new_state={"case_status": ModerationCase.Status.IN_REVIEW},
+            context={"claim_id": str(case.claim_id)},
         )
 
     if case.status != ModerationCase.Status.IN_REVIEW:
@@ -999,6 +1016,34 @@ def issue_adjudication_decision(
                 "previous_decision_id": None,
                 "previous_verdict": None,
                 "ai_verdict_snapshot": locked_claim.ai_verdict,
+                "ai_agreement": (
+                    locked_claim.ai_verdict == verdict
+                    if locked_claim.ai_verdict
+                    else None
+                ),
+            },
+        )
+
+        record_accountability_event(
+            action_type=AccountabilityEvent.ActionType.VERDICT_ISSUED,
+            resource_type=AccountabilityEvent.ResourceType.ADJUDICATION_DECISION,
+            resource_id=decision.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            actor=actor,
+            authority_organization=context["organization"],
+            subject_organization=context["organization"],
+            capability=PartnerCapability.ADJUDICATE,
+            previous_state={"verdict": None, "revision_number": 0},
+            new_state={
+                "verdict": decision.verdict,
+                "revision_number": decision.revision_number,
+            },
+            reason_code=verdict,
+            notes=rationale,
+            context={
+                "claim_id": str(locked_claim.pk),
+                "moderation_case_id": str(case.pk),
+                "ai_verdict": locked_claim.ai_verdict,
                 "ai_agreement": (
                     locked_claim.ai_verdict == verdict
                     if locked_claim.ai_verdict

@@ -1,12 +1,10 @@
-import { useState } from "react";
 import Icons from "./Icons";
 import "./EvidenceCard.css";
 import { EVIDENCE_VERDICT_META } from "../utils/constants";
 
 // Import UserAvatar function (defined in ThreadDetailPage, need to extract or pass as prop)
 // For now, we'll define it here
-function avatarStyle(username = "", isMod = false) {
-   if (isMod) return { bg: "#d1fae5", color: "#059669" };
+function avatarStyle(username = "") {
    const palettes = [
       { bg: "#ede9fe", color: "#7c3aed" },
       { bg: "#fce7f3", color: "#db2777" },
@@ -19,8 +17,8 @@ function avatarStyle(username = "", isMod = false) {
    return palettes[hash % palettes.length];
 }
 
-function UserAvatar({ username = "", isMod = false, size = 36 }) {
-   const style = avatarStyle(username, isMod);
+function UserAvatar({ username = "", size = 36 }) {
+   const style = avatarStyle(username);
    const initials = username.replace("@", "").slice(0, 1).toUpperCase();
    return (
       <div
@@ -44,16 +42,14 @@ function UserAvatar({ username = "", isMod = false, size = 36 }) {
 }
 
 /**
- * EvidenceCard - Unified component for both user & moderator contexts
+ * EvidenceCard - Community evidence display
  *
  * Props:
  *   evidence: Evidence object from API
- *   isModerator: Boolean - switches to verification mode
- *   isOwner: Boolean - shows edit/delete buttons (users only)
+ *   isOwner: Boolean - shows edit/delete buttons
  *   isTop: Boolean - shows "Top" badge (only first evidence)
  *   onEdit: Function(evidenceId, caption, verdict) - edit evidence
  *   onDelete: Function(evidenceId) - delete evidence
- *   onVerify: Function(evidenceId, status, notes) - verify evidence (mod only)
  *   editingId: Current editing ID state
  *   editingText: Current editing text state
  *   editingVerdict: Current editing verdict state
@@ -61,7 +57,6 @@ function UserAvatar({ username = "", isMod = false, size = 36 }) {
  */
 function EvidenceCard({
    evidence,
-   isModerator,
    isOwner,
    currentUserId,
    isTop,
@@ -69,7 +64,6 @@ function EvidenceCard({
    onDelete,
    onVote,
    votingEvidenceId,
-   onVerify,
    editingId,
    editingText,
    editingVerdict,
@@ -77,9 +71,6 @@ function EvidenceCard({
    setEditingText,
    setEditingVerdict,
 }) {
-   const [notes, setNotes] = useState("");
-   const [isVerifying, setIsVerifying] = useState(false);
-
    const ev = evidence;
    const upvotes = ev.upvotes ?? 0;
    const downvotes = ev.downvotes ?? 0;
@@ -143,15 +134,8 @@ function EvidenceCard({
    const isOwnEvidence = ev.contributor?.id === currentUserId;
    const isVoting = votingEvidenceId === ev.id;
 
-   const handleVerify = async (status) => {
-      setIsVerifying(true);
-      await onVerify(ev.id, status, notes);
-      setNotes("");
-      setIsVerifying(false);
-   };
-
    return (
-      <div className={`tdp-evidence-card evidence-card-${isModerator ? "mod" : "user"}`}>
+      <div className="tdp-evidence-card evidence-card-user">
          {/* Header with contributor and actions */}
          <div className="tdp-evidence-card-header">
             <div className="tdp-evidence-contributor">
@@ -301,147 +285,51 @@ function EvidenceCard({
             <span className="tdp-meta-chip">{submittedLabel}</span>
          </div>
 
-         {/* Actions - voting (users) vs verification (mods) */}
-         {isModerator ? (
-            // MODERATOR MODE
-            ev.evidence_status && ev.evidence_status !== "UNVERIFIED" ? (
-               // Verified/Rejected - Show read-only status
-               <div
-                  className={`tdp-evidence-verified-info ${
-                     ev.evidence_status === "REJECTED" ? "rejected" : ""
-                  }`}>
-                  <div className="tdp-verification-badge">
-                     <Icons
-                        name={ev.evidence_status === "VERIFIED" ? "check-circle" : "x-circle"}
-                        size={16}
-                        color={ev.evidence_status === "VERIFIED" ? "#10b981" : "#dc2626"}
-                     />
-                     <span className="tdp-verification-status">
-                        {ev.evidence_status === "VERIFIED" ? "Verified" : "Rejected"}
-                     </span>
-                  </div>
-
-                  <div className="tdp-verification-details">
-                     <div className="tdp-verified-by">
-                        <span className="tdp-label">Reviewed by:</span>
-                        <span className="tdp-value">
-                           {ev.verified_by?.username || "Moderator"}
-                        </span>{" "}
-                        <span className="tdp-mod-badge">
-                           <Icons
-                              name="shield"
-                              size={8}
-                              color="#059669"
-                              strokeWidth={2.5}
-                           />
-                           MOD
-                        </span>
-                     </div>
-                     {ev.verified_at && (
-                        <div className="tdp-verified-at">
-                           <span className="tdp-label">On:</span>
-                           <span className="tdp-value">
-                              {new Date(ev.verified_at).toLocaleString(undefined, {
-                                 month: "short",
-                                 day: "numeric",
-                                 year: "numeric",
-                                 hour: "2-digit",
-                                 minute: "2-digit",
-                              })}
-                           </span>
-                        </div>
-                     )}
-                  </div>
-
-                  {ev.moderator_notes && (
-                     <div className="tdp-moderator-notes-display">
-                        <div className="tdp-notes-label">Moderator Notes:</div>
-                        <div className="tdp-notes-text">{ev.moderator_notes}</div>
-                     </div>
-                  )}
-               </div>
-            ) : (
-               // Unverified - Show verification form
-               <div className="tdp-evidence-moderation">
-                  <textarea
-                     className="tdp-mod-notes"
-                     placeholder="Moderator notes (optional)..."
-                     value={notes}
-                     onChange={(e) => setNotes(e.target.value)}
-                     disabled={isVerifying}
-                  />
-                  <div className="tdp-mod-actions">
-                     <button
-                        className="tdp-mod-btn verify"
-                        onClick={() => handleVerify("VERIFIED")}
-                        disabled={isVerifying}>
-                        <Icons
-                           name="check"
-                           size={14}
-                        />
-                        Verify
-                     </button>
-                     <button
-                        className="tdp-mod-btn reject"
-                        onClick={() => handleVerify("REJECTED")}
-                        disabled={isVerifying}>
-                        <Icons
-                           name="x"
-                           size={14}
-                        />
-                        Reject
-                     </button>
-                  </div>
-               </div>
-            )
-         ) : (
-            // USER MODE
-            <div className="tdp-evidence-votes">
-               <button
-                  className={`tdp-vote-btn up ${myVoteValue === true ? "active" : ""}`}
-                  onClick={() => onVote?.(ev, true)}
-                  disabled={isVoting || isOwnEvidence}
-                  title={isOwnEvidence ? "You cannot vote on your own evidence." : "Upvote"}>
-                  <Icons
-                     name="chevron-up"
-                     size={13}
-                     strokeWidth={2.5}
-                     color="#166534"
-                  />
-                  {upvotes}
-               </button>
-               <button
-                  className={`tdp-vote-btn down ${myVoteValue === false ? "active" : ""}`}
-                  onClick={() => onVote?.(ev, false)}
-                  disabled={isVoting || isOwnEvidence}
-                  title={isOwnEvidence ? "You cannot vote on your own evidence." : "Downvote"}>
-                  <Icons
-                     name="chevron-down"
-                     size={13}
-                     strokeWidth={2.5}
-                     color="#991b1b"
-                  />
-                  {downvotes}
-               </button>
-               <span className="tdp-weighted-score">
-                  <Icons
-                     name="hash"
-                     size={9}
-                     color="#6b7280"
-                  />
-                  Weighted: {weighted}
-               </span>
-               <span
-                  className={`tdp-evidence-status evidence-status-${ev.evidence_status?.toLowerCase()}`}>
-                  Status: {ev.evidence_status}
-               </span>
-               <span className="tdp-vote-policy-hint">
-                  {isVoting
-                     ? "Syncing vote..."
-                     : "Votes are recorded now; trust impact applies after thread resolution."}
-               </span>
-            </div>
-         )}
+         {/* Community voting and recorded review status */}
+         <div className="tdp-evidence-votes">
+            <button
+               className={`tdp-vote-btn up ${myVoteValue === true ? "active" : ""}`}
+               onClick={() => onVote?.(ev, true)}
+               disabled={isVoting || isOwnEvidence}
+               title={isOwnEvidence ? "You cannot vote on your own evidence." : "Upvote"}>
+               <Icons
+                  name="chevron-up"
+                  size={13}
+                  strokeWidth={2.5}
+                  color="#166534"
+               />
+               {upvotes}
+            </button>
+            <button
+               className={`tdp-vote-btn down ${myVoteValue === false ? "active" : ""}`}
+               onClick={() => onVote?.(ev, false)}
+               disabled={isVoting || isOwnEvidence}
+               title={isOwnEvidence ? "You cannot vote on your own evidence." : "Downvote"}>
+               <Icons
+                  name="chevron-down"
+                  size={13}
+                  strokeWidth={2.5}
+                  color="#991b1b"
+               />
+               {downvotes}
+            </button>
+            <span className="tdp-weighted-score">
+               <Icons
+                  name="hash"
+                  size={9}
+                  color="#6b7280"
+               />
+               Weighted: {weighted}
+            </span>
+            <span className={`tdp-evidence-status evidence-status-${ev.evidence_status?.toLowerCase()}`}>
+               Status: {ev.evidence_status}
+            </span>
+            <span className="tdp-vote-policy-hint">
+               {isVoting
+                  ? "Syncing vote..."
+                  : "Votes are recorded now; trust impact applies after thread resolution."}
+            </span>
+         </div>
       </div>
    );
 }

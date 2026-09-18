@@ -81,6 +81,10 @@ REST_FRAMEWORK = {
         'anon': '5/minute',
         'user': '100/minute',
         'fact_check': os.getenv('DRF_FACT_CHECK_THROTTLE_RATE', '5/minute'),
+        "claim_polling": os.getenv(
+            "DRF_CLAIM_POLLING_THROTTLE_RATE",
+            "60/minute",
+        ),
         "password_reset": "3/hour",
         "email_verification": "3/hour",
         "public_partner": os.getenv(
@@ -143,15 +147,18 @@ def _normalize_supabase_pooler_port(database_url):
     return database_url.replace(".pooler.supabase.com:5432", ".pooler.supabase.com:6543")
 
 
-selected_db_url = os.environ.get("SUPABASE_DEVELOPMENT_DB_URL")
-# if not selected_db_url:
-#     primary_env = "SUPABASE_DEVELOPMENT_DB_URL" if DEBUG else "SUPABASE_PRODUCTION_DB_URL"
-#     fallback_env = "SUPABASE_PRODUCTION_DB_URL" if DEBUG else "SUPABASE_DEVELOPMENT_DB_URL"
-#     selected_db_url = os.environ.get(primary_env) or os.environ.get(fallback_env)
+database_env = (
+    "SUPABASE_DEVELOPMENT_DB_URL"
+    if DEBUG
+    else "SUPABASE_PRODUCTION_DB_URL"
+)
+selected_db_url = os.environ.get(database_env)
+if not selected_db_url:
+    raise RuntimeError(
+        f"No database URL configured for this environment. Set {database_env}."
+    )
 
 selected_db_url = _normalize_supabase_pooler_port(selected_db_url)
-if not selected_db_url:
-    raise RuntimeError("No Supabase database URL configured. Set SUPABASE_DATABASE_URL or environment-specific URLs.")
 
 DATABASES = {
     "default": {
@@ -258,9 +265,8 @@ SITE_ID = 1
 REST_AUTH = {
     'USE_JWT': True,
 }
-ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_USERNAME_REQUIRED = False
-ACCOUNT_AUTHENTICATION_METHOD = 'username_email'
+ACCOUNT_LOGIN_METHODS = {"username", "email"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
 ACCOUNT_EMAIL_VERIFICATION = 'none'
 
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = True

@@ -1604,6 +1604,14 @@ class ModerationEvent(models.Model):
             "ARTICLE_SUBMITTED",
             "Article Submitted for Review",
         )
+        ARTICLE_RETURNED_FOR_REWORK = (
+            "ARTICLE_RETURNED_FOR_REWORK",
+            "Article Returned for Rework",
+        )
+        ARTICLE_ABANDONED = (
+            "ARTICLE_ABANDONED",
+            "Article Abandoned",
+        )
         ARTICLE_PUBLISHED = (
             "ARTICLE_PUBLISHED",
             "Article Published",
@@ -1708,6 +1716,250 @@ class ModerationEvent(models.Model):
 
     def __str__(self):
         return f"{self.event_type} - " f"Case {self.case_id}"
+
+
+class AccountabilityEvent(models.Model):
+    class AuthorityScope(models.TextChoices):
+        PERSONAL = "PERSONAL", "Personal"
+        ORGANIZATION = "ORGANIZATION", "Organization"
+        PLATFORM = "PLATFORM", "Platform"
+        SYSTEM = "SYSTEM", "System"
+
+    class ActionType(models.TextChoices):
+        VERIFICATION_ASSIGNMENT_CREATED = (
+            "VERIFICATION_ASSIGNMENT_CREATED",
+            "Verification Assignment Created",
+        )
+        VERIFICATION_ASSIGNMENT_CLAIMED = (
+            "VERIFICATION_ASSIGNMENT_CLAIMED",
+            "Verification Assignment Claimed",
+        )
+        VERIFICATION_ASSIGNMENT_RELEASED = (
+            "VERIFICATION_ASSIGNMENT_RELEASED",
+            "Verification Assignment Released",
+        )
+        VERIFICATION_ASSIGNMENT_COMPLETED = (
+            "VERIFICATION_ASSIGNMENT_COMPLETED",
+            "Verification Assignment Completed",
+        )
+        ORGANIZATION_MEMBERSHIP_ROLE_CHANGED = (
+            "ORGANIZATION_MEMBERSHIP_ROLE_CHANGED",
+            "Organization Membership Role Changed",
+        )
+        ORGANIZATION_MEMBERSHIP_SUSPENDED = (
+            "ORGANIZATION_MEMBERSHIP_SUSPENDED",
+            "Organization Membership Suspended",
+        )
+        ORGANIZATION_MEMBERSHIP_RESTORED = (
+            "ORGANIZATION_MEMBERSHIP_RESTORED",
+            "Organization Membership Restored",
+        )
+        ORGANIZATION_MEMBERSHIP_REMOVED = (
+            "ORGANIZATION_MEMBERSHIP_REMOVED",
+            "Organization Membership Removed",
+        )
+        ORGANIZATION_INVITATION_CREATED = (
+            "ORGANIZATION_INVITATION_CREATED",
+            "Organization Invitation Created",
+        )
+        ORGANIZATION_INVITATION_RESENT = (
+            "ORGANIZATION_INVITATION_RESENT",
+            "Organization Invitation Resent",
+        )
+        ORGANIZATION_INVITATION_CANCELLED = (
+            "ORGANIZATION_INVITATION_CANCELLED",
+            "Organization Invitation Cancelled",
+        )
+        ORGANIZATION_INVITATION_ACCEPTED = (
+            "ORGANIZATION_INVITATION_ACCEPTED",
+            "Organization Invitation Accepted",
+        )
+        ORGANIZATION_INVITATION_EXPIRED = (
+            "ORGANIZATION_INVITATION_EXPIRED",
+            "Organization Invitation Expired",
+        )
+        ORGANIZATION_PUBLIC_PROFILE_UPDATED = (
+            "ORGANIZATION_PUBLIC_PROFILE_UPDATED",
+            "Organization Public Profile Updated",
+        )
+        ORGANIZATION_LOGO_UPDATED = (
+            "ORGANIZATION_LOGO_UPDATED",
+            "Organization Logo Updated",
+        )
+        ORGANIZATION_LOGO_REMOVED = (
+            "ORGANIZATION_LOGO_REMOVED",
+            "Organization Logo Removed",
+        )
+        SAFETY_CASE_CLAIMED = "SAFETY_CASE_CLAIMED", "Safety Case Claimed"
+        SAFETY_CASE_RELEASED = "SAFETY_CASE_RELEASED", "Safety Case Released"
+        SAFETY_CASE_ESCALATED = "SAFETY_CASE_ESCALATED", "Safety Case Escalated"
+        SAFETY_DISMISSED = "SAFETY_DISMISSED", "Safety Dismissed"
+        SAFETY_CONTENT_REMOVED = (
+            "SAFETY_CONTENT_REMOVED",
+            "Safety Content Removed",
+        )
+        EVIDENCE_REOPENED = "EVIDENCE_REOPENED", "Evidence Reopened"
+        EVIDENCE_VERIFIED = "EVIDENCE_VERIFIED", "Evidence Verified"
+        EVIDENCE_REJECTED = "EVIDENCE_REJECTED", "Evidence Rejected"
+        ADJUDICATION_STARTED = "ADJUDICATION_STARTED", "Adjudication Started"
+        VERDICT_ISSUED = "VERDICT_ISSUED", "Verdict Issued"
+        VERDICT_REVISED = "VERDICT_REVISED", "Verdict Revised"
+        ARTICLE_DRAFT_CREATED = "ARTICLE_DRAFT_CREATED", "Article Draft Created"
+        ARTICLE_DRAFT_SAVED = "ARTICLE_DRAFT_SAVED", "Article Draft Saved"
+        ARTICLE_SUBMITTED = "ARTICLE_SUBMITTED", "Article Submitted"
+        ARTICLE_RETURNED_FOR_REWORK = (
+            "ARTICLE_RETURNED_FOR_REWORK",
+            "Article Returned For Rework",
+        )
+        ARTICLE_ABANDONED = "ARTICLE_ABANDONED", "Article Abandoned"
+        ARTICLE_PUBLISHED = "ARTICLE_PUBLISHED", "Article Published"
+        ARTICLE_REVISION_DRAFTED = (
+            "ARTICLE_REVISION_DRAFTED",
+            "Article Revision Drafted",
+        )
+        ARTICLE_REVISED = "ARTICLE_REVISED", "Article Revised"
+        FACTUAL_CORRECTION_REQUESTED = (
+            "FACTUAL_CORRECTION_REQUESTED",
+            "Factual Correction Requested",
+        )
+        FACTUAL_CORRECTION_PROPOSAL_SAVED = (
+            "FACTUAL_CORRECTION_PROPOSAL_SAVED",
+            "Factual Correction Proposal Saved",
+        )
+        FACTUAL_CORRECTION_PROPOSAL_PREPARED = (
+            "FACTUAL_CORRECTION_PROPOSAL_PREPARED",
+            "Factual Correction Proposal Prepared",
+        )
+        FACTUAL_CORRECTION_CANCELLED = (
+            "FACTUAL_CORRECTION_CANCELLED",
+            "Factual Correction Cancelled",
+        )
+        FACTUAL_CORRECTION_PUBLISHED = (
+            "FACTUAL_CORRECTION_PUBLISHED",
+            "Factual Correction Published",
+        )
+
+    class ResourceType(models.TextChoices):
+        VERIFICATION_ASSIGNMENT = (
+            "VERIFICATION_ASSIGNMENT",
+            "Verification Assignment",
+        )
+        ORGANIZATION_MEMBERSHIP = (
+            "ORGANIZATION_MEMBERSHIP",
+            "Organization Membership",
+        )
+        ORGANIZATION_INVITATION = (
+            "ORGANIZATION_INVITATION",
+            "Organization Invitation",
+        )
+        ORGANIZATION = "ORGANIZATION", "Organization"
+        MODERATION_CASE = "MODERATION_CASE", "Moderation Case"
+        THREAD = "THREAD", "Thread"
+        EVIDENCE_SUBMISSION = "EVIDENCE_SUBMISSION", "Evidence Submission"
+        ADJUDICATION_DECISION = (
+            "ADJUDICATION_DECISION",
+            "Adjudication Decision",
+        )
+        OFFICIAL_FACT_CHECK = "OFFICIAL_FACT_CHECK", "Official Fact Check"
+        FACTUAL_CORRECTION_REQUEST = (
+            "FACTUAL_CORRECTION_REQUEST",
+            "Factual Correction Request",
+        )
+        FACTUAL_CORRECTION_PROPOSAL = (
+            "FACTUAL_CORRECTION_PROPOSAL",
+            "Factual Correction Proposal",
+        )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    actor = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="accountability_events",
+    )
+    actor_id_snapshot = models.CharField(max_length=255, blank=True)
+    actor_username_snapshot = models.CharField(max_length=150, blank=True)
+    authority_scope = models.CharField(
+        max_length=20,
+        choices=AuthorityScope.choices,
+    )
+    authority_organization = models.ForeignKey(
+        Organization,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="authority_accountability_events",
+    )
+    authority_organization_name_snapshot = models.CharField(
+        max_length=255,
+        blank=True,
+    )
+    subject_organization = models.ForeignKey(
+        Organization,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="subject_accountability_events",
+    )
+    subject_organization_name_snapshot = models.CharField(
+        max_length=255,
+        blank=True,
+    )
+    capability = models.CharField(max_length=64, blank=True)
+    action_type = models.CharField(max_length=64, choices=ActionType.choices)
+    resource_type = models.CharField(max_length=64, choices=ResourceType.choices)
+    resource_id = models.CharField(max_length=255)
+    previous_state = models.JSONField(default=dict, blank=True)
+    new_state = models.JSONField(default=dict, blank=True)
+    reason_code = models.CharField(max_length=100, blank=True)
+    notes = models.TextField(blank=True)
+    context = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(
+                fields=["authority_scope", "-created_at"],
+                name="acct_scope_time_idx",
+            ),
+            models.Index(
+                fields=["authority_organization", "-created_at"],
+                name="acct_auth_org_time_idx",
+            ),
+            models.Index(
+                fields=["subject_organization", "-created_at"],
+                name="acct_subject_org_time_idx",
+            ),
+            models.Index(
+                fields=["actor", "-created_at"],
+                name="acct_actor_time_idx",
+            ),
+            models.Index(
+                fields=["action_type", "-created_at"],
+                name="acct_action_time_idx",
+            ),
+            models.Index(
+                fields=["resource_type", "resource_id", "-created_at"],
+                name="acct_resource_time_idx",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError(
+                "Accountability events are append-only and cannot be modified."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            "Accountability events are append-only and cannot be deleted directly."
+        )
+
+    def __str__(self):
+        return f"{self.action_type} - {self.resource_type} {self.resource_id}"
 
 
 class AdjudicationDecision(models.Model):
@@ -1999,6 +2251,18 @@ class OfficialFactCheck(models.Model):
         EDITORIAL_REVISION = "EDITORIAL_REVISION", "Editorial revision"
         FACTUAL_CORRECTION = "FACTUAL_CORRECTION", "Factual correction"
 
+    @classmethod
+    def initial_workflow_queryset(cls):
+        """Return rows compatible with the INITIAL publication workflow."""
+        return cls.objects.filter(
+            Q(revision_kind=cls.RevisionKind.INITIAL)
+            | Q(revision_kind__isnull=True),
+            supersedes__isnull=True,
+            claim__isnull=False,
+            adjudication_decision__isnull=False,
+            organization__isnull=False,
+        )
+
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -2101,6 +2365,13 @@ class OfficialFactCheck(models.Model):
 
     version = models.PositiveIntegerField(
         default=1,
+    )
+
+    edit_generation = models.PositiveIntegerField(
+        default=1,
+        help_text=(
+            "Optimistic concurrency generation for mutable unpublished article work."
+        ),
     )
 
     created_at = models.DateTimeField(
@@ -2314,6 +2585,7 @@ class OfficialFactCheck(models.Model):
         "article_body",
         "sources",
         "version",
+        "edit_generation",
         "created_at",
         "drafted_by_id",
         "submitted_for_review_at",
@@ -4149,6 +4421,53 @@ class FactualCorrectionProposal(models.Model):
         )
 
 
+class ClaimFactCheckReference(models.Model):
+    """Durable publication resolution/provenance, separate from AI and analytics."""
+
+    class RelationshipKind(models.TextChoices):
+        AUTHORITATIVE = "AUTHORITATIVE", "Authoritative"
+        RELATED = "RELATED", "Related"
+
+    class MatchMethod(models.TextChoices):
+        EXACT_CANONICAL = "EXACT_CANONICAL", "Exact canonical"
+        EQUIVALENT_CLAIM = "EQUIVALENT_CLAIM", "Equivalent claim"
+        EXACT_HEADLINE = "EXACT_HEADLINE", "Exact headline"
+        SEMANTIC = "SEMANTIC", "Semantic"
+        FULL_TEXT = "FULL_TEXT", "Full text"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    target_claim = models.ForeignKey(
+        Claim, on_delete=models.CASCADE, related_name="fact_check_references",
+    )
+    fact_check = models.ForeignKey(
+        OfficialFactCheck, on_delete=models.PROTECT, related_name="claim_references",
+    )
+    relationship_kind = models.CharField(
+        max_length=20, choices=RelationshipKind.choices,
+    )
+    match_method = models.CharField(max_length=20, choices=MatchMethod.choices)
+    similarity_score = models.FloatField(null=True, blank=True)
+    query_fingerprint = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["target_claim"],
+                condition=Q(relationship_kind="AUTHORITATIVE"),
+                name="uniq_authoritative_claim_reference",
+            ),
+            models.UniqueConstraint(
+                fields=["target_claim", "fact_check", "relationship_kind"],
+                name="uniq_claim_fact_check_relationship",
+            ),
+            models.CheckConstraint(
+                condition=Q(query_fingerprint__regex=r"^[0-9a-f]{64}$"),
+                name="claim_reference_sha256_only",
+            ),
+        ]
+
+
 class KnowledgeReuseEvent(models.Model):
     class ReuseType(models.TextChoices):
         USER_RESPONSE = (
@@ -4208,6 +4527,17 @@ class KnowledgeReuseEvent(models.Model):
         null=True,
         blank=True,
         related_name="knowledge_reuse_events",
+    )
+
+    source_organization_id_snapshot = models.CharField(
+        max_length=255,
+        blank=True,
+        db_index=True,
+    )
+
+    target_claim_id_snapshot = models.CharField(
+        max_length=255,
+        blank=True,
     )
 
     reuse_type = models.CharField(
@@ -4282,3 +4612,15 @@ class KnowledgeReuseEvent(models.Model):
 
     def __str__(self):
         return f"{self.reuse_type} - " f"Fact Check {self.fact_check_id}"
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError(
+                "Knowledge reuse events are immutable and cannot be modified."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            "Knowledge reuse events are durable and cannot be deleted directly."
+        )

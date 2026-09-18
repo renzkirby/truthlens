@@ -14,12 +14,11 @@ from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from django.utils import timezone
 from django.db import IntegrityError, transaction
-from django.db.models import Q, Count, F, Max
+from django.db.models import Q, F, Max
 from rest_framework.decorators import (
     api_view,
     parser_classes,
     permission_classes,
-    action,
     throttle_classes,
 )
 from rest_framework import status, viewsets
@@ -46,6 +45,7 @@ from datetime import timedelta
 from django.shortcuts import get_object_or_404
 from PIL import Image
 import json
+import logging
 import secrets
 import base64
 import uuid
@@ -84,15 +84,10 @@ from .models import (
     OrganizationMembership,
     AdjudicationDecision,
     OfficialFactCheck,
+    FactualCorrectionRequest,
     VerificationAssignment,
 )
-from .moderation_service import (
-    ACTIVE_CASE_STATUSES,
-    ModerationCaseError,
-    ensure_safety_case,
-    escalate_safety_case,
-    resolve_safety_case,
-)
+from .moderation_service import ModerationCaseError, ensure_safety_case
 from .safety_review_service import (
     SafetyCaseConflict,
     SafetyReviewAuthorizationError,
@@ -106,11 +101,32 @@ from .safety_review_service import (
 from .organization_service import (
     PartnerCapability,
     has_capability,
-    has_case_capability,
+)
+from .verification_metrics_query_service import (
+    VerificationMetricsAuthorizationError,
+    VerificationMetricsCompositionError,
+    get_organization_verification_metrics,
+)
+from .verification_metrics_service import VerificationMetricsIntegrityError
+from .verification_activity_metrics_service import VerificationActivityMetricsIntegrityError
+from .verification_activity_trends_service import VerificationActivityTrendInputError
+from .verification_resolution_metrics_service import VerificationResolutionMetricsIntegrityError
+from .verification_reviewer_participation_metrics_service import (
+    VerificationReviewerParticipationMetricsIntegrityError,
 )
 from .organization_public_presence_service import (
     get_public_partner_by_slug,
     get_public_partner_directory,
+)
+from .public_publication_query_service import (
+    PublicPublicationNotFound,
+    get_public_partner_fact_check_detail,
+    list_public_partner_fact_checks,
+)
+from .public_publication_serializers import (
+    PublicFactCheckDetailSerializer,
+    PublicFactCheckPageSerializer,
+    PublicFactCheckQuerySerializer,
 )
 from .organization_public_profile_service import (
     InvalidOrganizationPublicProfileChanges,
@@ -132,8 +148,8 @@ from .evidence_review_service import (
     ensure_evidence_case,
     get_evidence_case_queue,
     get_evidence_case_queryset,
-    get_latest_evidence_case,
     review_evidence_submission,
+    review_correction_evidence,
     schedule_evidence_review_trust_updates,
 )
 from .adjudication_service import (
@@ -156,13 +172,60 @@ from .trust_service import (
     recompute_user_trust_score,
 )
 from .publishing_service import (
+    InvalidPublicationTransition,
     PublishingError,
     PublishingAuthorizationError,
     PublishingConflict,
+    abandon_fact_check_draft,
+    abandon_editorial_revision_draft,
+    create_editorial_revision_draft,
     create_fact_check_draft,
+    publish_editorial_revision,
+    return_editorial_revision_for_rework,
+    return_fact_check_for_rework,
     update_fact_check_draft,
     submit_fact_check_for_review,
     publish_fact_check,
+    publish_factual_correction,
+)
+from .factual_correction_service import (
+    FactualCorrectionAuthorizationError,
+    FactualCorrectionConflict,
+    FactualCorrectionError,
+    cancel_factual_correction,
+    request_factual_correction,
+)
+from .factual_correction_proposal_service import (
+    FactualCorrectionProposalAuthorizationError,
+    FactualCorrectionProposalConflict,
+    FactualCorrectionProposalError,
+    prepare_factual_correction_proposal,
+    save_factual_correction_proposal,
+)
+from .factual_correction_query_service import (
+    FactualCorrectionQueryAuthorizationError,
+    FactualCorrectionQueryNotFound,
+    get_factual_correction_detail,
+    list_factual_corrections,
+)
+from .publication_workflow_query_service import (
+    RESOURCE_FACT_CHECK,
+    PublicationWorkflowAuthorizationError,
+    PublicationWorkflowNotFound,
+    get_publication_work_item_detail,
+    list_publication_work_items,
+)
+from .organization_publication_query_service import (
+    OrganizationPublicationAuthorizationError,
+    OrganizationPublicationNotFound,
+    get_organization_publication_detail,
+    list_organization_publications,
+)
+from .accountability_query_service import (
+    AccountabilityQueryAuthorizationError,
+    AccountabilityQueryInputError,
+    list_organization_accountability_events,
+    list_platform_accountability_events,
 )
 from .verification_assignment_service import (
     VerificationAssignmentAuthorizationError,
@@ -201,6 +264,7 @@ from .organization_membership_service import (
     suspend_organization_membership,
 )
 from .throttles import (
+    ClaimPollingRateThrottle,
     FactCheckRateThrottle,
     PasswordResetRateThrottle,
     EmailVerificationRateThrottle,
@@ -220,7 +284,6 @@ from .serializers import (
     PublicUserThreadSerializer,
     PublicUserEvidenceSerializer,
     PublicUserCommentSerializer,
-    PublicModeratorVerdictSerializer,
     ThreadDetailSerializer,
     VoteSerializer,
     ThreadFlagSerializer,
@@ -231,15 +294,33 @@ from .serializers import (
     AdjudicationCaseQueueOrganizationSerializer,
     AdjudicationCaseQueueSerializer,
     AdjudicationOrganizationQuerySerializer,
-    ModerationDecisionSerializer,
     ClaimMatchSerializer,
     UserWithTrustBreakdownSerializer,
     ClaimDeepAnalysisSerializer,
     AdjudicationDecisionSerializer,
-    AdjudicationQueueCaseSerializer,
     FactCheckDraftCreateSerializer,
     FactCheckDraftUpdateSerializer,
-    OfficialFactCheckSerializer,
+    EditorialRevisionDraftCreateSerializer,
+    EditorialRevisionPublishSerializer,
+    FactCheckRecoverySerializer,
+    FactCheckTransitionSerializer,
+    PublicationWorkflowDetailQuerySerializer,
+    PublicationWorkflowDetailSerializer,
+    PublicationWorkflowPageSerializer,
+    PublicationWorkflowQueueQuerySerializer,
+    OrganizationPublicationDetailQuerySerializer,
+    OrganizationPublicationDetailSerializer,
+    OrganizationPublicationLibraryQuerySerializer,
+    OrganizationPublicationPageSerializer,
+    FactualCorrectionCancelSerializer,
+    FactualCorrectionCollectionQuerySerializer,
+    FactualCorrectionConcurrencyMutationSerializer,
+    FactualCorrectionDetailQuerySerializer,
+    FactualCorrectionDetailSerializer,
+    FactualCorrectionEvidenceReviewSerializer,
+    FactualCorrectionPageSerializer,
+    FactualCorrectionProposalSaveSerializer,
+    FactualCorrectionRequestMutationSerializer,
     VerificationAssignmentClaimSerializer,
     VerificationAssignmentSerializer,
     OrganizationMembershipAdminSerializer,
@@ -263,11 +344,18 @@ from .serializers import (
     EvidenceCaseQueueFilterSerializer,
     EvidenceCaseSummarySerializer,
     EvidenceReviewOrganizationSerializer,
+    AccountabilityPageSerializer,
+    OrganizationAccountabilityQuerySerializer,
+    OrganizationVerificationMetricsQuerySerializer,
+    PlatformAccountabilityQuerySerializer,
 )
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.views import SocialLoginView
 from .email_verification import send_email_verification
+
+
+logger = logging.getLogger(__name__)
 
 
 # GoogleLogin
@@ -331,65 +419,12 @@ class IsVoterOrReadOnly(BasePermission):
         return obj.voter == request.user
 
 
-def _has_moderator_role(user):
-    profile = getattr(user, "profile", None)
-    if not profile:
-        return False
-    # Backward-compatible during migration from MODERATOR -> MOD.
-    return profile.role in {UserProfile.Role.MOD, "MODERATOR"}
-
-
-class IsModerator(BasePermission):
-    """
-    Legacy class name.
-
-    MOD now represents the TruthLens Platform
-    Safety Moderator role, not a factual verifier.
-    """
-
+class CanReviewSafety(BasePermission):
     def has_permission(self, request, view):
         return has_capability(
             request.user,
             PartnerCapability.REVIEW_SAFETY,
         )
-
-
-class CanReviewEvidence(BasePermission):
-    def has_permission(
-        self,
-        request,
-        view,
-    ):
-        return request.user and request.user.is_authenticated
-
-    def has_object_permission(
-        self,
-        request,
-        view,
-        obj,
-    ):
-        # Nobody may issue an authoritative
-        # review of their own evidence.
-        if obj.contributor_id == request.user.id:
-            return False
-
-        case = get_latest_evidence_case(obj)
-
-        if case is None:
-            return False
-
-        return has_case_capability(
-            request.user,
-            case,
-            PartnerCapability.REVIEW_EVIDENCE,
-        )
-
-
-class IsNotModerator(BasePermission):
-    def has_permission(self, request, view):
-        if not request.user.is_authenticated:
-            return False
-        return not _has_moderator_role(request.user)
 
 
 def _authenticated_user_or_none(request):
@@ -455,9 +490,6 @@ def receive_snippet(request):
 
     media_url = upload_image_to_database(base64_string)
 
-    print("IMAGE HASH:", image_hash)
-    print("DEEPFAKE CHECK ENABLED:", check_deepfake)
-
     claim = Claim.objects.create(
         claim_type=Claim.ClaimType.IMAGE,
         media_hash=image_hash,
@@ -480,7 +512,7 @@ def receive_snippet(request):
 
 @csrf_exempt
 @api_view(["GET"])
-@throttle_classes([])
+@throttle_classes([ClaimPollingRateThrottle])
 def claim_polling_endpoint(request, claim_id):
     if not claim_id:
         return JsonResponse({"error": "Claim ID is required"}, status=400)
@@ -489,21 +521,15 @@ def claim_polling_endpoint(request, claim_id):
         claim = Claim.objects.get(id=claim_id)
     except Claim.DoesNotExist:
         return JsonResponse(
-            {
-                "verdict": "OUT_OF_SCOPE",
-                "summary": "The content of the image is not a claim that can be fact-checked.",
-                "confidence_score": 100,
-                "source_type": "N/A",
-            },
-            status=200,
+            {"detail": "Claim not found."},
+            status=404,
         )
 
     ai_verdict = claim.ai_verdict
-    if ai_verdict is None:
+    match_result = get_match_result(claim)
+    if match_result["resolution_source"] != "OFFICIAL_FACT_CHECK" and ai_verdict is None:
         return JsonResponse({"verdict": "PENDING"}, status=200)
     else:
-        match_result = get_match_result(claim)
-
         return JsonResponse(
             {
                 "id": str(claim_id),
@@ -540,7 +566,6 @@ def claim_polling_endpoint(request, claim_id):
 def verify_url(request):
     # gets the data from fronted ('yung URL)
     url = request.data.get("url")
-    print(f"Received URL: {url}")
     safe_url, url_error = validate_public_url(url)
     if url_error:
         return Response({"detail": url_error}, status=400)
@@ -626,10 +651,7 @@ def register_user(request):
         send_email_verification(user)
         verification_email_sent = True
     except Exception as error:
-        print(
-            "Failed to send verification email:",
-            error,
-        )
+        logger.exception("Failed to send registration verification email.")
 
     tokens = get_tokens_for_user(user)
 
@@ -673,79 +695,22 @@ def sync_guest_scan(request):
     if not isinstance(scan, dict):
         return Response({"detail": "scan payload is required."}, status=400)
 
-    # If the scan already references a known claim, just link it to this user history.
     raw_claim_id = scan.get("claim_id")
-    if raw_claim_id:
-        try:
-            claim_uuid = uuid.UUID(str(raw_claim_id))
-            existing_claim = Claim.objects.filter(id=claim_uuid).first()
-        except (ValueError, TypeError, AttributeError):
-            existing_claim = None
-
-        if existing_claim:
-            _record_authenticated_claim_check(request.user, existing_claim)
-            return Response(
-                {"id": str(existing_claim.id), "mode": "linked"}, status=200
-            )
-
-    scan_type = str(scan.get("scan_type") or "SCAN").upper()
-    verdict = str(scan.get("verdict") or "UNVERIFIED").upper()
-    summary = str(scan.get("summary") or "").strip()
-    source_type = str(scan.get("source_type") or "Extension Guest Sync").strip()[:50]
-    source_url = str(scan.get("source_url") or "").strip()
-    scanned_at = str(scan.get("scanned_at") or "").strip()
-
-    allowed_verdicts = {
-        "FACT",
-        "FAKE",
-        "MISLEADING",
-        "SATIRE",
-        "UNVERIFIED",
-        "OUT_OF_SCOPE",
-    }
-    if verdict not in allowed_verdicts:
-        verdict = "UNVERIFIED"
+    if not raw_claim_id:
+        return Response({"detail": "claim_id is required."}, status=400)
 
     try:
-        consensus_score = float(scan.get("confidence_score", 0))
-    except (TypeError, ValueError):
-        consensus_score = 0.0
-    consensus_score = max(0.0, min(consensus_score, 100.0))
+        claim_uuid = uuid.UUID(str(raw_claim_id))
+    except (ValueError, TypeError, AttributeError):
+        return Response({"detail": "claim_id must be a valid UUID."}, status=400)
 
-    normalized_source_url = (
-        source_url
-        if source_url.startswith("http://") or source_url.startswith("https://")
-        else None
-    )
-
-    if scan_type == "URL":
-        claim_type = Claim.ClaimType.URL
-    elif scan_type == "TEXT":
-        claim_type = Claim.ClaimType.TEXT
-    else:
-        claim_type = Claim.ClaimType.IMAGE
-
-    context_text = (
-        f"Synced from extension guest scan ({scan_type}) at {scanned_at}"
-        if scanned_at
-        else f"Synced from extension guest scan ({scan_type})"
-    )
-
-    claim = Claim.objects.create(
-        claim_type=claim_type,
-        url_link=normalized_source_url if claim_type == Claim.ClaimType.URL else None,
-        ai_summary=summary or "Synced from extension guest scan.",
-        ai_verdict=verdict,
-        consensus_score=consensus_score,
-        context_text=context_text,
-        source_type=source_type,
-        source_link=normalized_source_url,
-        top_verdict_source=normalized_source_url,
-        verified_via=Claim.VerificationSource.AI_EXTENSION,
-    )
+    try:
+        claim = Claim.objects.get(id=claim_uuid)
+    except Claim.DoesNotExist:
+        return Response({"detail": "Claim not found."}, status=404)
 
     _record_authenticated_claim_check(request.user, claim)
-    return Response({"id": str(claim.id), "mode": "created"}, status=201)
+    return Response({"id": str(claim.id), "mode": "linked"}, status=200)
 
 
 @api_view(["POST"])
@@ -796,10 +761,7 @@ def send_verification_email(request):
     try:
         send_email_verification(request.user)
     except Exception as error:
-        print(
-            "Failed to send verification email:",
-            error,
-        )
+        logger.exception("Failed to resend verification email.")
 
         return Response(
             {"detail": "Unable to send the verification " "email right now."},
@@ -912,65 +874,6 @@ def verify_email(request):
     )
 
 
-@api_view(["GET"])
-@permission_classes(
-    [
-        IsAuthenticated,
-        IsModerator,
-    ]
-)
-def moderation_queue(request):
-    """
-    Return threads with active Safety moderation cases.
-    """
-
-    status_filter = request.query_params.get(
-        "status",
-        "ALL",
-    )
-
-    allowed = {
-        "ALL",
-        Thread.Status.PENDING,
-        Thread.Status.OPEN,
-        Thread.Status.CLOSED,
-        Thread.Status.REJECTED,
-    }
-
-    if status_filter not in allowed:
-        return Response(
-            {"detail": "Invalid status filter."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    queryset = (
-        Thread.objects.filter(
-            moderation_cases__case_type=(ModerationCase.CaseType.SAFETY),
-            moderation_cases__status__in=(ACTIVE_CASE_STATUSES),
-        )
-        .select_related(
-            "claim",
-            "author",
-            "author__profile",
-        )
-        .distinct()
-        .order_by("-created_at")
-    )
-
-    if status_filter != "ALL":
-        queryset = queryset.filter(status=status_filter)
-
-    serializer = ThreadSerializer(
-        queryset,
-        many=True,
-    )
-
-    return Response(
-        serializer.data,
-        status=status.HTTP_200_OK,
-    )
-
-
 def _get_safety_case_or_404(case_id, *, include_events=False):
     return get_object_or_404(
         get_safety_case_queryset(include_events=include_events),
@@ -997,7 +900,7 @@ def _safety_case_detail_response(case_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsModerator])
+@permission_classes([IsAuthenticated, CanReviewSafety])
 def safety_case_queue(request):
     filters = SafetyCaseQueueFilterSerializer(data=request.query_params)
     filters.is_valid(raise_exception=True)
@@ -1021,13 +924,13 @@ def safety_case_queue(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsModerator])
+@permission_classes([IsAuthenticated, CanReviewSafety])
 def safety_case_detail(request, case_id):
     return _safety_case_detail_response(case_id)
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated, IsModerator])
+@permission_classes([IsAuthenticated, CanReviewSafety])
 def safety_case_claim(request, case_id):
     case = _get_safety_case_or_404(case_id)
 
@@ -1045,7 +948,7 @@ def safety_case_claim(request, case_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated, IsModerator])
+@permission_classes([IsAuthenticated, CanReviewSafety])
 def safety_case_release(request, case_id):
     case = _get_safety_case_or_404(case_id)
 
@@ -1063,7 +966,7 @@ def safety_case_release(request, case_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated, IsModerator])
+@permission_classes([IsAuthenticated, CanReviewSafety])
 def safety_case_action(request, case_id):
     payload = SafetyCaseActionSerializer(data=request.data)
     payload.is_valid(raise_exception=True)
@@ -1234,175 +1137,6 @@ def evidence_case_action(request, case_id):
 
 
 @api_view(["GET"])
-@permission_classes(
-    [
-        IsAuthenticated,
-    ]
-)
-def verdict_queue(request):
-    reviewed_filter = (
-        request.query_params.get(
-            "reviewed",
-            "pending",
-        )
-        .strip()
-        .lower()
-    )
-
-    allowed = {
-        "all",
-        "pending",
-        "resolved",
-    }
-
-    if reviewed_filter not in allowed:
-        return Response(
-            {"detail": "Invalid reviewed filter. " "Use all, pending, or " "resolved."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    try:
-        limit = int(
-            request.query_params.get(
-                "limit",
-                20,
-            )
-        )
-
-        offset = int(
-            request.query_params.get(
-                "offset",
-                0,
-            )
-        )
-
-    except (
-        TypeError,
-        ValueError,
-    ):
-        return Response(
-            {"detail": "limit and offset must " "be integers."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if limit < 1 or limit > 100 or offset < 0:
-        return Response(
-            {
-                "detail": "limit must be between "
-                "1 and 100, and offset "
-                "must be zero or greater."
-            },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    organization_id = request.query_params.get("organization_id")
-
-    if not organization_id:
-        return Response(
-            {"detail": "organization_id is required " "for adjudication review."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    organization = get_object_or_404(
-        Organization,
-        id=organization_id,
-    )
-
-    if not has_capability(
-        request.user,
-        PartnerCapability.ADJUDICATE,
-        organization=organization,
-    ):
-        return Response(
-            {
-                "detail": "You do not have permission "
-                "to adjudicate for this "
-                "organization."
-            },
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    queryset = ModerationCase.objects.filter(
-        case_type=(ModerationCase.CaseType.ADJUDICATION)
-    )
-
-    if reviewed_filter == "pending":
-        queryset = queryset.filter(status__in=ACTIVE_CASE_STATUSES)
-
-    elif reviewed_filter == "resolved":
-        queryset = queryset.filter(status=(ModerationCase.Status.RESOLVED))
-
-    else:
-        queryset = queryset.exclude(status=(ModerationCase.Status.CANCELLED))
-
-    queryset = queryset.filter(organization=organization)
-
-    queryset = (
-        queryset.select_related(
-            "claim",
-            "organization",
-            "assigned_to",
-            "assigned_to__profile",
-        )
-        .annotate(
-            total_evidence=Count(
-                "claim__threads__evidence_submissions",
-                distinct=True,
-            ),
-            verified_evidence=Count(
-                "claim__threads__evidence_submissions",
-                filter=Q(
-                    claim__threads__evidence_submissions__evidence_status=(
-                        EvidenceSubmission.EvidenceStatus.VERIFIED
-                    )
-                ),
-                distinct=True,
-            ),
-            rejected_evidence=Count(
-                "claim__threads__evidence_submissions",
-                filter=Q(
-                    claim__threads__evidence_submissions__evidence_status=(
-                        EvidenceSubmission.EvidenceStatus.REJECTED
-                    )
-                ),
-                distinct=True,
-            ),
-        )
-        .order_by(
-            "-priority",
-            "-created_at",
-        )
-    )
-    queryset = prefetch_claim_adjudication_provenance(
-        queryset,
-        claim_path="claim",
-        include_legacy_threads=True,
-    )
-
-    total_count = queryset.count()
-
-    cases = queryset[offset : offset + limit]
-
-    serializer = AdjudicationQueueCaseSerializer(
-        cases,
-        many=True,
-        context={
-            "request": request,
-        },
-    )
-
-    return Response(
-        {
-            "count": total_count,
-            "limit": limit,
-            "offset": offset,
-            "results": serializer.data,
-        },
-        status=status.HTTP_200_OK,
-    )
-
-
-@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def adjudication_case_queue(request):
     filters = AdjudicationCaseQueueFilterSerializer(data=request.query_params)
@@ -1489,17 +1223,66 @@ def _publishing_error_response(
 
     elif isinstance(
         error,
-        PublishingConflict,
+        (PublishingConflict, InvalidPublicationTransition),
     ):
         response_status = status.HTTP_409_CONFLICT
 
     else:
         response_status = status.HTTP_400_BAD_REQUEST
 
+    default_code = {
+        status.HTTP_403_FORBIDDEN: "FORBIDDEN",
+        status.HTTP_404_NOT_FOUND: "NOT_FOUND",
+        status.HTTP_409_CONFLICT: "CONFLICT",
+    }.get(response_status, "INVALID_INPUT")
+    payload = {
+        "code": getattr(error, "code", None) or default_code,
+        "detail": str(error),
+        "blockers": getattr(error, "blockers", []),
+    }
+    current = getattr(error, "current", None)
+    if current is not None:
+        payload["current"] = current
+    return Response(payload, status=response_status)
+
+
+def _publication_invalid_response(serializer):
     return Response(
         {
-            "detail": str(error),
+            "code": "INVALID_INPUT",
+            "detail": "Invalid publication request.",
+            "errors": serializer.errors,
+            "blockers": [],
         },
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
+def _publication_detail_response(
+    *, actor, organization, fact_check, workflow_kind="INITIAL"
+):
+    payload = get_publication_work_item_detail(
+        actor=actor,
+        organization=organization,
+        resource_type=RESOURCE_FACT_CHECK,
+        resource_id=fact_check.id,
+        workflow_kind=workflow_kind,
+    )
+    return Response(
+        PublicationWorkflowDetailSerializer(payload).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+def _organization_publication_error_response(error):
+    if isinstance(error, OrganizationPublicationAuthorizationError):
+        response_status = status.HTTP_403_FORBIDDEN
+    elif isinstance(error, OrganizationPublicationNotFound):
+        response_status = status.HTTP_404_NOT_FOUND
+    else:
+        response_status = status.HTTP_400_BAD_REQUEST
+    return Response(
+        {"detail": str(error)},
         status=response_status,
     )
 
@@ -1566,22 +1349,6 @@ def _adjudication_error_response(error):
     )
 
 
-def _ensure_legacy_adjudication_identity(
-    *,
-    case_id,
-    organization_id,
-    claim_id,
-):
-    case_matches = ModerationCase.objects.filter(
-        pk=case_id,
-        case_type=ModerationCase.CaseType.ADJUDICATION,
-        claim_id=claim_id,
-        organization_id=organization_id,
-    ).exists()
-    if not case_matches:
-        raise NotFound("Adjudication case not found.")
-
-
 def _execute_claim_adjudication(
     *,
     actor,
@@ -1635,205 +1402,47 @@ def adjudication_case_action(request, case_id):
         IsAuthenticated,
     ]
 )
-def moderation_resolve_thread(
-    request,
-    thread_id,
-):
-    """
-    Legacy thread-addressed adjudication endpoint.
-
-    The authoritative decision is Claim-centric.
-    Thread moderation fields remain temporary
-    compatibility mirrors only.
-
-    Thread.status is intentionally not changed.
-    Publication is intentionally not performed here.
-    """
-
-    organization_id = _adjudication_organization_id(request)
-    serializer = ModerationDecisionSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
-
-    thread = get_object_or_404(
-        Thread.objects.select_related("claim"),
-        id=thread_id,
-    )
-    claim = thread.claim
-
-    _ensure_legacy_adjudication_identity(
-        case_id=serializer.validated_data["case_id"],
-        organization_id=organization_id,
-        claim_id=claim.id,
-    )
-
-    try:
-        decision = _execute_claim_adjudication(
-            actor=request.user,
-            case_id=serializer.validated_data["case_id"],
-            organization_id=organization_id,
-            validated_data=serializer.validated_data,
-        )
-    except (AdjudicationError, ModerationCaseError) as error:
-        return _adjudication_error_response(error)
-
-    thread.refresh_from_db()
-
-    response_data = dict(
-        ThreadDetailSerializer(
-            thread,
-            context={
-                "request": request,
-            },
-        ).data
-    )
-
-    response_data["adjudication"] = AdjudicationDecisionSerializer(
-        decision,
-        context={
-            "request": request,
-        },
-    ).data
-
-    return Response(
-        response_data,
-        status=status.HTTP_200_OK,
-    )
-
-
-@api_view(["POST"])
-@permission_classes(
-    [
-        IsAuthenticated,
-    ]
-)
-def adjudicate_claim(
-    request,
-    claim_id,
-):
-    organization_id = _adjudication_organization_id(request)
-    serializer = ModerationDecisionSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
-
-    claim = get_object_or_404(
-        Claim,
-        id=claim_id,
-    )
-
-    _ensure_legacy_adjudication_identity(
-        case_id=serializer.validated_data["case_id"],
-        organization_id=organization_id,
-        claim_id=claim.id,
-    )
-
-    try:
-        decision = _execute_claim_adjudication(
-            actor=request.user,
-            case_id=serializer.validated_data["case_id"],
-            organization_id=organization_id,
-            validated_data=serializer.validated_data,
-        )
-    except (AdjudicationError, ModerationCaseError) as error:
-        return _adjudication_error_response(error)
-
-    return Response(
-        AdjudicationDecisionSerializer(
-            decision,
-            context={
-                "request": request,
-            },
-        ).data,
-        status=status.HTTP_200_OK,
-    )
-
-
-@api_view(["POST"])
-@permission_classes(
-    [
-        IsAuthenticated,
-    ]
-)
 def fact_check_draft_create(
     request,
     claim_id,
 ):
-    claim = get_object_or_404(
-        Claim,
-        id=claim_id,
-    )
-
     serializer = FactCheckDraftCreateSerializer(data=request.data)
-
-    serializer.is_valid(raise_exception=True)
-
-    decision = (
-        AdjudicationDecision.objects.filter(
-            claim=claim,
-            is_current=True,
-        )
-        .select_related(
-            "organization",
-        )
-        .first()
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(
+        Organization,
+        id=data["organization_id"],
     )
-
-    if not decision:
-        return Response(
-            {
-                "detail": "This claim does not "
-                "have a current "
-                "adjudication decision."
-            },
-            status=(status.HTTP_409_CONFLICT),
-        )
-
-    expected_revision = serializer.validated_data.get("expected_revision")
-
-    if expected_revision is not None and (
-        expected_revision != decision.revision_number
-    ):
-        return Response(
-            {
-                "detail": "The adjudication "
-                "decision changed after "
-                "the publishing workspace "
-                "was opened. Refresh "
-                "before creating a draft."
-            },
-            status=(status.HTTP_409_CONFLICT),
-        )
+    decision = get_object_or_404(
+        AdjudicationDecision.objects.select_related("organization"),
+        claim_id=claim_id,
+        organization=organization,
+        is_current=True,
+    )
 
     try:
         draft = create_fact_check_draft(
             decision=decision,
             actor=request.user,
-            headline=(serializer.validated_data["headline"]),
-            summary=(serializer.validated_data["summary"]),
-            article_body=(
-                serializer.validated_data.get(
-                    "article_body",
-                    "",
-                )
-            ),
-            source_urls=(
-                serializer.validated_data.get(
-                    "source_urls",
-                    [],
-                )
-            ),
+            organization_id=organization.id,
+            expected_decision_revision=data["expected_decision_revision"],
+            headline=data["headline"],
+            summary=data["summary"],
+            article_body=data.get("article_body", ""),
+            source_urls=data.get("source_urls", []),
         )
 
     except PublishingError as error:
         return _publishing_error_response(error)
 
-    return Response(
-        OfficialFactCheckSerializer(
-            draft,
-            context={
-                "request": request,
-            },
-        ).data,
-        status=status.HTTP_201_CREATED,
+    response = _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=draft,
     )
+    response.status_code = status.HTTP_201_CREATED
+    return response
 
 
 @api_view(["PATCH"])
@@ -1846,24 +1455,30 @@ def fact_check_draft_update(
     request,
     fact_check_id,
 ):
-    fact_check = get_object_or_404(
-        OfficialFactCheck,
-        id=fact_check_id,
-    )
-
     serializer = FactCheckDraftUpdateSerializer(
         data=request.data,
         partial=True,
     )
-
-    serializer.is_valid(raise_exception=True)
-
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
     data = serializer.validated_data
+    organization = get_object_or_404(
+        Organization,
+        id=data["organization_id"],
+    )
+    fact_check = get_object_or_404(
+        OfficialFactCheck.initial_workflow_queryset(),
+        id=fact_check_id,
+        organization=organization,
+    )
 
     try:
         updated = update_fact_check_draft(
             fact_check=fact_check,
             actor=request.user,
+            organization_id=organization.id,
+            expected_edit_generation=data["expected_edit_generation"],
+            expected_decision_revision=data["expected_decision_revision"],
             headline=data.get("headline"),
             summary=data.get("summary"),
             article_body=data.get("article_body"),
@@ -1873,14 +1488,10 @@ def fact_check_draft_update(
     except PublishingError as error:
         return _publishing_error_response(error)
 
-    return Response(
-        OfficialFactCheckSerializer(
-            updated,
-            context={
-                "request": request,
-            },
-        ).data,
-        status=status.HTTP_200_OK,
+    return _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=updated,
     )
 
 
@@ -1894,28 +1505,36 @@ def fact_check_submit(
     request,
     fact_check_id,
 ):
+    serializer = FactCheckTransitionSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(
+        Organization,
+        id=data["organization_id"],
+    )
     fact_check = get_object_or_404(
-        OfficialFactCheck,
+        OfficialFactCheck.initial_workflow_queryset(),
         id=fact_check_id,
+        organization=organization,
     )
 
     try:
         submitted = submit_fact_check_for_review(
             fact_check=fact_check,
             actor=request.user,
+            organization_id=organization.id,
+            expected_edit_generation=data["expected_edit_generation"],
+            expected_decision_revision=data["expected_decision_revision"],
         )
 
     except PublishingError as error:
         return _publishing_error_response(error)
 
-    return Response(
-        OfficialFactCheckSerializer(
-            submitted,
-            context={
-                "request": request,
-            },
-        ).data,
-        status=status.HTTP_200_OK,
+    return _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=submitted,
     )
 
 
@@ -1929,15 +1548,27 @@ def fact_check_publish(
     request,
     fact_check_id,
 ):
+    serializer = FactCheckTransitionSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(
+        Organization,
+        id=data["organization_id"],
+    )
     fact_check = get_object_or_404(
-        OfficialFactCheck,
+        OfficialFactCheck.initial_workflow_queryset(),
         id=fact_check_id,
+        organization=organization,
     )
 
     try:
         result = publish_fact_check(
             fact_check=fact_check,
             actor=request.user,
+            organization_id=organization.id,
+            expected_edit_generation=data["expected_edit_generation"],
+            expected_decision_revision=data["expected_decision_revision"],
         )
 
     except PublishingError as error:
@@ -1945,250 +1576,837 @@ def fact_check_publish(
 
     published = result["fact_check"]
 
-    return Response(
-        OfficialFactCheckSerializer(
-            published,
-            context={
-                "request": request,
-            },
-        ).data,
-        status=status.HTTP_200_OK,
+    return _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=published,
     )
 
 
 @api_view(["POST"])
-@permission_classes(
-    [
-        IsAuthenticated,
-        IsModerator,
-    ]
-)
-def moderation_resolve_safety_thread(
-    request,
-    thread_id,
-):
-    thread = get_object_or_404(
-        Thread,
-        id=thread_id,
+@permission_classes([IsAuthenticated])
+def fact_check_return_for_rework(request, fact_check_id):
+    serializer = FactCheckRecoverySerializer(data=request.data)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    fact_check = get_object_or_404(
+        OfficialFactCheck.initial_workflow_queryset(),
+        id=fact_check_id,
+        organization=organization,
     )
-
-    action = request.data.get("action", "").strip().upper()
-
-    moderator_notes = request.data.get("moderator_notes", "").strip()
-
-    allowed_actions = {
-        "DISMISS",
-        "REMOVE",
-        "ESCALATE",
-    }
-
-    if action not in allowed_actions:
-        return Response(
-            {"detail": "Invalid action. Use DISMISS, " "REMOVE, or ESCALATE."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
     try:
-        if action == "ESCALATE":
-            escalate_safety_case(
-                thread=thread,
-                actor=request.user,
-                notes=moderator_notes,
-            )
-
-            thread.refresh_from_db()
-
-            return Response(
-                ThreadSerializer(
-                    thread,
-                    context={"request": request},
-                ).data,
-                status=status.HTTP_200_OK,
-            )
-
-        result = resolve_safety_case(
-            thread=thread,
+        returned = return_fact_check_for_rework(
+            fact_check=fact_check,
             actor=request.user,
-            action=action,
-            notes=moderator_notes,
+            organization_id=organization.id,
+            expected_edit_generation=data["expected_edit_generation"],
+            reason=data["reason"],
         )
-
-    except ModerationCaseError as error:
-        return Response(
-            {
-                "detail": str(error),
-            },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    schedule_safety_resolution_trust_updates(
-        result,
-        action=action,
+    except PublishingError as error:
+        return _publishing_error_response(error)
+    return _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=returned,
     )
 
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def fact_check_abandon(request, fact_check_id):
+    serializer = FactCheckRecoverySerializer(data=request.data)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    fact_check = get_object_or_404(
+        OfficialFactCheck.initial_workflow_queryset(),
+        id=fact_check_id,
+        organization=organization,
+    )
+    try:
+        abandoned = abandon_fact_check_draft(
+            fact_check=fact_check,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_edit_generation=data["expected_edit_generation"],
+            reason=data["reason"],
+        )
+    except PublishingError as error:
+        return _publishing_error_response(error)
+    return _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=abandoned,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def publication_work_item_queue(request):
+    serializer = PublicationWorkflowQueueQuerySerializer(data=request.query_params)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    try:
+        payload = list_publication_work_items(
+            actor=request.user,
+            organization=organization,
+            queue=data["queue"],
+            limit=data["limit"],
+            offset=data["offset"],
+            workflow_kind=data["workflow_kind"],
+        )
+    except PublicationWorkflowAuthorizationError as error:
+        raise PermissionDenied(str(error)) from error
     return Response(
-        ThreadSerializer(
-            result["thread"],
-            context={"request": request},
-        ).data,
+        PublicationWorkflowPageSerializer(payload).data,
         status=status.HTTP_200_OK,
     )
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def evidence_moderation_queue(request):
-    """
-    Evidence review queue.
-
-    Professional evidence review is available only
-    through an explicitly scoped verified partner
-    organization with REVIEW_EVIDENCE capability.
-    """
-
-    evidence_status_filter = (
-        request.query_params.get(
-            "status",
-            EvidenceSubmission.EvidenceStatus.UNVERIFIED,
-        )
-        .strip()
-        .upper()
-    )
-
-    allowed_statuses = {
-        value for value, _label in EvidenceSubmission.EvidenceStatus.choices
-    }
-
-    if evidence_status_filter not in allowed_statuses:
-        return Response(
-            {"detail": "Invalid evidence status."},
-            status=(status.HTTP_400_BAD_REQUEST),
-        )
-
-    try:
-        limit = int(
-            request.query_params.get(
-                "limit",
-                20,
-            )
-        )
-
-        offset = int(
-            request.query_params.get(
-                "offset",
-                0,
-            )
-        )
-
-    except (
-        TypeError,
-        ValueError,
-    ):
-        return Response(
-            {"detail": "limit and offset must " "be integers."},
-            status=(status.HTTP_400_BAD_REQUEST),
-        )
-
-    if limit < 1 or limit > 100 or offset < 0:
-        return Response(
-            {
-                "detail": "limit must be between "
-                "1 and 100, and offset "
-                "must be zero or greater."
-            },
-            status=(status.HTTP_400_BAD_REQUEST),
-        )
-
-    thread_id = request.query_params.get("thread_id")
-
-    organization_id = request.query_params.get("organization_id")
-
-    if not organization_id:
-        return Response(
-            {"detail": "organization_id is required " "for evidence review."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
+def publication_work_item_detail(request, resource_type, resource_id):
+    serializer = PublicationWorkflowDetailQuerySerializer(data=request.query_params)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
     organization = get_object_or_404(
         Organization,
-        id=organization_id,
+        id=serializer.validated_data["organization_id"],
     )
-
-    if not has_capability(
-        request.user,
-        PartnerCapability.REVIEW_EVIDENCE,
-        organization=organization,
-    ):
-        return Response(
-            {
-                "detail": "You do not have permission "
-                "to review evidence for this "
-                "organization."
-            },
-            status=status.HTTP_403_FORBIDDEN,
+    try:
+        payload = get_publication_work_item_detail(
+            actor=request.user,
+            organization=organization,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            workflow_kind=serializer.validated_data["workflow_kind"],
         )
-
-    evidence_query = EvidenceSubmission.objects.filter(
-        evidence_status=(evidence_status_filter)
+    except PublicationWorkflowAuthorizationError as error:
+        raise PermissionDenied(str(error)) from error
+    except PublicationWorkflowNotFound as error:
+        raise NotFound(str(error)) from error
+    return Response(
+        PublicationWorkflowDetailSerializer(payload).data,
+        status=status.HTTP_200_OK,
     )
 
-    # UNVERIFIED is an operational queue,
-    # so it must correspond to an active
-    # Evidence ModerationCase.
-    if evidence_status_filter == EvidenceSubmission.EvidenceStatus.UNVERIFIED:
-        evidence_query = evidence_query.filter(
-            moderation_cases__case_type=(ModerationCase.CaseType.EVIDENCE),
-            moderation_cases__status__in=(ACTIVE_CASE_STATUSES),
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def organization_publication_library(request):
+    serializer = OrganizationPublicationLibraryQuerySerializer(
+        data=request.query_params
+    )
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    try:
+        payload = list_organization_publications(
+            actor=request.user,
+            organization=organization,
+            search=data["search"],
+            limit=data["limit"],
+            offset=data["offset"],
         )
-
-    evidence_query = evidence_query.filter(
-        moderation_cases__case_type=(ModerationCase.CaseType.EVIDENCE),
-        moderation_cases__organization=organization,
+    except OrganizationPublicationAuthorizationError as error:
+        return _organization_publication_error_response(error)
+    return Response(
+        OrganizationPublicationPageSerializer(payload).data,
+        status=status.HTTP_200_OK,
     )
 
-    if thread_id:
-        evidence_query = evidence_query.filter(thread_id=thread_id)
 
-    evidence_query = (
-        evidence_query.select_related(
-            "contributor",
-            "contributor__profile",
-            "thread",
-            "thread__claim",
-            "verified_by",
-            "verified_by__profile",
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def organization_publication_detail(request, fact_check_id):
+    serializer = OrganizationPublicationDetailQuerySerializer(
+        data=request.query_params
+    )
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    organization = get_object_or_404(
+        Organization,
+        id=serializer.validated_data["organization_id"],
+    )
+    try:
+        payload = get_organization_publication_detail(
+            actor=request.user,
+            organization=organization,
+            fact_check_id=fact_check_id,
         )
-        .prefetch_related(
-            "votes",
-        )
-        .distinct()
-        .order_by("-submitted_at")
-    )
-    evidence_query = prefetch_claim_adjudication_provenance(
-        evidence_query,
-        claim_path="thread__claim",
-        include_legacy_threads=True,
+    except (
+        OrganizationPublicationAuthorizationError,
+        OrganizationPublicationNotFound,
+    ) as error:
+        return _organization_publication_error_response(error)
+    return Response(
+        OrganizationPublicationDetailSerializer(payload).data,
+        status=status.HTTP_200_OK,
     )
 
-    total_count = evidence_query.count()
 
-    evidence = evidence_query[offset : offset + limit]
-
-    serializer = EvidenceSubmissionSerializer(
-        evidence,
-        many=True,
-        context={
-            "request": request,
-        },
+def _accountability_query_response(*, serializer, query_function, extra_args=None):
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+    query_args = {
+        "domain": data.get("domain", ""),
+        "action_type": data.get("action_type", ""),
+        "resource_type": data.get("resource_type", ""),
+        "resource_id": data.get("resource_id", ""),
+        "actor_search": data.get("actor", ""),
+        "created_after": data.get("created_after"),
+        "created_before": data.get("created_before"),
+        "limit": data["limit"],
+        "offset": data["offset"],
+        **(extra_args or {}),
+    }
+    try:
+        payload = query_function(**query_args)
+    except AccountabilityQueryAuthorizationError as error:
+        raise PermissionDenied(str(error)) from error
+    except AccountabilityQueryInputError as error:
+        raise ValidationError({"detail": str(error)}) from error
+    return Response(
+        AccountabilityPageSerializer(payload).data,
+        status=status.HTTP_200_OK,
     )
 
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def organization_accountability(request):
+    serializer = OrganizationAccountabilityQuerySerializer(data=request.query_params)
+    serializer.is_valid(raise_exception=True)
+    organization = get_object_or_404(
+        Organization,
+        id=serializer.validated_data["organization_id"],
+    )
+    return _accountability_query_response(
+        serializer=serializer,
+        query_function=list_organization_accountability_events,
+        extra_args={"actor": request.user, "organization": organization},
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def platform_safety_accountability(request):
+    return _accountability_query_response(
+        serializer=PlatformAccountabilityQuerySerializer(data=request.query_params),
+        query_function=list_platform_accountability_events,
+        extra_args={"actor": request.user},
+    )
+
+
+def _factual_correction_invalid_response(serializer):
     return Response(
         {
-            "count": total_count,
-            "limit": limit,
-            "offset": offset,
-            "results": serializer.data,
+            "code": "INVALID_INPUT",
+            "detail": "Invalid factual correction request.",
+            "errors": serializer.errors,
+            "blockers": [],
         },
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
+def _factual_correction_error_response(error):
+    if isinstance(
+        error,
+        (
+            FactualCorrectionQueryNotFound,
+        ),
+    ):
+        response_status = status.HTTP_404_NOT_FOUND
+    elif isinstance(
+        error,
+        (
+            FactualCorrectionQueryAuthorizationError,
+            FactualCorrectionAuthorizationError,
+            FactualCorrectionProposalAuthorizationError,
+            EvidenceReviewAuthorizationError,
+            PublishingAuthorizationError,
+        ),
+    ):
+        response_status = status.HTTP_403_FORBIDDEN
+    elif isinstance(
+        error,
+        (
+            FactualCorrectionConflict,
+            FactualCorrectionProposalConflict,
+            EvidenceReviewConflict,
+            PublishingConflict,
+        ),
+    ):
+        response_status = status.HTTP_409_CONFLICT
+    else:
+        response_status = status.HTTP_400_BAD_REQUEST
+    default_code = {
+        status.HTTP_403_FORBIDDEN: "FORBIDDEN",
+        status.HTTP_404_NOT_FOUND: "NOT_FOUND",
+        status.HTTP_409_CONFLICT: "CONFLICT",
+    }.get(response_status, "INVALID_INPUT")
+    payload = {
+        "code": getattr(error, "code", None) or default_code,
+        "detail": str(error),
+        "blockers": getattr(error, "blockers", []),
+    }
+    current = getattr(error, "current", None)
+    if current is not None:
+        payload["current"] = current
+    return Response(payload, status=response_status)
+
+
+def _factual_correction_detail_data(*, actor, organization, request_id):
+    return FactualCorrectionDetailSerializer(
+        get_factual_correction_detail(
+            actor=actor,
+            organization=organization,
+            correction_request_id=request_id,
+        )
+    ).data
+
+
+def _ensure_factual_correction_scope(*, request_id, organization, evidence_id=None):
+    correction = (
+        FactualCorrectionRequest.objects.filter(
+            pk=request_id,
+            organization=organization,
+        )
+        .only("id", "claim_id")
+        .first()
+    )
+    if correction is None:
+        raise NotFound("Factual correction request not found.")
+    if evidence_id is not None and not EvidenceSubmission.objects.filter(
+        pk=evidence_id,
+        thread__claim_id=correction.claim_id,
+    ).exists():
+        raise NotFound("Correction evidence not found.")
+    return correction
+
+
+def _ensure_factual_correction_capability(*, actor, organization, capability):
+    if not has_capability(actor, capability, organization=organization):
+        raise FactualCorrectionAuthorizationError(
+            "You do not have permission to perform this factual correction action."
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def factual_correction_collection(request):
+    serializer = FactualCorrectionCollectionQuerySerializer(
+        data=request.query_params
+    )
+    if not serializer.is_valid():
+        return _factual_correction_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    try:
+        payload = list_factual_corrections(
+            actor=request.user,
+            organization=organization,
+            request_status=data["status"],
+            limit=data["limit"],
+            offset=data["offset"],
+        )
+    except FactualCorrectionQueryAuthorizationError as error:
+        return _factual_correction_error_response(error)
+    return Response(
+        FactualCorrectionPageSerializer(payload).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def factual_correction_detail(request, request_id):
+    serializer = FactualCorrectionDetailQuerySerializer(data=request.query_params)
+    if not serializer.is_valid():
+        return _factual_correction_invalid_response(serializer)
+    organization = get_object_or_404(
+        Organization,
+        id=serializer.validated_data["organization_id"],
+    )
+    try:
+        payload = _factual_correction_detail_data(
+            actor=request.user,
+            organization=organization,
+            request_id=request_id,
+        )
+    except (
+        FactualCorrectionQueryAuthorizationError,
+        FactualCorrectionQueryNotFound,
+    ) as error:
+        return _factual_correction_error_response(error)
+    return Response(payload, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def factual_correction_request_create(request, predecessor_id):
+    serializer = FactualCorrectionRequestMutationSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _factual_correction_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    try:
+        _ensure_factual_correction_capability(
+            actor=request.user,
+            organization=organization,
+            capability=PartnerCapability.ADJUDICATE,
+        )
+        if not OfficialFactCheck.objects.filter(
+            pk=predecessor_id,
+            organization=organization,
+        ).exists():
+            raise NotFound("Publication not found.")
+        result = request_factual_correction(
+            predecessor_id=predecessor_id,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_predecessor_version=data["expected_predecessor_version"],
+            expected_decision_revision=data["expected_decision_revision"],
+            correction_reason=data["correction_reason"],
+        )
+        payload = _factual_correction_detail_data(
+            actor=request.user,
+            organization=organization,
+            request_id=result["request"].id,
+        )
+    except (FactualCorrectionError, FactualCorrectionQueryAuthorizationError) as error:
+        return _factual_correction_error_response(error)
+    return Response(payload, status=status.HTTP_201_CREATED)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def factual_correction_evidence_review(request, request_id, evidence_id):
+    serializer = FactualCorrectionEvidenceReviewSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _factual_correction_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    try:
+        _ensure_factual_correction_capability(
+            actor=request.user,
+            organization=organization,
+            capability=PartnerCapability.REVIEW_EVIDENCE,
+        )
+        _ensure_factual_correction_scope(
+            request_id=request_id,
+            organization=organization,
+            evidence_id=evidence_id,
+        )
+        review_correction_evidence(
+            correction_request_id=request_id,
+            evidence_id=evidence_id,
+            actor=request.user,
+            evidence_status=data["evidence_status"],
+            expected_evidence_status=data["expected_evidence_status"],
+            expected_case_id=data.get("expected_case_id"),
+            moderator_notes=data["moderator_notes"],
+            rejection_reason=data.get("rejection_reason"),
+            expected_predecessor_version=data["expected_predecessor_version"],
+            expected_decision_revision=data["expected_decision_revision"],
+        )
+        payload = _factual_correction_detail_data(
+            actor=request.user,
+            organization=organization,
+            request_id=request_id,
+        )
+    except (
+        EvidenceReviewError,
+        FactualCorrectionAuthorizationError,
+        FactualCorrectionQueryAuthorizationError,
+    ) as error:
+        return _factual_correction_error_response(error)
+    return Response(payload, status=status.HTTP_200_OK)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def factual_correction_proposal_save(request, request_id):
+    serializer = FactualCorrectionProposalSaveSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _factual_correction_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    try:
+        _ensure_factual_correction_capability(
+            actor=request.user,
+            organization=organization,
+            capability=PartnerCapability.CREATE_FACT_CHECK_DRAFT,
+        )
+        _ensure_factual_correction_scope(
+            request_id=request_id,
+            organization=organization,
+        )
+        save_factual_correction_proposal(
+            correction_request_id=request_id,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_proposal_version=data["expected_proposal_version"],
+            expected_predecessor_version=data["expected_predecessor_version"],
+            expected_decision_revision=data["expected_decision_revision"],
+            verdict=data["proposed_verdict"],
+            canonical_claim=data["proposed_canonical_claim"],
+            rationale=data["proposed_rationale"],
+            headline=data["headline"],
+            summary=data["summary"],
+            article_body=data["article_body"],
+            source_urls=data["source_urls"],
+            verification_run_id=data.get("verification_run_id"),
+        )
+        payload = _factual_correction_detail_data(
+            actor=request.user,
+            organization=organization,
+            request_id=request_id,
+        )
+    except (
+        FactualCorrectionAuthorizationError,
+        FactualCorrectionProposalError,
+        FactualCorrectionQueryAuthorizationError,
+    ) as error:
+        return _factual_correction_error_response(error)
+    return Response(payload, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def factual_correction_proposal_prepare(request, request_id):
+    serializer = FactualCorrectionConcurrencyMutationSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _factual_correction_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    try:
+        _ensure_factual_correction_capability(
+            actor=request.user,
+            organization=organization,
+            capability=PartnerCapability.ADJUDICATE,
+        )
+        _ensure_factual_correction_scope(
+            request_id=request_id,
+            organization=organization,
+        )
+        prepare_factual_correction_proposal(
+            correction_request_id=request_id,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_proposal_version=data["expected_proposal_version"],
+            expected_predecessor_version=data["expected_predecessor_version"],
+            expected_decision_revision=data["expected_decision_revision"],
+        )
+        payload = _factual_correction_detail_data(
+            actor=request.user,
+            organization=organization,
+            request_id=request_id,
+        )
+    except (
+        FactualCorrectionAuthorizationError,
+        FactualCorrectionProposalError,
+        FactualCorrectionQueryAuthorizationError,
+    ) as error:
+        return _factual_correction_error_response(error)
+    return Response(payload, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def factual_correction_publish(request, request_id):
+    serializer = FactualCorrectionConcurrencyMutationSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _factual_correction_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    try:
+        _ensure_factual_correction_capability(
+            actor=request.user,
+            organization=organization,
+            capability=PartnerCapability.PUBLISH_FACT_CHECK,
+        )
+        _ensure_factual_correction_scope(
+            request_id=request_id,
+            organization=organization,
+        )
+        result = publish_factual_correction(
+            correction_request_id=request_id,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_proposal_version=data["expected_proposal_version"],
+            expected_predecessor_version=data["expected_predecessor_version"],
+            expected_decision_revision=data["expected_decision_revision"],
+        )
+        correction_payload = _factual_correction_detail_data(
+            actor=request.user,
+            organization=organization,
+            request_id=request_id,
+        )
+        publication_payload = get_organization_publication_detail(
+            actor=request.user,
+            organization=organization,
+            fact_check_id=result["fact_check"].id,
+        )
+    except (
+        FactualCorrectionAuthorizationError,
+        PublishingError,
+        FactualCorrectionQueryAuthorizationError,
+        OrganizationPublicationAuthorizationError,
+        OrganizationPublicationNotFound,
+    ) as error:
+        return _factual_correction_error_response(error)
+    return Response(
+        {
+            "correction": correction_payload,
+            "publication": OrganizationPublicationDetailSerializer(
+                publication_payload
+            ).data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def factual_correction_cancel(request, request_id):
+    serializer = FactualCorrectionCancelSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _factual_correction_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    try:
+        _ensure_factual_correction_capability(
+            actor=request.user,
+            organization=organization,
+            capability=PartnerCapability.ADJUDICATE,
+        )
+        _ensure_factual_correction_scope(
+            request_id=request_id,
+            organization=organization,
+        )
+        cancel_factual_correction(
+            correction_request_id=request_id,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_proposal_version=data["expected_proposal_version"],
+            expected_predecessor_version=data["expected_predecessor_version"],
+            expected_decision_revision=data["expected_decision_revision"],
+            cancellation_reason=data["cancellation_reason"],
+        )
+        payload = _factual_correction_detail_data(
+            actor=request.user,
+            organization=organization,
+            request_id=request_id,
+        )
+    except (FactualCorrectionError, FactualCorrectionQueryAuthorizationError) as error:
+        return _factual_correction_error_response(error)
+    return Response(payload, status=status.HTTP_200_OK)
+
+
+def _editorial_revision_queryset(organization):
+    return OfficialFactCheck.objects.filter(
+        organization=organization,
+        revision_kind=OfficialFactCheck.RevisionKind.EDITORIAL_REVISION,
+        supersedes__isnull=False,
+    ).select_related("supersedes")
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def editorial_revision_draft_create(request, predecessor_id):
+    serializer = EditorialRevisionDraftCreateSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    predecessor = get_object_or_404(
+        OfficialFactCheck.objects.filter(organization=organization),
+        id=predecessor_id,
+    )
+    try:
+        revision = create_editorial_revision_draft(
+            predecessor_id=predecessor.id,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_predecessor_version=data["expected_predecessor_version"],
+            expected_decision_revision=data["expected_decision_revision"],
+            revision_reason=data["revision_reason"],
+            headline=data.get("headline"),
+            summary=data.get("summary"),
+            article_body=data.get("article_body"),
+            source_urls=data.get("source_urls") if "source_urls" in data else None,
+        )
+    except PublishingError as error:
+        return _publishing_error_response(error)
+    response = _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=revision,
+        workflow_kind="EDITORIAL_REVISION",
+    )
+    response.status_code = status.HTTP_201_CREATED
+    return response
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def editorial_revision_draft_update(request, revision_id):
+    serializer = FactCheckDraftUpdateSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    revision = get_object_or_404(
+        _editorial_revision_queryset(organization), id=revision_id
+    )
+    try:
+        revision = update_fact_check_draft(
+            fact_check=revision,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_edit_generation=data["expected_edit_generation"],
+            expected_decision_revision=data["expected_decision_revision"],
+            headline=data.get("headline"),
+            summary=data.get("summary"),
+            article_body=data.get("article_body"),
+            source_urls=data["source_urls"] if "source_urls" in data else None,
+        )
+    except PublishingError as error:
+        return _publishing_error_response(error)
+    return _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=revision,
+        workflow_kind="EDITORIAL_REVISION",
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def editorial_revision_submit(request, revision_id):
+    serializer = FactCheckTransitionSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    revision = get_object_or_404(
+        _editorial_revision_queryset(organization), id=revision_id
+    )
+    try:
+        revision = submit_fact_check_for_review(
+            fact_check=revision,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_edit_generation=data["expected_edit_generation"],
+            expected_decision_revision=data["expected_decision_revision"],
+        )
+    except PublishingError as error:
+        return _publishing_error_response(error)
+    return _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=revision,
+        workflow_kind="EDITORIAL_REVISION",
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def editorial_revision_return_for_rework(request, revision_id):
+    serializer = FactCheckRecoverySerializer(data=request.data)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    revision = get_object_or_404(
+        _editorial_revision_queryset(organization), id=revision_id
+    )
+    try:
+        revision = return_editorial_revision_for_rework(
+            revision=revision,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_edit_generation=data["expected_edit_generation"],
+            reason=data["reason"],
+        )
+    except PublishingError as error:
+        return _publishing_error_response(error)
+    return _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=revision,
+        workflow_kind="EDITORIAL_REVISION",
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def editorial_revision_abandon(request, revision_id):
+    serializer = FactCheckRecoverySerializer(data=request.data)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    revision = get_object_or_404(
+        _editorial_revision_queryset(organization), id=revision_id
+    )
+    try:
+        revision = abandon_editorial_revision_draft(
+            revision=revision,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_edit_generation=data["expected_edit_generation"],
+            reason=data["reason"],
+        )
+    except PublishingError as error:
+        return _publishing_error_response(error)
+    return _publication_detail_response(
+        actor=request.user,
+        organization=organization,
+        fact_check=revision,
+        workflow_kind="EDITORIAL_REVISION",
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def editorial_revision_publish(request, revision_id):
+    serializer = EditorialRevisionPublishSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _publication_invalid_response(serializer)
+    data = serializer.validated_data
+    organization = get_object_or_404(Organization, id=data["organization_id"])
+    revision = get_object_or_404(
+        _editorial_revision_queryset(organization), id=revision_id
+    )
+    try:
+        result = publish_editorial_revision(
+            revision_id=revision.id,
+            predecessor_id=revision.supersedes_id,
+            actor=request.user,
+            organization_id=organization.id,
+            expected_predecessor_version=data["expected_predecessor_version"],
+            expected_revision_version=data["expected_revision_version"],
+            expected_edit_generation=data["expected_edit_generation"],
+            expected_decision_revision=data["expected_decision_revision"],
+        )
+    except PublishingError as error:
+        return _publishing_error_response(error)
+    payload = get_organization_publication_detail(
+        actor=request.user,
+        organization=organization,
+        fact_check_id=result["fact_check"].id,
+    )
+    return Response(
+        OrganizationPublicationDetailSerializer(payload).data,
         status=status.HTTP_200_OK,
     )
 
@@ -2301,6 +2519,41 @@ def _verification_assignment_error_response(
         },
         status=response_status,
     )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def organization_verification_metrics(request, organization_id):
+    organization = get_object_or_404(Organization, id=organization_id)
+    query = OrganizationVerificationMetricsQuerySerializer(data=request.query_params)
+    query.is_valid(raise_exception=True)
+    try:
+        metrics = get_organization_verification_metrics(
+            actor=request.user,
+            organization=organization,
+            created_after=query.validated_data.get("created_after"),
+            created_before=query.validated_data.get("created_before"),
+        )
+    except VerificationMetricsAuthorizationError as error:
+        return Response({"detail": str(error)}, status=status.HTTP_403_FORBIDDEN)
+    except VerificationActivityTrendInputError:
+        return Response(
+            {"detail": "Invalid verification analytics time window."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    except (
+        VerificationMetricsIntegrityError,
+        VerificationActivityMetricsIntegrityError,
+        VerificationResolutionMetricsIntegrityError,
+        VerificationReviewerParticipationMetricsIntegrityError,
+        VerificationMetricsCompositionError,
+    ):
+        logger.exception("Organization verification metrics projection failed.")
+        return Response(
+            {"detail": "Verification metrics are temporarily unavailable."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    return Response(metrics)
 
 
 @api_view(["GET"])
@@ -2626,9 +2879,8 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
     serializer_class = EvidenceSubmissionSerializer
     permission_classes = [
         IsAuthenticated,
-        IsNotModerator,
         IsEvidenceContributorOrReadOnly,
-    ]  # If moderator submits evidence, returns an error
+    ]
 
     def get_queryset(self):
         return EvidenceSubmission.objects.all()
@@ -2664,89 +2916,6 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
                 organization=organization,
             )
 
-    @action(
-        detail=True,
-        methods=["patch"],
-        permission_classes=[
-            IsAuthenticated,
-            CanReviewEvidence,
-        ],
-    )
-    def verify(
-        self,
-        request,
-        pk=None,
-    ):
-        evidence = self.get_object()
-
-        evidence_status = request.data.get("evidence_status")
-
-        notes = request.data.get(
-            "moderator_notes",
-            "",
-        ).strip()
-
-        rejection_reason = request.data.get("rejection_reason")
-
-        expected_status = request.data.get(
-            "expected_status",
-            evidence.evidence_status,
-        )
-
-        try:
-            result = review_evidence_submission(
-                evidence=evidence,
-                actor=request.user,
-                evidence_status=evidence_status,
-                moderator_notes=notes,
-                rejection_reason=rejection_reason,
-                expected_status=expected_status,
-            )
-
-        except EvidenceReviewConflict as error:
-            return Response(
-                {
-                    "detail": str(error),
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
-
-        except EvidenceReviewAuthorizationError as error:
-            return Response(
-                {
-                    "detail": str(error),
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        except (
-            EvidenceReviewError,
-            ModerationCaseError,
-        ) as error:
-            return Response(
-                {
-                    "detail": str(error),
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        reviewed_evidence = result["evidence"]
-
-        schedule_evidence_review_trust_updates(result)
-
-        serializer = EvidenceSubmissionSerializer(
-            reviewed_evidence,
-            context={
-                "request": request,
-            },
-        )
-
-        return Response(
-            serializer.data,
-            status=status.HTTP_200_OK,
-        )
-
-
 class ThreadCommentViewSet(viewsets.ModelViewSet):
     serializer_class = ThreadCommentSerializer
     permission_classes = [IsAuthenticated, IsCommenterOrReadOnly]
@@ -2772,7 +2941,10 @@ class ThreadFlagViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
-        if _has_moderator_role(self.request.user):
+        if has_capability(
+            self.request.user,
+            PartnerCapability.REVIEW_SAFETY,
+        ):
             return ThreadFlag.objects.select_related("thread", "flagged_by").order_by(
                 "-flagged_at"
             )
@@ -2899,7 +3071,7 @@ def test_deepfake(request):
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON payload"}, status=400)
     except Exception as e:
-        print(f"Deepfake view error: {str(e)}")
+        logger.exception("Unexpected deepfake image processing failure.")
         return JsonResponse({"error": "Failed to process image format."}, status=400)
 
 
@@ -2913,8 +3085,6 @@ def verify_text(request):
 
     if not text_content:
         return Response({"error": "Text is required"}, status=400)
-
-    print(f"Received Text: {text_content[:100]}...")
 
     # ── Claim Deduplication Pre-Check ──
     fingerprint = compute_fingerprint("TEXT", text_content)
@@ -3107,31 +3277,6 @@ def public_user_evidence(request, username):
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny])
-def public_user_verdicts(request, username):
-    """Fetch public moderator verdict activity for a specific moderator user."""
-    target_user = get_object_or_404(
-        User.objects.select_related("profile"), username=username
-    )
-
-    if not _has_moderator_role(target_user):
-        return Response([], status=200)
-
-    verdict_threads = Thread.objects.filter(
-        moderated_by=target_user,
-        moderator_verdict__isnull=False,
-        status=Thread.Status.CLOSED,
-    ).order_by("-moderated_at", "-created_at")
-
-    serializer = PublicModeratorVerdictSerializer(
-        verdict_threads,
-        many=True,
-        context={"request": request},
-    )
-    return Response(serializer.data, status=200)
-
-
-@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def public_user_claims(request, username):
     """Fetch public claims submitted by a specific user."""
@@ -3148,39 +3293,6 @@ def public_user_claims(request, username):
 
     serializer = ClaimSerializer(claims, many=True)
     return Response(serializer.data)
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def moderator_transparency_stats(request, username):
-    """Return moderator activity metrics for institutional transparency cards."""
-    target_user = get_object_or_404(
-        User.objects.select_related("profile"), username=username
-    )
-
-    if not _has_moderator_role(target_user):
-        return Response({"detail": "This user is not a moderator."}, status=400)
-
-    resolved_threads = Thread.objects.filter(
-        moderated_by=target_user,
-        moderator_verdict__isnull=False,
-    )
-
-    stats = {
-        "total_claims_resolved": resolved_threads.count(),
-        "fact_verdicts_issued": resolved_threads.filter(
-            moderator_verdict="FACT"
-        ).count(),
-        "fake_verdicts_issued": resolved_threads.filter(
-            moderator_verdict="FAKE"
-        ).count(),
-        "pending_moderator_review": Thread.objects.filter(
-            status=Thread.Status.PENDING,
-            moderator_verdict__isnull=True,
-        ).count(),
-    }
-
-    return Response(stats, status=200)
 
 
 @api_view(["POST"])
@@ -3266,42 +3378,6 @@ def update_profile(request):
     # Return the updated user data
     serializer = UserWithTrustBreakdownSerializer(user, context={"request": request})
     return Response(serializer.data, status=200)
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated, IsModerator])
-def moderation_stats_view(request):
-    """
-    Returns system-wide aggregates for the Moderation Page.
-    """
-    from django.db.models import Q
-
-    flagged_threads = (
-        ModerationCase.objects.filter(
-            case_type=ModerationCase.CaseType.SAFETY,
-            status__in=ACTIVE_CASE_STATUSES,
-        )
-        .exclude(thread__isnull=True)
-        .values("thread_id")
-        .distinct()
-        .count()
-    )
-    closed_threads = Thread.objects.filter(status=Thread.Status.CLOSED).count()
-    open_threads = Thread.objects.filter(
-        Q(status=Thread.Status.OPEN) | Q(status=Thread.Status.PENDING)
-    ).count()
-    pending_verdicts = Thread.objects.filter(moderator_verdict__isnull=True).count()
-    total_claims = Claim.objects.count()
-
-    return Response(
-        {
-            "flagged_threads": flagged_threads,
-            "closed_threads": closed_threads,
-            "open_threads": open_threads,
-            "pending_verdicts": pending_verdicts,
-            "total_claims": total_claims,
-        }
-    )
 
 
 class UserHubView(APIView):
@@ -3749,7 +3825,7 @@ def request_password_reset(request):
             email_message.send(fail_silently=False)
 
         except Exception as error:
-            print(f"Password reset email failed: {error}")
+            logger.exception("Failed to deliver password reset email.")
 
     return Response(
         {"detail": generic_message},
@@ -3783,16 +3859,12 @@ def confirm_password_reset(request):
         user = User.objects.get(pk=user_id)
 
     except (TypeError, ValueError, OverflowError, User.DoesNotExist) as error:
-        print("RESET DEBUG uid decode/user lookup failed:", error)
-
         return Response(
             {"detail": "This password reset link is invalid or has expired."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
     token_is_valid = default_token_generator.check_token(user, token)
-
-    print("RESET DEBUG token valid:", token_is_valid)
 
     if not token_is_valid:
         return Response(
@@ -3887,6 +3959,48 @@ def public_partner_detail(
         PublicPartnerDetailSerializer(
             organization,
         ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@throttle_classes([PublicPartnerRateThrottle])
+def public_partner_fact_checks(request, slug):
+    organization = get_public_partner_by_slug(slug)
+    if organization is None:
+        raise NotFound()
+
+    query_serializer = PublicFactCheckQuerySerializer(data=request.query_params)
+    query_serializer.is_valid(raise_exception=True)
+    result = list_public_partner_fact_checks(
+        organization=organization,
+        limit=query_serializer.validated_data["limit"],
+        offset=query_serializer.validated_data["offset"],
+    )
+    return Response(
+        PublicFactCheckPageSerializer(result).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@throttle_classes([PublicPartnerRateThrottle])
+def public_partner_fact_check_detail(request, slug, publication_id):
+    organization = get_public_partner_by_slug(slug)
+    if organization is None:
+        raise NotFound()
+
+    try:
+        result = get_public_partner_fact_check_detail(
+            organization=organization,
+            publication_id=publication_id,
+        )
+    except PublicPublicationNotFound as error:
+        raise NotFound() from error
+    return Response(
+        PublicFactCheckDetailSerializer(result).data,
         status=status.HTTP_200_OK,
     )
 

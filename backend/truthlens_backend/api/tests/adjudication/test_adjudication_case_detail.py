@@ -1046,12 +1046,3 @@ class AdjudicationCaseDetailApiTests(APITestCase):
             str(self.context["case"].id),
             {item["id"] for item in queue_response.data["results"]},
         )
-        legacy_response = self.client.get(
-            reverse("moderation_verdict_queue")
-            + f"?organization_id={self.organization.id}&reviewed=resolved"
-        )
-        self.assertEqual(legacy_response.status_code, status.HTTP_200_OK)
-        self.assertIn(
-            str(self.context["case"].id),
-            {item["id"] for item in legacy_response.data["results"]},
-        )

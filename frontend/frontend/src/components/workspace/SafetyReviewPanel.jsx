@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useAuth } from "../../hooks/useAuth";
@@ -100,7 +100,8 @@ function formatCaseReference(caseId) {
 }
 
 function SafetyReviewPanel() {
-   const { authFetch, user } = useAuth();
+   const { authFetch, user, refreshUser } = useAuth();
+   const [accessRevoked, setAccessRevoked] = useState(false);
 
    const [filters, setFilters] = useState({
       status: "",
@@ -128,6 +129,9 @@ function SafetyReviewPanel() {
 
    const queueRequestIdRef = useRef(0);
    const detailRequestIdRef = useRef(0);
+   const safetyGenerationRef = useRef(0);
+   const accessRevokedRef = useRef(false);
+   const mountedRef = useRef(true);
    const selectedCaseIdRef = useRef(null);
    const queueHeadingRef = useRef(null);
    const detailRegionRef = useRef(null);
@@ -144,6 +148,66 @@ function SafetyReviewPanel() {
    const releaseTriggerRef = useRef(null);
    const releaseCancelRef = useRef(null);
    const restoreReleaseFocusRef = useRef(false);
+
+   useEffect(() => {
+      mountedRef.current = true;
+      return () => {
+         mountedRef.current = false;
+         safetyGenerationRef.current += 1;
+         queueRequestIdRef.current += 1;
+         detailRequestIdRef.current += 1;
+      };
+   }, []);
+
+   const revokeSafetyAccess = useCallback((error) => {
+      if (!mountedRef.current || accessRevokedRef.current) {
+         return;
+      }
+      accessRevokedRef.current = true;
+      safetyGenerationRef.current += 1;
+      queueRequestIdRef.current += 1;
+      detailRequestIdRef.current += 1;
+      selectedCaseIdRef.current = null;
+      focusDetailAfterLoadRef.current = false;
+      focusDetailAfterMutationRef.current = false;
+      focusDetailErrorRef.current = false;
+      decisionReturnFocusRef.current = null;
+      restoreReleaseFocusRef.current = false;
+      setAccessRevoked(true);
+      setQueue({ count: 0, results: [] });
+      setQueueLoading(false);
+      setQueueError("");
+      setSelectedCaseId(null);
+      setDetail(null);
+      setDetailLoading(false);
+      setDetailError("");
+      setDetailUnavailable(false);
+      setPendingOperation(null);
+      setConfirmingRelease(false);
+      setDecisionAction(null);
+      setDecisionNotes("");
+      setNotice("");
+      setActionError("");
+      if (error?.status === 403) {
+         refreshUser().catch(() => null);
+      }
+   }, [refreshUser]);
+
+   const safetyFetch = useCallback(async (url, options) => {
+      if (accessRevokedRef.current || !mountedRef.current) {
+         throw new Error("Platform Safety access is no longer available.");
+      }
+      const generation = safetyGenerationRef.current;
+      try {
+         // Allow normal auth refresh first; only a final 401 or direct 403 revokes Safety access.
+         return await authFetch(url, options);
+      } catch (error) {
+         if (generation === safetyGenerationRef.current && (error?.status === 401 || error?.status === 403)) {
+            revokeSafetyAccess(error);
+         }
+         throw error;
+      }
+   }, [authFetch, revokeSafetyAccess]);
 
    const queueUrl = useMemo(() => {
       const query = new URLSearchParams();
@@ -167,11 +231,14 @@ function SafetyReviewPanel() {
    }, [filters]);
 
    useEffect(() => {
+      if (accessRevokedRef.current) {
+         return undefined;
+      }
       let cancelled = false;
       const requestId = queueRequestIdRef.current + 1;
       queueRequestIdRef.current = requestId;
 
-      authFetch(queueUrl, { method: "GET" })
+      safetyFetch(queueUrl, { method: "GET" })
          .then((data) => {
             if (cancelled || queueRequestIdRef.current !== requestId) {
                return;
@@ -199,10 +266,10 @@ function SafetyReviewPanel() {
       return () => {
          cancelled = true;
       };
-   }, [authFetch, queueRequestVersion, queueUrl]);
+   }, [safetyFetch, queueRequestVersion, queueUrl]);
 
    useEffect(() => {
-      if (!selectedCaseId) {
+      if (!selectedCaseId || accessRevokedRef.current) {
          return undefined;
       }
 
@@ -210,7 +277,7 @@ function SafetyReviewPanel() {
       const requestId = detailRequestIdRef.current + 1;
       detailRequestIdRef.current = requestId;
 
-      authFetch(resolveApiEndpoint("SAFETY_CASE_DETAIL", selectedCaseId), {
+      safetyFetch(resolveApiEndpoint("SAFETY_CASE_DETAIL", selectedCaseId), {
          method: "GET",
       })
          .then((data) => {
@@ -257,7 +324,7 @@ function SafetyReviewPanel() {
       return () => {
          cancelled = true;
       };
-   }, [authFetch, detailRequestVersion, selectedCaseId]);
+   }, [safetyFetch, detailRequestVersion, selectedCaseId]);
 
    useEffect(() => {
       if (!detail) {
@@ -325,6 +392,9 @@ function SafetyReviewPanel() {
    }, [detailError]);
 
    const requestQueueRefresh = ({ clearMessages = false } = {}) => {
+      if (accessRevokedRef.current) {
+         return;
+      }
       setQueueLoading(true);
       setQueueError("");
 
@@ -337,7 +407,7 @@ function SafetyReviewPanel() {
    };
 
    const requestDetailRefresh = (caseId) => {
-      if (!caseId || selectedCaseIdRef.current !== caseId) {
+      if (accessRevokedRef.current || !caseId || selectedCaseIdRef.current !== caseId) {
          return;
       }
 
@@ -481,19 +551,24 @@ function SafetyReviewPanel() {
    };
 
    const handleClaim = async () => {
-      if (!detail?.id || pendingOperation) {
+      if (accessRevokedRef.current || !detail?.id || pendingOperation) {
          return;
       }
 
       const caseId = detail.id;
+      const generation = safetyGenerationRef.current;
       setPendingOperation({ caseId, kind: "claim" });
       setActionError("");
       setNotice("");
 
       try {
-         const updatedCase = await authFetch(resolveApiEndpoint("SAFETY_CASE_CLAIM", caseId), {
+         const updatedCase = await safetyFetch(resolveApiEndpoint("SAFETY_CASE_CLAIM", caseId), {
             method: "POST",
          });
+
+         if (generation !== safetyGenerationRef.current) {
+            return;
+         }
 
          updateQueueCase(updatedCase);
 
@@ -505,30 +580,40 @@ function SafetyReviewPanel() {
          setNotice(`Case ${formatCaseReference(caseId)} claimed. It is now assigned to you.`);
          requestQueueRefresh();
       } catch (error) {
+         if (generation !== safetyGenerationRef.current) {
+            return;
+         }
          if (requiresServerReconciliation(error)) {
             reconcileConflict(caseId, error);
          } else {
             reportMutationFailure(caseId, error?.message || "Unable to claim this Safety case.");
          }
       } finally {
-         setPendingOperation(null);
+         if (generation === safetyGenerationRef.current) {
+            setPendingOperation(null);
+         }
       }
    };
 
    const handleRelease = async () => {
-      if (!detail?.id || pendingOperation) {
+      if (accessRevokedRef.current || !detail?.id || pendingOperation) {
          return;
       }
 
       const caseId = detail.id;
+      const generation = safetyGenerationRef.current;
       setPendingOperation({ caseId, kind: "release" });
       setActionError("");
       setNotice("");
 
       try {
-         const updatedCase = await authFetch(resolveApiEndpoint("SAFETY_CASE_RELEASE", caseId), {
+         const updatedCase = await safetyFetch(resolveApiEndpoint("SAFETY_CASE_RELEASE", caseId), {
             method: "POST",
          });
+
+         if (generation !== safetyGenerationRef.current) {
+            return;
+         }
 
          updateQueueCase(updatedCase);
 
@@ -544,13 +629,18 @@ function SafetyReviewPanel() {
          );
          requestQueueRefresh();
       } catch (error) {
+         if (generation !== safetyGenerationRef.current) {
+            return;
+         }
          if (requiresServerReconciliation(error)) {
             reconcileConflict(caseId, error);
          } else {
             reportMutationFailure(caseId, error?.message || "Unable to release this Safety case.");
          }
       } finally {
-         setPendingOperation(null);
+         if (generation === safetyGenerationRef.current) {
+            setPendingOperation(null);
+         }
       }
    };
 
@@ -561,7 +651,7 @@ function SafetyReviewPanel() {
       const actionDetail = action ? ACTION_DETAILS[action] : null;
       const notes = decisionNotes.trim();
 
-      if (!detail?.id || !actionDetail || pendingOperation) {
+      if (accessRevokedRef.current || !detail?.id || !actionDetail || pendingOperation) {
          return;
       }
 
@@ -571,18 +661,23 @@ function SafetyReviewPanel() {
       }
 
       const caseId = detail.id;
+      const generation = safetyGenerationRef.current;
       setPendingOperation({ caseId, kind: "action", action });
       setActionError("");
       setNotice("");
 
       try {
-         const updatedCase = await authFetch(resolveApiEndpoint("SAFETY_CASE_ACTION", caseId), {
+         const updatedCase = await safetyFetch(resolveApiEndpoint("SAFETY_CASE_ACTION", caseId), {
             method: "POST",
             body: {
                action,
                notes,
             },
          });
+
+         if (generation !== safetyGenerationRef.current) {
+            return;
+         }
 
          if (selectedCaseIdRef.current === caseId) {
             focusDetailAfterMutationRef.current = true;
@@ -609,13 +704,18 @@ function SafetyReviewPanel() {
 
          requestQueueRefresh();
       } catch (error) {
+         if (generation !== safetyGenerationRef.current) {
+            return;
+         }
          if (requiresServerReconciliation(error)) {
             reconcileConflict(caseId, error);
          } else {
             reportMutationFailure(caseId, error?.message || "Unable to complete this Safety action.");
          }
       } finally {
-         setPendingOperation(null);
+         if (generation === safetyGenerationRef.current) {
+            setPendingOperation(null);
+         }
       }
    };
 
@@ -628,6 +728,16 @@ function SafetyReviewPanel() {
    const selectedActionDetail = decisionAction ? ACTION_DETAILS[decisionAction] : null;
    const hasQueueResults = queue.results.length > 0;
    const isInitialQueueLoading = queueLoading && !hasQueueResults && !queueError;
+
+   if (accessRevoked) {
+      return (
+         <div className="safety-review-panel">
+            <div className="safety-state" role="alert">
+               <p>Platform Safety access is no longer available.</p>
+            </div>
+         </div>
+      );
+   }
 
    return (
       <div className="safety-review-panel">

@@ -112,6 +112,8 @@ class VerificationAssignmentPublicationTests(TestCase):
         self.draft = create_fact_check_draft(
             decision=self.decision,
             actor=self.lead_verifier,
+            organization_id=self.organization.id,
+            expected_decision_revision=self.decision.revision_number,
             headline=("Fact Check: Reviewed Claim Is False"),
             summary=("Professional review found the " "claim unsupported."),
             article_body=(
@@ -140,11 +142,17 @@ class VerificationAssignmentPublicationTests(TestCase):
         submitted = submit_fact_check_for_review(
             fact_check=self.draft,
             actor=self.lead_verifier,
+            organization_id=self.organization.id,
+            expected_edit_generation=self.draft.edit_generation,
+            expected_decision_revision=self.decision.revision_number,
         )
 
         result = publish_fact_check(
             fact_check=submitted,
             actor=self.lead_verifier,
+            organization_id=self.organization.id,
+            expected_edit_generation=submitted.edit_generation,
+            expected_decision_revision=self.decision.revision_number,
         )
 
         published = result["fact_check"]
@@ -180,6 +188,9 @@ class VerificationAssignmentPublicationTests(TestCase):
             publish_fact_check(
                 fact_check=self.draft,
                 actor=self.lead_verifier,
+                organization_id=self.organization.id,
+                expected_edit_generation=self.draft.edit_generation,
+                expected_decision_revision=self.decision.revision_number,
             )
 
         self.assignment.refresh_from_db()
@@ -203,11 +214,17 @@ class VerificationAssignmentPublicationTests(TestCase):
         submitted = submit_fact_check_for_review(
             fact_check=self.draft,
             actor=self.lead_verifier,
+            organization_id=self.organization.id,
+            expected_edit_generation=self.draft.edit_generation,
+            expected_decision_revision=self.decision.revision_number,
         )
 
         publish_fact_check(
             fact_check=submitted,
             actor=self.lead_verifier,
+            organization_id=self.organization.id,
+            expected_edit_generation=submitted.edit_generation,
+            expected_decision_revision=self.decision.revision_number,
         )
 
         self.assignment.refresh_from_db()

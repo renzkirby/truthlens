@@ -18,29 +18,17 @@ import { state } from "./state.js";
 const COMMUNITY_PLATFORM_URL = state.WEB_APP_ORIGINS[0];
 
 // Pre-render icons
-const iconSparkles = renderToString(
-   React.createElement(Sparkles, { size: 14 }),
-);
-const iconShield = renderToString(
-   React.createElement(ShieldCheck, { size: 16 }),
-);
+const iconSparkles = renderToString(React.createElement(Sparkles, { size: 14 }));
+const iconShield = renderToString(React.createElement(ShieldCheck, { size: 16 }));
 const iconFlag = renderToString(React.createElement(Flag, { size: 16 }));
-const iconCheck = renderToString(
-   React.createElement(CheckCircle, { size: 16 }),
-);
+const iconCheck = renderToString(React.createElement(CheckCircle, { size: 16 }));
 const iconX = renderToString(React.createElement(XCircle, { size: 16 }));
-const iconAlert = renderToString(
-   React.createElement(AlertTriangle, { size: 16 }),
-);
+const iconAlert = renderToString(React.createElement(AlertTriangle, { size: 16 }));
 const iconHelp = renderToString(React.createElement(HelpCircle, { size: 16 }));
-const iconActivity = renderToString(
-   React.createElement(Activity, { size: 12 }),
-);
+const iconActivity = renderToString(React.createElement(Activity, { size: 12 }));
 const iconSearch = renderToString(React.createElement(Search, { size: 16 }));
 const iconUsers = renderToString(React.createElement(Users, { size: 16 }));
-const iconExternal = renderToString(
-   React.createElement(ExternalLink, { size: 12 }),
-);
+const iconExternal = renderToString(React.createElement(ExternalLink, { size: 12 }));
 
 // Helper function to get UI properties based on verdict
 function getVerdictUI(verdict) {
@@ -92,28 +80,174 @@ function getVerdictUI(verdict) {
    }
 }
 
+function escapeHtml(value) {
+   const entities = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+   return String(value ?? "").replace(/[&<>"']/g, (character) => entities[character]);
+}
+
+function nonblankText(value) {
+   return typeof value === "string" && value.trim() ? value : "";
+}
+
+function isRecord(value) {
+   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isPublishedInstitutionalResult(result) {
+   const publication = result.official_fact_check;
+   return result.resolution_source === "OFFICIAL_FACT_CHECK" && isRecord(publication)
+      && [publication.fact_check_id, publication.verdict, publication.headline, publication.summary].some(nonblankText);
+}
+
+// Attribute escaping and URL validation serve different purposes.
+function safeHttpUrl(value) {
+   if (typeof value !== "string" || Array.from(value).some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) return null;
+   if (!/^https?:\/\//i.test(value.trim())) return null;
+   try {
+      const url = new URL(value.trim());
+      return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password ? url.href : null;
+   } catch {
+      return null;
+   }
+}
+
+function communityBaseUrl() {
+   const safeUrl = safeHttpUrl(COMMUNITY_PLATFORM_URL);
+   if (!safeUrl) return null;
+   const url = new URL(safeUrl);
+   return url.search || url.hash ? null : safeUrl.replace(/\/+$/, "");
+}
+
+function pathComponent(value) {
+   const text = typeof value === "number" && Number.isFinite(value) ? String(value) : nonblankText(value).trim();
+   if (!text || text === "." || text === "..") return null;
+   try {
+      return encodeURIComponent(text);
+   } catch {
+      return null;
+   }
+}
+
+function displayPublishedResultCard(claim, publication) {
+   const organization = isRecord(publication.organization) ? publication.organization : {};
+   const organizationName = nonblankText(organization.name);
+   const publicProfileAvailable = organization.public_profile_available === true;
+   const baseUrl = communityBaseUrl();
+   const slug = pathComponent(organization.slug);
+   const publicationId = pathComponent(publication.fact_check_id);
+   const profileUrl = publicProfileAvailable && baseUrl && slug ? `${baseUrl}/partners/${slug}` : null;
+   const articleUrl = profileUrl && publicationId ? `${profileUrl}/fact-checks/${publicationId}` : null;
+   const logoUrl = publicProfileAvailable ? safeHttpUrl(organization.logo_url) : null;
+
+   // The publication is authoritative; top-level values are legacy transport fallbacks.
+   const verdict = nonblankText(publication.verdict) || nonblankText(claim.verdict) || nonblankText(claim.final_verdict);
+   const supportedVerdict = ["FACT", "FAKE", "MISLEADING", "SATIRE", "UNVERIFIED"].includes(verdict);
+   const ui = supportedVerdict ? getVerdictUI(verdict) : { class: "out-of-scope", icon: iconHelp, text: "Verdict unavailable" };
+   const summary = nonblankText(publication.summary) || nonblankText(claim.summary) || "No published summary available.";
+   const headline = nonblankText(publication.headline) || "Published fact-check";
+   const identityText = escapeHtml(organizationName || "Organization attribution unavailable");
+   const identityHTML = profileUrl
+      ? `<a href="${escapeHtml(profileUrl)}" target="_blank" rel="noopener noreferrer">${identityText} ${iconExternal}</a>`
+      : `<span>${identityText}</span>`;
+   const initial = organizationName ? escapeHtml(Array.from(organizationName.trim())[0].toUpperCase()) : iconShield;
+
+   const metadata = [];
+   if (nonblankText(publication.published_at)) {
+      const publishedAt = new Date(publication.published_at);
+      if (!Number.isNaN(publishedAt.getTime())) {
+         const dateText = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeZone: "UTC" }).format(publishedAt);
+         metadata.push(`<time datetime="${escapeHtml(publishedAt.toISOString())}">Published ${escapeHtml(dateText)} (UTC)</time>`);
+      }
+   }
+   if (Number.isInteger(publication.version) && publication.version > 0) {
+      metadata.push(`<span>Article v${escapeHtml(publication.version)}</span>`);
+   }
+   const revisionLabels = {
+      INITIAL: "Initial publication",
+      EDITORIAL_REVISION: "Editorial revision",
+      FACTUAL_CORRECTION: "Factual correction",
+   };
+   if (typeof publication.revision_kind === "string" && Object.hasOwn(revisionLabels, publication.revision_kind)) {
+      metadata.push(`<span>${escapeHtml(revisionLabels[publication.revision_kind])}</span>`);
+   }
+
+   const sources = Array.isArray(publication.sources) ? publication.sources
+      : Array.isArray(claim.sources) ? claim.sources : claim.source_url ? [claim.source_url] : [];
+   const sourceLinks = sources.map((source) => {
+      const url = safeHttpUrl(typeof source === "string" ? source : isRecord(source) ? source.url : null);
+      if (!url) return "";
+      const title = (isRecord(source) && nonblankText(source.title)) || new URL(url).hostname;
+      return `<li><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(title)} ${iconExternal}</a></li>`;
+   }).filter(Boolean).join("");
+
+   const card = document.createElement("div");
+   card.id = "truthlens-result-card";
+   card.className = `truthlens-card truthlens-institutional-card verdict-${ui.class}`;
+   card.setAttribute("role", "region");
+   card.setAttribute("aria-label", "Published institutional fact-check");
+   card.innerHTML = `
+      <div class="truthlens-header">
+         <div class="truthlens-title" style="color: ${ui.color || "#9ca3af"};">${iconShield} PUBLISHED FACT-CHECK</div>
+         <button class="truthlens-close-btn" aria-label="Close fact-check">&times;</button>
+      </div>
+      <div class="truthlens-publication-body">
+         <div class="truthlens-badge badge-${ui.class}" role="group" aria-label="Human factual verdict: ${escapeHtml(ui.text)}">${ui.icon} ${ui.text}</div>
+         <h2 class="truthlens-publication-headline" title="${escapeHtml(headline)}" aria-label="${escapeHtml(headline)}">${escapeHtml(headline)}</h2>
+         <section class="truthlens-summary-box truthlens-publication-summary">
+            <h3 class="truthlens-summary-title">${iconShield} PUBLISHED SUMMARY</h3>
+            <div class="truthlens-summary-text truthlens-publication-summary-scroll" role="region" aria-label="Published summary" tabindex="0"><p>${escapeHtml(summary)}</p></div>
+         </section>
+         <div class="truthlens-publication-partner">
+            <div class="truthlens-partner-mark"><span>${initial}</span>${logoUrl ? `<img hidden src="${escapeHtml(logoUrl)}" alt="" referrerpolicy="no-referrer">` : ""}</div>
+            <div class="truthlens-partner-identity"><span class="truthlens-publication-label">Published by</span>${identityHTML}</div>
+         </div>
+         ${metadata.length ? `<div class="truthlens-publication-metadata">${metadata.join("")}</div>` : ""}
+         ${sourceLinks ? `<section class="truthlens-publication-sources"><h3 class="truthlens-publication-label">Sources</h3><ul>${sourceLinks}</ul></section>` : ""}
+         ${articleUrl ? `<a href="${escapeHtml(articleUrl)}" target="_blank" rel="noopener noreferrer" class="truthlens-primary-btn">Read Full Fact-Check ${iconExternal}</a>` : ""}
+      </div>
+   `;
+
+   // Keep the initial visible until an image has loaded successfully.
+   const logo = card.querySelector(".truthlens-partner-mark img");
+   if (logo) {
+      const showLogo = () => {
+         if (!logo.naturalWidth) return;
+         logo.hidden = false;
+         logo.previousElementSibling.hidden = true;
+      };
+      logo.addEventListener("load", showLogo);
+      logo.addEventListener("error", () => {
+         logo.previousElementSibling.hidden = false;
+         logo.remove();
+      });
+      if (logo.complete) showLogo();
+   }
+   document.body.appendChild(card);
+   void card.offsetWidth;
+   setTimeout(() => card.classList.add("show"), 100);
+   card.querySelector(".truthlens-close-btn").addEventListener("click", () => {
+      card.classList.remove("show");
+      setTimeout(() => card.remove(), 300);
+   });
+}
+
 export function displayResultCard(claim) {
-   const {
-      id,
-      verdict,
-      summary,
-      confidence_score,
-      thread_id,
-      final_verdict,
-      sources,
-      source_url,
-   } = claim;
-   const deepAnalysisUrl = `${COMMUNITY_PLATFORM_URL}/analysis/${id}`;
+   if (isPublishedInstitutionalResult(claim)) {
+      displayPublishedResultCard(claim, claim.official_fact_check);
+      return;
+   }
+
+   const { verdict, summary, confidence_score, thread_id, final_verdict, sources, source_url } = claim;
+   const id = pathComponent(claim.claim_id || claim.id);
+   const baseUrl = communityBaseUrl();
+   const deepAnalysisUrl = baseUrl && id ? `${baseUrl}/analysis/${id}` : null;
 
    const displayVerdict = final_verdict || verdict;
    const ui = getVerdictUI(displayVerdict);
 
    // 1. Generate Sources HTML
    let sourcesHTML = "";
-   const evidenceList =
-      sources && sources.length > 0 ? sources : source_url ? [source_url] : [];
-   console.log(sources);
-   console.log(evidenceList);
+   const evidenceList = sources && sources.length > 0 ? sources : source_url ? [source_url] : [];
 
    if (displayVerdict !== "OUT_OF_SCOPE" && evidenceList.length > 0) {
       sourcesHTML = `
@@ -134,11 +268,8 @@ export function displayResultCard(claim) {
                      displayTitle = src.title;
                   } else if (urlStr.startsWith("http")) {
                      try {
-                        displayTitle = new URL(urlStr).hostname.replace(
-                           "www.",
-                           "",
-                        );
-                     } catch (e) {
+                        displayTitle = new URL(urlStr).hostname.replace("www.", "");
+                     } catch {
                         displayTitle = urlStr;
                      }
                   }
@@ -160,21 +291,20 @@ export function displayResultCard(claim) {
    let primaryButtonHTML = "";
    let secondaryLinkHTML = "";
 
-   const communityLink = thread_id
-      ? `${COMMUNITY_PLATFORM_URL}/thread/detail/${thread_id}`
-      : `${COMMUNITY_PLATFORM_URL}/thread/create?claim_id=${id}`;
-   const communityText = thread_id
-      ? "View Community Discussion"
-      : "Ask the Community";
+   const threadId = pathComponent(thread_id);
+   const communityLink = baseUrl && threadId
+      ? `${baseUrl}/thread/detail/${threadId}`
+      : baseUrl && id ? `${baseUrl}/thread/create?claim_id=${id}` : null;
+   const communityText = thread_id ? "View Community Discussion" : "Ask the Community";
 
    if (displayVerdict === "UNVERIFIED") {
       // UNVERIFIED: Primary CTA is asking the community. Secondary is full report.
-      primaryButtonHTML = `<a href='${communityLink}' target='_blank' class='truthlens-primary-btn'>${iconUsers} ${communityText}</a>`;
-      secondaryLinkHTML = `<a href='${deepAnalysisUrl}' target='_blank' class='truthlens-dashboard-link'>View full report ${iconExternal}</a>`;
+      primaryButtonHTML = communityLink ? `<a href='${escapeHtml(communityLink)}' target='_blank' rel='noopener noreferrer' class='truthlens-primary-btn'>${iconUsers} ${communityText}</a>` : "";
+      secondaryLinkHTML = deepAnalysisUrl ? `<a href='${escapeHtml(deepAnalysisUrl)}' target='_blank' rel='noopener noreferrer' class='truthlens-dashboard-link'>View full report ${iconExternal}</a>` : "";
    } else {
       // VERIFIED (Fact/Fake/etc): Primary CTA is the full report. Secondary is community discussion.
-      primaryButtonHTML = `<a href='${deepAnalysisUrl}' target='_blank' class='truthlens-primary-btn'>${iconSearch} View Full Report</a>`;
-      secondaryLinkHTML = `<a href='${communityLink}' target='_blank' class='truthlens-dashboard-link'>${communityText} ${iconExternal}</a>`;
+      primaryButtonHTML = deepAnalysisUrl ? `<a href='${escapeHtml(deepAnalysisUrl)}' target='_blank' rel='noopener noreferrer' class='truthlens-primary-btn'>${iconSearch} View Full Report</a>` : "";
+      secondaryLinkHTML = communityLink ? `<a href='${escapeHtml(communityLink)}' target='_blank' rel='noopener noreferrer' class='truthlens-dashboard-link'>${communityText} ${iconExternal}</a>` : "";
    }
 
    const card = document.createElement("div");
@@ -228,15 +358,16 @@ export function displayResultCard(claim) {
    void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
 
-   document
-      .getElementById("truthlens-close-btn")
-      .addEventListener("click", () => {
-         card.classList.remove("show");
-         setTimeout(() => card.remove(), 300);
-      });
+   document.getElementById("truthlens-close-btn").addEventListener("click", () => {
+      card.classList.remove("show");
+      setTimeout(() => card.remove(), 300);
+   });
 }
 
 export function displayLoadingCard(customMsg) {
+   document.querySelectorAll("#truthlens-error-card").forEach((errorCard) => {
+      errorCard.remove();
+   });
    const msg = typeof customMsg === "string" ? customMsg : "Analyzing claim...";
 
    const card = document.createElement("div");
@@ -257,9 +388,7 @@ export function displayLoadingCard(customMsg) {
    void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
 
-   document
-      .getElementById("truthlens-load-close-btn")
-      .addEventListener("click", removeLoadingCard);
+   document.getElementById("truthlens-load-close-btn").addEventListener("click", removeLoadingCard);
 }
 
 export function displayDeepfakeResultCard(data) {
@@ -303,12 +432,10 @@ export function displayDeepfakeResultCard(data) {
    void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
 
-   document
-      .getElementById("truthlens-close-btn")
-      .addEventListener("click", () => {
-         card.classList.remove("show");
-         setTimeout(() => card.remove(), 300);
-      });
+   document.getElementById("truthlens-close-btn").addEventListener("click", () => {
+      card.classList.remove("show");
+      setTimeout(() => card.remove(), 300);
+   });
 }
 
 export function removeLoadingCard() {
@@ -321,21 +448,145 @@ export function removeLoadingCard() {
 }
 
 export function displayErrorCard(message) {
+   document.querySelectorAll("#truthlens-error-card").forEach((errorCard) => {
+      errorCard.remove();
+   });
+
    const card = document.createElement("div");
    card.id = "truthlens-error-card";
    card.className = "truthlens-card";
    card.innerHTML = `
-      <div class="truthlens-header">
-         <strong class="truthlens-title">TruthLens</strong>
+      <div class="truthlens-header" style="align-items: center; gap: 12px;">
+         <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+            <strong class="truthlens-title" style="color: #111827;">TRUTHLENS</strong>
+            <span
+               style="
+                  display: inline-flex;
+                  align-items: center;
+                  padding: 3px 7px;
+                  border-radius: 999px;
+                  background: #fef2f2;
+                  color: #b91c1c;
+                  font-size: 9px;
+                  font-weight: 700;
+                  letter-spacing: 0.06em;
+                  line-height: 1.2;
+                  white-space: nowrap;
+               "
+            >
+               SERVICE ISSUE
+            </span>
+         </div>
+
+         <button
+            type="button"
+            id="truthlens-error-close-btn"
+            class="truthlens-close-btn"
+            aria-label="Dismiss error"
+            title="Dismiss"
+            style="
+               flex-shrink: 0;
+               width: 28px;
+               height: 28px;
+               display: inline-flex;
+               align-items: center;
+               justify-content: center;
+               border-radius: 8px;
+            "
+         >
+            &times;
+         </button>
       </div>
-      <div class="truthlens-error">
-         <div class="truthlens-error-icon">!</div>
-         <div class="truthlens-error-text">${message}</div>
+
+      <div
+         class="truthlens-error"
+         role="alert"
+         style="
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            margin-top: 14px;
+         "
+      >
+         <div
+            aria-hidden="true"
+            style="
+               width: 36px;
+               height: 36px;
+               flex: 0 0 36px;
+               display: inline-flex;
+               align-items: center;
+               justify-content: center;
+               border-radius: 10px;
+               background: #fef2f2;
+               color: #dc2626;
+            "
+         >
+            ${iconAlert}
+         </div>
+
+         <div style="min-width: 0; flex: 1;">
+            <div
+               style="
+                  margin-bottom: 4px;
+                  color: #111827;
+                  font-size: 14px;
+                  font-weight: 700;
+                  line-height: 1.35;
+               "
+            >
+               Analysis unavailable
+            </div>
+
+            <div
+               class="truthlens-error-text"
+               style="
+                  color: #4b5563;
+                  font-size: 13px;
+                  line-height: 1.45;
+                  overflow-wrap: anywhere;
+               "
+            >
+               ${message}
+            </div>
+
+            <div
+               style="
+                  display: flex;
+                  align-items: flex-start;
+                  gap: 6px;
+                  margin-top: 10px;
+                  padding-top: 9px;
+                  border-top: 1px solid #f3f4f6;
+                  color: #6b7280;
+                  font-size: 11px;
+                  line-height: 1.4;
+               "
+            >
+               <span
+                  aria-hidden="true"
+                  style="
+                     display: inline-flex;
+                     align-items: center;
+                     flex-shrink: 0;
+                     margin-top: 1px;
+                     color: #6b7280;
+                  "
+               >
+                  ${iconShield}
+               </span>
+               <span>No verdict was generated. Start a new scan to try again.</span>
+            </div>
+         </div>
       </div>
    `;
+
    document.body.appendChild(card);
-   setTimeout(() => card.classList.add("show"), 100);
-   setTimeout(() => {
+
+   const showTimer = setTimeout(() => card.classList.add("show"), 100);
+
+   card.querySelector("#truthlens-error-close-btn").addEventListener("click", () => {
+      clearTimeout(showTimer);
       card.classList.remove("show");
       setTimeout(() => card.remove(), 300);
    });
@@ -367,6 +618,11 @@ export function successCard(message) {
  * Shows a distinctive "Community Verified" treatment vs the standard AI result.
  */
 export function displayCachedResultCard(match) {
+   if (isPublishedInstitutionalResult(match)) {
+      displayPublishedResultCard(match, match.official_fact_check);
+      return;
+   }
+
    const {
       verdict,
       final_verdict,
@@ -386,14 +642,10 @@ export function displayCachedResultCard(match) {
 
    let confidence_bar_color = "#6b7280";
    if (confidence_score < 40) confidence_bar_color = "#e02424";
-   else if (confidence_score >= 40 && confidence_score < 70)
-      confidence_bar_color = "#ebdc09";
+   else if (confidence_score >= 40 && confidence_score < 70) confidence_bar_color = "#ebdc09";
    else if (confidence_score >= 70) confidence_bar_color = "#0e9f6e";
 
-   const displaySummary =
-      moderator_notes ||
-      summary ||
-      "This claim has been reviewed by the community.";
+   const displaySummary = moderator_notes || summary || "This claim has been reviewed by the community.";
 
    const aiWarningHTML = is_ai_generated
       ? `<div class="truthlens-banner truthlens-ai-warning">
@@ -442,8 +694,7 @@ export function displayCachedResultCard(match) {
    }
 
    let sourcesHTML = "";
-   const evidenceList =
-      sources && sources.length > 0 ? sources : source_url ? [source_url] : [];
+   const evidenceList = sources && sources.length > 0 ? sources : source_url ? [source_url] : [];
 
    if (displayVerdict !== "OUT_OF_SCOPE" && evidenceList.length > 0) {
       sourcesHTML = `
@@ -462,12 +713,8 @@ export function displayCachedResultCard(match) {
                               typeof src === "object" && src.title
                                  ? src.title
                                  : new URL(urlStr).hostname.replace("www.", "");
-                        } catch (e) {
+                        } catch {
                            displayTitle = urlStr;
-                           console.log(
-                              "Error parsing URL for display title:",
-                              e,
-                           );
                         }
 
                         return `
@@ -536,10 +783,8 @@ export function displayCachedResultCard(match) {
    void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
 
-   document
-      .getElementById("truthlens-close-btn")
-      .addEventListener("click", () => {
-         card.classList.remove("show");
-         setTimeout(() => card.remove(), 300);
-      });
+   document.getElementById("truthlens-close-btn").addEventListener("click", () => {
+      card.classList.remove("show");
+      setTimeout(() => card.remove(), 300);
+   });
 }

@@ -27,13 +27,21 @@ urlpatterns = [
     path("users/<str:username>/", views.get_public_user_profile),
     path("users/<str:username>/threads/", views.public_user_threads),
     path("users/<str:username>/evidence/", views.public_user_evidence),
-    path("users/<str:username>/verdicts/", views.public_user_verdicts),
     path("users/<str:username>/follow/", views.toggle_follow_user),
     path("users/<str:username>/followers/", views.get_user_followers),
     path("users/<str:username>/following/", views.get_user_following),
     path("users/<str:username>/claims/", views.public_user_claims),
-    path("users/<str:username>/moderation-stats/", views.moderator_transparency_stats),
     path("partners/", views.public_partner_directory, name="public_partner_directory"),
+    path(
+        "partners/<slug:slug>/fact-checks/",
+        views.public_partner_fact_checks,
+        name="public_partner_fact_checks",
+    ),
+    path(
+        "partners/<slug:slug>/fact-checks/<uuid:publication_id>/",
+        views.public_partner_fact_check_detail,
+        name="public_partner_fact_check_detail",
+    ),
     path(
         "partners/<slug:slug>/",
         views.public_partner_detail,
@@ -65,8 +73,16 @@ urlpatterns = [
         views.toggle_save_claim,
         name="toggle_save_claim",
     ),
-    path("moderation/stats/", views.moderation_stats_view, name="moderation_stats"),
-    path("moderation/queue/", views.moderation_queue, name="moderation_queue"),
+    path(
+        "accountability/organization/",
+        views.organization_accountability,
+        name="organization_accountability",
+    ),
+    path(
+        "accountability/platform-safety/",
+        views.platform_safety_accountability,
+        name="platform_safety_accountability",
+    ),
     path(
         "moderation/safety/cases/",
         views.safety_case_queue,
@@ -91,11 +107,6 @@ urlpatterns = [
         "moderation/safety/cases/<uuid:case_id>/action/",
         views.safety_case_action,
         name="safety_case_action",
-    ),
-    path(
-        "moderation/evidence-queue/",
-        views.evidence_moderation_queue,
-        name="moderation_evidence_queue",
     ),
     path(
         "moderation/evidence/cases/",
@@ -127,11 +138,6 @@ urlpatterns = [
         views.adjudication_case_action,
         name="adjudication_case_action",
     ),
-    path(
-        "moderation/verdict-queue/",
-        views.verdict_queue,
-        name="moderation_verdict_queue",
-    ),
     # Partner verification intake
     path(
         "verification/intake/",
@@ -152,6 +158,11 @@ urlpatterns = [
         "verification/workload/",
         views.verification_workload,
         name="verification_workload",
+    ),
+    path(
+        "organizations/<uuid:organization_id>/analytics/verification/",
+        views.organization_verification_metrics,
+        name="organization_verification_metrics",
     ),
     path(
         "organizations/" "<uuid:organization_id>/" "public-profile/",
@@ -240,24 +251,138 @@ urlpatterns = [
         name="organization_invitation_cancel",
     ),
     path(
-        "moderation/threads/<uuid:thread_id>/resolve/",
-        views.moderation_resolve_thread,
-        name="moderation_resolve_thread",
-    ),
-    path(
-        "moderation/threads/<uuid:thread_id>/safety-action/",
-        views.moderation_resolve_safety_thread,
-        name="moderation_safety_action",
-    ),
-    path(
-        "moderation/claims/" "<uuid:claim_id>/adjudicate/",
-        views.adjudicate_claim,
-        name="adjudicate_claim",
-    ),
-    path(
         "moderation/claims/" "<uuid:claim_id>/" "fact-checks/draft/",
         views.fact_check_draft_create,
         name=("moderation_fact_check_" "draft_create"),
+    ),
+    path(
+        "moderation/publications/work-items/",
+        views.publication_work_item_queue,
+        name="publication_work_item_queue",
+    ),
+    path(
+        (
+            "moderation/publications/work-items/"
+            "<str:resource_type>/<uuid:resource_id>/"
+        ),
+        views.publication_work_item_detail,
+        name="publication_work_item_detail",
+    ),
+    path(
+        "moderation/publications/library/",
+        views.organization_publication_library,
+        name="organization_publication_library",
+    ),
+    path(
+        "moderation/publications/library/<uuid:fact_check_id>/",
+        views.organization_publication_detail,
+        name="organization_publication_detail",
+    ),
+    path(
+        "moderation/publications/factual-corrections/",
+        views.factual_correction_collection,
+        name="factual_correction_collection",
+    ),
+    path(
+        "moderation/publications/factual-corrections/<uuid:request_id>/",
+        views.factual_correction_detail,
+        name="factual_correction_detail",
+    ),
+    path(
+        (
+            "moderation/publications/<uuid:predecessor_id>/"
+            "factual-corrections/request/"
+        ),
+        views.factual_correction_request_create,
+        name="factual_correction_request_create",
+    ),
+    path(
+        (
+            "moderation/publications/factual-corrections/"
+            "<uuid:request_id>/evidence/<uuid:evidence_id>/review/"
+        ),
+        views.factual_correction_evidence_review,
+        name="factual_correction_evidence_review",
+    ),
+    path(
+        (
+            "moderation/publications/factual-corrections/"
+            "<uuid:request_id>/proposal/"
+        ),
+        views.factual_correction_proposal_save,
+        name="factual_correction_proposal_save",
+    ),
+    path(
+        (
+            "moderation/publications/factual-corrections/"
+            "<uuid:request_id>/proposal/prepare/"
+        ),
+        views.factual_correction_proposal_prepare,
+        name="factual_correction_proposal_prepare",
+    ),
+    path(
+        (
+            "moderation/publications/factual-corrections/"
+            "<uuid:request_id>/publish/"
+        ),
+        views.factual_correction_publish,
+        name="factual_correction_publish",
+    ),
+    path(
+        (
+            "moderation/publications/factual-corrections/"
+            "<uuid:request_id>/cancel/"
+        ),
+        views.factual_correction_cancel,
+        name="factual_correction_cancel",
+    ),
+    path(
+        (
+            "moderation/publications/<uuid:predecessor_id>/"
+            "editorial-revisions/draft/"
+        ),
+        views.editorial_revision_draft_create,
+        name="editorial_revision_draft_create",
+    ),
+    path(
+        (
+            "moderation/publications/editorial-revisions/"
+            "<uuid:revision_id>/draft/"
+        ),
+        views.editorial_revision_draft_update,
+        name="editorial_revision_draft_update",
+    ),
+    path(
+        (
+            "moderation/publications/editorial-revisions/"
+            "<uuid:revision_id>/submit/"
+        ),
+        views.editorial_revision_submit,
+        name="editorial_revision_submit",
+    ),
+    path(
+        (
+            "moderation/publications/editorial-revisions/"
+            "<uuid:revision_id>/return-for-rework/"
+        ),
+        views.editorial_revision_return_for_rework,
+        name="editorial_revision_return_for_rework",
+    ),
+    path(
+        (
+            "moderation/publications/editorial-revisions/"
+            "<uuid:revision_id>/abandon/"
+        ),
+        views.editorial_revision_abandon,
+        name="editorial_revision_abandon",
+    ),
+    path(
+        (
+            "moderation/publications/editorial-revisions/"
+            "<uuid:revision_id>/publish/"
+        ),
+        views.editorial_revision_publish,
+        name="editorial_revision_publish",
     ),
     path(
         "moderation/fact-checks/" "<uuid:fact_check_id>/draft/",
@@ -273,6 +398,16 @@ urlpatterns = [
         "moderation/fact-checks/" "<uuid:fact_check_id>/publish/",
         views.fact_check_publish,
         name=("moderation_fact_check_publish"),
+    ),
+    path(
+        "moderation/fact-checks/" "<uuid:fact_check_id>/return-for-rework/",
+        views.fact_check_return_for_rework,
+        name="moderation_fact_check_return_for_rework",
+    ),
+    path(
+        "moderation/fact-checks/" "<uuid:fact_check_id>/abandon/",
+        views.fact_check_abandon,
+        name="moderation_fact_check_abandon",
     ),
     path(
         ("organization-invitations/" "<str:token>/"),

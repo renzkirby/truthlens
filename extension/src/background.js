@@ -1,14 +1,12 @@
 import { fetchClaimResult } from "./modules/api.js";
 import {
-   buildAuthHeaders,
-   clearAuthSession,
+   authenticatedFetch,
    getAuthSession,
    isTrustedWebOrigin,
-   saveAuthSession,
+   replaceAuthSession,
+   clearAuthSession,
 } from "./modules/auth.js";
 import { state } from "./modules/state.js";
-
-console.log("TruthLens background service worker loaded");
 
 const GUEST_SCANS_STORAGE_KEY = "guest_scans";
 const GUEST_SCANS_CAP = 3;
@@ -51,6 +49,12 @@ function normalizeGuestScanRecord({ verdictPayload, scanType }) {
       return null;
    }
 
+   const rawClaimId = verdictPayload.id || verdictPayload.claim_id;
+   const claimId = typeof rawClaimId === "string" ? rawClaimId.trim() : "";
+   if (!claimId) {
+      return null;
+   }
+
    const verdict = verdictPayload.final_verdict || verdictPayload.verdict || "UNVERIFIED";
    const confidenceScore = Number(verdictPayload.confidence_score ?? 0);
 
@@ -61,7 +65,7 @@ function normalizeGuestScanRecord({ verdictPayload, scanType }) {
       confidence_score: Number.isFinite(confidenceScore) ? confidenceScore : 0,
       source_type: verdictPayload.source_type || "Unknown",
       source_url: verdictPayload.source_url || "",
-      claim_id: verdictPayload.id || verdictPayload.claim_id || null,
+      claim_id: claimId,
       thread_id: verdictPayload.thread_id || null,
       scanned_at: new Date().toISOString(),
    };
@@ -82,32 +86,47 @@ async function appendGuestScan(verdictPayload, scanType) {
    });
 }
 
-async function shouldUseGuestCaching() {
+async function cacheGuestScanIfCurrentGuest(verdictPayload, scanType) {
    try {
       const session = await getAuthSession();
-      return !session?.accessToken;
-   } catch (_error) {
+      if (session?.accessToken) {
+         return false;
+      }
+
+      await appendGuestScan(verdictPayload, scanType);
+      return true;
+   } catch {
       return false;
    }
 }
 
+async function persistGuestScanQueue(scans) {
+   if (!scans.length) {
+      await storageLocalRemove([GUEST_SCANS_STORAGE_KEY]);
+      return;
+   }
+
+   await storageLocalSet({ [GUEST_SCANS_STORAGE_KEY]: scans });
+}
+
+function hasUsableGuestClaimId(scan) {
+   return typeof scan?.claim_id === "string" && Boolean(scan.claim_id.trim());
+}
+
 async function fetchAuthenticatedUsername() {
-   const headersWithAuth = await buildAuthHeaders({
-      "content-type": "application/json",
-   });
-   if (!headersWithAuth.Authorization) {
+   const session = await getAuthSession();
+   if (!session.accessToken) {
       return null;
    }
 
-   const response = await fetch(`${state.API_BASE_URL}/auth/me/`, {
-      method: "GET",
-      headers: headersWithAuth,
-   });
-
-   if (response.status === 401) {
-      await clearAuthSession();
-      return null;
-   }
+   const response = await authenticatedFetch(
+      `${state.API_BASE_URL}/auth/me/`,
+      {
+         method: "GET",
+         headers: { "content-type": "application/json" },
+      },
+      { requireAuth: true },
+   );
 
    if (!response.ok) {
       return null;
@@ -126,31 +145,49 @@ async function syncGuestScansWithBackend() {
    const guestScans = Array.isArray(stored[GUEST_SCANS_STORAGE_KEY]) ? stored[GUEST_SCANS_STORAGE_KEY] : [];
 
    if (!guestScans.length) {
-      return { synced: 0, skipped: true, reason: "no_guest_scans" };
+      return { synced: 0, discarded: 0, skipped: true, reason: "no_guest_scans" };
    }
 
-   const headersWithAuth = await buildAuthHeaders({
-      "content-type": "application/json",
-   });
-   if (!headersWithAuth.Authorization) {
-      return { synced: 0, skipped: true, reason: "missing_access_token" };
+   const session = await getAuthSession();
+   if (!session.accessToken) {
+      return { synced: 0, discarded: 0, skipped: true, reason: "missing_access_token" };
    }
 
    let syncedCount = 0;
+   let discardedCount = 0;
    let remainingScans = [...guestScans];
 
-   for (const scan of guestScans) {
-      const response = await fetch(`${state.API_BASE_URL}/${GUEST_SCAN_SYNC_ENDPOINT}`, {
-         method: "POST",
-         headers: headersWithAuth,
-         body: JSON.stringify({ scan }),
-      });
+   while (remainingScans.length) {
+      const scan = remainingScans[0];
+
+      if (!hasUsableGuestClaimId(scan)) {
+         discardedCount += 1;
+         remainingScans = remainingScans.slice(1);
+         await persistGuestScanQueue(remainingScans);
+         continue;
+      }
+
+      const response = await authenticatedFetch(
+         `${state.API_BASE_URL}/${GUEST_SCAN_SYNC_ENDPOINT}`,
+         {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ scan }),
+         },
+         { requireAuth: true },
+      );
 
       const responseData = await response.json().catch(() => ({}));
 
       if (response.status === 401) {
-         await clearAuthSession();
          throw new Error(responseData?.detail || "Authentication expired during guest sync.");
+      }
+
+      if (response.status === 400 || response.status === 404) {
+         discardedCount += 1;
+         remainingScans = remainingScans.slice(1);
+         await persistGuestScanQueue(remainingScans);
+         continue;
       }
 
       if (!response.ok) {
@@ -159,11 +196,10 @@ async function syncGuestScansWithBackend() {
 
       syncedCount += 1;
       remainingScans = remainingScans.slice(1);
-      await storageLocalSet({ [GUEST_SCANS_STORAGE_KEY]: remainingScans });
+      await persistGuestScanQueue(remainingScans);
    }
 
-   await storageLocalRemove([GUEST_SCANS_STORAGE_KEY]);
-   return { synced: syncedCount, skipped: false };
+   return { synced: syncedCount, discarded: discardedCount, skipped: false };
 }
 
 async function maybeSyncGuestScansAfterLogin() {
@@ -218,32 +254,22 @@ function resolveSenderOrigin(sender) {
 
    try {
       return new URL(sender.url).origin;
-   } catch (_error) {
+   } catch {
       return null;
    }
 }
 
-async function postJsonWithAuthFallback(path, payload) {
+async function postJsonWithAuth(path, payload) {
    const url = `${state.API_BASE_URL}/${path}`;
-   const baseHeaders = { "content-type": "application/json" };
-   const headersWithAuth = await buildAuthHeaders(baseHeaders);
-
-   let response = await fetch(url, {
-      method: "POST",
-      headers: headersWithAuth,
-      body: JSON.stringify(payload),
-   });
-
-   if (response.status === 401 && headersWithAuth.Authorization) {
-      await clearAuthSession();
-      response = await fetch(url, {
+   return authenticatedFetch(
+      url,
+      {
          method: "POST",
-         headers: baseHeaders,
+         headers: { "content-type": "application/json" },
          body: JSON.stringify(payload),
-      });
-   }
-
-   return response;
+      },
+      { allowGuestAfterAuthFailure: true },
+   );
 }
 
 function startPollingClaim({
@@ -251,44 +277,41 @@ function startPollingClaim({
    tabId,
    successType,
    timeoutMessage,
-   timeoutPayload,
    onResolved,
-   onTimeout,
    maxPolls = 20,
    pollEveryMs = 3000,
 }) {
    let pollCount = 0;
+   let isPollInFlight = false;
+
+   const stopWithError = (message) => {
+      clearInterval(pollInterval);
+      sendTabMessage(tabId, {
+         type: timeoutMessage,
+         message,
+      });
+   };
 
    const pollInterval = setInterval(async () => {
-      pollCount++;
-      if (pollCount > maxPolls) {
-         clearInterval(pollInterval);
-         console.error("Polling timed out");
-
-         if (typeof onTimeout === "function") {
-            try {
-               await onTimeout(timeoutPayload);
-            } catch (cacheError) {
-               console.warn("Failed to cache guest timeout verdict:", cacheError);
-            }
-         }
-
-         if (timeoutPayload) {
-            sendTabMessage(tabId, {
-               type: timeoutMessage,
-               data: timeoutPayload,
-            });
-         } else {
-            sendTabMessage(tabId, {
-               type: timeoutMessage,
-               message: "Failed to get claim result. Please try again later.",
-            });
-         }
+      if (isPollInFlight) {
          return;
       }
 
-      const claim = await fetchClaimResult(claimId);
-      if (claim && claim.verdict !== "PENDING") {
+      if (pollCount >= maxPolls) {
+         console.error("Polling timed out");
+         stopWithError("Verification timed out. Please try again.");
+         return;
+      }
+
+      pollCount++;
+      isPollInFlight = true;
+
+      try {
+         const claim = await fetchClaimResult(claimId);
+         if (claim.verdict === "PENDING") {
+            return;
+         }
+
          clearInterval(pollInterval);
 
          if (typeof onResolved === "function") {
@@ -303,6 +326,25 @@ function startPollingClaim({
             type: successType,
             data: claim,
          });
+      } catch (error) {
+         const errorStatus = Number.isInteger(error?.status) ? error.status : null;
+         const isTerminalFailure = errorStatus !== null && errorStatus < 500;
+
+         if (isTerminalFailure) {
+            const message =
+               errorStatus === 404
+                  ? "The claim result was not found. Please start the verification again."
+                  : "Unable to retrieve the verification result. Please try again.";
+            stopWithError(message);
+            return;
+         }
+
+         console.warn("Transient claim polling failure:", error?.message || error);
+         if (pollCount >= maxPolls) {
+            stopWithError("Unable to retrieve the verification result. Please try again.");
+         }
+      } finally {
+         isPollInFlight = false;
       }
    }, pollEveryMs);
 }
@@ -360,6 +402,13 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
          }
 
          const username = await fetchAuthenticatedUsername();
+         const currentSession = await getAuthSession();
+
+         if (!currentSession?.accessToken) {
+            sendResponse({ accepted: true, isGuest: true, username: null });
+            return;
+         }
+
          sendResponse({ accepted: true, isGuest: false, username });
       })().catch((error) => {
          sendResponse({
@@ -394,7 +443,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             return;
          }
 
-         await saveAuthSession({
+         await replaceAuthSession({
             accessToken,
             refreshToken,
             origin: senderOrigin,
@@ -413,8 +462,6 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
    }
 
    if (request.type === "CAPTURE_SCREENSHOT") {
-      console.log("Capturing full tab screenshot");
-
       chrome.tabs.captureVisibleTab(null, { format: "png" }, function (dataUrl) {
          if (chrome.runtime.lastError) {
             console.error("Screenshot error:", chrome.runtime.lastError);
@@ -422,7 +469,6 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             return;
          }
 
-         console.log("Screenshot captured, sending back to popup");
          sendResponse({ screenshot: dataUrl });
       });
 
@@ -452,21 +498,17 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       sendResponse({ accepted: true });
 
       (async () => {
-         const shouldCacheGuestScan = await shouldUseGuestCaching();
-
          try {
-            const res = await postJsonWithAuthFallback("analyze/", payload);
+            const res = await postJsonWithAuth("analyze/", payload);
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
                throw new Error(data?.detail || data?.error || "Snippet verification failed.");
             }
 
             if (data.cached && data.match) {
-               if (shouldCacheGuestScan) {
-                  appendGuestScan(data.match, "SNIPPET").catch((cacheError) => {
-                     console.warn("Failed to cache guest snippet verdict:", cacheError);
-                  });
-               }
+               cacheGuestScanIfCurrentGuest(data.match, "SNIPPET").catch((cacheError) => {
+                  console.warn("Failed to cache guest snippet verdict:", cacheError);
+               });
 
                sendTabMessage(tabId, {
                   type: "DISPLAY_SNIPPET_CACHED_RESULT",
@@ -480,7 +522,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                tabId,
                successType: "DISPLAY_SNIPPET_RESULT",
                timeoutMessage: "DISPLAY_SNIPPET_ERROR",
-               onResolved: shouldCacheGuestScan ? (claim) => appendGuestScan(claim, "SNIPPET") : null,
+               onResolved: (claim) => cacheGuestScanIfCurrentGuest(claim, "SNIPPET"),
                maxPolls: 50,
                pollEveryMs: 3000,
             });
@@ -508,7 +550,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 
       (async () => {
          try {
-            const res = await postJsonWithAuthFallback("test-deepfake/", payload);
+            const res = await postJsonWithAuth("test-deepfake/", payload);
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data?.error || "Deepfake check failed");
 
@@ -527,10 +569,8 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       const { url, tabId } = request;
 
       (async () => {
-         const shouldCacheGuestScan = await shouldUseGuestCaching();
-
          try {
-            const res = await postJsonWithAuthFallback("verify-url/", {
+            const res = await postJsonWithAuth("verify-url/", {
                url: url,
             });
             const data = await res.json().catch(() => ({}));
@@ -538,19 +578,9 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                throw new Error(data?.detail || "URL verification failed.");
             }
 
-            const timeoutFallback = {
-               verdict: "UNVERIFIED",
-               summary: "Verification timed out. Please try again.",
-               confidence_score: 0,
-               source_type: "Timeout",
-               source_url: "#",
-            };
-
             // Add this inside VERIFY_URL and VERIFY_FILE in background.js
             if (data.cached && data.match) {
-               if (shouldCacheGuestScan) {
-                  appendGuestScan(data.match, "URL").catch(console.warn); // change "URL" to "FILE" for the file listener
-               }
+               cacheGuestScanIfCurrentGuest(data.match, "URL").catch(console.warn);
 
                // IMPORTANT: Make sure your content.js is listening for these specific message types!
                sendTabMessage(tabId, {
@@ -564,33 +594,17 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                claimId: data.claim_id,
                tabId,
                successType: "DISPLAY_URL_RESULT",
-               timeoutMessage: "DISPLAY_URL_RESULT",
-               timeoutPayload: timeoutFallback,
-               onResolved: shouldCacheGuestScan ? (claim) => appendGuestScan(claim, "URL") : null,
-               onTimeout: shouldCacheGuestScan ? (timeoutData) => appendGuestScan(timeoutData, "URL") : null,
+               timeoutMessage: "DISPLAY_URL_ERROR",
+               onResolved: (claim) => cacheGuestScanIfCurrentGuest(claim, "URL"),
                maxPolls: 20,
                pollEveryMs: 3000,
             });
          } catch (err) {
             console.error("URL verification failed:", err);
 
-            const errorFallback = {
-               verdict: "UNVERIFIED",
-               summary: "Verification failed. Please try again.",
-               confidence_score: 0,
-               source_type: "Error",
-               source_url: "#",
-            };
-
-            if (shouldCacheGuestScan) {
-               appendGuestScan(errorFallback, "URL").catch((cacheError) => {
-                  console.warn("Failed to cache guest URL fallback verdict:", cacheError);
-               });
-            }
-
             sendTabMessage(tabId, {
-               type: "DISPLAY_URL_RESULT",
-               data: errorFallback,
+               type: "DISPLAY_URL_ERROR",
+               message: "Unable to verify this URL. Please try again.",
             });
          }
       })();
@@ -606,10 +620,8 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       sendResponse({ accepted: true, success: true });
       (async () => {
          // Also adding guest scan caching support so file scans save to the local library!
-         const shouldCacheGuestScan = await shouldUseGuestCaching();
-
          try {
-            const res = await postJsonWithAuthFallback(endpoint, payload);
+            const res = await postJsonWithAuth(endpoint, payload);
             const data = await res.json().catch(() => ({}));
 
             if (!res.ok) {
@@ -618,9 +630,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 
             // Add this inside VERIFY_URL and VERIFY_FILE in background.js
             if (data.cached && data.match) {
-               if (shouldCacheGuestScan) {
-                  appendGuestScan(data.match, "FILE").catch(console.warn); // change "URL" to "FILE" for the file listener
-               }
+               cacheGuestScanIfCurrentGuest(data.match, "FILE").catch(console.warn);
 
                // IMPORTANT: Make sure your content.js is listening for these specific message types!
                sendTabMessage(tabId, {
@@ -636,7 +646,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                tabId: tabId,
                successType: "DISPLAY_SNIPPET_RESULT",
                timeoutMessage: "DISPLAY_SNIPPET_ERROR",
-               onResolved: shouldCacheGuestScan ? (claim) => appendGuestScan(claim, "FILE") : null,
+               onResolved: (claim) => cacheGuestScanIfCurrentGuest(claim, "FILE"),
                maxPolls: 40,
                pollEveryMs: 3000,
             });

@@ -19,7 +19,9 @@ from PIL import (
 )
 from supabase import create_client
 
-from .models import Organization
+from .accountability_service import record_accountability_event
+from .models import AccountabilityEvent, Organization
+from .organization_service import PartnerCapability
 from .organization_public_profile_service import (
     ensure_can_manage_organization_public_profile,
 )
@@ -383,6 +385,25 @@ def upload_organization_logo(
                 ]
             )
 
+            record_accountability_event(
+                action_type=AccountabilityEvent.ActionType.ORGANIZATION_LOGO_UPDATED,
+                resource_type=AccountabilityEvent.ResourceType.ORGANIZATION,
+                resource_id=locked_organization.pk,
+                authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+                actor=actor,
+                authority_organization=locked_organization,
+                subject_organization=locked_organization,
+                capability=PartnerCapability.MANAGE_ORGANIZATION,
+                previous_state={
+                    "logo_url": previous_logo_url or "",
+                    "public_logo_enabled": locked_organization.public_logo_enabled,
+                },
+                new_state={
+                    "logo_url": public_url,
+                    "public_logo_enabled": locked_organization.public_logo_enabled,
+                },
+            )
+
     except Exception:
         _delete_logo_object_best_effort(
             logo_storage,
@@ -435,6 +456,26 @@ def remove_organization_logo(
                 "updated_at",
             ]
         )
+
+        if previous_logo_url:
+            record_accountability_event(
+                action_type=AccountabilityEvent.ActionType.ORGANIZATION_LOGO_REMOVED,
+                resource_type=AccountabilityEvent.ResourceType.ORGANIZATION,
+                resource_id=locked_organization.pk,
+                authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+                actor=actor,
+                authority_organization=locked_organization,
+                subject_organization=locked_organization,
+                capability=PartnerCapability.MANAGE_ORGANIZATION,
+                previous_state={
+                    "logo_url": previous_logo_url,
+                    "public_logo_enabled": locked_organization.public_logo_enabled,
+                },
+                new_state={
+                    "logo_url": "",
+                    "public_logo_enabled": locked_organization.public_logo_enabled,
+                },
+            )
 
     previous_object_path = get_managed_organization_logo_object_path(
         previous_logo_url,

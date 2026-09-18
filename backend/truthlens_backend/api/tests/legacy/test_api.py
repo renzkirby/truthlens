@@ -1,3 +1,5 @@
+import uuid
+
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.test import override_settings
@@ -355,6 +357,36 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
             created.contributor_trust_snapshot, self.other.profile.trust_score
         )
 
+    def test_platform_safety_role_can_submit_ordinary_community_evidence(self):
+        self.other.profile.role = UserProfile.Role.MOD
+        self.other.profile.save(update_fields=["role"])
+
+        self.assertFalse(
+            has_capability(
+                self.other,
+                PartnerCapability.REVIEW_EVIDENCE,
+            )
+        )
+
+        response = self.other_client.post(
+            reverse("evidence-list"),
+            {
+                "thread_id": str(self.thread.id),
+                "evidence_caption": "Safety moderator community evidence",
+                "evidence_url": "https://safety-proof.example.com",
+                "evidence_type": EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        evidence = EvidenceSubmission.objects.get(id=response.data["id"])
+        self.assertEqual(evidence.contributor, self.other)
+        self.assertEqual(
+            evidence.evidence_status,
+            EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+        )
+
     def test_thread_owner_can_submit_evidence_on_own_thread(self):
         evidence_list = reverse("evidence-list")
 
@@ -441,16 +473,8 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
         self.assertIn("escalation_reason", res.data)
 
 
-class ModeratorEvidenceVerificationTests(APITestCase):
-    """
-    Tests for the moderator evidence verification workflow.
-
-    Coverage:
-    - Permission checks (only MODERATOR role can verify)
-    - Verification status updates (VERIFIED/REJECTED)
-    - Trust Score v2 recalculation and reputation progression
-    - Moderator audit trail (verified_by, verified_at, moderator_notes)
-    """
+class EvidenceTrustScoreTests(APITestCase):
+    """Tests trust score recalculation from reviewed evidence history."""
 
     def setUp(self):
         """Set up partner-scoped evidence review fixtures."""
@@ -554,136 +578,6 @@ class ModeratorEvidenceVerificationTests(APITestCase):
         self.moderator_client.force_authenticate(user=self.moderator)
 
         self.unauthenticated_client = APIClient()
-
-    def test_unauthenticated_user_cannot_verify_evidence(self):
-        """Unauthenticated users should get 401 Unauthorized."""
-        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
-
-        res = self.unauthenticated_client.patch(
-            verify_url, {"evidence_status": "VERIFIED"}, format="json"
-        )
-
-        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
-
-    def test_non_moderator_user_cannot_verify_evidence(self):
-        """Regular users (even contributors) should get 403 Forbidden."""
-        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
-
-        res = self.contributor_client.patch(
-            verify_url, {"evidence_status": "VERIFIED"}, format="json"
-        )
-
-        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
-
-    def test_non_moderator_other_user_cannot_verify_evidence(self):
-        """Another non-moderator user should also get 403 Forbidden."""
-        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
-
-        res = self.other_client.patch(
-            verify_url, {"evidence_status": "VERIFIED"}, format="json"
-        )
-
-        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
-
-    def test_moderator_can_verify_evidence(self):
-        """Moderators can verify evidence as VERIFIED."""
-        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
-
-        res = self.moderator_client.patch(
-            verify_url,
-            {
-                "evidence_status": "VERIFIED",
-                "moderator_notes": "Evidence looks legitimate",
-            },
-            format="json",
-        )
-
-        self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.data["evidence_status"], "VERIFIED")
-
-        # Verify database was updated
-        self.evidence.refresh_from_db()
-        self.assertEqual(self.evidence.evidence_status, "VERIFIED")
-        self.assertEqual(self.evidence.verified_by, self.moderator)
-        self.assertIsNotNone(self.evidence.verified_at)
-        self.assertEqual(self.evidence.moderator_notes, "Evidence looks legitimate")
-
-    def test_moderator_can_reject_evidence(self):
-        """Moderators can reject evidence as REJECTED."""
-
-        verify_url = reverse(
-            "evidence-verify",
-            args=[str(self.evidence.id)],
-        )
-
-        res = self.moderator_client.patch(
-            verify_url,
-            {
-                "evidence_status": (EvidenceSubmission.EvidenceStatus.REJECTED),
-                "rejection_reason": (
-                    EvidenceSubmission.RejectionReason.UNRELIABLE_SOURCE
-                ),
-                "moderator_notes": "Evidence is not credible",
-            },
-            format="json",
-        )
-
-        self.assertEqual(
-            res.status_code,
-            status.HTTP_200_OK,
-        )
-
-        self.assertEqual(
-            res.data["evidence_status"],
-            EvidenceSubmission.EvidenceStatus.REJECTED,
-        )
-
-        self.evidence.refresh_from_db()
-
-        self.assertEqual(
-            self.evidence.evidence_status,
-            EvidenceSubmission.EvidenceStatus.REJECTED,
-        )
-
-        self.assertEqual(
-            self.evidence.rejection_reason,
-            EvidenceSubmission.RejectionReason.UNRELIABLE_SOURCE,
-        )
-
-        self.assertEqual(
-            self.evidence.verified_by,
-            self.moderator,
-        )
-
-        self.assertIsNotNone(self.evidence.verified_at)
-
-        self.assertEqual(
-            self.evidence.moderator_notes,
-            "Evidence is not credible",
-        )
-
-    def test_moderator_notes_are_optional(self):
-        """Moderators should be able to verify without providing notes."""
-        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
-
-        res = self.moderator_client.patch(
-            verify_url, {"evidence_status": "VERIFIED"}, format="json"
-        )
-
-        self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.evidence.refresh_from_db()
-        self.assertEqual(self.evidence.moderator_notes, "")
-
-    def test_invalid_evidence_status_returns_400(self):
-        """Invalid evidence_status should return 400 Bad Request."""
-        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
-
-        res = self.moderator_client.patch(
-            verify_url, {"evidence_status": "INVALID_STATUS"}, format="json"
-        )
-
-        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("detail", res.data)
 
     def test_new_user_starts_at_neutral_baseline(self):
         self.evidence.delete()
@@ -800,89 +694,6 @@ class ModeratorEvidenceVerificationTests(APITestCase):
             self.contributor_profile.trust_score,
             components["trust_score"],
         )
-
-    def test_verified_by_contains_moderator_info_in_response(self):
-        """Response should include verified_by with moderator user info."""
-        verify_url = reverse("evidence-verify", args=[str(self.evidence.id)])
-
-        res = self.moderator_client.patch(
-            verify_url, {"evidence_status": "VERIFIED"}, format="json"
-        )
-
-        self.assertEqual(res.status_code, status.HTTP_200_OK)
-        # Check that verified_by contains user data
-        self.assertIn("verified_by", res.data)
-        if res.data["verified_by"]:  # Could be null if not serialized
-            self.assertEqual(res.data["verified_by"]["username"], "moderator")
-
-    def test_moderator_can_reverify_already_verified_evidence(
-        self,
-    ):
-        """
-        A second authorized reviewer in the same partner
-        organization may re-review resolved evidence.
-        """
-        verify_url = reverse(
-            "evidence-verify",
-            args=[str(self.evidence.id)],
-        )
-
-        res1 = self.moderator_client.patch(
-            verify_url,
-            {
-                "evidence_status": "VERIFIED",
-                "moderator_notes": "First mod",
-            },
-            format="json",
-        )
-
-        self.assertEqual(
-            res1.status_code,
-            status.HTTP_200_OK,
-        )
-
-        moderator2 = User.objects.create_user(
-            username="moderator2",
-            email="mod2@test.com",
-            password="pass1234",
-        )
-
-        OrganizationMembership.objects.create(
-            organization=self.organization,
-            user=moderator2,
-            role=OrganizationMembership.Role.MODERATOR,
-            status=OrganizationMembership.Status.ACTIVE,
-        )
-
-        moderator2_client = APIClient()
-        moderator2_client.force_authenticate(user=moderator2)
-
-        res2 = moderator2_client.patch(
-            verify_url,
-            {
-                "evidence_status": "VERIFIED",
-                "moderator_notes": "Second mod",
-            },
-            format="json",
-        )
-
-        self.assertEqual(
-            res2.status_code,
-            status.HTTP_200_OK,
-        )
-
-        self.evidence.refresh_from_db()
-
-        self.assertEqual(
-            self.evidence.verified_by,
-            moderator2,
-        )
-
-        self.assertEqual(
-            self.evidence.moderator_notes,
-            "Second mod",
-        )
-
 
 class ModerationCaseFoundationTests(APITestCase):
     def setUp(self):
@@ -1406,6 +1217,49 @@ class ModerationCaseFoundationTests(APITestCase):
             ).count(),
             1,
         )
+
+    def test_thread_flag_listing_uses_review_safety_capability(self):
+        own_report = ThreadFlag.objects.create(
+            thread=self.thread,
+            flagged_by=self.author,
+            reason=ThreadFlag.Reason.SPAM,
+        )
+        moderator_report = ThreadFlag.objects.create(
+            thread=self.thread,
+            flagged_by=self.other_moderator,
+            reason=ThreadFlag.Reason.HARASSMENT,
+        )
+        normal_client = APIClient()
+        normal_client.force_authenticate(user=self.author)
+        safety_client = APIClient()
+        safety_client.force_authenticate(user=self.moderator)
+
+        with patch("api.views.has_capability", wraps=has_capability) as check:
+            normal_response = normal_client.get(reverse("thread-flag-list"))
+            safety_response = safety_client.get(reverse("thread-flag-list"))
+
+        self.assertEqual(normal_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(safety_response.status_code, status.HTTP_200_OK)
+        normal_results = (
+            normal_response.data["results"]
+            if isinstance(normal_response.data, dict)
+            else normal_response.data
+        )
+        safety_results = (
+            safety_response.data["results"]
+            if isinstance(safety_response.data, dict)
+            else safety_response.data
+        )
+        self.assertEqual(
+            {str(item["id"]) for item in normal_results},
+            {str(own_report.id)},
+        )
+        self.assertEqual(
+            {str(item["id"]) for item in safety_results},
+            {str(own_report.id), str(moderator_report.id)},
+        )
+        check.assert_any_call(self.author, PartnerCapability.REVIEW_SAFETY)
+        check.assert_any_call(self.moderator, PartnerCapability.REVIEW_SAFETY)
 
 
 class OrganizationFoundationTests(APITestCase):
@@ -2195,265 +2049,6 @@ class EvidenceCaseFoundationTests(APITestCase):
             )
 
 
-class EvidenceReviewCapabilityTests(APITestCase):
-    def setUp(self):
-        self.contributor = User.objects.create_user(
-            username="partner-evidence-author",
-            email="partner-author@test.com",
-            password="pass1234",
-        )
-
-        self.partner_reviewer = User.objects.create_user(
-            username="partner-reviewer",
-            email="partner-reviewer@test.com",
-            password="pass1234",
-        )
-
-        self.outsider = User.objects.create_user(
-            username="partner-outsider",
-            email="partner-outsider@test.com",
-            password="pass1234",
-        )
-
-        self.organization = Organization.objects.create(
-            name="Evidence Verification Lab",
-            slug="evidence-verification-lab",
-            organization_type=(Organization.OrganizationType.FACT_CHECKING),
-            verification_status=(Organization.VerificationStatus.VERIFIED),
-            partner_status=(Organization.PartnerStatus.ACTIVE),
-        )
-
-        OrganizationMembership.objects.create(
-            organization=self.organization,
-            user=self.partner_reviewer,
-            role=OrganizationMembership.Role.LEAD_VERIFIER,
-            status=OrganizationMembership.Status.ACTIVE,
-        )
-
-        self.claim = Claim.objects.create(
-            claim_type=Claim.ClaimType.TEXT,
-            context_text="Partner evidence review claim.",
-        )
-
-        self.thread = Thread.objects.create(
-            claim=self.claim,
-            author=self.contributor,
-            caption="Partner evidence review thread.",
-        )
-
-        self.evidence = EvidenceSubmission.objects.create(
-            thread=self.thread,
-            contributor=self.contributor,
-            evidence_caption="Partner-reviewed evidence.",
-            evidence_url=("https://example.com/partner-evidence"),
-            evidence_type=(EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION),
-            contributor_trust_snapshot=50.0,
-        )
-
-        assign_claim_to_partner(
-            claim=self.claim,
-            organization=self.organization,
-            actor=self.partner_reviewer,
-        )
-
-        self.case = ensure_evidence_case(
-            evidence=self.evidence,
-            actor=self.partner_reviewer,
-            organization=self.organization,
-        )
-
-    def test_partner_reviewer_can_review_own_organization_case(self):
-        client = APIClient()
-
-        client.force_authenticate(user=self.partner_reviewer)
-
-        response = client.patch(
-            reverse(
-                "evidence-verify",
-                kwargs={
-                    "pk": self.evidence.id,
-                },
-            ),
-            {
-                "evidence_status": EvidenceSubmission.EvidenceStatus.VERIFIED,
-                "expected_status": EvidenceSubmission.EvidenceStatus.UNVERIFIED,
-                "moderator_notes": "Source is credible.",
-            },
-            format="json",
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_200_OK,
-        )
-
-        self.evidence.refresh_from_db()
-
-        self.assertEqual(
-            self.evidence.evidence_status,
-            EvidenceSubmission.EvidenceStatus.VERIFIED,
-        )
-
-    def test_outsider_cannot_review_partner_case(self):
-        client = APIClient()
-
-        client.force_authenticate(user=self.outsider)
-
-        response = client.patch(
-            reverse(
-                "evidence-verify",
-                kwargs={
-                    "pk": self.evidence.id,
-                },
-            ),
-            {
-                "evidence_status": EvidenceSubmission.EvidenceStatus.VERIFIED,
-            },
-            format="json",
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_403_FORBIDDEN,
-        )
-
-    def test_reviewer_cannot_review_own_evidence(self):
-        own_evidence = EvidenceSubmission.objects.create(
-            thread=self.thread,
-            contributor=(self.partner_reviewer),
-            evidence_caption=("Reviewer-owned evidence."),
-            evidence_url=("https://example.com/" "reviewer-evidence"),
-            contributor_trust_snapshot=50.0,
-        )
-
-        own_case = ensure_evidence_case(
-            evidence=own_evidence,
-            actor=self.partner_reviewer,
-        )
-
-        own_case.organization = self.organization
-
-        own_case.save(
-            update_fields=[
-                "organization",
-                "updated_at",
-            ]
-        )
-
-        client = APIClient()
-
-        client.force_authenticate(user=self.partner_reviewer)
-
-        response = client.patch(
-            reverse(
-                "evidence-verify",
-                kwargs={
-                    "pk": own_evidence.id,
-                },
-            ),
-            {
-                "evidence_status": EvidenceSubmission.EvidenceStatus.VERIFIED,
-            },
-            format="json",
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_403_FORBIDDEN,
-        )
-
-    def test_rejection_requires_structured_reason(self):
-        client = APIClient()
-
-        client.force_authenticate(user=self.partner_reviewer)
-
-        response = client.patch(
-            reverse(
-                "evidence-verify",
-                kwargs={
-                    "pk": self.evidence.id,
-                },
-            ),
-            {
-                "evidence_status": EvidenceSubmission.EvidenceStatus.REJECTED,
-            },
-            format="json",
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_400_BAD_REQUEST,
-        )
-
-    def test_partner_can_read_scoped_evidence_queue(self):
-        client = APIClient()
-
-        client.force_authenticate(user=self.partner_reviewer)
-
-        response = client.get(
-            reverse("moderation_evidence_queue"),
-            {
-                "organization_id": str(self.organization.id),
-                "status": EvidenceSubmission.EvidenceStatus.UNVERIFIED,
-            },
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_200_OK,
-        )
-
-        self.assertEqual(
-            response.data["count"],
-            1,
-        )
-
-    def test_partner_queue_requires_organization_scope(self):
-        client = APIClient()
-
-        client.force_authenticate(user=self.partner_reviewer)
-
-        response = client.get(reverse("moderation_evidence_queue"))
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_400_BAD_REQUEST,
-        )
-
-    def test_evidence_queue_rejects_invalid_pagination(self):
-        self.partner_reviewer.profile.role = UserProfile.Role.MOD
-
-        self.partner_reviewer.profile.save(update_fields=["role"])
-
-        client = APIClient()
-
-        client.force_authenticate(user=self.partner_reviewer)
-
-        response = client.get(
-            reverse("moderation_evidence_queue"),
-            {
-                "limit": "not-a-number",
-            },
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_400_BAD_REQUEST,
-        )
-
-        response = client.get(
-            reverse("moderation_evidence_queue"),
-            {
-                "limit": "101",
-            },
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_400_BAD_REQUEST,
-        )
-
-
 class AdjudicationFoundationTests(APITestCase):
     def setUp(self):
         self.moderator = User.objects.create_user(
@@ -2937,403 +2532,6 @@ class AdjudicationFoundationTests(APITestCase):
         )
 
 
-class AdjudicationApiFoundationTests(APITestCase):
-    def setUp(self):
-        self.author = User.objects.create_user(
-            username="adjudication-author",
-            email="adjudication-author@test.com",
-            password="pass1234",
-        )
-
-        self.moderator = User.objects.create_user(
-            username="adjudication-api-reviewer",
-            email="adjudication-api-reviewer@test.com",
-            password="pass1234",
-        )
-
-        self.organization = Organization.objects.create(
-            name="Adjudication API Partner",
-            slug="adjudication-api-partner",
-            organization_type=(Organization.OrganizationType.FACT_CHECKING),
-            verification_status=(Organization.VerificationStatus.VERIFIED),
-            partner_status=(Organization.PartnerStatus.ACTIVE),
-        )
-
-        OrganizationMembership.objects.create(
-            organization=self.organization,
-            user=self.moderator,
-            role=OrganizationMembership.Role.LEAD_VERIFIER,
-            status=OrganizationMembership.Status.ACTIVE,
-        )
-
-        self.claim = Claim.objects.create(
-            claim_type=Claim.ClaimType.TEXT,
-            context_text="The API adjudication test claim.",
-            ai_verdict="FAKE",
-            ai_summary=("AI analysis found the claim unsupported."),
-            consensus_score=87.0,
-        )
-
-        self.thread = Thread.objects.create(
-            claim=self.claim,
-            author=self.author,
-            caption=("Community discussion for adjudication " "API testing."),
-            status=Thread.Status.OPEN,
-        )
-
-        assign_claim_to_partner(
-            claim=self.claim,
-            organization=self.organization,
-            actor=self.moderator,
-        )
-
-        EvidenceSubmission.objects.create(
-            thread=self.thread,
-            contributor=self.author,
-            evidence_caption="Reviewed API evidence.",
-            evidence_url="https://example.com/adjudication-api-evidence",
-            evidence_type=EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
-            evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
-            verified_by=self.moderator,
-            verified_at=timezone.now(),
-        )
-
-        self.case = ensure_adjudication_case(
-            claim=self.claim,
-            actor=self.moderator,
-            organization=self.organization,
-        )
-
-        self.client = APIClient()
-        self.client.force_authenticate(user=self.moderator)
-
-        self.url = (
-            reverse(
-                "moderation_resolve_thread",
-                kwargs={
-                    "thread_id": self.thread.id,
-                },
-            )
-            + f"?organization_id={self.organization.id}"
-        )
-
-    def _valid_payload(
-        self,
-        *,
-        verdict=None,
-        expected_revision=0,
-        case_id=None,
-    ):
-        return {
-            "case_id": str(case_id or self.case.id),
-            "moderator_verdict": (verdict or AdjudicationDecision.Verdict.FAKE),
-            "moderator_notes": ("Verified sources contradict " "the claim."),
-            "canonical_claim": ("The reviewed claim is false."),
-            # Legacy frontend compatibility.
-            # This must NOT actually close
-            # the community thread anymore.
-            "status": Thread.Status.CLOSED,
-            "expected_revision": expected_revision,
-        }
-
-    def test_partner_adjudicator_can_adjudicate_through_legacy_thread_endpoint(
-        self,
-    ):
-        response = self.client.post(
-            self.url,
-            self._valid_payload(),
-            format="json",
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_200_OK,
-        )
-
-        self.assertEqual(
-            AdjudicationDecision.objects.filter(
-                claim=self.claim,
-                is_current=True,
-            ).count(),
-            1,
-        )
-
-        decision = AdjudicationDecision.objects.get(
-            claim=self.claim,
-            is_current=True,
-        )
-
-        self.assertEqual(
-            decision.verdict,
-            AdjudicationDecision.Verdict.FAKE,
-        )
-
-        self.assertEqual(
-            decision.decided_by,
-            self.moderator,
-        )
-
-        self.assertEqual(
-            decision.organization,
-            self.organization,
-        )
-
-        self.assertEqual(
-            decision.revision_number,
-            1,
-        )
-
-        self.claim.refresh_from_db()
-
-        self.assertEqual(
-            self.claim.final_verdict,
-            AdjudicationDecision.Verdict.FAKE,
-        )
-
-        self.assertIn(
-            "adjudication",
-            response.data,
-        )
-
-        self.assertEqual(
-            response.data["adjudication"]["revision_number"],
-            1,
-        )
-
-    def test_adjudication_does_not_change_thread_community_status(
-        self,
-    ):
-        original_status = self.thread.status
-
-        response = self.client.post(
-            self.url,
-            self._valid_payload(),
-            format="json",
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_200_OK,
-        )
-
-        self.thread.refresh_from_db()
-
-        self.assertEqual(
-            self.thread.status,
-            original_status,
-        )
-
-        # Temporary compatibility mirror
-        # still receives the verdict.
-        self.assertEqual(
-            self.thread.moderator_verdict,
-            AdjudicationDecision.Verdict.FAKE,
-        )
-
-        self.assertEqual(
-            self.thread.moderator_notes,
-            ("Verified sources contradict " "the claim."),
-        )
-
-        self.assertEqual(
-            self.thread.moderated_by,
-            self.moderator,
-        )
-
-        self.assertIsNotNone(self.thread.moderated_at)
-
-    def test_adjudication_does_not_publish_official_fact_check(
-        self,
-    ):
-        initial_count = OfficialFactCheck.objects.count()
-
-        response = self.client.post(
-            self.url,
-            self._valid_payload(),
-            format="json",
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_200_OK,
-        )
-
-        self.assertEqual(
-            OfficialFactCheck.objects.count(),
-            initial_count,
-        )
-
-        self.assertTrue(
-            AdjudicationDecision.objects.filter(
-                claim=self.claim,
-                is_current=True,
-            ).exists()
-        )
-
-    def test_invalid_verdict_returns_400(
-        self,
-    ):
-        payload = self._valid_payload()
-
-        payload["moderator_verdict"] = "TOTALLY_INVALID"
-
-        response = self.client.post(
-            self.url,
-            payload,
-            format="json",
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_400_BAD_REQUEST,
-        )
-
-        self.assertEqual(
-            AdjudicationDecision.objects.filter(claim=self.claim).count(),
-            0,
-        )
-
-        self.claim.refresh_from_db()
-
-        self.assertIsNone(self.claim.final_verdict)
-
-    def test_stale_expected_revision_returns_409(
-        self,
-    ):
-        first_response = self.client.post(
-            self.url,
-            self._valid_payload(
-                expected_revision=0,
-            ),
-            format="json",
-        )
-
-        self.assertEqual(
-            first_response.status_code,
-            status.HTTP_200_OK,
-        )
-
-        stale_response = self.client.post(
-            self.url,
-            self._valid_payload(
-                verdict=(AdjudicationDecision.Verdict.MISLEADING),
-                expected_revision=0,
-            ),
-            format="json",
-        )
-
-        self.assertEqual(
-            stale_response.status_code,
-            status.HTTP_409_CONFLICT,
-        )
-
-        self.assertIn(
-            "detail",
-            stale_response.data,
-        )
-
-        decisions = AdjudicationDecision.objects.filter(claim=self.claim)
-
-        self.assertEqual(
-            decisions.count(),
-            1,
-        )
-
-        current = decisions.get(is_current=True)
-
-        self.assertEqual(
-            current.revision_number,
-            1,
-        )
-
-        self.assertEqual(
-            current.verdict,
-            AdjudicationDecision.Verdict.FAKE,
-        )
-
-        self.claim.refresh_from_db()
-
-        self.assertEqual(
-            self.claim.final_verdict,
-            AdjudicationDecision.Verdict.FAKE,
-        )
-
-    def test_conflicted_partner_adjudication_does_not_mutate_case_or_claim(
-        self,
-    ):
-        conflicted_claim = Claim.objects.create(
-            claim_type=Claim.ClaimType.TEXT,
-            context_text=("Claim authored for conflict rollback testing."),
-            ai_verdict="FAKE",
-        )
-
-        conflicted_thread = Thread.objects.create(
-            claim=conflicted_claim,
-            author=self.moderator,
-            caption="Reviewer-authored thread.",
-            status=Thread.Status.OPEN,
-        )
-
-        assign_claim_to_partner(
-            claim=conflicted_claim,
-            organization=self.organization,
-            actor=self.moderator,
-        )
-
-        case = ensure_adjudication_case(
-            claim=conflicted_claim,
-            actor=self.moderator,
-            organization=self.organization,
-        )
-
-        EvidenceSubmission.objects.create(
-            thread=conflicted_thread,
-            contributor=self.author,
-            evidence_caption="Reviewed conflict evidence.",
-            evidence_url="https://example.com/conflict-evidence",
-            evidence_type=EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
-            evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
-            verified_by=self.moderator,
-            verified_at=timezone.now(),
-        )
-
-        url = (
-            reverse(
-                "moderation_resolve_thread",
-                kwargs={
-                    "thread_id": conflicted_thread.id,
-                },
-            )
-            + f"?organization_id={self.organization.id}"
-        )
-
-        response = self.client.post(
-            url,
-            self._valid_payload(case_id=case.id),
-            format="json",
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_403_FORBIDDEN,
-        )
-
-        case.refresh_from_db()
-
-        self.assertEqual(
-            case.status,
-            ModerationCase.Status.OPEN,
-        )
-
-        self.assertFalse(
-            AdjudicationDecision.objects.filter(claim=conflicted_claim).exists()
-        )
-
-        conflicted_claim.refresh_from_db()
-
-        self.assertIsNone(conflicted_claim.final_verdict)
-
-
 class AdjudicationReadinessAndQueueTests(APITestCase):
     def setUp(self):
         self.author = User.objects.create_user(
@@ -3664,335 +2862,6 @@ class AdjudicationReadinessAndQueueTests(APITestCase):
             ).exists()
         )
 
-    # =====================================
-    # 4. System moderator sees actual
-    #    ready cases in pending queue
-    # =====================================
-
-    def test_partner_lead_sees_ready_claim_in_scoped_pending_queue(
-        self,
-    ):
-        ready = self._make_claim_ready(suffix="partner-queue")
-
-        response = self.moderator_client.get(
-            reverse("moderation_verdict_queue"),
-            {
-                "reviewed": "pending",
-                "organization_id": str(self.organization.id),
-            },
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_200_OK,
-        )
-
-        self.assertEqual(
-            response.data["count"],
-            1,
-        )
-
-        self.assertEqual(
-            len(response.data["results"]),
-            1,
-        )
-
-        result = response.data["results"][0]
-
-        self.assertEqual(
-            str(result["id"]),
-            str(ready["case"].id),
-        )
-
-        self.assertEqual(
-            str(result["claim"]["id"]),
-            str(ready["claim"].id),
-        )
-
-        self.assertEqual(
-            result["status"],
-            ModerationCase.Status.OPEN,
-        )
-
-        self.assertEqual(
-            result["total_evidence"],
-            2,
-        )
-
-        self.assertEqual(
-            result["verified_evidence"],
-            1,
-        )
-
-        self.assertEqual(
-            result["rejected_evidence"],
-            1,
-        )
-
-    # =====================================
-    # 5. Resolved case moves from pending
-    #    queue to resolved queue
-    # =====================================
-
-    def test_resolved_adjudication_case_moves_from_pending_to_resolved_queue(
-        self,
-    ):
-        ready = self._make_claim_ready(suffix="resolved-queue")
-
-        issue_adjudication_decision(
-            claim=ready["claim"],
-            actor=self.moderator,
-            verdict=AdjudicationDecision.Verdict.FAKE,
-            canonical_claim="The reviewed claim is false.",
-            rationale=("Reviewed community evidence does not " "support the claim."),
-            organization=self.organization,
-            expected_revision=0,
-        )
-
-        queue_params = {
-            "organization_id": str(self.organization.id),
-        }
-
-        pending_response = self.moderator_client.get(
-            reverse("moderation_verdict_queue"),
-            {
-                **queue_params,
-                "reviewed": "pending",
-            },
-        )
-
-        self.assertEqual(
-            pending_response.status_code,
-            status.HTTP_200_OK,
-        )
-
-        self.assertEqual(
-            pending_response.data["count"],
-            0,
-        )
-
-        resolved_response = self.moderator_client.get(
-            reverse("moderation_verdict_queue"),
-            {
-                **queue_params,
-                "reviewed": "resolved",
-            },
-        )
-
-        self.assertEqual(
-            resolved_response.status_code,
-            status.HTTP_200_OK,
-        )
-
-        self.assertEqual(
-            resolved_response.data["count"],
-            1,
-        )
-
-        self.assertEqual(
-            str(resolved_response.data["results"][0]["id"]),
-            str(ready["case"].id),
-        )
-
-        self.assertEqual(
-            resolved_response.data["results"][0]["status"],
-            ModerationCase.Status.RESOLVED,
-        )
-
-    # =====================================
-    # 6. Partner queue requires explicit
-    #    organization scope
-    # =====================================
-
-    def test_partner_adjudicator_queue_requires_organization_scope(
-        self,
-    ):
-        claim, _thread = self._create_claim_and_thread(suffix="partner-scope")
-
-        ensure_adjudication_case(
-            claim=claim,
-            actor=self.moderator,
-            organization=self.organization,
-        )
-
-        response = self.partner_client.get(
-            reverse("moderation_verdict_queue"),
-            {
-                "reviewed": "pending",
-            },
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_400_BAD_REQUEST,
-        )
-
-        self.assertIn(
-            "organization_id",
-            response.data["detail"],
-        )
-
-    # =====================================
-    # 7. Partner can only see organization
-    #    cases within their capability scope
-    # =====================================
-
-    def test_partner_can_only_view_own_organization_adjudication_queue(
-        self,
-    ):
-        own_claim, _own_thread = self._create_claim_and_thread(suffix="own-org")
-
-        own_case = ensure_adjudication_case(
-            claim=own_claim,
-            actor=self.moderator,
-            organization=self.organization,
-        )
-
-        other_claim, _other_thread = self._create_claim_and_thread(
-            suffix="other-org",
-            organization=self.other_organization,
-            actor=self.other_partner_reviewer,
-        )
-
-        ensure_adjudication_case(
-            claim=other_claim,
-            actor=self.other_partner_reviewer,
-            organization=self.other_organization,
-        )
-
-        own_response = self.partner_client.get(
-            reverse("moderation_verdict_queue"),
-            {
-                "reviewed": "pending",
-                "organization_id": str(self.organization.id),
-            },
-        )
-
-        self.assertEqual(
-            own_response.status_code,
-            status.HTTP_200_OK,
-        )
-
-        self.assertEqual(
-            own_response.data["count"],
-            1,
-        )
-
-        self.assertEqual(
-            str(own_response.data["results"][0]["id"]),
-            str(own_case.id),
-        )
-
-        self.assertEqual(
-            str(own_response.data["results"][0]["organization"]["id"]),
-            str(self.organization.id),
-        )
-
-        other_response = self.partner_client.get(
-            reverse("moderation_verdict_queue"),
-            {
-                "reviewed": "pending",
-                "organization_id": str(self.other_organization.id),
-            },
-        )
-
-        self.assertEqual(
-            other_response.status_code,
-            status.HTTP_403_FORBIDDEN,
-        )
-
-    # =====================================
-    # 8. Canonical Claim endpoint performs
-    #    adjudication without closing thread
-    # =====================================
-
-    def test_canonical_claim_adjudication_endpoint_creates_decision_without_changing_thread_status(
-        self,
-    ):
-        ready = self._make_claim_ready(suffix="canonical-endpoint")
-
-        claim = ready["claim"]
-        thread = ready["thread"]
-
-        original_thread_status = thread.status
-
-        response = self.moderator_client.post(
-            reverse(
-                "adjudicate_claim",
-                kwargs={
-                    "claim_id": claim.id,
-                },
-            )
-            + f"?organization_id={self.organization.id}",
-            {
-                "case_id": str(ready["case"].id),
-                "moderator_verdict": (AdjudicationDecision.Verdict.FAKE),
-                "moderator_notes": ("The reviewed evidence " "contradicts the claim."),
-                "canonical_claim": ("The reviewed claim " "is false."),
-                "expected_revision": 0,
-            },
-            format="json",
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_200_OK,
-        )
-
-        self.assertEqual(
-            response.data["verdict"],
-            AdjudicationDecision.Verdict.FAKE,
-        )
-
-        self.assertEqual(
-            response.data["revision_number"],
-            1,
-        )
-
-        self.assertTrue(response.data["is_current"])
-
-        decision = AdjudicationDecision.objects.get(
-            claim=claim,
-            is_current=True,
-        )
-
-        self.assertEqual(
-            decision.verdict,
-            AdjudicationDecision.Verdict.FAKE,
-        )
-
-        self.assertEqual(
-            decision.decided_by,
-            self.moderator,
-        )
-
-        claim.refresh_from_db()
-        thread.refresh_from_db()
-
-        self.assertEqual(
-            claim.final_verdict,
-            AdjudicationDecision.Verdict.FAKE,
-        )
-
-        # Community lifecycle must remain
-        # independent from adjudication.
-        self.assertEqual(
-            thread.status,
-            original_thread_status,
-        )
-
-        # Compatibility mirror remains
-        # available temporarily.
-        self.assertEqual(
-            thread.moderator_verdict,
-            AdjudicationDecision.Verdict.FAKE,
-        )
-
-        self.assertEqual(
-            thread.moderated_by,
-            self.moderator,
-        )
-
 
 class PublishingFoundationTests(APITestCase):
     def setUp(self):
@@ -4082,6 +2951,8 @@ class PublishingFoundationTests(APITestCase):
         return create_fact_check_draft(
             decision=self.decision,
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_decision_revision=self.decision.revision_number,
             headline=(f"Fact Check {suffix}"),
             summary=(
                 "The reviewed claim is " "not supported by the " "available evidence."
@@ -4101,11 +2972,17 @@ class PublishingFoundationTests(APITestCase):
         fact_check = submit_fact_check_for_review(
             fact_check=fact_check,
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_edit_generation=fact_check.edit_generation,
+            expected_decision_revision=self.decision.revision_number,
         )
 
         return publish_fact_check(
             fact_check=fact_check,
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_edit_generation=fact_check.edit_generation,
+            expected_decision_revision=self.decision.revision_number,
         )
 
     def test_create_draft_uses_authoritative_decision_snapshot(
@@ -4201,6 +3078,8 @@ class PublishingFoundationTests(APITestCase):
         draft = create_fact_check_draft(
             decision=self.decision,
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_decision_revision=self.decision.revision_number,
             headline="Incomplete article",
             summary=("The article has no " "analysis body yet."),
             article_body="",
@@ -4210,6 +3089,9 @@ class PublishingFoundationTests(APITestCase):
             submit_fact_check_for_review(
                 fact_check=draft,
                 actor=self.moderator,
+                organization_id=self.organization.id,
+                expected_edit_generation=draft.edit_generation,
+                expected_decision_revision=self.decision.revision_number,
             )
 
         draft.refresh_from_db()
@@ -4227,6 +3109,9 @@ class PublishingFoundationTests(APITestCase):
         submitted = submit_fact_check_for_review(
             fact_check=draft,
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=self.decision.revision_number,
         )
 
         self.assertEqual(
@@ -4251,6 +3136,9 @@ class PublishingFoundationTests(APITestCase):
             publish_fact_check(
                 fact_check=draft,
                 actor=self.moderator,
+                organization_id=self.organization.id,
+                expected_edit_generation=draft.edit_generation,
+                expected_decision_revision=self.decision.revision_number,
             )
 
         draft.refresh_from_db()
@@ -4318,6 +3206,9 @@ class PublishingFoundationTests(APITestCase):
             submit_fact_check_for_review(
                 fact_check=draft,
                 actor=self.moderator,
+                organization_id=self.organization.id,
+                expected_edit_generation=draft.edit_generation,
+                expected_decision_revision=self.decision.revision_number,
             )
 
         draft.refresh_from_db()
@@ -4336,26 +3227,15 @@ class PublishingFoundationTests(APITestCase):
 
         first_published = first_result["fact_check"]
 
-        second_draft = self._create_complete_draft(suffix="v2")
+        with self.assertRaises(PublishingConflict) as raised:
+            self._create_complete_draft(suffix="v2")
 
         self.assertEqual(
-            second_draft.version,
-            2,
+            raised.exception.code,
+            "ACTIVE_PUBLICATION_WORK_EXISTS",
         )
-
-        second_draft = submit_fact_check_for_review(
-            fact_check=second_draft,
-            actor=self.moderator,
-        )
-
-        with self.assertRaises(PublishingConflict):
-            publish_fact_check(
-                fact_check=second_draft,
-                actor=self.moderator,
-            )
 
         first_published.refresh_from_db()
-        second_draft.refresh_from_db()
 
         self.assertEqual(
             first_published.publication_status,
@@ -4365,16 +3245,21 @@ class PublishingFoundationTests(APITestCase):
         self.assertIsNone(first_published.archived_at)
 
         self.assertEqual(
-            second_draft.publication_status,
-            OfficialFactCheck.PublicationStatus.IN_REVIEW,
-        )
-
-        self.assertEqual(
             OfficialFactCheck.objects.filter(
                 claim=self.claim,
                 publication_status=(OfficialFactCheck.PublicationStatus.PUBLISHED),
             ).count(),
             1,
+        )
+
+        self.assertFalse(
+            OfficialFactCheck.objects.filter(
+                claim=self.claim,
+                publication_status__in=[
+                    OfficialFactCheck.PublicationStatus.DRAFT,
+                    OfficialFactCheck.PublicationStatus.IN_REVIEW,
+                ],
+            ).exists()
         )
 
     def test_update_draft_cannot_change_authoritative_fields(
@@ -4389,6 +3274,9 @@ class PublishingFoundationTests(APITestCase):
         updated = update_fact_check_draft(
             fact_check=draft,
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=self.decision.revision_number,
             headline=("Updated editorial " "headline"),
             summary=("Updated editorial " "summary."),
             article_body=(
@@ -4476,6 +3364,8 @@ class PublishingFoundationTests(APITestCase):
         draft = create_fact_check_draft(
             decision=self.decision,
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_decision_revision=self.decision.revision_number,
             headline=("Source provenance test"),
             summary=("Testing publication source " "replacement behavior."),
             article_body=(
@@ -4489,6 +3379,9 @@ class PublishingFoundationTests(APITestCase):
         updated = update_fact_check_draft(
             fact_check=draft,
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=self.decision.revision_number,
             source_urls=[
                 ("https://example.org/" "manual-source-two"),
             ],
@@ -4534,6 +3427,9 @@ class PublishingFoundationTests(APITestCase):
         stale_article = submit_fact_check_for_review(
             fact_check=stale_article,
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_edit_generation=stale_article.edit_generation,
+            expected_decision_revision=self.decision.revision_number,
         )
 
         self.assertEqual(
@@ -4557,6 +3453,8 @@ class PublishingFoundationTests(APITestCase):
         fresh_draft = create_fact_check_draft(
             decision=(revised["decision"]),
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_decision_revision=revised["decision"].revision_number,
             headline=("Updated Fact Check"),
             summary=("The updated adjudication " "requires a new article."),
             article_body=("This article reflects the " "new authoritative decision."),
@@ -4594,6 +3492,9 @@ class PublishingFoundationTests(APITestCase):
         draft = submit_fact_check_for_review(
             fact_check=draft,
             actor=self.moderator,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=self.decision.revision_number,
         )
 
         with patch(("api.publishing_service" "._queue_fact_check_index")) as queue_mock:
@@ -4601,6 +3502,9 @@ class PublishingFoundationTests(APITestCase):
                 result = publish_fact_check(
                     fact_check=draft,
                     actor=self.moderator,
+                    organization_id=self.organization.id,
+                    expected_edit_generation=draft.edit_generation,
+                    expected_decision_revision=self.decision.revision_number,
                 )
 
         published = result["fact_check"]
@@ -4799,9 +3703,12 @@ class PublishingApiAuthorizationTests(APITestCase):
     def _draft_payload(
         self,
         *,
+        organization=None,
         expected_revision=1,
     ):
+        organization = organization or self.organization
         return {
+            "organization_id": str(organization.id),
             "headline": ("TruthLens Fact Check"),
             "summary": ("The reviewed claim is " "not supported."),
             "article_body": (
@@ -4812,7 +3719,7 @@ class PublishingApiAuthorizationTests(APITestCase):
             "source_urls": [
                 ("https://example.com/" "publishing-api-source"),
             ],
-            "expected_revision": (expected_revision),
+            "expected_decision_revision": (expected_revision),
         }
 
     def _create_draft(
@@ -4820,6 +3727,10 @@ class PublishingApiAuthorizationTests(APITestCase):
         client,
         claim,
     ):
+        decision = AdjudicationDecision.objects.get(
+            claim=claim,
+            is_current=True,
+        )
         return client.post(
             reverse(
                 ("moderation_fact_check_" "draft_create"),
@@ -4827,7 +3738,10 @@ class PublishingApiAuthorizationTests(APITestCase):
                     "claim_id": claim.id,
                 },
             ),
-            self._draft_payload(),
+            self._draft_payload(
+                organization=decision.organization,
+                expected_revision=decision.revision_number,
+            ),
             format="json",
         )
 
@@ -4836,6 +3750,9 @@ class PublishingApiAuthorizationTests(APITestCase):
         client,
         fact_check_id,
     ):
+        fact_check = OfficialFactCheck.objects.select_related(
+            "adjudication_decision"
+        ).get(pk=fact_check_id)
         return client.post(
             reverse(
                 "moderation_fact_check_submit",
@@ -4843,7 +3760,13 @@ class PublishingApiAuthorizationTests(APITestCase):
                     "fact_check_id": fact_check_id,
                 },
             ),
-            {},
+            {
+                "organization_id": str(fact_check.organization_id),
+                "expected_edit_generation": fact_check.edit_generation,
+                "expected_decision_revision": (
+                    fact_check.adjudication_decision.revision_number
+                ),
+            },
             format="json",
         )
 
@@ -4852,6 +3775,9 @@ class PublishingApiAuthorizationTests(APITestCase):
         client,
         fact_check_id,
     ):
+        fact_check = OfficialFactCheck.objects.select_related(
+            "adjudication_decision"
+        ).get(pk=fact_check_id)
         return client.post(
             reverse(
                 ("moderation_fact_check_" "publish"),
@@ -4859,7 +3785,13 @@ class PublishingApiAuthorizationTests(APITestCase):
                     "fact_check_id": fact_check_id,
                 },
             ),
-            {},
+            {
+                "organization_id": str(fact_check.organization_id),
+                "expected_edit_generation": fact_check.edit_generation,
+                "expected_decision_revision": (
+                    fact_check.adjudication_decision.revision_number
+                ),
+            },
             format="json",
         )
 
@@ -5047,6 +3979,11 @@ class PublishingApiAuthorizationTests(APITestCase):
                 },
             ),
             {
+                "organization_id": str(self.organization.id),
+                "expected_edit_generation": create_response.data[
+                    "edit_generation"
+                ],
+                "expected_decision_revision": self.other_decision.revision_number,
                 "headline": "Unauthorized edit",
             },
             format="json",
@@ -5054,7 +3991,7 @@ class PublishingApiAuthorizationTests(APITestCase):
 
         self.assertEqual(
             response.status_code,
-            status.HTTP_403_FORBIDDEN,
+            status.HTTP_404_NOT_FOUND,
         )
 
     # ---------------------------------
@@ -5123,7 +4060,7 @@ class PublishingApiAuthorizationTests(APITestCase):
 
         self.assertEqual(
             response.status_code,
-            status.HTTP_400_BAD_REQUEST,
+            status.HTTP_409_CONFLICT,
         )
 
     # ---------------------------------
@@ -5159,6 +4096,9 @@ class PublishingApiAuthorizationTests(APITestCase):
                 },
             ),
             {
+                "organization_id": str(self.organization.id),
+                "expected_edit_generation": created.data["edit_generation"],
+                "expected_decision_revision": self.partner_decision.revision_number,
                 "headline": "Should not change",
             },
             format="json",
@@ -5166,7 +4106,7 @@ class PublishingApiAuthorizationTests(APITestCase):
 
         self.assertEqual(
             response.status_code,
-            status.HTTP_400_BAD_REQUEST,
+            status.HTTP_409_CONFLICT,
         )
 
     # ---------------------------------
@@ -5191,6 +4131,9 @@ class PublishingApiAuthorizationTests(APITestCase):
                 },
             ),
             {
+                "organization_id": str(self.organization.id),
+                "expected_edit_generation": created.data["edit_generation"],
+                "expected_decision_revision": self.partner_decision.revision_number,
                 "verdict": "FACT",
                 "canonical_claim": ("Editor attempted " "replacement."),
             },
@@ -5279,6 +4222,14 @@ class PublishingApiAuthorizationTests(APITestCase):
             verdict=(AdjudicationDecision.Verdict.MISLEADING),
             canonical_claim=("The revised claim is " "misleading."),
             rationale=("New evidence changed " "the authoritative result."),
+        )
+
+        AdjudicationDecisionEvidenceSnapshot.objects.create(
+            decision=revised["decision"],
+            claim_id=self.partner_claim.id,
+            evidence_records=(
+                self.partner_decision.evidence_snapshot.evidence_records
+            ),
         )
 
         second_response = self.lead_client.post(
@@ -6051,6 +5002,112 @@ class KnowledgeReuseFoundationTests(APITestCase):
         new_claim.refresh_from_db()
 
         self.assertIsNone(new_claim.final_verdict)
+
+
+class ExtensionFailureIntegrityTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="extension_user",
+            email="extension@test.com",
+            password="pass1234",
+        )
+        self.client.force_authenticate(user=self.user)
+        self.claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.URL,
+            url_link="https://example.com/existing-claim",
+            ai_summary="Existing backend claim.",
+            ai_verdict="FACT",
+        )
+        self.sync_url = "/api/auth/guest-scan-sync/"
+
+    def test_polling_nonexistent_claim_returns_non_factual_404(self):
+        initial_claim_count = Claim.objects.count()
+
+        response = self.client.get(
+            reverse(
+                "claim_status",
+                kwargs={"claim_id": uuid.uuid4()},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.json(), {"detail": "Claim not found."})
+        self.assertNotEqual(response.json().get("verdict"), "OUT_OF_SCOPE")
+        self.assertEqual(Claim.objects.count(), initial_claim_count)
+
+    def test_guest_scan_sync_links_existing_claim_without_creating_claim(self):
+        initial_claim_count = Claim.objects.count()
+
+        response = self.client.post(
+            self.sync_url,
+            {"scan": {"claim_id": str(self.claim.id)}},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.json(),
+            {"id": str(self.claim.id), "mode": "linked"},
+        )
+        self.assertEqual(Claim.objects.count(), initial_claim_count)
+        self.assertTrue(
+            ClaimCheckHistory.objects.filter(
+                user=self.user,
+                claim=self.claim,
+            ).exists()
+        )
+
+    def test_guest_scan_sync_without_claim_id_rejects_client_verdict_data(self):
+        initial_claim_count = Claim.objects.count()
+
+        response = self.client.post(
+            self.sync_url,
+            {
+                "scan": {
+                    "scan_type": "URL",
+                    "verdict": "FACT",
+                    "summary": "Client-supplied factual assertion.",
+                    "confidence_score": 100,
+                    "source_type": "Client",
+                    "source_url": "https://example.com/client-source",
+                    "scanned_at": "2026-09-15T00:00:00Z",
+                }
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Claim.objects.count(), initial_claim_count)
+
+    def test_guest_scan_sync_with_malformed_claim_id_creates_no_claim(self):
+        initial_claim_count = Claim.objects.count()
+
+        response = self.client.post(
+            self.sync_url,
+            {
+                "scan": {
+                    "claim_id": "not-a-uuid",
+                    "verdict": "FAKE",
+                    "summary": "Untrusted client summary.",
+                }
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Claim.objects.count(), initial_claim_count)
+
+    def test_guest_scan_sync_with_nonexistent_claim_returns_404(self):
+        initial_claim_count = Claim.objects.count()
+
+        response = self.client.post(
+            self.sync_url,
+            {"scan": {"claim_id": str(uuid.uuid4())}},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(Claim.objects.count(), initial_claim_count)
 
 
 class OptionalFactCheckAuthTests(APITestCase):
