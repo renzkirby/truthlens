@@ -18,6 +18,7 @@ from .ocr_service import extract_text_from_image
 from .services import (
     ClaimGateError,
     LLMProviderUnavailableError,
+    llm_provider_scope,
     process_image,
     clean_ocr_text,
     clean_extracted_text,
@@ -617,6 +618,7 @@ def text_fact_check_process(raw_text, claim_id):
     )
 
 
+@llm_provider_scope()
 def execute_core_text_pipeline(raw_text, claim_id):
     """The shared brain for both Snippets and pure Text claims."""
 
@@ -1210,6 +1212,7 @@ def execute_core_text_pipeline(raw_text, claim_id):
 
 # URL PIPELINE
 @shared_task
+@llm_provider_scope()
 def url_fact_check_process(url, claim_id):
     pipeline_started_at = time.perf_counter()
     outcome = "completed"
