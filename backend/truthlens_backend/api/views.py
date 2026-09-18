@@ -3739,7 +3739,12 @@ def verify_file(request):
 
         if matched_claim:
             _record_authenticated_claim_check(authenticated_user, matched_claim)
-            match_result = get_match_result(matched_claim)
+            match_result = get_match_result(
+                matched_claim,
+                triggered_by=authenticated_user,
+                record_reuse=True,
+                query_text=extracted_text,
+            )
             return JsonResponse(
                 {
                     "claim_id": str(matched_claim.id),
