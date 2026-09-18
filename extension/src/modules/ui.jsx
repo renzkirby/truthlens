@@ -128,6 +128,44 @@ function pathComponent(value) {
    }
 }
 
+function relatedPublicationsHTML(claim) {
+   if (claim.resolution_source === "OFFICIAL_FACT_CHECK" || !Array.isArray(claim.related_fact_checks)) return "";
+   const baseUrl = communityBaseUrl();
+   if (!baseUrl) return "";
+   const entries = [];
+   for (const publication of claim.related_fact_checks) {
+      if (!isRecord(publication) || !isRecord(publication.organization)) continue;
+      const organization = publication.organization;
+      const rawSlug = nonblankText(organization.slug).trim();
+      const rawId = nonblankText(publication.fact_check_id).trim();
+      const headline = nonblankText(publication.headline);
+      const organizationName = nonblankText(organization.name);
+      if (organization.public_profile_available !== true || !headline || !organizationName
+         || !/^[a-zA-Z0-9_-]+$/.test(rawSlug)
+         || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId)) continue;
+      const slug = pathComponent(rawSlug);
+      const publicationId = pathComponent(rawId);
+      if (!slug || !publicationId) continue;
+      const articleUrl = `${baseUrl}/partners/${slug}/fact-checks/${publicationId}`;
+      entries.push(`
+         <div class="truthlens-related-publication">
+            <p class="truthlens-related-publication-headline">${escapeHtml(headline)}</p>
+            <p class="truthlens-related-publication-org">Published by ${escapeHtml(organizationName)}</p>
+            <a class="truthlens-related-publication-link" href="${escapeHtml(articleUrl)}" target="_blank" rel="noopener noreferrer">Read related fact-check ${iconExternal}</a>
+         </div>
+      `);
+      if (entries.length === 3) break;
+   }
+   if (!entries.length) return "";
+   return `
+      <section class="truthlens-related-publications" aria-labelledby="truthlens-related-publications-title">
+         <h2 id="truthlens-related-publications-title" class="truthlens-related-publications-title">Related TruthLens fact-check</h2>
+         ${entries.join("")}
+         <p class="truthlens-related-publication-note">Related context only — this publication does not determine the verdict above.</p>
+      </section>
+   `;
+}
+
 function displayPublishedResultCard(claim, publication) {
    const organization = isRecord(publication.organization) ? publication.organization : {};
    const organizationName = nonblankText(organization.name);
@@ -348,6 +386,7 @@ export function displayResultCard(claim) {
          </div>
 
          ${sourcesHTML}
+         ${relatedPublicationsHTML(claim)}
 
          ${primaryButtonHTML}
          ${secondaryLinkHTML}

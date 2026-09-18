@@ -9,9 +9,16 @@ from api.knowledge_reuse_service import (
     InvalidKnowledgeReuse,
     PublishedFactCheckMatch,
     build_published_fact_check_payload,
+    build_related_published_fact_check_payload,
 )
-from api.models import KnowledgeReuseEvent, OfficialFactCheck, Organization
+from api.models import (
+    ClaimFactCheckReference,
+    KnowledgeReuseEvent,
+    OfficialFactCheck,
+    Organization,
+)
 from api.organization_public_presence_service import is_public_partner_eligible
+from api.public_publication_query_service import PublicPublicationNotFound
 
 
 class PublishedResultContractTests(SimpleTestCase):
@@ -55,6 +62,23 @@ class PublishedResultContractTests(SimpleTestCase):
             match_method=KnowledgeReuseEvent.MatchMethod.SEMANTIC,
             similarity_score=0.923456789,
         )
+        self.public_detail = {
+            "selected_publication_id": str(self.publication.id),
+            "organization": {
+                "name": self.organization.name,
+                "slug": self.organization.slug,
+            },
+            "article": {
+                "headline": self.publication.headline,
+            },
+            "published_at": self.publication.published_at.isoformat(),
+        }
+        self.public_detail_lookup = self.enterContext(
+            patch(
+                "api.knowledge_reuse_service.get_public_partner_fact_check_detail",
+                return_value=self.public_detail,
+            )
+        )
 
     def build(self):
         return build_published_fact_check_payload(self.match)
@@ -79,11 +103,13 @@ class PublishedResultContractTests(SimpleTestCase):
                     "logo_url": self.organization.logo_url,
                 },
                 "published_at": self.publication.published_at.isoformat(),
-                "sources": [{
-                    "url": self.source.url,
-                    "title": self.source.title,
-                    "source_type": self.source.source_type,
-                }],
+                "sources": [
+                    {
+                        "url": self.source.url,
+                        "title": self.source.title,
+                        "source_type": self.source.source_type,
+                    }
+                ],
                 "match_method": self.match.match_method,
                 "similarity_score": self.match.similarity_score,
             },
@@ -110,10 +136,16 @@ class PublishedResultContractTests(SimpleTestCase):
     def test_ineligible_partner_cannot_expose_profile_or_logo(self):
         cases = [
             ("public_profile_enabled", False),
-            *[("verification_status", value) for value in Organization.VerificationStatus.values
-              if value != Organization.VerificationStatus.VERIFIED],
-            *[("partner_status", value) for value in Organization.PartnerStatus.values
-              if value != Organization.PartnerStatus.ACTIVE],
+            *[
+                ("verification_status", value)
+                for value in Organization.VerificationStatus.values
+                if value != Organization.VerificationStatus.VERIFIED
+            ],
+            *[
+                ("partner_status", value)
+                for value in Organization.PartnerStatus.values
+                if value != Organization.PartnerStatus.ACTIVE
+            ],
         ]
         for field, value in cases:
             with self.subTest(field=field, value=value):
@@ -172,15 +204,30 @@ class PublishedResultContractTests(SimpleTestCase):
             similarity_score=None,
         )
         payload = self.build()
-        self.assertEqual(payload["sources"], [
-            {"url": "https://source.example/legacy", "title": None, "source_type": "LEGACY_IMPORT"},
-            {"url": "https://source.example/second", "title": "Legacy title", "source_type": "LEGACY_IMPORT"},
-        ])
-        self.assertEqual(payload["match_method"], KnowledgeReuseEvent.MatchMethod.EXACT_TEXT)
+        self.assertEqual(
+            payload["sources"],
+            [
+                {
+                    "url": "https://source.example/legacy",
+                    "title": None,
+                    "source_type": "LEGACY_IMPORT",
+                },
+                {
+                    "url": "https://source.example/second",
+                    "title": "Legacy title",
+                    "source_type": "LEGACY_IMPORT",
+                },
+            ],
+        )
+        self.assertEqual(
+            payload["match_method"], KnowledgeReuseEvent.MatchMethod.EXACT_TEXT
+        )
         self.assertIsNone(payload["similarity_score"])
 
     def test_building_payload_emits_no_telemetry_or_ai_replacement_summary(self):
-        with patch("api.knowledge_reuse_service.record_knowledge_reuse") as record, patch(
+        with patch(
+            "api.knowledge_reuse_service.record_knowledge_reuse"
+        ) as record, patch(
             "api.knowledge_reuse_service.generate_embedding"
         ) as generate:
             payload = self.build()
@@ -189,11 +236,218 @@ class PublishedResultContractTests(SimpleTestCase):
         self.assertEqual(payload["summary"], self.publication.summary)
         # Exact whitelists also exclude membership, capabilities, invitations,
         # private reviewer data, AI replacement fields and telemetry fields.
-        self.assertEqual(set(payload), {
-            "fact_check_id", "claim_id", "canonical_claim", "headline", "verdict",
-            "summary", "version", "revision_kind", "organization", "published_at",
-            "sources", "match_method", "similarity_score",
-        })
-        self.assertEqual(set(payload["organization"]), {
-            "id", "name", "slug", "public_profile_available", "logo_url",
-        })
+        self.assertEqual(
+            set(payload),
+            {
+                "fact_check_id",
+                "claim_id",
+                "canonical_claim",
+                "headline",
+                "verdict",
+                "summary",
+                "version",
+                "revision_kind",
+                "organization",
+                "published_at",
+                "sources",
+                "match_method",
+                "similarity_score",
+            },
+        )
+        self.assertEqual(
+            set(payload["organization"]),
+            {
+                "id",
+                "name",
+                "slug",
+                "public_profile_available",
+                "logo_url",
+            },
+        )
+
+    def related_reference(self, **overrides):
+        return SimpleNamespace(
+            **{
+                "fact_check": self.publication,
+                "relationship_kind": "RELATED",
+                "match_method": "SEMANTIC",
+                "similarity_score": 0.99,
+                **overrides,
+            }
+        )
+
+    def test_related_payload_is_exactly_the_public_reading_whitelist(self):
+        payload = build_related_published_fact_check_payload(self.related_reference())
+        self.assertEqual(
+            payload,
+            {
+                "fact_check_id": str(self.publication.id),
+                "headline": self.public_detail["article"]["headline"],
+                "published_at": self.public_detail["published_at"],
+                "match_method": "SEMANTIC",
+                "organization": {
+                    "name": self.organization.name,
+                    "slug": self.organization.slug,
+                    "public_profile_available": True,
+                },
+            },
+        )
+        self.assertEqual(
+            set(payload),
+            {
+                "fact_check_id",
+                "headline",
+                "published_at",
+                "match_method",
+                "organization",
+            },
+        )
+        self.assertEqual(
+            set(payload["organization"]),
+            {
+                "name",
+                "slug",
+                "public_profile_available",
+            },
+        )
+        self.assertTrue(
+            {
+                "verdict",
+                "canonical_claim",
+                "summary",
+                "sources",
+                "similarity_score",
+                "ai_verdict",
+                "final_verdict",
+                "adjudication_decision",
+            }.isdisjoint(payload)
+        )
+        self.publication.source_items.all.assert_not_called()
+
+    def test_related_methods_and_null_publication_date(self):
+        self.public_detail["published_at"] = None
+        for method in ("SEMANTIC", "FULL_TEXT", "EXACT_HEADLINE", "EXACT_CANONICAL"):
+            with self.subTest(method=method):
+                payload = build_related_published_fact_check_payload(
+                    self.related_reference(match_method=method)
+                )
+                self.assertEqual(payload["match_method"], method)
+                self.assertIsNone(payload["published_at"])
+        for method in ("EQUIVALENT_CLAIM", "EXACT_TEXT", "invalid"):
+            with self.subTest(method=method):
+                self.assertIsNone(
+                    build_related_published_fact_check_payload(
+                        self.related_reference(match_method=method)
+                    )
+                )
+
+    def test_related_builder_requires_related_published_public_linkable_partner(self):
+        self.assertIsNone(build_related_published_fact_check_payload(None))
+        self.assertIsNone(
+            build_related_published_fact_check_payload(
+                self.related_reference(
+                    relationship_kind=ClaimFactCheckReference.RelationshipKind.AUTHORITATIVE
+                )
+            )
+        )
+        for status in OfficialFactCheck.PublicationStatus.values:
+            if status == "PUBLISHED":
+                continue
+            with self.subTest(status=status):
+                self.publication.publication_status = status
+                self.assertIsNone(
+                    build_related_published_fact_check_payload(self.related_reference())
+                )
+        self.publication.publication_status = "PUBLISHED"
+        for slug in ("", " "):
+            with self.subTest(slug=slug):
+                self.organization.slug = slug
+                self.assertIsNone(
+                    build_related_published_fact_check_payload(self.related_reference())
+                )
+        self.publication.organization = None
+        self.assertIsNone(
+            build_related_published_fact_check_payload(self.related_reference())
+        )
+
+    def test_related_builder_delegates_eligibility_without_telemetry_or_providers(self):
+        with patch(
+            "api.knowledge_reuse_service.is_public_partner_eligible", return_value=False
+        ) as eligible:
+            self.assertIsNone(
+                build_related_published_fact_check_payload(self.related_reference())
+            )
+        eligible.assert_called_once_with(self.organization)
+        with patch(
+            "api.knowledge_reuse_service.is_public_partner_eligible",
+            wraps=is_public_partner_eligible,
+        ) as eligible, patch(
+            "api.knowledge_reuse_service.record_knowledge_reuse"
+        ) as record, patch(
+            "api.knowledge_reuse_service.generate_embedding"
+        ) as embedding, patch(
+            "api.services.call_llm_with_fallback"
+        ) as llm:
+            payload = build_related_published_fact_check_payload(
+                self.related_reference()
+            )
+        self.assertIsNotNone(payload)
+        eligible.assert_called_once_with(self.organization)
+        for provider in (record, embedding, llm):
+            provider.assert_not_called()
+
+    def test_related_builder_uses_validated_public_projection_not_mutable_live_fields(
+        self,
+    ):
+        self.publication.headline = "Mutable live headline that must not surface"
+        self.organization.name = "Mutable live organization name"
+        self.organization.slug = "mutable-live-slug"
+        self.public_detail.update(
+            {
+                "selected_publication_id": str(self.publication.id),
+                "organization": {
+                    "name": "Sealed Public Partner",
+                    "slug": "sealed-public-partner",
+                },
+                "article": {
+                    "headline": "Sealed snapshot headline",
+                },
+                "published_at": "2026-09-15T10:00:00+00:00",
+            }
+        )
+
+        payload = build_related_published_fact_check_payload(self.related_reference())
+
+        self.public_detail_lookup.assert_called_with(
+            organization=self.organization,
+            publication_id=self.publication.id,
+        )
+        self.assertEqual(payload["fact_check_id"], str(self.publication.id))
+        self.assertEqual(payload["headline"], "Sealed snapshot headline")
+        self.assertEqual(payload["published_at"], "2026-09-15T10:00:00+00:00")
+        self.assertEqual(
+            payload["organization"],
+            {
+                "name": "Sealed Public Partner",
+                "slug": "sealed-public-partner",
+                "public_profile_available": True,
+            },
+        )
+
+    def test_related_builder_fails_closed_only_for_publication_not_found(self):
+        with patch(
+            "api.knowledge_reuse_service.get_public_partner_fact_check_detail",
+            side_effect=PublicPublicationNotFound("Publication not found."),
+        ):
+            self.assertIsNone(
+                build_related_published_fact_check_payload(self.related_reference())
+            )
+
+        with patch(
+            "api.knowledge_reuse_service.get_public_partner_fact_check_detail",
+            side_effect=RuntimeError("Unexpected public projection failure"),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError, "Unexpected public projection failure"
+            ):
+                build_related_published_fact_check_payload(self.related_reference())

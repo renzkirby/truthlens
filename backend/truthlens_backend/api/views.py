@@ -554,6 +554,7 @@ def claim_polling_endpoint(request, claim_id):
                 "score_context": (match_result["score_context"]),
                 "resolution_source": (match_result["resolution_source"]),
                 "official_fact_check": (match_result["official_fact_check"]),
+                "related_fact_checks": match_result["related_fact_checks"],
             },
             status=200,
         )

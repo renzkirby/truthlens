@@ -9,6 +9,7 @@ from django.contrib.postgres.search import (
     SearchRank,
     SearchVector,
 )
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import F, Q
 from pgvector.django import CosineDistance
@@ -23,6 +24,10 @@ from .models import (
     OfficialFactCheck,
 )
 from .organization_public_presence_service import is_public_partner_eligible
+from .public_publication_query_service import (
+    PublicPublicationNotFound,
+    get_public_partner_fact_check_detail,
+)
 
 SEMANTIC_MATCH_THRESHOLD = 0.80
 FULL_TEXT_RANK_THRESHOLD = 0.08
@@ -294,7 +299,9 @@ def record_equivalent_claim_fact_check_reference(
         return None
 
     resolved_similarity = (
-        unique_match.similarity_score if similarity_score is _UNSET else similarity_score
+        unique_match.similarity_score
+        if similarity_score is _UNSET
+        else similarity_score
     )
     fingerprint = build_query_fingerprint(query_text)
 
@@ -481,6 +488,95 @@ def get_published_fact_check_resolution_for_claim(claim):
     )
 
 
+def build_related_published_fact_check_payload(reference):
+    """Public reading context only; never expose the publication's verdict."""
+    if (
+        reference is None
+        or reference.relationship_kind
+        != ClaimFactCheckReference.RelationshipKind.RELATED
+        or reference.match_method
+        not in (
+            ClaimFactCheckReference.MatchMethod.SEMANTIC,
+            ClaimFactCheckReference.MatchMethod.FULL_TEXT,
+            ClaimFactCheckReference.MatchMethod.EXACT_HEADLINE,
+            ClaimFactCheckReference.MatchMethod.EXACT_CANONICAL,
+        )
+    ):
+        return None
+
+    fact_check = reference.fact_check
+    partner = fact_check.organization
+    if (
+        fact_check.publication_status != OfficialFactCheck.PublicationStatus.PUBLISHED
+        or partner is None
+        or not is_public_partner_eligible(partner)
+        or not (partner.slug or "").strip()
+    ):
+        return None
+
+    # A RELATED reference is surfaceable only when the existing anonymous
+    # publication-detail contract can actually resolve the article. This keeps
+    # extension links aligned with sealed public lineage instead of treating a
+    # live PUBLISHED row as sufficient public reachability.
+    try:
+        public_detail = get_public_partner_fact_check_detail(
+            organization=partner,
+            publication_id=fact_check.id,
+        )
+    except PublicPublicationNotFound:
+        return None
+
+    public_organization = public_detail["organization"]
+    return {
+        "fact_check_id": str(public_detail["selected_publication_id"]),
+        "headline": public_detail["article"]["headline"],
+        "published_at": public_detail["published_at"],
+        "match_method": reference.match_method,
+        "organization": {
+            "name": public_organization["name"],
+            "slug": public_organization["slug"],
+            "public_profile_available": True,
+        },
+    }
+
+
+def get_related_published_fact_check_payloads(claim, *, limit=3):
+    """Read durable IMAGE/URL provenance in chronology, without reuse or search."""
+    if not isinstance(limit, int) or limit < 1:
+        return []
+    if isinstance(claim, Claim) and claim._state.adding:
+        return []
+    claim_id = getattr(claim, "pk", claim)
+    if not claim_id:
+        return []
+    try:
+        target_exists = Claim.objects.filter(
+            pk=claim_id, claim_type__in=(Claim.ClaimType.IMAGE, Claim.ClaimType.URL)
+        ).exists()
+    except (ValidationError, ValueError, TypeError):
+        return []
+    if not target_exists:
+        return []
+
+    references = (
+        ClaimFactCheckReference.objects.filter(
+            target_claim_id=claim_id,
+            relationship_kind=ClaimFactCheckReference.RelationshipKind.RELATED,
+            fact_check__publication_status=OfficialFactCheck.PublicationStatus.PUBLISHED,
+        )
+        .select_related("fact_check", "fact_check__organization")
+        .order_by("-created_at", "fact_check_id")
+    )
+    payloads = []
+    for reference in references:
+        payload = build_related_published_fact_check_payload(reference)
+        if payload is not None:
+            payloads.append(payload)
+            if len(payloads) >= min(limit, 3):
+                break
+    return payloads
+
+
 def index_published_fact_check(
     fact_check,
 ):
@@ -542,7 +638,6 @@ def index_published_fact_check(
     return True
 
 
-
 def find_published_fact_check_candidates(
     query_text,
     *,
@@ -579,8 +674,7 @@ def find_published_fact_check_candidates(
     exact_candidates = list(
         queryset.filter(
             Q(canonical_claim__iexact=query_text) | Q(headline__iexact=query_text)
-        )
-        .order_by("-published_at", "-created_at", "pk")[: max_candidates + 1]
+        ).order_by("-published_at", "-created_at", "pk")[: max_candidates + 1]
     )
     for fact_check in exact_candidates:
         if not add_match(

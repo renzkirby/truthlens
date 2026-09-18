@@ -3,8 +3,10 @@
 import base64
 import hashlib
 import json
+from datetime import timedelta
 from importlib import import_module
 from unittest.mock import Mock, patch
+from uuid import uuid4
 
 from django.contrib.auth.models import User
 from django.contrib.postgres.search import SearchVector
@@ -27,6 +29,7 @@ from api.knowledge_reuse_service import (
     find_published_fact_check_candidates,
     find_published_fact_check_match,
     get_published_fact_check_resolution_for_claim,
+    get_related_published_fact_check_payloads,
     record_authoritative_claim_fact_check_reference,
     record_equivalent_claim_fact_check_reference,
     record_related_claim_fact_check_reference,
@@ -44,6 +47,9 @@ from api.models import (
     VerificationRun,
 )
 from api.services import LLMProviderUnavailableError
+from api.public_publication_query_service import (
+    get_public_partner_fact_check_detail as get_public_fact_check_detail,
+)
 
 
 class ClaimEquivalenceClassifierTests(SimpleTestCase):
@@ -721,18 +727,25 @@ class RelatedReferencePersistenceTests(PublicationResolutionFixture):
         operation = migration.operations[0]
         self.assertEqual(type(operation).__name__, "AddConstraint")
         self.assertEqual(operation.model_name, "claimfactcheckreference")
-        self.assertEqual(operation.constraint.name, "uniq_claim_fact_check_relationship")
+        self.assertEqual(
+            operation.constraint.name, "uniq_claim_fact_check_relationship"
+        )
         self.assertEqual(
             operation.constraint.fields,
             ("target_claim", "fact_check", "relationship_kind"),
         )
         self.assertIn(
             "uniq_authoritative_claim_reference",
-            {constraint.name for constraint in ClaimFactCheckReference._meta.constraints},
+            {
+                constraint.name
+                for constraint in ClaimFactCheckReference._meta.constraints
+            },
         )
 
     def test_only_provenance_and_normalized_fingerprint_are_written(self):
-        publication_before = OfficialFactCheck.objects.values().get(pk=self.publication.pk)
+        publication_before = OfficialFactCheck.objects.values().get(
+            pk=self.publication.pk
+        )
         claim_before = Claim.objects.values().get(pk=self.target.pk)
         query = "  Vaccines  CONTAIN tracking microchips.  "
         reference = self.related_reference(query_text=query)
@@ -740,9 +753,7 @@ class RelatedReferencePersistenceTests(PublicationResolutionFixture):
         self.assertEqual(reference.match_method, "SEMANTIC")
         self.assertEqual(reference.similarity_score, 0.91)
         self.assertEqual(reference.query_fingerprint, build_query_fingerprint(query))
-        self.assertEqual(
-            Claim.objects.values().get(pk=self.target.pk), claim_before
-        )
+        self.assertEqual(Claim.objects.values().get(pk=self.target.pk), claim_before)
         self.assertEqual(
             OfficialFactCheck.objects.values().get(pk=self.publication.pk),
             publication_before,
@@ -816,12 +827,20 @@ class RelatedReferencePersistenceTests(PublicationResolutionFixture):
                     match_method=method, query_text=f"  {query.upper()}  "
                 )
                 self.assertEqual(reference.match_method, method)
-                self.assertIsNone(get_published_fact_check_resolution_for_claim(self.target))
+                self.assertIsNone(
+                    get_published_fact_check_resolution_for_claim(self.target)
+                )
                 self.assert_no_target_verdicts()
                 reference.delete()
 
     def test_rejects_equivalence_generic_vault_and_invalid_methods(self):
-        for method in ("EQUIVALENT_CLAIM", "EXACT_TEXT", "CLAIM_CACHE", "invalid", None):
+        for method in (
+            "EQUIVALENT_CLAIM",
+            "EXACT_TEXT",
+            "CLAIM_CACHE",
+            "invalid",
+            None,
+        ):
             with self.subTest(method=method), self.assertRaises(InvalidKnowledgeReuse):
                 self.related_reference(match_method=method)
         self.assertFalse(self.target.fact_check_references.exists())
@@ -835,7 +854,9 @@ class RelatedReferencePersistenceTests(PublicationResolutionFixture):
             {"target_claim": Claim()},
             {"fact_check": OfficialFactCheck()},
         ):
-            with self.subTest(overrides=overrides), self.assertRaises(InvalidKnowledgeReuse):
+            with self.subTest(overrides=overrides), self.assertRaises(
+                InvalidKnowledgeReuse
+            ):
                 self.related_reference(**overrides)
         self.assertFalse(self.target.fact_check_references.exists())
 
@@ -859,7 +880,8 @@ class RelatedReferencePersistenceTests(PublicationResolutionFixture):
                 )
                 self.assertIsNone(self.related_reference())
         OfficialFactCheck.objects.filter(pk=self.publication.pk).update(
-            publication_status="PUBLISHED", canonical_claim="A changed canonical claim.",
+            publication_status="PUBLISHED",
+            canonical_claim="A changed canonical claim.",
             headline="A changed headline.",
         )
         for method, query in (
@@ -867,7 +889,9 @@ class RelatedReferencePersistenceTests(PublicationResolutionFixture):
             ("EXACT_HEADLINE", self.publication.headline),
         ):
             with self.subTest(method=method):
-                self.assertIsNone(self.related_reference(match_method=method, query_text=query))
+                self.assertIsNone(
+                    self.related_reference(match_method=method, query_text=query)
+                )
         self.assertFalse(self.target.fact_check_references.exists())
 
     def test_image_url_only_including_database_type_revalidation(self):
@@ -1149,6 +1173,7 @@ class PublishedReferenceResultTests(PublicationResolutionFixture):
             )
         )
         self.assertEqual(result["official_fact_check"], payload)
+        self.assertEqual(result["related_fact_checks"], [])
         self.assertEqual(payload["claim_id"], str(self.source_claim.pk))
         self.assert_no_target_verdicts()
 
@@ -1244,6 +1269,7 @@ class PublishedReferenceResultTests(PublicationResolutionFixture):
         )
         self.assertEqual(result["resolution_source"], "OFFICIAL_FACT_CHECK")
         self.assertEqual(result["official_fact_check"], expected)
+        self.assertEqual(result["related_fact_checks"], [])
         self.assertEqual(result["verdict"], "FACT")
         self.assertIsNone(result["ai_verdict"])
         self.assertIsNone(result["final_verdict"])
@@ -1272,6 +1298,317 @@ class PublishedReferenceResultTests(PublicationResolutionFixture):
                 result = get_match_result(self.target, record_reuse=True)
             self.assertEqual(result["resolution_source"], "OFFICIAL_FACT_CHECK")
             self.assertTrue(self.target.fact_check_references.exists())
+
+
+class RelatedPublicationSurfacingTests(PublicationResolutionFixture):
+    def setUp(self):
+        super().setUp()
+        self.organization.public_profile_enabled = True
+        self.organization.verification_status = Organization.VerificationStatus.VERIFIED
+        self.organization.partner_status = Organization.PartnerStatus.ACTIVE
+        self.organization.save()
+        self.target.ai_verdict = "FAKE"
+        self.target.ai_summary = "Independent AI analysis."
+        self.target.ai_sources = ["https://source.example/ai"]
+        self.target.consensus_score = 72
+        self.target.save()
+        self.public_detail_lookup = self.enterContext(
+            patch(
+                "api.knowledge_reuse_service.get_public_partner_fact_check_detail",
+                side_effect=self._public_detail_for,
+            )
+        )
+
+    def _public_detail_for(self, *, organization, publication_id):
+        publication = OfficialFactCheck.objects.get(pk=publication_id)
+        return {
+            "selected_publication_id": str(publication.pk),
+            "organization": {
+                "name": organization.name,
+                "slug": organization.slug,
+            },
+            "article": {
+                "headline": publication.headline,
+            },
+            "published_at": (
+                publication.published_at.isoformat()
+                if publication.published_at
+                else None
+            ),
+        }
+
+    def related(self, **overrides):
+        return self.raw_reference(
+            **{
+                "relationship_kind": "RELATED",
+                "match_method": "SEMANTIC",
+                "similarity_score": 0.99,
+                **overrides,
+            }
+        )
+
+    def test_public_related_context_preserves_every_existing_ai_result_field(self):
+        before = get_match_result(self.target)
+        self.related()
+        result = get_match_result(self.target)
+        self.assertEqual(result["resolution_source"], "AI")
+        self.assertEqual(result["verdict"], "FAKE")
+        self.assertIsNone(result["official_fact_check"])
+        self.assertEqual(len(result["related_fact_checks"]), 1)
+        self.assertEqual(result["related_fact_checks"][0]["match_method"], "SEMANTIC")
+        self.assertEqual(
+            {
+                key: value
+                for key, value in result.items()
+                if key != "related_fact_checks"
+            },
+            {
+                key: value
+                for key, value in before.items()
+                if key != "related_fact_checks"
+            },
+        )
+
+    def test_no_related_rows_and_authoritative_only_rows_surface_empty_list(self):
+        self.assertEqual(get_match_result(self.target)["related_fact_checks"], [])
+        self.raw_reference()
+        self.assertEqual(get_related_published_fact_check_payloads(self.target), [])
+
+    def test_archived_publication_is_omitted_without_deleting_reference(self):
+        reference = self.related()
+        OfficialFactCheck.objects.filter(pk=self.publication.pk).update(
+            publication_status="ARCHIVED"
+        )
+        self.assertEqual(get_match_result(self.target)["related_fact_checks"], [])
+        self.assertTrue(
+            ClaimFactCheckReference.objects.filter(pk=reference.pk).exists()
+        )
+
+    def test_unreachable_public_article_is_omitted_without_deleting_reference(self):
+        reference = self.related()
+        with patch(
+            "api.knowledge_reuse_service.get_public_partner_fact_check_detail",
+            side_effect=get_public_fact_check_detail,
+        ):
+            self.assertEqual(get_match_result(self.target)["related_fact_checks"], [])
+        self.assertTrue(
+            ClaimFactCheckReference.objects.filter(pk=reference.pk).exists()
+        )
+
+    def test_each_public_eligibility_gate_hides_context_without_deleting_provenance(
+        self,
+    ):
+        reference = self.related()
+        cases = [
+            ("public_profile_enabled", False),
+            *[
+                ("verification_status", value)
+                for value in Organization.VerificationStatus.values
+                if value != Organization.VerificationStatus.VERIFIED
+            ],
+            *[
+                ("partner_status", value)
+                for value in Organization.PartnerStatus.values
+                if value != Organization.PartnerStatus.ACTIVE
+            ],
+        ]
+        for field, value in cases:
+            with self.subTest(field=field, value=value):
+                original = getattr(self.organization, field)
+                Organization.objects.filter(pk=self.organization.pk).update(
+                    **{field: value}
+                )
+                self.assertEqual(
+                    get_match_result(self.target)["related_fact_checks"], []
+                )
+                self.assertTrue(
+                    ClaimFactCheckReference.objects.filter(pk=reference.pk).exists()
+                )
+                Organization.objects.filter(pk=self.organization.pk).update(
+                    **{field: original}
+                )
+
+    def test_organizationless_publication_is_omitted(self):
+        reference = self.related()
+        OfficialFactCheck.objects.filter(pk=self.publication.pk).update(
+            organization=None
+        )
+        self.assertEqual(get_match_result(self.target)["related_fact_checks"], [])
+        self.assertTrue(
+            ClaimFactCheckReference.objects.filter(pk=reference.pk).exists()
+        )
+
+    def test_official_result_remains_self_contained_with_historical_related_rows(self):
+        self.raw_reference()
+        before = get_match_result(self.target)
+        self.related()
+        self.assertEqual(get_match_result(self.target), before)
+        self.assertEqual(before["resolution_source"], "OFFICIAL_FACT_CHECK")
+        self.assertEqual(before["related_fact_checks"], [])
+        self.assertEqual(len(get_related_published_fact_check_payloads(self.target)), 1)
+
+    def test_chronology_uuid_tiebreak_and_cap_do_not_rank_similarity_or_verdict(self):
+        references = [self.related(similarity_score=1.0)]
+        now = timezone.now()
+        for index in range(4):
+            publication = OfficialFactCheck.objects.create(
+                organization=self.organization,
+                canonical_claim=f"Distinct related proposition {index}.",
+                headline=f"Related reading {index}",
+                verdict="FAKE" if index % 2 else "FACT",
+                publication_status="PUBLISHED",
+            )
+            references.append(
+                self.related(
+                    fact_check=publication,
+                    similarity_score=0.1 * index,
+                    match_method="FULL_TEXT" if index % 2 else "SEMANTIC",
+                )
+            )
+        for index, reference in enumerate(references):
+            ClaimFactCheckReference.objects.filter(pk=reference.pk).update(
+                created_at=now + timedelta(seconds=min(index, 3))
+            )
+        expected = [
+            str(reference.fact_check_id)
+            for reference in sorted(
+                ClaimFactCheckReference.objects.all(),
+                key=lambda reference: (
+                    -reference.created_at.timestamp(),
+                    reference.fact_check_id,
+                ),
+            )
+        ]
+        for limit in (3, 99):
+            with self.subTest(limit=limit):
+                payloads = get_related_published_fact_check_payloads(
+                    self.target, limit=limit
+                )
+                self.assertEqual(
+                    [item["fact_check_id"] for item in payloads], expected[:3]
+                )
+        self.assertEqual(
+            len(get_related_published_fact_check_payloads(self.target, limit=1)), 1
+        )
+
+    def test_ineligible_newest_reference_does_not_consume_public_limit(self):
+        self.related()
+        private_publication = OfficialFactCheck.objects.create(
+            headline="Private partner publication",
+            verdict="FACT",
+            publication_status="PUBLISHED",
+        )
+        self.related(fact_check=private_publication)
+        self.assertEqual(
+            get_related_published_fact_check_payloads(self.target, limit=1)[0][
+                "fact_check_id"
+            ],
+            str(self.publication.pk),
+        )
+
+    def test_image_url_only_and_invalid_or_missing_targets_return_empty(self):
+        self.related()
+        self.assertEqual(
+            get_related_published_fact_check_payloads(self.target.pk),
+            get_related_published_fact_check_payloads(self.target),
+        )
+        Claim.objects.filter(pk=self.target.pk).update(claim_type="URL")
+        self.assertEqual(len(get_related_published_fact_check_payloads(self.target)), 1)
+        Claim.objects.filter(pk=self.target.pk).update(claim_type="TEXT")
+        self.target.refresh_from_db()
+        self.assertEqual(get_match_result(self.target)["related_fact_checks"], [])
+        self.assertTrue(self.target.fact_check_references.exists())
+        for target in (None, "invalid-uuid", uuid4(), Claim(), [], object()):
+            with self.subTest(target=target):
+                self.assertEqual(get_related_published_fact_check_payloads(target), [])
+
+    def test_invalid_or_empty_limits_surface_nothing(self):
+        self.related()
+        for limit in (0, -1, None, "3"):
+            with self.subTest(limit=limit):
+                self.assertEqual(
+                    get_related_published_fact_check_payloads(self.target, limit=limit),
+                    [],
+                )
+
+    def test_unresolved_thread_does_not_inherit_related_verdict(self):
+        self.related()
+        self.target.ai_verdict = None
+        self.target.save()
+        self.assertEqual(get_match_result(self.target)["related_fact_checks"], [])
+        actor = User.objects.create_user(username="related-thread-user")
+        Thread.objects.create(claim=self.target, author=actor)
+        result = get_match_result(self.target)
+        self.assertEqual(result["resolution_source"], "COMMUNITY_THREAD")
+        self.assertIsNone(result["verdict"])
+        self.assertEqual(result["related_fact_checks"], [])
+
+    def test_completed_community_and_adjudication_results_preserve_result_fields(self):
+        actor = User.objects.create_user(username="related-context-user")
+        Thread.objects.create(claim=self.target, author=actor)
+        for source, provenance in (
+            ("COMMUNITY_THREAD", {"verdict": None, "is_attributable": False}),
+            ("ADJUDICATION", {"verdict": "MISLEADING", "is_attributable": True}),
+        ):
+            with self.subTest(source=source), patch(
+                "api.claim_matching.get_claim_adjudication_provenance",
+                return_value=provenance,
+            ):
+                self.target.fact_check_references.all().delete()
+                before = get_match_result(self.target)
+                self.related()
+                result = get_match_result(self.target)
+                self.assertEqual(result["resolution_source"], source)
+                self.assertEqual(len(result["related_fact_checks"]), 1)
+                self.assertEqual(
+                    {
+                        key: value
+                        for key, value in result.items()
+                        if key != "related_fact_checks"
+                    },
+                    {
+                        key: value
+                        for key, value in before.items()
+                        if key != "related_fact_checks"
+                    },
+                )
+
+    def test_surfacing_is_read_only_and_calls_no_search_embedding_llm_or_telemetry(
+        self,
+    ):
+        self.related()
+        models = (
+            Claim,
+            OfficialFactCheck,
+            ClaimFactCheckReference,
+            KnowledgeReuseEvent,
+        )
+        before = [list(model.objects.order_by("pk").values()) for model in models]
+        with patch(
+            "api.knowledge_reuse_service.generate_embedding"
+        ) as embedding, patch("api.services.call_llm_with_fallback") as llm, patch(
+            "api.knowledge_reuse_service.record_knowledge_reuse"
+        ) as record, patch(
+            "api.claim_matching.record_knowledge_reuse"
+        ) as response_record, patch(
+            "api.knowledge_reuse_service.find_published_fact_check_candidates"
+        ) as search:
+            self.assertEqual(
+                len(get_related_published_fact_check_payloads(self.target)), 1
+            )
+            self.assertEqual(
+                len(
+                    get_match_result(self.target, record_reuse=True)[
+                        "related_fact_checks"
+                    ]
+                ),
+                1,
+            )
+        for provider in (embedding, llm, record, response_record, search):
+            provider.assert_not_called()
+        self.assertEqual(
+            [list(model.objects.order_by("pk").values()) for model in models], before
+        )
 
 
 class PublishedClaimPipelineTests(PublicationResolutionFixture):
@@ -1442,7 +1779,9 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             build_query_fingerprint(self.cleaned["cleaned_claim"]),
         )
         self.assertFalse(
-            self.target.fact_check_references.filter(relationship_kind="AUTHORITATIVE").exists()
+            self.target.fact_check_references.filter(
+                relationship_kind="AUTHORITATIVE"
+            ).exists()
         )
         self.assertIsNone(get_published_fact_check_resolution_for_claim(self.target))
 
@@ -1767,7 +2106,9 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.assertEqual(reference.match_method, "EQUIVALENT_CLAIM")
         self.assertEqual(reference.fact_check_id, self.publication.pk)
         self.assertFalse(
-            self.target.fact_check_references.filter(relationship_kind="RELATED").exists()
+            self.target.fact_check_references.filter(
+                relationship_kind="RELATED"
+            ).exists()
         )
         self.assertEqual(
             reference.query_fingerprint,
@@ -2043,7 +2384,9 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.assert_ai_path(self.image_gfc)
         self.llm.assert_not_called()
 
-    def test_non_equivalent_image_semantic_context_keeps_telemetry_and_durable_provenance(self):
+    def test_non_equivalent_image_semantic_context_keeps_telemetry_and_durable_provenance(
+        self,
+    ):
         self.equivalent_context(equivalent=False)
         candidate = self.authority_candidates.return_value[0]
         self.vault.side_effect = services.search_official_vault
@@ -2067,7 +2410,9 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         ):
             self.image()
         self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
-        self.assertEqual(KnowledgeReuseEvent.objects.filter(target_claim=self.target).count(), 1)
+        self.assertEqual(
+            KnowledgeReuseEvent.objects.filter(target_claim=self.target).count(), 1
+        )
 
     def test_non_equivalent_image_full_text_context_creates_related_full_text(self):
         self.equivalent_context(method="FULL_TEXT", equivalent=False)
@@ -2132,7 +2477,9 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
     def test_url_related_operational_failure_preserves_ai_result(self):
         self.assert_related_operational_failure_continues(self.url, self.url_gfc)
 
-    def test_related_database_failure_rolls_back_savepoint_and_preserves_ai_result(self):
+    def test_related_database_failure_rolls_back_savepoint_and_preserves_ai_result(
+        self,
+    ):
         self.equivalent_context(equivalent=False)
 
         def failing_related_storage(**kwargs):
@@ -2231,6 +2578,7 @@ class PublishedResolutionPollingTests(PublicationResolutionFixture):
         result = self.poll()
         self.assertEqual(result["verdict"], self.publication.verdict)
         self.assertEqual(result["resolution_source"], "OFFICIAL_FACT_CHECK")
+        self.assertEqual(result["related_fact_checks"], [])
         self.assertEqual(
             result["official_fact_check"]["fact_check_id"], str(self.publication.pk)
         )
@@ -2323,3 +2671,58 @@ class PublishedResolutionPollingTests(PublicationResolutionFixture):
         self.assertEqual(result["resolution_source"], "AI")
         self.assertEqual(result["verdict"], "MISLEADING")
         self.assertEqual(result["summary"], self.target.ai_summary)
+        self.assertEqual(result["related_fact_checks"], [])
+
+    def test_completed_ai_polling_surfaces_public_related_reading_only(self):
+        Organization.objects.filter(pk=self.organization.pk).update(
+            public_profile_enabled=True,
+            verification_status="VERIFIED",
+            partner_status="ACTIVE",
+        )
+        self.raw_reference(relationship_kind="RELATED", match_method="SEMANTIC")
+        self.target.ai_verdict = "FAKE"
+        self.target.save()
+        result = self.poll()
+        self.assertEqual(result["resolution_source"], "AI")
+        self.assertEqual(result["verdict"], "FAKE")
+        self.assertIsNone(result["official_fact_check"])
+        self.assertEqual(
+            result["related_fact_checks"],
+            get_related_published_fact_check_payloads(self.target),
+        )
+
+    def test_public_related_context_alone_remains_exactly_pending(self):
+        Organization.objects.filter(pk=self.organization.pk).update(
+            public_profile_enabled=True,
+            verification_status="VERIFIED",
+            partner_status="ACTIVE",
+        )
+        self.raw_reference(
+            relationship_kind="RELATED",
+            match_method="SEMANTIC",
+        )
+
+        public_detail = {
+            "selected_publication_id": str(self.publication.pk),
+            "article": {
+                "headline": self.publication.headline,
+            },
+            "published_at": self.publication.published_at.isoformat(),
+            "organization": {
+                "name": self.organization.name,
+                "slug": self.organization.slug,
+            },
+        }
+
+        with patch(
+            "api.knowledge_reuse_service.get_public_partner_fact_check_detail",
+            return_value=public_detail,
+        ):
+            self.assertEqual(
+                len(get_related_published_fact_check_payloads(self.target)),
+                1,
+            )
+            self.assertEqual(
+                self.poll(),
+                {"verdict": "PENDING"},
+            )
