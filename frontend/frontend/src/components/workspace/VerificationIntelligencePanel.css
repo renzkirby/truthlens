@@ -1,0 +1,311 @@
+.verification-intelligence-panel {
+   min-width: 0;
+   padding: var(--tl-space-4);
+   border: 1px solid var(--border-default);
+   border-radius: var(--tl-radius-lg);
+   background: var(--bg-subtle);
+   color: var(--text-body);
+   font-size: var(--tl-text-sm);
+   line-height: 1.55;
+   overflow-wrap: anywhere;
+   box-shadow: var(--tl-shadow-sm);
+}
+
+.verification-intelligence-heading-row,
+.verification-intelligence-block-heading,
+.verification-intelligence-question-context,
+.verification-intelligence-count-badges,
+.verification-intelligence-publication-labels {
+   display: flex;
+   flex-wrap: wrap;
+   align-items: center;
+   gap: var(--tl-space-2);
+}
+
+.verification-intelligence-heading-row,
+.verification-intelligence-block-heading {
+   justify-content: space-between;
+}
+
+.verification-intelligence-heading-row > div {
+   min-width: 0;
+}
+
+.verification-intelligence-eyebrow {
+   display: block;
+   margin-bottom: var(--tl-space-1);
+   color: var(--brand-primary);
+   font-size: var(--tl-text-xs);
+   font-weight: 700;
+   letter-spacing: 0.04em;
+   text-transform: uppercase;
+}
+
+.verification-intelligence-heading h5 {
+   margin: 0;
+   color: var(--text-main);
+   font-size: var(--tl-text-base);
+   font-weight: 750;
+   line-height: 1.3;
+}
+
+.verification-intelligence-heading > p,
+.verification-intelligence-note,
+.verification-intelligence-meta,
+.verification-intelligence-empty-copy {
+   color: var(--text-muted);
+}
+
+.verification-intelligence-panel p {
+   margin: var(--tl-space-2) 0 0;
+}
+
+.verification-intelligence-content {
+   display: grid;
+   gap: var(--tl-space-4);
+   margin-top: var(--tl-space-4);
+}
+
+.verification-intelligence-state-card {
+   display: grid;
+   gap: var(--tl-space-1);
+   padding: var(--tl-space-3);
+   border: 1px solid var(--border-default);
+   border-left: 3px solid var(--brand-primary);
+   border-radius: 0 var(--tl-radius-md) var(--tl-radius-md) 0;
+   background: var(--bg-surface);
+}
+
+.verification-intelligence-state-card span {
+   color: var(--text-muted);
+   font-size: var(--tl-text-xs);
+   font-weight: 700;
+   text-transform: uppercase;
+   letter-spacing: 0.035em;
+}
+
+.verification-intelligence-state-card strong {
+   color: var(--text-main);
+   font-size: var(--tl-text-ui);
+   line-height: 1.35;
+}
+
+.verification-intelligence-block {
+   min-width: 0;
+   padding-top: var(--tl-space-4);
+   border-top: 1px solid var(--border-light);
+}
+
+.verification-intelligence-block h6 {
+   margin: 0;
+   color: var(--text-main);
+   font-size: var(--tl-text-ui);
+   font-weight: 700;
+}
+
+.verification-intelligence-summary-line {
+   color: var(--text-body);
+   font-weight: 600;
+}
+
+.verification-intelligence-count-badges {
+   margin-top: var(--tl-space-3);
+}
+
+.verification-intelligence-compact-list,
+.verification-intelligence-questions,
+.verification-intelligence-limitations-body ul {
+   margin: var(--tl-space-3) 0 0;
+   padding-left: var(--tl-space-5);
+}
+
+.verification-intelligence-compact-list li + li,
+.verification-intelligence-questions li + li,
+.verification-intelligence-limitations-body li + li {
+   margin-top: var(--tl-space-2);
+}
+
+.verification-intelligence-metrics {
+   display: grid;
+   grid-template-columns: repeat(3, minmax(0, 1fr));
+   gap: var(--tl-space-2);
+   margin: var(--tl-space-3) 0 0;
+}
+
+.verification-intelligence-metrics > div {
+   min-width: 0;
+   padding: var(--tl-space-2);
+   border: 1px solid var(--border-light);
+   border-radius: var(--tl-radius-sm);
+   background: var(--bg-surface);
+}
+
+.verification-intelligence-metrics dt {
+   color: var(--text-muted);
+   font-size: var(--tl-text-xs);
+   line-height: 1.35;
+}
+
+.verification-intelligence-metrics dd {
+   margin: var(--tl-space-1) 0 0;
+   color: var(--text-main);
+   font-size: var(--tl-text-ui);
+   font-weight: 700;
+   font-variant-numeric: tabular-nums;
+}
+
+.verification-intelligence-signal-group,
+.verification-intelligence-source-summary {
+   margin-top: var(--tl-space-3);
+}
+
+.verification-intelligence-signal-group > span,
+.verification-intelligence-source-summary > strong {
+   color: var(--text-main);
+   font-size: var(--tl-text-xs);
+   font-weight: 700;
+}
+
+.verification-intelligence-question-context {
+   margin-top: var(--tl-space-2);
+   color: var(--text-muted);
+   font-size: var(--tl-text-xs);
+}
+
+.verification-intelligence-publication {
+   margin-top: var(--tl-space-3);
+   padding: var(--tl-space-3);
+   border: 1px solid var(--border-default);
+   border-radius: var(--tl-radius-md);
+   background: var(--bg-surface);
+}
+
+.verification-intelligence-publication-title {
+   color: var(--text-main);
+   font-size: var(--tl-text-ui);
+   font-weight: 700;
+   line-height: 1.4;
+}
+
+.verification-intelligence-publications {
+   margin: var(--tl-space-3) 0 0;
+   padding: 0;
+   list-style: none;
+}
+
+.verification-intelligence-publications > li + li {
+   margin-top: var(--tl-space-3);
+}
+
+.verification-intelligence-warning,
+.verification-intelligence-error {
+   margin-top: var(--tl-space-3);
+   padding: var(--tl-space-3);
+   border: 1px solid var(--tl-color-status-warning-border);
+   border-radius: var(--tl-radius-md);
+   background: var(--tl-color-status-warning-bg);
+   color: var(--tl-color-status-warning-text);
+}
+
+.verification-intelligence-error > strong {
+   display: block;
+   color: inherit;
+}
+
+.verification-intelligence-loading {
+   margin-top: var(--tl-space-4);
+   color: var(--text-muted);
+}
+
+.verification-intelligence-retry {
+   margin-top: var(--tl-space-3);
+   max-width: 100%;
+}
+
+.verification-intelligence-related-disclosure,
+.verification-intelligence-limitations {
+   margin-top: var(--tl-space-3);
+}
+
+.verification-intelligence-related-disclosure > summary,
+.verification-intelligence-limitations > summary {
+   min-height: var(--tl-control-height-standard);
+   box-sizing: border-box;
+   display: flex;
+   align-items: center;
+   color: var(--text-main);
+   font-size: var(--tl-text-sm);
+   font-weight: 700;
+   cursor: pointer;
+}
+
+.verification-intelligence-related-disclosure > summary:hover,
+.verification-intelligence-limitations > summary:hover {
+   color: var(--brand-primary);
+}
+
+.verification-intelligence-related-disclosure > summary:focus-visible,
+.verification-intelligence-limitations > summary:focus-visible {
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
+   border-radius: var(--tl-radius-sm);
+}
+
+.verification-intelligence-limitations {
+   padding-top: var(--tl-space-3);
+   border-top: 1px solid var(--border-light);
+}
+
+.verification-intelligence-limitations-body {
+   display: grid;
+   gap: var(--tl-space-3);
+   padding-bottom: var(--tl-space-2);
+}
+
+.verification-intelligence-limitations-body > div > strong {
+   color: var(--text-main);
+   font-size: var(--tl-text-xs);
+}
+
+.verification-intelligence-limitations-body li > span {
+   color: var(--text-muted);
+   font-size: var(--tl-text-xs);
+}
+
+/* The intelligence card lives in the case-context rail. Give that rail enough
+   width for readable review support without making it visually dominant. */
+.adjudication-detail-layout:has(.verification-intelligence-panel) {
+   grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+}
+
+.adjudication-context-rail > .verification-intelligence-panel + h5 {
+   margin-top: var(--tl-space-6);
+   padding-top: var(--tl-space-5);
+   border-top: 1px solid var(--border-default);
+}
+
+@container adjudication-panel (max-width: 920px) {
+   .adjudication-detail-layout:has(.verification-intelligence-panel) {
+      grid-template-columns: 1fr;
+   }
+
+   .verification-intelligence-panel {
+      max-width: none;
+   }
+}
+
+@container adjudication-panel (max-width: 520px) {
+   .verification-intelligence-panel {
+      padding: var(--tl-space-3);
+   }
+
+   .verification-intelligence-metrics {
+      grid-template-columns: 1fr;
+   }
+
+   .verification-intelligence-heading-row,
+   .verification-intelligence-block-heading {
+      align-items: flex-start;
+      flex-direction: column;
+   }
+}
