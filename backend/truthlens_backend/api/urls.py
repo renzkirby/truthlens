@@ -141,6 +141,11 @@ urlpatterns = [
     ),
     # Partner verification intake
     path(
+        "verification/claims/<uuid:claim_id>/intelligence/",
+        views.verification_intelligence,
+        name="verification_intelligence",
+    ),
+    path(
         "verification/intake/",
         views.verification_intake,
         name="verification_intake",

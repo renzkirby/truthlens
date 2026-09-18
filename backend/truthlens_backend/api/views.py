@@ -248,6 +248,11 @@ from .verification_assignment_service import (
     get_organization_verification_workload,
     release_verification_assignment,
 )
+from .verification_intelligence_service import (
+    VerificationIntelligenceAuthorizationError,
+    VerificationIntelligenceNotFound,
+    get_verification_intelligence_context,
+)
 from .organization_invitation_service import (
     OrganizationInvitationAuthorizationError,
     OrganizationInvitationConflict,
@@ -2700,6 +2705,26 @@ def verification_assignment_release(
         },
         status=status.HTTP_200_OK,
     )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def verification_intelligence(request, claim_id):
+    # Reuse the established required UUID query-scope validation and lookup.
+    query = AdjudicationOrganizationQuerySerializer(data=request.query_params)
+    query.is_valid(raise_exception=True)
+    organization = get_object_or_404(
+        Organization, id=query.validated_data["organization_id"],
+    )
+    try:
+        projection = get_verification_intelligence_context(
+            actor=request.user, organization=organization, claim_id=claim_id,
+        )
+    except VerificationIntelligenceAuthorizationError as error:
+        return Response({"detail": str(error)}, status=status.HTTP_403_FORBIDDEN)
+    except VerificationIntelligenceNotFound as error:
+        return Response({"detail": str(error)}, status=status.HTTP_404_NOT_FOUND)
+    return Response(projection, status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])
