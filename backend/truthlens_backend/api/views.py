@@ -10,6 +10,7 @@ from django.core.mail import send_mail
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.cache import never_cache
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from django.utils import timezone
@@ -2707,6 +2708,7 @@ def verification_assignment_release(
     )
 
 
+@never_cache
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def verification_intelligence(request, claim_id):
@@ -2724,6 +2726,12 @@ def verification_intelligence(request, claim_id):
         return Response({"detail": str(error)}, status=status.HTTP_403_FORBIDDEN)
     except VerificationIntelligenceNotFound as error:
         return Response({"detail": str(error)}, status=status.HTTP_404_NOT_FOUND)
+    except Exception:
+        logger.exception("Verification intelligence projection failed.")
+        return Response(
+            {"detail": "Verification intelligence is temporarily unavailable."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
     return Response(projection, status=status.HTTP_200_OK)
 
 
