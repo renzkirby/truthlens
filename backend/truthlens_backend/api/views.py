@@ -10,6 +10,7 @@ from django.core.mail import send_mail
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.cache import never_cache
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from django.utils import timezone
@@ -113,6 +114,15 @@ from .verification_activity_trends_service import VerificationActivityTrendInput
 from .verification_resolution_metrics_service import VerificationResolutionMetricsIntegrityError
 from .verification_reviewer_participation_metrics_service import (
     VerificationReviewerParticipationMetricsIntegrityError,
+)
+from .verification_public_reach_metrics_service import VerificationPublicReachMetricsIntegrityError
+from .verification_knowledge_reuse_metrics_service import VerificationKnowledgeReuseMetricsIntegrityError
+from .public_reach_serializers import PublicReachRequestSerializer
+from .public_reach_service import (
+    InvalidPublicReach,
+    PublicReachConflict,
+    PublicReachTargetNotFound,
+    record_public_reach_event,
 )
 from .organization_public_presence_service import (
     get_public_partner_by_slug,
@@ -239,6 +249,11 @@ from .verification_assignment_service import (
     get_organization_verification_workload,
     release_verification_assignment,
 )
+from .verification_intelligence_service import (
+    VerificationIntelligenceAuthorizationError,
+    VerificationIntelligenceNotFound,
+    get_verification_intelligence_context,
+)
 from .organization_invitation_service import (
     OrganizationInvitationAuthorizationError,
     OrganizationInvitationConflict,
@@ -269,6 +284,7 @@ from .throttles import (
     PasswordResetRateThrottle,
     EmailVerificationRateThrottle,
     PublicPartnerRateThrottle,
+    PublicReachRateThrottle,
 )
 from .serializers import (
     RegisterSerializer,
@@ -554,6 +570,7 @@ def claim_polling_endpoint(request, claim_id):
                 "score_context": (match_result["score_context"]),
                 "resolution_source": (match_result["resolution_source"]),
                 "official_fact_check": (match_result["official_fact_check"]),
+                "related_fact_checks": match_result["related_fact_checks"],
             },
             status=200,
         )
@@ -2546,6 +2563,8 @@ def organization_verification_metrics(request, organization_id):
         VerificationActivityMetricsIntegrityError,
         VerificationResolutionMetricsIntegrityError,
         VerificationReviewerParticipationMetricsIntegrityError,
+        VerificationPublicReachMetricsIntegrityError,
+        VerificationKnowledgeReuseMetricsIntegrityError,
         VerificationMetricsCompositionError,
     ):
         logger.exception("Organization verification metrics projection failed.")
@@ -2687,6 +2706,33 @@ def verification_assignment_release(
         },
         status=status.HTTP_200_OK,
     )
+
+
+@never_cache
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def verification_intelligence(request, claim_id):
+    # Reuse the established required UUID query-scope validation and lookup.
+    query = AdjudicationOrganizationQuerySerializer(data=request.query_params)
+    query.is_valid(raise_exception=True)
+    organization = get_object_or_404(
+        Organization, id=query.validated_data["organization_id"],
+    )
+    try:
+        projection = get_verification_intelligence_context(
+            actor=request.user, organization=organization, claim_id=claim_id,
+        )
+    except VerificationIntelligenceAuthorizationError as error:
+        return Response({"detail": str(error)}, status=status.HTTP_403_FORBIDDEN)
+    except VerificationIntelligenceNotFound as error:
+        return Response({"detail": str(error)}, status=status.HTTP_404_NOT_FOUND)
+    except Exception:
+        logger.exception("Verification intelligence projection failed.")
+        return Response(
+            {"detail": "Verification intelligence is temporarily unavailable."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    return Response(projection, status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])
@@ -3730,7 +3776,12 @@ def verify_file(request):
 
         if matched_claim:
             _record_authenticated_claim_check(authenticated_user, matched_claim)
-            match_result = get_match_result(matched_claim)
+            match_result = get_match_result(
+                matched_claim,
+                triggered_by=authenticated_user,
+                record_reuse=True,
+                query_text=extracted_text,
+            )
             return JsonResponse(
                 {
                     "claim_id": str(matched_claim.id),
@@ -4003,6 +4054,40 @@ def public_partner_fact_check_detail(request, slug, publication_id):
         PublicFactCheckDetailSerializer(result).data,
         status=status.HTTP_200_OK,
     )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([PublicReachRateThrottle])
+def public_reach_events(request):
+    serializer = PublicReachRequestSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    payload = serializer.validated_data
+    organization = get_public_partner_by_slug(payload["organization_slug"])
+    if organization is None:
+        raise NotFound()
+    fact_check = None
+    if payload.get("publication_id") is not None:
+        fact_check = OfficialFactCheck.objects.filter(
+            pk=payload["publication_id"], organization=organization,
+        ).first()
+        if fact_check is None:
+            raise NotFound()
+    try:
+        _, created = record_public_reach_event(
+            client_event_id=payload["client_event_id"],
+            event_type=payload["event_type"],
+            source_surface=payload["source_surface"],
+            organization=organization,
+            fact_check=fact_check,
+        )
+    except PublicReachTargetNotFound as error:
+        raise NotFound() from error
+    except PublicReachConflict:
+        return Response({"detail": "Conflicting client_event_id."}, status=status.HTTP_409_CONFLICT)
+    except InvalidPublicReach:
+        return Response({"detail": "Invalid reach event."}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({"recorded": True}, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
 
 def _organization_public_profile_error_response(error):

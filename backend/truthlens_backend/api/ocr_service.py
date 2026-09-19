@@ -1,4 +1,7 @@
-from .ocr_adapter import extract_text_with_provider_adapter
+from .ocr_adapter import (
+    OCRProviderUnavailableError,
+    extract_text_with_provider_adapter,
+)
 
 
 def extract_text_from_image(image_bytes):

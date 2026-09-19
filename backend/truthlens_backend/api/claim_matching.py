@@ -27,6 +27,7 @@ from .embedding_service import generate_embedding
 from .knowledge_reuse_service import (
     build_published_fact_check_payload,
     get_published_fact_check_resolution_for_claim,
+    get_related_published_fact_check_payloads,
     record_knowledge_reuse,
 )
 from .adjudication_provenance import get_claim_adjudication_provenance
@@ -309,6 +310,7 @@ def get_match_result(
     sources = []
     moderator_notes = None
     official_fact_check = None
+    related_fact_checks = []
     resolution_source = None
 
     adjudication_provenance = get_claim_adjudication_provenance(matched_claim)
@@ -462,6 +464,9 @@ def get_match_result(
     ):
         sources = [matched_claim.top_verdict_source]
 
+    if effective_verdict and resolution_source != "OFFICIAL_FACT_CHECK":
+        related_fact_checks = get_related_published_fact_check_payloads(matched_claim)
+
     return {
         "match_type": match_type,
         "claim_id": str(matched_claim.id),
@@ -485,4 +490,5 @@ def get_match_result(
         "score_context": (matched_claim.score_context),
         "resolution_source": (resolution_source),
         "official_fact_check": (official_fact_check),
+        "related_fact_checks": related_fact_checks,
     }

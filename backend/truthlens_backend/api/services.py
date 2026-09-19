@@ -1,6 +1,8 @@
 from groq import Groq
 from google import genai
-from google.genai import types
+from google.genai import errors, types
+from contextlib import contextmanager
+from contextvars import ContextVar
 import os
 import json
 import re
@@ -40,6 +42,19 @@ gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+
+
+_gemini_degraded = ContextVar("gemini_degraded", default=None)
+
+
+@contextmanager
+def llm_provider_scope():
+    """Give one synchronous verification execution fresh provider state."""
+    token = _gemini_degraded.set(False)
+    try:
+        yield
+    finally:
+        _gemini_degraded.reset(token)
 
 
 class LLMProviderUnavailableError(RuntimeError):
@@ -155,49 +170,55 @@ def _model_from_env(name, default):
 
 def _provider_error_label(error):
     """Return useful error metadata without including provider secrets."""
+    if isinstance(error, errors.APIError) and type(error.code) is int:
+        return f"{type(error).__name__} code={error.code}"
     return type(error).__name__
 
 
 def call_llm_with_fallback(system_instructions, user_prompt):
-    """Call Gemini first, then Groq once if Gemini is unavailable."""
-    try:
-        response = gemini_client.models.generate_content(
-            model=_model_from_env("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
-            contents=user_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instructions,
-                response_mime_type="application/json",
-                temperature=0.1,
-            ),
-        )
-        return response.text
-
-    except Exception as gemini_err:
-        logger.warning(
-            "Gemini API failed (%s); trying Groq fallback.",
-            _provider_error_label(gemini_err),
-        )
-
+    """Use Gemini first unless Groq has already taken over in this job."""
+    if not _gemini_degraded.get():
         try:
-            chat_completion = groq_client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": system_instructions},
-                    {"role": "user", "content": user_prompt},
-                ],
-                model=_model_from_env("GROQ_MODEL", DEFAULT_GROQ_MODEL),
-                response_format={"type": "json_object"},
-                temperature=0.1,
+            response = gemini_client.models.generate_content(
+                model=_model_from_env("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
+                contents=user_prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instructions,
+                    response_mime_type="application/json",
+                    temperature=0.1,
+                ),
             )
-            return chat_completion.choices[0].message.content
+            return response.text
+        except Exception as gemini_err:
+            logger.warning(
+                "Gemini API failed (%s); trying Groq fallback.",
+                _provider_error_label(gemini_err),
+            )
 
-        except Exception as groq_err:
-            logger.error(
-                "Groq fallback also failed (%s).",
-                _provider_error_label(groq_err),
-            )
-            raise LLMProviderUnavailableError(
-                "No configured LLM provider successfully completed this request."
-            ) from groq_err
+    try:
+        chat_completion = groq_client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": system_instructions},
+                {"role": "user", "content": user_prompt},
+            ],
+            model=_model_from_env("GROQ_MODEL", DEFAULT_GROQ_MODEL),
+            response_format={"type": "json_object"},
+            temperature=0.1,
+        )
+        content = chat_completion.choices[0].message.content
+    except Exception as groq_err:
+        logger.error(
+            "Groq fallback failed (%s).",
+            _provider_error_label(groq_err),
+        )
+        raise LLMProviderUnavailableError(
+            "No configured LLM provider successfully completed this request."
+        ) from groq_err
+
+    # Outside an explicit job scope, retain independent Gemini-first calls.
+    if _gemini_degraded.get() is not None:
+        _gemini_degraded.set(True)
+    return content
 
 
 def _parse_llm_json(raw_content):

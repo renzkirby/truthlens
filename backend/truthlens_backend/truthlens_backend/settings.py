@@ -87,6 +87,10 @@ REST_FRAMEWORK = {
         ),
         "password_reset": "3/hour",
         "email_verification": "3/hour",
+        "public_reach": os.getenv(
+            "DRF_PUBLIC_REACH_THROTTLE_RATE",
+            "120/minute",
+        ),
         "public_partner": os.getenv(
             "DRF_PUBLIC_PARTNER_THROTTLE_RATE",
             "60/minute",

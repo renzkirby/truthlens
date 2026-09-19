@@ -12,6 +12,10 @@ MetricHook = Callable[[dict], None]
 _ocr_metric_hook: Optional[MetricHook] = None
 
 
+class OCRProviderUnavailableError(RuntimeError):
+    """Every configured OCR provider failed to complete the request."""
+
+
 class OCRProvider:
     name = "base"
 
@@ -165,12 +169,14 @@ def extract_text_with_provider_adapter(image_bytes: bytes) -> str:
     providers = _get_provider_sequence()
     overall_start = time.perf_counter()
     last_error = None
+    provider_completed = False
 
     for attempt_index, provider_name in enumerate(providers, start=1):
         attempt_start = time.perf_counter()
         try:
             provider = _get_provider(provider_name)
             extracted_text = provider.extract_text(image_bytes)
+            provider_completed = True
             duration_ms = int((time.perf_counter() - attempt_start) * 1000)
 
             _emit_ocr_metric(
@@ -202,15 +208,28 @@ def extract_text_with_provider_adapter(image_bytes: bytes) -> str:
                 attempt=attempt_index,
                 success=False,
                 duration_ms=duration_ms,
-                error=str(error)[:200],
+                error=type(error).__name__,
             )
-            logger.warning("OCR provider '%s' failed: %s", provider_name, error)
+            logger.warning(
+                "OCR provider '%s' failed (%s).", provider_name, type(error).__name__
+            )
+
+    if provider_completed:
+        _emit_ocr_metric(
+            "ocr.no_text",
+            configured_provider=configured_provider,
+            attempted_providers=providers,
+            total_duration_ms=int((time.perf_counter() - overall_start) * 1000),
+        )
+        return ""
 
     _emit_ocr_metric(
         "ocr.failed",
         configured_provider=configured_provider,
         attempted_providers=providers,
         total_duration_ms=int((time.perf_counter() - overall_start) * 1000),
-        error=(str(last_error)[:200] if last_error else ""),
+        error=(type(last_error).__name__ if last_error is not None else ""),
     )
-    return ""
+    raise OCRProviderUnavailableError(
+        "No configured OCR provider successfully completed this request."
+    ) from last_error

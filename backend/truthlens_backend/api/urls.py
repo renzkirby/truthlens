@@ -31,6 +31,7 @@ urlpatterns = [
     path("users/<str:username>/followers/", views.get_user_followers),
     path("users/<str:username>/following/", views.get_user_following),
     path("users/<str:username>/claims/", views.public_user_claims),
+    path("public-reach/events/", views.public_reach_events, name="public_reach_events"),
     path("partners/", views.public_partner_directory, name="public_partner_directory"),
     path(
         "partners/<slug:slug>/fact-checks/",
@@ -139,6 +140,11 @@ urlpatterns = [
         name="adjudication_case_action",
     ),
     # Partner verification intake
+    path(
+        "verification/claims/<uuid:claim_id>/intelligence/",
+        views.verification_intelligence,
+        name="verification_intelligence",
+    ),
     path(
         "verification/intake/",
         views.verification_intake,

@@ -207,6 +207,73 @@
    margin-top: 6px;
 }
 
+/* Reading context stays separate from the result's verdict and confidence. */
+.truthlens-related-publications {
+   margin: 0 0 16px;
+   padding-top: 12px;
+   border-top: 1px solid #e5e7eb;
+   overflow-wrap: anywhere;
+}
+
+.truthlens-related-publications-title {
+   margin: 0 0 8px;
+   font-size: 11px;
+   line-height: 1.5;
+   font-weight: 700;
+   text-transform: uppercase;
+   color: #4b5563;
+}
+
+.truthlens-related-publication + .truthlens-related-publication {
+   margin-top: 10px;
+}
+
+.truthlens-related-publication-headline {
+   margin: 0 0 2px;
+   font-size: 12px;
+   line-height: 1.5;
+   font-weight: 600;
+   color: #374151;
+}
+
+.truthlens-related-publication-org,
+.truthlens-related-publication-note {
+   margin: 0 0 4px;
+   font-size: 11px;
+   line-height: 1.5;
+   color: #4b5563;
+}
+
+.truthlens-related-publication-link {
+   display: inline-flex;
+   align-items: center;
+   gap: 4px;
+   padding: 3px 0;
+   font-size: 11px;
+   line-height: 1.5;
+   color: #4f46e5;
+   text-decoration: underline;
+   text-underline-offset: 2px;
+}
+
+.truthlens-related-publication-link svg {
+   flex-shrink: 0;
+}
+
+.truthlens-related-publication-link:hover {
+   color: #4338ca;
+}
+
+.truthlens-related-publication-link:focus-visible {
+   outline: 2px solid #4f46e5;
+   outline-offset: 2px;
+   border-radius: 2px;
+}
+
+.truthlens-related-publication-note {
+   margin: 8px 0 0;
+}
+
 /* Primary Action Button */
 .truthlens-primary-btn {
    display: flex;

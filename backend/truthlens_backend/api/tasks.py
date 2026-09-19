@@ -14,10 +14,11 @@ from .knowledge_reuse_service import (
     record_equivalent_claim_fact_check_reference,
     record_related_claim_fact_check_reference,
 )
-from .ocr_service import extract_text_from_image
+from .ocr_service import OCRProviderUnavailableError, extract_text_from_image
 from .services import (
     ClaimGateError,
     LLMProviderUnavailableError,
+    llm_provider_scope,
     process_image,
     clean_ocr_text,
     clean_extracted_text,
@@ -805,7 +806,14 @@ def snippet_fact_check_process(
 
     # 2. PARALLEL CHECK: OCR
     ocr_started_at = time.perf_counter()
-    ocr_result = extract_text_from_image(image_bytes)
+    try:
+        ocr_result = extract_text_from_image(image_bytes)
+    except OCRProviderUnavailableError:
+        outcome = "ocr_unavailable"
+        logger.warning("OCR unavailable for claim %s.", claim_id)
+        _log_stage(claim_id, "ocr_failed", ocr_started_at, outcome=outcome)
+        _log_stage(claim_id, "snippet_task_total", task_started_at, outcome=outcome)
+        return
     _log_stage(claim_id, "ocr", ocr_started_at, text_length=len(ocr_result or ""))
 
     if not ocr_result:
@@ -849,6 +857,7 @@ def text_fact_check_process(raw_text, claim_id):
     )
 
 
+@llm_provider_scope()
 def execute_core_text_pipeline(raw_text, claim_id):
     """The shared brain for both Snippets and pure Text claims."""
 
@@ -1443,6 +1452,7 @@ def execute_core_text_pipeline(raw_text, claim_id):
 
 # URL PIPELINE
 @shared_task
+@llm_provider_scope()
 def url_fact_check_process(url, claim_id):
     pipeline_started_at = time.perf_counter()
     outcome = "completed"

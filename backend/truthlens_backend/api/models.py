@@ -4468,6 +4468,79 @@ class ClaimFactCheckReference(models.Model):
         ]
 
 
+class PublicReachEvent(models.Model):
+    """Observed public interactions; no visitor identity or historical backfill."""
+
+    class EventType(models.TextChoices):
+        PUBLICATION_VIEW = "PUBLICATION_VIEW", "Publication view"
+        PARTNER_PROFILE_VIEW = "PARTNER_PROFILE_VIEW", "Partner profile view"
+        EXTENSION_PUBLICATION_IMPRESSION = "EXTENSION_PUBLICATION_IMPRESSION", "Extension publication impression"
+        EXTENSION_PUBLICATION_CLICK = "EXTENSION_PUBLICATION_CLICK", "Extension publication click"
+
+    class SourceSurface(models.TextChoices):
+        PUBLIC_FACT_CHECK_PAGE = "PUBLIC_FACT_CHECK_PAGE", "Public fact-check page"
+        PUBLIC_PARTNER_PROFILE = "PUBLIC_PARTNER_PROFILE", "Public partner profile"
+        EXTENSION_OFFICIAL_FACT_CHECK = "EXTENSION_OFFICIAL_FACT_CHECK", "Extension official fact-check"
+        EXTENSION_RELATED_FACT_CHECK = "EXTENSION_RELATED_FACT_CHECK", "Extension related fact-check"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    client_event_id = models.UUIDField(unique=True, editable=False)
+    event_type = models.CharField(max_length=40, choices=EventType.choices, db_index=True)
+    source_surface = models.CharField(max_length=40, choices=SourceSurface.choices, db_index=True)
+    organization = models.ForeignKey(
+        Organization, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="public_reach_events",
+    )
+    fact_check = models.ForeignKey(
+        OfficialFactCheck, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="public_reach_events",
+    )
+    source_organization_id_snapshot = models.CharField(max_length=255, db_index=True)
+    fact_check_id_snapshot = models.CharField(max_length=255, blank=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["event_type", "-created_at"], name="reach_event_time_idx"),
+            models.Index(fields=["source_surface", "-created_at"], name="reach_surface_time_idx"),
+            models.Index(fields=["source_organization_id_snapshot", "-created_at"], name="reach_org_time_idx"),
+            models.Index(fields=["fact_check_id_snapshot", "-created_at"], name="reach_publication_time_idx"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(event_type="PARTNER_PROFILE_VIEW", source_surface="PUBLIC_PARTNER_PROFILE")
+                    | models.Q(event_type="PUBLICATION_VIEW", source_surface="PUBLIC_FACT_CHECK_PAGE")
+                    | models.Q(
+                        event_type__in=["EXTENSION_PUBLICATION_IMPRESSION", "EXTENSION_PUBLICATION_CLICK"],
+                        source_surface__in=["EXTENSION_OFFICIAL_FACT_CHECK", "EXTENSION_RELATED_FACT_CHECK"],
+                    )
+                ),
+                name="reach_valid_event_surface",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(event_type="PARTNER_PROFILE_VIEW", fact_check_id_snapshot="", fact_check__isnull=True)
+                    | (~models.Q(event_type="PARTNER_PROFILE_VIEW") & ~models.Q(fact_check_id_snapshot=""))
+                ),
+                name="reach_publication_snapshot",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(source_organization_id_snapshot=""),
+                name="reach_organization_snapshot",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding or type(self).objects.filter(pk=self.pk).exists():
+            raise ValidationError("Public reach events are immutable and cannot be modified.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Public reach events are durable and cannot be deleted directly.")
+
+
 class KnowledgeReuseEvent(models.Model):
     class ReuseType(models.TextChoices):
         USER_RESPONSE = (
