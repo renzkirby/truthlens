@@ -1,22 +1,17 @@
-import React, { useState, useRef } from "react";
+import { useState, useRef } from "react";
 import ReactCrop from "react-image-crop";
+import "@fontsource-variable/mona-sans/wght.css";
 import "react-image-crop/dist/ReactCrop.css";
 import "./CropStudio.css";
 
 export default function CropStudio({ imageSrc, onConfirm, onCancel }) {
-   const [crop, setCrop] = useState({
-      unit: "%", // Percentage in UI
-      width: 50,
-      height: 50,
-      x: 25,
-      y: 25,
-   });
+   const [crop, setCrop] = useState();
    const imgRef = useRef(null);
+   const hasValidCrop = Boolean(crop && crop.width > 0 && crop.height > 0);
 
    const generateCroppedImage = async () => {
       const img = imgRef.current;
-      if (!img || !crop.width || !crop.height) {
-         onCancel();
+      if (!img || !hasValidCrop) {
          return;
       }
 
@@ -54,25 +49,20 @@ export default function CropStudio({ imageSrc, onConfirm, onCancel }) {
    return (
       <div className="crop-studio">
          <div className="crop-studio-header">
-            <h3>Crop Check</h3>
-            <p>Select the claim you want to verify</p>
+            <h3>TruthLens · Select content</h3>
+            <p>{hasValidCrop ? "Move or resize your selection, then click Confirm." : "Drag across the image to select content to investigate."}</p>
          </div>
          <div className="crop-studio-editor">
             {imageSrc ? (
                <ReactCrop
                   crop={crop}
+                  keepSelection
                   onChange={(pixelCrop, percentCrop) => setCrop(percentCrop)}>
                   <img
                      ref={imgRef}
                      src={imageSrc}
                      onLoad={() => {
-                        setCrop({
-                           unit: "%",
-                           width: 50,
-                           height: 50,
-                           x: 25,
-                           y: 25,
-                        });
+                        setCrop(undefined);
                      }}
                      alt="Crop source"
                      className="crop-studio-img"
@@ -84,11 +74,14 @@ export default function CropStudio({ imageSrc, onConfirm, onCancel }) {
          </div>
          <div className="crop-studio-actions">
             <button
+               type="button"
                className="crop-btn cancel"
                onClick={onCancel}>
                Cancel
             </button>
             <button
+               type="button"
+               disabled={!hasValidCrop}
                className="crop-btn confirm"
                onClick={generateCroppedImage}>
                Confirm

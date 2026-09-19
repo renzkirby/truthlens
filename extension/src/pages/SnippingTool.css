@@ -1,160 +1,35 @@
-/* SnippingTool.css */
 .snipping-page {
-     display: flex;
-     flex-direction: column;
-     gap: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .snip-action-box {
-     background-color: transparent;
-     /* border: none;
-     padding: 15px 10px; */
-     text-align: center;
-     display: flex;
-     flex-direction: column;
-     align-items: center;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid var(--tl-border);
+  border-radius: 12px;
+  background: var(--tl-surface);
 }
 
 .snip-icon-wrapper {
-     width: 44px;
-     height: 44px;
-     background: #dbeafe;
-     border-radius: 10px;
-     display: flex;
-     align-items: center;
-     justify-content: center;
-     margin-bottom: 8px;
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: var(--tl-primary-soft);
+  color: var(--tl-primary);
 }
 
 .snip-title {
-     font-size: 12px;
-     color: var(--brand-primary);
-     font-weight: 700;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tl-text);
 }
 
-.snip-subtitle {
-     font-size: 10px;
-     color: var(--text-muted);
-     margin-top: 4px;
-}
-
-.snip-btn {
-     width: 100%;
-     background: var(--brand-primary);
-     color: var(--text-inverse);
-     border: none;
-     border-radius: 8px;
-     padding: 10px;
-     font-size: 13px;
-     font-weight: 700;
-     cursor: pointer;
-     transition: background 0.2s;
-}
-
-.snip-btn:hover {
-     background: var(--brand-primary-hover);
-}
-
-.snip-btn:disabled {
-     opacity: 0.6;
-     cursor: not-allowed;
-}
-
-/* --- Deepfake Toggle Styles --- */
-.deepfake-toggle-container {
-     display: flex;
-     align-items: center;
-     justify-content: space-between;
-     background-color: var(--bg-surface, #ffffff);
-     border: 1.5px solid var(--border-light, #e5e7eb);
-     border-radius: 8px;
-     padding: 16px;
-     margin-top: 12px;
-}
-
-.toggle-label-group {
-     display: flex;
-     align-items: center;
-     gap: 10px;
-}
-
-.toggle-text {
-     display: flex;
-     flex-direction: column;
-}
-
-.toggle-title {
-     font-size: 10px;
-     font-weight: 700;
-     color: var(--text-main, #111827);
-}
-
-.toggle-desc {
-     font-size: 7px;
-     color: var(--text-muted, #6b7280);
-     margin-top: 2px;
-}
-
-/* The switch - the box around the slider */
-.switch {
-     position: relative;
-     display: inline-block;
-     width: 34px;
-     height: 20px;
-}
-
-/* Hide default HTML checkbox */
-.switch input {
-     opacity: 0;
-     width: 0;
-     height: 0;
-}
-
-/* The slider */
-.slider {
-     position: absolute;
-     cursor: pointer;
-     top: 0;
-     left: 0;
-     right: 0;
-     bottom: 0;
-     background-color: #cbd5e1;
-     transition: 0.3s;
-}
-
-.slider:before {
-     position: absolute;
-     content: "";
-     height: 14px;
-     width: 14px;
-     left: 3px;
-     bottom: 3px;
-     background-color: white;
-     transition: 0.3s;
-}
-
-input:checked+.slider {
-     background-color: var(--brand-primary);
-}
-
-input:focus+.slider {
-     box-shadow: 0 0 1px var(--brand-primary);
-}
-
-input:checked+.slider:before {
-     transform: translateX(14px);
-}
-
-/* Rounded sliders */
-.slider.round {
-     border-radius: 20px;
-}
-
-.slider.round:before {
-     border-radius: 50%;
-}
-
-input:disabled+.slider {
-     opacity: 0.6;
-     cursor: not-allowed;
-}
+.snip-subtitle { margin-top: 4px; font-size: 11px; line-height: 1.5; color: var(--tl-text-secondary); }
