@@ -17,29 +17,49 @@ export default function CropStudio({ imageSrc, onConfirm, onCancel }) {
 
       const canvas = document.createElement("canvas");
 
-      // When unit is '%', the x, y, width, height are percentages of natural size
-      // The naturalWidth includes any device pixel ratio applied when the screenshot was taken
-      const naturalWidthCrop = (crop.width / 100) * img.naturalWidth;
-      const naturalHeightCrop = (crop.height / 100) * img.naturalHeight;
-      const naturalXCrop = (crop.x / 100) * img.naturalWidth;
-      const naturalYCrop = (crop.y / 100) * img.naturalHeight;
+      // Convert the percentage selection to screenshot pixels, then snap the
+      // crop outward to integer pixel boundaries. Canvas dimensions are integer
+      // pixels, so fractional source/destination rectangles can resample edge
+      // pixels and make nearly identical selections produce different images.
+      const rawLeft = (crop.x / 100) * img.naturalWidth;
+      const rawTop = (crop.y / 100) * img.naturalHeight;
+      const rawRight = ((crop.x + crop.width) / 100) * img.naturalWidth;
+      const rawBottom = ((crop.y + crop.height) / 100) * img.naturalHeight;
 
-      canvas.width = naturalWidthCrop;
-      canvas.height = naturalHeightCrop;
+      const sourceX = Math.max(0, Math.floor(rawLeft));
+      const sourceY = Math.max(0, Math.floor(rawTop));
+      const sourceRight = Math.min(img.naturalWidth, Math.ceil(rawRight));
+      const sourceBottom = Math.min(img.naturalHeight, Math.ceil(rawBottom));
+
+      const sourceWidth = sourceRight - sourceX;
+      const sourceHeight = sourceBottom - sourceY;
+
+      if (sourceWidth <= 0 || sourceHeight <= 0) {
+         return;
+      }
+
+      canvas.width = sourceWidth;
+      canvas.height = sourceHeight;
 
       const ctx = canvas.getContext("2d");
-      ctx.imageSmoothingQuality = "high";
+      if (!ctx) {
+         return;
+      }
+
+      // Source and destination rectangles are the same integer dimensions.
+      // Disable smoothing so this remains a direct screenshot-pixel crop.
+      ctx.imageSmoothingEnabled = false;
 
       ctx.drawImage(
          img,
-         naturalXCrop,
-         naturalYCrop,
-         naturalWidthCrop,
-         naturalHeightCrop,
+         sourceX,
+         sourceY,
+         sourceWidth,
+         sourceHeight,
          0,
          0,
-         naturalWidthCrop,
-         naturalHeightCrop,
+         sourceWidth,
+         sourceHeight,
       );
 
       const croppedDataUrl = canvas.toDataURL("image/png");
