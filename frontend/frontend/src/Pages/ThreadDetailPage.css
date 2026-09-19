@@ -7,7 +7,7 @@
     --tdp-breadcrumb-height: 52px;
 
     background: #ffffff;
-    font-family: 'Inter', sans-serif;
+    font-family: var(--tl-font-sans);
 }
 
 /* ── Loading / Error states ─────────────────────────────────────────────────── */
@@ -789,7 +789,7 @@
     padding: 10px 12px;
     font-size: 11px;
     color: #374151;
-    font-family: 'Inter', sans-serif;
+    font-family: var(--tl-font-sans);
     resize: vertical;
     outline: none;
     box-sizing: border-box;
@@ -947,7 +947,7 @@
     padding: 10px 18px;
     font-size: 12px;
     color: #374151;
-    font-family: 'Inter', sans-serif;
+    font-family: var(--tl-font-sans);
     outline: none;
 }
 
@@ -1128,7 +1128,7 @@
     padding: 9px 11px;
     font-size: 12px;
     color: #334155;
-    font-family: 'Inter', sans-serif;
+    font-family: var(--tl-font-sans);
     line-height: 1.55;
     resize: vertical;
     box-sizing: border-box;
@@ -1930,7 +1930,7 @@
     color: #6b7280;
     white-space: nowrap;
     width: 100%;
-    font-family: 'Inter', sans-serif;
+    font-family: var(--tl-font-sans);
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     transition: all 0.15s;
     position: relative;

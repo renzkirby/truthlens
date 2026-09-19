@@ -1,10 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
 .create-thread-layout {
    display: flex;
    flex-direction: column;
    background-color: var(--bg-app);
-   font-family: 'Inter', sans-serif;
+   font-family: var(--tl-font-sans);
 }
 
 /* ── Topbar ── */
@@ -152,7 +150,7 @@
    background: #f9fafb;
    font-size: 14px;
    color: var(--text-main);
-   font-family: 'Inter', sans-serif;
+   font-family: var(--tl-font-sans);
    resize: vertical;
    outline: none;
    transition: border-color 0.2s;
@@ -174,7 +172,7 @@
    background: #f9fafb;
    font-size: 14px;
    color: var(--text-main);
-   font-family: 'Inter', sans-serif;
+   font-family: var(--tl-font-sans);
    outline: none;
    transition: border-color 0.2s;
    box-sizing: border-box;
@@ -202,7 +200,7 @@
    border: 1.5px solid var(--border-color);
    border-radius: 10px;
    background: #fff;
-   font-family: 'Inter', sans-serif;
+   font-family: var(--tl-font-sans);
    text-align: left;
    cursor: pointer;
    transition: all 0.15s;
@@ -251,7 +249,7 @@
    font-size: 15px;
    font-weight: 700;
    cursor: pointer;
-   font-family: 'Inter', sans-serif;
+   font-family: var(--tl-font-sans);
    transition: background 0.2s;
 }
 

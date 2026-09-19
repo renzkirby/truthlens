@@ -2,7 +2,7 @@
 /* 1. Layout & Structure */
 .hub-page-layout {
    background-color: #f6f8fb;
-   font-family: "Inter", sans-serif;
+   font-family: var(--tl-font-sans);
    color: #0f172a;
 }
 
