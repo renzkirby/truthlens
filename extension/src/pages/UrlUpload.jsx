@@ -35,8 +35,11 @@ function UrlUpload() {
 
    return (
       <div className="url-page">
-         {/* Label */}
-         <p className="url-page-label">Paste article or claim URL</p>
+         <div className="page-intro">
+            <span className="page-eyebrow">Analyze URL</span>
+            <h1>Check an article or webpage.</h1>
+         </div>
+         <label htmlFor="claim-url" className="url-page-label">Article or claim URL</label>
 
          {/* Input row */}
          <div className="url-input-row">
@@ -48,6 +51,7 @@ function UrlUpload() {
                   className="url-input-icon"
                />
                <input
+                  id="claim-url"
                   className="url-input"
                   type="text"
                   placeholder="https://example.com/article…"
@@ -57,13 +61,15 @@ function UrlUpload() {
                />
             </div>
             <button
-               className="url-scan-btn"
+               type="button"
+               className="primary-button"
+               disabled={!url}
                onClick={handleVerify}>
                <ScanLine
                   size={13}
                   strokeWidth={2.5}
                />
-               Scan
+               Analyze URL
             </button>
          </div>
 

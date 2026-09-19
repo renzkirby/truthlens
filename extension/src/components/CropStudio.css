@@ -1,5 +1,10 @@
-/* CropStudio.css */
 .crop-studio {
+    --tl-font-sans: "Mona Sans Variable", "Inter", system-ui, -apple-system,
+        BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --rc-drag-handle-bg-colour: #4f46e5;
+    --rc-border-color: #ffffff;
+    --rc-focus-color: #a5b4fc;
+    --rc-drag-handle-size: 12px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -10,127 +15,135 @@
     margin: 0;
     box-sizing: border-box;
     position: relative;
-    background-color: rgba(0, 0, 0, 0.4);
-    /* Lighter backdrop to let the frozen screen look natural */
+    background: rgba(15, 23, 42, 0.65);
     cursor: default;
+    font-family: var(--tl-font-sans);
 }
-
+.crop-studio :is(h3, p, button) {
+    font-family: var(--tl-font-sans);
+}
 .crop-studio-header {
     position: absolute;
-    top: 30px;
+    top: 24px;
     left: 50%;
     transform: translateX(-50%);
+    width: max-content;
+    max-width: calc(100vw - 32px);
+    box-sizing: border-box;
     text-align: center;
-    background: rgba(15, 15, 15, 0.9);
-    padding: 12px 28px;
-    border-radius: 50px;
+    background: rgba(17, 24, 39, 0.94);
+    padding: 12px 22px;
+    border-radius: 12px;
     z-index: 10;
     color: white;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    pointer-events: none;
 }
-
 .crop-studio-header h3 {
-    margin: 0;
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: white;
-    letter-spacing: 0.5px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: white;
 }
 
 .crop-studio-header p {
-    margin: 4px 0 0;
-    font-size: 0.85rem;
-    color: #ccc;
+  margin: 5px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #d1d5db;
 }
 
 .crop-studio-editor {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    overflow: hidden;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
 }
 
-.ReactCrop {
-    width: 100vw;
-    height: 100vh;
+.crop-studio .ReactCrop {
+  width: 100vw;
+  height: 100vh;
 }
 
 .crop-studio-img {
-    width: 100vw;
-    height: 100vh;
-    object-fit: cover;
-    pointer-events: none;
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.crop-studio .ReactCrop__drag-handle {
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px #312e81;
 }
 
 .crop-studio-actions {
-    position: absolute;
-    bottom: 40px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    justify-content: center;
-    gap: 20px;
-    z-index: 10;
-    background: rgba(15, 15, 15, 0.9);
-    padding: 14px 24px;
-    border-radius: 50px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  z-index: 10;
+  background: rgba(17, 24, 39, 0.94);
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 .crop-btn {
-    padding: 10px 24px;
-    border: 1px solid transparent;
-    border-radius: 50px;
-    font-size: 0.9rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease-in-out;
-    min-width: 110px;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-}
-
-.crop-btn:active {
-    transform: scale(0.95);
+  padding: 10px 22px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font: 600 13px/1.4 var(--tl-font-sans);
+  cursor: pointer;
+  min-width: 100px;
 }
 
 .crop-btn.cancel {
-    background-color: transparent;
-    color: #ddd;
-    border-color: #666;
+  background: transparent;
+  color: #e5e7eb;
+  border-color: #6b7280;
 }
 
 .crop-btn.cancel:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    color: white;
-    border-color: #999;
-    transform: translateY(-2px);
+  background: #374151;
+  color: white;
 }
 
 .crop-btn.confirm {
-    background-color: #ffffff;
-    color: #000000;
-    box-shadow: 0 4px 15px rgba(255, 255, 255, 0.2);
+  background: linear-gradient(135deg, #4f46e5, #4338ca);
+  color: white;
 }
 
-.crop-btn.confirm:hover {
-    background-color: #f0f0f0;
-    box-shadow: 0 6px 20px rgba(255, 255, 255, 0.3);
-    transform: translateY(-2px);
+.crop-btn.confirm:hover:not(:disabled) {
+  background: #4338ca;
+}
+
+.crop-btn.confirm:disabled {
+  background: #374151;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.crop-btn:focus-visible {
+  outline: 2px solid #c7d2fe;
+  outline-offset: 3px;
 }
 
 .crop-studio-loading {
-    font-size: 1.2rem;
-    color: white;
-    font-weight: bold;
-    padding: 20px;
-    background: rgba(0, 0, 0, 0.6);
-    border-radius: 10px;
-    backdrop-filter: blur(5px);
+  font-size: 14px;
+  color: white;
+  padding: 20px;
+  background: rgba(17, 24, 39, 0.9);
+  border-radius: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .crop-studio .ReactCrop__crop-selection {
+        animation: none;
+    }
 }

@@ -1,30 +1,25 @@
-// SnippingTool.jsx
 import "./SnippingTool.css";
-import { Crosshair, Sparkles } from "lucide-react";
+import { Image, Scissors } from "lucide-react";
 
-function SnippingTool({ handleSnipClick, isSnipping }) {
+export default function SnippingTool({ handleSnipClick, isSnipping }) {
    return (
       <div className="snipping-page">
-         <div className="snip-action-box">
-            <div className="snip-icon-wrapper">
-               <Crosshair
-                  size={22}
-                  color="var(--brand-primary)"
-                  strokeWidth={2}
-               />
-            </div>
-            <div className="snip-title">Verify Image</div>
-            <div className="snip-subtitle">Draw a box around the claim</div>
+         <div className="page-intro">
+            <span className="page-eyebrow">Verify Image</span>
+            <h1>Check what you're seeing.</h1>
+            <p>Select a suspicious image or claim on the page to start an investigation.</p>
          </div>
-
-         <button
-            className="snip-btn"
-            onClick={handleSnipClick}
-            disabled={isSnipping}>
+         <div className="snip-action-box">
+            <div className="snip-icon-wrapper"><Image size={24} aria-hidden="true" /></div>
+            <div>
+               <div className="snip-title">Verify Image</div>
+               <div className="snip-subtitle">Draw a box around the claim</div>
+            </div>
+         </div>
+         <button type="button" className="primary-button" onClick={handleSnipClick} disabled={isSnipping}>
+            <Scissors size={17} aria-hidden="true" />
             {isSnipping ? "Snipping..." : "Start Snipping"}
          </button>
       </div>
    );
 }
-
-export default SnippingTool;

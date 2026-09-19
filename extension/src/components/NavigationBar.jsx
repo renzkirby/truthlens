@@ -1,46 +1,22 @@
-// NavigationBar.jsx
 import "./NavigationBar.css";
-import { Scissors, Upload, Link, Sparkles } from "lucide-react";
+import { ArrowRight, Link, FileText, Sparkles } from "lucide-react";
 
-function NavigationBar({ activeLink, setActiveLink }) {
+const tools = [
+   { id: "url-upload", label: "Analyze URL", icon: Link },
+   { id: "file-upload", label: "Upload File", icon: FileText },
+   { id: "detect-deepfake", label: "Deepfake Detection", icon: Sparkles },
+];
+
+export default function NavigationBar({ setActiveLink }) {
    return (
-      <nav className="extension-navigation-bar">
-         <div className="extension-nav-links">
-            <button 
-               className={`nav-tab ${activeLink === "snipping" ? "active" : ""}`}
-               onClick={() => setActiveLink("snipping")}
-               title="Verify Image (Snip)" // Tooltip added
-            >
-               <Scissors size={18} strokeWidth={2} />
-               <span className="nav-label">Snip</span>
+      <nav className="extension-tools" aria-label="Verification tools">
+         {tools.map(({ id, label, icon: Icon }) => (
+            <button type="button" className="extension-tool" key={id} onClick={() => setActiveLink(id)}>
+               <Icon size={17} aria-hidden="true" />
+               <span>{label}</span>
+               <ArrowRight size={15} className="tool-arrow" aria-hidden="true" />
             </button>
-            <button 
-               className={`nav-tab ${activeLink === "url-upload" ? "active" : ""}`}
-               onClick={() => setActiveLink("url-upload")}
-               title="Analyze URL"
-            >
-               <Link size={18} strokeWidth={2} />
-               <span className="nav-label">URL</span>
-            </button>
-            <button 
-               className={`nav-tab ${activeLink === "detect-deepfake" ? "active" : ""}`}
-               onClick={() => setActiveLink("detect-deepfake")}
-               title="Detect Deepfake"
-            >
-               <Sparkles size={18} strokeWidth={2} />
-               <span className="nav-label">AI Scan</span>
-            </button>
-            <button 
-               className={`nav-tab ${activeLink === "file-upload" ? "active" : ""}`}
-               onClick={() => setActiveLink("file-upload")}
-               title="Upload File"
-            >
-               <Upload size={18} strokeWidth={2} />
-               <span className="nav-label">File</span>
-            </button>
-         </div>
+         ))}
       </nav>
    );
 }
-
-export default NavigationBar;

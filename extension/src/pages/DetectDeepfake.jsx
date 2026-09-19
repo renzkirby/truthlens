@@ -1,26 +1,26 @@
-// src/pages/DetectDeepfake.jsx
-import { Crosshair, Sparkles } from "lucide-react";
+import { Scissors, Sparkles } from "lucide-react";
+import "./SnippingTool.css";
+import "./DetectDeepfake.css";
 
-function DetectDeepfake({ handleDeepfakeSnipClick, isSnipping }) {
+export default function DetectDeepfake({ handleDeepfakeSnipClick, isSnipping }) {
    return (
-      <div className="snipping-page">
-         <div className="snip-action-box">
-            <div className="snip-icon-wrapper" style={{ background: "#7c3aed" }}>
-               <Sparkles size={22} color="#fff" strokeWidth={2} />
-            </div>
-            <div className="snip-title" style={{ color: "#5b21b6" }}>AI Forensics Scanner</div>
-            <div className="snip-subtitle">Draw a box around an image to detect AI generation</div>
+      <div className="snipping-page deepfake-page">
+         <div className="page-intro">
+            <span className="page-eyebrow">Deepfake Detection</span>
+            <h1>Take a closer look.</h1>
+            <p>Check an image for signs of AI generation.</p>
          </div>
-
-         <button
-            className="snip-btn"
-            style={{ background: "#7c3aed" }}
-            onClick={handleDeepfakeSnipClick}
-            disabled={isSnipping}>
+         <div className="snip-action-box">
+            <div className="snip-icon-wrapper"><Sparkles size={24} aria-hidden="true" /></div>
+            <div>
+               <div className="snip-title">AI Forensics Scanner</div>
+               <div className="snip-subtitle">Draw a box around an image to analyze it</div>
+            </div>
+         </div>
+         <button type="button" className="primary-button" onClick={handleDeepfakeSnipClick} disabled={isSnipping}>
+            <Scissors size={17} aria-hidden="true" />
             {isSnipping ? "Snipping..." : "Scan for Deepfake"}
          </button>
       </div>
    );
 }
-
-export default DetectDeepfake;

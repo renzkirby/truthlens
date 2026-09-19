@@ -1,37 +1,36 @@
-/* NavigationBar.css */
-.extension-navigation-bar {
-     border-bottom: 1.5px solid var(--border-default);
-     background: var(--bg-surface);
+.extension-tools {
+  display: grid;
+  gap: 4px;
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--tl-border);
 }
 
-.extension-nav-links {
-     display: flex;
-     justify-content: space-between;
+.extension-tool {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 38px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--tl-surface);
+  color: var(--tl-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
 }
 
-.nav-tab {
-     flex: 1;
-     display: flex;
-     align-items: center;
-     justify-content: center;
-     gap: 6px;
-     padding: 10px 4px;
-     font-size: 10px;
-     font-weight: 700;
-     color: var(--text-muted);
-     background: var(--bg-subtle);
-     border: none;
-     border-bottom: 2px solid transparent;
-     cursor: pointer;
-     transition: all 0.2s;
+.extension-tool > svg {
+  flex-shrink: 0;
+  color: var(--tl-primary);
 }
 
-.nav-tab.active {
-     color: var(--brand-primary);
-     background: var(--bg-surface);
-     border-bottom: 2px solid var(--brand-primary);
+.extension-tool .tool-arrow {
+  margin-left: auto;
+  color: var(--tl-text-secondary);
 }
 
-.nav-tab.active svg {
-   color: var(--brand-primary);
-}
+.extension-tool:hover { background: var(--tl-primary-soft); border-color: #dfe3ff; color: var(--tl-primary); }

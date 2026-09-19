@@ -1,7 +1,8 @@
 // App.jsx
 import { useState, useEffect } from "react";
+import { ArrowLeft } from "lucide-react";
 import "./App.css";
-import truthlensIcon from "./assets/truthlens-icon.png";
+import TruthLensLogo from "./assets/truthlens_logo.png";
 import NavigationBar from "./components/NavigationBar";
 import FileUpload from "./pages/FileUpload";
 import SnippingTool from "./pages/SnippingTool";
@@ -309,26 +310,28 @@ function App() {
 
    return (
       <div className="card">
-         <div className="header-row">
+         <header className="header-row">
             <div className="logo-container">
                <div className="logo-box">
                   <img
-                     src={truthlensIcon}
-                     alt="TruthLens"
-                     style={{ width: "25px", height: "25px", objectFit: "contain" }}
+                     src={TruthLensLogo}
+                     alt=""
                   />
                </div>
                <h2>TruthLens</h2>
             </div>
-            <span className="version-badge">v1.1</span>
-         </div>
+            <span className="ready-pill"><span aria-hidden="true" />Ready</span>
+         </header>
 
-         <NavigationBar
-            activeLink={activeLink}
-            setActiveLink={setActiveLink}
-         />
-
-         <div className="content-area">{renderContent()}</div>
+         <main className="content-area">
+            {activeLink !== "snipping" && (
+               <button type="button" className="back-button" onClick={() => setActiveLink("snipping")}>
+                  <ArrowLeft size={14} aria-hidden="true" /> Back
+               </button>
+            )}
+            {renderContent()}
+            {activeLink === "snipping" && <NavigationBar setActiveLink={setActiveLink} />}
+         </main>
 
          {!isGuestMode &&
             guestSyncStatus?.status === "success" &&
@@ -379,19 +382,19 @@ function App() {
             </section>
          )}
 
-         {isGuestMode && (
+         {isGuestMode && activeLink === "snipping" && (
             <section className="guest-mode-panel">
                <div className="guest-mode-header">
-                  <span className="guest-mode-badge">Guest Mode</span>
+                  <h3 className="guest-mode-badge">Recent scans</h3>
                   <span className="guest-mode-cap">
-                     {ghostScans.length}/{GUEST_SCANS_CAP} cached locally
+                     {ghostScans.length}/{GUEST_SCANS_CAP} saved locally
                   </span>
                </div>
 
                <div className="guest-history-list">
                   {ghostScans.length === 0 ? (
                      <p className="guest-history-empty">
-                        No ghost scans yet. Run a scan and your latest 3 verdicts will appear here.
+                        Your latest investigations will appear here.
                      </p>
                   ) : (
                      ghostScans.map((scan, index) => {
@@ -428,8 +431,7 @@ function App() {
 
                <div className="guest-upsell-cta">
                   <p>
-                     You have unsaved scans. Log in or create a TruthLens account to save them to
-                     your permanent Private Library and earn Trust Points!
+                     Sign in to save your investigations.
                   </p>
                   <div className="guest-upsell-actions">
                      <a
@@ -451,7 +453,7 @@ function App() {
             </section>
          )}
 
-         <div className="app-footer">
+         <footer className="app-footer">
             <span className="footer-user">
                {isGuestMode ? (
                   "Browsing as guest"
@@ -467,9 +469,9 @@ function App() {
                type="button"
                className="footer-link footer-link-button"
                onClick={handleOpenCommunityPlatform}>
-               Open Community Platform →
+               Open TruthLens →
             </button>
-         </div>
+         </footer>
       </div>
    );
 }
