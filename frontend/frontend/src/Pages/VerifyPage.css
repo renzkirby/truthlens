@@ -1,10 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
 .verify-layout {
    display: flex;
    flex-direction: column;
    background-color: var(--bg-app);
-   font-family: 'Inter', sans-serif;
+   font-family: var(--tl-font-sans);
 }
 
 .verify-container {
@@ -73,7 +71,7 @@
    font-weight: 600;
    color: var(--text-muted);
    cursor: pointer;
-   font-family: 'Inter', sans-serif;
+   font-family: var(--tl-font-sans);
    transition: all 0.15s;
    flex-shrink: 0;
 }
@@ -175,7 +173,7 @@
    background: #f9fafb;
    font-size: 13px;
    color: var(--text-main);
-   font-family: 'Inter', sans-serif;
+   font-family: var(--tl-font-sans);
    outline: none;
    transition: border-color 0.2s;
 }
@@ -204,7 +202,7 @@
    font-size: 13px;
    font-weight: 600;
    cursor: pointer;
-   font-family: 'Inter', sans-serif;
+   font-family: var(--tl-font-sans);
    transition: background 0.2s;
    white-space: nowrap;
 }
@@ -320,7 +318,7 @@
    font-weight: 600;
    color: var(--text-muted);
    cursor: pointer;
-   font-family: 'Inter', sans-serif;
+   font-family: var(--tl-font-sans);
 }
 
 .remove-image-btn:hover {
@@ -611,7 +609,7 @@
    font-weight: 600;
    color: var(--verdict-misleading-text);
    cursor: pointer;
-   font-family: 'Inter', sans-serif;
+   font-family: var(--tl-font-sans);
    transition: background 0.15s;
 }
 
