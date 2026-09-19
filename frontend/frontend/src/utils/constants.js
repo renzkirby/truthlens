@@ -95,6 +95,7 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localho
 
 // Common API endpoints (relative paths)
 export const API_ENDPOINTS = {
+   PUBLIC_REACH_EVENTS: "public-reach/events/",
    // Auth & User
    LOGIN: "auth/login/",
    REGISTER: "auth/register/",
@@ -166,6 +167,8 @@ export const API_ENDPOINTS = {
    // Verification Workspace
    VERIFICATION_INTAKE: "verification/intake/",
    VERIFICATION_WORKLOAD: "verification/workload/",
+   VERIFICATION_INTELLIGENCE: (claimId) =>
+      `verification/claims/${encodeURIComponent(claimId)}/intelligence/`,
    VERIFICATION_ASSIGNMENT_CLAIM: (assignmentId) => `verification/assignments/${assignmentId}/claim/`,
    VERIFICATION_ASSIGNMENT_RELEASE: (assignmentId) => `verification/assignments/${assignmentId}/release/`,
    ORGANIZATION_MEMBERS: (organizationId) => `organizations/${organizationId}/members/`,

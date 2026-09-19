@@ -14,6 +14,7 @@ import PartnerLogo from "../components/partners/PartnerLogo";
 import { useAuth } from "../hooks/useAuth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { resolveApiEndpoint } from "../utils/api";
+import { createPublicReachEventId, recordPublicReach } from "../utils/publicReach";
 import "./PublicFactCheckPage.css";
 
 const VERDICT_META = {
@@ -192,6 +193,7 @@ function PublicFactCheckPage() {
    const [retryVersion, setRetryVersion] = useState(0);
    const [focusRouteKey, setFocusRouteKey] = useState(null);
    const requestIdRef = useRef(0);
+   const reachAttemptRef = useRef(null);
    const historyFocusTargetRef = useRef(null);
    const headingRef = useRef(null);
    const routeKey = `${slug}/${publicationId}`;
@@ -209,15 +211,21 @@ function PublicFactCheckPage() {
 
    useEffect(() => {
       const requestId = ++requestIdRef.current;
+      if (reachAttemptRef.current?.routeKey !== routeKey) {
+         reachAttemptRef.current = { routeKey, eventId: createPublicReachEventId() };
+      }
+      const reachEventId = reachAttemptRef.current.eventId;
 
       authFetch(resolveApiEndpoint("PUBLIC_PARTNER_FACT_CHECK_DETAIL", slug, publicationId))
          .then((response) => {
             if (requestId !== requestIdRef.current) return;
-            if (!response?.article || !response?.organization) {
+            if (!response?.article || response?.organization?.slug !== slug
+               || typeof response?.selected_publication_id !== "string"
+               || response.selected_publication_id.toLowerCase() !== publicationId.toLowerCase()) {
                throw new Error("The public publication response is incomplete.");
             }
 
-            setDetailState({ routeKey, data: response });
+            setDetailState({ routeKey, data: response, reachEventId });
             if (historyFocusTargetRef.current === routeKey) {
                historyFocusTargetRef.current = null;
                setFocusRouteKey(routeKey);
@@ -238,6 +246,18 @@ function PublicFactCheckPage() {
          requestIdRef.current += 1;
       };
    }, [authFetch, publicationId, retryVersion, routeKey, slug]);
+
+   useEffect(() => {
+      if (!detail || error || showLoading || reachAttemptRef.current?.routeKey !== routeKey
+         || detailState.reachEventId !== reachAttemptRef.current.eventId) return;
+      void recordPublicReach({
+         clientEventId: detailState.reachEventId,
+         eventType: "PUBLICATION_VIEW",
+         sourceSurface: "PUBLIC_FACT_CHECK_PAGE",
+         organizationSlug: detail.organization.slug,
+         publicationId: detail.selected_publication_id,
+      });
+   }, [detail, detailState, error, routeKey, showLoading]);
 
    useEffect(() => {
       if (!detail || focusRouteKey !== routeKey) return undefined;

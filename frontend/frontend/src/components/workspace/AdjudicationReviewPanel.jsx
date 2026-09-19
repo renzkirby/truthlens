@@ -8,6 +8,7 @@ import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
 import Select from "../ui/Select.jsx";
 import Textarea from "../ui/Textarea.jsx";
+import VerificationIntelligencePanel from "./VerificationIntelligencePanel.jsx";
 
 import "./AdjudicationReviewPanel.css";
 
@@ -2272,6 +2273,14 @@ function AdjudicationReviewContent({
                                        className="adjudication-context-rail"
                                        aria-label="Selected case context"
                                     >
+                                       {detailClaim.id && organizationId && (
+                                          <VerificationIntelligencePanel
+                                             key={`${organizationId}:${detailClaim.id}`}
+                                             organizationId={organizationId}
+                                             claimId={detailClaim.id}
+                                          />
+                                       )}
+
                                        <h5>Case context</h5>
                                        <dl className="adjudication-detail-facts">
                                           <div><dt>Organization</dt><dd>{detail.organization?.name || "Unavailable"}</dd></div>

@@ -1,9 +1,10 @@
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import requests
 from django.test import TestCase
 
-from api import tasks
+from api import services, tasks
 from api.models import Claim, EvidenceSource, VerificationEvidence, VerificationRun
 from api.verification import runs
 from api.verification.contracts import RawEvidence
@@ -146,6 +147,73 @@ class VerificationRunURLRuntimeTests(TestCase):
 
     def _invoke(self):
         return tasks.url_fact_check_process.run(self.url, self.claim.pk)
+
+    def test_provider_scope_isolated_across_jobs_and_failure_exit(self):
+        for failed_job in (False, True):
+            with self.subTest(failed_job=failed_job):
+                self.claim = Claim.objects.create(
+                    claim_type=Claim.ClaimType.URL,
+                    context_text="First scoped URL claim.",
+                )
+                gemini = Mock()
+                groq = Mock()
+                gemini.models.generate_content.return_value = SimpleNamespace(
+                    text='{"provider": "gemini"}',
+                )
+                gemini.models.generate_content.side_effect = RuntimeError(
+                    "Gemini unavailable",
+                )
+                groq_response = SimpleNamespace(choices=[SimpleNamespace(
+                    message=SimpleNamespace(content='{"provider": "groq"}'),
+                )])
+                groq.chat.completions.create.return_value = groq_response
+                if failed_job:
+                    groq.chat.completions.create.side_effect = [
+                        groq_response, RuntimeError("Groq unavailable"),
+                    ]
+
+                def query_with_llm(*args, **kwargs):
+                    services.call_llm_with_fallback("System", "Claim gate")
+                    return self.cleaned
+
+                def evaluate_with_llm(*args, **kwargs):
+                    services.call_llm_with_fallback("System", "Final evaluation")
+                    return self.verdict
+
+                self.query.side_effect = query_with_llm
+                self.evaluate_persisted.side_effect = evaluate_with_llm
+                with patch("api.services.gemini_client", gemini), patch(
+                    "api.services.groq_client", groq,
+                ):
+                    if failed_job:
+                        with self.assertRaises(LLMProviderUnavailableError):
+                            self._execute()
+                        run = self.claim.verification_runs.get()
+                        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+                        self.assertEqual(run.failure_code, "LLM_UNAVAILABLE")
+                        self.claim.refresh_from_db()
+                        self.assertIsNone(self.claim.ai_verdict)
+                    else:
+                        self._assert_terminal(
+                            self._execute(), VerificationRun.Status.COMPLETED,
+                        )
+                    gemini.models.generate_content.assert_called_once()
+                    self.assertEqual(groq.chat.completions.create.call_count, 2)
+
+                    gemini.models.generate_content.side_effect = None
+                    self.assertEqual(
+                        services.call_llm_with_fallback("System", "After job"),
+                        '{"provider": "gemini"}',
+                    )
+                    self.claim = Claim.objects.create(
+                        claim_type=Claim.ClaimType.URL,
+                        context_text="Independent scoped URL claim.",
+                    )
+                    self._assert_terminal(
+                        self._execute(), VerificationRun.Status.COMPLETED,
+                    )
+                    self.assertEqual(gemini.models.generate_content.call_count, 4)
+                    self.assertEqual(groq.chat.completions.create.call_count, 2)
 
     def _execute(self):
         before = self._terminal_count()

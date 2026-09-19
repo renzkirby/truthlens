@@ -35,6 +35,14 @@ class PublicPartnerRateThrottle(SimpleRateThrottle):
             "ident": ident,
         }
 
+class PublicReachRateThrottle(SimpleRateThrottle):
+    scope = "public_reach"
+
+    def get_cache_key(self, request, view):
+        # Temporary cache identity is never persisted in PublicReachEvent.
+        return self.cache_format % {"scope": self.scope, "ident": self.get_ident(request)}
+
+
 class EmailVerificationRateThrottle(
     SimpleRateThrottle
 ):

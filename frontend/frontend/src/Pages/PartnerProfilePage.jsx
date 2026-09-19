@@ -4,6 +4,7 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { resolveApiEndpoint } from "../utils/api";
+import { createPublicReachEventId, recordPublicReach } from "../utils/publicReach";
 import PartnerLogo from "../components/partners/PartnerLogo";
 import "./PartnerProfilePage.css";
 
@@ -323,6 +324,7 @@ function PartnerProfileContent({ slug }) {
    const [error, setError] = useState(null);
    const [retryVersion, setRetryVersion] = useState(0);
    const requestIdRef = useRef(0);
+   const reachEventIdRef = useRef(null);
    let documentTitle = "Partner Profile | TruthLens";
    if (partner?.name) documentTitle = `${partner.name} | TruthLens Partners`;
    if (error) documentTitle = "Partner Profile Unavailable | TruthLens";
@@ -332,9 +334,15 @@ function PartnerProfileContent({ slug }) {
    useEffect(() => {
       const requestId = ++requestIdRef.current;
 
+      if (!reachEventIdRef.current) reachEventIdRef.current = createPublicReachEventId();
+
       authFetch(resolveApiEndpoint("PUBLIC_PARTNER_DETAIL", slug))
          .then((response) => {
-            if (requestId === requestIdRef.current) setPartner(response);
+            if (requestId !== requestIdRef.current) return;
+            if (!response?.name || response?.slug !== slug) {
+               throw new Error("The public partner response is incomplete.");
+            }
+            setPartner(response);
          })
          .catch((requestError) => {
             if (requestId === requestIdRef.current) {
@@ -349,6 +357,16 @@ function PartnerProfileContent({ slug }) {
          requestIdRef.current += 1;
       };
    }, [authFetch, retryVersion, slug]);
+
+   useEffect(() => {
+      if (isLoading || error || !partner) return;
+      void recordPublicReach({
+         clientEventId: reachEventIdRef.current,
+         eventType: "PARTNER_PROFILE_VIEW",
+         sourceSurface: "PUBLIC_PARTNER_PROFILE",
+         organizationSlug: partner.slug,
+      });
+   }, [error, isLoading, partner]);
 
    const retry = () => {
       setPartner(null);

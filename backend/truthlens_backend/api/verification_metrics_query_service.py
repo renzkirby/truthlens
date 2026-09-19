@@ -13,6 +13,8 @@ from .verification_resolution_metrics_service import (
 from .verification_reviewer_participation_metrics_service import (
     get_organization_verification_reviewer_participation,
 )
+from .verification_public_reach_metrics_service import get_organization_public_reach_metrics
+from .verification_knowledge_reuse_metrics_service import get_organization_knowledge_reuse_metrics
 
 
 class VerificationMetricsAuthorizationError(Exception):
@@ -51,12 +53,16 @@ def get_organization_verification_metrics(
     activity = get_organization_verification_activity(organization=organization)
     resolution = get_organization_verification_resolution_distribution(organization=organization)
     reviewers = get_organization_verification_reviewer_participation(organization=organization)
+    reach = get_organization_public_reach_metrics(organization=organization)
+    reuse = get_organization_knowledge_reuse_metrics(organization=organization)
     organization_id = str(organization.pk)
     if (
         baseline.get("organization_id") != organization_id
         or activity.get("organization_id") != organization_id
         or resolution.get("organization_id") != organization_id
         or reviewers.get("organization_id") != organization_id
+        or reach.get("organization_id") != organization_id
+        or reuse.get("organization_id") != organization_id
     ):
         raise VerificationMetricsCompositionError(
             "Measurement service organization identity is missing or mismatched."
@@ -78,6 +84,16 @@ def get_organization_verification_metrics(
             "measurement_basis": reviewers["measurement_basis"],
             "unique_reviewers": reviewers["reviewer_participation"]["unique_reviewers"],
             "by_stage": reviewers["reviewer_participation"]["by_stage"],
+        },
+        "public_reach": {
+            "measurement_basis": reach["measurement_basis"],
+            "observed_interactions": reach["observed_interactions"],
+            "extension_publications": reach["extension_publications"],
+        },
+        "knowledge_reuse": {
+            "measurement_basis": reuse["measurement_basis"],
+            "material_reuse": reuse["material_reuse"],
+            "repeat_claim_reuse": reuse["repeat_claim_reuse"],
         },
     }
     if created_after is not None and created_before is not None:
