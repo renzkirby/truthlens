@@ -11,7 +11,15 @@ const countFormatter = new Intl.NumberFormat(undefined);
 const percentFormatter = new Intl.NumberFormat(undefined, { style: "percent", maximumFractionDigits: 1 });
 const secondsFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
 const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "long" });
+const utcDateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeZone: "UTC" });
 const VERDICTS = ["FACT", "FAKE", "MISLEADING", "SATIRE"];
+const UTC_DAY_MS = 24 * 60 * 60 * 1000;
+const TREND_COUNT_FIELDS = {
+   assignment: ["claimed", "released", "completed"],
+   evidence_review: ["decisions", "verified", "rejected"],
+   adjudication: ["started", "verdicts_issued"],
+   publication: ["initial_published"],
+};
 
 function isMeasurement(value) {
    return typeof value === "number" && Number.isFinite(value) && value >= 0;
@@ -19,6 +27,132 @@ function isMeasurement(value) {
 
 function isCount(value) {
    return isMeasurement(value) && Number.isInteger(value);
+}
+
+function getUtcDateString(date) {
+   return date.toISOString().slice(0, 10);
+}
+
+function utcDateValue(value) {
+   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value ?? "");
+   if (!match) return null;
+   const timestamp = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+   return getUtcDateString(new Date(timestamp)) === value ? timestamp : null;
+}
+
+function shiftUtcDate(value, amount) {
+   const timestamp = utcDateValue(value);
+   return timestamp === null ? "" : getUtcDateString(new Date(timestamp + amount * UTC_DAY_MS));
+}
+
+function formatUtcInstant(date) {
+   return date.toISOString().replace(/\.(\d{3})Z$/, (_match, milliseconds) => `.${milliseconds}000Z`);
+}
+
+function createAppliedPeriod(mode, startDate, endDate, instant = new Date(), retryVersion = 0) {
+   const today = getUtcDateString(instant);
+   return {
+      mode,
+      startDate,
+      endDate,
+      retryVersion,
+      createdAfter: `${startDate}T00:00:00.000000Z`,
+      createdBefore:
+         endDate === today ? formatUtcInstant(instant) : `${endDate}T23:59:59.999999Z`,
+   };
+}
+
+function createPresetPeriod(days, mode, instant = new Date()) {
+   const endDate = getUtcDateString(instant);
+   return createAppliedPeriod(mode, shiftUtcDate(endDate, -(days - 1)), endDate, instant);
+}
+
+function validateCustomPeriod(startDate, endDate, instant = new Date()) {
+   const start = utcDateValue(startDate);
+   const end = utcDateValue(endDate);
+   if (start === null || end === null) return "Enter both a valid start date and end date.";
+   if (start > end) return "Start date must be on or before end date.";
+   if (endDate > getUtcDateString(instant)) return "End date cannot be in the future.";
+   if ((end - start) / UTC_DAY_MS + 1 > 90) {
+      return "The reporting period cannot include more than 90 UTC calendar dates.";
+   }
+   return "";
+}
+
+function listUtcDates(startDate, endDate) {
+   const start = utcDateValue(startDate);
+   const end = utcDateValue(endDate);
+   if (start === null || end === null || start > end) return [];
+   const dates = [];
+   for (let timestamp = start; timestamp <= end; timestamp += UTC_DAY_MS) {
+      dates.push(getUtcDateString(new Date(timestamp)));
+   }
+   return dates;
+}
+
+function normalizeUtcBoundary(value) {
+   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?Z$/.exec(value ?? "");
+   if (!match) return null;
+   const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number);
+   const fraction = (match[7] ?? "").padEnd(6, "0");
+   const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second, Number(fraction.slice(0, 3))));
+   if (
+      date.getUTCFullYear() !== year ||
+      date.getUTCMonth() !== month - 1 ||
+      date.getUTCDate() !== day ||
+      date.getUTCHours() !== hour ||
+      date.getUTCMinutes() !== minute ||
+      date.getUTCSeconds() !== second
+   ) {
+      return null;
+   }
+   return `${value.slice(0, 19)}.${fraction}Z`;
+}
+
+function hasTrendCounts(value) {
+   return (
+      value !== null &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      Object.entries(TREND_COUNT_FIELDS).every(
+         ([category, fields]) =>
+            value[category] !== null &&
+            typeof value[category] === "object" &&
+            !Array.isArray(value[category]) &&
+            fields.every((field) => isCount(value[category][field])),
+      )
+   );
+}
+
+function isTrendResponseContract(value, organizationId, period) {
+   const trend = value?.trend;
+   const basis = trend?.measurement_basis;
+   const expectedDates = listUtcDates(period.startDate, period.endDate);
+   return (
+      value !== null &&
+      typeof value === "object" &&
+      String(value.organization_id) === String(organizationId) &&
+      trend !== null &&
+      typeof trend === "object" &&
+      basis?.source === "ACCOUNTABILITY_EVENT" &&
+      basis?.coverage === "INSTRUMENTATION_ERA_ONLY" &&
+      basis?.historical_backfill === false &&
+      basis?.granularity === "DAY" &&
+      basis?.bucket_timezone === "UTC" &&
+      normalizeUtcBoundary(basis?.created_after) === normalizeUtcBoundary(period.createdAfter) &&
+      normalizeUtcBoundary(basis?.created_before) === normalizeUtcBoundary(period.createdBefore) &&
+      hasTrendCounts(trend.totals) &&
+      Array.isArray(trend.daily) &&
+      trend.daily.length === expectedDates.length &&
+      trend.daily.every(
+         (bucket, index) => bucket?.date === expectedDates[index] && utcDateValue(bucket.date) !== null && hasTrendCounts(bucket),
+      )
+   );
+}
+
+function formatUtcDate(value) {
+   const timestamp = utcDateValue(value);
+   return timestamp === null ? value : utcDateFormatter.format(new Date(timestamp));
 }
 
 function isCurrentStateContract(value) {
@@ -140,6 +274,311 @@ function MeasurementBasis({ title, basis, fields }) {
             </dl>
          ) : (
             <p>Measurement basis not available from current observations.</p>
+         )}
+      </section>
+   );
+}
+
+function ActivityTrendsSection({ authFetch, authIdentity, organizationId, requestUrl }) {
+   const sectionHeadingId = useId();
+   const startDateId = useId();
+   const endDateId = useId();
+   const customHelpId = useId();
+   const customErrorId = useId();
+   const [appliedPeriod, setAppliedPeriod] = useState(() => createPresetPeriod(7, "last-7"));
+   const [periodMode, setPeriodMode] = useState("last-7");
+   const [draftRange, setDraftRange] = useState(() => ({
+      startDate: appliedPeriod.startDate,
+      endDate: appliedPeriod.endDate,
+   }));
+   const [validationMessage, setValidationMessage] = useState("");
+   const [trendResult, setTrendResult] = useState(null);
+   const trendGenerationRef = useRef(0);
+   const query = new URLSearchParams({
+      created_after: appliedPeriod.createdAfter,
+      created_before: appliedPeriod.createdBefore,
+   });
+   const trendRequestUrl = `${requestUrl}?${query.toString()}`;
+   const requestKey = JSON.stringify([
+      authIdentity,
+      organizationId,
+      appliedPeriod.createdAfter,
+      appliedPeriod.createdBefore,
+      appliedPeriod.retryVersion,
+   ]);
+
+   useEffect(() => {
+      const generation = ++trendGenerationRef.current;
+      let cancelled = false;
+
+      queueMicrotask(() => {
+         if (!cancelled && trendGenerationRef.current === generation) {
+            setTrendResult({ key: requestKey, status: "loading" });
+         }
+      });
+
+      async function loadTrend() {
+         try {
+            const data = await authFetch(trendRequestUrl, { method: "GET" });
+            if (cancelled || trendGenerationRef.current !== generation) return;
+            if (!isTrendResponseContract(data, organizationId, appliedPeriod)) {
+               throw new Error("Unexpected activity trend response contract.");
+            }
+            setTrendResult({ key: requestKey, status: "ready", trend: data.trend });
+         } catch (error) {
+            if (cancelled || trendGenerationRef.current !== generation) return;
+            let status = "error";
+            if (error?.status === 401 || error?.status === 403) status = "denied";
+            if (error?.status === 404) status = "not-found";
+            setTrendResult({ key: requestKey, status });
+         }
+      }
+
+      loadTrend();
+      return () => {
+         cancelled = true;
+      };
+   }, [appliedPeriod, authFetch, organizationId, requestKey, trendRequestUrl]);
+
+   const currentResult = trendResult?.key === requestKey ? trendResult : null;
+   const status = currentResult?.status ?? "loading";
+   const trend = status === "ready" ? currentResult.trend : null;
+   const today = getUtcDateString(new Date());
+   const includesCurrentUtcDay = appliedPeriod.endDate === today;
+   const expectedDateCount = listUtcDates(appliedPeriod.startDate, appliedPeriod.endDate).length;
+
+   function applyPreset(days, mode) {
+      const nextPeriod = createPresetPeriod(days, mode);
+      setPeriodMode(mode);
+      setValidationMessage("");
+      setDraftRange({ startDate: nextPeriod.startDate, endDate: nextPeriod.endDate });
+      setAppliedPeriod(nextPeriod);
+   }
+
+   function selectPeriodMode(mode) {
+      if (mode === "last-7") {
+         applyPreset(7, mode);
+      } else if (mode === "last-30") {
+         applyPreset(30, mode);
+      } else {
+         setPeriodMode("custom");
+         setValidationMessage("");
+      }
+   }
+
+   function updateDraftRange(field, value) {
+      const nextRange = { ...draftRange, [field]: value };
+      setDraftRange(nextRange);
+      setValidationMessage(validateCustomPeriod(nextRange.startDate, nextRange.endDate));
+   }
+
+   function applyCustomPeriod(event) {
+      event.preventDefault();
+      const instant = new Date();
+      const message = validateCustomPeriod(draftRange.startDate, draftRange.endDate, instant);
+      setValidationMessage(message);
+      if (message) return;
+      setAppliedPeriod(createAppliedPeriod("custom", draftRange.startDate, draftRange.endDate, instant));
+   }
+
+   function retryTrend() {
+      setAppliedPeriod((period) =>
+         createAppliedPeriod(
+            period.mode,
+            period.startDate,
+            period.endDate,
+            new Date(),
+            period.retryVersion + 1,
+         ),
+      );
+   }
+
+   const summaryMeasurements = trend
+      ? [
+           ["Investigations taken", trend.totals.assignment.claimed],
+           ["Evidence review decisions", trend.totals.evidence_review.decisions],
+           ["Verdicts issued", trend.totals.adjudication.verdicts_issued],
+           ["Initial publications recorded", trend.totals.publication.initial_published],
+        ]
+      : [];
+   const hasNoRecordedActivity =
+      trend &&
+      Object.entries(TREND_COUNT_FIELDS).every(([category, fields]) =>
+         fields.every((field) => trend.totals[category][field] === 0),
+      );
+
+   return (
+      <section className="institutional-analytics__section institutional-analytics__trends" aria-labelledby={sectionHeadingId}>
+         <header className="institutional-analytics__section-header">
+            <h4 id={sectionHeadingId}>Activity over time</h4>
+            <p>Explore eligible verification activity recorded during a selected UTC reporting period.</p>
+         </header>
+
+         <fieldset className="institutional-analytics__period-controls">
+            <legend>Reporting period</legend>
+            <p className="institutional-analytics__period-help">
+               Presets use UTC calendar days, including the current partial UTC day—not rolling hour intervals.
+            </p>
+            <div className="institutional-analytics__period-options">
+               {[
+                  ["last-7", "Last 7 days"],
+                  ["last-30", "Last 30 days"],
+                  ["custom", "Custom range"],
+               ].map(([value, label]) => (
+                  <label key={value} className="institutional-analytics__period-option">
+                     <input
+                        type="radio"
+                        name={`${sectionHeadingId}-reporting-period`}
+                        value={value}
+                        checked={periodMode === value}
+                        onChange={() => selectPeriodMode(value)}
+                     />
+                     <span>{label}</span>
+                  </label>
+               ))}
+            </div>
+         </fieldset>
+
+         {periodMode === "custom" && (
+            <form className="institutional-analytics__custom-period" onSubmit={applyCustomPeriod} noValidate>
+               <div className="institutional-analytics__date-field">
+                  <label htmlFor={startDateId}>Start date</label>
+                  <input
+                     id={startDateId}
+                     type="date"
+                     value={draftRange.startDate}
+                     max={today}
+                     required
+                     aria-invalid={validationMessage ? "true" : undefined}
+                     aria-describedby={`${customHelpId}${validationMessage ? ` ${customErrorId}` : ""}`}
+                     onChange={(event) => updateDraftRange("startDate", event.target.value)}
+                  />
+               </div>
+               <div className="institutional-analytics__date-field">
+                  <label htmlFor={endDateId}>End date</label>
+                  <input
+                     id={endDateId}
+                     type="date"
+                     value={draftRange.endDate}
+                     max={today}
+                     required
+                     aria-invalid={validationMessage ? "true" : undefined}
+                     aria-describedby={`${customHelpId}${validationMessage ? ` ${customErrorId}` : ""}`}
+                     onChange={(event) => updateDraftRange("endDate", event.target.value)}
+                  />
+               </div>
+               <Button type="submit" variant="secondary" className="institutional-analytics__apply-period">
+                  Apply period
+               </Button>
+               <p id={customHelpId} className="institutional-analytics__custom-help">
+                  Dates are inclusive UTC calendar dates; the maximum period is 90 dates.
+               </p>
+               {validationMessage && (
+                  <p id={customErrorId} className="institutional-analytics__validation-error" role="alert">
+                     {validationMessage}
+                  </p>
+               )}
+            </form>
+         )}
+
+         <div className="institutional-analytics__selected-period">
+            <span>UTC reporting period</span>
+            <p>
+               <time dateTime={appliedPeriod.startDate}>
+                  {formatUtcDate(appliedPeriod.startDate)} ({appliedPeriod.startDate})
+               </time>{" "}
+               to{" "}
+               <time dateTime={appliedPeriod.endDate}>
+                  {formatUtcDate(appliedPeriod.endDate)} ({appliedPeriod.endDate})
+               </time>
+            </p>
+            {includesCurrentUtcDay && <p>The current UTC day is still in progress.</p>}
+         </div>
+
+         {status === "loading" ? (
+            <p className="institutional-analytics__trend-state" role="status">
+               Loading activity for this reporting period…
+            </p>
+         ) : status === "denied" ? (
+            <div className="institutional-analytics__trend-state" role="alert">
+               <h5>Activity trends access unavailable</h5>
+               <p>Your current session does not have access to activity trends for this organization.</p>
+            </div>
+         ) : status === "not-found" ? (
+            <div className="institutional-analytics__trend-state" role="alert">
+               <h5>Organization activity unavailable</h5>
+               <p>This organization could not be found or is no longer available to your current session.</p>
+            </div>
+         ) : status === "error" ? (
+            <div className="institutional-analytics__trend-state" role="alert">
+               <h5>Activity trends are temporarily unavailable</h5>
+               <p>The selected-period activity could not be loaded. Your other Analytics measurements remain available.</p>
+               <Button variant="secondary" onClick={retryTrend}>
+                  Retry activity trends
+               </Button>
+            </div>
+         ) : (
+            <div className="institutional-analytics__trend-results">
+               <dl className="institutional-analytics__trend-summary">
+                  {summaryMeasurements.map(([label, value]) => (
+                     <div key={label}>
+                        <dt>{label}</dt>
+                        <dd>{formatCount(value)}</dd>
+                        <dd className="institutional-analytics__trend-summary-note">Observed during the selected period.</dd>
+                     </div>
+                  ))}
+               </dl>
+
+               {hasNoRecordedActivity && (
+                  <div className="institutional-analytics__trend-empty">
+                     <h5>No eligible verification activity was recorded during this reporting period.</h5>
+                     <p>Earlier work may exist outside the selected dates or outside the instrumentation coverage.</p>
+                  </div>
+               )}
+
+               <details className="institutional-analytics__daily-details">
+                  <summary>Daily activity breakdown ({countFormatter.format(expectedDateCount)} UTC dates)</summary>
+                  <p>Each row preserves the backend&apos;s UTC calendar-day bucket, including zero-activity dates.</p>
+                  <div
+                     className="institutional-analytics__daily-table-region"
+                     role="region"
+                     tabIndex="0"
+                     aria-label="Scrollable daily activity table"
+                  >
+                     <table className="institutional-analytics__daily-table">
+                        <caption>Eligible event counts by UTC calendar date</caption>
+                        <thead>
+                           <tr>
+                              <th scope="col">UTC date</th>
+                              <th scope="col">Investigations taken</th>
+                              <th scope="col">Evidence review decisions</th>
+                              <th scope="col">Verdicts issued</th>
+                              <th scope="col">Initial publications recorded</th>
+                           </tr>
+                        </thead>
+                        <tbody>
+                           {trend.daily.map((bucket) => (
+                              <tr key={bucket.date}>
+                                 <th scope="row">
+                                    <time dateTime={bucket.date}>{bucket.date}</time>
+                                 </th>
+                                 <td>{formatCount(bucket.assignment.claimed)}</td>
+                                 <td>{formatCount(bucket.evidence_review.decisions)}</td>
+                                 <td>{formatCount(bucket.adjudication.verdicts_issued)}</td>
+                                 <td>{formatCount(bucket.publication.initial_published)}</td>
+                              </tr>
+                           ))}
+                        </tbody>
+                     </table>
+                  </div>
+                  <p className="institutional-analytics__scroll-hint">Scroll within the table to review every column.</p>
+               </details>
+
+               <p className="institutional-analytics__trend-coverage">
+                  Counts are eligible accountability events observed during this UTC period. Coverage is limited to the
+                  instrumentation era; historical activity has not been backfilled.
+               </p>
+            </div>
          )}
       </section>
    );
@@ -371,6 +810,13 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
                      </section>
                   </div>
                </section>
+
+               <ActivityTrendsSection
+                  authFetch={authFetch}
+                  authIdentity={authIdentity}
+                  organizationId={organizationId}
+                  requestUrl={requestUrl}
+               />
 
                <div className="institutional-analytics__support-grid">
                   <section className="institutional-analytics__section institutional-analytics__support-panel">

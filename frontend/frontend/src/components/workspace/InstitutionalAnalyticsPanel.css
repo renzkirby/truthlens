@@ -252,6 +252,332 @@
    margin-top: var(--tl-space-2);
 }
 
+/* Selected-period activity remains distinct from current state and cumulative history. */
+.institutional-analytics__trends {
+   display: grid;
+   gap: var(--tl-space-5);
+}
+
+.institutional-analytics__trends > .institutional-analytics__section-header {
+   margin-bottom: 0;
+}
+
+.institutional-analytics__period-controls {
+   min-inline-size: 0;
+   margin: 0;
+   padding: 0;
+   border: 0;
+}
+
+.institutional-analytics__period-controls legend {
+   padding: 0;
+   color: var(--tl-color-text-main);
+   font-weight: 700;
+}
+
+.institutional-analytics__period-help,
+.institutional-analytics__custom-help,
+.institutional-analytics__daily-details > p,
+.institutional-analytics__scroll-hint,
+.institutional-analytics__trend-coverage {
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-sm);
+}
+
+.institutional-analytics__period-help {
+   max-width: 72ch;
+   margin-top: var(--tl-space-1) !important;
+}
+
+.institutional-analytics__period-options {
+   display: flex;
+   flex-wrap: wrap;
+   gap: var(--tl-space-2);
+   min-width: 0;
+   margin-top: var(--tl-space-3);
+}
+
+.institutional-analytics__period-option {
+   box-sizing: border-box;
+   display: inline-flex;
+   align-items: center;
+   gap: var(--tl-space-2);
+   min-width: 0;
+   padding: var(--tl-space-2) var(--tl-space-3);
+   color: var(--tl-color-text-body);
+   background: var(--tl-color-bg-surface);
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: var(--tl-radius-md);
+   font-weight: 650;
+   cursor: pointer;
+}
+
+.institutional-analytics__period-option:has(input:checked) {
+   color: var(--tl-color-brand-primary);
+   background: var(--tl-color-bg-subtle);
+   border-color: var(--tl-color-brand-primary);
+}
+
+.institutional-analytics__period-option:has(input:focus-visible) {
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
+}
+
+.institutional-analytics__period-option input {
+   flex: 0 0 auto;
+   margin: 0;
+   accent-color: var(--tl-color-brand-primary);
+}
+
+.institutional-analytics__custom-period {
+   display: grid;
+   grid-template-columns: repeat(2, minmax(11rem, 1fr)) auto;
+   align-items: end;
+   gap: var(--tl-space-3);
+   min-width: 0;
+   padding: var(--tl-space-4);
+   background: var(--tl-color-bg-subtle);
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: var(--tl-radius-md);
+}
+
+.institutional-analytics__date-field {
+   display: grid;
+   gap: var(--tl-space-1);
+   min-width: 0;
+}
+
+.institutional-analytics__date-field label {
+   color: var(--tl-color-text-main);
+   font-size: var(--tl-text-sm);
+   font-weight: 650;
+}
+
+.institutional-analytics__date-field input {
+   box-sizing: border-box;
+   width: 100%;
+   min-width: 0;
+   min-height: var(--tl-control-height-standard);
+   padding: var(--tl-space-2) var(--tl-space-3);
+   color: var(--tl-color-text-main);
+   background: var(--tl-color-bg-surface);
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: var(--tl-radius-md);
+   font-family: inherit;
+   font-size: var(--tl-text-base);
+}
+
+.institutional-analytics__date-field input:focus-visible {
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
+}
+
+.institutional-analytics__date-field input[aria-invalid="true"] {
+   border-color: var(--tl-color-status-critical-text);
+}
+
+.institutional-analytics__apply-period {
+   align-self: end;
+}
+
+.institutional-analytics__custom-help,
+.institutional-analytics__validation-error {
+   grid-column: 1 / -1;
+}
+
+.institutional-analytics__validation-error {
+   color: var(--tl-color-status-critical-text);
+   font-size: var(--tl-text-sm);
+   font-weight: 650;
+}
+
+.institutional-analytics__selected-period {
+   display: grid;
+   gap: var(--tl-space-1);
+   min-width: 0;
+   padding: var(--tl-space-3) var(--tl-space-4);
+   background: var(--tl-color-bg-subtle);
+   border-block: 1px solid var(--tl-color-border-default);
+}
+
+.institutional-analytics__selected-period > span {
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-xs);
+   font-weight: 700;
+   letter-spacing: 0.02em;
+   text-transform: uppercase;
+}
+
+.institutional-analytics__selected-period > p:first-of-type {
+   color: var(--tl-color-text-main);
+   font-weight: 700;
+}
+
+.institutional-analytics__selected-period > p:last-child:not(:first-of-type) {
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-sm);
+}
+
+.institutional-analytics__trend-state {
+   min-width: 0;
+   padding: var(--tl-space-4);
+   background: var(--tl-color-bg-subtle);
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: var(--tl-radius-md);
+}
+
+.institutional-analytics__trend-state p {
+   margin-top: var(--tl-space-2);
+}
+
+.institutional-analytics__trend-state .tl-button {
+   max-width: 100%;
+   margin-top: var(--tl-space-4);
+}
+
+.institutional-analytics__trend-results {
+   display: grid;
+   gap: var(--tl-space-4);
+   min-width: 0;
+}
+
+.institutional-analytics__trend-summary {
+   display: grid;
+   grid-template-columns: repeat(4, minmax(0, 1fr));
+   gap: var(--tl-space-3);
+   min-width: 0;
+}
+
+.institutional-analytics__trend-summary > div {
+   display: grid;
+   grid-template-rows: auto 1fr auto;
+   gap: var(--tl-space-2);
+   min-width: 0;
+   padding: var(--tl-space-4);
+   background: var(--tl-color-bg-surface);
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: var(--tl-radius-md);
+}
+
+.institutional-analytics__trend-summary dt {
+   color: var(--tl-color-text-body);
+   font-size: var(--tl-text-sm);
+   font-weight: 650;
+   line-height: 1.35;
+}
+
+.institutional-analytics__trend-summary dd:not(.institutional-analytics__trend-summary-note) {
+   align-self: center;
+   color: var(--tl-color-text-main);
+   font-size: var(--tl-text-2xl);
+   font-weight: 750;
+   font-variant-numeric: tabular-nums;
+   line-height: 1.1;
+}
+
+.institutional-analytics__trend-summary-note {
+   padding-top: var(--tl-space-2);
+   color: var(--tl-color-text-muted);
+   border-top: 1px solid var(--tl-color-border-light);
+   font-size: var(--tl-text-xs);
+}
+
+.institutional-analytics__trend-empty {
+   padding: var(--tl-space-4);
+   background: var(--tl-color-bg-subtle);
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: var(--tl-radius-md);
+}
+
+.institutional-analytics__trend-empty p {
+   margin-top: var(--tl-space-2);
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-sm);
+}
+
+.institutional-analytics__daily-details {
+   min-width: 0;
+   padding-block: var(--tl-space-3);
+   border-block: 1px solid var(--tl-color-border-default);
+}
+
+.institutional-analytics__daily-details > summary {
+   color: var(--tl-color-text-main);
+   font-weight: 700;
+   cursor: pointer;
+}
+
+.institutional-analytics__daily-details > summary:hover {
+   color: var(--tl-color-brand-primary);
+}
+
+.institutional-analytics__daily-details > summary:focus-visible,
+.institutional-analytics__daily-table-region:focus-visible {
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
+   border-radius: var(--tl-radius-sm);
+}
+
+.institutional-analytics__daily-details > p {
+   max-width: 72ch;
+   margin-top: var(--tl-space-2) !important;
+}
+
+.institutional-analytics__daily-table-region {
+   max-width: 100%;
+   margin-top: var(--tl-space-3);
+   overflow-x: auto;
+   overscroll-behavior-inline: contain;
+   scrollbar-color: var(--tl-color-brand-primary) var(--tl-color-bg-subtle);
+}
+
+.institutional-analytics__daily-table {
+   width: 100%;
+   min-width: 44rem;
+   border-collapse: collapse;
+   color: var(--tl-color-text-body);
+   font-size: var(--tl-text-sm);
+}
+
+.institutional-analytics__daily-table caption {
+   padding: 0 0 var(--tl-space-2);
+   color: var(--tl-color-text-muted);
+   text-align: start;
+}
+
+.institutional-analytics__daily-table th,
+.institutional-analytics__daily-table td {
+   padding: var(--tl-space-2) var(--tl-space-3);
+   border-bottom: 1px solid var(--tl-color-border-light);
+   text-align: start;
+   vertical-align: top;
+}
+
+.institutional-analytics__daily-table thead th {
+   color: var(--tl-color-text-main);
+   background: var(--tl-color-bg-subtle);
+   font-weight: 700;
+}
+
+.institutional-analytics__daily-table tbody th {
+   color: var(--tl-color-text-main);
+   font-weight: 650;
+   white-space: nowrap;
+}
+
+.institutional-analytics__daily-table td {
+   font-variant-numeric: tabular-nums;
+}
+
+.institutional-analytics__scroll-hint {
+   display: none;
+   margin-top: var(--tl-space-2) !important;
+}
+
+.institutional-analytics__trend-coverage {
+   max-width: 78ch;
+}
+
 /* Supporting history and outcomes use adjacent cards only when there is room. */
 .institutional-analytics__support-grid {
    display: grid;
@@ -592,7 +918,8 @@
 }
 
 @container institutional-analytics (max-width: 930px) {
-   .institutional-analytics__current-grid {
+   .institutional-analytics__current-grid,
+   .institutional-analytics__trend-summary {
       grid-template-columns: repeat(2, minmax(0, 1fr));
    }
 
@@ -603,10 +930,15 @@
    .institutional-analytics__workflow-details {
       grid-template-columns: repeat(2, minmax(0, 1fr));
    }
+
+   .institutional-analytics__scroll-hint {
+      display: block;
+   }
 }
 
 @container institutional-analytics (max-width: 660px) {
    .institutional-analytics__activity-grid,
+   .institutional-analytics__custom-period,
    .institutional-analytics__workflow-details,
    .institutional-analytics__notes-definitions,
    .institutional-analytics__basis-grid {
@@ -625,10 +957,15 @@
    .institutional-analytics__support-panel {
       padding: var(--tl-space-4);
    }
+
+   .institutional-analytics__apply-period {
+      justify-self: start;
+   }
 }
 
 @container institutional-analytics (max-width: 460px) {
    .institutional-analytics__current-grid,
+   .institutional-analytics__trend-summary,
    .institutional-analytics__workflow-summary,
    .institutional-analytics__turnaround-primary {
       grid-template-columns: minmax(0, 1fr);
@@ -645,6 +982,15 @@
    .institutional-analytics__notes {
       padding-right: var(--tl-space-4);
       padding-left: var(--tl-space-4);
+   }
+
+   .institutional-analytics__period-options {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+   }
+
+   .institutional-analytics__period-option {
+      width: 100%;
    }
 
    .institutional-analytics__basis dl > div {
