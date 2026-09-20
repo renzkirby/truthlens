@@ -121,9 +121,7 @@ class VerificationActivityMetricsTests(TestCase):
         actions = AccountabilityEvent.ActionType
         for action in (actions.EVIDENCE_VERIFIED, actions.EVIDENCE_REJECTED):
             for correction_id in (str(uuid.uuid4()), None, "", False):
-                self.record(action, context={
-                    "claim_id": self.claim_id, "correction_request_id": correction_id,
-                })
+                self.record(action, context={"correction_request_id": correction_id})
         self.assertEqual(self.activity(), self.empty_contract())
 
     def test_excluded_correction_evidence_does_not_extend_activity_timestamps(self):
@@ -131,7 +129,7 @@ class VerificationActivityMetricsTests(TestCase):
         for action, offset in ((actions.EVIDENCE_VERIFIED, -100),
                                (actions.EVIDENCE_REJECTED, 100)):
             self.record(action, at=self.observed_at + timedelta(seconds=offset), context={
-                "claim_id": self.claim_id, "correction_request_id": str(uuid.uuid4()),
+                "correction_request_id": str(uuid.uuid4()),
             })
         self.record(actions.EVIDENCE_VERIFIED)
         result = self.activity()
@@ -219,6 +217,19 @@ class VerificationActivityMetricsTests(TestCase):
                         self.record(action, resource_type=AccountabilityEvent.ResourceType.THREAD)
                         self.activity()
 
+    def test_correction_evidence_with_wrong_resource_type_still_fails_closed(self):
+        actions = AccountabilityEvent.ActionType
+        for action in (actions.EVIDENCE_VERIFIED, actions.EVIDENCE_REJECTED):
+            with self.subTest(action=action):
+                with self.assertRaises(VerificationActivityMetricsIntegrityError):
+                    with transaction.atomic():
+                        self.record(
+                            action,
+                            resource_type=AccountabilityEvent.ResourceType.THREAD,
+                            context={"correction_request_id": str(uuid.uuid4())},
+                        )
+                        self.activity()
+
     def test_all_selected_actions_require_nonblank_string_claim_identity(self):
         actions = AccountabilityEvent.ActionType
         for action in (actions.EVIDENCE_VERIFIED, actions.EVIDENCE_REJECTED,
@@ -250,7 +261,7 @@ class VerificationActivityMetricsTests(TestCase):
         for offset in (-1000, 1000):
             self.record(actions.EVIDENCE_REJECTED,
                         at=self.observed_at + timedelta(seconds=offset), context={
-                            "claim_id": self.claim_id, "correction_request_id": str(uuid.uuid4()),
+                            "correction_request_id": str(uuid.uuid4()),
                         })
         self.record(actions.ARTICLE_PUBLISHED, organization=self.other_organization,
                     at=later + timedelta(days=4))

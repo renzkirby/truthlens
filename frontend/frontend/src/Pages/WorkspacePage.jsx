@@ -25,6 +25,7 @@ import PublishingPanel from "../components/workspace/PublishingPanel.jsx";
 import PublicationsPanel from "../components/workspace/PublicationsPanel.jsx";
 import FactualCorrectionPanel, { CorrectionDialog } from "../components/workspace/FactualCorrectionPanel.jsx";
 import AccountabilityPanel from "../components/workspace/AccountabilityPanel.jsx";
+import InstitutionalAnalyticsPanel from "../components/workspace/InstitutionalAnalyticsPanel.jsx";
 
 const WORKLOAD_CAPABILITIES = [
    WorkspaceCapability.CLAIM_VERIFICATION_WORK,
@@ -39,6 +40,11 @@ const FACTUAL_CORRECTION_CAPABILITIES = [
    WorkspaceCapability.ADJUDICATE,
    WorkspaceCapability.CREATE_FACT_CHECK_DRAFT,
    WorkspaceCapability.PUBLISH_FACT_CHECK,
+];
+
+const ORGANIZATION_ANALYTICS_CAPABILITIES = [
+   WorkspaceCapability.CLAIM_VERIFICATION_WORK,
+   WorkspaceCapability.MANAGE_ORGANIZATION,
 ];
 
 const ORGANIZATION_ACCOUNTABILITY_CAPABILITIES = [
@@ -140,6 +146,14 @@ const WORKSPACE_SECTIONS = [
       capability: WorkspaceCapability.MANAGE_ORGANIZATION,
    },
    {
+      id: "analytics",
+      label: "Analytics",
+      description: "Review observed verification activity, completion, resolution, and reviewer participation.",
+      icon: "bar-chart",
+      scope: "organization",
+      capabilities: ORGANIZATION_ANALYTICS_CAPABILITIES,
+   },
+   {
       id: "accountability",
       label: "Accountability",
       description: "Review attributable actions and state changes affecting this organization.",
@@ -205,9 +219,7 @@ function WorkspacePage() {
    const allowedNavigationUrlRef = useRef(null);
 
    const acceptedHistoryIndexRef = useRef(
-      typeof window !== "undefined" && Number.isInteger(window.history.state?.idx)
-         ? window.history.state.idx
-         : null,
+      typeof window !== "undefined" && Number.isInteger(window.history.state?.idx) ? window.history.state.idx : null,
    );
 
    const acceptedHistoryUrlRef = useRef(typeof window !== "undefined" ? window.location.href : "");
@@ -283,7 +295,9 @@ function WorkspacePage() {
          : memberships;
 
       const defaultMembership = defaultOrganizationId
-         ? eligibleMemberships.find((membership) => String(membership?.organization?.id) === String(defaultOrganizationId))
+         ? eligibleMemberships.find(
+              (membership) => String(membership?.organization?.id) === String(defaultOrganizationId),
+           )
          : null;
 
       if (defaultMembership) {
@@ -536,7 +550,15 @@ function WorkspacePage() {
 
       const handleDocumentClick = (event) => {
          const anchor = event.target.closest?.("a[href]");
-         if (!anchor || anchor.target === "_blank" || anchor.download || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+         if (
+            !anchor ||
+            anchor.target === "_blank" ||
+            anchor.download ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey
+         ) {
             return;
          }
          const destination = new URL(anchor.href, window.location.href);
@@ -555,7 +577,13 @@ function WorkspacePage() {
          window.removeEventListener("popstate", handlePopState, true);
          document.removeEventListener("click", handleDocumentClick, true);
       };
-   }, [correctionDirty, isCorrectionRoute, navigateWithOneShotAllowance, requestNavigationConfirmation, withCorrectionDirtyGuard]);
+   }, [
+      correctionDirty,
+      isCorrectionRoute,
+      navigateWithOneShotAllowance,
+      requestNavigationConfirmation,
+      withCorrectionDirtyGuard,
+   ]);
 
    useEffect(() => {
       if (pendingFallbackHistoryTraversal) {
@@ -570,11 +598,7 @@ function WorkspacePage() {
 
    useEffect(() => {
       const pendingTraversal = pendingFallbackHistoryTraversal;
-      if (
-         !pendingTraversal ||
-         !correctionDirty ||
-         window.location.href !== pendingTraversal.acceptedUrl
-      ) {
+      if (!pendingTraversal || !correctionDirty || window.location.href !== pendingTraversal.acceptedUrl) {
          return;
       }
 
@@ -595,7 +619,15 @@ function WorkspacePage() {
          allowedFallbackHistoryIndex = pendingTraversal.targetIndex;
          window.history.go(pendingTraversal.delta);
       });
-   }, [correctionDirty, fallbackTraversalVersion, location.hash, location.key, location.pathname, location.search, requestNavigationConfirmation]);
+   }, [
+      correctionDirty,
+      fallbackTraversalVersion,
+      location.hash,
+      location.key,
+      location.pathname,
+      location.search,
+      requestNavigationConfirmation,
+   ]);
 
    const openRevisionInDrafting = (revision) => {
       const revisionId = revision?.fact_check_id || revision?.id || revision?.resource_id;
@@ -665,241 +697,243 @@ function WorkspacePage() {
 
    return (
       <div className="workspace-view">
-            <header className="workspace-header">
-               <div className="workspace-header-copy">
-                  <div className="workspace-title-row">
-                     <div className="workspace-title-icon">
-                        <Icons name="shield" size={21} />
-                     </div>
-
-                     <div>
-                        <p className="workspace-eyebrow">TruthLens Operations</p>
-
-                        <h1>Verification Workspace</h1>
-                     </div>
+         <header className="workspace-header">
+            <div className="workspace-header-copy">
+               <div className="workspace-title-row">
+                  <div className="workspace-title-icon">
+                     <Icons name="shield" size={21} />
                   </div>
 
-                  <p className="workspace-description">
-                     Access operational tools according to your platform and partner organization permissions.
-                  </p>
+                  <div>
+                     <p className="workspace-eyebrow">TruthLens Operations</p>
+
+                     <h1>Verification Workspace</h1>
+                  </div>
                </div>
 
-               {isPlatformSection ? (
-                  <div className="workspace-platform-context">
-                     <Icons name="shield" size={15} />
+               <p className="workspace-description">
+                  Access operational tools according to your platform and partner organization permissions.
+               </p>
+            </div>
 
-                     <span>Platform Safety · Platform-wide</span>
-                  </div>
-               ) : memberships.length > 0 ? (
-                  <div className="workspace-organization-control">
-                     <label htmlFor="workspace-organization">Organization</label>
+            {isPlatformSection ? (
+               <div className="workspace-platform-context">
+                  <Icons name="shield" size={15} />
 
-                     <Select
-                        id="workspace-organization"
-                        density="standard"
-                        value={selectedOrganizationId ?? ""}
-                        onChange={(event) => handleOrganizationChange(event.target.value)}
-                     >
-                        {organizationOptions.map((membership) => (
-                           <option key={membership.organization.id} value={membership.organization.id}>
-                              {membership.organization.name}
-                           </option>
-                        ))}
-                     </Select>
+                  <span>Platform Safety · Platform-wide</span>
+               </div>
+            ) : memberships.length > 0 ? (
+               <div className="workspace-organization-control">
+                  <label htmlFor="workspace-organization">Organization</label>
 
-                     {selectedMembership && (
-                        <span className="workspace-role-label">Your role: {formatRole(selectedMembership.role)}</span>
-                     )}
-                  </div>
-               ) : (
-                  <div className="workspace-platform-context">
-                     <Icons name="shield" size={15} />
-
-                     <span>Platform Safety</span>
-                  </div>
-               )}
-            </header>
-
-            <div className="workspace-body">
-               <aside className="workspace-sidebar">
-                  <div className="workspace-sidebar-heading">Available tools</div>
-
-                  <nav className="workspace-navigation" aria-label="Workspace sections">
-                     {visibleSectionGroups.map((group) => (
-                        <section key={group.scope} className="workspace-nav-group">
-                           <h2>{group.label}</h2>
-
-                           <div className="workspace-nav-group-items">
-                              {group.sections.map((section) => (
-                                 <button
-                                    key={section.id}
-                                    type="button"
-                                    className={`workspace-nav-item ${activeSectionId === section.id ? "active" : ""}`}
-                                    aria-pressed={activeSectionId === section.id}
-                                    onClick={() => handleSectionChange(section.id)}
-                                 >
-                                    <span className="workspace-nav-icon">
-                                       <Icons name={section.icon} size={17} />
-                                    </span>
-
-                                    <span className="workspace-nav-copy">
-                                       <strong>{section.label}</strong>
-                                    </span>
-                                 </button>
-                              ))}
-                           </div>
-                        </section>
+                  <Select
+                     id="workspace-organization"
+                     density="standard"
+                     value={selectedOrganizationId ?? ""}
+                     onChange={(event) => handleOrganizationChange(event.target.value)}
+                  >
+                     {organizationOptions.map((membership) => (
+                        <option key={membership.organization.id} value={membership.organization.id}>
+                           {membership.organization.name}
+                        </option>
                      ))}
-                  </nav>
-               </aside>
+                  </Select>
 
-               <section className="workspace-content">
-                  {activeSection ? (
-                     <>
-                        <div className="workspace-content-header">
+                  {selectedMembership && (
+                     <span className="workspace-role-label">Your role: {formatRole(selectedMembership.role)}</span>
+                  )}
+               </div>
+            ) : (
+               <div className="workspace-platform-context">
+                  <Icons name="shield" size={15} />
+
+                  <span>Platform Safety</span>
+               </div>
+            )}
+         </header>
+
+         <div className="workspace-body">
+            <aside className="workspace-sidebar">
+               <div className="workspace-sidebar-heading">Available tools</div>
+
+               <nav className="workspace-navigation" aria-label="Workspace sections">
+                  {visibleSectionGroups.map((group) => (
+                     <section key={group.scope} className="workspace-nav-group">
+                        <h2>{group.label}</h2>
+
+                        <div className="workspace-nav-group-items">
+                           {group.sections.map((section) => (
+                              <button
+                                 key={section.id}
+                                 type="button"
+                                 className={`workspace-nav-item ${activeSectionId === section.id ? "active" : ""}`}
+                                 aria-pressed={activeSectionId === section.id}
+                                 onClick={() => handleSectionChange(section.id)}
+                              >
+                                 <span className="workspace-nav-icon">
+                                    <Icons name={section.icon} size={17} />
+                                 </span>
+
+                                 <span className="workspace-nav-copy">
+                                    <strong>{section.label}</strong>
+                                 </span>
+                              </button>
+                           ))}
+                        </div>
+                     </section>
+                  ))}
+               </nav>
+            </aside>
+
+            <section className="workspace-content">
+               {activeSection ? (
+                  <>
+                     <div className="workspace-content-header">
+                        <div>
+                           <span className="workspace-scope-context">
+                              {activeSection.scope === "platform"
+                                 ? "Platform Safety"
+                                 : selectedOrganization?.name
+                                   ? `Organization · ${selectedOrganization.name}`
+                                   : "Organization"}
+                           </span>
+
+                           <h2>{activeSection.label}</h2>
+
+                           <p>{activeSection.description}</p>
+                        </div>
+                     </div>
+
+                     {activeSection.id === "safety" ? (
+                        <SafetyReviewPanel />
+                     ) : activeSection.id === "safety-audit" ? (
+                        <AccountabilityPanel scope="platform" />
+                     ) : activeSection.id === "intake" ? (
+                        <VerificationIntakePanel
+                           key={selectedOrganizationId ?? "no-organization"}
+                           organizationId={selectedOrganizationId}
+                           organizationName={selectedOrganization?.name}
+                        />
+                     ) : activeSection.id === "workload" ? (
+                        <OrganizationWorkloadPanel
+                           key={selectedOrganizationId ?? "no-organization"}
+                           organizationId={selectedOrganizationId}
+                           organizationName={selectedOrganization?.name}
+                           canReleaseInvestigation={organizationCapabilities.includes(
+                              WorkspaceCapability.CLAIM_VERIFICATION_WORK,
+                           )}
+                        />
+                     ) : activeSection.id === "evidence" &&
+                       organizationCapabilities.includes(WorkspaceCapability.REVIEW_EVIDENCE) ? (
+                        <EvidenceReviewPanel
+                           key={selectedOrganizationId ?? "no-organization"}
+                           organizationId={selectedOrganizationId}
+                           organizationName={selectedOrganization?.name}
+                           canReviewEvidence
+                        />
+                     ) : activeSection.id === "adjudication" &&
+                       organizationCapabilities.includes(WorkspaceCapability.ADJUDICATE) ? (
+                        <AdjudicationReviewPanel
+                           key={selectedOrganizationId ?? "no-organization"}
+                           organizationId={selectedOrganizationId}
+                           organizationName={selectedOrganization?.name}
+                           canAdjudicate
+                        />
+                     ) : activeSection.id === "drafting" &&
+                       organizationCapabilities.includes(WorkspaceCapability.CREATE_FACT_CHECK_DRAFT) ? (
+                        <DraftingPanel
+                           key={selectedOrganizationId ?? "no-organization"}
+                           organizationId={selectedOrganizationId}
+                           organizationName={selectedOrganization?.name}
+                           initialSelection={draftingHandoff}
+                           onInitialSelectionConsumed={() => setDraftingHandoff(null)}
+                        />
+                     ) : activeSection.id === "publishing" &&
+                       organizationCapabilities.includes(WorkspaceCapability.PUBLISH_FACT_CHECK) ? (
+                        <PublishingPanel
+                           key={selectedOrganizationId ?? "no-organization"}
+                           organizationId={selectedOrganizationId}
+                           organizationName={selectedOrganization?.name}
+                           onPublicationPublished={openCurrentPublication}
+                        />
+                     ) : activeSection.id === "publications" ? (
+                        <PublicationsPanel
+                           key={selectedOrganizationId ?? "no-organization"}
+                           organizationId={selectedOrganizationId}
+                           organizationName={selectedOrganization?.name}
+                           initialPublicationId={publicationHandoff}
+                           onInitialPublicationConsumed={() => setPublicationHandoff(null)}
+                           onRevisionCreated={openRevisionInDrafting}
+                           onCorrectionOpened={(correctionRequestId) =>
+                              navigateCorrection({ requestId: correctionRequestId, status: "ACTIVE", offset: 0 })
+                           }
+                        />
+                     ) : activeSection.id === "factual-corrections" ? (
+                        <FactualCorrectionPanel
+                           organizationId={selectedOrganizationId}
+                           organizationName={selectedOrganization?.name}
+                           requestId={routeRequestId || null}
+                           status={routeStatus}
+                           offset={routeOffset}
+                           onNavigate={navigateCorrection}
+                           onDirtyChange={handleCorrectionDirtyChange}
+                           onOpenPublication={openCurrentPublication}
+                        />
+                     ) : activeSection.id === "organization" ? (
+                        <OrganizationAdminPanel
+                           key={selectedOrganizationId ?? "no-organization"}
+                           organizationId={selectedOrganizationId}
+                           membershipRole={selectedMembership?.role}
+                        />
+                     ) : activeSection.id === "analytics" ? (
+                        <InstitutionalAnalyticsPanel
+                           key={selectedOrganizationId ?? "no-organization"}
+                           organizationId={selectedOrganizationId}
+                           organizationName={selectedOrganization?.name}
+                        />
+                     ) : activeSection.id === "accountability" ? (
+                        <AccountabilityPanel
+                           key={selectedOrganizationId ?? "no-organization"}
+                           scope="organization"
+                           organizationId={selectedOrganizationId}
+                           organizationName={selectedOrganization?.name}
+                        />
+                     ) : (
+                        <div className="workspace-placeholder">
+                           <div className="workspace-placeholder-icon">
+                              <Icons name={activeSection.icon} size={24} />
+                           </div>
+
                            <div>
-                              <span className="workspace-scope-context">
-                                 {activeSection.scope === "platform"
-                                    ? "Platform Safety"
-                                    : selectedOrganization?.name
-                                      ? `Organization · ${selectedOrganization.name}`
-                                      : "Organization"}
-                              </span>
+                              <strong>Workspace foundation ready</strong>
 
-                              <h2>{activeSection.label}</h2>
+                              <p>This section is authorized and ready for its workflow integration.</p>
 
-                              <p>{activeSection.description}</p>
+                              <code>{activeSection.capability}</code>
                            </div>
                         </div>
+                     )}
+                  </>
+               ) : (
+                  <div className="workspace-empty-state">
+                     <Icons name="lock" size={24} />
 
-                        {activeSection.id === "safety" ? (
-                           <SafetyReviewPanel />
-                        ) : activeSection.id === "safety-audit" ? (
-                           <AccountabilityPanel scope="platform" />
-                        ) : activeSection.id === "intake" ? (
-                           <VerificationIntakePanel
-                              key={selectedOrganizationId ?? "no-organization"}
-                              organizationId={selectedOrganizationId}
-                              organizationName={selectedOrganization?.name}
-                           />
-                        ) : activeSection.id === "workload" ? (
-                           <OrganizationWorkloadPanel
-                              key={selectedOrganizationId ?? "no-organization"}
-                              organizationId={selectedOrganizationId}
-                              organizationName={selectedOrganization?.name}
-                              canReleaseInvestigation={organizationCapabilities.includes(
-                                 WorkspaceCapability.CLAIM_VERIFICATION_WORK,
-                              )}
-                           />
-                        ) : activeSection.id === "evidence" && organizationCapabilities.includes(
-                             WorkspaceCapability.REVIEW_EVIDENCE,
-                          ) ? (
-                           <EvidenceReviewPanel
-                              key={selectedOrganizationId ?? "no-organization"}
-                              organizationId={selectedOrganizationId}
-                              organizationName={selectedOrganization?.name}
-                              canReviewEvidence
-                           />
-                        ) : activeSection.id === "adjudication" && organizationCapabilities.includes(
-                             WorkspaceCapability.ADJUDICATE,
-                          ) ? (
-                           <AdjudicationReviewPanel
-                              key={selectedOrganizationId ?? "no-organization"}
-                              organizationId={selectedOrganizationId}
-                              organizationName={selectedOrganization?.name}
-                              canAdjudicate
-                           />
-                        ) : activeSection.id === "drafting" && organizationCapabilities.includes(
-                             WorkspaceCapability.CREATE_FACT_CHECK_DRAFT,
-                          ) ? (
-                           <DraftingPanel
-                              key={selectedOrganizationId ?? "no-organization"}
-                              organizationId={selectedOrganizationId}
-                              organizationName={selectedOrganization?.name}
-                              initialSelection={draftingHandoff}
-                              onInitialSelectionConsumed={() => setDraftingHandoff(null)}
-                           />
-                        ) : activeSection.id === "publishing" && organizationCapabilities.includes(
-                             WorkspaceCapability.PUBLISH_FACT_CHECK,
-                          ) ? (
-                           <PublishingPanel
-                              key={selectedOrganizationId ?? "no-organization"}
-                              organizationId={selectedOrganizationId}
-                              organizationName={selectedOrganization?.name}
-                              onPublicationPublished={openCurrentPublication}
-                           />
-                        ) : activeSection.id === "publications" ? (
-                           <PublicationsPanel
-                              key={selectedOrganizationId ?? "no-organization"}
-                              organizationId={selectedOrganizationId}
-                              organizationName={selectedOrganization?.name}
-                              initialPublicationId={publicationHandoff}
-                              onInitialPublicationConsumed={() => setPublicationHandoff(null)}
-                              onRevisionCreated={openRevisionInDrafting}
-                              onCorrectionOpened={(correctionRequestId) =>
-                                 navigateCorrection({ requestId: correctionRequestId, status: "ACTIVE", offset: 0 })
-                              }
-                            />
-                        ) : activeSection.id === "factual-corrections" ? (
-                           <FactualCorrectionPanel
-                              organizationId={selectedOrganizationId}
-                              organizationName={selectedOrganization?.name}
-                              requestId={routeRequestId || null}
-                              status={routeStatus}
-                              offset={routeOffset}
-                              onNavigate={navigateCorrection}
-                              onDirtyChange={handleCorrectionDirtyChange}
-                              onOpenPublication={openCurrentPublication}
-                           />
-                        ) : activeSection.id === "organization" ? (
-                           <OrganizationAdminPanel
-                              key={selectedOrganizationId ?? "no-organization"}
-                              organizationId={selectedOrganizationId}
-                              membershipRole={selectedMembership?.role}
-                           />
-                        ) : activeSection.id === "accountability" ? (
-                           <AccountabilityPanel
-                              key={selectedOrganizationId ?? "no-organization"}
-                              scope="organization"
-                              organizationId={selectedOrganizationId}
-                              organizationName={selectedOrganization?.name}
-                           />
-                        ) : (
-                           <div className="workspace-placeholder">
-                              <div className="workspace-placeholder-icon">
-                                 <Icons name={activeSection.icon} size={24} />
-                              </div>
+                     <h2>No workspace tools available</h2>
 
-                              <div>
-                                 <strong>Workspace foundation ready</strong>
-
-                                 <p>This section is authorized and ready for its workflow integration.</p>
-
-                                 <code>{activeSection.capability}</code>
-                              </div>
-                           </div>
-                        )}
-                     </>
-                  ) : (
-                     <div className="workspace-empty-state">
-                        <Icons name="lock" size={24} />
-
-                        <h2>No workspace tools available</h2>
-
-                        <p>Your current authorization context does not expose any operational section.</p>
-                     </div>
-                  )}
-               </section>
-            </div>
-            <CorrectionDialog
-               open={navigationPromptOpen}
-               title="Discard unsaved correction proposal changes?"
-               description="This navigation would leave the proposal editor. Your unsaved text will be lost, while the last saved server proposal remains unchanged."
-               confirmLabel="Discard and continue"
-               confirmVariant="destructive"
-               onClose={() => resolveNavigationConfirmation(false)}
-               onConfirm={() => resolveNavigationConfirmation(true)}
-            />
+                     <p>Your current authorization context does not expose any operational section.</p>
+                  </div>
+               )}
+            </section>
+         </div>
+         <CorrectionDialog
+            open={navigationPromptOpen}
+            title="Discard unsaved correction proposal changes?"
+            description="This navigation would leave the proposal editor. Your unsaved text will be lost, while the last saved server proposal remains unchanged."
+            confirmLabel="Discard and continue"
+            confirmVariant="destructive"
+            onClose={() => resolveNavigationConfirmation(false)}
+            onConfirm={() => resolveNavigationConfirmation(true)}
+         />
       </div>
    );
 }

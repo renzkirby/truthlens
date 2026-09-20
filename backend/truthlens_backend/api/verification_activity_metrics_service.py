@@ -43,8 +43,7 @@ def project_organization_verification_activity_events(*, organization):
                 f"Event {event['id']} has an incorrect resource type for {action}."
             )
         context = event["context"]
-        claim_id = context.get("claim_id") if isinstance(context, dict) else None
-        if not isinstance(claim_id, str) or not claim_id.strip():
+        if not isinstance(context, dict):
             raise VerificationActivityMetricsIntegrityError(
                 f"Event {event['id']} has a missing or blank claim_id."
             )
@@ -54,6 +53,12 @@ def project_organization_verification_activity_events(*, organization):
             and "correction_request_id" in context
         ):
             continue
+
+        claim_id = context.get("claim_id")
+        if not isinstance(claim_id, str) or not claim_id.strip():
+            raise VerificationActivityMetricsIntegrityError(
+                f"Event {event['id']} has a missing or blank claim_id."
+            )
 
         if action == actions.ARTICLE_PUBLISHED and context.get("revision_kind") != "INITIAL":
             raise VerificationActivityMetricsIntegrityError(

@@ -169,23 +169,27 @@ class OrdinaryActivityEventProjectionTests(TestCase):
             "publication": {"initial_published": 1},
         })
 
-    def test_correction_evidence_is_excluded_after_integrity_validation(self):
+    def test_correction_evidence_without_claim_identity_is_excluded_after_resource_validation(self):
         actions = AccountabilityEvent.ActionType
         for action in (actions.EVIDENCE_VERIFIED, actions.EVIDENCE_REJECTED):
             for correction_id in (str(uuid.uuid4()), None, "", False):
-                self.record(action, context={
-                    "claim_id": self.claim_id, "correction_request_id": correction_id,
-                })
+                self.record(action, context={"correction_request_id": correction_id})
         self.assertEqual(self.project(), [])
-        for overrides in (
-            {"context": {"correction_request_id": str(uuid.uuid4())}},
-            {"context": {"claim_id": self.claim_id, "correction_request_id": None},
-             "resource_type": AccountabilityEvent.ResourceType.THREAD},
-        ):
-            with self.subTest(overrides=overrides):
+
+        for action in (actions.EVIDENCE_VERIFIED, actions.EVIDENCE_REJECTED):
+            with self.subTest(action=action, integrity_rule="wrong resource"):
                 with self.assertRaises(VerificationActivityMetricsIntegrityError):
                     with transaction.atomic():
-                        self.record(actions.EVIDENCE_VERIFIED, **overrides)
+                        self.record(
+                            action,
+                            context={"correction_request_id": None},
+                            resource_type=AccountabilityEvent.ResourceType.THREAD,
+                        )
+                        self.project()
+            with self.subTest(action=action, integrity_rule="ordinary missing claim identity"):
+                with self.assertRaises(VerificationActivityMetricsIntegrityError):
+                    with transaction.atomic():
+                        self.record(action, context={})
                         self.project()
 
     def test_repeated_evidence_decisions_are_preserved_as_distinct_events(self):
@@ -270,9 +274,7 @@ class OrdinaryActivityEventProjectionTests(TestCase):
     def test_excluded_activity_and_other_tenant_history_never_enter_trend(self):
         actions = AccountabilityEvent.ActionType
         for action in (actions.EVIDENCE_VERIFIED, actions.EVIDENCE_REJECTED):
-            self.record(action, context={
-                "claim_id": self.claim_id, "correction_request_id": str(uuid.uuid4()),
-            })
+            self.record(action, context={"correction_request_id": str(uuid.uuid4())})
         for action in (actions.ARTICLE_REVISED, actions.FACTUAL_CORRECTION_PUBLISHED,
                        actions.VERDICT_REVISED, actions.ARTICLE_DRAFT_SAVED,
                        actions.ARTICLE_SUBMITTED, actions.ARTICLE_RETURNED_FOR_REWORK,

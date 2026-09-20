@@ -15,6 +15,9 @@ from .verification_reviewer_participation_metrics_service import (
 )
 from .verification_public_reach_metrics_service import get_organization_public_reach_metrics
 from .verification_knowledge_reuse_metrics_service import get_organization_knowledge_reuse_metrics
+from .verification_current_state_metrics_service import (
+    get_organization_verification_current_state,
+)
 
 
 class VerificationMetricsAuthorizationError(Exception):
@@ -55,6 +58,9 @@ def get_organization_verification_metrics(
     reviewers = get_organization_verification_reviewer_participation(organization=organization)
     reach = get_organization_public_reach_metrics(organization=organization)
     reuse = get_organization_knowledge_reuse_metrics(organization=organization)
+    current_state = get_organization_verification_current_state(
+        organization=organization
+    )
     organization_id = str(organization.pk)
     if (
         baseline.get("organization_id") != organization_id
@@ -63,6 +69,7 @@ def get_organization_verification_metrics(
         or reviewers.get("organization_id") != organization_id
         or reach.get("organization_id") != organization_id
         or reuse.get("organization_id") != organization_id
+        or current_state.get("organization_id") != organization_id
     ):
         raise VerificationMetricsCompositionError(
             "Measurement service organization identity is missing or mismatched."
@@ -94,6 +101,13 @@ def get_organization_verification_metrics(
             "measurement_basis": reuse["measurement_basis"],
             "material_reuse": reuse["material_reuse"],
             "repeat_claim_reuse": reuse["repeat_claim_reuse"],
+        },
+        "current_state": {
+            "measurement_basis": current_state["measurement_basis"],
+            "published_fact_checks": current_state["published_fact_checks"],
+            "factual_corrections": current_state["factual_corrections"],
+            "investigations": current_state["investigations"],
+            "publication_work": current_state["publication_work"],
         },
     }
     if created_after is not None and created_before is not None:
