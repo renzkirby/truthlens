@@ -5,12 +5,26 @@ from types import SimpleNamespace
 from unittest.mock import call, patch
 
 from django.contrib.auth.models import User
+from django.db import connection
 from django.test import SimpleTestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from rest_framework.test import APIClient, APITestCase
 
-from api.models import Organization, OrganizationMembership, UserProfile
+from api.models import (
+    AccountabilityEvent,
+    AdjudicationDecision,
+    Claim,
+    OfficialFactCheck,
+    Organization,
+    OrganizationMembership,
+    UserProfile,
+    VerificationAssignment,
+)
 from api.organization_service import PartnerCapability
+from api.verification_current_state_metrics_service import (
+    get_organization_verification_current_state,
+)
 from api.verification_metrics_query_service import (
     VerificationMetricsAuthorizationError,
     VerificationMetricsCompositionError,
@@ -44,6 +58,10 @@ REVIEWERS_PATCH = (
 )
 PUBLIC_REACH_PATCH = "api.verification_metrics_query_service.get_organization_public_reach_metrics"
 KNOWLEDGE_REUSE_PATCH = "api.verification_metrics_query_service.get_organization_knowledge_reuse_metrics"
+CURRENT_STATE_PATCH = (
+    "api.verification_metrics_query_service."
+    "get_organization_verification_current_state"
+)
 
 
 def make_public_reach_payload(organization):
@@ -98,6 +116,20 @@ def make_knowledge_reuse_payload(organization):
 
 def measurement_section(payload):
     return {key: value for key, value in payload.items() if key != "organization_id"}
+
+
+def make_current_state_payload(organization):
+    return {
+        "organization_id": str(organization.pk),
+        "measurement_basis": {
+            "source": "PERSISTED_OPERATIONAL_RECORDS",
+            "coverage": "CURRENT_STATE",
+        },
+        "published_fact_checks": {"distinct_claims": 2},
+        "factual_corrections": {"active_requests": 1},
+        "investigations": {"active_assignments": 3},
+        "publication_work": {"distinct_claims": 1},
+    }
 
 
 def make_resolution_payload(organization):
@@ -226,8 +258,12 @@ class VerificationMetricsApiTests(APITestCase):
         self.reviewer_participation_payload = make_reviewer_participation_payload(self.organization)
         self.public_reach_payload = make_public_reach_payload(self.organization)
         self.knowledge_reuse_payload = make_knowledge_reuse_payload(self.organization)
+        self.current_state_payload = make_current_state_payload(self.organization)
         self.public_reach = self.enterContext(patch(PUBLIC_REACH_PATCH, return_value=self.public_reach_payload))
         self.knowledge_reuse = self.enterContext(patch(KNOWLEDGE_REUSE_PATCH, return_value=self.knowledge_reuse_payload))
+        self.current_state = self.enterContext(
+            patch(CURRENT_STATE_PATCH, return_value=self.current_state_payload)
+        )
         # Default trusted mocks keep existing transport cases independent of raw history.
         resolution_patch = patch(RESOLUTION_PATCH, return_value=self.resolution_payload)
         self.resolution = resolution_patch.start()
@@ -287,6 +323,7 @@ class VerificationMetricsApiTests(APITestCase):
             },
             "public_reach": measurement_section(self.public_reach_payload),
             "knowledge_reuse": measurement_section(self.knowledge_reuse_payload),
+            "current_state": measurement_section(self.current_state_payload),
         }
 
     def metrics_url(self, organization_id):
@@ -307,6 +344,7 @@ class VerificationMetricsApiTests(APITestCase):
         original_reviewers = deepcopy(self.reviewer_participation_payload)
         original_reach = deepcopy(self.public_reach_payload)
         original_reuse = deepcopy(self.knowledge_reuse_payload)
+        original_current_state = deepcopy(self.current_state_payload)
         with (
             patch(BASELINE_PATCH, return_value=self.baseline) as baseline,
             patch(ACTIVITY_PATCH, return_value=self.activity_payload) as activity,
@@ -314,6 +352,7 @@ class VerificationMetricsApiTests(APITestCase):
             patch(REVIEWERS_PATCH, return_value=self.reviewer_participation_payload) as reviewers,
             patch(PUBLIC_REACH_PATCH, return_value=self.public_reach_payload) as reach,
             patch(KNOWLEDGE_REUSE_PATCH, return_value=self.knowledge_reuse_payload) as reuse,
+            patch(CURRENT_STATE_PATCH, return_value=self.current_state_payload) as current_state,
             patch(TREND_PATCH) as trend,
         ):
             response = self.request_metrics(actor)
@@ -327,6 +366,7 @@ class VerificationMetricsApiTests(APITestCase):
         self.assertEqual(self.reviewer_participation_payload, original_reviewers)
         self.assertEqual(self.public_reach_payload, original_reach)
         self.assertEqual(self.knowledge_reuse_payload, original_reuse)
+        self.assertEqual(self.current_state_payload, original_current_state)
         self.assertIsNot(response.data["resolution_distribution"], self.resolution_payload)
         self.assertIsNot(response.data["reviewer_participation"], self.reviewer_participation_payload)
         self.assertIsNot(response.data["reviewer_participation"],
@@ -334,7 +374,7 @@ class VerificationMetricsApiTests(APITestCase):
         self.assertEqual(set(response.data), {
             "organization_id", "measurement_basis", "attempts", "reliability",
             "completed_turnaround", "activity", "resolution_distribution", "reviewer_participation",
-            "public_reach", "knowledge_reuse",
+            "public_reach", "knowledge_reuse", "current_state",
         })
         self.assertEqual(set(response.data["activity"]), {
             "measurement_basis", "evidence_review", "adjudication", "publication",
@@ -351,8 +391,13 @@ class VerificationMetricsApiTests(APITestCase):
         self.assertEqual(set(response.data["knowledge_reuse"]), {
             "measurement_basis", "material_reuse", "repeat_claim_reuse",
         })
+        self.assertEqual(set(response.data["current_state"]), {
+            "measurement_basis", "published_fact_checks", "factual_corrections",
+            "investigations", "publication_work",
+        })
         self.assertIsNot(response.data["public_reach"], self.public_reach_payload)
         self.assertIsNot(response.data["knowledge_reuse"], self.knowledge_reuse_payload)
+        self.assertIsNot(response.data["current_state"], self.current_state_payload)
         self.assertEqual(response.data["resolution_distribution"]["measurement_basis"],
                          original_resolution["measurement_basis"])
         self.assertEqual(response.data["reviewer_participation"]["measurement_basis"],
@@ -367,6 +412,7 @@ class VerificationMetricsApiTests(APITestCase):
         reviewers.assert_called_once_with(organization=self.organization)
         reach.assert_called_once_with(organization=self.organization)
         reuse.assert_called_once_with(organization=self.organization)
+        current_state.assert_called_once_with(organization=self.organization)
         trend.assert_not_called()
         return response
 
@@ -378,6 +424,7 @@ class VerificationMetricsApiTests(APITestCase):
             patch(REVIEWERS_PATCH) as reviewers,
             patch(PUBLIC_REACH_PATCH) as reach,
             patch(KNOWLEDGE_REUSE_PATCH) as reuse,
+            patch(CURRENT_STATE_PATCH) as current_state,
             patch(TREND_PATCH) as trend,
         ):
             response = self.request_metrics(actor, url=url, params=params)
@@ -389,6 +436,7 @@ class VerificationMetricsApiTests(APITestCase):
         reviewers.assert_not_called()
         reach.assert_not_called()
         reuse.assert_not_called()
+        current_state.assert_not_called()
         trend.assert_not_called()
 
     def test_unauthenticated_request_returns_401(self):
@@ -407,6 +455,7 @@ class VerificationMetricsApiTests(APITestCase):
                 self.reviewers.assert_not_called()
                 self.public_reach.assert_not_called()
                 self.knowledge_reuse.assert_not_called()
+                self.current_state.assert_not_called()
                 trend.assert_not_called()
 
     def test_owner_can_read_metrics(self):
@@ -490,6 +539,7 @@ class VerificationMetricsApiTests(APITestCase):
         self.reviewers.assert_not_called()
         self.public_reach.assert_not_called()
         self.knowledge_reuse.assert_not_called()
+        self.current_state.assert_not_called()
         trend.assert_not_called()
 
     def test_success_preserves_baseline_and_activity_coverage_on_the_wire(self):
@@ -580,6 +630,7 @@ class VerificationMetricsApiTests(APITestCase):
         )
         self.public_reach.assert_not_called()
         self.knowledge_reuse.assert_not_called()
+        self.current_state.assert_not_called()
 
     def assert_generic_unavailable(self, response, log_exception):
         self.assertEqual(response.status_code, 503)
@@ -606,6 +657,7 @@ class VerificationMetricsApiTests(APITestCase):
         activity.assert_called_once_with(organization=self.organization)
         self.public_reach.assert_not_called()
         self.knowledge_reuse.assert_not_called()
+        self.current_state.assert_not_called()
 
     def test_composition_error_returns_generic_503_without_partial_metrics(self):
         error = VerificationMetricsCompositionError("Internal identity details.")
@@ -618,9 +670,12 @@ class VerificationMetricsApiTests(APITestCase):
         self.assertNotIn(str(error), response.content.decode())
         self.public_reach.assert_not_called()
         self.knowledge_reuse.assert_not_called()
+        self.current_state.assert_not_called()
 
     def test_missing_or_mismatched_service_identities_return_generic_503(self):
-        for service in ("baseline", "activity", "resolution", "reviewers", "reach", "reuse"):
+        for service in (
+            "baseline", "activity", "resolution", "reviewers", "reach", "reuse", "current",
+        ):
             for identity in (None, str(self.other_organization.pk)):
                 with self.subTest(service=service, identity=identity):
                     baseline_payload = deepcopy(self.baseline)
@@ -629,10 +684,12 @@ class VerificationMetricsApiTests(APITestCase):
                     reviewer_payload = deepcopy(self.reviewer_participation_payload)
                     reach_payload = deepcopy(self.public_reach_payload)
                     reuse_payload = deepcopy(self.knowledge_reuse_payload)
+                    current_payload = deepcopy(self.current_state_payload)
                     malformed = {
                         "baseline": baseline_payload, "activity": activity_payload,
                         "resolution": resolution_payload, "reviewers": reviewer_payload,
                         "reach": reach_payload, "reuse": reuse_payload,
+                        "current": current_payload,
                     }[service]
                     if identity is None:
                         del malformed["organization_id"]
@@ -645,6 +702,7 @@ class VerificationMetricsApiTests(APITestCase):
                         patch(REVIEWERS_PATCH, return_value=reviewer_payload) as reviewers,
                         patch(PUBLIC_REACH_PATCH, return_value=reach_payload) as reach,
                         patch(KNOWLEDGE_REUSE_PATCH, return_value=reuse_payload) as reuse,
+                        patch(CURRENT_STATE_PATCH, return_value=current_payload) as current_state,
                         patch(TREND_PATCH) as trend,
                         patch("api.views.logger.exception") as log_exception,
                     ):
@@ -658,6 +716,7 @@ class VerificationMetricsApiTests(APITestCase):
                     reviewers.assert_called_once_with(organization=self.organization)
                     reach.assert_called_once_with(organization=self.organization)
                     reuse.assert_called_once_with(organization=self.organization)
+                    current_state.assert_called_once_with(organization=self.organization)
                     trend.assert_not_called()
 
 
@@ -673,6 +732,7 @@ class VerificationMetricsApiTests(APITestCase):
         original_reviewers = deepcopy(self.reviewer_participation_payload)
         original_reach = deepcopy(self.public_reach_payload)
         original_reuse = deepcopy(self.knowledge_reuse_payload)
+        original_current_state = deepcopy(self.current_state_payload)
         with (
             patch(BASELINE_PATCH, return_value=self.baseline) as baseline,
             patch(ACTIVITY_PATCH, return_value=self.activity_payload) as activity,
@@ -680,6 +740,7 @@ class VerificationMetricsApiTests(APITestCase):
             patch(REVIEWERS_PATCH, return_value=self.reviewer_participation_payload) as reviewers,
             patch(PUBLIC_REACH_PATCH, return_value=self.public_reach_payload) as reach,
             patch(KNOWLEDGE_REUSE_PATCH, return_value=self.knowledge_reuse_payload) as reuse,
+            patch(CURRENT_STATE_PATCH, return_value=self.current_state_payload) as current_state,
             patch(TREND_PATCH, return_value=payload) as trend,
         ):
             response = self.request_metrics(actor, params=self.window if params is None else params)
@@ -687,7 +748,7 @@ class VerificationMetricsApiTests(APITestCase):
         self.assertEqual(set(response.data), {
             "organization_id", "measurement_basis", "attempts", "reliability",
             "completed_turnaround", "activity", "resolution_distribution", "reviewer_participation",
-            "public_reach", "knowledge_reuse", "trend",
+            "public_reach", "knowledge_reuse", "current_state", "trend",
         })
         for key, value in self.expected_payload().items():
             self.assertEqual(response.data[key], value)
@@ -705,12 +766,14 @@ class VerificationMetricsApiTests(APITestCase):
         self.assertEqual(self.reviewer_participation_payload, original_reviewers)
         self.assertEqual(self.public_reach_payload, original_reach)
         self.assertEqual(self.knowledge_reuse_payload, original_reuse)
+        self.assertEqual(self.current_state_payload, original_current_state)
         baseline.assert_called_once_with(organization=self.organization)
         activity.assert_called_once_with(organization=self.organization)
         resolution.assert_called_once_with(organization=self.organization)
         reviewers.assert_called_once_with(organization=self.organization)
         reach.assert_called_once_with(organization=self.organization)
         reuse.assert_called_once_with(organization=self.organization)
+        current_state.assert_called_once_with(organization=self.organization)
         trend.assert_called_once_with(
             organization=self.organization, created_after=after, created_before=before,
         )
@@ -726,6 +789,7 @@ class VerificationMetricsApiTests(APITestCase):
             patch(REVIEWERS_PATCH) as reviewers,
             patch(PUBLIC_REACH_PATCH) as reach,
             patch(KNOWLEDGE_REUSE_PATCH) as reuse,
+            patch(CURRENT_STATE_PATCH) as current_state,
             patch(TREND_PATCH) as trend,
         ):
             response = self.request_metrics(self.members[OrganizationMembership.Role.OWNER], params=params)
@@ -736,6 +800,7 @@ class VerificationMetricsApiTests(APITestCase):
         reviewers.assert_not_called()
         reach.assert_not_called()
         reuse.assert_not_called()
+        current_state.assert_not_called()
         trend.assert_not_called()
         return response
 
@@ -876,6 +941,7 @@ class VerificationMetricsApiTests(APITestCase):
         self.reviewers.assert_not_called()
         self.public_reach.assert_not_called()
         self.knowledge_reuse.assert_not_called()
+        self.current_state.assert_not_called()
         trend.assert_not_called()
 
     def assert_windowed_integrity_failure(self, source, error):
@@ -892,6 +958,7 @@ class VerificationMetricsApiTests(APITestCase):
                   side_effect=error if source == "reach" else None) as reach,
             patch(KNOWLEDGE_REUSE_PATCH, return_value=self.knowledge_reuse_payload,
                   side_effect=error if source == "reuse" else None) as reuse,
+            patch(CURRENT_STATE_PATCH, return_value=self.current_state_payload) as current_state,
             patch(TREND_PATCH, return_value=self.trend_payload,
                   side_effect=error if source == "trend" else None) as trend,
             patch("api.views.logger.exception") as log_exception,
@@ -920,6 +987,10 @@ class VerificationMetricsApiTests(APITestCase):
             reuse.assert_not_called()
         else:
             reuse.assert_called_once_with(organization=self.organization)
+        if source == "trend":
+            current_state.assert_called_once_with(organization=self.organization)
+        else:
+            current_state.assert_not_called()
         if source == "trend":
             trend.assert_called_once_with(organization=self.organization,
                                           created_after=self.created_after, created_before=self.created_before)
@@ -959,6 +1030,7 @@ class VerificationMetricsApiTests(APITestCase):
                               side_effect=error if source == "reach" else None) as reach,
                         patch(KNOWLEDGE_REUSE_PATCH, return_value=self.knowledge_reuse_payload,
                               side_effect=error if source == "reuse" else None) as reuse,
+                        patch(CURRENT_STATE_PATCH, return_value=self.current_state_payload) as current_state,
                         patch(TREND_PATCH) as trend,
                         patch("api.views.logger.exception") as log_exception,
                     ):
@@ -982,6 +1054,7 @@ class VerificationMetricsApiTests(APITestCase):
                         reuse.assert_not_called()
                     else:
                         reuse.assert_called_once_with(organization=self.organization)
+                    current_state.assert_not_called()
                     trend.assert_not_called()
                     self.assertEqual(self.resolution_payload, original_resolution)
                     self.assertEqual(self.reviewer_participation_payload, original_reviewers)
@@ -1010,6 +1083,7 @@ class VerificationMetricsApiTests(APITestCase):
                     patch(ACTIVITY_PATCH, return_value=self.activity_payload),
                     patch(PUBLIC_REACH_PATCH, return_value=self.public_reach_payload) as reach,
                     patch(KNOWLEDGE_REUSE_PATCH, return_value=self.knowledge_reuse_payload) as reuse,
+                    patch(CURRENT_STATE_PATCH, return_value=self.current_state_payload) as current_state,
                     patch(TREND_PATCH, return_value=payload),
                     patch("api.views.logger.exception") as log_exception,
                 ):
@@ -1018,6 +1092,7 @@ class VerificationMetricsApiTests(APITestCase):
                 self.assertEqual(payload, original)
                 reach.assert_called_once_with(organization=self.organization)
                 reuse.assert_called_once_with(organization=self.organization)
+                current_state.assert_called_once_with(organization=self.organization)
 
     def test_defensive_trend_input_error_returns_generic_400(self):
         error = VerificationActivityTrendInputError("Internal invalid-window details.")
@@ -1033,6 +1108,7 @@ class VerificationMetricsApiTests(APITestCase):
         log_exception.assert_not_called()
         self.public_reach.assert_called_once_with(organization=self.organization)
         self.knowledge_reuse.assert_called_once_with(organization=self.organization)
+        self.current_state.assert_called_once_with(organization=self.organization)
 
     def test_trend_datetimes_serialize_as_utc_over_http(self):
         response = self.assert_window_allowed(self.members[OrganizationMembership.Role.OWNER])
@@ -1095,6 +1171,156 @@ class VerificationMetricsApiTests(APITestCase):
                         check_keys(child)
             check_keys(section)
 
+        current_state = response.json()["current_state"]
+        self.assertEqual(current_state, {
+            "measurement_basis": {
+                "source": "PERSISTED_OPERATIONAL_RECORDS",
+                "coverage": "CURRENT_STATE",
+            },
+            "published_fact_checks": {"distinct_claims": 2},
+            "factual_corrections": {"active_requests": 1},
+            "investigations": {"active_assignments": 3},
+            "publication_work": {"distinct_claims": 1},
+        })
+        for section, field in (
+            ("published_fact_checks", "distinct_claims"),
+            ("factual_corrections", "active_requests"),
+            ("investigations", "active_assignments"),
+            ("publication_work", "distinct_claims"),
+        ):
+            self.assertIsInstance(current_state[section][field], int)
+
+    def test_current_state_uses_real_records_is_unwindowed_and_get_is_read_only(self):
+        published_claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Current published API metric claim.",
+        )
+        published_decision = AdjudicationDecision.objects.create(
+            claim=published_claim,
+            verdict=AdjudicationDecision.Verdict.FACT,
+            canonical_claim="Current published API metric claim.",
+            rationale="Persisted API metric decision.",
+            decided_by=self.members[OrganizationMembership.Role.LEAD_VERIFIER],
+            organization=self.organization,
+        )
+        publication = OfficialFactCheck.objects.create(
+            claim=published_claim,
+            adjudication_decision=published_decision,
+            organization=self.organization,
+            canonical_claim=published_decision.canonical_claim,
+            verdict=published_decision.verdict,
+            headline="Private current publication headline",
+            summary="Private current publication summary.",
+            article_body="Private current publication body.",
+            publication_status=OfficialFactCheck.PublicationStatus.PUBLISHED,
+            revision_kind=OfficialFactCheck.RevisionKind.INITIAL,
+        )
+        draft_claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Current open publication work API metric claim.",
+        )
+        draft_decision = AdjudicationDecision.objects.create(
+            claim=draft_claim,
+            verdict=AdjudicationDecision.Verdict.FACT,
+            canonical_claim="Current open publication work API metric claim.",
+            rationale="Persisted draft API metric decision.",
+            decided_by=self.members[OrganizationMembership.Role.LEAD_VERIFIER],
+            organization=self.organization,
+        )
+        draft = OfficialFactCheck.objects.create(
+            claim=draft_claim,
+            adjudication_decision=draft_decision,
+            organization=self.organization,
+            canonical_claim=draft_decision.canonical_claim,
+            verdict=draft_decision.verdict,
+            headline="Private current draft headline",
+            summary="Private current draft summary.",
+            article_body="Private current draft body.",
+            publication_status=OfficialFactCheck.PublicationStatus.DRAFT,
+            revision_kind=OfficialFactCheck.RevisionKind.INITIAL,
+        )
+        assignment_claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Current active investigation API metric claim.",
+        )
+        assignment = VerificationAssignment.objects.create(
+            claim=assignment_claim,
+            organization=self.organization,
+            claimed_by=self.members[OrganizationMembership.Role.LEAD_VERIFIER],
+            status=VerificationAssignment.Status.ACTIVE,
+        )
+        event_count = AccountabilityEvent.objects.count()
+        record_counts = {
+            OfficialFactCheck: OfficialFactCheck.objects.count(),
+            VerificationAssignment: VerificationAssignment.objects.count(),
+        }
+
+        with (
+            CaptureQueriesContext(connection) as queries,
+            patch(BASELINE_PATCH, return_value=self.baseline),
+            patch(ACTIVITY_PATCH, return_value=self.activity_payload),
+            patch(RESOLUTION_PATCH, return_value=self.resolution_payload),
+            patch(REVIEWERS_PATCH, return_value=self.reviewer_participation_payload),
+            patch(PUBLIC_REACH_PATCH, return_value=self.public_reach_payload),
+            patch(KNOWLEDGE_REUSE_PATCH, return_value=self.knowledge_reuse_payload),
+            patch(
+                CURRENT_STATE_PATCH,
+                wraps=get_organization_verification_current_state,
+            ) as current_state,
+            patch(TREND_PATCH, return_value=self.trend_payload),
+        ):
+            aggregate = self.request_metrics(
+                self.members[OrganizationMembership.Role.OWNER]
+            )
+            windowed = self.request_metrics(
+                self.members[OrganizationMembership.Role.OWNER],
+                params=self.window,
+            )
+
+        expected_current_state = {
+            "measurement_basis": {
+                "source": "PERSISTED_OPERATIONAL_RECORDS",
+                "coverage": "CURRENT_STATE",
+            },
+            "published_fact_checks": {"distinct_claims": 1},
+            "factual_corrections": {"active_requests": 0},
+            "investigations": {"active_assignments": 1},
+            "publication_work": {"distinct_claims": 1},
+        }
+        self.assertEqual(aggregate.status_code, 200)
+        self.assertEqual(windowed.status_code, 200)
+        self.assertTrue(queries.captured_queries)
+        for query in queries.captured_queries:
+            sql = query["sql"].lstrip().upper()
+            self.assertFalse(sql.startswith(("INSERT", "UPDATE", "DELETE")))
+        self.assertEqual(aggregate.data["current_state"], expected_current_state)
+        self.assertEqual(windowed.data["current_state"], expected_current_state)
+        self.assertEqual(current_state.call_count, 2)
+        for key, value in self.expected_payload().items():
+            if key != "current_state":
+                self.assertEqual(aggregate.data[key], value)
+                self.assertEqual(windowed.data[key], value)
+        serialized = str(aggregate.data["current_state"])
+        for private_value in (
+            publication.id,
+            publication.claim_id,
+            publication.headline,
+            draft.id,
+            draft.claim_id,
+            draft.article_body,
+            assignment.id,
+            assignment.claim_id,
+        ):
+            self.assertNotIn(str(private_value), serialized)
+        self.assertEqual(AccountabilityEvent.objects.count(), event_count)
+        self.assertEqual(
+            {
+                OfficialFactCheck: OfficialFactCheck.objects.count(),
+                VerificationAssignment: VerificationAssignment.objects.count(),
+            },
+            record_counts,
+        )
+
     def test_populated_reach_and_reuse_are_unchanged_by_trend_window(self):
         # These observations predate the requested trend window.
         observed_at = datetime(2026, 9, 16, 8, tzinfo=timezone.utc)
@@ -1126,6 +1352,9 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
     def setUp(self):
         self.public_reach = self.enterContext(patch(PUBLIC_REACH_PATCH, side_effect=make_public_reach_payload))
         self.knowledge_reuse = self.enterContext(patch(KNOWLEDGE_REUSE_PATCH, side_effect=make_knowledge_reuse_payload))
+        self.current_state = self.enterContext(
+            patch(CURRENT_STATE_PATCH, side_effect=make_current_state_payload)
+        )
         resolution_patch = patch(RESOLUTION_PATCH, side_effect=make_resolution_payload)
         self.resolution = resolution_patch.start()
         self.addCleanup(resolution_patch.stop)
@@ -1152,8 +1381,10 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
         original_reviewers = deepcopy(reviewers_payload)
         reach_payload = make_public_reach_payload(organization)
         reuse_payload = make_knowledge_reuse_payload(organization)
+        current_state_payload = make_current_state_payload(organization)
         original_reach = deepcopy(reach_payload)
         original_reuse = deepcopy(reuse_payload)
+        original_current_state = deepcopy(current_state_payload)
         for results, capabilities in (
             ([True], [PartnerCapability.MANAGE_ORGANIZATION]),
             ([False, True], [
@@ -1173,6 +1404,7 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
                 patch(REVIEWERS_PATCH, return_value=reviewers_payload) as reviewers,
                 patch(PUBLIC_REACH_PATCH, return_value=reach_payload) as reach,
                 patch(KNOWLEDGE_REUSE_PATCH, return_value=reuse_payload) as reuse,
+                patch(CURRENT_STATE_PATCH, return_value=current_state_payload) as current_state,
                 patch(TREND_PATCH) as trend,
             ):
                 result = get_organization_verification_metrics(
@@ -1198,6 +1430,7 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
                 },
                 "public_reach": measurement_section(original_reach),
                 "knowledge_reuse": measurement_section(original_reuse),
+                "current_state": measurement_section(original_current_state),
             })
             self.assertIsNot(result, payload)
             self.assertIsNot(result["activity"], activity_payload)
@@ -1207,6 +1440,7 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
             self.assertEqual(reviewers_payload, original_reviewers)
             self.assertEqual(reach_payload, original_reach)
             self.assertEqual(reuse_payload, original_reuse)
+            self.assertEqual(current_state_payload, original_current_state)
             self.assertIsNot(result["resolution_distribution"], resolution_payload)
             self.assertIsNot(result["reviewer_participation"], reviewers_payload["reviewer_participation"])
             self.assertEqual(capability.call_args_list, [
@@ -1219,6 +1453,7 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
             reviewers.assert_called_once_with(organization=organization)
             reach.assert_called_once_with(organization=organization)
             reuse.assert_called_once_with(organization=organization)
+            current_state.assert_called_once_with(organization=organization)
             trend.assert_not_called()
 
     def test_missing_capabilities_raise_without_reading_any_service(self):
@@ -1245,12 +1480,15 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
         self.reviewers.assert_not_called()
         self.public_reach.assert_not_called()
         self.knowledge_reuse.assert_not_called()
+        self.current_state.assert_not_called()
         trend.assert_not_called()
 
     def test_missing_or_mismatched_service_identity_raises_composition_error(self):
         actor = object()
         organization = SimpleNamespace(pk=uuid.uuid4())
-        for service in ("baseline", "activity", "resolution", "reviewers", "reach", "reuse"):
+        for service in (
+            "baseline", "activity", "resolution", "reviewers", "reach", "reuse", "current",
+        ):
             for identity in (None, str(uuid.uuid4())):
                 with self.subTest(service=service, identity=identity):
                     baseline_payload = {"organization_id": str(organization.pk)}
@@ -1259,10 +1497,12 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
                     reviewers_payload = make_reviewer_participation_payload(organization)
                     reach_payload = make_public_reach_payload(organization)
                     reuse_payload = make_knowledge_reuse_payload(organization)
+                    current_payload = make_current_state_payload(organization)
                     malformed = {
                         "baseline": baseline_payload, "activity": activity_payload,
                         "resolution": resolution_payload, "reviewers": reviewers_payload,
                         "reach": reach_payload, "reuse": reuse_payload,
+                        "current": current_payload,
                     }[service]
                     if identity is None:
                         del malformed["organization_id"]
@@ -1274,6 +1514,7 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
                     original_reviewers = deepcopy(reviewers_payload)
                     original_reach = deepcopy(reach_payload)
                     original_reuse = deepcopy(reuse_payload)
+                    original_current = deepcopy(current_payload)
                     with (
                         patch(
                             "api.verification_metrics_query_service.has_capability",
@@ -1285,6 +1526,7 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
                         patch(REVIEWERS_PATCH, return_value=reviewers_payload) as reviewers,
                         patch(PUBLIC_REACH_PATCH, return_value=reach_payload) as reach,
                         patch(KNOWLEDGE_REUSE_PATCH, return_value=reuse_payload) as reuse,
+                        patch(CURRENT_STATE_PATCH, return_value=current_payload) as current_state,
                         patch(TREND_PATCH) as trend,
                     ):
                         with self.assertRaises(VerificationMetricsCompositionError):
@@ -1297,6 +1539,7 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
                     reviewers.assert_called_once_with(organization=organization)
                     reach.assert_called_once_with(organization=organization)
                     reuse.assert_called_once_with(organization=organization)
+                    current_state.assert_called_once_with(organization=organization)
                     trend.assert_not_called()
                     self.assertEqual(baseline_payload, original_baseline)
                     self.assertEqual(activity_payload, original_activity)
@@ -1304,6 +1547,7 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
                     self.assertEqual(reviewers_payload, original_reviewers)
                     self.assertEqual(reach_payload, original_reach)
                     self.assertEqual(reuse_payload, original_reuse)
+                    self.assertEqual(current_payload, original_current)
 
     def test_direct_partial_window_fails_after_authorization_before_all_measurements(self):
         actor = object()
@@ -1331,6 +1575,7 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
                 self.reviewers.assert_not_called()
                 self.public_reach.assert_not_called()
                 self.knowledge_reuse.assert_not_called()
+                self.current_state.assert_not_called()
                 trend.assert_not_called()
 
     def test_direct_partial_window_does_not_bypass_authorization(self):
@@ -1358,6 +1603,7 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
         self.reviewers.assert_not_called()
         self.public_reach.assert_not_called()
         self.knowledge_reuse.assert_not_called()
+        self.current_state.assert_not_called()
         trend.assert_not_called()
 
     def test_direct_missing_or_mismatched_trend_identity_raises_composition_error(self):
@@ -1380,6 +1626,7 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
                     patch(ACTIVITY_PATCH, return_value=activity_payload) as activity,
                     patch(PUBLIC_REACH_PATCH, side_effect=make_public_reach_payload) as reach,
                     patch(KNOWLEDGE_REUSE_PATCH, side_effect=make_knowledge_reuse_payload) as reuse,
+                    patch(CURRENT_STATE_PATCH, side_effect=make_current_state_payload) as current_state,
                     patch(TREND_PATCH, return_value=trend_payload) as trend,
                 ):
                     with self.assertRaises(VerificationMetricsCompositionError):
@@ -1391,6 +1638,7 @@ class VerificationMetricsQueryBoundaryTests(SimpleTestCase):
                 activity.assert_called_once_with(organization=organization)
                 reach.assert_called_once_with(organization=organization)
                 reuse.assert_called_once_with(organization=organization)
+                current_state.assert_called_once_with(organization=organization)
                 trend.assert_called_once_with(
                     organization=organization, created_after=after, created_before=before,
                 )

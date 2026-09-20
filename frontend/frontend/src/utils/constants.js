@@ -167,6 +167,8 @@ export const API_ENDPOINTS = {
    // Verification Workspace
    VERIFICATION_INTAKE: "verification/intake/",
    VERIFICATION_WORKLOAD: "verification/workload/",
+   ORGANIZATION_VERIFICATION_ANALYTICS: (organizationId) =>
+      `organizations/${encodeURIComponent(organizationId)}/analytics/verification/`,
    VERIFICATION_INTELLIGENCE: (claimId) =>
       `verification/claims/${encodeURIComponent(claimId)}/intelligence/`,
    VERIFICATION_ASSIGNMENT_CLAIM: (assignmentId) => `verification/assignments/${assignmentId}/claim/`,
