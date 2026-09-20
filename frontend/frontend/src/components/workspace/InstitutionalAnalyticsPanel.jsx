@@ -12,6 +12,7 @@ const percentFormatter = new Intl.NumberFormat(undefined, { style: "percent", ma
 const secondsFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
 const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "long" });
 const utcDateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeZone: "UTC" });
+const utcAxisDateFormatter = new Intl.DateTimeFormat(undefined, { month: "numeric", day: "numeric", timeZone: "UTC" });
 const VERDICTS = ["FACT", "FAKE", "MISLEADING", "SATIRE"];
 const UTC_DAY_MS = 24 * 60 * 60 * 1000;
 const TREND_COUNT_FIELDS = {
@@ -20,6 +21,36 @@ const TREND_COUNT_FIELDS = {
    adjudication: ["started", "verdicts_issued"],
    publication: ["initial_published"],
 };
+const TREND_CHART_METRICS = [
+   {
+      id: "assignment-claimed",
+      label: "Investigations taken",
+      category: "assignment",
+      field: "claimed",
+      zeroMessage: "No investigation-taking events were recorded during this reporting period.",
+   },
+   {
+      id: "evidence-review-decisions",
+      label: "Evidence review decisions",
+      category: "evidence_review",
+      field: "decisions",
+      zeroMessage: "No evidence review decision events were recorded during this reporting period.",
+   },
+   {
+      id: "adjudication-verdicts",
+      label: "Verdicts issued",
+      category: "adjudication",
+      field: "verdicts_issued",
+      zeroMessage: "No verdict issuance events were recorded during this reporting period.",
+   },
+   {
+      id: "publication-initial",
+      label: "Initial publications recorded",
+      category: "publication",
+      field: "initial_published",
+      zeroMessage: "No initial publication events were recorded during this reporting period.",
+   },
+];
 
 function isMeasurement(value) {
    return typeof value === "number" && Number.isFinite(value) && value >= 0;
@@ -155,6 +186,19 @@ function formatUtcDate(value) {
    return timestamp === null ? value : utcDateFormatter.format(new Date(timestamp));
 }
 
+function formatUtcAxisDate(value) {
+   const timestamp = utcDateValue(value);
+   return timestamp === null ? value : utcAxisDateFormatter.format(new Date(timestamp));
+}
+
+function getTrendAxisLabelStep(dateCount) {
+   if (dateCount <= 7) return 1;
+   if (dateCount <= 14) return 2;
+   if (dateCount <= 31) return 5;
+   if (dateCount <= 62) return 7;
+   return 10;
+}
+
 function isCurrentStateContract(value) {
    return (
       value !== null &&
@@ -274,6 +318,132 @@ function MeasurementBasis({ title, basis, fields }) {
             </dl>
          ) : (
             <p>Measurement basis not available from current observations.</p>
+         )}
+      </section>
+   );
+}
+
+function DailyActivityChart({ daily, startDate, endDate, includesCurrentUtcDay }) {
+   const chartTitleId = useId();
+   const chartDescriptionId = useId();
+   const [selectedMetricId, setSelectedMetricId] = useState(TREND_CHART_METRICS[0].id);
+   const [hoveredDate, setHoveredDate] = useState(null);
+   const selectedMetric =
+      TREND_CHART_METRICS.find((metric) => metric.id === selectedMetricId) ?? TREND_CHART_METRICS[0];
+   const values = daily.map((bucket) => bucket[selectedMetric.category][selectedMetric.field]);
+   const maximum = Math.max(...values);
+   const midpoint = maximum > 1 ? maximum / 2 : null;
+   const labelStep = getTrendAxisLabelStep(daily.length);
+   const chartDescription = [
+      `${selectedMetric.label} from ${startDate} through ${endDate} UTC.`,
+      "Each bar represents the recorded count for one returned UTC calendar date.",
+      `The selected series ranges from 0 to ${countFormatter.format(maximum)} events per date.`,
+      includesCurrentUtcDay ? "The final UTC date is a partial-day observation." : null,
+      "Hover over a date column to see its exact count and UTC date.",
+      "Exact daily counts for every date are available in the Daily activity breakdown table below.",
+   ]
+      .filter(Boolean)
+      .join(" ");
+
+   return (
+      <section className="institutional-analytics__trend-chart" aria-labelledby={chartTitleId} aria-describedby={chartDescriptionId}>
+         <header className="institutional-analytics__chart-header">
+            <h5 id={chartTitleId}>{selectedMetric.label} by UTC date</h5>
+            <p id={chartDescriptionId}>{chartDescription}</p>
+         </header>
+
+         <fieldset className="institutional-analytics__chart-selector">
+            <legend>Chart measurement</legend>
+            <div className="institutional-analytics__chart-options">
+               {TREND_CHART_METRICS.map((metric) => (
+                  <label key={metric.id} className="institutional-analytics__chart-option">
+                     <input
+                        type="radio"
+                        name={`${chartTitleId}-measurement`}
+                        value={metric.id}
+                        checked={selectedMetric.id === metric.id}
+                        onChange={() => {
+                           setHoveredDate(null);
+                           setSelectedMetricId(metric.id);
+                        }}
+                     />
+                     <span>{metric.label}</span>
+                  </label>
+               ))}
+            </div>
+         </fieldset>
+
+         {maximum === 0 ? (
+            <p className="institutional-analytics__chart-empty">{selectedMetric.zeroMessage}</p>
+         ) : (
+            <>
+               <p className="institutional-analytics__chart-scale-note">
+                  Scale: 0 to {formatCount(maximum)} events per UTC date for {selectedMetric.label.toLowerCase()}.
+               </p>
+               <div className="institutional-analytics__chart-layout">
+                  <div className="institutional-analytics__chart-scale" aria-hidden="true">
+                     <span>{formatCount(maximum)}</span>
+                     {midpoint !== null && <span>{formatCount(midpoint)}</span>}
+                     <span>0</span>
+                  </div>
+                  <div
+                     className="institutional-analytics__chart-scroll"
+                     role="region"
+                     tabIndex={daily.length > 7 ? 0 : undefined}
+                     aria-label={`${selectedMetric.label} daily bar chart${daily.length > 7 ? ", horizontally scrollable" : ""}`}
+                  >
+                     <div
+                        className="institutional-analytics__chart-plot"
+                        style={{ "--trend-day-count": daily.length }}
+                        aria-hidden="true"
+                     >
+                        <div className="institutional-analytics__chart-plot-area">
+                           <div className="institutional-analytics__chart-gridlines">
+                              <span />
+                              {midpoint !== null && <span />}
+                              <span />
+                           </div>
+                           <div className="institutional-analytics__chart-bars">
+                              {daily.map((bucket, index) => (
+                                 <div
+                                    key={bucket.date}
+                                    className={`institutional-analytics__chart-bar-slot${hoveredDate === bucket.date ? " institutional-analytics__chart-bar-slot--hovered" : ""}`}
+                                    data-tooltip={`${bucket.date} UTC · ${formatCount(values[index])} ${values[index] === 1 ? "event" : "events"}`}
+                                    onMouseEnter={() => setHoveredDate(bucket.date)}
+                                    onMouseLeave={() => setHoveredDate(null)}
+                                 >
+                                    <span
+                                       className={`institutional-analytics__chart-bar${values[index] > 0 ? " institutional-analytics__chart-bar--nonzero" : ""}`}
+                                       style={{ height: `${(values[index] / maximum) * 100}%` }}
+                                    />
+                                 </div>
+                              ))}
+                           </div>
+                        </div>
+                        <div className="institutional-analytics__chart-dates">
+                           {daily.map((bucket, index) => {
+                              const isLastDate = index === daily.length - 1;
+                              const showLabel =
+                                 index % labelStep === 0 || (isLastDate && index % labelStep > labelStep / 2);
+                              return (
+                                 <span
+                                    key={bucket.date}
+                                    className={hoveredDate === bucket.date ? "institutional-analytics__chart-date--hovered" : undefined}
+                                 >
+                                    {showLabel || hoveredDate === bucket.date ? formatUtcAxisDate(bucket.date) : ""}
+                                 </span>
+                              );
+                           })}
+                        </div>
+                     </div>
+                  </div>
+               </div>
+               {daily.length > 7 && (
+                  <p className="institutional-analytics__chart-scroll-hint">
+                     Longer reporting periods can be scrolled within the chart.
+                  </p>
+               )}
+            </>
          )}
       </section>
    );
@@ -534,6 +704,15 @@ function ActivityTrendsSection({ authFetch, authIdentity, organizationId, reques
                      <h5>No eligible verification activity was recorded during this reporting period.</h5>
                      <p>Earlier work may exist outside the selected dates or outside the instrumentation coverage.</p>
                   </div>
+               )}
+
+               {!hasNoRecordedActivity && (
+                  <DailyActivityChart
+                     daily={trend.daily}
+                     startDate={appliedPeriod.startDate}
+                     endDate={appliedPeriod.endDate}
+                     includesCurrentUtcDay={includesCurrentUtcDay}
+                  />
                )}
 
                <details className="institutional-analytics__daily-details">

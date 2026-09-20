@@ -495,6 +495,258 @@
    font-size: var(--tl-text-sm);
 }
 
+.institutional-analytics__trend-chart {
+   display: grid;
+   gap: var(--tl-space-4);
+   min-width: 0;
+   padding: var(--tl-space-4);
+   background: var(--tl-color-bg-surface);
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: var(--tl-radius-md);
+}
+
+.institutional-analytics__chart-header {
+   display: grid;
+   gap: var(--tl-space-1);
+   min-width: 0;
+}
+
+.institutional-analytics__chart-header p {
+   max-width: 78ch;
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-sm);
+}
+
+.institutional-analytics__chart-selector {
+   min-inline-size: 0;
+   margin: 0;
+   padding: 0;
+   border: 0;
+}
+
+.institutional-analytics__chart-selector legend {
+   padding: 0;
+   color: var(--tl-color-text-main);
+   font-size: var(--tl-text-sm);
+   font-weight: 700;
+}
+
+.institutional-analytics__chart-options {
+   display: flex;
+   flex-wrap: wrap;
+   gap: var(--tl-space-2);
+   min-width: 0;
+   margin-top: var(--tl-space-2);
+}
+
+.institutional-analytics__chart-option {
+   box-sizing: border-box;
+   display: inline-flex;
+   align-items: center;
+   gap: var(--tl-space-2);
+   min-width: 0;
+   min-height: var(--tl-control-height-comfortable);
+   padding: var(--tl-space-2) var(--tl-space-3);
+   color: var(--tl-color-text-body);
+   background: var(--tl-color-bg-subtle);
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: var(--tl-radius-md);
+   font-size: var(--tl-text-sm);
+   font-weight: 650;
+   line-height: 1.35;
+   cursor: pointer;
+}
+
+.institutional-analytics__chart-option:has(input:checked) {
+   color: var(--tl-color-brand-primary);
+   background: var(--tl-color-bg-surface);
+   border-color: var(--tl-color-brand-primary);
+}
+
+.institutional-analytics__chart-option:has(input:focus-visible) {
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
+}
+
+.institutional-analytics__chart-option input {
+   flex: 0 0 auto;
+   margin: 0;
+   accent-color: var(--tl-color-brand-primary);
+}
+
+.institutional-analytics__chart-scale-note,
+.institutional-analytics__chart-scroll-hint {
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-sm);
+}
+
+.institutional-analytics__chart-layout {
+   display: grid;
+   grid-template-columns: max-content minmax(0, 1fr);
+   align-items: start;
+   gap: var(--tl-space-2);
+   min-width: 0;
+}
+
+.institutional-analytics__chart-scale {
+   display: flex;
+   flex-direction: column;
+   justify-content: space-between;
+   height: 12rem;
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-xs);
+   font-variant-numeric: tabular-nums;
+   line-height: 1;
+   text-align: end;
+}
+
+.institutional-analytics__chart-scroll {
+   min-width: 0;
+   max-width: 100%;
+   overflow-x: auto;
+   overscroll-behavior-inline: contain;
+   scrollbar-color: var(--tl-color-brand-primary) var(--tl-color-bg-subtle);
+}
+
+.institutional-analytics__chart-scroll:focus-visible {
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
+   border-radius: var(--tl-radius-sm);
+}
+
+.institutional-analytics__chart-plot {
+   width: max-content;
+   min-width: 100%;
+}
+
+.institutional-analytics__chart-plot-area {
+   position: relative;
+   height: 12rem;
+}
+
+.institutional-analytics__chart-gridlines {
+   position: absolute;
+   inset: 0;
+   display: flex;
+   flex-direction: column;
+   justify-content: space-between;
+   pointer-events: none;
+}
+
+.institutional-analytics__chart-gridlines span {
+   width: 100%;
+   border-top: 1px solid var(--tl-color-border-light);
+}
+
+.institutional-analytics__chart-gridlines span:last-child {
+   border-color: var(--tl-color-border-default);
+}
+
+.institutional-analytics__chart-bars,
+.institutional-analytics__chart-dates {
+   display: grid;
+   grid-template-columns: repeat(var(--trend-day-count), minmax(var(--tl-space-8), 1fr));
+}
+
+.institutional-analytics__chart-bars {
+   position: absolute;
+   inset: 0;
+}
+
+.institutional-analytics__chart-bar-slot {
+   position: relative;
+   display: flex;
+   align-items: flex-end;
+   justify-content: center;
+   min-width: 0;
+   padding-inline: var(--tl-space-1);
+}
+
+.institutional-analytics__chart-bar-slot--hovered {
+   background: var(--tl-color-bg-subtle);
+}
+
+/* Keep the exact-count tooltip inside the plot's height so horizontal
+   scrolling does not clip it at the top. A zero-day column is hoverable too. */
+.institutional-analytics__chart-bar-slot::after {
+   position: absolute;
+   z-index: 2;
+   top: var(--tl-space-2);
+   left: 50%;
+   width: max-content;
+   max-width: 12rem;
+   padding: var(--tl-space-1) var(--tl-space-2);
+   color: var(--tl-color-text-inverse);
+   background: var(--tl-color-text-main);
+   border-radius: var(--tl-radius-sm);
+   font-size: var(--tl-text-xs);
+   font-variant-numeric: tabular-nums;
+   line-height: 1.4;
+   text-align: center;
+   white-space: nowrap;
+   content: attr(data-tooltip);
+   opacity: 0;
+   pointer-events: none;
+   transform: translateX(-50%);
+}
+
+.institutional-analytics__chart-bar-slot--hovered::after {
+   opacity: 1;
+}
+
+/* Prevent clipped tooltips for the first and last columns in a scrollable plot. */
+.institutional-analytics__chart-bar-slot:first-child::after {
+   left: 0;
+   transform: none;
+}
+
+.institutional-analytics__chart-bar-slot:last-child::after {
+   right: 0;
+   left: auto;
+   transform: none;
+}
+
+.institutional-analytics__chart-bar {
+   display: block;
+   width: 65%;
+   max-width: var(--tl-space-6);
+   background: var(--tl-color-brand-primary);
+   border-radius: var(--tl-radius-sm) var(--tl-radius-sm) 0 0;
+}
+
+.institutional-analytics__chart-bar-slot--hovered .institutional-analytics__chart-bar--nonzero {
+   outline: 2px solid var(--tl-color-text-main);
+   outline-offset: 1px;
+}
+
+.institutional-analytics__chart-dates {
+   min-height: var(--tl-control-height-standard);
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-xs);
+   line-height: 1.2;
+}
+
+.institutional-analytics__chart-dates span {
+   min-width: 0;
+   padding: var(--tl-space-2) var(--tl-space-1) 0;
+   text-align: center;
+   white-space: nowrap;
+}
+
+.institutional-analytics__chart-date--hovered {
+   color: var(--tl-color-text-main);
+   font-weight: 700;
+}
+
+.institutional-analytics__chart-empty {
+   padding: var(--tl-space-3) var(--tl-space-4);
+   color: var(--tl-color-text-body);
+   background: var(--tl-color-bg-subtle);
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: var(--tl-radius-md);
+   font-size: var(--tl-text-sm);
+}
+
 .institutional-analytics__daily-details {
    min-width: 0;
    padding-block: var(--tl-space-3);
@@ -961,6 +1213,19 @@
    .institutional-analytics__apply-period {
       justify-self: start;
    }
+
+   .institutional-analytics__trend-chart {
+      padding: var(--tl-space-3);
+   }
+
+   .institutional-analytics__chart-options {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+   }
+
+   .institutional-analytics__chart-option {
+      width: 100%;
+   }
 }
 
 @container institutional-analytics (max-width: 460px) {
@@ -991,6 +1256,10 @@
 
    .institutional-analytics__period-option {
       width: 100%;
+   }
+
+   .institutional-analytics__chart-options {
+      grid-template-columns: minmax(0, 1fr);
    }
 
    .institutional-analytics__basis dl > div {
