@@ -1,4 +1,10 @@
-﻿from .settings import *
+import os
+
+# Set the environment identity before importing base settings so test settings
+# never require development, staging, or production database credentials.
+os.environ["APP_ENV"] = "test"
+
+from .settings import *
 
 # Use a local SQLite DB for isolated/offline test runs.
 DATABASES = {

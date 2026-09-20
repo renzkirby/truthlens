@@ -107,6 +107,28 @@ git clone https://github.com/renzkirby/truthlens.git
 cd truthlens
 ```
 
+### Backend Environment Selection
+
+Database selection is controlled by `APP_ENV`, independently of `DEBUG`.
+Values are stripped and lower-cased, then validated against exactly:
+`development`, `test`, `staging`, and `production`.
+
+- If `APP_ENV` is absent, it defaults to `development` for the existing local
+  workflow. An explicitly empty or unsupported value fails startup.
+- `development` requires `SUPABASE_DEVELOPMENT_DB_URL`.
+- `staging` requires `SUPABASE_STAGING_DB_URL` and `DEBUG=False`.
+- `production` requires `SUPABASE_PRODUCTION_DB_URL` and `DEBUG=False`.
+- `test` uses `SUPABASE_TEST_DB_URL` when supplied; otherwise it uses the
+  isolated SQLite test database. `truthlens_backend.settings_test` always sets
+  `APP_ENV=test` before base settings are imported.
+- No environment falls back to another environment's database URL. Identical
+  configured URLs across environments are rejected as an additional safeguard.
+
+Exact URL comparison cannot prove that differently formatted endpoints or
+credentials address separate databases. Deployment validation must also verify
+distinct Supabase project/database identity and credentials without printing
+their values.
+
 ### 2. Backend Setup
 
 ```powershell

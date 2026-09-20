@@ -16,6 +16,12 @@ from datetime import timedelta
 import os
 import dj_database_url
 
+from .environment import (
+    resolve_app_environment,
+    select_database_url,
+    validate_debug_policy,
+)
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -24,6 +30,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 load_dotenv()
+
+# APP_ENV is independent of DEBUG. An absent value defaults only to local
+# development; empty or unsupported values fail closed. Staging and production
+# must always be selected explicitly.
+APP_ENV = resolve_app_environment()
 
 SUPABASE_ORGANIZATION_LOGOS_BUCKET = os.getenv(
     "SUPABASE_ORGANIZATION_LOGOS_BUCKET",
@@ -35,6 +46,7 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'False') == 'True'
+validate_debug_policy(APP_ENV, DEBUG)
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
 
@@ -145,40 +157,34 @@ WSGI_APPLICATION = "truthlens_backend.wsgi.application"
 # }
 
 
-def _normalize_supabase_pooler_port(database_url):
-    if not database_url:
-        return database_url
-    return database_url.replace(".pooler.supabase.com:5432", ".pooler.supabase.com:6543")
+database_env, selected_db_url = select_database_url(APP_ENV)
 
-
-database_env = (
-    "SUPABASE_DEVELOPMENT_DB_URL"
-    if DEBUG
-    else "SUPABASE_PRODUCTION_DB_URL"
-)
-selected_db_url = os.environ.get(database_env)
-if not selected_db_url:
-    raise RuntimeError(
-        f"No database URL configured for this environment. Set {database_env}."
-    )
-
-selected_db_url = _normalize_supabase_pooler_port(selected_db_url)
-
-DATABASES = {
-    "default": {
-        **dj_database_url.parse(
-            selected_db_url,
-            conn_max_age=600,
-            conn_health_checks=True,
-        ),
-        "TEST": {
-            "NAME": os.getenv(
-                "TEST_DATABASE_NAME",
-                "test_postgres",
-            ),
-        },
+if selected_db_url is None:
+    # APP_ENV=test has a safe offline default. PostgreSQL integration tests may
+    # instead provide SUPABASE_TEST_DB_URL and retain Django's isolated TEST
+    # database name below.
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "test_db.sqlite3",
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            **dj_database_url.parse(
+                selected_db_url,
+                conn_max_age=600,
+                conn_health_checks=True,
+            ),
+            "TEST": {
+                "NAME": os.getenv(
+                    "TEST_DATABASE_NAME",
+                    "test_postgres",
+                ),
+            },
+        }
+    }
 
 # DATABASES = {
 #     "default": {
