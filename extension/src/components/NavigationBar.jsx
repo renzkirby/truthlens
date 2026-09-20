@@ -10,13 +10,17 @@ const tools = [
 export default function NavigationBar({ setActiveLink }) {
    return (
       <nav className="extension-tools" aria-label="Verification tools">
-         {tools.map(({ id, label, icon: Icon }) => (
-            <button type="button" className="extension-tool" key={id} onClick={() => setActiveLink(id)}>
-               <Icon size={17} aria-hidden="true" />
-               <span>{label}</span>
-               <ArrowRight size={15} className="tool-arrow" aria-hidden="true" />
-            </button>
-         ))}
+         {tools.map(({ id, label, icon }) => {
+            const Icon = icon;
+
+            return (
+               <button type="button" className="extension-tool" key={id} onClick={() => setActiveLink(id)}>
+                  <Icon size={17} aria-hidden="true" />
+                  <span>{label}</span>
+                  <ArrowRight size={15} className="tool-arrow" aria-hidden="true" />
+               </button>
+            );
+         })}
       </nav>
    );
 }
