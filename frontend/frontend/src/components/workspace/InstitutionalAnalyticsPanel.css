@@ -14,11 +14,11 @@
    background: var(--tl-color-brand-primary);
 }
 
-.institutional-analytics :is(h3, h4, h5, p, dl, dd) {
+.institutional-analytics :is(h3, h4, h5, h6, p, dl, dd) {
    margin: 0;
 }
 
-.institutional-analytics :is(h3, h4, h5) {
+.institutional-analytics :is(h3, h4, h5, h6) {
    color: var(--tl-color-text-main);
    text-wrap: balance;
 }
@@ -30,6 +30,10 @@
 
 .institutional-analytics h5 {
    font-size: var(--tl-text-base);
+}
+
+.institutional-analytics h6 {
+   font-size: var(--tl-text-sm);
 }
 
 .institutional-analytics__header {
@@ -1007,6 +1011,193 @@
    margin-top: var(--tl-space-3) !important;
 }
 
+/* Cumulative reach and reuse are supporting observations, separate from selected-period activity. */
+.institutional-analytics__observations > .institutional-analytics__section-header {
+   margin-bottom: var(--tl-space-4);
+}
+
+.institutional-analytics__observation-grid {
+   display: grid;
+   grid-template-columns: repeat(2, minmax(0, 1fr));
+   align-items: start;
+   gap: var(--tl-space-4);
+   min-width: 0;
+}
+
+.institutional-analytics__observation-panel {
+   display: grid;
+   gap: var(--tl-space-4);
+   min-width: 0;
+   padding: var(--tl-space-5);
+   background: var(--tl-color-bg-surface);
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: var(--tl-radius-lg);
+}
+
+.institutional-analytics__observation-panel > header {
+   display: grid;
+   gap: var(--tl-space-1);
+   min-width: 0;
+}
+
+.institutional-analytics__observation-panel > header p,
+.institutional-analytics__observation-limitation {
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-sm);
+}
+
+.institutional-analytics__observation-metrics {
+   display: grid;
+   grid-template-columns: repeat(2, minmax(0, 1fr));
+   gap: var(--tl-space-3);
+   min-width: 0;
+}
+
+.institutional-analytics__observation-metrics > div {
+   display: grid;
+   grid-template-rows: auto auto 1fr;
+   align-content: start;
+   gap: var(--tl-space-2);
+   min-width: 0;
+   padding: var(--tl-space-4);
+   background: var(--tl-color-bg-subtle);
+   border-radius: var(--tl-radius-md);
+}
+
+.institutional-analytics__observation-metrics dt {
+   color: var(--tl-color-text-body);
+   font-size: var(--tl-text-sm);
+   font-weight: 650;
+   line-height: 1.35;
+}
+
+.institutional-analytics__observation-value {
+   color: var(--tl-color-text-main);
+   font-size: var(--tl-text-xl);
+   font-weight: 750;
+   font-variant-numeric: tabular-nums;
+   line-height: 1.1;
+}
+
+.institutional-analytics__observation-description {
+   padding-top: var(--tl-space-2);
+   color: var(--tl-color-text-muted);
+   border-top: 1px solid var(--tl-color-border-light);
+   font-size: var(--tl-text-sm);
+   line-height: 1.45;
+}
+
+.institutional-analytics__measurement-support {
+   display: grid;
+   gap: var(--tl-space-3);
+   min-width: 0;
+   padding: var(--tl-space-4);
+   background: var(--tl-color-bg-subtle);
+   border-radius: var(--tl-radius-md);
+}
+
+.institutional-analytics__cache-metric > div {
+   display: flex;
+   flex-wrap: wrap;
+   align-items: baseline;
+   justify-content: space-between;
+   gap: var(--tl-space-2) var(--tl-space-3);
+   min-width: 0;
+}
+
+.institutional-analytics__cache-metric dt {
+   color: var(--tl-color-text-body);
+   font-size: var(--tl-text-sm);
+}
+
+.institutional-analytics__cache-metric dd {
+   color: var(--tl-color-text-main);
+   font-size: var(--tl-text-xl);
+   font-weight: 750;
+   font-variant-numeric: tabular-nums;
+}
+
+.institutional-analytics__measurement-details {
+   min-width: 0;
+   padding-top: var(--tl-space-2);
+   border-top: 1px solid var(--tl-color-border-default);
+}
+
+.institutional-analytics__measurement-details > summary {
+   padding: var(--tl-space-2) 0;
+   color: var(--tl-color-text-main);
+   font-size: var(--tl-text-sm);
+   font-weight: 650;
+   cursor: pointer;
+}
+
+.institutional-analytics__measurement-details > summary:hover {
+   color: var(--tl-color-brand-primary);
+}
+
+.institutional-analytics__measurement-details > summary:focus-visible {
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
+   border-radius: var(--tl-radius-sm);
+}
+
+.institutional-analytics__measurement-details[open] > summary {
+   margin-bottom: var(--tl-space-2);
+}
+
+.institutional-analytics__measurement-details > p,
+.institutional-analytics__match-methods > p {
+   margin-top: var(--tl-space-3) !important;
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-sm);
+}
+
+.institutional-analytics__match-methods {
+   min-width: 0;
+   margin-top: var(--tl-space-4);
+   padding-top: var(--tl-space-4);
+   border-top: 1px solid var(--tl-color-border-light);
+}
+
+.institutional-analytics__match-methods > h6 {
+   margin-bottom: var(--tl-space-3);
+}
+
+.institutional-analytics__match-methods > dl {
+   display: grid;
+   grid-template-columns: repeat(2, minmax(0, 1fr));
+   gap: var(--tl-space-3);
+   min-width: 0;
+}
+
+.institutional-analytics__match-methods dl > div {
+   display: grid;
+   grid-template-columns: minmax(0, 1fr) auto;
+   gap: var(--tl-space-1) var(--tl-space-3);
+   min-width: 0;
+   padding: var(--tl-space-3);
+   background: var(--tl-color-bg-subtle);
+   border-radius: var(--tl-radius-md);
+}
+
+.institutional-analytics__match-methods dt {
+   color: var(--tl-color-text-main);
+   font-size: var(--tl-text-sm);
+   font-weight: 650;
+}
+
+.institutional-analytics__match-methods dd:first-of-type {
+   color: var(--tl-color-text-main);
+   font-weight: 700;
+   font-variant-numeric: tabular-nums;
+}
+
+.institutional-analytics__match-methods dd:last-child {
+   grid-column: 1 / -1;
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-sm);
+}
+
 /* Methodology remains discoverable, with technical provenance a second disclosure. */
 .institutional-analytics__notes {
    min-width: 0;
@@ -1179,6 +1370,10 @@
       grid-template-columns: minmax(0, 1fr);
    }
 
+   .institutional-analytics__observation-grid {
+      grid-template-columns: minmax(0, 1fr);
+   }
+
    .institutional-analytics__workflow-details {
       grid-template-columns: repeat(2, minmax(0, 1fr));
    }
@@ -1206,7 +1401,8 @@
    }
 
    .institutional-analytics__section--current,
-   .institutional-analytics__support-panel {
+   .institutional-analytics__support-panel,
+   .institutional-analytics__observation-panel {
       padding: var(--tl-space-4);
    }
 
@@ -1232,7 +1428,9 @@
    .institutional-analytics__current-grid,
    .institutional-analytics__trend-summary,
    .institutional-analytics__workflow-summary,
-   .institutional-analytics__turnaround-primary {
+   .institutional-analytics__turnaround-primary,
+   .institutional-analytics__observation-metrics,
+   .institutional-analytics__match-methods > dl {
       grid-template-columns: minmax(0, 1fr);
    }
 

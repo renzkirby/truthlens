@@ -213,6 +213,100 @@ function isCurrentStateContract(value) {
    );
 }
 
+function isRecord(value) {
+   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasCountFields(value, fields) {
+   return isRecord(value) && fields.every((field) => isCount(value[field]));
+}
+
+function isObservedInstant(value) {
+   return typeof value === "string" && value.length > 0 && !Number.isNaN(new Date(value).getTime());
+}
+
+function hasObservedInterval(first, last, eventCount) {
+   if (eventCount === 0) return first === null && last === null;
+   return isObservedInstant(first) && isObservedInstant(last) && new Date(first).getTime() <= new Date(last).getTime();
+}
+
+function isPublicReachContract(value) {
+   const basis = value?.measurement_basis;
+   const interactions = value?.observed_interactions;
+   const byType = interactions?.by_type;
+   const bySurface = interactions?.by_surface;
+   const impressions = value?.extension_publications?.impressions;
+   const clicks = value?.extension_publications?.clicks;
+   const typeFields = [
+      "PUBLICATION_VIEW",
+      "PARTNER_PROFILE_VIEW",
+      "EXTENSION_PUBLICATION_IMPRESSION",
+      "EXTENSION_PUBLICATION_CLICK",
+   ];
+   const surfaceFields = [
+      "PUBLIC_FACT_CHECK_PAGE",
+      "PUBLIC_PARTNER_PROFILE",
+      "EXTENSION_OFFICIAL_FACT_CHECK",
+      "EXTENSION_RELATED_FACT_CHECK",
+   ];
+
+   return (
+      isRecord(value) &&
+      basis?.source === "PUBLIC_REACH_EVENT" &&
+      basis?.attribution_source === "SOURCE_ORGANIZATION_ID_SNAPSHOT" &&
+      basis?.publication_identity_source === "FACT_CHECK_ID_SNAPSHOT" &&
+      basis?.coverage === "INSTRUMENTATION_ERA_ONLY" &&
+      basis?.historical_backfill === false &&
+      basis?.unique_audience_measurement === false &&
+      hasCountFields(interactions, ["events", "distinct_publications"]) &&
+      hasCountFields(byType, typeFields) &&
+      hasCountFields(bySurface, surfaceFields) &&
+      hasCountFields(impressions, ["official", "related", "total"]) &&
+      hasCountFields(clicks, ["official", "related", "total"]) &&
+      hasObservedInterval(
+         basis?.first_observed_interaction_at,
+         basis?.last_observed_interaction_at,
+         interactions.events,
+      ) &&
+      interactions.events === typeFields.reduce((total, field) => total + byType[field], 0) &&
+      interactions.events === surfaceFields.reduce((total, field) => total + bySurface[field], 0) &&
+      impressions.total === impressions.official + impressions.related &&
+      clicks.total === clicks.official + clicks.related &&
+      byType.EXTENSION_PUBLICATION_IMPRESSION === impressions.total &&
+      byType.EXTENSION_PUBLICATION_CLICK === clicks.total
+   );
+}
+
+function isKnowledgeReuseContract(value) {
+   const basis = value?.measurement_basis;
+   const material = value?.material_reuse;
+   const byType = material?.by_type;
+   const byMatchMethod = material?.by_match_method;
+   const repeat = value?.repeat_claim_reuse;
+   const typeFields = ["USER_RESPONSE", "VERIFICATION_CONTEXT"];
+   const methodFields = ["EXACT_TEXT", "SEMANTIC", "FULL_TEXT", "CLAIM_CACHE"];
+
+   return (
+      isRecord(value) &&
+      basis?.source === "KNOWLEDGE_REUSE_EVENT" &&
+      basis?.attribution_source === "SOURCE_ORGANIZATION_ID_SNAPSHOT" &&
+      basis?.target_identity_source === "TARGET_CLAIM_ID_SNAPSHOT" &&
+      basis?.coverage === "ATTRIBUTED_INSTRUMENTATION_ERA_ONLY" &&
+      basis?.historical_backfill === false &&
+      basis?.historical_unattributed_rows_excluded === true &&
+      hasCountFields(material, ["events", "distinct_publications", "distinct_target_claims"]) &&
+      hasCountFields(byType, typeFields) &&
+      hasCountFields(byMatchMethod, methodFields) &&
+      hasCountFields(repeat, ["cached_published_responses", "distinct_cached_claims"]) &&
+      hasObservedInterval(basis?.first_observed_reuse_at, basis?.last_observed_reuse_at, material.events) &&
+      material.events === typeFields.reduce((total, field) => total + byType[field], 0) &&
+      material.events === methodFields.reduce((total, field) => total + byMatchMethod[field], 0) &&
+      repeat.cached_published_responses <= byType.USER_RESPONSE &&
+      repeat.cached_published_responses <= byMatchMethod.CLAIM_CACHE &&
+      repeat.distinct_cached_claims <= material.distinct_target_claims
+   );
+}
+
 function formatCount(value) {
    return isMeasurement(value) ? countFormatter.format(value) : "Not available";
 }
@@ -266,6 +360,11 @@ const BASIS_LABELS = {
    source: "Source",
    coverage: "Coverage",
    historical_backfill: "Historical backfill",
+   attribution_source: "Organization attribution source",
+   publication_identity_source: "Publication identity source",
+   target_identity_source: "Target-claim identity source",
+   unique_audience_measurement: "Unique audience measurement",
+   historical_unattributed_rows_excluded: "Unattributed historical records excluded",
    identity_source: "Reviewer identity source",
    first_observed_claimed_at: "First observed assignment claim",
    last_observed_claimed_at: "Last observed assignment claim",
@@ -275,6 +374,10 @@ const BASIS_LABELS = {
    last_observed_participation_at: "Last observed participation",
    first_observed_resolution_at: "First observed resolution",
    last_observed_resolution_at: "Last observed resolution",
+   first_observed_interaction_at: "First observed public interaction",
+   last_observed_interaction_at: "Last observed public interaction",
+   first_observed_reuse_at: "First observed knowledge reuse",
+   last_observed_reuse_at: "Last observed knowledge reuse",
 };
 
 const BASIS_VALUES = {
@@ -285,6 +388,12 @@ const BASIS_VALUES = {
    OBSERVED_AUTHORITATIVE_RESOLUTION_EVENTS_ONLY: "Observed authoritative resolution events only",
    DURABLE_ACTOR_ID_SNAPSHOT_EVENTS_ONLY: "Events with durable reviewer identity snapshots only",
    ACTOR_ID_SNAPSHOT: "Durable reviewer identity snapshots",
+   PUBLIC_REACH_EVENT: "Public reach events",
+   KNOWLEDGE_REUSE_EVENT: "Knowledge reuse events",
+   SOURCE_ORGANIZATION_ID_SNAPSHOT: "Recording-time source-organization snapshots",
+   FACT_CHECK_ID_SNAPSHOT: "Recording-time publication identity snapshots",
+   TARGET_CLAIM_ID_SNAPSHOT: "Recording-time target-claim identity snapshots",
+   ATTRIBUTED_INSTRUMENTATION_ERA_ONLY: "Attributed records since knowledge reuse tracking began",
 };
 
 function BasisValue({ field, value }) {
@@ -763,6 +872,227 @@ function ActivityTrendsSection({ authFetch, authIdentity, organizationId, reques
    );
 }
 
+function ObservationMetricCards({ items }) {
+   return (
+      <dl className="institutional-analytics__observation-metrics">
+         {items.map(({ label, value, description }) => (
+            <div key={label}>
+               <dt>{label}</dt>
+               <dd className="institutional-analytics__observation-value">{formatCount(value)}</dd>
+               <dd className="institutional-analytics__observation-description">{description}</dd>
+            </div>
+         ))}
+      </dl>
+   );
+}
+
+function PublicationReachPanel({ reach }) {
+   const interactions = reach?.observed_interactions;
+   const extension = reach?.extension_publications;
+
+   return (
+      <section className="institutional-analytics__observation-panel">
+         <header>
+            <h5>Publication reach</h5>
+            <p>Recorded interactions with your organization&apos;s public profile and fact-check publications.</p>
+         </header>
+
+         {!reach ? (
+            <EmptyMessage>Publication reach measurements are unavailable.</EmptyMessage>
+         ) : (
+            <>
+               <ObservationMetricCards
+                  items={[
+                     {
+                        label: "Publication page views",
+                        value: interactions.by_type.PUBLICATION_VIEW,
+                        description: "Recorded visits to your organization's public fact-check pages.",
+                     },
+                     {
+                        label: "Partner profile views",
+                        value: interactions.by_type.PARTNER_PROFILE_VIEW,
+                        description: "Recorded visits to your organization's public profile.",
+                     },
+                  ]}
+               />
+               {interactions.events === 0 ? (
+                  <EmptyMessage>No eligible public interactions have been recorded for this organization yet.</EmptyMessage>
+               ) : (
+                  <>
+                     <p className="institutional-analytics__observation-limitation">
+                        These values count recorded events, not unique visitors or readers.
+                     </p>
+
+                     <section className="institutional-analytics__measurement-support">
+                        <h6>Browser extension activity</h6>
+                        <MetricList
+                           compact
+                           items={[
+                              ["Publication impressions", formatCount(extension.impressions.total)],
+                              ["Publication clicks", formatCount(extension.clicks.total)],
+                           ]}
+                        />
+                        <p className="institutional-analytics__supporting-copy">
+                           An impression is a recorded presentation of a publication result through the extension; it
+                           does not prove the publication was read. A click is recorded for an extension publication
+                           result and does not establish that its verdict was accepted.
+                        </p>
+                     </section>
+
+                     <details className="institutional-analytics__measurement-details">
+                        <summary>Official and related publication results</summary>
+                        <MetricList
+                           compact
+                           items={[
+                              ["Official publication impressions", formatCount(extension.impressions.official)],
+                              ["Related publication impressions", formatCount(extension.impressions.related)],
+                              ["Official publication clicks", formatCount(extension.clicks.official)],
+                              ["Related publication clicks", formatCount(extension.clicks.related)],
+                           ]}
+                        />
+                        <p>
+                           Related publications provide context and do not automatically transfer their verdicts to
+                           another claim.
+                        </p>
+                     </details>
+
+                     <details className="institutional-analytics__measurement-details">
+                        <summary>Additional reach measurements</summary>
+                        <MetricList
+                           compact
+                           items={[
+                              ["Total recorded public interactions", formatCount(interactions.events)],
+                              [
+                                 "Distinct publication identities observed",
+                                 formatCount(interactions.distinct_publications),
+                              ],
+                           ]}
+                        />
+                        <p>
+                           Distinct publication identities are those associated with observed interactions. This is not
+                           a count of all current or historical publications, publicly accessible publications, or
+                           people.
+                        </p>
+                     </details>
+                  </>
+               )}
+            </>
+         )}
+      </section>
+   );
+}
+
+function KnowledgeReusePanel({ reuse }) {
+   const material = reuse?.material_reuse;
+   const repeat = reuse?.repeat_claim_reuse;
+
+   return (
+      <section className="institutional-analytics__observation-panel">
+         <header>
+            <h5>Knowledge reuse</h5>
+            <p>Recorded reuse of your organization&apos;s previously published knowledge within TruthLens.</p>
+         </header>
+
+         {!reuse ? (
+            <EmptyMessage>Knowledge reuse measurements are unavailable.</EmptyMessage>
+         ) : (
+            <>
+               <ObservationMetricCards
+                  items={[
+                     {
+                        label: "User-facing reuse events",
+                        value: material.by_type.USER_RESPONSE,
+                        description:
+                           "Recorded occasions when previously published knowledge was reused in a user-facing response.",
+                     },
+                     {
+                        label: "Verification-context reuse events",
+                        value: material.by_type.VERIFICATION_CONTEXT,
+                        description:
+                           "Recorded occasions when published knowledge was reused as context for another verification workflow.",
+                     },
+                  ]}
+               />
+               {material.events === 0 ? (
+                  <EmptyMessage>
+                     No attributed knowledge reuse events have been recorded for this organization yet.
+                  </EmptyMessage>
+               ) : (
+                  <>
+                     <p className="institutional-analytics__observation-limitation">
+                        These event counts are not unique users or target claims. Verification-context reuse does not
+                        automatically transfer an earlier publication&apos;s verdict to another claim.
+                     </p>
+
+                     <section className="institutional-analytics__measurement-support">
+                        <h6>Previously published knowledge served from cache</h6>
+                        <dl className="institutional-analytics__cache-metric">
+                           <div>
+                              <dt>Cached published-response events</dt>
+                              <dd>{formatCount(repeat.cached_published_responses)}</dd>
+                           </div>
+                        </dl>
+                        <p className="institutional-analytics__supporting-copy">
+                           Recorded occasions when a user-facing response reused previously published knowledge through
+                           the claim cache. The same target claim may contribute more than one event; this is not a
+                           measure of all cache hits, unique users served, automatically verified claims, work avoided,
+                           or time saved.
+                        </p>
+                     </section>
+
+                     <details className="institutional-analytics__measurement-details">
+                        <summary>Additional reuse measurements and match methods</summary>
+                        <MetricList
+                           compact
+                           items={[
+                              ["Total recorded reuse events", formatCount(material.events)],
+                              ["Distinct publication identities reused", formatCount(material.distinct_publications)],
+                              ["Distinct target-claim identities", formatCount(material.distinct_target_claims)],
+                              ["Distinct cached target-claim identities", formatCount(repeat.distinct_cached_claims)],
+                           ]}
+                        />
+                        <p>
+                           Target-claim counts use recorded identity snapshots. They are not counts of successfully
+                           verified claims, and missing historical identities are not reconstructed from current
+                           relationships.
+                        </p>
+                        <section className="institutional-analytics__match-methods">
+                           <h6>How reuse events were matched</h6>
+                           <dl>
+                              <div>
+                                 <dt>Exact text</dt>
+                                 <dd>{formatCount(material.by_match_method.EXACT_TEXT)}</dd>
+                                 <dd>Matched recorded text exactly; this does not transfer an institutional verdict.</dd>
+                              </div>
+                              <div>
+                                 <dt>Semantic</dt>
+                                 <dd>{formatCount(material.by_match_method.SEMANTIC)}</dd>
+                                 <dd>Matched by semantic similarity, which is not authoritative factual equivalence.</dd>
+                              </div>
+                              <div>
+                                 <dt>Full text</dt>
+                                 <dd>{formatCount(material.by_match_method.FULL_TEXT)}</dd>
+                                 <dd>Matched through full-text retrieval.</dd>
+                              </div>
+                              <div>
+                                 <dt>Claim cache</dt>
+                                 <dd>{formatCount(material.by_match_method.CLAIM_CACHE)}</dd>
+                                 <dd>
+                                    Matched through the claim cache; not every such event is a cached published response.
+                                 </dd>
+                              </div>
+                           </dl>
+                           <p>Match methods provide context and do not measure verification quality.</p>
+                        </section>
+                     </details>
+                  </>
+               )}
+            </>
+         )}
+      </section>
+   );
+}
+
 function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
    const { authFetch, token, user } = useAuth();
    const headingId = useId();
@@ -822,6 +1152,10 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
    const activity = data?.activity;
    const reviewers = data?.reviewer_participation;
    const resolution = data?.resolution_distribution?.latest_observed_resolutions;
+   const publicReachIsAvailable = isPublicReachContract(data?.public_reach);
+   const knowledgeReuseIsAvailable = isKnowledgeReuseContract(data?.knowledge_reuse);
+   const publicReach = publicReachIsAvailable ? data.public_reach : null;
+   const knowledgeReuse = knowledgeReuseIsAvailable ? data.knowledge_reuse : null;
    const currentStateCounts = currentState
       ? [
            currentState.published_fact_checks.distinct_claims,
@@ -1127,6 +1461,21 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
 
                </div>
 
+               <section className="institutional-analytics__section institutional-analytics__observations">
+                  <header className="institutional-analytics__section-header">
+                     <span className="institutional-analytics__coverage-label">Cumulative recorded observations</span>
+                     <h4>Institutional reach and knowledge reuse</h4>
+                     <p>
+                        Recorded public interactions and knowledge reuse since their respective tracking began. Activity
+                        Trends reporting periods do not filter these measurements.
+                     </p>
+                  </header>
+                  <div className="institutional-analytics__observation-grid">
+                     <PublicationReachPanel reach={publicReach} />
+                     <KnowledgeReusePanel reuse={knowledgeReuse} />
+                  </div>
+               </section>
+
                <details className="institutional-analytics__notes">
                   <summary>How these measurements are calculated</summary>
                   <div className="institutional-analytics__notes-content">
@@ -1154,6 +1503,22 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
                            <dt>Decision outcomes</dt>
                            <dd>Latest observed authoritative resolution events, not necessarily all historical decisions
                               and not a measure of factual quality.</dd>
+                        </div>
+                        <div>
+                           <dt>Public reach</dt>
+                           <dd>
+                              Eligible public interaction events attributed through recording-time source-organization
+                              snapshots. These cumulative, unbackfilled observations differ from current operational
+                              publication counts and do not measure unique audience, reading, belief, or persuasion.
+                           </dd>
+                        </div>
+                        <div>
+                           <dt>Knowledge reuse</dt>
+                           <dd>
+                              Attributed reuse events recorded during instrumentation coverage. Historical records without
+                              a source-organization snapshot are excluded rather than reconstructed. Reuse does not transfer
+                              a verdict or measure work avoided, and it differs from current publication counts.
+                           </dd>
                         </div>
                      </dl>
                      <p className="institutional-analytics__notes-clarification">
@@ -1195,6 +1560,38 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
                            basis={data.resolution_distribution?.measurement_basis}
                            fields={[...commonBasisFields, "first_observed_resolution_at", "last_observed_resolution_at"]}
                         />
+                        {publicReachIsAvailable && (
+                           <MeasurementBasis
+                              title="Public reach"
+                              basis={publicReach.measurement_basis}
+                              fields={[
+                                 "source",
+                                 "attribution_source",
+                                 "publication_identity_source",
+                                 "coverage",
+                                 "historical_backfill",
+                                 "unique_audience_measurement",
+                                 "first_observed_interaction_at",
+                                 "last_observed_interaction_at",
+                              ]}
+                           />
+                        )}
+                        {knowledgeReuseIsAvailable && (
+                           <MeasurementBasis
+                              title="Knowledge reuse"
+                              basis={knowledgeReuse.measurement_basis}
+                              fields={[
+                                 "source",
+                                 "attribution_source",
+                                 "target_identity_source",
+                                 "coverage",
+                                 "historical_backfill",
+                                 "historical_unattributed_rows_excluded",
+                                 "first_observed_reuse_at",
+                                 "last_observed_reuse_at",
+                              ]}
+                           />
+                        )}
                         </div>
                      </details>
                   </div>
