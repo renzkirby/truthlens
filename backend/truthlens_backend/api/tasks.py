@@ -2026,6 +2026,8 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
                 raise ValueError("confidence score cannot be stored") from exc
             if not math.isfinite(normalized_confidence):
                 raise ValueError("confidence score must be finite")
+            if normalized_confidence < 0 or normalized_confidence > 100:
+                raise ValueError("confidence score must be between 0 and 100")
             confidence = normalized_confidence
             if ai_verdict_value == "UNVERIFIED" and confidence == 0:
                 confidence = 40
