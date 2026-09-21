@@ -536,6 +536,7 @@ def build_related_published_fact_check_payload(reference):
             "name": public_organization["name"],
             "slug": public_organization["slug"],
             "public_profile_available": True,
+            "logo_url": public_organization.get("logo_url"),
         },
     }
 

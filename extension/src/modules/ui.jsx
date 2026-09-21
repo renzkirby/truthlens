@@ -163,6 +163,30 @@ function instrumentPublicPublicationLinks(card) {
    }
 }
 
+function initializeOrganizationLogos(card) {
+   if (!card) return;
+
+   for (const logo of card.querySelectorAll("img[data-truthlens-organization-logo]")) {
+      const fallback = logo.previousElementSibling;
+      const showLogo = () => {
+         if (!logo.naturalWidth) return;
+         logo.hidden = false;
+         if (fallback) fallback.hidden = true;
+      };
+      const retainFallback = () => {
+         if (fallback) fallback.hidden = false;
+         logo.remove();
+      };
+
+      logo.addEventListener("load", showLogo, { once: true });
+      logo.addEventListener("error", retainFallback, { once: true });
+      if (logo.complete) {
+         if (logo.naturalWidth) showLogo();
+         else retainFallback();
+      }
+   }
+}
+
 function relatedPublicationsHTML(claim) {
    if (claim.resolution_source === "OFFICIAL_FACT_CHECK" || !Array.isArray(claim.related_fact_checks)) return "";
    const baseUrl = communityBaseUrl();
@@ -182,10 +206,15 @@ function relatedPublicationsHTML(claim) {
       const publicationId = pathComponent(rawId);
       if (!slug || !publicationId) continue;
       const articleUrl = `${baseUrl}/partners/${slug}/fact-checks/${publicationId}`;
+      const logoUrl = safeHttpUrl(organization.logo_url);
+      const initial = escapeHtml(Array.from(organizationName.trim())[0]?.toUpperCase() || "?");
       entries.push(`
          <div class="truthlens-related-publication">
             <p class="truthlens-related-publication-headline">${escapeHtml(headline)}</p>
-            <p class="truthlens-related-publication-org">Published by ${escapeHtml(organizationName)}</p>
+            <div class="truthlens-related-publication-byline">
+               <span class="truthlens-related-publication-mark" aria-hidden="true"><span>${initial}</span>${logoUrl ? `<img class="truthlens-organization-logo" data-truthlens-organization-logo hidden src="${escapeHtml(logoUrl)}" alt="" referrerpolicy="no-referrer">` : ""}</span>
+               <span class="truthlens-related-publication-org">Published by ${escapeHtml(organizationName)}</span>
+            </div>
             <a class="truthlens-related-publication-link" ${publicReachAttributes(rawSlug, rawId, "EXTENSION_RELATED_FACT_CHECK")} href="${escapeHtml(articleUrl)}" target="_blank" rel="noopener noreferrer">Read related fact-check ${iconExternal}</a>
          </div>
       `);
@@ -303,7 +332,7 @@ function displayPublishedResultCard(claim, publication) {
             <div class="truthlens-summary-text truthlens-publication-summary-scroll" role="region" aria-label="Published summary" tabindex="0"><p>${escapeHtml(summary)}</p></div>
          </section>
          <div class="truthlens-publication-partner">
-            <div class="truthlens-partner-mark"><span>${initial}</span>${logoUrl ? `<img hidden src="${escapeHtml(logoUrl)}" alt="" referrerpolicy="no-referrer">` : ""}</div>
+            <div class="truthlens-partner-mark"><span>${initial}</span>${logoUrl ? `<img class="truthlens-organization-logo" data-truthlens-organization-logo hidden src="${escapeHtml(logoUrl)}" alt="" referrerpolicy="no-referrer">` : ""}</div>
             <div class="truthlens-partner-identity"><span class="truthlens-publication-label">Published by</span>${identityHTML}</div>
          </div>
          ${metadata.length ? `<div class="truthlens-publication-metadata">${metadata.join("")}</div>` : ""}
@@ -312,22 +341,8 @@ function displayPublishedResultCard(claim, publication) {
       </div>
    `;
 
-   // Keep the initial visible until an image has loaded successfully.
-   const logo = card.querySelector(".truthlens-partner-mark img");
-   if (logo) {
-      const showLogo = () => {
-         if (!logo.naturalWidth) return;
-         logo.hidden = false;
-         logo.previousElementSibling.hidden = true;
-      };
-      logo.addEventListener("load", showLogo);
-      logo.addEventListener("error", () => {
-         logo.previousElementSibling.hidden = false;
-         logo.remove();
-      });
-      if (logo.complete) showLogo();
-   }
    document.body.appendChild(card);
+   initializeOrganizationLogos(card);
    const cleanupScrollShadows = initializeScrollPositionShadows(
       card.querySelector(".truthlens-publication-body"),
    );
@@ -468,6 +483,7 @@ export function displayResultCard(claim) {
    `;
 
    document.body.appendChild(card);
+   initializeOrganizationLogos(card);
    const cleanupScrollShadows = initializeScrollPositionShadows(
       card.querySelector(".truthlens-result-body"),
    );

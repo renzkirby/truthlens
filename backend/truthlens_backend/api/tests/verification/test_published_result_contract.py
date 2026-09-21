@@ -67,6 +67,7 @@ class PublishedResultContractTests(SimpleTestCase):
             "organization": {
                 "name": self.organization.name,
                 "slug": self.organization.slug,
+                "logo_url": "https://public.example/partner-logo.png",
             },
             "article": {
                 "headline": self.publication.headline,
@@ -289,6 +290,7 @@ class PublishedResultContractTests(SimpleTestCase):
                     "name": self.organization.name,
                     "slug": self.organization.slug,
                     "public_profile_available": True,
+                    "logo_url": "https://public.example/partner-logo.png",
                 },
             },
         )
@@ -308,6 +310,7 @@ class PublishedResultContractTests(SimpleTestCase):
                 "name",
                 "slug",
                 "public_profile_available",
+                "logo_url",
             },
         )
         self.assertTrue(
@@ -402,12 +405,14 @@ class PublishedResultContractTests(SimpleTestCase):
         self.publication.headline = "Mutable live headline that must not surface"
         self.organization.name = "Mutable live organization name"
         self.organization.slug = "mutable-live-slug"
+        self.organization.logo_url = "https://private.example/mutable-live-logo.png"
         self.public_detail.update(
             {
                 "selected_publication_id": str(self.publication.id),
                 "organization": {
                     "name": "Sealed Public Partner",
                     "slug": "sealed-public-partner",
+                    "logo_url": "https://public.example/sealed-partner-logo.png",
                 },
                 "article": {
                     "headline": "Sealed snapshot headline",
@@ -431,6 +436,7 @@ class PublishedResultContractTests(SimpleTestCase):
                 "name": "Sealed Public Partner",
                 "slug": "sealed-public-partner",
                 "public_profile_available": True,
+                "logo_url": "https://public.example/sealed-partner-logo.png",
             },
         )
 
