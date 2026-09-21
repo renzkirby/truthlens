@@ -1,5 +1,5 @@
 .crop-studio {
-    --tl-font-sans: "Mona Sans Variable", "Inter", system-ui, -apple-system,
+    --tl-font-sans: "Mona Sans Variable", ui-sans-serif, system-ui, -apple-system,
         BlinkMacSystemFont, "Segoe UI", sans-serif;
     --rc-drag-handle-bg-colour: #4f46e5;
     --rc-border-color: #ffffff;
@@ -17,10 +17,12 @@
     position: relative;
     background: rgba(15, 23, 42, 0.65);
     cursor: default;
-    font-family: var(--tl-font-sans);
+    font-family: var(--tl-font-sans) !important;
 }
-.crop-studio :is(h3, p, button) {
-    font-family: var(--tl-font-sans);
+.crop-studio *,
+.crop-studio *::before,
+.crop-studio *::after {
+    font-family: var(--tl-font-sans) !important;
 }
 .crop-studio-header {
     position: absolute;

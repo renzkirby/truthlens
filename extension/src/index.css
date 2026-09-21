@@ -1,6 +1,6 @@
 /* index.css */
 :root {
-  --tl-font-sans: "Mona Sans Variable", "Inter", system-ui, -apple-system,
+  --tl-font-sans: "Mona Sans Variable", ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, "Segoe UI", sans-serif;
   /* ── 1. Brand & Core ── */
   --brand-primary: #4f46e5;
