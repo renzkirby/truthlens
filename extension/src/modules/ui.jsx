@@ -1,5 +1,6 @@
 import React from "react";
 import { renderToString } from "react-dom/server";
+import "@fontsource-variable/mona-sans/wght.css";
 import {
    Sparkles,
    ShieldCheck,
@@ -200,6 +201,38 @@ function relatedPublicationsHTML(claim) {
    `;
 }
 
+function initializeScrollPositionShadows(scrollBody) {
+   if (!scrollBody) return () => {};
+
+   const tolerance = 2;
+   const updateScrollPositionShadows = () => {
+      const hasOverflow = scrollBody.scrollHeight - scrollBody.clientHeight > tolerance;
+      const canScrollUp = hasOverflow && scrollBody.scrollTop > tolerance;
+      const canScrollDown =
+         hasOverflow &&
+         scrollBody.scrollTop + scrollBody.clientHeight < scrollBody.scrollHeight - tolerance;
+
+      scrollBody.classList.toggle("truthlens-can-scroll-up", canScrollUp);
+      scrollBody.classList.toggle("truthlens-can-scroll-down", canScrollDown);
+   };
+
+   scrollBody.addEventListener("scroll", updateScrollPositionShadows, { passive: true });
+
+   const resizeObserver = typeof ResizeObserver === "function"
+      ? new ResizeObserver(updateScrollPositionShadows)
+      : null;
+   resizeObserver?.observe(scrollBody);
+
+   updateScrollPositionShadows();
+   const layoutFrame = requestAnimationFrame(updateScrollPositionShadows);
+
+   return () => {
+      cancelAnimationFrame(layoutFrame);
+      resizeObserver?.disconnect();
+      scrollBody.removeEventListener("scroll", updateScrollPositionShadows);
+   };
+}
+
 function displayPublishedResultCard(claim, publication) {
    const organization = isRecord(publication.organization) ? publication.organization : {};
    const organizationName = nonblankText(organization.name);
@@ -254,7 +287,7 @@ function displayPublishedResultCard(claim, publication) {
 
    const card = document.createElement("div");
    card.id = "truthlens-result-card";
-   card.className = `truthlens-card truthlens-institutional-card verdict-${ui.class}`;
+   card.className = `truthlens-card truthlens-result-card-shell truthlens-institutional-card verdict-${ui.class}`;
    card.setAttribute("role", "region");
    card.setAttribute("aria-label", "Published institutional fact-check");
    card.innerHTML = `
@@ -262,7 +295,7 @@ function displayPublishedResultCard(claim, publication) {
          <div class="truthlens-title" style="color: ${ui.color || "#9ca3af"};">${iconShield} PUBLISHED FACT-CHECK</div>
          <button class="truthlens-close-btn" aria-label="Close fact-check">&times;</button>
       </div>
-      <div class="truthlens-publication-body">
+      <div class="truthlens-publication-body" role="region" aria-label="Published fact-check details" tabindex="0">
          <div class="truthlens-badge badge-${ui.class}" role="group" aria-label="Human factual verdict: ${escapeHtml(ui.text)}">${ui.icon} ${ui.text}</div>
          <h2 class="truthlens-publication-headline" title="${escapeHtml(headline)}" aria-label="${escapeHtml(headline)}">${escapeHtml(headline)}</h2>
          <section class="truthlens-summary-box truthlens-publication-summary">
@@ -295,12 +328,18 @@ function displayPublishedResultCard(claim, publication) {
       if (logo.complete) showLogo();
    }
    document.body.appendChild(card);
+   const cleanupScrollShadows = initializeScrollPositionShadows(
+      card.querySelector(".truthlens-publication-body"),
+   );
    instrumentPublicPublicationLinks(card);
    void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
    card.querySelector(".truthlens-close-btn").addEventListener("click", () => {
       card.classList.remove("show");
-      setTimeout(() => card.remove(), 300);
+      setTimeout(() => {
+         cleanupScrollShadows();
+         card.remove();
+      }, 300);
    });
 }
 
@@ -383,21 +422,21 @@ export function displayResultCard(claim) {
    const card = document.createElement("div");
    card.id = "truthlens-result-card";
    // Apply the color-coded border class to the entire card
-   card.className = `truthlens-card verdict-${ui.class}`;
+   card.className = `truthlens-card truthlens-result-card-shell verdict-${ui.class}`;
 
    card.innerHTML = `
       <div class="truthlens-header">
          <div class="truthlens-title" style="color: ${ui.color};">
             ${iconFlag} CLAIM FLAGGED
          </div>
-         <button id="truthlens-close-btn" class="truthlens-close-btn">&times;</button>
+         <button id="truthlens-close-btn" class="truthlens-close-btn" aria-label="Close verification result">&times;</button>
       </div>
 
-      <div class="truthlens-badge badge-${ui.class}">
-         ${ui.icon} ${ui.text}
-      </div>
+      <div class="truthlens-result-body" role="region" aria-label="Verification result details" tabindex="0">
+         <div class="truthlens-badge badge-${ui.class}">
+            ${ui.icon} ${ui.text}
+         </div>
 
-      <div style="overflow-y: hidden; padding-right: 4px; overflow-x: hidden;">
          <div class="truthlens-summary-box">
             <div class="truthlens-summary-title">
                ${iconSparkles} AI SUMMARY
@@ -429,13 +468,19 @@ export function displayResultCard(claim) {
    `;
 
    document.body.appendChild(card);
+   const cleanupScrollShadows = initializeScrollPositionShadows(
+      card.querySelector(".truthlens-result-body"),
+   );
    instrumentPublicPublicationLinks(card);
    void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
 
    document.getElementById("truthlens-close-btn").addEventListener("click", () => {
       card.classList.remove("show");
-      setTimeout(() => card.remove(), 300);
+      setTimeout(() => {
+         cleanupScrollShadows();
+         card.remove();
+      }, 300);
    });
 }
 

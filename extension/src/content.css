@@ -1,5 +1,4 @@
 /* content.css - Wireframe Accurate Design */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 
 .truthlens-card {
    position: fixed;
@@ -11,12 +10,68 @@
    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
    padding: 20px;
    z-index: 9999999;
-   font-family: "Inter", sans-serif;
+   font-family: "Mona Sans Variable", ui-sans-serif, system-ui, -apple-system,
+      BlinkMacSystemFont, "Segoe UI", sans-serif;
    color: #111827;
    opacity: 0;
    transform: translateX(110%);
    transition: all 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
    box-sizing: border-box;
+}
+
+.truthlens-card button,
+.truthlens-card input,
+.truthlens-card select,
+.truthlens-card textarea {
+   font-family: inherit;
+}
+
+.truthlens-card.truthlens-result-card-shell {
+   max-height: calc(100vh - 48px);
+   max-height: calc(100dvh - 48px);
+   overflow: hidden;
+   display: flex;
+   flex-direction: column;
+}
+
+.truthlens-result-card-shell > .truthlens-header {
+   flex: 0 0 auto;
+}
+
+.truthlens-result-body,
+.truthlens-institutional-card .truthlens-publication-body {
+   flex: 1 1 auto;
+   min-height: 0;
+   overflow-y: auto;
+   overflow-x: hidden;
+   overscroll-behavior-y: contain;
+   scrollbar-gutter: stable;
+   scrollbar-width: thin;
+   scrollbar-color: #cbd5e1 transparent;
+   padding-right: 4px;
+}
+
+.truthlens-result-body:focus-visible,
+.truthlens-institutional-card .truthlens-publication-body:focus-visible {
+   outline: 2px solid #4f46e5;
+   outline-offset: -2px;
+}
+
+.truthlens-result-body.truthlens-can-scroll-up,
+.truthlens-publication-body.truthlens-can-scroll-up {
+   box-shadow: inset 0 12px 10px -12px rgba(71, 85, 105, 0.35);
+}
+
+.truthlens-result-body.truthlens-can-scroll-down,
+.truthlens-publication-body.truthlens-can-scroll-down {
+   box-shadow: inset 0 -12px 10px -12px rgba(71, 85, 105, 0.35);
+}
+
+.truthlens-result-body.truthlens-can-scroll-up.truthlens-can-scroll-down,
+.truthlens-publication-body.truthlens-can-scroll-up.truthlens-can-scroll-down {
+   box-shadow:
+      inset 0 12px 10px -12px rgba(71, 85, 105, 0.35),
+      inset 0 -12px 10px -12px rgba(71, 85, 105, 0.35);
 }
 
 .truthlens-card.show {
@@ -143,20 +198,28 @@
    overflow-y: auto; /* Tells the browser to scroll vertically if needed */
    padding-right: 8px;
 }
-.truthlens-summary-text::-webkit-scrollbar {
+.truthlens-summary-text::-webkit-scrollbar,
+.truthlens-result-body::-webkit-scrollbar,
+.truthlens-institutional-card .truthlens-publication-body::-webkit-scrollbar {
    width: 6px;
 }
 
-.truthlens-summary-text::-webkit-scrollbar-track {
+.truthlens-summary-text::-webkit-scrollbar-track,
+.truthlens-result-body::-webkit-scrollbar-track,
+.truthlens-institutional-card .truthlens-publication-body::-webkit-scrollbar-track {
    background: transparent;
 }
 
-.truthlens-summary-text::-webkit-scrollbar-thumb {
+.truthlens-summary-text::-webkit-scrollbar-thumb,
+.truthlens-result-body::-webkit-scrollbar-thumb,
+.truthlens-institutional-card .truthlens-publication-body::-webkit-scrollbar-thumb {
    background-color: #cbd5e1;
    border-radius: 10px;
 }
 
-.truthlens-summary-text::-webkit-scrollbar-thumb:hover {
+.truthlens-summary-text::-webkit-scrollbar-thumb:hover,
+.truthlens-result-body::-webkit-scrollbar-thumb:hover,
+.truthlens-institutional-card .truthlens-publication-body::-webkit-scrollbar-thumb:hover {
    background-color: #94a3b8;
 }
 
@@ -406,9 +469,6 @@
 .truthlens-card.truthlens-institutional-card {
    width: min(360px, calc(100vw - 32px));
    padding: 16px;
-   overflow: visible;
-   display: flex;
-   flex-direction: column;
 }
 
 .truthlens-card.truthlens-institutional-card.verdict-out-of-scope {
@@ -437,8 +497,6 @@
 }
 
 .truthlens-institutional-card .truthlens-publication-body {
-   flex-shrink: 0;
-   overflow: visible;
    overflow-wrap: anywhere;
 }
 
@@ -599,9 +657,14 @@
 }
 
 @media (max-width: 400px) {
-   .truthlens-card.truthlens-institutional-card {
+   .truthlens-card.truthlens-result-card-shell {
       top: 16px;
       right: 16px;
+      max-height: calc(100vh - 32px);
+      max-height: calc(100dvh - 32px);
+   }
+
+   .truthlens-card.truthlens-institutional-card {
       padding: 12px;
    }
 }
