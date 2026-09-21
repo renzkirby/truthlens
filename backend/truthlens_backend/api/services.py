@@ -5,8 +5,10 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 import os
 import json
+import math
 import re
 import logging
+from numbers import Number
 from urllib.parse import urlparse
 import ipaddress
 import imagehash
@@ -225,6 +227,33 @@ def _parse_llm_json(raw_content):
     """Strip markdown formatting and parse JSON from LLM responses."""
     cleaned = raw_content.strip().replace("```json", "").replace("```", "").strip()
     return json.loads(cleaned)
+
+
+def _normalize_verdict_confidence_score(value):
+    """Normalize final-verdict confidence to the canonical 0-100 scale."""
+    if isinstance(value, bool) or not isinstance(value, Number):
+        raise TypeError("final-verdict confidence score must be numeric")
+
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("final-verdict confidence score is invalid") from exc
+
+    if not math.isfinite(numeric_value):
+        raise ValueError("final-verdict confidence score must be finite")
+    if numeric_value < 0 or numeric_value > 100:
+        raise ValueError("final-verdict confidence score must be between 0 and 100")
+
+    if 0 < numeric_value < 1:
+        normalized_value = round(numeric_value * 100, 6)
+        logger.warning(
+            "Normalized fractional final-verdict confidence %.6g to %.6g percent.",
+            numeric_value,
+            normalized_value,
+        )
+        return normalized_value
+
+    return numeric_value
 
 
 def validate_public_url(raw_url):
@@ -594,6 +623,9 @@ def evaluate_image_claim_with_gfc(
         JSON OUTPUT SCHEMA & ENFORCEMENT:
         You must output ONLY a raw, valid JSON object. 
         DO NOT wrap the JSON in markdown formatting (e.g., no ```json blocks).
+        confidence_score MUST be a numeric percentage from 0 to 100.
+        0 means no confidence. 100 means maximum confidence.
+        Never return a fractional 0-1 probability.
         
         Your JSON must exactly match this structure:
         {
@@ -613,7 +645,11 @@ def evaluate_image_claim_with_gfc(
     try:
         response_text = call_llm_with_fallback(system_instructions, user_data)
         logger.debug("evaluate_image_claim_with_gfc OUTPUT: %s", response_text)
-        return _parse_llm_json(response_text)
+        parsed_result = _parse_llm_json(response_text)
+        parsed_result["confidence_score"] = _normalize_verdict_confidence_score(
+            parsed_result.get("confidence_score")
+        )
+        return parsed_result
     except LLMProviderUnavailableError:
         raise
     except Exception as e:
@@ -671,6 +707,9 @@ def evaluate_image_claim_with_tavily(
     JSON OUTPUT SCHEMA & ENFORCEMENT:
     You must output ONLY a raw, valid JSON object. 
     DO NOT wrap the JSON in markdown formatting (e.g., no ```json blocks).
+    confidence_score MUST be a numeric percentage from 0 to 100.
+    0 means no confidence. 100 means maximum confidence.
+    Never return a fractional 0-1 probability.
     
     Your JSON must exactly match this structure:
     {
@@ -690,7 +729,11 @@ def evaluate_image_claim_with_tavily(
     try:
         response_text = call_llm_with_fallback(system_instructions, user_data)
         logger.debug("evaluate_image_claim_with_tavily OUTPUT: %s", response_text)
-        return _parse_llm_json(response_text)
+        parsed_result = _parse_llm_json(response_text)
+        parsed_result["confidence_score"] = _normalize_verdict_confidence_score(
+            parsed_result.get("confidence_score")
+        )
+        return parsed_result
     except Exception as e:
         logger.error("Tavily Evaluator AI Error: %s", e)
         return {
@@ -739,12 +782,16 @@ def evaluate_claim_with_persisted_evidence(
     - SATIRE applies when the supplied evidence explicitly supports that classification.
     - Conflicting, irrelevant, or insufficient evidence requires UNVERIFIED.
 
+    confidence_score MUST be a numeric percentage from 0 to 100.
+    0 means no confidence. 100 means maximum confidence.
+    Never return a fractional 0-1 probability.
+
     Return only a valid JSON object with exactly these fields:
     {
         "reasoning": "Evidence-bound explanation",
         "verdict": "FACT, FAKE, MISLEADING, UNVERIFIED, or SATIRE",
         "summary": "Concise user-facing summary",
-        "confidence_score": 0,
+        "confidence_score": 95,
         "score_context": "Concise explanation of the confidence score"
     }
     """
@@ -771,6 +818,9 @@ def evaluate_claim_with_persisted_evidence(
         valid_verdicts = {"FACT", "FAKE", "MISLEADING", "UNVERIFIED", "SATIRE"}
         if parsed_result["verdict"] not in valid_verdicts:
             raise ValueError("Persisted evidence evaluator returned an invalid verdict")
+        parsed_result["confidence_score"] = _normalize_verdict_confidence_score(
+            parsed_result["confidence_score"]
+        )
         return parsed_result
     except LLMProviderUnavailableError:
         raise
@@ -917,6 +967,9 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
     JSON OUTPUT SCHEMA & ENFORCEMENT:
     You must output ONLY a raw, valid JSON object. 
     DO NOT wrap the JSON in markdown formatting (e.g., no ```json blocks).
+    confidence_score MUST be a numeric percentage from 0 to 100.
+    0 means no confidence. 100 means maximum confidence.
+    Never return a fractional 0-1 probability.
     
     Your JSON must exactly match this structure:
     {
@@ -935,7 +988,11 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
 
     try:
         response_text = call_llm_with_fallback(system_instructions, user_data)
-        return _parse_llm_json(response_text)
+        parsed_result = _parse_llm_json(response_text)
+        parsed_result["confidence_score"] = _normalize_verdict_confidence_score(
+            parsed_result.get("confidence_score")
+        )
+        return parsed_result
     except Exception as e:
         logger.error("URL GFC AI Error: %s", e)
         return {
@@ -987,6 +1044,9 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
     JSON OUTPUT SCHEMA & ENFORCEMENT:
     You must output ONLY a raw, valid JSON object. 
     DO NOT wrap the JSON in markdown formatting (e.g., no ```json blocks).
+    confidence_score MUST be a numeric percentage from 0 to 100.
+    0 means no confidence. 100 means maximum confidence.
+    Never return a fractional 0-1 probability.
     
     Your JSON must exactly match this structure:
     {
@@ -1005,7 +1065,11 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
 
     try:
         response_text = call_llm_with_fallback(system_instructions, user_data)
-        return _parse_llm_json(response_text)
+        parsed_result = _parse_llm_json(response_text)
+        parsed_result["confidence_score"] = _normalize_verdict_confidence_score(
+            parsed_result.get("confidence_score")
+        )
+        return parsed_result
     except Exception as e:
         logger.error("URL Tavily Evaluator AI Error: %s", e)
         return {
