@@ -62,6 +62,10 @@ from .services import (
     validate_public_url,
     check_url_threat_reputation,
 )
+from .profile_avatar_service import (
+    ProfileAvatarStorageError,
+    upload_profile_avatar,
+)
 from .claim_matching import compute_fingerprint, find_matching_claim, get_match_result
 from .tasks import (
     snippet_fact_check_process,
@@ -292,6 +296,7 @@ from .serializers import (
     PublicUserSearchSerializer,
     PublicIdentityProfileSerializer,
     CurrentUserSerializer,
+    ProfileUpdateSerializer,
     UserProfileSerializer,
     ClaimSerializer,
     ThreadSerializer,
@@ -3391,39 +3396,35 @@ def get_user_following(request, username):
 @api_view(["PATCH"])
 @permission_classes([IsAuthenticated])
 def update_profile(request):
-    """Update user's profile info including bio, username, email, and avatar."""
-    user = request.user
-    profile = user.profile
-    data = request.data
+    """Update ordinary profile fields without changing account identity."""
+    serializer = ProfileUpdateSerializer(
+        request.user,
+        data=request.data,
+        partial=True,
+        context={"request": request},
+    )
+    serializer.is_valid(raise_exception=True)
 
-    # Update User model fields
-    if "username" in data and data["username"]:
-        user.username = data["username"]
-    if "email" in data and data["email"]:
-        user.email = data["email"]
+    validated_avatar = serializer.validated_data.pop("avatar_base64", None)
+    avatar_url = None
+    if validated_avatar is not None:
+        try:
+            avatar_url = upload_profile_avatar(
+                user_id=request.user.pk,
+                avatar=validated_avatar,
+            )
+        except ProfileAvatarStorageError:
+            return Response(
+                {"avatar_base64": ["Unable to store the avatar image right now."]},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
-    # Update Bio if provided
-    if "bio" in data:
-        profile.bio = data["bio"]
-
-    # Update Avatar if base64 image is provided
-    if "avatar_base64" in data and data["avatar_base64"]:
-        base64_string = data["avatar_base64"]
-        # Strip the data:image/png;base64, header if it exists
-        if "," in base64_string:
-            base64_string = base64_string.split(",")[1]
-
-        # Reuse your awesome existing upload service!
-        avatar_url = upload_image_to_database(base64_string)
-        if avatar_url:
-            profile.avatar_url = avatar_url
-
-    user.save()
-    profile.save()
-
-    # Return the updated user data
-    serializer = UserWithTrustBreakdownSerializer(user, context={"request": request})
-    return Response(serializer.data, status=200)
+    user = serializer.save(avatar_url=avatar_url)
+    response_serializer = UserWithTrustBreakdownSerializer(
+        user,
+        context={"request": request},
+    )
+    return Response(response_serializer.data, status=status.HTTP_200_OK)
 
 
 class UserHubView(APIView):
@@ -3834,6 +3835,7 @@ def request_password_reset(request):
     user = User.objects.filter(email__iexact=email).first()
 
     if user:
+        is_password_setup = not user.has_usable_password()
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
 
@@ -3844,19 +3846,29 @@ def request_password_reset(request):
 
         reset_url = f"{frontend_url}/reset-password/{uid}/{token}"
 
-        subject = "Reset your TruthLens password"
-
-        text_body = (
-            "We received a request to reset your TruthLens password.\n\n"
-            f"Reset your password here:\n{reset_url}\n\n"
-            "This link is single-use and will expire.\n\n"
-            "If you did not request this, you can ignore this email."
-        )
+        if is_password_setup:
+            subject = "Set your TruthLens password"
+            text_body = (
+                "We received a request to add a password to your "
+                "TruthLens account.\n\n"
+                f"Set your password here:\n{reset_url}\n\n"
+                "This link is single-use and will expire.\n\n"
+                "If you did not request this, you can ignore this email."
+            )
+        else:
+            subject = "Reset your TruthLens password"
+            text_body = (
+                "We received a request to reset your TruthLens password.\n\n"
+                f"Reset your password here:\n{reset_url}\n\n"
+                "This link is single-use and will expire.\n\n"
+                "If you did not request this, you can ignore this email."
+            )
 
         html_body = render_to_string(
             "emails/password_reset.html",
             {
                 "reset_url": reset_url,
+                "is_password_setup": is_password_setup,
             },
         )
 

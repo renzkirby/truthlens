@@ -1,6 +1,10 @@
+from collections.abc import Mapping
+
 from rest_framework import serializers
 from django.contrib.auth.models import User
+from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.core.validators import URLValidator
+from django.db import transaction
 from django.utils.dateparse import parse_datetime
 from datetime import timezone as datetime_timezone
 from .models import (
@@ -39,6 +43,10 @@ from .organization_service import (
 )
 from .organization_public_presence_service import (
     is_public_partner_eligible,
+)
+from .profile_avatar_service import (
+    ProfileAvatarValidationError,
+    validate_profile_avatar_data_url,
 )
 from .moderation_service import ACTIVE_CASE_STATUSES
 from .adjudication_provenance import (
@@ -283,12 +291,114 @@ class UserWithTrustBreakdownSerializer(UserSerializer):
 
 class CurrentUserSerializer(UserWithTrustBreakdownSerializer):
     workspace = serializers.SerializerMethodField()
+    auth_methods = serializers.SerializerMethodField()
 
     def get_workspace(self, obj):
         return get_workspace_access_context(obj)
 
+    def get_auth_methods(self, obj):
+        methods = []
+
+        if obj.has_usable_password():
+            methods.append("password")
+
+        social_providers = obj.socialaccount_set.values_list("provider", flat=True)
+        methods.extend(sorted(set(social_providers)))
+
+        return methods
+
     class Meta(UserWithTrustBreakdownSerializer.Meta):
-        fields = UserWithTrustBreakdownSerializer.Meta.fields + ["workspace"]
+        fields = UserWithTrustBreakdownSerializer.Meta.fields + [
+            "workspace",
+            "auth_methods",
+        ]
+
+
+class ProfileUpdateSerializer(serializers.Serializer):
+    ALLOWED_FIELDS = {"username", "bio", "avatar_base64"}
+
+    username = serializers.CharField(
+        required=False,
+        allow_blank=False,
+        max_length=User._meta.get_field("username").max_length,
+        trim_whitespace=True,
+        validators=[UnicodeUsernameValidator()],
+    )
+    bio = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        trim_whitespace=False,
+    )
+    avatar_base64 = serializers.CharField(
+        required=False,
+        allow_blank=False,
+        trim_whitespace=False,
+        write_only=True,
+    )
+
+    def to_internal_value(self, data):
+        if not isinstance(data, Mapping):
+            raise serializers.ValidationError(
+                {"detail": "Profile updates must be submitted as an object."}
+            )
+
+        unsupported_fields = set(data) - self.ALLOWED_FIELDS
+        if unsupported_fields:
+            errors = {}
+            for field_name in sorted(unsupported_fields):
+                if field_name == "email":
+                    errors[field_name] = [
+                        "Email cannot be changed through profile updates."
+                    ]
+                else:
+                    errors[field_name] = ["This profile field is not supported."]
+            raise serializers.ValidationError(errors)
+
+        return super().to_internal_value(data)
+
+    def validate_username(self, value):
+        user = self.instance
+        duplicate_exists = (
+            User.objects.filter(username__iexact=value)
+            .exclude(pk=user.pk)
+            .exists()
+        )
+        if duplicate_exists:
+            raise serializers.ValidationError("This username is already taken.")
+        return value
+
+    def validate_avatar_base64(self, value):
+        try:
+            return validate_profile_avatar_data_url(value)
+        except ProfileAvatarValidationError as error:
+            raise serializers.ValidationError(str(error)) from error
+
+    def update(self, instance, validated_data):
+        profile = instance.profile
+        avatar_url = validated_data.pop("avatar_url", None)
+        user_update_fields = []
+        profile_update_fields = []
+
+        if "username" in validated_data:
+            instance.username = validated_data["username"]
+            user_update_fields.append("username")
+
+        if "bio" in validated_data:
+            profile.bio = validated_data["bio"]
+            profile_update_fields.append("bio")
+
+        if avatar_url is not None:
+            profile.avatar_url = avatar_url
+            profile_update_fields.append("avatar_url")
+
+        with transaction.atomic():
+            if user_update_fields:
+                instance.save(update_fields=user_update_fields)
+            if profile_update_fields:
+                profile.save(update_fields=profile_update_fields)
+
+        return instance
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
