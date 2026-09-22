@@ -48,6 +48,66 @@ def _claim_vector_indexes():
 
 
 # Create your models here.
+class Notification(models.Model):
+    """A derived inbox event; never authoritative workflow state."""
+
+    class NotificationType(models.TextChoices):
+        AUTOMATED_VERIFICATION_COMPLETED = "AUTOMATED_VERIFICATION_COMPLETED", "Analysis completed"
+        AUTOMATED_VERIFICATION_FAILED = "AUTOMATED_VERIFICATION_FAILED", "Analysis failed"
+        PARTNER_FACT_CHECK_PUBLISHED = "PARTNER_FACT_CHECK_PUBLISHED", "Partner fact-check published"
+        PARTNER_FACT_CHECK_CORRECTED = "PARTNER_FACT_CHECK_CORRECTED", "Partner fact-check corrected"
+        ARTICLE_RETURNED_FOR_REWORK = "ARTICLE_RETURNED_FOR_REWORK", "Article returned for rework"
+        FACT_CHECK_PUBLISHED = "FACT_CHECK_PUBLISHED", "Fact-check published"
+        FACTUAL_CORRECTION_PUBLISHED = "FACTUAL_CORRECTION_PUBLISHED", "Factual correction published"
+        ORGANIZATION_MEMBERSHIP_CHANGED = "ORGANIZATION_MEMBERSHIP_CHANGED", "Membership changed"
+        THREAD_COMMENTED = "THREAD_COMMENTED", "Thread commented"
+        EVIDENCE_REVIEWED = "EVIDENCE_REVIEWED", "Evidence reviewed"
+
+    class TargetType(models.TextChoices):
+        CLAIM = "CLAIM", "Claim"
+        THREAD = "THREAD", "Thread"
+        OFFICIAL_FACT_CHECK = "OFFICIAL_FACT_CHECK", "Official fact-check"
+        WORKSPACE = "WORKSPACE", "Workspace"
+        ORGANIZATION = "ORGANIZATION", "Organization"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
+    actor = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="acted_notifications")
+    organization = models.ForeignKey("Organization", null=True, blank=True, on_delete=models.SET_NULL, related_name="notifications")
+    notification_type = models.CharField(max_length=40, choices=NotificationType.choices)
+    target_type = models.CharField(max_length=24, choices=TargetType.choices)
+    target_id = models.UUIDField(null=True, blank=True)
+    title = models.CharField(max_length=180)
+    message = models.CharField(max_length=500)
+    dedupe_key = models.CharField(max_length=200)
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(fields=["recipient", "dedupe_key"], name="notification_recipient_event_uniq"),
+            models.CheckConstraint(condition=Q(notification_type__in=[
+                "AUTOMATED_VERIFICATION_COMPLETED", "AUTOMATED_VERIFICATION_FAILED",
+                "PARTNER_FACT_CHECK_PUBLISHED", "PARTNER_FACT_CHECK_CORRECTED",
+                "ARTICLE_RETURNED_FOR_REWORK", "FACT_CHECK_PUBLISHED",
+                "FACTUAL_CORRECTION_PUBLISHED", "ORGANIZATION_MEMBERSHIP_CHANGED",
+                "THREAD_COMMENTED", "EVIDENCE_REVIEWED",
+            ]), name="notification_type_valid"),
+            models.CheckConstraint(condition=Q(target_type__in=[
+                "CLAIM", "THREAD", "OFFICIAL_FACT_CHECK", "WORKSPACE", "ORGANIZATION",
+            ]), name="notification_target_valid"),
+        ]
+        indexes = [
+            models.Index(fields=["recipient", "-created_at", "-id"], name="notification_inbox_idx"),
+            models.Index(fields=["recipient", "-created_at"], condition=Q(read_at__isnull=True), name="notification_unread_idx"),
+        ]
+
+    @property
+    def is_read(self):
+        return self.read_at is not None
+
+
 class UserProfile(models.Model):
     class Role(models.TextChoices):
         USER = "USER", "User"

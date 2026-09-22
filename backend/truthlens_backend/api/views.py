@@ -70,6 +70,7 @@ from .tasks import (
     recompute_user_trust_score_task,
 )
 from .models import (
+    Notification,
     Claim,
     ClaimCheckHistory,
     Thread,
@@ -382,6 +383,52 @@ class GoogleLogin(SocialLoginView):
 
 
 # ── Pagination Configuration ──
+class NotificationCursorPagination(CursorPagination):
+    page_size = 20
+    ordering = ("-created_at", "-id")
+    template = None
+
+
+class NotificationListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .serializers import NotificationSerializer
+        inbox_filter = request.query_params.get("filter", "all")
+        if inbox_filter not in ("all", "unread"):
+            raise ValidationError({"filter": "Use all or unread."})
+        rows = Notification.objects.filter(recipient=request.user).select_related("actor", "organization")
+        if inbox_filter == "unread":
+            rows = rows.filter(read_at__isnull=True)
+        paginator = NotificationCursorPagination()
+        page = paginator.paginate_queryset(rows, request, view=self)
+        return paginator.get_paginated_response(NotificationSerializer(page, many=True).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def notification_unread_count(request):
+    return Response({"unread_count": Notification.objects.filter(recipient=request.user, read_at__isnull=True).count()})
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def notification_mark_read(request, notification_id):
+    from .serializers import NotificationSerializer
+    rows = Notification.objects.filter(recipient=request.user, pk=notification_id)
+    notification = get_object_or_404(rows)
+    rows.filter(read_at__isnull=True).update(read_at=timezone.now())
+    notification.refresh_from_db()
+    return Response(NotificationSerializer(notification).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def notification_mark_all_read(request):
+    count = Notification.objects.filter(recipient=request.user, read_at__isnull=True).update(read_at=timezone.now())
+    return Response({"updated_count": count})
+
+
 class StandardCursorPagination(CursorPagination):
     """
     Cursor-based pagination for efficient infinite scrolling.
