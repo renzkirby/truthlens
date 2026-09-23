@@ -36,19 +36,22 @@ load_dotenv()
 # must always be selected explicitly.
 APP_ENV = resolve_app_environment()
 
-SUPABASE_ORGANIZATION_LOGOS_BUCKET = os.getenv(
-    "SUPABASE_ORGANIZATION_LOGOS_BUCKET",
-    "organization-logos",
-) or "organization-logos"
+SUPABASE_ORGANIZATION_LOGOS_BUCKET = (
+    os.getenv(
+        "SUPABASE_ORGANIZATION_LOGOS_BUCKET",
+        "organization-logos",
+    )
+    or "organization-logos"
+)
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'False') == 'True'
+DEBUG = os.getenv("DEBUG", "False") == "True"
 validate_debug_policy(APP_ENV, DEBUG)
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
 
 
 def _split_csv_env(name, default=""):
@@ -69,30 +72,30 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework.authtoken",
     "rest_framework_simplejwt",
-    'dj_rest_auth',
-    'django.contrib.sites',
-    'allauth',
-    'allauth.account',
-    'allauth.socialaccount',
-    'allauth.socialaccount.providers.google',
-    'dj_rest_auth.registration',
+    "dj_rest_auth",
+    "django.contrib.sites",
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.google",
+    "dj_rest_auth.registration",
     "corsheaders",
     "pgvector",
     "api",
 ]
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
-    'DEFAULT_THROTTLE_CLASSES': [
-        'rest_framework.throttling.AnonRateThrottle',
-        'rest_framework.throttling.UserRateThrottle'
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
     ],
-    'DEFAULT_THROTTLE_RATES': {
-        'anon': '5/minute',
-        'user': '100/minute',
-        'fact_check': os.getenv('DRF_FACT_CHECK_THROTTLE_RATE', '5/minute'),
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "5/minute",
+        "user": "100/minute",
+        "fact_check": os.getenv("DRF_FACT_CHECK_THROTTLE_RATE", "5/minute"),
         "claim_polling": os.getenv(
             "DRF_CLAIM_POLLING_THROTTLE_RATE",
             "60/minute",
@@ -107,7 +110,7 @@ REST_FRAMEWORK = {
             "DRF_PUBLIC_PARTNER_THROTTLE_RATE",
             "60/minute",
         ),
-    }
+    },
 }
 
 MIDDLEWARE = [
@@ -119,7 +122,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    'allauth.account.middleware.AccountMiddleware',
+    "allauth.account.middleware.AccountMiddleware",
 ]
 
 ROOT_URLCONF = "truthlens_backend.urls"
@@ -243,7 +246,10 @@ allowed_extension_ids = [
 CORS_ALLOWED_ORIGINS = list(
     dict.fromkeys(
         cors_allowed_origins
-        + [f"chrome-extension://{extension_id}" for extension_id in allowed_extension_ids]
+        + [
+            f"chrome-extension://{extension_id}"
+            for extension_id in allowed_extension_ids
+        ]
     )
 )
 
@@ -252,68 +258,68 @@ CSRF_TRUSTED_ORIGINS = _split_csv_env(
     "http://localhost:5173,http://localhost:5174",
 )
 
-CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'ROTATE_REFRESH_TOKENS': True,
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": True,
 }
 
 AUTHENTICATION_BACKENDS = [
-    'api.backends.EmailOrUsernameBackend',
-    'django.contrib.auth.backends.ModelBackend',
-    'allauth.account.auth_backends.AuthenticationBackend',
+    "api.backends.EmailOrUsernameBackend",
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
 ]
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_URL = "/media/"
+MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
-#Authentication and Google OAuth settings
+# Authentication and Google OAuth settings
 SITE_ID = 1
 REST_AUTH = {
-    'USE_JWT': True,
+    "USE_JWT": True,
 }
 ACCOUNT_LOGIN_METHODS = {"username", "email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
-ACCOUNT_EMAIL_VERIFICATION = 'none'
+ACCOUNT_EMAIL_VERIFICATION = "none"
 
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
 SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
 SOCIALACCOUNT_AUTO_SIGNUP = True
 SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
 SOCIALACCOUNT_PROVIDERS = {
-    'google': {
+    "google": {
         "APP": {
-            'client_id': os.environ.get('GOOGLE_OAUTH_CLIENT_ID'),
-            'client_secret': os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET'),
-            'key': ''
+            "client_id": os.environ.get("GOOGLE_OAUTH_CLIENT_ID"),
+            "client_secret": os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET"),
+            "key": "",
         },
-        'SCOPE': [
-            'profile',
-            'email',
+        "SCOPE": [
+            "profile",
+            "email",
         ],
-        'AUTH_PARAMS': {
-            'access_type': 'online',
-        }
+        "AUTH_PARAMS": {
+            "access_type": "online",
+        },
     }
 }
 
-#EMAIL CONFIGURATION
+# EMAIL CONFIGURATION
 # EMAIL_BACKEND = os.getenv(
 #     "EMAIL_BACKEND",
 #     "django.core.mail.backends.console.EmailBackend",
 # )
 
-EMAIL_BACKEND= os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend"
+)
 
 EMAIL_HOST = os.getenv("EMAIL_HOST", "")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
 
-EMAIL_USE_TLS = (
-    os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
-)
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
 
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
@@ -323,9 +329,7 @@ DEFAULT_FROM_EMAIL = os.getenv(
     "TruthLens <onboarding@resend.dev>",
 )
 
-SOCIALACCOUNT_ADAPTER = (
-    "api.adapters.TruthLensSocialAccountAdapter"
-)
+SOCIALACCOUNT_ADAPTER = "api.adapters.TruthLensSocialAccountAdapter"
 
 FRONTEND_URL = os.getenv(
     "FRONTEND_URL",
@@ -338,3 +342,19 @@ EMAIL_VERIFICATION_TOKEN_LIFETIME_HOURS = int(
         "24",
     )
 )
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "False").lower() == "true"
+
+SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "False").lower() == "true"
+
+CSRF_COOKIE_SECURE = os.getenv("CSRF_COOKIE_SECURE", "False").lower() == "true"
+
+SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "0"))
+
+SECURE_HSTS_INCLUDE_SUBDOMAINS = (
+    os.getenv("SECURE_HSTS_INCLUDE_SUBDOMAINS", "False").lower() == "true"
+)
+
+SECURE_HSTS_PRELOAD = os.getenv("SECURE_HSTS_PRELOAD", "False").lower() == "true"
