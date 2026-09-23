@@ -11,7 +11,6 @@ from collections.abc import Mapping
 
 from django.core.exceptions import ImproperlyConfigured
 
-
 SUPPORTED_APP_ENVIRONMENTS = (
     "development",
     "test",
@@ -28,7 +27,13 @@ DATABASE_URL_ENV_BY_APP_ENV = {
 
 
 def normalize_supabase_pooler_port(database_url: str) -> str:
-    """Use Supabase's transaction-pooler port consistently."""
+    """Preserve the Supabase connection mode selected by the configured URL."""
+
+    return database_url
+
+
+def _database_url_isolation_identity(database_url: str) -> str:
+    """Canonicalize Supabase pooler aliases only for environment isolation checks."""
 
     return database_url.replace(
         ".pooler.supabase.com:5432",
@@ -70,9 +75,7 @@ def validate_debug_policy(app_env: str, debug: bool) -> None:
     """Reject DEBUG=True in staging and production."""
 
     if app_env in {"staging", "production"} and debug:
-        raise ImproperlyConfigured(
-            f"DEBUG must be False when APP_ENV is {app_env}."
-        )
+        raise ImproperlyConfigured(f"DEBUG must be False when APP_ENV is {app_env}.")
 
 
 def _configured_database_urls(
@@ -104,10 +107,15 @@ def _validate_database_url_isolation(
         return
 
     selected_variable, selected_url = selected
+    selected_identity = _database_url_isolation_identity(selected_url)
+
     for other_app_env, (other_variable, other_url) in configured.items():
         if other_app_env == selected_app_env:
             continue
-        if selected_url == other_url:
+
+        other_identity = _database_url_isolation_identity(other_url)
+
+        if selected_identity == other_identity:
             raise ImproperlyConfigured(
                 "Database environment crossover detected: "
                 f"{selected_variable} and {other_variable} must not be identical."

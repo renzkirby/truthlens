@@ -14,7 +14,6 @@ from truthlens_backend.environment import (
     validate_debug_policy,
 )
 
-
 DEV_URL = "postgresql://dev_user:dev_password@dev.example.test/dev_db"
 TEST_URL = "postgresql://test_user:test_password@test.example.test/test_db"
 STAGING_URL = (
@@ -140,11 +139,11 @@ class ApplicationEnvironmentSelectionTests(SimpleTestCase):
 
 
 class DatabaseEnvironmentSelectionTests(SimpleTestCase):
-    def test_supabase_pooler_port_is_normalized(self):
+    def test_supabase_pooler_port_is_preserved(self):
         url = "postgresql://test@aws.pooler.supabase.com:5432/postgres"
         self.assertEqual(
             normalize_supabase_pooler_port(url),
-            "postgresql://test@aws.pooler.supabase.com:6543/postgres",
+            url,
         )
 
     def test_development_selects_only_development_database(self):
@@ -221,9 +220,7 @@ class DatabaseEnvironmentSelectionTests(SimpleTestCase):
             )
 
     def test_identical_staging_and_production_urls_are_rejected(self):
-        duplicate_url = (
-            "postgresql://synthetic:secret@shared.example.test/shared_db"
-        )
+        duplicate_url = "postgresql://synthetic:secret@shared.example.test/shared_db"
         environment = {
             "SUPABASE_STAGING_DB_URL": duplicate_url,
             "SUPABASE_PRODUCTION_DB_URL": duplicate_url,
