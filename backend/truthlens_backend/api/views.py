@@ -104,6 +104,7 @@ from .organization_service import (
     PartnerCapability,
     has_capability,
 )
+from .notification_service import dispatch_after_commit, notify_thread_commented
 from .verification_metrics_query_service import (
     VerificationMetricsAuthorizationError,
     VerificationMetricsCompositionError,
@@ -3026,10 +3027,11 @@ class ThreadCommentViewSet(viewsets.ModelViewSet):
             thread = Thread.objects.get(id=thread_id)
         except Thread.DoesNotExist:
             raise NotFound("Thread not found.")
-        serializer.save(
+        comment = serializer.save(
             commenter=self.request.user,
             thread=thread,
         )
+        dispatch_after_commit(notify_thread_commented, comment)
 
 
 class ThreadFlagViewSet(viewsets.ModelViewSet):

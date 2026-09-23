@@ -6,7 +6,7 @@ from urllib.parse import quote
 from django.db import transaction
 from django.utils.html import strip_tags
 
-from .models import Notification, OfficialFactCheck, VerificationRun
+from .models import EvidenceSubmission, Notification, OfficialFactCheck, VerificationRun
 
 logger = logging.getLogger(__name__)
 Type = Notification.NotificationType
@@ -207,4 +207,50 @@ def notify_membership_changed(membership, *, actor_id, event_id, change):
         target_type=Target.ORGANIZATION, target_id=membership.organization_id,
         dedupe_key=f"membership-event:{event_id}",
         title="Your organization membership changed", message=messages[change],
+    )
+
+
+def notify_thread_commented(comment):
+    return create_notification_once(
+        recipient_id=comment.thread.author_id,
+        actor_id=comment.commenter_id,
+        notification_type=Type.THREAD_COMMENTED,
+        target_type=Target.THREAD,
+        target_id=comment.thread_id,
+        dedupe_key=f"thread-comment:{comment.pk}:thread-author",
+        title="New comment on your discussion",
+        message=f"{comment.commenter.username} commented on your discussion.",
+    )
+
+
+def notify_evidence_reviewed(
+    evidence,
+    *,
+    actor_id,
+    event_id,
+    previous_status,
+    new_status,
+):
+    if previous_status == new_status:
+        return None
+    messages = {
+        EvidenceSubmission.EvidenceStatus.VERIFIED: (
+            "A verification partner verified evidence you submitted."
+        ),
+        EvidenceSubmission.EvidenceStatus.REJECTED: (
+            "A verification partner rejected evidence you submitted."
+        ),
+    }
+    message = messages.get(new_status)
+    if message is None:
+        return None
+    return create_notification_once(
+        recipient_id=evidence.contributor_id,
+        actor_id=actor_id,
+        notification_type=Type.EVIDENCE_REVIEWED,
+        target_type=Target.THREAD,
+        target_id=evidence.thread_id,
+        dedupe_key=f"evidence-review:{event_id}:contributor",
+        title="Your evidence was reviewed",
+        message=message,
     )

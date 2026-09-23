@@ -1,4 +1,5 @@
 import base64
+import uuid
 from unittest.mock import Mock, patch
 
 from django.contrib.auth.models import User
@@ -6,12 +7,15 @@ from django.core.cache import cache
 from django.db import transaction
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from api import notification_service as inbox, publishing_service, tasks
+from api.evidence_review_service import review_evidence_submission
 from api.models import (
     AccountabilityEvent, Claim, ClaimCheckHistory, EvidenceSubmission, Notification,
-    OfficialFactCheck, Organization, OrganizationMembership, VerificationRun,
+    ModerationCase, ModerationEvent, OfficialFactCheck, Organization,
+    OrganizationMembership, Thread, VerificationAssignment, VerificationRun,
 )
 from api.organization_membership_service import (
     change_organization_membership_role, suspend_organization_membership,
@@ -19,9 +23,351 @@ from api.organization_membership_service import (
 )
 from api.tests.workspace.test_publication_transaction_safety import PublicationTransactionFixtures
 from api.tests.workspace.test_factual_correction_handoff import FactualCorrectionHandoffFixtures
+from api.tests.workspace.test_factual_correction_request import FactualCorrectionRequestFixtures
 from api.verification import runs
 
 Type = Notification.NotificationType
+
+
+class ThreadCommentNotificationTests(TestCase):
+    def setUp(self):
+        self.author = User.objects.create_user(username="thread-notification-author")
+        self.commenter = User.objects.create_user(username="thread-notification-commenter")
+        self.unrelated = User.objects.create_user(username="thread-notification-unrelated")
+        self.claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="A community claim with a discussion.",
+        )
+        self.thread = Thread.objects.create(
+            claim=self.claim,
+            author=self.author,
+            caption="Discuss this claim.",
+        )
+        self.client = APIClient()
+
+    def post_comment(self, user, text="A useful comment"):
+        self.client.force_authenticate(user)
+        return self.client.post(
+            reverse("comment-list"),
+            {"thread_id": str(self.thread.pk), "comment_text": text},
+            format="json",
+        )
+
+    def test_comment_notifies_only_thread_author_after_commit_and_dedupes(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.post_comment(self.commenter)
+            self.assertEqual(response.status_code, 201, response.content)
+            self.assertFalse(Notification.objects.exists())
+
+        comment = self.thread.comments.get(pk=response.data["id"])
+        row = Notification.objects.get()
+        self.assertEqual(row.recipient, self.author)
+        self.assertEqual(row.actor, self.commenter)
+        self.assertEqual(row.notification_type, Type.THREAD_COMMENTED)
+        self.assertEqual(row.target_type, Notification.TargetType.THREAD)
+        self.assertEqual(row.target_id, self.thread.pk)
+        self.assertEqual(row.title, "New comment on your discussion")
+        self.assertEqual(
+            row.message,
+            "thread-notification-commenter commented on your discussion.",
+        )
+        self.assertNotIn("A useful comment", row.message)
+        self.assertFalse(Notification.objects.filter(recipient=self.unrelated).exists())
+        self.assertEqual(inbox.notify_thread_commented(comment).pk, row.pk)
+        self.assertEqual(Notification.objects.count(), 1)
+
+    def test_commenter_does_not_notify_themselves(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.post_comment(self.author)
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertFalse(Notification.objects.exists())
+
+    def test_notification_failure_does_not_fail_comment_creation(self):
+        with patch.object(
+            inbox,
+            "create_notification_once",
+            side_effect=RuntimeError("notification unavailable"),
+        ):
+            with self.assertLogs("api.notification_service", level="ERROR"):
+                with self.captureOnCommitCallbacks(execute=True):
+                    response = self.post_comment(self.commenter, "Still persists")
+
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertTrue(
+            self.thread.comments.filter(
+                commenter=self.commenter,
+                comment_text="Still persists",
+            ).exists()
+        )
+        self.assertFalse(Notification.objects.exists())
+
+
+class EvidenceReviewNotificationTests(TestCase):
+    def setUp(self):
+        self.contributor = User.objects.create_user(username="evidence-notification-contributor")
+        self.reviewer = User.objects.create_user(username="evidence-notification-reviewer")
+        self.organization = Organization.objects.create(
+            name="Evidence Notification Partner",
+            slug="evidence-notification-partner",
+            organization_type=Organization.OrganizationType.FACT_CHECKING,
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.ACTIVE,
+        )
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=self.reviewer,
+            role=OrganizationMembership.Role.LEAD_VERIFIER,
+            status=OrganizationMembership.Status.ACTIVE,
+        )
+        self.claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Evidence notification claim.",
+        )
+        self.thread = Thread.objects.create(
+            claim=self.claim,
+            author=self.contributor,
+            caption="Evidence notification thread.",
+        )
+        VerificationAssignment.objects.create(
+            claim=self.claim,
+            organization=self.organization,
+            claimed_by=self.reviewer,
+            status=VerificationAssignment.Status.ACTIVE,
+            claimed_at=timezone.now(),
+        )
+
+    def make_evidence(self, suffix):
+        evidence = EvidenceSubmission.objects.create(
+            thread=self.thread,
+            contributor=self.contributor,
+            evidence_caption=f"Evidence {suffix}",
+        )
+        case = ModerationCase.objects.create(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=evidence,
+            organization=self.organization,
+            source=ModerationCase.Source.EVIDENCE_SUBMISSION,
+        )
+        return evidence, case
+
+    def review(self, evidence, case, decision, **overrides):
+        values = {
+            "evidence": evidence,
+            "actor": self.reviewer,
+            "evidence_status": decision,
+            "expected_status": evidence.evidence_status,
+            "expected_case_id": case.pk,
+            "expected_organization_id": self.organization.pk,
+            "allow_reopen": True,
+        }
+        values.update(overrides)
+        return review_evidence_submission(**values)
+
+    def test_verified_and_rejected_transitions_are_safe_targeted_and_retry_stable(self):
+        decisions = (
+            (
+                EvidenceSubmission.EvidenceStatus.VERIFIED,
+                "verified evidence you submitted",
+                None,
+            ),
+            (
+                EvidenceSubmission.EvidenceStatus.REJECTED,
+                "rejected evidence you submitted",
+                EvidenceSubmission.RejectionReason.IRRELEVANT,
+            ),
+        )
+        for index, (decision, wording, rejection_reason) in enumerate(decisions):
+            with self.subTest(decision=decision):
+                evidence, case = self.make_evidence(index)
+                private_notes = f"PRIVATE review note {index}"
+                notification_count = Notification.objects.count()
+                with self.captureOnCommitCallbacks(execute=True):
+                    result = self.review(
+                        evidence,
+                        case,
+                        decision,
+                        moderator_notes=private_notes,
+                        rejection_reason=rejection_reason,
+                    )
+                    self.assertEqual(Notification.objects.count(), notification_count)
+
+                row = Notification.objects.get(
+                    target_id=evidence.thread_id,
+                    message__contains=wording,
+                )
+                self.assertEqual(row.recipient, self.contributor)
+                self.assertEqual(row.actor, self.reviewer)
+                self.assertEqual(row.notification_type, Type.EVIDENCE_REVIEWED)
+                self.assertEqual(row.target_type, Notification.TargetType.THREAD)
+                self.assertIn(wording, row.message)
+                self.assertNotIn("PRIVATE", row.message)
+                if rejection_reason:
+                    self.assertNotIn(rejection_reason, row.message)
+                event = ModerationEvent.objects.get(
+                    case=result["case"],
+                    event_type=(
+                        ModerationEvent.EventType.EVIDENCE_VERIFIED
+                        if decision == EvidenceSubmission.EvidenceStatus.VERIFIED
+                        else ModerationEvent.EventType.EVIDENCE_REJECTED
+                    ),
+                )
+                retried = inbox.notify_evidence_reviewed(
+                    result["evidence"],
+                    actor_id=self.reviewer.pk,
+                    event_id=event.pk,
+                    previous_status=EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+                    new_status=decision,
+                )
+                self.assertEqual(retried.pk, row.pk)
+        self.assertEqual(Notification.objects.count(), 2)
+
+    def test_helper_suppresses_contributor_self_notification(self):
+        evidence, _case = self.make_evidence("self-suppression")
+        self.assertIsNone(
+            inbox.notify_evidence_reviewed(
+                evidence,
+                actor_id=self.contributor.pk,
+                event_id=uuid.uuid4(),
+                previous_status=EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+                new_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            )
+        )
+        self.assertFalse(Notification.objects.exists())
+
+    def test_delivery_failure_does_not_undo_authoritative_review(self):
+        evidence, case = self.make_evidence("delivery-failure")
+        with patch.object(
+            inbox,
+            "create_notification_once",
+            side_effect=RuntimeError("notification unavailable"),
+        ):
+            with self.assertLogs("api.notification_service", level="ERROR"):
+                with self.captureOnCommitCallbacks(execute=True):
+                    result = self.review(
+                        evidence,
+                        case,
+                        EvidenceSubmission.EvidenceStatus.REJECTED,
+                        rejection_reason=EvidenceSubmission.RejectionReason.OUTDATED,
+                    )
+
+        result["evidence"].refresh_from_db()
+        result["case"].refresh_from_db()
+        self.assertEqual(
+            result["evidence"].evidence_status,
+            EvidenceSubmission.EvidenceStatus.REJECTED,
+        )
+        self.assertEqual(result["case"].status, ModerationCase.Status.RESOLVED)
+        self.assertTrue(
+            ModerationEvent.objects.filter(
+                case=result["case"],
+                event_type=ModerationEvent.EventType.EVIDENCE_REJECTED,
+            ).exists()
+        )
+        self.assertFalse(Notification.objects.exists())
+
+
+class CorrectionEvidenceReviewNotificationTests(
+    FactualCorrectionRequestFixtures,
+    TestCase,
+):
+    def test_correction_transition_notifies_and_both_reaffirmations_are_suppressed(self):
+        rejected = self.make_correction_review_context(suffix="notification-rejected")
+        with self.captureOnCommitCallbacks(execute=True):
+            result = self.review_correction(
+                rejected,
+                evidence_status=EvidenceSubmission.EvidenceStatus.REJECTED,
+                rejection_reason=EvidenceSubmission.RejectionReason.OUTDATED,
+                moderator_notes="PRIVATE correction rejection details",
+            )
+            self.assertFalse(Notification.objects.exists())
+
+        row = Notification.objects.get()
+        self.assertEqual(row.recipient, self.contributor)
+        self.assertEqual(row.actor, self.moderator)
+        self.assertEqual(row.target_id, rejected["thread"].pk)
+        self.assertIn("rejected evidence you submitted", row.message)
+        self.assertNotIn("PRIVATE", row.message)
+        self.assertNotIn(EvidenceSubmission.RejectionReason.OUTDATED, row.message)
+        self.assertEqual(
+            inbox.notify_evidence_reviewed(
+                result["evidence"],
+                actor_id=self.moderator.pk,
+                event_id=result["event"].pk,
+                previous_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+                new_status=EvidenceSubmission.EvidenceStatus.REJECTED,
+            ).pk,
+            row.pk,
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            rejected_reaffirmation = self.review_correction(
+                rejected,
+                evidence_status=EvidenceSubmission.EvidenceStatus.REJECTED,
+                expected_evidence_status=EvidenceSubmission.EvidenceStatus.REJECTED,
+                rejection_reason=EvidenceSubmission.RejectionReason.OUTDATED,
+            )
+        self.assertFalse(result["event"].metadata["is_reaffirmation"])
+        self.assertNotEqual(result["event"].pk, rejected_reaffirmation["event"].pk)
+        self.assertTrue(rejected_reaffirmation["event"].metadata["is_reaffirmation"])
+        self.assertEqual(
+            ModerationEvent.objects.filter(
+                case=rejected["evidence_case"],
+                event_type=ModerationEvent.EventType.EVIDENCE_REJECTED,
+                metadata__correction_request_id=str(rejected["correction_request"].pk),
+            ).count(),
+            2,
+        )
+        self.assertEqual(Notification.objects.count(), 1)
+
+        verified = self.make_correction_review_context(suffix="notification-verified")
+        with self.captureOnCommitCallbacks(execute=True):
+            first_verified_reaffirmation = self.review_correction(verified)
+            second_verified_reaffirmation = self.review_correction(verified)
+        self.assertNotEqual(
+            first_verified_reaffirmation["event"].pk,
+            second_verified_reaffirmation["event"].pk,
+        )
+        self.assertTrue(
+            first_verified_reaffirmation["event"].metadata["is_reaffirmation"]
+        )
+        self.assertTrue(
+            second_verified_reaffirmation["event"].metadata["is_reaffirmation"]
+        )
+        self.assertEqual(
+            ModerationEvent.objects.filter(
+                case=verified["evidence_case"],
+                event_type=ModerationEvent.EventType.EVIDENCE_VERIFIED,
+                metadata__correction_request_id=str(verified["correction_request"].pk),
+            ).count(),
+            2,
+        )
+        self.assertEqual(Notification.objects.count(), 1)
+
+    def test_correction_delivery_failure_preserves_review_state(self):
+        context = self.make_correction_review_context(suffix="notification-failure")
+        with patch.object(
+            inbox,
+            "create_notification_once",
+            side_effect=RuntimeError("notification unavailable"),
+        ):
+            with self.assertLogs("api.notification_service", level="ERROR"):
+                with self.captureOnCommitCallbacks(execute=True):
+                    result = self.review_correction(
+                        context,
+                        evidence_status=EvidenceSubmission.EvidenceStatus.REJECTED,
+                        rejection_reason=EvidenceSubmission.RejectionReason.OUTDATED,
+                    )
+
+        result["evidence"].refresh_from_db()
+        result["case"].refresh_from_db()
+        result["event"].refresh_from_db()
+        self.assertEqual(
+            result["evidence"].evidence_status,
+            EvidenceSubmission.EvidenceStatus.REJECTED,
+        )
+        self.assertEqual(result["case"].status, ModerationCase.Status.RESOLVED)
+        self.assertFalse(result["event"].metadata["is_reaffirmation"])
+        self.assertFalse(Notification.objects.exists())
 
 
 class VerificationNotificationTests(TestCase):
