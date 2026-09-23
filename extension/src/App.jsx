@@ -14,7 +14,7 @@ import { state } from "./modules/state.js";
 const GUEST_SCANS_STORAGE_KEY = "guest_scans";
 const GUEST_SCANS_CAP = 3;
 const GUEST_SCAN_SYNC_STATUS_STORAGE_KEY = "guest_scan_sync_status";
-const WEB_APP_BASE_URL = state.WEB_APP_ORIGINS?.[0] || "https://truthlens-dev.vercel.app";
+const WEB_APP_BASE_URL = state.WEB_APP_BASE_URL;
 const GUEST_SYNC_STATUS_AUTO_DISMISS_MS = 7000;
 
 function normalizeGuestScans(rawGuestScans) {
@@ -108,11 +108,7 @@ function App() {
       let isDisposed = false;
 
       const requestGuestSyncRetryIfNeeded = () => {
-         if (
-            typeof chrome === "undefined" ||
-            !chrome.runtime?.sendMessage ||
-            !chrome.storage?.local
-         ) {
+         if (typeof chrome === "undefined" || !chrome.runtime?.sendMessage || !chrome.storage?.local) {
             return;
          }
 
@@ -168,9 +164,7 @@ function App() {
             }
 
             const normalizedUsername =
-               authContext?.accepted && typeof authContext.username === "string"
-                  ? authContext.username.trim()
-                  : "";
+               authContext?.accepted && typeof authContext.username === "string" ? authContext.username.trim() : "";
             setLoggedInUsername(normalizedUsername || null);
 
             requestGuestSyncRetryIfNeeded();
@@ -180,9 +174,7 @@ function App() {
                   return;
                }
 
-               setGuestSyncStatus(
-                  normalizeGuestSyncStatus(result?.[GUEST_SCAN_SYNC_STATUS_STORAGE_KEY]),
-               );
+               setGuestSyncStatus(normalizeGuestSyncStatus(result?.[GUEST_SCAN_SYNC_STATUS_STORAGE_KEY]));
             });
             return;
          }
@@ -215,9 +207,7 @@ function App() {
          }
 
          if (changes[GUEST_SCAN_SYNC_STATUS_STORAGE_KEY]) {
-            setGuestSyncStatus(
-               normalizeGuestSyncStatus(changes[GUEST_SCAN_SYNC_STATUS_STORAGE_KEY].newValue),
-            );
+            setGuestSyncStatus(normalizeGuestSyncStatus(changes[GUEST_SCAN_SYNC_STATUS_STORAGE_KEY].newValue));
          }
       };
 
@@ -286,19 +276,9 @@ function App() {
    const renderContent = () => {
       switch (activeLink) {
          case "snipping":
-            return (
-               <SnippingTool
-                  handleSnipClick={handleSnipClick}
-                  isSnipping={isSnipping}
-               />
-            );
+            return <SnippingTool handleSnipClick={handleSnipClick} isSnipping={isSnipping} />;
          case "detect-deepfake":
-            return (
-               <DetectDeepfake
-                  handleDeepfakeSnipClick={handleDeepfakeSnipClick}
-                  isSnipping={isSnipping}
-               />
-            );
+            return <DetectDeepfake handleDeepfakeSnipClick={handleDeepfakeSnipClick} isSnipping={isSnipping} />;
          case "file-upload":
             return <FileUpload />;
          case "url-upload":
@@ -313,14 +293,14 @@ function App() {
          <header className="header-row">
             <div className="logo-container">
                <div className="logo-box">
-                  <img
-                     src={TruthLensLogo}
-                     alt=""
-                  />
+                  <img src={TruthLensLogo} alt="" />
                </div>
                <h2>TruthLens</h2>
             </div>
-            <span className="ready-pill"><span aria-hidden="true" />Ready</span>
+            <span className="ready-pill">
+               <span aria-hidden="true" />
+               Ready
+            </span>
          </header>
 
          <main className="content-area">
@@ -333,45 +313,39 @@ function App() {
             {activeLink === "snipping" && <NavigationBar setActiveLink={setActiveLink} />}
          </main>
 
-         {!isGuestMode &&
-            guestSyncStatus?.status === "success" &&
-            guestSyncStatus.syncedCount > 0 && (
-               <section
-                  className="guest-sync-status success"
-                  role="status">
-                  <div className="guest-sync-status-headline">
-                     <strong>
-                        Synced {guestSyncStatus.syncedCount} ghost scan
-                        {guestSyncStatus.syncedCount === 1 ? "" : "s"} after login.
-                     </strong>
-                     <button
-                        type="button"
-                        className="guest-sync-dismiss-btn"
-                        onClick={dismissGuestSyncStatus}
-                        aria-label="Dismiss sync status">
-                        ×
-                     </button>
-                  </div>
-                  <span>
-                     Added to your private library
-                     {guestSyncStatus.updatedAt
-                        ? ` • ${formatGuestTimestamp(guestSyncStatus.updatedAt)}`
-                        : "."}
-                  </span>
-               </section>
-            )}
+         {!isGuestMode && guestSyncStatus?.status === "success" && guestSyncStatus.syncedCount > 0 && (
+            <section className="guest-sync-status success" role="status">
+               <div className="guest-sync-status-headline">
+                  <strong>
+                     Synced {guestSyncStatus.syncedCount} ghost scan
+                     {guestSyncStatus.syncedCount === 1 ? "" : "s"} after login.
+                  </strong>
+                  <button
+                     type="button"
+                     className="guest-sync-dismiss-btn"
+                     onClick={dismissGuestSyncStatus}
+                     aria-label="Dismiss sync status"
+                  >
+                     ×
+                  </button>
+               </div>
+               <span>
+                  Added to your private library
+                  {guestSyncStatus.updatedAt ? ` • ${formatGuestTimestamp(guestSyncStatus.updatedAt)}` : "."}
+               </span>
+            </section>
+         )}
 
          {!isGuestMode && guestSyncStatus?.status === "error" && (
-            <section
-               className="guest-sync-status error"
-               role="status">
+            <section className="guest-sync-status error" role="status">
                <div className="guest-sync-status-headline">
                   <strong>We could not sync your unsaved scans automatically.</strong>
                   <button
                      type="button"
                      className="guest-sync-dismiss-btn"
                      onClick={dismissGuestSyncStatus}
-                     aria-label="Dismiss sync status">
+                     aria-label="Dismiss sync status"
+                  >
                      ×
                   </button>
                </div>
@@ -393,31 +367,22 @@ function App() {
 
                <div className="guest-history-list">
                   {ghostScans.length === 0 ? (
-                     <p className="guest-history-empty">
-                        Your latest investigations will appear here.
-                     </p>
+                     <p className="guest-history-empty">Your latest investigations will appear here.</p>
                   ) : (
                      ghostScans.map((scan, index) => {
                         const verdict = String(scan?.verdict || "UNVERIFIED").toUpperCase();
                         const confidenceScore = Number(scan?.confidence_score || 0);
 
                         return (
-                           <article
-                              key={`${scan?.scanned_at || "ghost-scan"}-${index}`}
-                              className="guest-history-item">
+                           <article key={`${scan?.scanned_at || "ghost-scan"}-${index}`} className="guest-history-item">
                               <div className="guest-history-item-top">
-                                 <span className="guest-history-item-type">
-                                    {scan?.scan_type || "SCAN"}
-                                 </span>
-                                 <span
-                                    className={`guest-history-verdict ${getVerdictToneClass(verdict)}`}>
+                                 <span className="guest-history-item-type">{scan?.scan_type || "SCAN"}</span>
+                                 <span className={`guest-history-verdict ${getVerdictToneClass(verdict)}`}>
                                     {verdict}
                                  </span>
                               </div>
 
-                              <p className="guest-history-summary">
-                                 {scan?.summary || "No summary available."}
-                              </p>
+                              <p className="guest-history-summary">{scan?.summary || "No summary available."}</p>
 
                               <div className="guest-history-meta">
                                  <span>{confidenceScore}% confidence</span>
@@ -430,22 +395,22 @@ function App() {
                </div>
 
                <div className="guest-upsell-cta">
-                  <p>
-                     Sign in to save your investigations.
-                  </p>
+                  <p>Sign in to save your investigations.</p>
                   <div className="guest-upsell-actions">
                      <a
                         href={`${WEB_APP_BASE_URL}/login`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="guest-upsell-link login">
+                        className="guest-upsell-link login"
+                     >
                         Log In
                      </a>
                      <a
                         href={`${WEB_APP_BASE_URL}/register`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="guest-upsell-link register">
+                        className="guest-upsell-link register"
+                     >
                         Create Account
                      </a>
                   </div>
@@ -465,10 +430,7 @@ function App() {
                   "Signed in to TruthLens"
                )}
             </span>
-            <button
-               type="button"
-               className="footer-link footer-link-button"
-               onClick={handleOpenCommunityPlatform}>
+            <button type="button" className="footer-link footer-link-button" onClick={handleOpenCommunityPlatform}>
                Open TruthLens →
             </button>
          </footer>

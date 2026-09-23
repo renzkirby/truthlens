@@ -47,6 +47,57 @@ def _claim_vector_indexes():
     ]
 
 
+def _official_fact_check_indexes(database_engine=None):
+    """Return indexes supported by the configured database backend.
+
+    PostgreSQL settings are authoritative for migration-state validation.
+    SQLite omits the HNSW and GIN definitions only for offline test schema
+    construction; the historical production migrations remain unchanged.
+    """
+
+    engine = database_engine
+    if engine is None:
+        engine = settings.DATABASES.get("default", {}).get("ENGINE", "")
+
+    indexes = []
+    if "postgresql" in engine:
+        indexes.extend(
+            [
+                HnswIndex(
+                    name="official_claim_hnsw_idx",
+                    fields=["embedding"],
+                    m=16,
+                    ef_construction=128,
+                    opclasses=["vector_cosine_ops"],
+                ),
+                GinIndex(
+                    fields=["search_vector"],
+                    name="official_claim_gin_idx",
+                ),
+            ]
+        )
+
+    indexes.extend(
+        [
+            models.Index(
+                fields=[
+                    "publication_status",
+                    "-published_at",
+                ],
+                name="factcheck_status_published_idx",
+            ),
+            models.Index(
+                fields=[
+                    "organization",
+                    "publication_status",
+                ],
+                name="factcheck_org_status_idx",
+            ),
+        ]
+    )
+    return indexes
+
+
 # Create your models here.
 class UserProfile(models.Model):
     class Role(models.TextChoices):
@@ -2546,33 +2597,7 @@ class OfficialFactCheck(models.Model):
             ),
         ]
 
-        indexes = [
-            HnswIndex(
-                name="official_claim_hnsw_idx",
-                fields=["embedding"],
-                m=16,
-                ef_construction=128,
-                opclasses=["vector_cosine_ops"],
-            ),
-            GinIndex(
-                fields=["search_vector"],
-                name="official_claim_gin_idx",
-            ),
-            models.Index(
-                fields=[
-                    "publication_status",
-                    "-published_at",
-                ],
-                name=("factcheck_status_" "published_idx"),
-            ),
-            models.Index(
-                fields=[
-                    "organization",
-                    "publication_status",
-                ],
-                name=("factcheck_org_" "status_idx"),
-            ),
-        ]
+        indexes = _official_fact_check_indexes()
 
     SEALED_CONTENT_FIELDS = (
         "claim_id",
