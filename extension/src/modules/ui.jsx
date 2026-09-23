@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { state } from "./state.js";
 
-const COMMUNITY_PLATFORM_URL = state.WEB_APP_ORIGINS[0];
+const COMMUNITY_PLATFORM_URL = state.WEB_APP_BASE_URL;
 
 // Pre-render icons
 const iconSparkles = renderToString(React.createElement(Sparkles, { size: 14 }));
@@ -95,13 +95,20 @@ function isRecord(value) {
 
 function isPublishedInstitutionalResult(result) {
    const publication = result.official_fact_check;
-   return result.resolution_source === "OFFICIAL_FACT_CHECK" && isRecord(publication)
-      && [publication.fact_check_id, publication.verdict, publication.headline, publication.summary].some(nonblankText);
+   return (
+      result.resolution_source === "OFFICIAL_FACT_CHECK" &&
+      isRecord(publication) &&
+      [publication.fact_check_id, publication.verdict, publication.headline, publication.summary].some(nonblankText)
+   );
 }
 
 // Attribute escaping and URL validation serve different purposes.
 function safeHttpUrl(value) {
-   if (typeof value !== "string" || Array.from(value).some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) return null;
+   if (
+      typeof value !== "string" ||
+      Array.from(value).some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)
+   )
+      return null;
    if (!/^https?:\/\//i.test(value.trim())) return null;
    try {
       const url = new URL(value.trim());
@@ -129,9 +136,13 @@ function pathComponent(value) {
 }
 
 function publicReachAttributes(organizationSlug, publicationId, surface) {
-   if (typeof organizationSlug !== "string" || !/^[a-zA-Z0-9_-]{1,255}$/.test(organizationSlug)
-      || typeof publicationId !== "string"
-      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(publicationId)) return "";
+   if (
+      typeof organizationSlug !== "string" ||
+      !/^[a-zA-Z0-9_-]{1,255}$/.test(organizationSlug) ||
+      typeof publicationId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(publicationId)
+   )
+      return "";
    return `data-reach-organization-slug="${escapeHtml(organizationSlug)}" data-reach-publication-id="${escapeHtml(publicationId)}" data-reach-surface="${escapeHtml(surface)}"`;
 }
 
@@ -174,9 +185,14 @@ function relatedPublicationsHTML(claim) {
       const rawId = nonblankText(publication.fact_check_id).trim();
       const headline = nonblankText(publication.headline);
       const organizationName = nonblankText(organization.name);
-      if (organization.public_profile_available !== true || !headline || !organizationName
-         || !/^[a-zA-Z0-9_-]+$/.test(rawSlug)
-         || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId)) continue;
+      if (
+         organization.public_profile_available !== true ||
+         !headline ||
+         !organizationName ||
+         !/^[a-zA-Z0-9_-]+$/.test(rawSlug) ||
+         !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId)
+      )
+         continue;
       const slug = pathComponent(rawSlug);
       const publicationId = pathComponent(rawId);
       if (!slug || !publicationId) continue;
@@ -212,10 +228,14 @@ function displayPublishedResultCard(claim, publication) {
    const logoUrl = publicProfileAvailable ? safeHttpUrl(organization.logo_url) : null;
 
    // The publication is authoritative; top-level values are legacy transport fallbacks.
-   const verdict = nonblankText(publication.verdict) || nonblankText(claim.verdict) || nonblankText(claim.final_verdict);
+   const verdict =
+      nonblankText(publication.verdict) || nonblankText(claim.verdict) || nonblankText(claim.final_verdict);
    const supportedVerdict = ["FACT", "FAKE", "MISLEADING", "SATIRE", "UNVERIFIED"].includes(verdict);
-   const ui = supportedVerdict ? getVerdictUI(verdict) : { class: "out-of-scope", icon: iconHelp, text: "Verdict unavailable" };
-   const summary = nonblankText(publication.summary) || nonblankText(claim.summary) || "No published summary available.";
+   const ui = supportedVerdict
+      ? getVerdictUI(verdict)
+      : { class: "out-of-scope", icon: iconHelp, text: "Verdict unavailable" };
+   const summary =
+      nonblankText(publication.summary) || nonblankText(claim.summary) || "No published summary available.";
    const headline = nonblankText(publication.headline) || "Published fact-check";
    const identityText = escapeHtml(organizationName || "Organization attribution unavailable");
    const identityHTML = profileUrl
@@ -227,8 +247,12 @@ function displayPublishedResultCard(claim, publication) {
    if (nonblankText(publication.published_at)) {
       const publishedAt = new Date(publication.published_at);
       if (!Number.isNaN(publishedAt.getTime())) {
-         const dateText = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeZone: "UTC" }).format(publishedAt);
-         metadata.push(`<time datetime="${escapeHtml(publishedAt.toISOString())}">Published ${escapeHtml(dateText)} (UTC)</time>`);
+         const dateText = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeZone: "UTC" }).format(
+            publishedAt,
+         );
+         metadata.push(
+            `<time datetime="${escapeHtml(publishedAt.toISOString())}">Published ${escapeHtml(dateText)} (UTC)</time>`,
+         );
       }
    }
    if (Number.isInteger(publication.version) && publication.version > 0) {
@@ -243,14 +267,22 @@ function displayPublishedResultCard(claim, publication) {
       metadata.push(`<span>${escapeHtml(revisionLabels[publication.revision_kind])}</span>`);
    }
 
-   const sources = Array.isArray(publication.sources) ? publication.sources
-      : Array.isArray(claim.sources) ? claim.sources : claim.source_url ? [claim.source_url] : [];
-   const sourceLinks = sources.map((source) => {
-      const url = safeHttpUrl(typeof source === "string" ? source : isRecord(source) ? source.url : null);
-      if (!url) return "";
-      const title = (isRecord(source) && nonblankText(source.title)) || new URL(url).hostname;
-      return `<li><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(title)} ${iconExternal}</a></li>`;
-   }).filter(Boolean).join("");
+   const sources = Array.isArray(publication.sources)
+      ? publication.sources
+      : Array.isArray(claim.sources)
+        ? claim.sources
+        : claim.source_url
+          ? [claim.source_url]
+          : [];
+   const sourceLinks = sources
+      .map((source) => {
+         const url = safeHttpUrl(typeof source === "string" ? source : isRecord(source) ? source.url : null);
+         if (!url) return "";
+         const title = (isRecord(source) && nonblankText(source.title)) || new URL(url).hostname;
+         return `<li><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(title)} ${iconExternal}</a></li>`;
+      })
+      .filter(Boolean)
+      .join("");
 
    const card = document.createElement("div");
    card.id = "truthlens-result-card";
@@ -365,19 +397,30 @@ export function displayResultCard(claim) {
    let secondaryLinkHTML = "";
 
    const threadId = pathComponent(thread_id);
-   const communityLink = baseUrl && threadId
-      ? `${baseUrl}/thread/detail/${threadId}`
-      : baseUrl && id ? `${baseUrl}/thread/create?claim_id=${id}` : null;
+   const communityLink =
+      baseUrl && threadId
+         ? `${baseUrl}/thread/detail/${threadId}`
+         : baseUrl && id
+           ? `${baseUrl}/thread/create?claim_id=${id}`
+           : null;
    const communityText = thread_id ? "View Community Discussion" : "Ask the Community";
 
    if (displayVerdict === "UNVERIFIED") {
       // UNVERIFIED: Primary CTA is asking the community. Secondary is full report.
-      primaryButtonHTML = communityLink ? `<a href='${escapeHtml(communityLink)}' target='_blank' rel='noopener noreferrer' class='truthlens-primary-btn'>${iconUsers} ${communityText}</a>` : "";
-      secondaryLinkHTML = deepAnalysisUrl ? `<a href='${escapeHtml(deepAnalysisUrl)}' target='_blank' rel='noopener noreferrer' class='truthlens-dashboard-link'>View full report ${iconExternal}</a>` : "";
+      primaryButtonHTML = communityLink
+         ? `<a href='${escapeHtml(communityLink)}' target='_blank' rel='noopener noreferrer' class='truthlens-primary-btn'>${iconUsers} ${communityText}</a>`
+         : "";
+      secondaryLinkHTML = deepAnalysisUrl
+         ? `<a href='${escapeHtml(deepAnalysisUrl)}' target='_blank' rel='noopener noreferrer' class='truthlens-dashboard-link'>View full report ${iconExternal}</a>`
+         : "";
    } else {
       // VERIFIED (Fact/Fake/etc): Primary CTA is the full report. Secondary is community discussion.
-      primaryButtonHTML = deepAnalysisUrl ? `<a href='${escapeHtml(deepAnalysisUrl)}' target='_blank' rel='noopener noreferrer' class='truthlens-primary-btn'>${iconSearch} View Full Report</a>` : "";
-      secondaryLinkHTML = communityLink ? `<a href='${escapeHtml(communityLink)}' target='_blank' rel='noopener noreferrer' class='truthlens-dashboard-link'>${communityText} ${iconExternal}</a>` : "";
+      primaryButtonHTML = deepAnalysisUrl
+         ? `<a href='${escapeHtml(deepAnalysisUrl)}' target='_blank' rel='noopener noreferrer' class='truthlens-primary-btn'>${iconSearch} View Full Report</a>`
+         : "";
+      secondaryLinkHTML = communityLink
+         ? `<a href='${escapeHtml(communityLink)}' target='_blank' rel='noopener noreferrer' class='truthlens-dashboard-link'>${communityText} ${iconExternal}</a>`
+         : "";
    }
 
    const card = document.createElement("div");
