@@ -564,7 +564,8 @@ def receive_snippet(request):
     claim_id = claim.id  # Get the ID of the saved claim
 
     snippet_fact_check_process.delay(
-        image_hash, str(claim_id), check_deepfake, base64_string
+        image_hash, str(claim_id), check_deepfake, base64_string,
+        triggered_by_id=authenticated_user.pk if authenticated_user else None,
     )
 
     return JsonResponse(
@@ -677,7 +678,10 @@ def verify_url(request):
     _record_authenticated_claim_check(authenticated_user, claim)
     claim_id = claim.id
 
-    url_fact_check_process.delay(safe_url, claim_id)
+    url_fact_check_process.delay(
+        safe_url, claim_id,
+        triggered_by_id=authenticated_user.pk if authenticated_user else None,
+    )
 
     return JsonResponse(
         {"claim_id": str(claim_id), "url_safety": url_safety, "cached": False},
@@ -3216,7 +3220,10 @@ def verify_text(request):
     claim_id = claim.id
 
     # Send the raw text to the Celery worker
-    text_fact_check_process.delay(text_content, claim_id)
+    text_fact_check_process.delay(
+        text_content, claim_id,
+        triggered_by_id=authenticated_user.pk if authenticated_user else None,
+    )
 
     return JsonResponse(
         {"claim_id": str(claim_id), "cached": False},
@@ -3849,7 +3856,10 @@ def verify_file(request):
         claim_id = claim.id
 
         # Send the extracted text to your existing Celery worker
-        text_fact_check_process.delay(extracted_text, claim_id)
+        text_fact_check_process.delay(
+            extracted_text, claim_id,
+            triggered_by_id=authenticated_user.pk if authenticated_user else None,
+        )
 
         return JsonResponse(
             {"claim_id": str(claim_id), "cached": False},

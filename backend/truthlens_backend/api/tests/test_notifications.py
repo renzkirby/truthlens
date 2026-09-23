@@ -1,4 +1,5 @@
 import uuid
+from datetime import timedelta
 from unittest.mock import Mock
 
 from django.contrib.auth.models import User
@@ -6,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from api.models import Notification
@@ -94,6 +96,12 @@ class NotificationFoundationTests(TestCase):
     def test_list_is_private_read_only_and_paginated_newest_first(self):
         self.create(recipient_id=self.other.pk)
         rows = [self.create(dedupe_key=f"comment:{i}") for i in range(22)]
+        # Creation calls can share a clock tick; insertion order is not timestamp order.
+        first_created_at = timezone.now() - timedelta(minutes=1)
+        for index, row in enumerate(rows):
+            Notification.objects.filter(pk=row.pk).update(
+                created_at=first_created_at + timedelta(seconds=index),
+            )
         response = self.client.get(reverse("notification_list"), {"recipient_id": self.other.pk})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data["results"]), 20)
@@ -103,7 +111,46 @@ class NotificationFoundationTests(TestCase):
         self.assertIsNotNone(response.data["next"])
         next_page = self.client.get(response.data["next"])
         self.assertEqual(len(next_page.data["results"]), 2)
+        self.assertEqual(
+            [item["id"] for item in response.data["results"] + next_page.data["results"]],
+            [str(row.pk) for row in reversed(rows)],
+        )
+        self.assertIsNone(next_page.data["next"])
         self.assertEqual(self.client.post(reverse("notification_list"), {}).status_code, 405)
+
+    def test_equal_timestamps_use_descending_uuid_across_cursor_pages(self):
+        timestamp = timezone.now() - timedelta(minutes=1)
+        # Deliberately insert out of UUID order, with ties spanning three pages.
+        ids = list(range(1, 46, 2)) + list(range(2, 46, 2))
+        for value in ids:
+            Notification.objects.create(
+                id=uuid.UUID(int=value), recipient=self.user,
+                notification_type=Notification.NotificationType.THREAD_COMMENTED,
+                target_type=Notification.TargetType.THREAD,
+                dedupe_key=f"tie:{value}", title="New comment", message="Someone commented.",
+            )
+        Notification.objects.filter(recipient=self.user).update(created_at=timestamp)
+        newest = self.create(dedupe_key="newest")
+        oldest = self.create(dedupe_key="oldest")
+        Notification.objects.filter(pk=newest.pk).update(created_at=timestamp + timedelta(seconds=1))
+        Notification.objects.filter(pk=oldest.pk).update(created_at=timestamp - timedelta(seconds=1))
+        self.create(recipient_id=self.other.pk)
+        expected = [str(newest.pk)] + [str(uuid.UUID(int=i)) for i in range(45, 0, -1)] + [str(oldest.pk)]
+
+        pages = []
+        url = reverse("notification_list")
+        while url:
+            self.assertLess(len(pages), 3, "Cursor must advance and terminate")
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200)
+            repeated = self.client.get(url)
+            self.assertEqual(response.data, repeated.data)
+            pages.append(response.data)
+            url = response.data["next"]
+        actual = [item["id"] for page in pages for item in page["results"]]
+        self.assertEqual(actual, expected)
+        self.assertEqual(len(actual), len(set(actual)))
+        self.assertEqual([len(page["results"]) for page in pages], [20, 20, 7])
 
     def test_read_endpoints_are_scoped_and_idempotent(self):
         own = self.create()

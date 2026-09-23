@@ -5,6 +5,7 @@ from .models import (
     OrganizationMembership,
 )
 from .accountability_service import record_accountability_event
+from .notification_service import dispatch_after_commit, notify_membership_changed
 from .organization_service import (
     PartnerCapability,
     get_manageable_membership_roles,
@@ -192,7 +193,7 @@ def change_organization_membership_role(
         ]
     )
 
-    record_accountability_event(
+    event = record_accountability_event(
         action_type=AccountabilityEvent.ActionType.ORGANIZATION_MEMBERSHIP_ROLE_CHANGED,
         resource_type=AccountabilityEvent.ResourceType.ORGANIZATION_MEMBERSHIP,
         resource_id=membership.pk,
@@ -205,6 +206,10 @@ def change_organization_membership_role(
         new_state={"role": membership.role, "status": membership.status},
     )
 
+    dispatch_after_commit(
+        notify_membership_changed, membership, actor_id=actor.pk,
+        event_id=event.pk, change="role_changed",
+    )
     return membership
 
 
@@ -237,7 +242,7 @@ def suspend_organization_membership(
         ]
     )
 
-    record_accountability_event(
+    event = record_accountability_event(
         action_type=AccountabilityEvent.ActionType.ORGANIZATION_MEMBERSHIP_SUSPENDED,
         resource_type=AccountabilityEvent.ResourceType.ORGANIZATION_MEMBERSHIP,
         resource_id=membership.pk,
@@ -250,6 +255,10 @@ def suspend_organization_membership(
         new_state={"role": membership.role, "status": membership.status},
     )
 
+    dispatch_after_commit(
+        notify_membership_changed, membership, actor_id=actor.pk,
+        event_id=event.pk, change="suspended",
+    )
     return membership
 
 
@@ -282,7 +291,7 @@ def restore_organization_membership(
         ]
     )
 
-    record_accountability_event(
+    event = record_accountability_event(
         action_type=AccountabilityEvent.ActionType.ORGANIZATION_MEMBERSHIP_RESTORED,
         resource_type=AccountabilityEvent.ResourceType.ORGANIZATION_MEMBERSHIP,
         resource_id=membership.pk,
@@ -295,6 +304,10 @@ def restore_organization_membership(
         new_state={"role": membership.role, "status": membership.status},
     )
 
+    dispatch_after_commit(
+        notify_membership_changed, membership, actor_id=actor.pk,
+        event_id=event.pk, change="restored",
+    )
     return membership
 
 
@@ -327,7 +340,7 @@ def remove_organization_membership(
         ]
     )
 
-    record_accountability_event(
+    event = record_accountability_event(
         action_type=AccountabilityEvent.ActionType.ORGANIZATION_MEMBERSHIP_REMOVED,
         resource_type=AccountabilityEvent.ResourceType.ORGANIZATION_MEMBERSHIP,
         resource_id=membership.pk,
@@ -340,4 +353,8 @@ def remove_organization_membership(
         new_state={"role": membership.role, "status": membership.status},
     )
 
+    dispatch_after_commit(
+        notify_membership_changed, membership, actor_id=actor.pk,
+        event_id=event.pk, change="removed",
+    )
     return membership

@@ -9,6 +9,12 @@ from django.core.validators import (
 )
 from django.db import IntegrityError, transaction
 from django.utils import timezone
+from .notification_service import (
+    dispatch_after_commit,
+    notify_article_returned_for_rework,
+    notify_fact_check_published,
+    notify_factual_correction_published,
+)
 
 from .adjudication_service import _build_decision_evidence_records
 from .evidence_snapshot_schema import (
@@ -2109,6 +2115,9 @@ def return_fact_check_for_rework(
             },
             notes=reason,
         )
+        dispatch_after_commit(
+            notify_article_returned_for_rework, locked_fact_check, actor_id=actor.pk,
+        )
         return locked_fact_check
 
 
@@ -2284,6 +2293,9 @@ def return_editorial_revision_for_rework(
             },
             notes=reason,
             context={"predecessor_id": str(locked_revision.supersedes_id)},
+        )
+        dispatch_after_commit(
+            notify_article_returned_for_rework, locked_revision, actor_id=actor.pk,
         )
         return locked_revision
 
@@ -2667,6 +2679,7 @@ def publish_editorial_revision(
 
         revision_id_for_index = revision.id
         transaction.on_commit(lambda: _queue_fact_check_index(revision_id_for_index))
+        dispatch_after_commit(notify_fact_check_published, revision, actor_id=actor.pk)
         return {
             "fact_check": revision,
             "archived_fact_check": predecessor,
@@ -2863,6 +2876,7 @@ def publish_fact_check(
         published_fact_check_id = locked_fact_check.id
 
         transaction.on_commit(lambda: _queue_fact_check_index(published_fact_check_id))
+        dispatch_after_commit(notify_fact_check_published, locked_fact_check, actor_id=actor.pk)
 
         return {
             "fact_check": locked_fact_check,
@@ -3775,6 +3789,10 @@ def publish_factual_correction(
 
         successor_id_for_index = successor.id
         transaction.on_commit(lambda: _queue_fact_check_index(successor_id_for_index))
+        dispatch_after_commit(
+            notify_factual_correction_published, successor, actor_id=actor.pk,
+            workspace_recipient_ids=(request.requested_by_id, proposal.prepared_by_id),
+        )
         return {
             "decision": decision,
             "decision_snapshot": decision_snapshot,

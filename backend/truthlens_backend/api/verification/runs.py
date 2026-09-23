@@ -2,6 +2,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from ..models import Claim, VerificationRun
+from ..notification_service import dispatch_after_commit, notify_verification_finished
 
 
 class InvalidVerificationRunTransition(
@@ -121,6 +122,7 @@ def complete_verification_run(
         ]
     )
 
+    dispatch_after_commit(notify_verification_finished, locked)
     return locked
 
 
@@ -151,6 +153,7 @@ def abstain_verification_run(
         ]
     )
 
+    dispatch_after_commit(notify_verification_finished, locked)
     return locked
 
 
@@ -185,6 +188,7 @@ def fail_verification_run(
         ]
     )
 
+    dispatch_after_commit(notify_verification_finished, locked)
     return locked
 
 
