@@ -1,98 +1,210 @@
-import { useState, useRef, useEffect } from "react";
-import { useAuth } from "../hooks/useAuth";
+import { useEffect, useRef, useState } from "react";
+
 import Icons from "../components/Icons";
-import "./SettingsPage.css";
-import { User } from "lucide-react";
+import Button from "../components/ui/Button";
+import Input from "../components/ui/Input";
+import Textarea from "../components/ui/Textarea";
+import { useAuth } from "../hooks/useAuth";
 import { resolveApiEndpoint } from "../utils/api";
+
+import "./SettingsPage.css";
+
+const MAX_AVATAR_SIZE = 2 * 1024 * 1024;
+const ACCEPTED_AVATAR_TYPES = new Set(["image/jpeg", "image/png", "image/gif"]);
+const MAX_SETTINGS_ERROR_LENGTH = 200;
+const UNSAFE_SETTINGS_ERROR_PATTERNS = [
+   /<!doctype|<\/?[a-z][^>]*>/i,
+   /traceback|stack trace|django|internal server error|technical 500 response|request failed|failed to fetch/i,
+   /\b(?:syntax|type|reference|value|key|operational|programming)error\b|unexpected token|status code \d{3}/i,
+   /\bat\s+\S+\s+\([^)]*:\d+:\d+\)/i,
+];
+
+const profileFromUser = (user) => ({
+   username: user?.username || "",
+   bio: user?.bio || "",
+});
+
+const firstError = (value) => {
+   if (Array.isArray(value)) return value[0] || "";
+   return typeof value === "string" ? value : "";
+};
+
+const settingsErrorMessage = (error, fallback) => {
+   const status = Number(error?.status);
+
+   // Never expose server, network, parser, or unknown runtime failures.
+   // Product-safe fallbacks are the authoritative copy for those cases.
+   if (!Number.isInteger(status) || status < 400 || status >= 500) {
+      return fallback;
+   }
+
+   const candidates = [error?.detail, error?.message];
+
+   for (const candidate of candidates) {
+      if (typeof candidate !== "string") continue;
+
+      const message = candidate.replace(/\s+/g, " ").trim();
+      if (!message || message.length > MAX_SETTINGS_ERROR_LENGTH) continue;
+      if (UNSAFE_SETTINGS_ERROR_PATTERNS.some((pattern) => pattern.test(message))) continue;
+
+      return message;
+   }
+
+   return fallback;
+};
+
+const authMethodLabel = (method) => {
+   if (method === "password") return "Password";
+   if (method === "google") return "Google";
+   return method;
+};
 
 function SettingsPage() {
    const { user, authFetch, refreshUser, logout } = useAuth();
-   const [activeTab, setActiveTab] = useState("profile");
-
-   const [formData, setFormData] = useState({
-      username: "",
-      email: "",
-      bio: "",
-      avatar_base64: "",
-   });
-
-   const [previewAvatar, setPreviewAvatar] = useState(null);
+   const [activeSection, setActiveSection] = useState("profile");
+   const [formData, setFormData] = useState(() => profileFromUser(user));
+   const [savedProfile, setSavedProfile] = useState(() => profileFromUser(user));
+   const [avatarBase64, setAvatarBase64] = useState("");
+   const [previewAvatar, setPreviewAvatar] = useState(user?.avatar_url || null);
+   const [avatarFailed, setAvatarFailed] = useState(false);
+   const [fieldErrors, setFieldErrors] = useState({});
+   const [profileMessage, setProfileMessage] = useState({ text: "", type: "" });
    const [isSaving, setIsSaving] = useState(false);
-   const [message, setMessage] = useState({ text: "", type: "" });
    const [isSendingVerification, setIsSendingVerification] = useState(false);
-   const [verificationMessage, setVerificationMessage] = useState({
-      text: "",
-      type: "",
-   });
-   const sendVerificationEndpoint = resolveApiEndpoint("SEND_VERIFICATION");
+   const [isSendingReset, setIsSendingReset] = useState(false);
+   const [verificationMessage, setVerificationMessage] = useState({ text: "", type: "" });
+   const [passwordMessage, setPasswordMessage] = useState({ text: "", type: "" });
    const fileInputRef = useRef(null);
 
    useEffect(() => {
-      if (user) {
-         setFormData({
-            username: user.username || "",
-            email: user.email || "",
-            bio: user.bio || "",
-            avatar_base64: "", // Don't prefill base64 for existing avatar
-         });
-         setPreviewAvatar(user.avatar_url || null);
-      }
+      if (!user) return;
+
+      const nextProfile = profileFromUser(user);
+      setFormData(nextProfile);
+      setSavedProfile(nextProfile);
+      setAvatarBase64("");
+      setPreviewAvatar(user.avatar_url || null);
+      setAvatarFailed(false);
    }, [user]);
 
-   const handleInputChange = (e) => {
-      const { name, value } = e.target;
-      setFormData((prev) => ({ ...prev, [name]: value }));
+   const isDirty =
+      formData.username !== savedProfile.username || formData.bio !== savedProfile.bio || Boolean(avatarBase64);
+
+   const clearFieldFeedback = (fieldName) => {
+      setFieldErrors((current) => ({ ...current, [fieldName]: "" }));
+      setProfileMessage({ text: "", type: "" });
    };
 
-   const handleFileChange = (e) => {
-      const file = e.target.files[0];
-      if (file) {
-         if (file.size > 2 * 1024 * 1024) {
-            setMessage({ text: "File must be less than 2MB", type: "error" });
+   const handleInputChange = (event) => {
+      const { name, value } = event.target;
+      setFormData((current) => ({ ...current, [name]: value }));
+      clearFieldFeedback(name);
+   };
+
+   const handleFileChange = (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      clearFieldFeedback("avatar_base64");
+
+      if (!ACCEPTED_AVATAR_TYPES.has(file.type)) {
+         setFieldErrors((current) => ({
+            ...current,
+            avatar_base64: "Choose a JPG, PNG, or GIF image.",
+         }));
+         event.target.value = "";
+         return;
+      }
+
+      if (file.size > MAX_AVATAR_SIZE) {
+         setFieldErrors((current) => ({
+            ...current,
+            avatar_base64: "Choose an image that is 2 MB or smaller.",
+         }));
+         event.target.value = "";
+         return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+         if (typeof reader.result !== "string") {
+            setFieldErrors((current) => ({
+               ...current,
+               avatar_base64: "We could not read that image. Choose another file.",
+            }));
             return;
          }
 
-         const reader = new FileReader();
-         reader.onloadend = () => {
-            setPreviewAvatar(reader.result);
-            setFormData((prev) => ({ ...prev, avatar_base64: reader.result }));
-         };
-         reader.readAsDataURL(file);
+         setAvatarBase64(reader.result);
+         setPreviewAvatar(reader.result);
+         setAvatarFailed(false);
+      };
+      reader.onerror = () => {
+         setFieldErrors((current) => ({
+            ...current,
+            avatar_base64: "We could not read that image. Choose another file.",
+         }));
+      };
+      reader.readAsDataURL(file);
+   };
+
+   const handleSaveProfile = async (event) => {
+      event.preventDefault();
+      if (isSaving || !isDirty) return;
+
+      const trimmedUsername = formData.username.trim();
+      if (!trimmedUsername) {
+         setFieldErrors((current) => ({ ...current, username: "Enter a username." }));
+         return;
       }
-   };
+      if (trimmedUsername.length > 150) {
+         setFieldErrors((current) => ({
+            ...current,
+            username: "Use 150 characters or fewer.",
+         }));
+         return;
+      }
 
-   const triggerFileInput = () => {
-      fileInputRef.current.click();
-   };
-
-   const handleSaveProfile = async () => {
       setIsSaving(true);
-      setMessage({ text: "", type: "" });
+      setFieldErrors({});
+      setProfileMessage({ text: "", type: "" });
+
+      const payload = {
+         username: formData.username,
+         bio: formData.bio,
+      };
+      if (avatarBase64) payload.avatar_base64 = avatarBase64;
 
       try {
-         await authFetch(`${import.meta.env.VITE_API_BASE_URL}/auth/profile/update/`, {
+         const savedUser = await authFetch(resolveApiEndpoint("PROFILE_UPDATE"), {
             method: "PATCH",
-            headers: {
-               "Content-Type": "application/json",
-            },
-            body: JSON.stringify(formData),
+            headers: { "Content-Type": "application/json" },
+            body: payload,
          });
+         const refreshedUser = await refreshUser?.();
+         const authoritativeUser = refreshedUser || savedUser;
+         const nextProfile = profileFromUser(authoritativeUser);
 
-         setMessage({
-            text: "Profile updated successfully!",
-            type: "success",
-         });
-
-         try {
-            await refreshUser?.();
-         } catch (refreshError) {
-            console.warn("Profile was updated, but refreshing user data failed:", refreshError);
-         }
+         setFormData(nextProfile);
+         setSavedProfile(nextProfile);
+         setAvatarBase64("");
+         setPreviewAvatar(authoritativeUser?.avatar_url || previewAvatar);
+         setAvatarFailed(false);
+         if (fileInputRef.current) fileInputRef.current.value = "";
+         setProfileMessage({ text: "Your profile has been saved.", type: "success" });
       } catch (error) {
-         console.error("Error updating profile:", error);
+         const nextErrors = {
+            username: firstError(error?.username),
+            bio: firstError(error?.bio),
+            avatar_base64: firstError(error?.avatar_base64),
+         };
+         setFieldErrors(nextErrors);
+         const fallbackMessage = Object.values(nextErrors).some(Boolean)
+            ? "Review the highlighted fields and try again."
+            : "We could not save your profile. Try again.";
 
-         setMessage({
-            text: "Failed to update profile. Please try again.",
+         setProfileMessage({
+            text: settingsErrorMessage(error, fallbackMessage),
             type: "error",
          });
       } finally {
@@ -104,32 +216,22 @@ function SettingsPage() {
       if (isSendingVerification || user?.is_email_verified) return;
 
       setIsSendingVerification(true);
-      setVerificationMessage({
-         text: "",
-         type: "",
-      });
+      setVerificationMessage({ text: "", type: "" });
 
       try {
-         const data = await authFetch(sendVerificationEndpoint, {
+         const data = await authFetch(resolveApiEndpoint("SEND_VERIFICATION"), {
             method: "POST",
          });
-
          setVerificationMessage({
             text: data?.detail || "Verification email sent. Check your inbox.",
             type: "success",
          });
       } catch (error) {
-         console.error("Failed to resend verification email:", error);
-
-         const isRateLimited =
-            error?.message?.toLowerCase().includes("throttle") ||
-            error?.message?.toLowerCase().includes("rate") ||
-            error?.message?.includes("429");
-
          setVerificationMessage({
-            text: isRateLimited
-               ? "You've requested several verification emails. Please try again later."
-               : error?.message || "Unable to send the verification email right now.",
+            text:
+               error?.status === 429
+                  ? "You have requested several verification emails. Try again later."
+                  : settingsErrorMessage(error, "We could not send the verification email. Try again."),
             type: "error",
          });
       } finally {
@@ -137,302 +239,370 @@ function SettingsPage() {
       }
    };
 
-   return (
-      <div className="settings-layout">
-         <main className="settings-container">
-            <div className="settings-header">
-               <h1>Settings</h1>
-               <p className="settings-subtitle">Manage your account preferences and extension behaviour.</p>
-            </div>
+   const authMethods = Array.isArray(user?.auth_methods) ? user.auth_methods : [];
+   const isGoogleOnlyAccount = authMethods.includes("google") && !authMethods.includes("password");
+   const passwordAction = isGoogleOnlyAccount
+      ? {
+           title: "Add a password",
+           description:
+              "This account currently signs in with Google. We will email a secure, single-use link that lets you add a TruthLens password.",
+           button: "Send password setup link",
+           loading: "Sending setup link…",
+           success: "Password setup instructions have been sent.",
+           rateError: "You have requested several password setup emails. Try again later.",
+           error: "We could not send password setup instructions. Try again.",
+        }
+      : {
+           title: "Password security",
+           description: "We will email a secure, single-use link to reset your password.",
+           button: "Send password reset link",
+           loading: "Sending reset link…",
+           success: "Password reset instructions have been sent.",
+           rateError: "You have requested several reset emails. Try again later.",
+           error: "We could not send password reset instructions. Try again.",
+        };
 
-            <div className="settings-main-wrapper">
-               <div className="settings-sidebar">
-                  <div className="settings-sidebar-nav">
-                     <button
-                        className={`settings-tab ${activeTab === "profile" ? "active" : ""}`}
-                        onClick={() => setActiveTab("profile")}
-                     >
-                        <Icons name="user" size={18} />
-                        Profile
-                     </button>
-                     <button className="settings-tab" disabled>
-                        <Icons name="lock" size={18} />
-                        Security
-                     </button>
-                     <button className="settings-tab" disabled>
-                        <Icons name="bell" size={18} />
-                        Notifications
-                     </button>
-                  </div>
-               </div>
+   const handlePasswordReset = async () => {
+      if (isSendingReset || !user?.email) return;
+
+      setIsSendingReset(true);
+      setPasswordMessage({ text: "", type: "" });
+
+      try {
+         const data = await authFetch(resolveApiEndpoint("PASSWORD_RESET"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: { email: user.email },
+         });
+         setPasswordMessage({
+            text: isGoogleOnlyAccount ? passwordAction.success : data?.detail || passwordAction.success,
+            type: "success",
+         });
+      } catch (error) {
+         setPasswordMessage({
+            text: error?.status === 429 ? passwordAction.rateError : settingsErrorMessage(error, passwordAction.error),
+            type: "error",
+         });
+      } finally {
+         setIsSendingReset(false);
+      }
+   };
+
+   const avatarFallback = formData.username.trim().charAt(0).toUpperCase() || "?";
+
+   return (
+      <main className="settings-page">
+         <div className="settings-page__container">
+            <header className="settings-page__header">
+               <h1>Settings</h1>
+               <p>Manage your public profile and the security details tied to your account.</p>
+            </header>
+
+            <div className="settings-page__layout">
+               <nav className="settings-nav" aria-label="Settings sections">
+                  <button
+                     type="button"
+                     className={`settings-nav__item ${activeSection === "profile" ? "is-active" : ""}`}
+                     onClick={() => setActiveSection("profile")}
+                     aria-current={activeSection === "profile" ? "page" : undefined}
+                  >
+                     <Icons name="user" size={18} aria-hidden="true" />
+                     <span>Profile</span>
+                  </button>
+                  <button
+                     type="button"
+                     className={`settings-nav__item ${activeSection === "security" ? "is-active" : ""}`}
+                     onClick={() => setActiveSection("security")}
+                     aria-current={activeSection === "security" ? "page" : undefined}
+                  >
+                     <Icons name="lock" size={18} aria-hidden="true" />
+                     <span>Account &amp; security</span>
+                  </button>
+               </nav>
 
                <div className="settings-content">
-                  {activeTab === "profile" ? (
-                     <div className="settings-panel">
-                        <div
-                           className="panel-header"
-                           style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "12px",
-                              marginBottom: "24px",
-                              borderBottom: "1px solid var(--border-color, #e5e7eb)",
-                              paddingBottom: "16px",
-                           }}
-                        >
-                           <div
-                              style={{
-                                 backgroundColor: "#4f46e5",
-                                 borderRadius: "8px",
-                                 padding: "6px",
-                                 display: "flex",
-                                 color: "white",
-                              }}
-                           >
-                              <Icons name="user" size={18} />
-                           </div>
-                           <h2 className="panel-title" style={{ margin: 0 }}>
-                              Profile
-                           </h2>
+                  {activeSection === "profile" ? (
+                     <section aria-labelledby="profile-settings-title">
+                        <div className="settings-section__header">
+                           <h2 id="profile-settings-title">Profile</h2>
+                           <p>Control how you appear to other people across TruthLens.</p>
                         </div>
 
-                        <div className="settings-form-group avatar-upload-row">
-                           <div className="current-avatar">
-                              <div
-                                 className="avatar-placeholder"
-                                 style={{
-                                    backgroundColor: "#e0e7ff",
-                                    color: "#4f46e5",
-                                 }}
-                              >
-                                 {previewAvatar ? (
-                                    <img
-                                       src={previewAvatar}
-                                       alt={`${user?.username}'s avatar`}
-                                       style={{
-                                          width: "100%",
-                                          height: "100%",
-                                          borderRadius: "50%",
-                                          objectFit: "cover",
-                                       }}
-                                    />
+                        <form className="settings-form" onSubmit={handleSaveProfile} noValidate>
+                           <div className="settings-avatar-field">
+                              <div className="settings-avatar" aria-hidden="true">
+                                 {previewAvatar && !avatarFailed ? (
+                                    <img src={previewAvatar} alt="" onError={() => setAvatarFailed(true)} />
                                  ) : (
-                                    user?.username?.[0]?.toUpperCase() || "?"
+                                    <span>{avatarFallback}</span>
                                  )}
                               </div>
+                              <div className="settings-avatar-field__body">
+                                 <label className="settings-field__label" htmlFor="settings-avatar">
+                                    Profile picture
+                                 </label>
+                                 <input
+                                    id="settings-avatar"
+                                    ref={fileInputRef}
+                                    className="settings-avatar-input"
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/gif"
+                                    onChange={handleFileChange}
+                                    aria-describedby={`avatar-hint${fieldErrors.avatar_base64 ? " avatar-error" : ""}`}
+                                    aria-invalid={fieldErrors.avatar_base64 ? "true" : undefined}
+                                 />
+                                 <Button
+                                    type="button"
+                                    variant="secondary"
+                                    density="standard"
+                                    leadingIcon={<Icons name="upload" size={17} />}
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={isSaving}
+                                 >
+                                    Choose profile picture
+                                 </Button>
+                                 <p id="avatar-hint" className="settings-field__hint">
+                                    JPG, PNG, or GIF. Maximum 2 MB.
+                                 </p>
+                                 {fieldErrors.avatar_base64 ? (
+                                    <p id="avatar-error" className="settings-field__error">
+                                       {fieldErrors.avatar_base64}
+                                    </p>
+                                 ) : null}
+                              </div>
                            </div>
-                           <div className="avatar-upload-actions">
-                              <input
-                                 type="file"
-                                 ref={fileInputRef}
-                                 onChange={handleFileChange}
-                                 accept="image/jpeg, image/png, image/gif"
-                                 style={{ display: "none" }}
+
+                           <div className="settings-field">
+                              <label className="settings-field__label" htmlFor="settings-username">
+                                 Username
+                              </label>
+                              <Input
+                                 id="settings-username"
+                                 name="username"
+                                 value={formData.username}
+                                 onChange={handleInputChange}
+                                 autoComplete="username"
+                                 maxLength={150}
+                                 density="comfortable"
+                                 invalid={Boolean(fieldErrors.username)}
+                                 aria-describedby={`username-hint${fieldErrors.username ? " username-error" : ""}`}
+                                 disabled={isSaving}
+                                 required
                               />
-                              <button
-                                 className="upload-btn"
-                                 style={{
-                                    color: "#4f46e5",
-                                    borderColor: "#c7d2fe",
-                                    backgroundColor: "#eef2ff",
-                                 }}
-                                 onClick={triggerFileInput}
-                              >
-                                 Change Avatar
-                              </button>
-                              <p className="upload-hint">JPG, PNG or GIF - max 2MB</p>
+                              <p id="username-hint" className="settings-field__hint">
+                                 This is the name shown on your profile and contributions.
+                              </p>
+                              {fieldErrors.username ? (
+                                 <p id="username-error" className="settings-field__error">
+                                    {fieldErrors.username}
+                                 </p>
+                              ) : null}
                            </div>
-                        </div>
 
-                        <div className="settings-form-group">
-                           <label
-                              className="form-label"
-                              style={{
-                                 textTransform: "uppercase",
-                                 fontSize: "12px",
-                                 letterSpacing: "0.5px",
-                              }}
-                           >
-                              DISPLAY NAME
-                           </label>
-                           <input
-                              type="text"
-                              name="username"
-                              value={formData.username}
-                              onChange={handleInputChange}
-                              className="form-input"
-                              placeholder="@verifyme"
-                           />
-                        </div>
+                           <div className="settings-field">
+                              <label className="settings-field__label" htmlFor="settings-bio">
+                                 Bio
+                              </label>
+                              <Textarea
+                                 id="settings-bio"
+                                 name="bio"
+                                 value={formData.bio}
+                                 onChange={handleInputChange}
+                                 density="comfortable"
+                                 rows={5}
+                                 invalid={Boolean(fieldErrors.bio)}
+                                 aria-describedby={`bio-hint${fieldErrors.bio ? " bio-error" : ""}`}
+                                 disabled={isSaving}
+                              />
+                              <p id="bio-hint" className="settings-field__hint">
+                                 Share a short introduction for people viewing your public profile.
+                              </p>
+                              {fieldErrors.bio ? (
+                                 <p id="bio-error" className="settings-field__error">
+                                    {fieldErrors.bio}
+                                 </p>
+                              ) : null}
+                           </div>
 
-                        <div className="settings-form-group">
-                           <label
-                              className="form-label"
-                              style={{
-                                 textTransform: "uppercase",
-                                 fontSize: "12px",
-                                 letterSpacing: "0.5px",
-                              }}
-                           >
-                              EMAIL ADDRESS
-                           </label>
-                           <input
-                              type="email"
-                              name="email"
-                              value={formData.email}
-                              onChange={handleInputChange}
-                              className="form-input"
-                              placeholder="user@email.com"
-                           />
-                        </div>
+                           <div className="settings-form__footer">
+                              <Button
+                                 type="submit"
+                                 variant="primary"
+                                 density="comfortable"
+                                 loading={isSaving}
+                                 loadingLabel="Saving profile…"
+                                 disabled={!isDirty}
+                              >
+                                 Save profile
+                              </Button>
+                              <p className="settings-form__save-hint">
+                                 {isDirty ? "You have unsaved changes." : "Your profile is up to date."}
+                              </p>
+                           </div>
 
-                        {/* Email Verification */}
-                        <div className="settings-verification-card">
-                           <div className="settings-verification-content">
+                           {profileMessage.text ? (
                               <div
-                                 className={`settings-verification-icon ${
-                                    user?.is_email_verified
-                                       ? "settings-verification-icon--verified"
-                                       : "settings-verification-icon--pending"
-                                 }`}
+                                 className={`settings-feedback settings-feedback--${profileMessage.type}`}
+                                 role={profileMessage.type === "error" ? "alert" : "status"}
+                                 aria-live={profileMessage.type === "error" ? "assertive" : "polite"}
                               >
                                  <Icons
-                                    name={user?.is_email_verified ? "check-circle" : "mail"}
-                                    size={20}
+                                    name={profileMessage.type === "error" ? "alert-circle" : "check-circle"}
+                                    size={18}
                                     aria-hidden="true"
                                  />
+                                 <span>{profileMessage.text}</span>
                               </div>
+                           ) : null}
+                        </form>
+                     </section>
+                  ) : (
+                     <section aria-labelledby="security-settings-title">
+                        <div className="settings-section__header">
+                           <h2 id="security-settings-title">Account &amp; security</h2>
+                           <p>Review your sign-in details and recover access when you need to.</p>
+                        </div>
 
-                              <div className="settings-verification-copy">
-                                 <div className="settings-verification-heading">
-                                    <strong>Email verification</strong>
-
+                        <div className="settings-account-list">
+                           <section className="settings-account-row" aria-labelledby="account-email-title">
+                              <div className="settings-account-row__icon" aria-hidden="true">
+                                 <Icons name="mail" size={19} />
+                              </div>
+                              <div className="settings-account-row__content">
+                                 <div className="settings-account-row__heading">
+                                    <h3 id="account-email-title">Email address</h3>
                                     <span
-                                       className={`settings-verification-badge ${
-                                          user?.is_email_verified
-                                             ? "settings-verification-badge--verified"
-                                             : "settings-verification-badge--pending"
+                                       className={`settings-status settings-status--${
+                                          user?.is_email_verified ? "verified" : "pending"
                                        }`}
                                     >
+                                       <Icons
+                                          name={user?.is_email_verified ? "check-circle" : "alert-circle"}
+                                          size={14}
+                                          aria-hidden="true"
+                                       />
                                        {user?.is_email_verified ? "Verified" : "Not verified"}
                                     </span>
                                  </div>
-
-                                 <p>
-                                    {user?.is_email_verified
-                                       ? "Your email address has been verified."
-                                       : "Verify your email address to confirm account ownership and keep account recovery reliable."}
+                                 <p className="settings-account-row__value">{user?.email || "No email on file"}</p>
+                                 <p className="settings-account-row__description">
+                                    This email is tied to your TruthLens account and is used for verification and
+                                    account recovery.
                                  </p>
-
-                                 {!user?.is_email_verified && (
-                                    <button
-                                       type="button"
-                                       className="settings-verification-btn"
-                                       onClick={handleResendVerification}
-                                       disabled={isSendingVerification}
-                                       aria-busy={isSendingVerification}
-                                    >
-                                       {isSendingVerification ? "Sending..." : "Resend verification email"}
-                                    </button>
-                                 )}
-
-                                 {verificationMessage.text && (
+                                 {!user?.is_email_verified ? (
+                                    <div className="settings-account-row__actions">
+                                       <Button
+                                          type="button"
+                                          variant="secondary"
+                                          density="standard"
+                                          loading={isSendingVerification}
+                                          loadingLabel="Sending verification…"
+                                          onClick={handleResendVerification}
+                                          disabled={!user?.email}
+                                       >
+                                          Resend verification email
+                                       </Button>
+                                    </div>
+                                 ) : null}
+                                 {verificationMessage.text ? (
                                     <p
-                                       className={`settings-verification-message settings-verification-message--${verificationMessage.type}`}
+                                       className={`settings-inline-message settings-inline-message--${verificationMessage.type}`}
                                        role={verificationMessage.type === "error" ? "alert" : "status"}
                                     >
                                        {verificationMessage.text}
                                     </p>
+                                 ) : null}
+                              </div>
+                           </section>
+
+                           <section className="settings-account-row" aria-labelledby="sign-in-methods-title">
+                              <div className="settings-account-row__icon" aria-hidden="true">
+                                 <Icons name="shield-check" size={19} />
+                              </div>
+                              <div className="settings-account-row__content">
+                                 <h3 id="sign-in-methods-title">Sign-in methods</h3>
+                                 {authMethods.length ? (
+                                    <ul className="settings-auth-methods">
+                                       {authMethods.map((method) => (
+                                          <li key={method}>
+                                             <Icons
+                                                name={method === "password" ? "lock" : "user-check"}
+                                                size={16}
+                                                aria-hidden="true"
+                                             />
+                                             <span>{authMethodLabel(method)}</span>
+                                          </li>
+                                       ))}
+                                    </ul>
+                                 ) : (
+                                    <p className="settings-account-row__description">
+                                       Sign-in method information is unavailable.
+                                    </p>
                                  )}
                               </div>
-                           </div>
-                        </div>
+                           </section>
 
-                        <div className="settings-form-group">
-                           <label
-                              className="form-label"
-                              style={{
-                                 textTransform: "uppercase",
-                                 fontSize: "12px",
-                                 letterSpacing: "0.5px",
-                              }}
-                           >
-                              BIO
-                           </label>
-                           <input
-                              type="text"
-                              name="bio"
-                              value={formData.bio}
-                              onChange={handleInputChange}
-                              className="form-input"
-                              placeholder="Passionate about media literacy..."
-                           />
-                        </div>
-
-                        <div
-                           className="settings-actions"
-                           style={{
-                              marginTop: "0",
-                              paddingTop: "0",
-                              borderTop: "none",
-                              justifyContent: "flex-start",
-                              flexDirection: "column",
-                              alignItems: "flex-start",
-                              gap: "8px",
-                           }}
-                        >
-                           <button className="save-btn" onClick={handleSaveProfile} disabled={isSaving}>
-                              {isSaving ? "Saving..." : "Save Changes"}
-                           </button>
-                           {message.text && (
-                              <div
-                                 style={{
-                                    color: message.type === "error" ? "#ef4444" : "#10b981",
-                                    fontSize: "14px",
-                                    marginTop: "8px",
-                                 }}
-                              >
-                                 {message.text}
+                           <section className="settings-account-row" aria-labelledby="password-title">
+                              <div className="settings-account-row__icon" aria-hidden="true">
+                                 <Icons name="lock" size={19} />
                               </div>
-                           )}
-                        </div>
-                     </div>
-                  ) : (
-                     <div className="settings-panel">
-                        <h2 className="panel-title">Account Details</h2>
-                        <p className="panel-desc">Manage your email and password.</p>
+                              <div className="settings-account-row__content">
+                                 <h3 id="password-title">{passwordAction.title}</h3>
+                                 <p className="settings-account-row__description">{passwordAction.description}</p>
+                                 <div className="settings-account-row__actions">
+                                    <Button
+                                       type="button"
+                                       variant="secondary"
+                                       density="standard"
+                                       loading={isSendingReset}
+                                       loadingLabel={passwordAction.loading}
+                                       onClick={handlePasswordReset}
+                                       disabled={!user?.email}
+                                    >
+                                       {passwordAction.button}
+                                    </Button>
+                                 </div>
+                                 {passwordMessage.text ? (
+                                    <p
+                                       className={`settings-inline-message settings-inline-message--${passwordMessage.type}`}
+                                       role={passwordMessage.type === "error" ? "alert" : "status"}
+                                    >
+                                       {passwordMessage.text}
+                                    </p>
+                                 ) : null}
+                              </div>
+                           </section>
 
-                        <div className="settings-form-group">
-                           <button className="settings-btn" style={{ width: "100%", marginBottom: "12px" }}>
-                              Change Email
-                           </button>
-                           <button className="settings-btn" style={{ width: "100%" }}>
-                              Change Password
-                           </button>
+                           <section className="settings-account-row" aria-labelledby="session-title">
+                              <div className="settings-account-row__icon" aria-hidden="true">
+                                 <Icons name="logout" size={19} />
+                              </div>
+                              <div className="settings-account-row__content">
+                                 <h3 id="session-title">Current session</h3>
+                                 <p className="settings-account-row__description">
+                                    You&apos;re signed in on this browser. Log out when you&apos;re finished, especially
+                                    on a shared device.
+                                 </p>
+                                 <div className="settings-account-row__actions">
+                                    <Button
+                                       type="button"
+                                       variant="secondary"
+                                       density="standard"
+                                       leadingIcon={<Icons name="logout" size={17} />}
+                                       onClick={logout}
+                                    >
+                                       Log out of TruthLens
+                                    </Button>
+                                 </div>
+                              </div>
+                           </section>
                         </div>
-                     </div>
-                  )}
-
-                  {activeTab !== "profile" && (
-                     <div className="settings-panel danger-zone">
-                        <h2 className="panel-title danger-title">Danger Zone</h2>
-                        <button className="settings-btn danger" style={{ width: "100%", marginBottom: "12px" }}>
-                           Delete Account
-                        </button>
-                        <button
-                           className="logout-btn"
-                           onClick={logout}
-                           style={{ width: "100%", justifyContent: "center" }}
-                        >
-                           <Icons name="logout" size={16} />
-                           Log out of TruthLens
-                        </button>
-                     </div>
+                     </section>
                   )}
                </div>
             </div>
-         </main>
-      </div>
+         </div>
+      </main>
    );
 }
 
