@@ -334,7 +334,7 @@ class VerificationRunURLRuntimeTests(TestCase):
             VerificationRun.Status.COMPLETED,
         )
 
-        self.create_run.assert_called_once_with(self.claim)
+        self.create_run.assert_called_once_with(self.claim, triggered_by=None)
         self.start_run.assert_called_once()
 
         self.assertEqual(

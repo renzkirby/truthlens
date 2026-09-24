@@ -255,7 +255,9 @@ class SnippetOCRReliabilityTests(TestCase):
 
         self._execute()
 
-        self.core_pipeline.assert_called_once_with("Extracted text", self.claim.pk)
+        self.core_pipeline.assert_called_once_with(
+            "Extracted text", self.claim.pk, triggered_by_id=None,
+        )
         self.assertTrue(Claim.objects.filter(pk=self.claim.pk).exists())
         self.save_claim.assert_not_called()
         self._assert_outcome("completed")

@@ -8,6 +8,7 @@ from django.db import transaction
 from django.utils.dateparse import parse_datetime
 from datetime import timezone as datetime_timezone
 from .models import (
+    Notification,
     Claim,
     Thread,
     UserProfile,
@@ -54,6 +55,42 @@ from .adjudication_provenance import (
     get_adjudication_decision_provenance,
     get_claim_adjudication_provenance,
 )
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    category = serializers.SerializerMethodField()
+    priority = serializers.SerializerMethodField()
+    destination = serializers.SerializerMethodField()
+    actor = serializers.SerializerMethodField()
+    organization = serializers.SerializerMethodField()
+    is_read = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = Notification
+        fields = (
+            "id", "notification_type", "category", "priority", "title", "message",
+            "actor", "organization", "target_type", "target_id", "destination",
+            "is_read", "read_at", "created_at",
+        )
+        read_only_fields = fields
+
+    def get_category(self, obj):
+        from .notification_service import NOTIFICATION_METADATA
+        return NOTIFICATION_METADATA[obj.notification_type][0]
+
+    def get_priority(self, obj):
+        from .notification_service import NOTIFICATION_METADATA
+        return NOTIFICATION_METADATA[obj.notification_type][1]
+
+    def get_destination(self, obj):
+        from .notification_service import notification_destination
+        return notification_destination(obj)
+
+    def get_actor(self, obj):
+        return {"id": obj.actor_id, "username": obj.actor.username} if obj.actor_id else None
+
+    def get_organization(self, obj):
+        return {"id": str(obj.organization_id), "name": obj.organization.name} if obj.organization_id else None
 
 
 class PublicIdentityProfileSerializer(serializers.ModelSerializer):

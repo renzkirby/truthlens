@@ -710,7 +710,7 @@ def _assess_and_persist_reasoning_evidence(
 # IMAGE PIPELINE
 @shared_task
 def snippet_fact_check_process(
-    image_hash, claim_id, check_deepfake=False, base64_string=None
+    image_hash, claim_id, check_deepfake=False, base64_string=None, triggered_by_id=None
 ):
     task_started_at = time.perf_counter()
     outcome = "completed"
@@ -840,25 +840,31 @@ def snippet_fact_check_process(
     logger.info("Image processed successfully. Passing to Core Text Pipeline...")
     # 3. Hand off the text to the fact-checker!
     core_pipeline_started_at = time.perf_counter()
-    execute_core_text_pipeline(ocr_result, claim_id)
+    execute_core_text_pipeline(ocr_result, claim_id, triggered_by_id=triggered_by_id)
     _log_stage(claim_id, "execute_core_text_pipeline", core_pipeline_started_at)
     _log_stage(claim_id, "snippet_task_total", task_started_at, outcome=outcome)
 
 
 # TEXT PIPELINE
 @shared_task
-def text_fact_check_process(raw_text, claim_id):
+def text_fact_check_process(raw_text, claim_id, triggered_by_id=None):
     task_started_at = time.perf_counter()
     logger.info("Received raw text. Passing to Core Text Pipeline...")
 
-    execute_core_text_pipeline(raw_text, claim_id)
+    execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=triggered_by_id)
     _log_stage(
         claim_id, "text_task_total", task_started_at, text_length=len(raw_text or "")
     )
 
 
+def _resolve_triggered_by(triggered_by_id):
+    if triggered_by_id is None:
+        return None
+    return User.objects.filter(pk=triggered_by_id).first()
+
+
 @llm_provider_scope()
-def execute_core_text_pipeline(raw_text, claim_id):
+def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
     """The shared brain for both Snippets and pure Text claims."""
 
     # --- 1. SECOND CHANCE TEXT DEDUPLICATION ---
@@ -869,7 +875,9 @@ def execute_core_text_pipeline(raw_text, claim_id):
     run_claim = Claim.objects.filter(id=claim_id).first()
     run = None
     if run_claim is not None:
-        run = create_verification_run(run_claim)
+        run = create_verification_run(
+            run_claim, triggered_by=_resolve_triggered_by(triggered_by_id)
+        )
         run = start_verification_run(run)
 
     selected_verdict = None
@@ -1453,7 +1461,7 @@ def execute_core_text_pipeline(raw_text, claim_id):
 # URL PIPELINE
 @shared_task
 @llm_provider_scope()
-def url_fact_check_process(url, claim_id):
+def url_fact_check_process(url, claim_id, triggered_by_id=None):
     pipeline_started_at = time.perf_counter()
     outcome = "completed"
 
@@ -1499,7 +1507,9 @@ def url_fact_check_process(url, claim_id):
     run_claim = Claim.objects.filter(id=claim_id).first()
     run = None
     if run_claim is not None:
-        run = create_verification_run(run_claim)
+        run = create_verification_run(
+            run_claim, triggered_by=_resolve_triggered_by(triggered_by_id)
+        )
         run = start_verification_run(run)
 
     selected_verdict = None

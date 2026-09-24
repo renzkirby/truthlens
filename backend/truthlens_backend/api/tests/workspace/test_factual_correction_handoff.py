@@ -163,14 +163,13 @@ class FactualCorrectionHandoffTests(FactualCorrectionHandoffFixtures, TestCase):
         )
 
         with patch("api.publishing_service._queue_fact_check_index") as queue_index:
-            with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            with self.captureOnCommitCallbacks(execute=True):
                 result = self.handoff(context)
 
         decision = result["decision"]
         decision_snapshot = result["decision_snapshot"]
         successor = result["fact_check"]
         seal = result["publication_snapshot"]
-        self.assertEqual(len(callbacks), 1)
         queue_index.assert_called_once_with(successor.id)
         predecessor.refresh_from_db()
         predecessor_decision.refresh_from_db()

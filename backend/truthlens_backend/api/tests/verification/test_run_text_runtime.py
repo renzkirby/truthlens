@@ -245,7 +245,7 @@ class VerificationRunTextRuntimeTests(TestCase):
             VerificationRun._meta.get_field("pipeline_version").get_default(),
         )
         self.assertIsNone(run.triggered_by)
-        self.create_run.assert_called_once_with(self.claim)
+        self.create_run.assert_called_once_with(self.claim, triggered_by=None)
         self.start_run.assert_called_once()
         self._assert_terminal(run, VerificationRun.Status.COMPLETED)
 

@@ -74,6 +74,7 @@ from .tasks import (
     recompute_user_trust_score_task,
 )
 from .models import (
+    Notification,
     Claim,
     ClaimCheckHistory,
     Thread,
@@ -107,6 +108,7 @@ from .organization_service import (
     PartnerCapability,
     has_capability,
 )
+from .notification_service import dispatch_after_commit, notify_thread_commented
 from .verification_metrics_query_service import (
     VerificationMetricsAuthorizationError,
     VerificationMetricsCompositionError,
@@ -394,6 +396,52 @@ class GoogleLogin(SocialLoginView):
 
 
 # ── Pagination Configuration ──
+class NotificationCursorPagination(CursorPagination):
+    page_size = 20
+    ordering = ("-created_at", "-id")
+    template = None
+
+
+class NotificationListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .serializers import NotificationSerializer
+        inbox_filter = request.query_params.get("filter", "all")
+        if inbox_filter not in ("all", "unread"):
+            raise ValidationError({"filter": "Use all or unread."})
+        rows = Notification.objects.filter(recipient=request.user).select_related("actor", "organization")
+        if inbox_filter == "unread":
+            rows = rows.filter(read_at__isnull=True)
+        paginator = NotificationCursorPagination()
+        page = paginator.paginate_queryset(rows, request, view=self)
+        return paginator.get_paginated_response(NotificationSerializer(page, many=True).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def notification_unread_count(request):
+    return Response({"unread_count": Notification.objects.filter(recipient=request.user, read_at__isnull=True).count()})
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def notification_mark_read(request, notification_id):
+    from .serializers import NotificationSerializer
+    rows = Notification.objects.filter(recipient=request.user, pk=notification_id)
+    notification = get_object_or_404(rows)
+    rows.filter(read_at__isnull=True).update(read_at=timezone.now())
+    notification.refresh_from_db()
+    return Response(NotificationSerializer(notification).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def notification_mark_all_read(request):
+    count = Notification.objects.filter(recipient=request.user, read_at__isnull=True).update(read_at=timezone.now())
+    return Response({"updated_count": count})
+
+
 class StandardCursorPagination(CursorPagination):
     """
     Cursor-based pagination for efficient infinite scrolling.
@@ -529,7 +577,8 @@ def receive_snippet(request):
     claim_id = claim.id  # Get the ID of the saved claim
 
     snippet_fact_check_process.delay(
-        image_hash, str(claim_id), check_deepfake, base64_string
+        image_hash, str(claim_id), check_deepfake, base64_string,
+        triggered_by_id=authenticated_user.pk if authenticated_user else None,
     )
 
     return JsonResponse(
@@ -645,7 +694,10 @@ def verify_url(request):
     _record_authenticated_claim_check(authenticated_user, claim)
     claim_id = claim.id
 
-    url_fact_check_process.delay(safe_url, claim_id)
+    url_fact_check_process.delay(
+        safe_url, claim_id,
+        triggered_by_id=authenticated_user.pk if authenticated_user else None,
+    )
 
     return JsonResponse(
         {"claim_id": str(claim_id), "url_safety": url_safety, "cached": False},
@@ -2989,10 +3041,11 @@ class ThreadCommentViewSet(viewsets.ModelViewSet):
             thread = Thread.objects.get(id=thread_id)
         except Thread.DoesNotExist:
             raise NotFound("Thread not found.")
-        serializer.save(
+        comment = serializer.save(
             commenter=self.request.user,
             thread=thread,
         )
+        dispatch_after_commit(notify_thread_commented, comment)
 
 
 class ThreadFlagViewSet(viewsets.ModelViewSet):
@@ -3183,7 +3236,10 @@ def verify_text(request):
     claim_id = claim.id
 
     # Send the raw text to the Celery worker
-    text_fact_check_process.delay(text_content, claim_id)
+    text_fact_check_process.delay(
+        text_content, claim_id,
+        triggered_by_id=authenticated_user.pk if authenticated_user else None,
+    )
 
     return JsonResponse(
         {"claim_id": str(claim_id), "cached": False},
@@ -3812,7 +3868,10 @@ def verify_file(request):
         claim_id = claim.id
 
         # Send the extracted text to your existing Celery worker
-        text_fact_check_process.delay(extracted_text, claim_id)
+        text_fact_check_process.delay(
+            extracted_text, claim_id,
+            triggered_by_id=authenticated_user.pk if authenticated_user else None,
+        )
 
         return JsonResponse(
             {"claim_id": str(claim_id), "cached": False},

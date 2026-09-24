@@ -398,7 +398,9 @@ class FileCacheKnowledgeReuseTests(KnowledgeReuseMetricsFixture):
         self.assertFalse(payload["cached"])
         claim = Claim.objects.get(pk=payload["claim_id"])
         self.assertEqual(claim.claim_type, Claim.ClaimType.FILE)
-        task.assert_called_once_with("Published source proposition", claim.pk)
+        task.assert_called_once_with(
+            "Published source proposition", claim.pk, triggered_by_id=self.actor.pk,
+        )
         match.assert_not_called()
         self.assertFalse(KnowledgeReuseEvent.objects.exists())
 

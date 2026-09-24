@@ -44,6 +44,26 @@ export function resolveApiEndpoint(endpoint, ...params) {
    return buildApiUrl(path);
 }
 
+export const getNotifications = (authFetch, { filter = "all", cursor = null } = {}) => {
+   const url = new URL(resolveApiEndpoint("NOTIFICATIONS"));
+   url.searchParams.set("filter", filter);
+   if (cursor) {
+      url.searchParams.set("cursor", cursor);
+   }
+   return authFetch(url.toString(), { method: "GET" });
+};
+
+export const getNotificationUnreadCount = (authFetch) =>
+   authFetch(resolveApiEndpoint("NOTIFICATION_UNREAD_COUNT"), { method: "GET" });
+
+export const markNotificationRead = (authFetch, notificationId) =>
+   authFetch(resolveApiEndpoint("NOTIFICATION_MARK_READ", notificationId), {
+      method: "PATCH",
+   });
+
+export const markAllNotificationsRead = (authFetch) =>
+   authFetch(resolveApiEndpoint("NOTIFICATION_MARK_ALL_READ"), { method: "POST" });
+
 // Fetch Personal User Hub Data
 export const getUserHubData = async () => {
    const response = await axios.get(`${API_BASE_URL}/dashboards/hub/`, {

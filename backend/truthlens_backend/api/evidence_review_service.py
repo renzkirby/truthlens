@@ -47,6 +47,7 @@ from .organization_service import (
     has_case_capability,
     has_capability,
 )
+from .notification_service import dispatch_after_commit, notify_evidence_reviewed
 
 logger = logging.getLogger(__name__)
 
@@ -765,6 +766,15 @@ def review_correction_evidence(
                 "evidence_record": evidence_record,
             },
         )
+        if previous_status != evidence_status:
+            dispatch_after_commit(
+                notify_evidence_reviewed,
+                locked_evidence,
+                actor_id=actor.pk,
+                event_id=review_event.pk,
+                previous_status=previous_status,
+                new_status=evidence_status,
+            )
         accountability_action = (
             AccountabilityEvent.ActionType.EVIDENCE_VERIFIED
             if evidence_status == EvidenceSubmission.EvidenceStatus.VERIFIED
@@ -1046,7 +1056,7 @@ def review_evidence_submission(
             else (ModerationEvent.EventType.EVIDENCE_REJECTED)
         )
 
-        ModerationEvent.objects.create(
+        review_event = ModerationEvent.objects.create(
             case=case,
             actor=actor,
             event_type=event_type,
@@ -1059,6 +1069,15 @@ def review_evidence_submission(
                 "new_evidence_status": evidence_status,
             },
         )
+        if previous_status != evidence_status:
+            dispatch_after_commit(
+                notify_evidence_reviewed,
+                locked_evidence,
+                actor_id=actor.pk,
+                event_id=review_event.pk,
+                previous_status=previous_status,
+                new_status=evidence_status,
+            )
 
         accountability_action = (
             AccountabilityEvent.ActionType.EVIDENCE_VERIFIED

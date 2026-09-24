@@ -32,6 +32,52 @@
     min-width: 0;
 }
 
+.tl-app-nav__notifications {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: var(--tl-control-height-comfortable);
+    height: var(--tl-control-height-comfortable);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: var(--tl-radius-md);
+    color: rgba(255, 255, 255, 0.76);
+    background: rgba(255, 255, 255, 0.06);
+    text-decoration: none;
+    transition:
+        color var(--tl-duration-fast) ease,
+        background-color var(--tl-duration-fast) ease,
+        border-color var(--tl-duration-fast) ease;
+}
+
+.tl-app-nav__notifications:hover,
+.tl-app-nav__notifications.active {
+    color: var(--tl-color-text-inverse);
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.34);
+}
+
+.tl-app-nav__notification-badge {
+    position: absolute;
+    top: -5px;
+    right: -6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    border: 2px solid var(--tl-color-brand-dark);
+    border-radius: var(--tl-radius-pill);
+    color: var(--tl-color-text-inverse);
+    background: var(--tl-color-fake-border);
+    font-size: 0.625rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
 .tl-app-nav__brand {
     display: flex;
     align-items: center;
@@ -201,6 +247,7 @@
 
 .tl-app-nav__brand:focus-visible,
 .tl-app-nav__primary-link:focus-visible,
+.tl-app-nav__notifications:focus-visible,
 .tl-app-nav__account-trigger:focus-visible {
     outline: var(--tl-focus-width) solid var(--tl-color-text-inverse);
     outline-offset: var(--tl-focus-offset);
@@ -406,6 +453,15 @@
 
     .tl-app-nav__start {
         gap: 0;
+    }
+
+    .tl-app-nav__actions {
+        gap: var(--tl-space-2);
+    }
+
+    .tl-app-nav__notifications {
+        width: var(--tl-control-height-standard);
+        height: var(--tl-control-height-standard);
     }
 
     /* ── Show bottom tab bar ── */
