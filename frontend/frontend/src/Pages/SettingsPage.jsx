@@ -11,6 +11,13 @@ import "./SettingsPage.css";
 
 const MAX_AVATAR_SIZE = 2 * 1024 * 1024;
 const ACCEPTED_AVATAR_TYPES = new Set(["image/jpeg", "image/png", "image/gif"]);
+const MAX_SETTINGS_ERROR_LENGTH = 200;
+const UNSAFE_SETTINGS_ERROR_PATTERNS = [
+   /<!doctype|<\/?[a-z][^>]*>/i,
+   /traceback|stack trace|django|internal server error|technical 500 response|request failed|failed to fetch/i,
+   /\b(?:syntax|type|reference|value|key|operational|programming)error\b|unexpected token|status code \d{3}/i,
+   /\bat\s+\S+\s+\([^)]*:\d+:\d+\)/i,
+];
 
 const profileFromUser = (user) => ({
    username: user?.username || "",
@@ -20,6 +27,30 @@ const profileFromUser = (user) => ({
 const firstError = (value) => {
    if (Array.isArray(value)) return value[0] || "";
    return typeof value === "string" ? value : "";
+};
+
+const settingsErrorMessage = (error, fallback) => {
+   const status = Number(error?.status);
+
+   // Never expose server, network, parser, or unknown runtime failures.
+   // Product-safe fallbacks are the authoritative copy for those cases.
+   if (!Number.isInteger(status) || status < 400 || status >= 500) {
+      return fallback;
+   }
+
+   const candidates = [error?.detail, error?.message];
+
+   for (const candidate of candidates) {
+      if (typeof candidate !== "string") continue;
+
+      const message = candidate.replace(/\s+/g, " ").trim();
+      if (!message || message.length > MAX_SETTINGS_ERROR_LENGTH) continue;
+      if (UNSAFE_SETTINGS_ERROR_PATTERNS.some((pattern) => pattern.test(message))) continue;
+
+      return message;
+   }
+
+   return fallback;
 };
 
 const authMethodLabel = (method) => {
@@ -57,9 +88,7 @@ function SettingsPage() {
    }, [user]);
 
    const isDirty =
-      formData.username !== savedProfile.username ||
-      formData.bio !== savedProfile.bio ||
-      Boolean(avatarBase64);
+      formData.username !== savedProfile.username || formData.bio !== savedProfile.bio || Boolean(avatarBase64);
 
    const clearFieldFeedback = (fieldName) => {
       setFieldErrors((current) => ({ ...current, [fieldName]: "" }));
@@ -170,12 +199,12 @@ function SettingsPage() {
             avatar_base64: firstError(error?.avatar_base64),
          };
          setFieldErrors(nextErrors);
+         const fallbackMessage = Object.values(nextErrors).some(Boolean)
+            ? "Review the highlighted fields and try again."
+            : "We could not save your profile. Try again.";
+
          setProfileMessage({
-            text:
-               error?.detail ||
-               (Object.values(nextErrors).some(Boolean)
-                  ? "Review the highlighted fields and try again."
-                  : "We could not save your profile. Try again."),
+            text: settingsErrorMessage(error, fallbackMessage),
             type: "error",
          });
       } finally {
@@ -202,7 +231,7 @@ function SettingsPage() {
             text:
                error?.status === 429
                   ? "You have requested several verification emails. Try again later."
-                  : error?.message || "We could not send the verification email. Try again.",
+                  : settingsErrorMessage(error, "We could not send the verification email. Try again."),
             type: "error",
          });
       } finally {
@@ -211,8 +240,7 @@ function SettingsPage() {
    };
 
    const authMethods = Array.isArray(user?.auth_methods) ? user.auth_methods : [];
-   const isGoogleOnlyAccount =
-      authMethods.includes("google") && !authMethods.includes("password");
+   const isGoogleOnlyAccount = authMethods.includes("google") && !authMethods.includes("password");
    const passwordAction = isGoogleOnlyAccount
       ? {
            title: "Add a password",
@@ -247,17 +275,12 @@ function SettingsPage() {
             body: { email: user.email },
          });
          setPasswordMessage({
-            text: isGoogleOnlyAccount
-               ? passwordAction.success
-               : data?.detail || passwordAction.success,
+            text: isGoogleOnlyAccount ? passwordAction.success : data?.detail || passwordAction.success,
             type: "success",
          });
       } catch (error) {
          setPasswordMessage({
-            text:
-               error?.status === 429
-                  ? passwordAction.rateError
-                  : error?.message || passwordAction.error,
+            text: error?.status === 429 ? passwordAction.rateError : settingsErrorMessage(error, passwordAction.error),
             type: "error",
          });
       } finally {
@@ -309,11 +332,7 @@ function SettingsPage() {
                            <div className="settings-avatar-field">
                               <div className="settings-avatar" aria-hidden="true">
                                  {previewAvatar && !avatarFailed ? (
-                                    <img
-                                       src={previewAvatar}
-                                       alt=""
-                                       onError={() => setAvatarFailed(true)}
-                                    />
+                                    <img src={previewAvatar} alt="" onError={() => setAvatarFailed(true)} />
                                  ) : (
                                     <span>{avatarFallback}</span>
                                  )}
@@ -329,9 +348,7 @@ function SettingsPage() {
                                     type="file"
                                     accept="image/jpeg,image/png,image/gif"
                                     onChange={handleFileChange}
-                                    aria-describedby={`avatar-hint${
-                                       fieldErrors.avatar_base64 ? " avatar-error" : ""
-                                    }`}
+                                    aria-describedby={`avatar-hint${fieldErrors.avatar_base64 ? " avatar-error" : ""}`}
                                     aria-invalid={fieldErrors.avatar_base64 ? "true" : undefined}
                                  />
                                  <Button
@@ -469,7 +486,8 @@ function SettingsPage() {
                                  </div>
                                  <p className="settings-account-row__value">{user?.email || "No email on file"}</p>
                                  <p className="settings-account-row__description">
-                                    Email changes are not available in this settings checkpoint.
+                                    This email is tied to your TruthLens account and is used for verification and
+                                    account recovery.
                                  </p>
                                  {!user?.is_email_verified ? (
                                     <div className="settings-account-row__actions">
@@ -530,9 +548,7 @@ function SettingsPage() {
                               </div>
                               <div className="settings-account-row__content">
                                  <h3 id="password-title">{passwordAction.title}</h3>
-                                 <p className="settings-account-row__description">
-                                    {passwordAction.description}
-                                 </p>
+                                 <p className="settings-account-row__description">{passwordAction.description}</p>
                                  <div className="settings-account-row__actions">
                                     <Button
                                        type="button"
@@ -564,7 +580,8 @@ function SettingsPage() {
                               <div className="settings-account-row__content">
                                  <h3 id="session-title">Current session</h3>
                                  <p className="settings-account-row__description">
-                                    Sign out of TruthLens on this browser. Other session management is not available yet.
+                                    You&apos;re signed in on this browser. Log out when you&apos;re finished, especially
+                                    on a shared device.
                                  </p>
                                  <div className="settings-account-row__actions">
                                     <Button
