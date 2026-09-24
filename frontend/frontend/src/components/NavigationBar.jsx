@@ -6,6 +6,7 @@ import Icons from "./Icons.jsx";
 import "./NavigationBar.css";
 import Button from "./ui/Button.jsx";
 import { useAuth } from "../hooks/useAuth";
+import { useNotificationInbox } from "../hooks/useNotificationInbox";
 import { canAccessWorkspace } from "../utils/workspace";
 
 const isModeratorRole = (role) => role === "MOD" || role === "MODERATOR";
@@ -13,6 +14,7 @@ const ACCOUNT_PANEL_ID = "tl-app-nav-account-panel";
 
 function NavigationBar() {
    const { user, logout } = useAuth();
+   const { unreadCount } = useNotificationInbox();
    const [isOpen, setIsOpen] = useState(false);
    const dropdownRef = useRef(null);
    const accountTriggerRef = useRef(null);
@@ -67,6 +69,9 @@ function NavigationBar() {
    const isDashboardRoute = location.pathname === "/dashboard";
    const isWorkspaceRoute = location.pathname.startsWith("/workspace") || location.pathname === "/moderation";
    const isProfileRoute = location.pathname === "/profile";
+   const isNotificationsRoute = location.pathname === "/notifications";
+   const notificationLabel =
+      unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications";
 
    return (
       <>
@@ -117,6 +122,19 @@ function NavigationBar() {
 
             <div className="tl-app-nav__actions">
                <GlobalSearch key={`${location.pathname}${location.search}`} />
+               <Link
+                  to="/notifications"
+                  className={`tl-app-nav__notifications ${isNotificationsRoute ? "active" : ""}`}
+                  aria-label={notificationLabel}
+                  aria-current={isNotificationsRoute ? "page" : undefined}
+               >
+                  <Icons name="bell" size={20} />
+                  {unreadCount > 0 && (
+                     <span className="tl-app-nav__notification-badge" aria-hidden="true">
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                     </span>
+                  )}
+               </Link>
                <div className="tl-app-nav__account" ref={dropdownRef}>
                   <button
                      ref={accountTriggerRef}

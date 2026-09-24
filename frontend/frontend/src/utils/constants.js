@@ -109,6 +109,13 @@ export const API_ENDPOINTS = {
    SEND_VERIFICATION: "auth/send-verification/",
    USER_SEARCH: "users/search/",
 
+   // Persistent Notifications
+   NOTIFICATIONS: "notifications/",
+   NOTIFICATION_UNREAD_COUNT: "notifications/unread-count/",
+   NOTIFICATION_MARK_READ: (notificationId) =>
+      `notifications/${encodeURIComponent(notificationId)}/read/`,
+   NOTIFICATION_MARK_ALL_READ: "notifications/mark-all-read/",
+
    // Claims & Threads
    CLAIMS: "claims/",
    THREADS: "threads/",
