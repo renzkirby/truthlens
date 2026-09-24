@@ -421,7 +421,9 @@ body {
   color: var(--text-main);
 }
 
-.needs-evidence-btn {
+.assessment-source-label {
+  display: inline-flex;
+  align-items: center;
   background-color: var(--bg-surface);
   border: 1px solid var(--border-default);
   color: var(--text-muted);
@@ -429,6 +431,36 @@ body {
   border-radius: 6px;
   font-size: 0.85rem;
   font-weight: 600;
+}
+
+.feed-load-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  color: var(--verdict-fake-text);
+}
+
+.feed-retry-btn {
+  flex: 0 0 auto;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--text-main);
+  padding: 8px 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.feed-retry-btn:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+.feed-retry-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 /* Footer */
@@ -688,15 +720,6 @@ body {
 
 .context-label {
   font-weight: 700;
-}
-
-.mixed-evidence-pill {
-  margin-left: 4px;
-  background-color: #fef3c7;
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-size: 11px;
-  color: #92400e;
 }
 
 @media (max-width: 1024px) {

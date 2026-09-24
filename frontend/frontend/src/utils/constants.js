@@ -77,18 +77,6 @@ export const VERDICT_CONFIG = {
    },
 };
 
-// ── Action Text Mapping ──
-// Maps verdict state to user-facing action text in community feed
-export const ACTION_TEXT_MAP = {
-   FACT: "Verified",
-   FAKE: "Verified",
-   MISLEADING: "Verified",
-   SATIRE: "Verified",
-   UNVERIFIED: "Needs Evidence",
-   OUT_OF_SCOPE: "Rejected",
-   PENDING: "Processing",
-};
-
 // ── API Configuration ──
 // Centralized API base URL (easily switch between environments)
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";

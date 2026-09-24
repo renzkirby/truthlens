@@ -419,6 +419,69 @@ class UserProfileSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "user", "trust_score", "is_email_verified", "role"]
 
 
+def get_canonical_claim_source_url(claim):
+    def extract_url(value):
+        if not value:
+            return None
+
+        if isinstance(value, dict):
+            url = value.get("url")
+            if isinstance(url, str) and url.startswith(("http://", "https://")):
+                return url
+            return None
+
+        if not isinstance(value, str):
+            return None
+
+        value = value.strip()
+
+        if value.startswith(("http://", "https://")):
+            return value
+
+        if value.startswith("{"):
+            parsed = None
+
+            try:
+                parsed = json.loads(value)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+            if parsed is None:
+                try:
+                    parsed = ast.literal_eval(value)
+                except (ValueError, SyntaxError):
+                    pass
+
+            if isinstance(parsed, dict):
+                url = parsed.get("url")
+
+                if isinstance(url, str) and url.startswith(("http://", "https://")):
+                    return url
+
+        return None
+
+    if claim.claim_type == Claim.ClaimType.URL:
+        url = extract_url(claim.url_link)
+        if url:
+            return url
+
+    url = extract_url(claim.source_link)
+    if url:
+        return url
+
+    url = extract_url(claim.top_verdict_source)
+    if url:
+        return url
+
+    if claim.ai_sources:
+        for source in claim.ai_sources:
+            url = extract_url(source)
+            if url:
+                return url
+
+    return None
+
+
 class ClaimSerializer(serializers.ModelSerializer):
     final_verdict = serializers.SerializerMethodField()
     effective_verdict = serializers.SerializerMethodField()
@@ -452,71 +515,7 @@ class ClaimSerializer(serializers.ModelSerializer):
         return activity_at or obj.last_updated
 
     def get_canonical_source_url(self, obj):
-        def extract_url(value):
-            if not value:
-                return None
-
-            if isinstance(value, dict):
-                url = value.get("url")
-                if isinstance(url, str) and url.startswith(("http://", "https://")):
-                    return url
-                return None
-
-            if not isinstance(value, str):
-                return None
-
-            value = value.strip()
-
-            # Normal URL
-            if value.startswith(("http://", "https://")):
-                return value
-
-            # Legacy serialized dictionary
-            if value.startswith("{"):
-                parsed = None
-
-                # Newer/JSON-style records
-                try:
-                    parsed = json.loads(value)
-                except (json.JSONDecodeError, TypeError):
-                    pass
-
-                # Older Python-dict-style records:
-                # {'url': 'https://...', 'title': '...'}
-                if parsed is None:
-                    try:
-                        parsed = ast.literal_eval(value)
-                    except (ValueError, SyntaxError):
-                        pass
-
-                if isinstance(parsed, dict):
-                    url = parsed.get("url")
-
-                    if isinstance(url, str) and url.startswith(("http://", "https://")):
-                        return url
-
-            return None
-
-        if obj.claim_type == Claim.ClaimType.URL:
-            url = extract_url(obj.url_link)
-            if url:
-                return url
-
-        url = extract_url(obj.source_link)
-        if url:
-            return url
-
-        url = extract_url(obj.top_verdict_source)
-        if url:
-            return url
-
-        if obj.ai_sources:
-            for source in obj.ai_sources:
-                url = extract_url(source)
-                if url:
-                    return url
-
-        return None
+        return get_canonical_claim_source_url(obj)
 
     def _get_adjudication_provenance(self, obj):
         cache = getattr(self, "_adjudication_provenance_cache", None)
@@ -1080,6 +1079,78 @@ class VerificationAssignmentSerializer(serializers.ModelSerializer):
 
 class VerificationAssignmentClaimSerializer(serializers.Serializer):
     organization_id = serializers.UUIDField()
+
+
+class CommunityFeedAuthorSerializer(serializers.ModelSerializer):
+    avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
+
+    class Meta:
+        model = User
+        fields = ["id", "username", "avatar_url"]
+        read_only_fields = fields
+
+
+class CommunityFeedClaimSerializer(serializers.ModelSerializer):
+    canonical_source_url = serializers.SerializerMethodField()
+    human_verdict = serializers.SerializerMethodField()
+    verified_evidence_count = serializers.SerializerMethodField()
+
+    def get_canonical_source_url(self, obj):
+        return get_canonical_claim_source_url(obj)
+
+    def get_human_verdict(self, obj):
+        provenance = get_claim_adjudication_provenance(obj)
+        if not provenance["is_attributable"]:
+            return None
+        return {"verdict": provenance["verdict"]}
+
+    def get_verified_evidence_count(self, obj):
+        return self.context["verified_evidence_count"]
+
+    class Meta:
+        model = Claim
+        fields = [
+            "id",
+            "claim_type",
+            "context_text",
+            "media_url",
+            "canonical_source_url",
+            "ai_verdict",
+            "ai_summary",
+            "consensus_score",
+            "human_verdict",
+            "verified_evidence_count",
+        ]
+        read_only_fields = fields
+
+
+class CommunityFeedThreadSerializer(serializers.ModelSerializer):
+    author = CommunityFeedAuthorSerializer(read_only=True)
+    claim = serializers.SerializerMethodField()
+    comment_count = serializers.IntegerField(read_only=True)
+    evidence_count = serializers.IntegerField(read_only=True)
+
+    def get_claim(self, obj):
+        context = {
+            **self.context,
+            "verified_evidence_count": obj.verified_evidence_count,
+        }
+        return CommunityFeedClaimSerializer(obj.claim, context=context).data
+
+    class Meta:
+        model = Thread
+        fields = [
+            "id",
+            "display_id",
+            "caption",
+            "status",
+            "created_at",
+            "comment_count",
+            "evidence_count",
+            "author",
+            "claim",
+        ]
+        read_only_fields = fields
 
 
 class ThreadSerializer(serializers.ModelSerializer):

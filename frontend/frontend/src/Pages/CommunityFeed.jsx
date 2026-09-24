@@ -6,7 +6,7 @@
  *
  * Features:
  *   - Browse all community threads
- *   - Filter by status (trending, verified, needs evidence)
+ *   - Filter by assessment source and claim type
  *   - View verdict status and evidence
  *   - Navigate to thread details
  *
@@ -18,7 +18,7 @@
 
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useNotification } from "../hooks/useNotification";
 import Icons from "../components/Icons.jsx";
 
@@ -30,20 +30,28 @@ import { buildApiUrl, resolveApiEndpoint } from "../utils/api";
 // ── Styles ──
 import "./CommunityFeed.css";
 
-/**
- * Get user-friendly action text based on claim verdict status
- * @param {string} verdict - Verdict value (FACT, FAKE, etc.)
- * @returns {string} Action text describing what to do next
- */
-function getAiActionText(verdict) {
-   if (!verdict || verdict === "UNVERIFIED") return "Needs Evidence";
-   return "AI Analysis";
+const MAX_SAFE_ERROR_LENGTH = 200;
+const UNSAFE_ERROR_PATTERN =
+   /<[^>]+>|traceback|stack trace|django|internal server error|exception at|request failed with status code|\b(?:valueerror|typeerror|runtimeerror|databaseerror|integrityerror|operationalerror)\b|\bat\s+\S+\s*\([^)]*:\d+:\d+\)/i;
+
+function getSafeActionMessage(error, fallback) {
+   const status = Number(error?.status);
+   if (!Number.isInteger(status) || status < 400 || status >= 500) {
+      return fallback;
+   }
+
+   const candidate = [error?.detail, error?.message]
+      .filter((value) => typeof value === "string")
+      .map((value) => value.trim())
+      .find((value) => value && value.length <= MAX_SAFE_ERROR_LENGTH && !UNSAFE_ERROR_PATTERN.test(value));
+
+   return candidate ? candidate.replace(/\s+/g, " ") : fallback;
 }
 
-const FEED_FILTERS = {
-   TRENDING: "TRENDING",
-   VERIFIED: "VERIFIED",
-   NEEDS_EVIDENCE: "NEEDS_EVIDENCE",
+const ASSESSMENT_SOURCES = {
+   ALL: "ALL",
+   HUMAN: "human",
+   AI: "ai",
 };
 
 const FeedSkeleton = () => {
@@ -167,6 +175,7 @@ const CATEGORIES = {
    ALL: "ALL",
    TEXT: "TEXT",
    IMAGE: "IMAGE",
+   VIDEO: "VIDEO",
    FILE: "FILE",
    URL: "URL",
 };
@@ -187,13 +196,14 @@ function CommunityFeed() {
    const [threads, setThreads] = useState([]);
    const [loading, setLoading] = useState(false);
    const [hasMore, setHasMore] = useState(true);
-   const [error, setError] = useState(null);
+   const [loadError, setLoadError] = useState(null);
    const [currentCursor, setCurrentCursor] = useState(null);
-   const [activeFilter, setActiveFilter] = useState(FEED_FILTERS.TRENDING);
+   const [activeAssessmentSource, setActiveAssessmentSource] = useState(ASSESSMENT_SOURCES.ALL);
    const [activeCategoryFilter, setActiveCategoryFilter] = useState(CATEGORIES.ALL);
    const [sortOrder, setSortOrder] = useState("newest");
    const observerTarget = useRef(null);
    const requestedPagesRef = useRef(new Set());
+   const requestGenerationRef = useRef(0);
    const activeSearchTerm = (searchParams.get("q") || "").trim();
 
    // ── UI State for thread actions (menus, editing) ──
@@ -280,12 +290,21 @@ function CommunityFeed() {
             body: JSON.stringify({ caption: editingCaption.trim() }),
          });
 
-         setThreads((prev) => prev.map((thread) => (thread.id === threadId ? { ...thread, ...updated } : thread)));
+         setThreads((prev) =>
+            prev.map((thread) =>
+               thread.id === threadId
+                  ? {
+                       ...thread,
+                       caption: updated?.caption ?? editingCaption.trim(),
+                       status: updated?.status ?? thread.status,
+                    }
+                  : thread,
+            ),
+         );
          cancelEditThread();
          addToast({ type: "success", message: "Thread updated successfully." });
       } catch (err) {
-         const message = err?.message || "Failed to update thread.";
-         setError(message);
+         const message = getSafeActionMessage(err, "Unable to update this thread. Please try again.");
          addToast({ type: "error", message });
       } finally {
          setSavingThreadId(null);
@@ -356,7 +375,7 @@ function CommunityFeed() {
 
          addToast({
             type: "success",
-            message: "Thread reported. Moderators have been notified.",
+            message: "Report submitted for review.",
          });
          setReportDialog({
             open: false,
@@ -365,8 +384,7 @@ function CommunityFeed() {
             notes: "",
          });
       } catch (err) {
-         const message = err?.message || "Failed to report thread.";
-         setError(message);
+         const message = getSafeActionMessage(err, "Unable to submit this report. Please try again.");
          addToast({ type: "error", message });
       } finally {
          setReportingThreadId(null);
@@ -406,7 +424,7 @@ function CommunityFeed() {
          if (err?.name !== "AbortError") {
             addToast({
                type: "error",
-               message: err?.message || "Failed to share thread.",
+               message: getSafeActionMessage(err, "Unable to share this thread."),
             });
          }
       } finally {
@@ -431,48 +449,25 @@ function CommunityFeed() {
          closeDeleteDialog();
          addToast({ type: "success", message: "Thread deleted successfully." });
       } catch (err) {
-         const message = err?.message || "Failed to delete thread.";
-         setError(message);
+         const message = getSafeActionMessage(err, "Unable to delete this thread. Please try again.");
          addToast({ type: "error", message });
       } finally {
          setDeletingThreadId(null);
       }
    };
 
-   const isHumanReviewed = (thread) => Boolean(thread?.claim?.moderator_verdict_info);
-   const isAwaitingHumanAdjudication = (thread) => {
-      const verifiedEvidenceCount = thread?.claim?.verified_evidence_count ?? 0;
-      return !isHumanReviewed(thread) && verifiedEvidenceCount > 0;
-   };
-
-   const filteredThreads = useMemo(() => {
-      return threads.filter((thread) => {
-         // 1. Status Filter
-         if (activeFilter === FEED_FILTERS.VERIFIED) {
-            if (!isHumanReviewed(thread)) return false;
-         } else if (activeFilter === FEED_FILTERS.NEEDS_EVIDENCE) {
-            if (isHumanReviewed(thread)) return false;
-         }
-
-         // 2. Category Filter
-         if (activeCategoryFilter !== CATEGORIES.ALL) {
-            if (thread.claim?.claim_type !== activeCategoryFilter) return false;
-         }
-
-         return true;
-      });
-   }, [threads, activeFilter, activeCategoryFilter]);
+   const isHumanReviewed = (thread) => Boolean(thread?.claim?.human_verdict);
 
    // ── Fetch threads with pagination ──
    const fetchThreadsPage = useCallback(
-      async (pageUrl = null) => {
-         const pageKey = pageUrl || `FIRST:${sortOrder}:${activeSearchTerm || "ALL"}`;
+      async (pageUrl = null, generation = requestGenerationRef.current) => {
+         const pageKey = `${generation}:${pageUrl || "FIRST"}`;
          if (requestedPagesRef.current.has(pageKey)) return;
 
          try {
             requestedPagesRef.current.add(pageKey);
             setLoading(true);
-            setError(null);
+            setLoadError(null);
 
             // DRF cursor pagination already returns the full next URL.
             let url = pageUrl || threadsEndpoint;
@@ -482,10 +477,17 @@ function CommunityFeed() {
                   searchParams.set("search", activeSearchTerm);
                }
                searchParams.set("sort", sortOrder);
+               if (activeAssessmentSource !== ASSESSMENT_SOURCES.ALL) {
+                  searchParams.set("assessment_source", activeAssessmentSource);
+               }
+               if (activeCategoryFilter !== CATEGORIES.ALL) {
+                  searchParams.set("claim_type", activeCategoryFilter);
+               }
                url = `${threadsEndpoint}?${searchParams.toString()}`;
             }
 
             const response = await authFetch(url, { method: "GET" });
+            if (generation !== requestGenerationRef.current) return;
 
             // Handle paginated response
             const newThreads = response.results || response || [];
@@ -501,26 +503,31 @@ function CommunityFeed() {
             // Check if there are more pages
             setHasMore(Boolean(response?.next));
          } catch (err) {
+            if (generation !== requestGenerationRef.current) return;
             requestedPagesRef.current.delete(pageKey);
             console.error("Failed to fetch threads:", err);
-            const message = "Failed to load threads.";
-            setError(message);
+            const message = "Unable to load the community feed. Please try again.";
+            setLoadError(message);
             addToast({ type: "error", message });
          } finally {
-            setLoading(false);
+            if (generation === requestGenerationRef.current) {
+               setLoading(false);
+            }
          }
       },
-      [authFetch, addToast, threadsEndpoint, activeSearchTerm, sortOrder],
+      [authFetch, addToast, threadsEndpoint, activeSearchTerm, sortOrder, activeAssessmentSource, activeCategoryFilter],
    );
 
-   // ── Initial load / search refresh ──
+   // ── Initial load / query refresh ──
    useEffect(() => {
+      const generation = requestGenerationRef.current + 1;
+      requestGenerationRef.current = generation;
       requestedPagesRef.current.clear();
       setThreads([]);
       setCurrentCursor(null);
       setHasMore(true);
-      fetchThreadsPage(null);
-   }, [fetchThreadsPage, sortOrder]);
+      fetchThreadsPage(null, generation);
+   }, [fetchThreadsPage]);
 
    // ── Infinite scroll: Intersection Observer ──
    useEffect(() => {
@@ -529,7 +536,7 @@ function CommunityFeed() {
       const observer = new IntersectionObserver(
          (entries) => {
             if (entries[0].isIntersecting && hasMore && !loading && currentCursor) {
-               fetchThreadsPage(currentCursor);
+               fetchThreadsPage(currentCursor, requestGenerationRef.current);
             }
          },
          { threshold: 0.1 },
@@ -567,33 +574,46 @@ function CommunityFeed() {
          <main className="feed-container">
             {/* ── Category Filter Pills ── */}
             <div className="category-pills">
+               <span className="filter-label">Claim type:</span>
                <button
                   className={`category-pill ${activeCategoryFilter === CATEGORIES.ALL ? "active" : ""}`}
                   onClick={() => setActiveCategoryFilter(CATEGORIES.ALL)}
+                  aria-pressed={activeCategoryFilter === CATEGORIES.ALL}
                >
-                  All Categories
+                  All
                </button>
                <button
                   className={`category-pill ${activeCategoryFilter === CATEGORIES.TEXT ? "active" : ""}`}
                   onClick={() => setActiveCategoryFilter(CATEGORIES.TEXT)}
+                  aria-pressed={activeCategoryFilter === CATEGORIES.TEXT}
                >
                   <Icons name="file-text" size={14} /> Text
                </button>
                <button
                   className={`category-pill ${activeCategoryFilter === CATEGORIES.IMAGE ? "active" : ""}`}
                   onClick={() => setActiveCategoryFilter(CATEGORIES.IMAGE)}
+                  aria-pressed={activeCategoryFilter === CATEGORIES.IMAGE}
                >
                   <Icons name="image" size={14} /> Images
                </button>
                <button
+                  className={`category-pill ${activeCategoryFilter === CATEGORIES.VIDEO ? "active" : ""}`}
+                  onClick={() => setActiveCategoryFilter(CATEGORIES.VIDEO)}
+                  aria-pressed={activeCategoryFilter === CATEGORIES.VIDEO}
+               >
+                  <Icons name="play" size={14} /> Video
+               </button>
+               <button
                   className={`category-pill ${activeCategoryFilter === CATEGORIES.FILE ? "active" : ""}`}
                   onClick={() => setActiveCategoryFilter(CATEGORIES.FILE)}
+                  aria-pressed={activeCategoryFilter === CATEGORIES.FILE}
                >
                   <Icons name="paperclip" size={14} /> Files
                </button>
                <button
                   className={`category-pill ${activeCategoryFilter === CATEGORIES.URL ? "active" : ""}`}
                   onClick={() => setActiveCategoryFilter(CATEGORIES.URL)}
+                  aria-pressed={activeCategoryFilter === CATEGORIES.URL}
                >
                   <Icons name="link" size={14} /> Links
                </button>
@@ -602,27 +622,29 @@ function CommunityFeed() {
             {/* ── Filter Bar ── */}
             <div className="filter-bar box-panel">
                <div className="filter-left">
-                  <span className="filter-label">Filter:</span>
+                  <span className="filter-label">Assessment:</span>
                   <button
-                     className={`filter-btn ${activeFilter === FEED_FILTERS.TRENDING ? "active" : ""}`}
-                     onClick={() => setActiveFilter(FEED_FILTERS.TRENDING)}
+                     className={`filter-btn ${activeAssessmentSource === ASSESSMENT_SOURCES.ALL ? "active" : ""}`}
+                     onClick={() => setActiveAssessmentSource(ASSESSMENT_SOURCES.ALL)}
+                     aria-pressed={activeAssessmentSource === ASSESSMENT_SOURCES.ALL}
                   >
-                     <Icons name="trending-up" />
-                     Trending
+                     All
                   </button>
                   <button
-                     className={`filter-btn ${activeFilter === FEED_FILTERS.VERIFIED ? "active" : ""}`}
-                     onClick={() => setActiveFilter(FEED_FILTERS.VERIFIED)}
+                     className={`filter-btn ${activeAssessmentSource === ASSESSMENT_SOURCES.HUMAN ? "active" : ""}`}
+                     onClick={() => setActiveAssessmentSource(ASSESSMENT_SOURCES.HUMAN)}
+                     aria-pressed={activeAssessmentSource === ASSESSMENT_SOURCES.HUMAN}
                   >
-                     <Icons name="check" />
-                     Recently Verified
+                     <Icons name="shield-check" />
+                     Human reviewed
                   </button>
                   <button
-                     className={`filter-btn ${activeFilter === FEED_FILTERS.NEEDS_EVIDENCE ? "active" : ""}`}
-                     onClick={() => setActiveFilter(FEED_FILTERS.NEEDS_EVIDENCE)}
+                     className={`filter-btn ${activeAssessmentSource === ASSESSMENT_SOURCES.AI ? "active" : ""}`}
+                     onClick={() => setActiveAssessmentSource(ASSESSMENT_SOURCES.AI)}
+                     aria-pressed={activeAssessmentSource === ASSESSMENT_SOURCES.AI}
                   >
-                     <Icons name="search" />
-                     Needs Evidence
+                     <Icons name="cpu" />
+                     AI-assisted
                   </button>
                </div>
 
@@ -630,7 +652,12 @@ function CommunityFeed() {
                   <span className="filter-label">Sort:</span>
 
                   <div className="sort-dropdown-container">
-                     <button className="sort-trigger-btn" onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}>
+                     <button
+                        className="sort-trigger-btn"
+                        onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
+                        aria-haspopup="menu"
+                        aria-expanded={isSortMenuOpen}
+                     >
                         <Icons name={sortOrder === "newest" ? "arrow-down" : "arrow-up"} size={14} />
                         {sortOrder === "newest" ? "Newest First" : "Oldest First"}
                         <Icons name="chevron-down" size={14} color="var(--text-muted)" />
@@ -664,41 +691,47 @@ function CommunityFeed() {
                </div>
             </div>
 
-            {activeSearchTerm && (
-               <div className="feed-search-summary">
-                  Showing {filteredThreads.length} {filteredThreads.length === 1 ? "result" : "results"} for "
-                  {activeSearchTerm}"
-               </div>
-            )}
+            {activeSearchTerm && <div className="feed-search-summary">Results for "{activeSearchTerm}"</div>}
 
             {/* ── Loading & Error States ── */}
             {threads.length === 0 && loading && <FeedSkeleton />}
-            {error && <p style={{ color: "red", padding: "20px" }}>{error}</p>}
+            {loadError && (
+               <div className="feed-load-error" role="alert">
+                  <span>{loadError}</span>
+                  <button
+                     type="button"
+                     className="feed-retry-btn"
+                     onClick={() => fetchThreadsPage(currentCursor, requestGenerationRef.current)}
+                     disabled={loading}
+                  >
+                     Try again
+                  </button>
+               </div>
+            )}
 
             {/* ── Threads List ── */}
             {/* Empty state or thread cards */}
             {!loading && (
                <div className="posts-list">
-                  {filteredThreads.length === 0 ? (
-                     <h2 className="no-threads-text">
-                        {activeSearchTerm
-                           ? `No threads found for "${activeSearchTerm}".`
-                           : threads.length === 0
-                             ? "No threads yet. Be the first to escalate a claim."
-                             : "No threads match this filter yet."}
-                     </h2>
+                  {threads.length === 0 ? (
+                     !loadError ? (
+                        <h2 className="no-threads-text">
+                           {activeSearchTerm
+                              ? `No threads found for "${activeSearchTerm}".`
+                              : activeAssessmentSource !== ASSESSMENT_SOURCES.ALL ||
+                                  activeCategoryFilter !== CATEGORIES.ALL
+                                ? "No threads match these filters."
+                                : "No threads yet. Be the first to escalate a claim."}
+                        </h2>
+                     ) : null
                   ) : (
-                     filteredThreads.map((thread) => {
-                        const verdict = getEffectiveVerdict(thread.claim);
+                     threads.map((thread) => {
+                        const verdict =
+                           thread.claim?.human_verdict?.verdict || getEffectiveVerdict(thread.claim) || "UNVERIFIED";
                         const verdictClass = verdict?.toLowerCase();
                         const hasHumanReviewedVerdict = isHumanReviewed(thread);
-                        const awaitingHumanAdjudication = isAwaitingHumanAdjudication(thread);
-                        const pendingEvidenceCount = thread.claim?.verified_evidence_count ?? 0;
-                        const actionText = hasHumanReviewedVerdict
-                           ? "Reviewed"
-                           : awaitingHumanAdjudication
-                             ? "Pending"
-                             : getAiActionText(verdict);
+                        const verifiedEvidenceCount = thread.claim?.verified_evidence_count ?? 0;
+                        const assessmentSourceLabel = hasHumanReviewedVerdict ? "Human reviewed" : "AI-assisted";
 
                         return (
                            <div key={thread.id} className="post-card">
@@ -829,7 +862,7 @@ function CommunityFeed() {
                                                    marginRight: "2px",
                                                 }}
                                              >
-                                                <Icons name="shield-check" size={12} /> Reviewed:
+                                                <Icons name="shield-check" size={12} /> Human reviewed:
                                              </span>
                                           ) : (
                                              <span
@@ -841,7 +874,7 @@ function CommunityFeed() {
                                                    marginRight: "2px",
                                                 }}
                                              >
-                                                <Icons name="cpu" size={12} /> AI:
+                                                <Icons name="cpu" size={12} /> AI-assisted:
                                              </span>
                                           )}
 
@@ -982,9 +1015,9 @@ function CommunityFeed() {
                                  )}
 
                                  {/* URL Source Link Block */}
-                                 {thread.claim.claim_type === CATEGORIES.URL && thread.claim.source_link && (
+                                 {thread.claim.claim_type === CATEGORIES.URL && thread.claim.canonical_source_url && (
                                     <a
-                                       href={thread.claim.source_link}
+                                       href={thread.claim.canonical_source_url}
                                        target="_blank"
                                        rel="noopener noreferrer"
                                        className="url-preview-card"
@@ -993,57 +1026,47 @@ function CommunityFeed() {
                                        <div className="media-icon">
                                           <Icons name="external-link" size={20} />
                                        </div>
-                                       <span className="media-source" title={thread.claim.source_link}>
-                                          {thread.claim.source_link}
+                                       <span className="media-source" title={thread.claim.canonical_source_url}>
+                                          {thread.claim.canonical_source_url}
                                        </span>
                                     </a>
                                  )}
                               </div>
 
-                              {/* ── AI Analysis Bar or Human-Reviewed Verdict (NOW WITH CONTEXT INSIDE) ── */}
+                              {/* ── Current assessment source and context ── */}
                               <div className={`ai-analysis-bar bar-${verdictClass}`}>
-                                 {/* TOP ROW: Verdict Info & Button */}
+                                 {/* TOP ROW: Verdict and assessment source */}
                                  <div className="ai-analysis-top-row">
                                     {hasHumanReviewedVerdict ? (
-                                       // Show human-reviewed verdict
                                        <div className="ai-info">
                                           <span className="ai-confidence-text">
-                                             Human-reviewed verdict:{" "}
-                                             <strong>{thread.claim.moderator_verdict_info.verdict}</strong> (
-                                             {thread.claim.moderator_verdict_info.verified_evidence_count} evidence)
-                                             {thread.claim.moderator_verdict_info.verdict === "MISLEADING" && (
-                                                <span className="mixed-evidence-pill">Mixed evidence</span>
-                                             )}
-                                          </span>
-                                       </div>
-                                    ) : awaitingHumanAdjudication ? (
-                                       // Show pending state
-                                       <div className="ai-info">
-                                          <span className="ai-confidence-text">
-                                             <strong>{pendingEvidenceCount}</strong> verified evidence under review
+                                             Human reviewed: <strong>{thread.claim.human_verdict.verdict}</strong> (
+                                             {verifiedEvidenceCount} verified evidence{" "}
+                                             {verifiedEvidenceCount === 1 ? "submission" : "submissions"})
                                           </span>
                                        </div>
                                     ) : (
-                                       // Show AI Verdict (fallback)
                                        <div className="ai-info">
                                           <span className="ai-confidence-text">
-                                             AI Confidence: <strong>{thread.claim.consensus_score}%</strong>
+                                             AI-assisted confidence:{" "}
+                                             <strong>
+                                                {thread.claim.consensus_score == null
+                                                   ? "Not available"
+                                                   : `${thread.claim.consensus_score}%`}
+                                             </strong>
                                           </span>
                                        </div>
                                     )}
 
-                                    <button className="needs-evidence-btn">{actionText}</button>
+                                    <span className="assessment-source-label">{assessmentSourceLabel}</span>
                                  </div>
 
                                  {/* BOTTOM ROW: Context / Reasoning Text */}
                                  <div className="ai-analysis-context">
                                     <strong className="context-label">Context: </strong>
                                     {hasHumanReviewedVerdict
-                                       ? thread.claim.moderator_verdict_info?.notes ||
-                                         "Human adjudication context is not available in this view."
-                                       : awaitingHumanAdjudication
-                                         ? `${pendingEvidenceCount} verified evidence submissions are awaiting human adjudication.`
-                                         : thread.claim.ai_summary || "No AI summary available."}
+                                       ? "A human adjudicator reviewed this claim."
+                                       : thread.claim.ai_summary || "No AI-assisted summary is available."}
                                  </div>
                               </div>
 
@@ -1082,7 +1105,7 @@ function CommunityFeed() {
                                     }}
                                  >
                                     <Icons name="paperclip" />
-                                    Evidence
+                                    Evidence submissions
                                     <span className="count-pill">{thread.evidence_count}</span>
                                  </button>
                               </div>

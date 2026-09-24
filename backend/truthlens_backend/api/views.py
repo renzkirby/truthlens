@@ -15,7 +15,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from django.utils import timezone
 from django.db import IntegrityError, transaction
-from django.db.models import Q, F, Max
+from django.db.models import Count, Q, F, Max
 from rest_framework.decorators import (
     api_view,
     parser_classes,
@@ -307,6 +307,7 @@ from .serializers import (
     ProfileUpdateSerializer,
     UserProfileSerializer,
     ClaimSerializer,
+    CommunityFeedThreadSerializer,
     ThreadSerializer,
     ThreadCommentSerializer,
     EvidenceSubmissionSerializer,
@@ -2812,26 +2813,53 @@ class ThreadViewSet(viewsets.ModelViewSet):
     pagination_class = StandardCursorPagination
 
     def get_queryset(self):
+        action = getattr(self, "action", None)
+
         # Dynamic sorting based on parameter
         sort_order = self.request.query_params.get("sort", "newest")
         order_field = "created_at" if sort_order == "oldest" else "-created_at"
+
+        claim_type = (
+            self.request.query_params.get("claim_type") if action == "list" else None
+        )
+        if claim_type is not None and claim_type not in Claim.ClaimType.values:
+            raise ValidationError(
+                {
+                    "claim_type": (
+                        "Select a valid claim type: "
+                        f"{', '.join(Claim.ClaimType.values)}."
+                    )
+                }
+            )
+
+        assessment_source = (
+            self.request.query_params.get("assessment_source")
+            if action == "list"
+            else None
+        )
+        if assessment_source is not None and assessment_source not in {"human", "ai"}:
+            raise ValidationError(
+                {
+                    "assessment_source": (
+                        "Select a valid assessment source: human or ai."
+                    )
+                }
+            )
 
         queryset = (
             Thread.objects.exclude(status=Thread.Status.REJECTED)
             .select_related("claim", "author", "author__profile")
             .order_by(order_field)
         )
-        queryset = prefetch_claim_adjudication_provenance(
-            queryset,
-            claim_path="claim",
-            include_legacy_threads=True,
-        )
+
         search_query = self.request.query_params.get("search", "").strip()[:120]
-        if search_query:
+        if search_query or assessment_source:
             queryset = annotate_claim_authoritative_verdict(
                 queryset,
                 claim_id_field="claim_id",
             )
+
+        if search_query:
             queryset = queryset.filter(
                 Q(caption__icontains=search_query)
                 | Q(author__username__icontains=search_query)
@@ -2842,11 +2870,33 @@ class ThreadViewSet(viewsets.ModelViewSet):
                 | Q(authoritative_final_verdict__icontains=search_query)
             )
 
+        if claim_type is not None:
+            queryset = queryset.filter(claim__claim_type=claim_type)
+
+        if assessment_source == "human":
+            queryset = queryset.filter(authoritative_final_verdict__isnull=False)
+        elif assessment_source == "ai":
+            queryset = queryset.filter(authoritative_final_verdict__isnull=True)
+
         claim_id = self.request.query_params.get("claim_id")
         if claim_id:
             queryset = queryset.filter(claim_id=claim_id)
 
-        if getattr(self, "action", None) == "retrieve":
+        if action == "list":
+            queryset = queryset.annotate(
+                comment_count=Count("comments", distinct=True),
+                evidence_count=Count("evidence_submissions", distinct=True),
+                verified_evidence_count=Count(
+                    "claim__threads__evidence_submissions",
+                    filter=Q(
+                        claim__threads__evidence_submissions__evidence_status=(
+                            EvidenceSubmission.EvidenceStatus.VERIFIED
+                        )
+                    ),
+                    distinct=True,
+                ),
+            )
+        elif action == "retrieve":
             queryset = queryset.prefetch_related(
                 "flags",
                 "evidence_submissions__votes",
@@ -2857,7 +2907,11 @@ class ThreadViewSet(viewsets.ModelViewSet):
         else:
             queryset = queryset.prefetch_related("evidence_submissions")
 
-        return queryset
+        return prefetch_claim_adjudication_provenance(
+            queryset,
+            claim_path="claim",
+            include_legacy_threads=True,
+        )
 
     def perform_create(self, serializer):
         claim_id = serializer.validated_data.pop("claim_id")
@@ -2921,6 +2975,8 @@ class ThreadViewSet(viewsets.ModelViewSet):
         return None
 
     def get_serializer_class(self):
+        if self.action == "list":
+            return CommunityFeedThreadSerializer
         if self.action == "retrieve":
             return ThreadDetailSerializer
         return ThreadSerializer
