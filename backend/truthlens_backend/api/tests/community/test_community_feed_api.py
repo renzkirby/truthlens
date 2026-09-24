@@ -3,6 +3,7 @@ from urllib.parse import parse_qs, urlparse
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
+from django.utils.dateparse import parse_datetime
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -38,6 +39,9 @@ class CommunityFeedApiTests(TestCase):
             organization_type=Organization.OrganizationType.FACT_CHECKING,
             verification_status=Organization.VerificationStatus.VERIFIED,
             partner_status=Organization.PartnerStatus.ACTIVE,
+            public_profile_enabled=True,
+            public_logo_enabled=True,
+            logo_url="https://example.com/community-feed-review-partner.png",
         )
         OrganizationMembership.objects.create(
             organization=self.organization,
@@ -92,7 +96,7 @@ class CommunityFeedApiTests(TestCase):
             actor=self.reviewer,
             organization=self.organization,
         )
-        return issue_adjudication_decision(
+        result = issue_adjudication_decision(
             case_id=case.id,
             organization_id=self.organization.id,
             actor=self.reviewer,
@@ -101,6 +105,8 @@ class CommunityFeedApiTests(TestCase):
             rationale="A human adjudicator reviewed the available evidence.",
             expected_revision=0,
         )
+
+        return result["decision"]
 
     @staticmethod
     def _result_ids(response):
@@ -162,17 +168,182 @@ class CommunityFeedApiTests(TestCase):
 
     def test_assessment_source_human_uses_attributable_provenance(self):
         human_claim, human_thread = self._create_thread("human reviewed")
-        self._issue_human_decision(human_claim, human_thread)
+        decision = self._issue_human_decision(human_claim, human_thread)
         self._create_thread("AI only")
 
         response = self.client.get(self.url, {"assessment_source": "human"})
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(self._result_ids(response), [str(human_thread.id)])
+        human_verdict = response.data["results"][0]["claim"]["human_verdict"]
+        self.assertEqual(human_verdict["verdict"], decision.verdict)
         self.assertEqual(
-            response.data["results"][0]["claim"]["human_verdict"],
-            {"verdict": AdjudicationDecision.Verdict.FACT},
+            parse_datetime(human_verdict["reviewed_at"]),
+            decision.decided_at,
         )
+        self.assertEqual(
+            human_verdict["organization"],
+            {
+                "id": str(self.organization.id),
+                "name": self.organization.name,
+                "slug": self.organization.slug,
+                "logo_url": self.organization.logo_url,
+            },
+        )
+
+    def test_human_verdict_logo_requires_public_logo_permission(self):
+        self.organization.public_logo_enabled = False
+        self.organization.save(update_fields=["public_logo_enabled"])
+        claim, thread = self._create_thread("logo disabled")
+        self._issue_human_decision(claim, thread)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        organization = response.data["results"][0]["claim"]["human_verdict"][
+            "organization"
+        ]
+        self.assertEqual(organization["name"], self.organization.name)
+        self.assertIsNone(organization["logo_url"])
+
+    def test_non_public_adjudicating_organization_is_not_exposed(self):
+        self.organization.public_profile_enabled = False
+        self.organization.save(update_fields=["public_profile_enabled"])
+        claim, thread = self._create_thread("private organization")
+        decision = self._issue_human_decision(claim, thread)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        human_verdict = response.data["results"][0]["claim"]["human_verdict"]
+        self.assertEqual(human_verdict["verdict"], decision.verdict)
+        self.assertIsNone(human_verdict["organization"])
+
+    def test_non_active_partner_organization_is_not_exposed(self):
+        claim, thread = self._create_thread("suspended partner")
+        self._issue_human_decision(claim, thread)
+
+        for partner_status in (
+            Organization.PartnerStatus.SUSPENDED,
+            Organization.PartnerStatus.NONE,
+            Organization.PartnerStatus.FORMER,
+        ):
+            with self.subTest(partner_status=partner_status):
+                self.organization.partner_status = partner_status
+                self.organization.save(update_fields=["partner_status"])
+
+                response = self.client.get(self.url)
+
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertIsNone(
+                    response.data["results"][0]["claim"]["human_verdict"][
+                        "organization"
+                    ]
+                )
+
+    def test_unverified_partner_organization_is_not_exposed(self):
+        claim, thread = self._create_thread("unverified partner")
+        self._issue_human_decision(claim, thread)
+        self.organization.verification_status = (
+            Organization.VerificationStatus.UNVERIFIED
+        )
+        self.organization.save(update_fields=["verification_status"])
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(
+            response.data["results"][0]["claim"]["human_verdict"]["organization"]
+        )
+
+    def test_canonical_review_does_not_fall_back_to_decision_organization(self):
+        claim, thread = self._create_thread("canonical organization removed")
+        decision = self._issue_human_decision(claim, thread)
+        self.assertEqual(decision.organization_id, self.organization.id)
+        decision.moderation_case.organization = None
+        decision.moderation_case.save(update_fields=["organization"])
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        human_verdict = response.data["results"][0]["claim"]["human_verdict"]
+        self.assertEqual(human_verdict["verdict"], decision.verdict)
+        self.assertEqual(
+            parse_datetime(human_verdict["reviewed_at"]),
+            decision.decided_at,
+        )
+        self.assertIsNone(human_verdict["organization"])
+
+    def test_attributable_legacy_review_uses_decision_organization(self):
+        claim, thread = self._create_thread("legacy review")
+        thread.moderated_by = self.reviewer
+        thread.moderator_verdict = AdjudicationDecision.Verdict.FACT
+        thread.save(update_fields=["moderated_by", "moderator_verdict"])
+        decision = AdjudicationDecision.objects.create(
+            claim=claim,
+            verdict=AdjudicationDecision.Verdict.FACT,
+            canonical_claim=claim.context_text,
+            rationale="Historical human review with attributable provenance.",
+            decided_by=self.reviewer,
+            organization=self.organization,
+            decision_source=AdjudicationDecision.DecisionSource.LEGACY_MIGRATION,
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        human_verdict = response.data["results"][0]["claim"]["human_verdict"]
+        self.assertEqual(human_verdict["verdict"], decision.verdict)
+        self.assertEqual(
+            parse_datetime(human_verdict["reviewed_at"]),
+            decision.decided_at,
+        )
+        self.assertEqual(
+            human_verdict["organization"],
+            {
+                "id": str(self.organization.id),
+                "name": self.organization.name,
+                "slug": self.organization.slug,
+                "logo_url": self.organization.logo_url,
+            },
+        )
+        self.assertEqual(
+            set(human_verdict),
+            {"verdict", "reviewed_at", "organization"},
+        )
+        self.assertEqual(
+            set(human_verdict["organization"]),
+            {"id", "name", "slug", "logo_url"},
+        )
+
+    def test_ai_only_claim_has_no_human_verdict(self):
+        self._create_thread("AI only projection")
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data["results"][0]["claim"]["human_verdict"])
+
+    def test_human_verdict_projection_contains_only_public_safe_fields(self):
+        claim, thread = self._create_thread("public-safe projection")
+        self._issue_human_decision(claim, thread)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        human_verdict = response.data["results"][0]["claim"]["human_verdict"]
+        self.assertEqual(
+            set(human_verdict),
+            {"verdict", "reviewed_at", "organization"},
+        )
+        self.assertEqual(
+            set(human_verdict["organization"]),
+            {"id", "name", "slug", "logo_url"},
+        )
+        self.assertNotIn("reviewer", human_verdict)
+        self.assertNotIn("email", human_verdict["organization"])
+        self.assertNotIn("verification_status", human_verdict["organization"])
+        self.assertNotIn("partner_status", human_verdict["organization"])
 
     def test_assessment_source_ai_excludes_only_attributable_human_reviews(self):
         human_claim, human_thread = self._create_thread("human reviewed")

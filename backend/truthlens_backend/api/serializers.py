@@ -1102,7 +1102,38 @@ class CommunityFeedClaimSerializer(serializers.ModelSerializer):
         provenance = get_claim_adjudication_provenance(obj)
         if not provenance["is_attributable"]:
             return None
-        return {"verdict": provenance["verdict"]}
+
+        decision = provenance["decision"]
+        organization = None
+
+        if provenance["status"] == AdjudicationProvenance.HUMAN_ADJUDICATION:
+            case = decision.moderation_case
+            if case and case.organization_id:
+                organization = case.organization
+        elif provenance["status"] == AdjudicationProvenance.LEGACY_HUMAN_REVIEW:
+            organization = decision.organization
+
+        public_organization = None
+
+        if organization and is_public_partner_eligible(organization):
+            public_organization = {
+                "id": str(organization.id),
+                "name": organization.name,
+                "slug": organization.slug,
+                "logo_url": (
+                    organization.logo_url
+                    if organization.public_logo_enabled and organization.logo_url
+                    else None
+                ),
+            }
+
+        return {
+            "verdict": decision.verdict,
+            "reviewed_at": serializers.DateTimeField().to_representation(
+                decision.decided_at
+            ),
+            "organization": public_organization,
+        }
 
     def get_verified_evidence_count(self, obj):
         return self.context["verified_evidence_count"]

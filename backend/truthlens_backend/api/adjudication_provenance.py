@@ -52,7 +52,11 @@ def get_current_adjudication_decision(
     if lock:
         queryset = queryset.select_for_update()
     else:
-        queryset = queryset.select_related("moderation_case")
+        queryset = queryset.select_related(
+            "moderation_case",
+            "moderation_case__organization",
+            "organization",
+        )
 
     return queryset.first()
 
@@ -77,7 +81,9 @@ def prefetch_claim_adjudication_provenance(
             decision_lookup,
             queryset=(
                 AdjudicationDecision.objects.filter(is_current=True).select_related(
-                    "moderation_case"
+                    "moderation_case",
+                    "moderation_case__organization",
+                    "organization",
                 )
             ),
             to_attr="_current_adjudication_decisions",
