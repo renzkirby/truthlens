@@ -113,14 +113,22 @@ from .verification_metrics_query_service import (
     get_organization_verification_metrics,
 )
 from .verification_metrics_service import VerificationMetricsIntegrityError
-from .verification_activity_metrics_service import VerificationActivityMetricsIntegrityError
+from .verification_activity_metrics_service import (
+    VerificationActivityMetricsIntegrityError,
+)
 from .verification_activity_trends_service import VerificationActivityTrendInputError
-from .verification_resolution_metrics_service import VerificationResolutionMetricsIntegrityError
+from .verification_resolution_metrics_service import (
+    VerificationResolutionMetricsIntegrityError,
+)
 from .verification_reviewer_participation_metrics_service import (
     VerificationReviewerParticipationMetricsIntegrityError,
 )
-from .verification_public_reach_metrics_service import VerificationPublicReachMetricsIntegrityError
-from .verification_knowledge_reuse_metrics_service import VerificationKnowledgeReuseMetricsIntegrityError
+from .verification_public_reach_metrics_service import (
+    VerificationPublicReachMetricsIntegrityError,
+)
+from .verification_knowledge_reuse_metrics_service import (
+    VerificationKnowledgeReuseMetricsIntegrityError,
+)
 from .public_reach_serializers import PublicReachRequestSerializer
 from .public_reach_service import (
     InvalidPublicReach,
@@ -375,7 +383,6 @@ from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.views import SocialLoginView
 from .email_verification import send_email_verification
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -383,7 +390,7 @@ logger = logging.getLogger(__name__)
 class GoogleLogin(SocialLoginView):
     adapter_class = GoogleOAuth2Adapter
     client_class = OAuth2Client
-    callback_url = "https://truthlens-dev.vercel.app/"  # TODO: update to production URL in env vars
+    callback_url = settings.FRONTEND_URL  # TODO: update to production URL in env vars
 
 
 # ── Pagination Configuration ──
@@ -548,7 +555,10 @@ def claim_polling_endpoint(request, claim_id):
 
     ai_verdict = claim.ai_verdict
     match_result = get_match_result(claim)
-    if match_result["resolution_source"] != "OFFICIAL_FACT_CHECK" and ai_verdict is None:
+    if (
+        match_result["resolution_source"] != "OFFICIAL_FACT_CHECK"
+        and ai_verdict is None
+    ):
         return JsonResponse({"verdict": "PENDING"}, status=200)
     else:
         return JsonResponse(
@@ -1079,9 +1089,7 @@ def evidence_case_queue(request):
             "count": total_count,
             "limit": data["limit"],
             "offset": data["offset"],
-            "organization": EvidenceReviewOrganizationSerializer(
-                organization
-            ).data,
+            "organization": EvidenceReviewOrganizationSerializer(organization).data,
             "results": EvidenceCaseSummarySerializer(
                 cases,
                 many=True,
@@ -1747,9 +1755,7 @@ def organization_publication_library(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def organization_publication_detail(request, fact_check_id):
-    serializer = OrganizationPublicationDetailQuerySerializer(
-        data=request.query_params
-    )
+    serializer = OrganizationPublicationDetailQuerySerializer(data=request.query_params)
     if not serializer.is_valid():
         return _publication_invalid_response(serializer)
     organization = get_object_or_404(
@@ -1841,9 +1847,7 @@ def _factual_correction_invalid_response(serializer):
 def _factual_correction_error_response(error):
     if isinstance(
         error,
-        (
-            FactualCorrectionQueryNotFound,
-        ),
+        (FactualCorrectionQueryNotFound,),
     ):
         response_status = status.HTTP_404_NOT_FOUND
     elif isinstance(
@@ -1906,10 +1910,13 @@ def _ensure_factual_correction_scope(*, request_id, organization, evidence_id=No
     )
     if correction is None:
         raise NotFound("Factual correction request not found.")
-    if evidence_id is not None and not EvidenceSubmission.objects.filter(
-        pk=evidence_id,
-        thread__claim_id=correction.claim_id,
-    ).exists():
+    if (
+        evidence_id is not None
+        and not EvidenceSubmission.objects.filter(
+            pk=evidence_id,
+            thread__claim_id=correction.claim_id,
+        ).exists()
+    ):
         raise NotFound("Correction evidence not found.")
     return correction
 
@@ -1924,9 +1931,7 @@ def _ensure_factual_correction_capability(*, actor, organization, capability):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def factual_correction_collection(request):
-    serializer = FactualCorrectionCollectionQuerySerializer(
-        data=request.query_params
-    )
+    serializer = FactualCorrectionCollectionQuerySerializer(data=request.query_params)
     if not serializer.is_valid():
         return _factual_correction_invalid_response(serializer)
     data = serializer.validated_data
@@ -2721,11 +2726,14 @@ def verification_intelligence(request, claim_id):
     query = AdjudicationOrganizationQuerySerializer(data=request.query_params)
     query.is_valid(raise_exception=True)
     organization = get_object_or_404(
-        Organization, id=query.validated_data["organization_id"],
+        Organization,
+        id=query.validated_data["organization_id"],
     )
     try:
         projection = get_verification_intelligence_context(
-            actor=request.user, organization=organization, claim_id=claim_id,
+            actor=request.user,
+            organization=organization,
+            claim_id=claim_id,
         )
     except VerificationIntelligenceAuthorizationError as error:
         return Response({"detail": str(error)}, status=status.HTTP_403_FORBIDDEN)
@@ -2966,6 +2974,7 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
                 actor=self.request.user,
                 organization=organization,
             )
+
 
 class ThreadCommentViewSet(viewsets.ModelViewSet):
     serializer_class = ThreadCommentSerializer
@@ -4081,7 +4090,8 @@ def public_reach_events(request):
     fact_check = None
     if payload.get("publication_id") is not None:
         fact_check = OfficialFactCheck.objects.filter(
-            pk=payload["publication_id"], organization=organization,
+            pk=payload["publication_id"],
+            organization=organization,
         ).first()
         if fact_check is None:
             raise NotFound()
@@ -4096,10 +4106,17 @@ def public_reach_events(request):
     except PublicReachTargetNotFound as error:
         raise NotFound() from error
     except PublicReachConflict:
-        return Response({"detail": "Conflicting client_event_id."}, status=status.HTTP_409_CONFLICT)
+        return Response(
+            {"detail": "Conflicting client_event_id."}, status=status.HTTP_409_CONFLICT
+        )
     except InvalidPublicReach:
-        return Response({"detail": "Invalid reach event."}, status=status.HTTP_400_BAD_REQUEST)
-    return Response({"recorded": True}, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+        return Response(
+            {"detail": "Invalid reach event."}, status=status.HTTP_400_BAD_REQUEST
+        )
+    return Response(
+        {"recorded": True},
+        status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+    )
 
 
 def _organization_public_profile_error_response(error):
