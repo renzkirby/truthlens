@@ -15,8 +15,9 @@ from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from django.utils import timezone
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Q, F, Max
+from django.db.models import Count, Q, F, Max, Prefetch
 from rest_framework.decorators import (
+    action,
     api_view,
     parser_classes,
     permission_classes,
@@ -81,6 +82,7 @@ from .models import (
     UserProfile,
     EvidenceSubmission,
     ThreadComment,
+    ThreadCommentLike,
     ThreadFlag,
     FlagResolutionLog,
     Vote,
@@ -2949,12 +2951,31 @@ class ThreadViewSet(viewsets.ModelViewSet):
                 ),
             )
         elif action == "retrieve":
-            queryset = queryset.prefetch_related(
-                "flags",
+            queryset = queryset.annotate(
+                verified_evidence_count=Count(
+                    "claim__threads__evidence_submissions",
+                    filter=Q(
+                        claim__threads__evidence_submissions__evidence_status=(
+                            EvidenceSubmission.EvidenceStatus.VERIFIED
+                        )
+                    ),
+                    distinct=True,
+                ),
+            ).prefetch_related(
                 "evidence_submissions__votes",
                 "evidence_submissions__contributor__profile",
                 "evidence_submissions__verified_by__profile",
-                "comments__commenter__profile",
+                Prefetch(
+                    "comments",
+                    queryset=(
+                        ThreadComment.objects.select_related(
+                            "commenter__profile",
+                            "parent__commenter",
+                        )
+                        .prefetch_related("likes")
+                        .order_by("-commented_at")
+                    ),
+                ),
             )
         else:
             queryset = queryset.prefetch_related("evidence_submissions")
@@ -3089,7 +3110,14 @@ class ThreadCommentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsCommenterOrReadOnly]
 
     def get_queryset(self):
-        return ThreadComment.objects.all().order_by("-commented_at")
+        return (
+            ThreadComment.objects.select_related(
+                "commenter__profile",
+                "parent__commenter",
+            )
+            .prefetch_related("likes")
+            .order_by("-commented_at")
+        )
 
     def perform_create(self, serializer):
         thread_id = serializer.validated_data.pop("thread_id")
@@ -3102,6 +3130,43 @@ class ThreadCommentViewSet(viewsets.ModelViewSet):
             thread=thread,
         )
         dispatch_after_commit(notify_thread_commented, comment)
+
+    @action(
+        detail=True,
+        methods=["post", "delete"],
+        permission_classes=[IsAuthenticated],
+    )
+    def like(self, request, pk=None):
+        comment = self.get_object()
+
+        if request.method == "POST":
+            try:
+                with transaction.atomic():
+                    ThreadCommentLike.objects.get_or_create(
+                        comment=comment,
+                        user=request.user,
+                    )
+            except IntegrityError:
+                # A concurrent duplicate like still satisfies idempotent POST.
+                pass
+            is_liked = True
+        else:
+            ThreadCommentLike.objects.filter(
+                comment=comment,
+                user=request.user,
+            ).delete()
+            is_liked = False
+
+        return Response(
+            {
+                "comment_id": str(comment.id),
+                "like_count": ThreadCommentLike.objects.filter(
+                    comment=comment,
+                ).count(),
+                "is_liked": is_liked,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class ThreadFlagViewSet(viewsets.ModelViewSet):

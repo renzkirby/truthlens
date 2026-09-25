@@ -2343,11 +2343,63 @@ class ThreadComment(models.Model):
     commenter = models.ForeignKey(
         "auth.User", on_delete=models.CASCADE, related_name="user_comments"
     )
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="replies",
+    )
     comment_text = models.TextField(blank=True, null=True)
     commented_at = models.DateTimeField(auto_now_add=True)
 
+    def clean(self):
+        super().clean()
+        if self.parent_id and self.thread_id and self.parent.thread_id != self.thread_id:
+            raise ValidationError(
+                {"parent": "Parent comment must belong to the same thread."}
+            )
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            original_parent_id = type(self).objects.only("parent_id").get(
+                pk=self.pk
+            ).parent_id
+            if original_parent_id != self.parent_id:
+                raise ValidationError(
+                    {"parent": "Cannot be changed after comment creation."}
+                )
+        self.clean()
+        return super().save(*args, **kwargs)
+
     def __str__(self):
         return f"ThreadComment {self.id} - Thread ID: {self.thread.id} - Commenter: {self.commenter.username}"
+
+
+class ThreadCommentLike(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    comment = models.ForeignKey(
+        ThreadComment,
+        on_delete=models.CASCADE,
+        related_name="likes",
+    )
+    user = models.ForeignKey(
+        "auth.User",
+        on_delete=models.CASCADE,
+        related_name="thread_comment_likes",
+    )
+    liked_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["comment", "user"],
+                name="unique_thread_comment_like",
+            )
+        ]
+
+    def __str__(self):
+        return f"ThreadCommentLike {self.id} - Comment ID: {self.comment_id} - User: {self.user.username}"
 
 
 class OfficialFactCheck(models.Model):
