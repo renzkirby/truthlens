@@ -9,10 +9,10 @@ function PublicSiteHeader() {
    const { user } = useAuth();
    const [isMenuOpen, setIsMenuOpen] = useState(false);
    const menuToggleRef = useRef(null);
-   const isLandingPage = pathname === "/landing-page";
    const isPartnerRoute = pathname === "/partners" || pathname.startsWith("/partners/");
-   const featuresHref = isLandingPage ? "#features" : "/landing-page#features";
-   const aboutHref = isLandingPage ? "#about" : "/landing-page#about";
+   const isLandingPage = pathname === "/landing";
+   const featuresHref = isLandingPage ? "#features" : "/landing#features";
+   const aboutHref = isLandingPage ? "#about" : "/landing#about";
 
    const closeMenu = () => setIsMenuOpen(false);
 
@@ -37,7 +37,7 @@ function PublicSiteHeader() {
          </a>
          <nav className="public-site-header__inner" aria-label="Public navigation">
             <Link
-               to="/landing-page"
+               to="/landing"
                className="public-site-header__brand"
                aria-label="TruthLens home"
                aria-current={isLandingPage ? "page" : undefined}
@@ -96,11 +96,7 @@ function PublicSiteHeader() {
                <a href={aboutHref} onClick={closeMenu}>
                   About
                </a>
-               <Link
-                  to="/partners"
-                  aria-current={isPartnerRoute ? "page" : undefined}
-                  onClick={closeMenu}
-               >
+               <Link to="/partners" aria-current={isPartnerRoute ? "page" : undefined} onClick={closeMenu}>
                   Partners
                </Link>
 
