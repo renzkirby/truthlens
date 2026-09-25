@@ -27,10 +27,36 @@
 
 .auth-route-loader__text {
    margin: 0;
+   max-width: 34rem;
 
    font-size: 0.875rem;
    font-weight: 500;
    line-height: 1.5;
+   text-align: center;
+}
+
+.auth-route-loader__retry {
+   min-height: 2.5rem;
+   padding: 0.55rem 1rem;
+
+   border: 1px solid var(--border-default, #e2e8f0);
+   border-radius: 0.625rem;
+   background: var(--bg-surface, #ffffff);
+   color: var(--text-main, #0f172a);
+
+   font: inherit;
+   font-weight: 600;
+   cursor: pointer;
+}
+
+.auth-route-loader__retry:hover {
+   border-color: var(--brand-primary, #4f46e5);
+   color: var(--brand-primary, #4f46e5);
+}
+
+.auth-route-loader__retry:focus-visible {
+   outline: 3px solid color-mix(in srgb, var(--brand-primary, #4f46e5) 32%, transparent);
+   outline-offset: 3px;
 }
 
 @keyframes auth-route-spin {

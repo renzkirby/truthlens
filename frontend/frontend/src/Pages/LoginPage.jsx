@@ -19,6 +19,7 @@ import Button from "../components/ui/Button.jsx";
 import Input from "../components/ui/Input.jsx";
 import { useGoogleLogin } from "@react-oauth/google";
 import AuthShell from "../components/auth/AuthShell.jsx";
+import AuthRouteLoader from "../components/AuthRouteLoader.jsx";
 import { useNotification } from "../hooks/useNotification";
 // ── Utilities & Constants ──
 import { resolveApiEndpoint } from "../utils/api";
@@ -29,7 +30,13 @@ import { resolveAuthDestination } from "../utils/authNavigation";
 import "../components/account/AccountForm.css";
 
 function LoginPage() {
-   const { login, user, loading } = useAuth();
+   const {
+      login,
+      user,
+      loading,
+      sessionRestoreError,
+      retrySessionRestore,
+   } = useAuth();
    const navigate = useNavigate();
    const location = useLocation();
    const [showPassword, setShowPassword] = useState(false);
@@ -64,6 +71,9 @@ function LoginPage() {
          navigate(destination, {
             replace: true,
          });
+      } else if (justLoggedIn && !user && !loading) {
+         setJustLoggedIn(false);
+         setError("Your session could not be restored. Please sign in again.");
       }
    }, [user, loading, justLoggedIn, from, navigate, addToast]);
 
@@ -144,8 +154,7 @@ function LoginPage() {
 
             // console.log("Django Authentication Response:", data);
 
-            if (response.ok && data?.access) {
-               // If refresh is empty or undefined, it just passes null/undefined to AuthContext
+            if (response.ok && data?.access && data?.refresh) {
                await login(data.access, data.refresh, true);
                setJustLoggedIn(true);
                return;
@@ -166,6 +175,10 @@ function LoginPage() {
          console.error("Google Sign-In Error");
       },
    });
+
+   if (justLoggedIn && loading) {
+      return <AuthRouteLoader error={sessionRestoreError} onRetry={retrySessionRestore} />;
+   }
 
    return (
       <>

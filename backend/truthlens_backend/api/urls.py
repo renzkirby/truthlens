@@ -1,7 +1,7 @@
 from django.urls import path, include
-from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework.routers import DefaultRouter
 from . import views
+from .auth_tokens import SessionTokenRefreshView
 
 urlpatterns = [
     path("notifications/", views.NotificationListView.as_view(), name="notification_list"),
@@ -22,7 +22,7 @@ urlpatterns = [
     path("verify-file/", views.verify_file, name="verify_file"),
     # Auth urls
     path("auth/login/", views.login_user),
-    path("auth/refresh/", TokenRefreshView.as_view()),
+    path("auth/refresh/", SessionTokenRefreshView.as_view()),
     path("auth/register/", views.register_user),
     path("auth/me/", views.get_current_user, name="auth_me"),
     path("auth/profile/update/", views.update_profile),

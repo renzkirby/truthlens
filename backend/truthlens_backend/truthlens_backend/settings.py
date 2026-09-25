@@ -280,6 +280,10 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 SITE_ID = 1
 REST_AUTH = {
     "USE_JWT": True,
+    "JWT_AUTH_HTTPONLY": False,
+    "JWT_TOKEN_CLAIMS_SERIALIZER": (
+        "api.auth_tokens.GoogleRememberedTokenObtainPairSerializer"
+    ),
 }
 ACCOUNT_LOGIN_METHODS = {"username", "email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
