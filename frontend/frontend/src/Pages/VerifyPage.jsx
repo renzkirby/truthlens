@@ -1,876 +1,969 @@
-/**
- * Verify Page (Fact Checking Interface)
- * ══════════════════════════════════════════════════════════════════
- * Main fact-checking interface where users submit claims for AI analysis.
- *
- * Features:
- *   - Multiple input methods (text snippet, URL, image/screenshot)
- *   - AI analysis results with confidence score
- *   - Verdict display with explanation
- *   - Escalation to community if unverified or low confidence
- *   - Result card with source links and context
- *
- * Workflow:
- *   1. User inputs claim (snippet, URL, or image)
- *   2. Backend processes via AI pipeline
- *   3. Results display with verdict, confidence, and summary
- *   4. User can escalate to community if desired
- */
-
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { useNavigate } from "react-router-dom";
 import Icons from "../components/Icons.jsx";
-
-// ── Utilities & Constants ──
 import { VERDICT_CONFIG } from "../utils/constants";
-
-// ── Styles ──
 import "./VerifyPage.css";
 
-// ── Loading Indicator Component ──
-const VerifyLoadingState = ({ isCompleting }) => {
+const POLL_INTERVAL_MS = 3000;
+const MAX_POLLS = 60;
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const DOCUMENT_EXTENSIONS = ["pdf", "docx", "txt"];
+
+const VERIFY_MODES = [
+   { id: "url", label: "URL", icon: "link", group: "claim" },
+   { id: "text", label: "Text", icon: "file-text", group: "claim" },
+   { id: "image", label: "Image", icon: "image", group: "claim" },
+   { id: "file", label: "Document", icon: "file", group: "claim" },
+   { id: "deepfake", label: "AI Image Check", icon: "sparkles", group: "media" },
+];
+
+const normalizeResult = (payload, claimId) => ({
+   ...payload,
+   id: payload?.id || payload?.claim_id || claimId,
+});
+
+const isResolvedMatch = (match) => Boolean(match?.verdict && match.verdict !== "PENDING");
+const hasNumericValue = (value) =>
+   value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+
+const getErrorMessage = (error, fallback) => {
+   if (error?.status === 429) {
+      return "Too many verification requests. Please wait a moment and try again.";
+   }
+
+   if (error?.status === 400 || error?.status === 415) {
+      return "We could not process that input. Check the format and try again.";
+   }
+
+   return fallback;
+};
+
+const getSafeSourceUrl = (value) => {
+   if (typeof value !== "string") return null;
+
+   try {
+      const parsedUrl = new URL(value);
+      return parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:" ? value : null;
+   } catch {
+      return null;
+   }
+};
+
+const getSourceDetails = (source) => {
+   if (typeof source === "string") return { url: getSafeSourceUrl(source), title: null };
+   if (!source || typeof source !== "object") return { url: null, title: null };
+   return { url: getSafeSourceUrl(source.url), title: source.title || null };
+};
+
+const getSourceLabel = ({ url, title }) => {
+   if (title) return title;
+   if (!url) return "Source";
+
+   try {
+      return new URL(url).hostname.replace(/^www\./, "");
+   } catch {
+      return url;
+   }
+};
+
+const VerifyLoadingState = ({ mode }) => {
+   const isMediaCheck = mode === "deepfake";
+
    return (
-      <div className="verify-loading-container">
-         <Icons name="loader" size={32} className="spin" color="#4f46e5" />
-         <p className="verify-loading-text">{isCompleting ? "Finalizing Report..." : "Analyzing your claim..."}</p>
-         <p className="verify-loading-subtext">Please wait. This may take 10-30 seconds.</p>
-         <div className="verify-loading-progress-bar">
-            {/* When completing, it switches to the completing animation that goes to 100% */}
-            <div className={`verify-loading-progress-fill ${isCompleting ? "completing" : ""}`} />
+      <div className="verify-loading-container" role="status" aria-live="polite">
+         <span className="verify-loading-spinner" aria-hidden="true" />
+         <div>
+            <p className="verify-loading-text">{isMediaCheck ? "Analyzing media signals" : "Analysis in progress"}</p>
+            <p className="verify-loading-subtext">
+               {isMediaCheck
+                  ? "The model is checking for signals associated with AI-generated imagery."
+                  : "TruthLens is gathering source context and evaluating the submitted claim."}
+            </p>
          </div>
       </div>
    );
 };
 
-// ── Optional Loading State Styles ──
-// These will be styled via VerifyPage.css
-
-// ── Result Card Component ──
-// Displays AI analysis result with verdict badge, confidence, and CTA buttons
-const ResultCard = ({ result, onEscalate }) => {
-   const config = VERDICT_CONFIG[result.verdict] || VERDICT_CONFIG.UNVERIFIED;
-
-   let confidenceColor;
-   if (result.verdict === "OUT_OF_SCOPE") {
-      confidenceColor = "var(--verdict-outofscope-border)";
-   } else {
-      confidenceColor =
-         result.confidence_score >= 70
-            ? "var(--verdict-fact-border)"
-            : result.confidence_score >= 40
-              ? "var(--verdict-misleading-border)"
-              : "var(--verdict-fake-border)";
-   }
-
-   // NEW: Allow community action for everything EXCEPT Out of Scope
-   const canAskCommunity = result.verdict !== "OUT_OF_SCOPE";
-
-   // Check if this is an escalation (AI is confused) or just a discussion (AI is confident)
-   const isEscalation = result.verdict === "UNVERIFIED" || result.confidence_score < 50;
-
-   const evidenceList =
-      result.sources && result.sources.length > 0 ? result.sources : result.source_url ? [result.source_url] : [];
+const VerdictBadge = ({ verdict }) => {
+   const normalizedVerdict = verdict || "UNVERIFIED";
+   const config = VERDICT_CONFIG[normalizedVerdict] || VERDICT_CONFIG.UNVERIFIED;
 
    return (
-      <div className="result-card">
-         <div className="result-verdict-row">
-            <span className="result-label">This content is</span>
-            <span className="result-badge" style={{ color: config.color, backgroundColor: config.bg }}>
-               {config.label}
-            </span>
-         </div>
+      <span className={`result-badge result-badge--${normalizedVerdict.toLowerCase()}`}>
+         <Icons name={config.icon} size={15} />
+         {config.label}
+      </span>
+   );
+};
 
-         {/* ── Banners ── */}
-         {result.has_community_verdict && (
-            <div className="result-banner community-verified">
-               <Icons name="shield-check" size={14} /> COMMUNITY VERIFIED
-            </div>
-         )}
-         {result.is_ai_generated && (
-            <div className="result-banner ai-warning">
-               <Icons name="sparkles" size={14} /> AI-GENERATED MEDIA DETECTED
-            </div>
-         )}
+const AiConfidence = ({ value }) => {
+   if (!hasNumericValue(value)) return null;
+   const numericValue = Number(value);
 
-         <div className="result-summary-box">
-            <p className="result-summary-title">
-               {result.has_community_verdict ? "Community Verdict Summary" : "AI Summary"}
-            </p>
-            <p className="result-summary-text">{result.summary}</p>
-         </div>
+   const boundedValue = Math.min(100, Math.max(0, numericValue));
 
-         <div className="result-confidence-label">
-            Confidence Score: <strong>{result.confidence_score}%</strong>
+   return (
+      <div className="ai-confidence">
+         <div className="ai-confidence-heading">
+            <span>AI confidence</span>
+            <strong>{Math.round(boundedValue)}%</strong>
          </div>
-         <div className="result-confidence-track">
-            <div
-               className="result-confidence-fill"
-               style={{
-                  width: `${result.confidence_score}%`,
-                  backgroundColor: confidenceColor,
-               }}
+         <div
+            className="ai-confidence-track"
+            role="meter"
+            aria-label="AI confidence"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow={Math.round(boundedValue)}
+         >
+            <span className="ai-confidence-fill" style={{ width: `${boundedValue}%` }} />
+         </div>
+         <p>Model confidence in its own assessment, not human or institutional certainty.</p>
+      </div>
+   );
+};
+
+const SourceList = ({ sources, title }) => {
+   const sourceItems = (sources || []).map(getSourceDetails).filter((source) => source.url);
+   if (!sourceItems.length) return null;
+
+   return (
+      <section className="result-sources-section" aria-labelledby="verify-sources-title">
+         <h3 id="verify-sources-title" className="result-section-title">
+            {title}
+         </h3>
+         <ul className="result-sources-list">
+            {sourceItems.map((source, index) => (
+               <li key={`${source.url}-${index}`}>
+                  <a href={source.url} target="_blank" rel="noopener noreferrer" className="result-source-item">
+                     <span>{getSourceLabel(source)}</span>
+                     {source.title && <small>{source.url}</small>}
+                     <Icons name="external-link" size={14} aria-hidden="true" />
+                  </a>
+               </li>
+            ))}
+         </ul>
+      </section>
+   );
+};
+
+const OrganizationIdentity = ({ organization }) => {
+   const [failedLogoUrl, setFailedLogoUrl] = useState(null);
+   const logoUrl = organization?.logo_url || null;
+   const canShowLogo = Boolean(logoUrl && failedLogoUrl !== logoUrl);
+
+   if (!organization?.name) return null;
+
+   return (
+      <div className="organization-identity">
+         {canShowLogo ? (
+            <img
+               src={logoUrl}
+               alt={`${organization.name} logo`}
+               className="organization-logo"
+               onError={() => setFailedLogoUrl(logoUrl)}
             />
-         </div>
-
-         {/* ── Score Context ── */}
-         {result.score_context && (
-            <div className="result-score-context">
-               <strong>Context:</strong> {result.score_context}
-            </div>
+         ) : (
+            <span className="organization-monogram" aria-hidden="true">
+               {organization.name.charAt(0).toUpperCase()}
+            </span>
          )}
+         <div>
+            <span>Published by</span>
+            <strong>{organization.name}</strong>
+         </div>
+      </div>
+   );
+};
 
-         {/* ── Multiple Sources List ── */}
-         {result.verdict !== "OUT_OF_SCOPE" && evidenceList.length > 0 && (
-            <div className="result-sources-section">
-               <strong className="result-sources-title">Sources:</strong>
-               <div className="result-sources-list">
-                  {evidenceList.map((src, index) => {
-                     const urlStr = typeof src === "string" ? src : src.url;
-                     return (
-                        <a
-                           key={index}
-                           href={urlStr}
-                           target="_blank"
-                           rel="noopener noreferrer"
-                           className="result-source-item"
-                        >
-                           "{urlStr}"
-                        </a>
-                     );
-                  })}
+const ResultCard = ({ result }) => {
+   const resolutionSource = result.resolution_source || (result.final_verdict ? "ADJUDICATION" : "AI");
+   const isOfficial = resolutionSource === "OFFICIAL_FACT_CHECK";
+   const isAdjudication = resolutionSource === "ADJUDICATION";
+   const hasCommunityDiscussion = resolutionSource === "COMMUNITY_THREAD";
+   const officialFactCheck = isOfficial ? result.official_fact_check : null;
+   const organization = officialFactCheck?.organization;
+   const officialRoute =
+      organization?.public_profile_available && organization?.slug && officialFactCheck?.fact_check_id
+         ? `/partners/${encodeURIComponent(organization.slug)}/fact-checks/${encodeURIComponent(officialFactCheck.fact_check_id)}`
+         : null;
+   const displayedVerdict = isAdjudication
+      ? result.final_verdict || result.verdict
+      : isOfficial
+        ? officialFactCheck?.verdict || result.verdict
+        : result.ai_verdict || result.verdict;
+   const aiVerdict = result.ai_verdict && result.ai_verdict !== displayedVerdict ? result.ai_verdict : null;
+   const summary = isOfficial ? officialFactCheck?.summary || result.summary : result.summary;
+   const sources = isOfficial
+      ? officialFactCheck?.sources || []
+      : result.sources?.length
+        ? result.sources
+        : result.source_url
+          ? [result.source_url]
+          : [];
+   const canDiscuss = result.verdict !== "OUT_OF_SCOPE" && Boolean(result.id);
+   const isAiOwnedResult = resolutionSource === "AI" || resolutionSource === "COMMUNITY_THREAD";
+   const isEscalation =
+      isAiOwnedResult &&
+      (displayedVerdict === "UNVERIFIED" ||
+         (hasNumericValue(result.confidence_score) && Number(result.confidence_score) < 50));
+   const sourceSectionTitle = isOfficial
+      ? "Published sources"
+      : resolutionSource === "AI"
+        ? "Sources considered by AI"
+        : "Available sources";
+
+   const provenance = isOfficial
+      ? {
+           icon: "shield-check",
+           title: "Published fact-check",
+           description: "An institutional publication is the authoritative conclusion shown here.",
+           className: "official",
+        }
+      : isAdjudication
+        ? {
+             icon: "users",
+             title: "Human adjudication",
+             description: "A human adjudicator determined the verdict. AI material is separated below.",
+             className: "adjudication",
+          }
+        : {
+             icon: "sparkles",
+             title: "AI-assisted assessment",
+             description:
+                "This conclusion was produced by automated analysis and should be checked against its sources.",
+             className: "ai",
+          };
+
+   return (
+      <article className="result-card" aria-labelledby="result-provenance-title">
+         <header className={`result-provenance result-provenance--${provenance.className}`}>
+            <span className="result-provenance-icon" aria-hidden="true">
+               <Icons name={provenance.icon} size={18} />
+            </span>
+            <div>
+               <h2 id="result-provenance-title">{provenance.title}</h2>
+               <p>{provenance.description}</p>
+            </div>
+         </header>
+
+         {hasCommunityDiscussion && (
+            <div className="community-availability">
+               <Icons name="message-circle" size={16} aria-hidden="true" />
+               <div>
+                  <strong>Community discussion available</strong>
+                  <span>The discussion is separate from the AI-assisted assessment above.</span>
                </div>
             </div>
          )}
 
-         <div className="result-footer" style={{ marginTop: "8px" }}>
-            <span className="result-source-type">
-               <Icons name="info" size={13} />
-               Source Type: {result.has_community_verdict ? "Community Moderation" : result.source_type}
-            </span>
-         </div>
+         {isOfficial && <OrganizationIdentity organization={organization} />}
 
-         {/* ── Call to Action Buttons ── */}
+         <section className="result-conclusion" aria-labelledby="result-conclusion-title">
+            <p id="result-conclusion-title" className="result-section-title">
+               {isOfficial ? "Published conclusion" : isAdjudication ? "Adjudicated conclusion" : "AI conclusion"}
+            </p>
+            <div className="result-verdict-row">
+               <VerdictBadge verdict={displayedVerdict} />
+            </div>
+            {isOfficial && officialFactCheck?.headline && (
+               <h3 className="official-headline">{officialFactCheck.headline}</h3>
+            )}
+         </section>
+
+         {result.is_ai_generated && (
+            <div className="result-signal-note">
+               <Icons name="sparkles" size={15} aria-hidden="true" />
+               AI-generated media signals were detected in the submitted content.
+            </div>
+         )}
+
+         {isOfficial ? (
+            summary && (
+               <section className="result-summary-box" aria-labelledby="published-summary-title">
+                  <h3 id="published-summary-title" className="result-section-title">
+                     Published summary
+                  </h3>
+                  <p className="result-summary-text">{summary}</p>
+               </section>
+            )
+         ) : isAdjudication ? (
+            (summary || hasNumericValue(result.confidence_score) || result.score_context) && (
+               <section className="ai-context" aria-labelledby="ai-context-title">
+                  <div className="ai-context-heading">
+                     <Icons name="sparkles" size={16} aria-hidden="true" />
+                     <h3 id="ai-context-title">AI analysis context</h3>
+                  </div>
+                  {summary && <p className="result-summary-text">{summary}</p>}
+                  {aiVerdict && (
+                     <p className="ai-context-verdict">
+                        AI assessment: <VerdictBadge verdict={aiVerdict} />
+                     </p>
+                  )}
+                  <AiConfidence value={result.confidence_score} />
+                  {result.score_context && (
+                     <p className="result-score-context">
+                        <strong>AI assessment context:</strong> {result.score_context}
+                     </p>
+                  )}
+               </section>
+            )
+         ) : (
+            <>
+               {summary && (
+                  <section className="result-summary-box" aria-labelledby="ai-summary-title">
+                     <h3 id="ai-summary-title" className="result-section-title">
+                        AI analysis summary
+                     </h3>
+                     <p className="result-summary-text">{summary}</p>
+                  </section>
+               )}
+               <AiConfidence value={result.confidence_score} />
+            </>
+         )}
+
+         {result.score_context && !isOfficial && !isAdjudication && (
+            <p className="result-score-context">
+               <strong>AI assessment context:</strong> {result.score_context}
+            </p>
+         )}
+
+         <SourceList sources={sources} title={sourceSectionTitle} />
+
+         {result.source_type && (
+            <p className="result-source-type">
+               <Icons name="info" size={14} aria-hidden="true" />
+               Input or source type: {result.source_type}
+            </p>
+         )}
+
          <div className="result-action-buttons">
-            <a href={`/analysis/${result.id}`} target="_blank" rel="noopener noreferrer" className="view-report-btn">
-               View Full Report →
-            </a>
+            {officialRoute && (
+               <Link to={officialRoute} className="result-action result-action--primary">
+                  Read published fact-check
+                  <Icons name="arrow-right" size={16} aria-hidden="true" />
+               </Link>
+            )}
+
+            {result.id && (
+               <Link
+                  to={`/analysis/${encodeURIComponent(result.id)}`}
+                  className={`result-action ${officialRoute ? "result-action--secondary" : "result-action--primary"}`}
+               >
+                  View AI analysis
+                  <Icons name="arrow-right" size={16} aria-hidden="true" />
+               </Link>
+            )}
 
             {result.thread_id ? (
-               <a
-                  href={`/thread/detail/${result.thread_id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="view-thread-btn"
+               <Link
+                  to={`/thread/detail/${encodeURIComponent(result.thread_id)}`}
+                  className="result-action result-action--secondary"
                >
-                  View Community Discussion
-               </a>
-            ) : canAskCommunity && result.id ? (
-               <button
-                  className="escalate-btn"
-                  onClick={onEscalate}
-                  style={
-                     !isEscalation
-                        ? {
-                             background: "#f3f4f6",
-                             borderColor: "#e5e7eb",
-                             color: "#4b5563",
-                          }
-                        : {}
-                  }
+                  View community discussion
+               </Link>
+            ) : canDiscuss ? (
+               <Link
+                  to={`/thread/create?claim_id=${encodeURIComponent(result.id)}`}
+                  className="result-action result-action--tertiary"
                >
-                  <Icons name={isEscalation ? "flag" : "users"} size={14} />
-                  {isEscalation ? "Ask the Community" : "Discuss / Contest in Community"}
-               </button>
+                  <Icons name={isEscalation ? "flag" : "users"} size={15} aria-hidden="true" />
+                  {isEscalation ? "Ask the community" : "Start a community discussion"}
+               </Link>
             ) : null}
          </div>
-      </div>
+      </article>
    );
 };
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+const DeepfakeResult = ({ result }) => {
+   const detected = result.detected;
+
+   return (
+      <article className="result-card media-result" aria-labelledby="media-result-title">
+         <header className="result-provenance result-provenance--ai">
+            <span className="result-provenance-icon" aria-hidden="true">
+               <Icons name="scan-line" size={18} />
+            </span>
+            <div>
+               <h2 id="media-result-title">Automated image analysis</h2>
+               <p>This is a model estimate, not proof that the image is authentic or fabricated.</p>
+            </div>
+         </header>
+
+         <div className={`media-signal media-signal--${detected ? "detected" : "clear"}`}>
+            <Icons name={detected ? "alert-triangle" : "info"} size={18} aria-hidden="true" />
+            <strong>{detected ? "AI-generation signals detected" : "No strong AI-generation signals detected"}</strong>
+         </div>
+
+         <section className="media-probability" aria-labelledby="media-probability-title">
+            <p id="media-probability-title">Model-estimated AI-generation likelihood</p>
+            <strong>{result.score === null ? "Unavailable" : `${result.score}%`}</strong>
+         </section>
+
+         {result.summary && (
+            <section className="result-summary-box" aria-labelledby="media-explanation-title">
+               <h3 id="media-explanation-title" className="result-section-title">
+                  Model explanation
+               </h3>
+               <p className="result-summary-text">{result.summary}</p>
+            </section>
+         )}
+
+         <p className="media-caveat">
+            Automated detection can miss sophisticated edits or flag genuine images. Use provenance, original files, and
+            corroborating evidence before drawing a conclusion.
+         </p>
+      </article>
+   );
+};
+
 function VerifyPage() {
    const { authFetch } = useAuth();
-   const navigate = useNavigate();
-   const fileInputRef = useRef(null);
-
    const [activeTab, setActiveTab] = useState("url");
    const [url, setUrl] = useState("");
-   const [image, setImage] = useState(null);
-   const [imagePreview, setImagePreview] = useState(null);
    const [text, setText] = useState("");
+   const [claimImage, setClaimImage] = useState(null);
+   const [claimImagePreview, setClaimImagePreview] = useState(null);
+   const [mediaImage, setMediaImage] = useState(null);
+   const [mediaImagePreview, setMediaImagePreview] = useState(null);
+   const [docFile, setDocFile] = useState(null);
    const [loading, setLoading] = useState(false);
-   const [isCompleting, setIsCompleting] = useState(false);
    const [result, setResult] = useState(null);
    const [error, setError] = useState(null);
-   const [docFile, setDocFile] = useState(null);
+
+   const tabRefs = useRef([]);
+   const claimImageInputRef = useRef(null);
+   const mediaImageInputRef = useRef(null);
    const docFileInputRef = useRef(null);
+   const pollTimerRef = useRef(null);
+   const operationRef = useRef(0);
+   const resultRef = useRef(null);
 
-   const pollForResult = (claimId) => {
+   useEffect(() => {
+      return () => {
+         if (claimImagePreview) URL.revokeObjectURL(claimImagePreview);
+      };
+   }, [claimImagePreview]);
+
+   useEffect(() => {
+      return () => {
+         if (mediaImagePreview) URL.revokeObjectURL(mediaImagePreview);
+      };
+   }, [mediaImagePreview]);
+
+   useEffect(() => {
+      return () => {
+         operationRef.current += 1;
+         if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+      };
+   }, []);
+
+   useEffect(() => {
+      if (result && !loading) resultRef.current?.focus();
+   }, [result, loading]);
+
+   const cancelActiveWork = () => {
+      operationRef.current += 1;
+      if (pollTimerRef.current) {
+         clearTimeout(pollTimerRef.current);
+         pollTimerRef.current = null;
+      }
+   };
+
+   const beginOperation = () => {
+      cancelActiveWork();
+      const operationId = operationRef.current;
+      setLoading(true);
+      setResult(null);
+      setError(null);
+      return operationId;
+   };
+
+   const failOperation = (operationId, message) => {
+      if (operationRef.current !== operationId) return;
+      setError(message);
+      setLoading(false);
+   };
+
+   const pollForResult = (claimId, operationId) => {
       let pollCount = 0;
-      const maxPolls = 20;
 
-      const interval = setInterval(async () => {
-         pollCount++;
+      const poll = async () => {
+         if (operationRef.current !== operationId) return;
+         pollCount += 1;
 
-         if (pollCount > maxPolls) {
-            clearInterval(interval);
-            setError("Verification timed out. Please try again.");
-            setLoading(false);
+         if (pollCount > MAX_POLLS) {
+            failOperation(operationId, "This analysis is taking longer than expected. You can try again in a moment.");
             return;
          }
 
          try {
             const data = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/claims/${claimId}/status`);
+            if (operationRef.current !== operationId) return;
 
             if (data.verdict !== "PENDING") {
-               clearInterval(interval);
-               setIsCompleting(true);
-               // Give 800ms for the animation to shoot to 100% before removing the loading state
-               setTimeout(() => {
-                  setResult(data);
-                  setLoading(false);
-                  setIsCompleting(false);
-               }, 800);
+               setResult(normalizeResult(data, claimId));
+               setLoading(false);
+               return;
             }
-         } catch (err) {
-            console.error("Verification error:", err);
-            clearInterval(interval);
-            setError("Failed to retrieve result. Please try again.");
-            setLoading(false);
-            setIsCompleting(false);
+
+            pollTimerRef.current = setTimeout(poll, POLL_INTERVAL_MS);
+         } catch (pollError) {
+            failOperation(
+               operationId,
+               getErrorMessage(pollError, "We could not retrieve the verification result. Please try again."),
+            );
          }
-      }, 3000);
+      };
+
+      pollTimerRef.current = setTimeout(poll, POLL_INTERVAL_MS);
    };
 
-   // ── URL verification handler ──────────────────────────────────────────────
-   const handleUrlVerify = async () => {
+   const handleSubmissionResponse = (data, operationId) => {
+      if (operationRef.current !== operationId) return;
+
+      if (isResolvedMatch(data?.match)) {
+         setResult(normalizeResult(data.match, data.claim_id));
+         setLoading(false);
+         return;
+      }
+
+      if (!data?.claim_id) {
+         failOperation(operationId, "The verification request did not start correctly. Please try again.");
+         return;
+      }
+
+      pollForResult(data.claim_id, operationId);
+   };
+
+   const handleUrlVerify = async (event) => {
+      event?.preventDefault();
       if (!url.trim()) return;
-      setLoading(true);
-      setResult(null);
-      setError(null);
+      const operationId = beginOperation();
 
       try {
          const data = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/verify-url/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url }),
+            body: { url: url.trim() },
          });
-         pollForResult(data.claim_id);
-      } catch (err) {
-         console.error("URL verification error:", err);
-         setError("Failed to submit URL. Please try again.");
-         setLoading(false);
+         handleSubmissionResponse(data, operationId);
+      } catch (submissionError) {
+         failOperation(
+            operationId,
+            getErrorMessage(submissionError, "We could not submit that URL. Check it and try again."),
+         );
       }
    };
 
-   // ── Image selection handler ───────────────────────────────────────────────
-   const handleImageSelect = (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      setImage(file);
-      setImagePreview(URL.createObjectURL(file));
-      setResult(null);
-      setError(null);
-   };
-
-   // ── Drag and drop handlers ────────────────────────────────────────────────
-   const handleDrop = (e) => {
-      e.preventDefault();
-      const file = e.dataTransfer.files[0];
-      if (!file || !file.type.startsWith("image/")) return;
-      setImage(file);
-      setImagePreview(URL.createObjectURL(file));
-      setResult(null);
-      setError(null);
-   };
-
-   // ── Image verification handler ────────────────────────────────────────────
-   const handleImageVerify = async () => {
-      if (!image) return;
-      setLoading(true);
-      setResult(null);
-      setError(null);
+   const handleTextVerify = async () => {
+      if (!text.trim()) return;
+      const operationId = beginOperation();
 
       try {
-         const base64 = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(image);
+         const data = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/verify-text/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: { text: text.trim() },
          });
+         handleSubmissionResponse(data, operationId);
+      } catch (submissionError) {
+         failOperation(
+            operationId,
+            getErrorMessage(submissionError, "We could not submit that text. Please try again."),
+         );
+      }
+   };
 
+   const handleImageVerify = async () => {
+      if (!claimImage) return;
+      const operationId = beginOperation();
+
+      try {
+         const base64 = await readFileAsDataUrl(claimImage);
+         if (operationRef.current !== operationId) return;
          const data = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/analyze/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image_data: base64 }),
+            body: { image_data: base64 },
          });
-
-         pollForResult(data.claim_id);
-      } catch (err) {
-         console.error("Image verification error:", err);
-         setError("Failed to submit image. Please try again.");
-         setLoading(false);
+         handleSubmissionResponse(data, operationId);
+      } catch (submissionError) {
+         failOperation(
+            operationId,
+            getErrorMessage(submissionError, "We could not analyze that image. Please try another file."),
+         );
       }
-   };
-
-   // ── File upload handlers ───────────────────────────────────────────────
-   const handleDocFileSelect = (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      setDocFile(file);
-      setResult(null);
-      setError(null);
-   };
-
-   const handleDocDrop = (e) => {
-      e.preventDefault();
-      const file = e.dataTransfer.files[0];
-      if (!file) return;
-      setDocFile(file);
-      setResult(null);
-      setError(null);
    };
 
    const handleFileVerify = async () => {
       if (!docFile) return;
-      setLoading(true);
-      setResult(null);
-      setError(null);
+      const operationId = beginOperation();
 
       try {
-         // Convert document to base64
-         const base64 = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(docFile);
-         });
-
-         // NOTE: We will need to build this endpoint in Django later to parse the PDF/DOCX!
+         const base64 = await readFileAsDataUrl(docFile);
+         if (operationRef.current !== operationId) return;
          const data = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/verify-file/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
+            body: {
                file_data: base64,
                file_name: docFile.name,
                file_type: docFile.type,
-            }),
+            },
          });
-
-         pollForResult(data.claim_id);
-      } catch (err) {
-         console.error("File verification error:", err);
-         setError("Failed to submit document. Please try again.");
-         setLoading(false);
+         handleSubmissionResponse(data, operationId);
+      } catch (submissionError) {
+         failOperation(
+            operationId,
+            getErrorMessage(submissionError, "We could not analyze that document. Please try again."),
+         );
       }
    };
 
-   // ── AI-GENERATED IMAGE DETECTION handler ────────────────────────────────────────────────────
    const handleDeepfakeTest = async () => {
-      if (!image) return;
-      setLoading(true);
-      setResult(null);
-      setError(null);
-
-      const base64 = await new Promise((resolve, reject) => {
-         const reader = new FileReader();
-         reader.onload = () => resolve(reader.result);
-         reader.onerror = reject;
-         reader.readAsDataURL(image);
-      });
+      if (!mediaImage) return;
+      const operationId = beginOperation();
 
       try {
+         const base64 = await readFileAsDataUrl(mediaImage);
+         if (operationRef.current !== operationId) return;
          const response = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/test-deepfake/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image_data: base64 }),
+            body: { image_data: base64 },
          });
-
-         setIsCompleting(true);
-         setTimeout(() => {
-            // Custom simple result for the sandbox
-            setResult({
-               isDeepfakeTest: true,
-               score: (response.ai_probability * 100).toFixed(1),
-               verdict: response.is_fake ? "AI GENERATED" : "REAL IMAGE",
-               summary: response.summary,
-            });
-            setLoading(false);
-            setIsCompleting(false);
-         }, 800);
-      } catch (err) {
-         console.error("Deepfake test error:", err);
-         setError("Deepfake test failed.");
+         if (operationRef.current !== operationId) return;
+         const probability = Number(response.ai_probability);
+         setResult({
+            isDeepfakeTest: true,
+            score: Number.isFinite(probability) ? (probability * 100).toFixed(1) : null,
+            detected: Boolean(response.is_fake),
+            summary: response.summary,
+         });
          setLoading(false);
+      } catch (submissionError) {
+         failOperation(
+            operationId,
+            getErrorMessage(submissionError, "The media analysis could not be completed. Please try again."),
+         );
       }
    };
 
-   // ── Text verification handler ────────────────────────────────────────────
-   const handleTextVerify = async () => {
-      if (!text.trim()) return;
-      setLoading(true);
+   const selectImage = (file, setFile, setPreview, inputRef) => {
+      if (!file) return;
+
+      const extension = file.name.split(".").pop()?.toLowerCase();
+      if (!IMAGE_TYPES.includes(file.type) && !["jpg", "jpeg", "png", "webp"].includes(extension)) {
+         cancelActiveWork();
+         setFile(null);
+         setPreview(null);
+         setResult(null);
+         setError("Choose a PNG, JPG, or WEBP image.");
+         setLoading(false);
+         if (inputRef.current) inputRef.current.value = "";
+         return;
+      }
+
+      cancelActiveWork();
+      setFile(file);
+      setPreview(URL.createObjectURL(file));
       setResult(null);
       setError(null);
-
-      try {
-         // We will build this endpoint in Django next!
-         const data = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/verify-text/`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text }),
-         });
-         pollForResult(data.claim_id);
-      } catch (err) {
-         console.error("Text verification error:", err);
-         setError("Failed to submit text. Please try again.");
-         setLoading(false);
-      }
+      setLoading(false);
    };
 
-   // ── Tab switch handler ────────────────────────────────────────────────────
+   const selectDocument = (file) => {
+      if (!file) return;
+      const extension = file.name.split(".").pop()?.toLowerCase();
+
+      if (!DOCUMENT_EXTENSIONS.includes(extension)) {
+         cancelActiveWork();
+         setDocFile(null);
+         setResult(null);
+         setError("Choose a PDF, DOCX, or TXT document.");
+         setLoading(false);
+         if (docFileInputRef.current) docFileInputRef.current.value = "";
+         return;
+      }
+
+      cancelActiveWork();
+      setDocFile(file);
+      setResult(null);
+      setError(null);
+      setLoading(false);
+   };
+
+   const clearFile = (setFile, inputRef, setPreview = null) => {
+      cancelActiveWork();
+      setFile(null);
+      if (setPreview) setPreview(null);
+      setResult(null);
+      setError(null);
+      setLoading(false);
+      if (inputRef.current) inputRef.current.value = "";
+   };
+
    const handleTabSwitch = (tab) => {
+      if (tab === activeTab) return;
+      cancelActiveWork();
       setActiveTab(tab);
       setResult(null);
       setError(null);
       setLoading(false);
-      setUrl("");
-      setImage(null);
-      setImagePreview(null);
-      setText("");
-      setDocFile(null);
+   };
+
+   const handleTabKeyDown = (event, index) => {
+      let nextIndex = null;
+      if (event.key === "ArrowRight" || event.key === "ArrowDown") nextIndex = (index + 1) % VERIFY_MODES.length;
+      if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+         nextIndex = (index - 1 + VERIFY_MODES.length) % VERIFY_MODES.length;
+      }
+      if (event.key === "Home") nextIndex = 0;
+      if (event.key === "End") nextIndex = VERIFY_MODES.length - 1;
+      if (nextIndex === null) return;
+
+      event.preventDefault();
+      handleTabSwitch(VERIFY_MODES[nextIndex].id);
+      tabRefs.current[nextIndex]?.focus();
    };
 
    return (
       <div className="verify-layout">
          <main className={`verify-container ${result && !loading ? "has-result" : ""}`}>
-            <div className="verify-header">
-               <div className="verify-header-icon">
-                  <Icons name="scan-line" size={22} color="#fff" />
+            <header className="verify-header">
+               <div className="verify-header-icon" aria-hidden="true">
+                  <Icons name="scan-line" size={22} />
                </div>
                <div>
-                  <h1 className="verify-title">Verify a Claim</h1>
-                  <p className="verify-subtitle">Submit a URL or image to check if it contains misinformation.</p>
+                  <h1 className="verify-title">Verify a claim or check image</h1>
+                  <p className="verify-subtitle">
+                     Compare claims with available evidence, or check an image for AI-generation signals.
+                  </p>
                </div>
-            </div>
+            </header>
 
-            {/* Tabs */}
-            <div className="verify-tabs">
-               <button
-                  className={`verify-tab-btn ${activeTab === "url" ? "active" : ""}`}
-                  onClick={() => handleTabSwitch("url")}
-               >
-                  <Icons name="link" size={15} />
-                  Analyze URL
-               </button>
-               <button
-                  className={`verify-tab-btn ${activeTab === "image" ? "active" : ""}`}
-                  onClick={() => handleTabSwitch("image")}
-               >
-                  <Icons name="image" size={15} />
-                  Verify Image
-               </button>
-               <button
-                  className={`verify-tab-btn ${activeTab === "text" ? "active" : ""}`}
-                  onClick={() => handleTabSwitch("text")}
-               >
-                  <Icons name="file-text" size={15} />
-                  Verify Text
-               </button>
-               <button
-                  className={`verify-tab-btn ${activeTab === "file" ? "active" : ""}`}
-                  onClick={() => handleTabSwitch("file")}
-               >
-                  <Icons name="file" size={15} />
-                  Verify File
-               </button>
-               <button
-                  className={`verify-tab-btn ${activeTab === "deepfake" ? "active" : ""}`}
-                  onClick={() => {
-                     setActiveTab("deepfake");
-                     setResult(null);
-                     setError(null);
-                  }}
-               >
-                  <Icons name="sparkles" size={16} />
-                  Detect Deepfake
-               </button>
-            </div>
+            <section className="verify-mode-selector" aria-label="Verification method">
+               <div className="verify-mode-context">
+                  <span>Claim verification</span>
+                  <span>AI image detection</span>
+               </div>
+               <div className="verify-tabs" role="tablist" aria-label="Choose what to analyze">
+                  {VERIFY_MODES.map((mode, index) => (
+                     <button
+                        key={mode.id}
+                        ref={(element) => {
+                           tabRefs.current[index] = element;
+                        }}
+                        id={`verify-tab-${mode.id}`}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeTab === mode.id}
+                        aria-controls="verify-mode-panel"
+                        tabIndex={activeTab === mode.id ? 0 : -1}
+                        className={`verify-tab-btn ${mode.group === "media" ? "verify-tab-btn--media" : ""} ${activeTab === mode.id ? "active" : ""}`}
+                        onClick={() => handleTabSwitch(mode.id)}
+                        onKeyDown={(event) => handleTabKeyDown(event, index)}
+                     >
+                        <Icons name={mode.icon} size={16} aria-hidden="true" />
+                        {mode.label}
+                     </button>
+                  ))}
+               </div>
+            </section>
 
             <div className="verify-body">
                <div className="verify-body-left">
-                  {/* Loading State */}
-                  {loading && <VerifyLoadingState isCompleting={isCompleting} />}
-                  {/* Error State */}
+                  {loading && <VerifyLoadingState mode={activeTab} />}
+
                   {error && (
-                     <div className="verify-error">
-                        <Icons name="alert-triangle" size={15} />
-                        {error}
+                     <div className="verify-error" role="alert">
+                        <Icons name="alert-triangle" size={17} aria-hidden="true" />
+                        <span>{error}</span>
                      </div>
                   )}
 
-                  {/* ── URL Tab ── */}
-                  {activeTab === "url" && (
-                     <div className="verify-panel box-panel">
-                        <label className="panel-label">
-                           <Icons name="link" size={14} />
-                           Paste a news article or social media URL
-                        </label>
-                        <div className="url-input-row">
-                           <input
-                              type="text"
-                              className="url-input"
-                              placeholder="https://..."
-                              value={url}
-                              onChange={(e) => setUrl(e.target.value)}
-                              onKeyDown={(e) => e.key === "Enter" && handleUrlVerify()}
+                  <section
+                     id="verify-mode-panel"
+                     role="tabpanel"
+                     aria-labelledby={`verify-tab-${activeTab}`}
+                     className="verify-panel box-panel"
+                  >
+                     {activeTab === "url" && (
+                        <form onSubmit={handleUrlVerify}>
+                           <PanelHeading
+                              icon="link"
+                              title="Check a URL-based claim"
+                              description="Submit a public article or post. TruthLens will analyze its claim and available source context."
+                           />
+                           <label className="field-label" htmlFor="verify-url-input">
+                              Article or post URL
+                           </label>
+                           <div className="url-input-row">
+                              <input
+                                 id="verify-url-input"
+                                 type="url"
+                                 inputMode="url"
+                                 className="verify-input"
+                                 placeholder="https://example.com/article"
+                                 value={url}
+                                 onChange={(event) => {
+                                    setUrl(event.target.value);
+                                    setResult(null);
+                                    setError(null);
+                                 }}
+                                 disabled={loading}
+                                 required
+                                 aria-describedby="verify-url-hint"
+                              />
+                              <SubmitButton loading={loading} disabled={!url.trim()} label="Verify URL" />
+                           </div>
+                           <p id="verify-url-hint" className="panel-hint">
+                              Public pages work best. Paywalls and sign-in walls may limit the available evidence.
+                           </p>
+                        </form>
+                     )}
+
+                     {activeTab === "text" && (
+                        <>
+                           <PanelHeading
+                              icon="file-text"
+                              title="Check a written claim"
+                              description="Paste one clear factual claim, quotation, or short post for focused analysis."
+                           />
+                           <label className="field-label" htmlFor="verify-text-input">
+                              Claim text
+                           </label>
+                           <textarea
+                              id="verify-text-input"
+                              className="verify-input verify-textarea"
+                              placeholder="Paste the claim you want to check…"
+                              value={text}
+                              onChange={(event) => {
+                                 setText(event.target.value);
+                                 setResult(null);
+                                 setError(null);
+                              }}
                               disabled={loading}
+                              rows={6}
+                              aria-describedby="verify-text-hint"
                            />
                            <button
-                              className="verify-submit-btn"
-                              onClick={handleUrlVerify}
-                              disabled={loading || !url.trim()}
+                              type="button"
+                              className="verify-submit-btn full-width"
+                              onClick={handleTextVerify}
+                              disabled={loading || !text.trim()}
                            >
-                              {loading ? (
-                                 <>
-                                    <div className="btn-spinner" />
-                                    Verifying...
-                                 </>
-                              ) : (
-                                 <>
-                                    <Icons name="search" size={15} />
-                                    Verify
-                                 </>
-                              )}
+                              <Icons name="search" size={16} aria-hidden="true" />
+                              Verify text
                            </button>
-                        </div>
-                        <p className="panel-hint">
-                           Works best with news articles. Social media posts and paywalled sites may not load correctly.
-                        </p>
-                     </div>
-                  )}
+                           <p id="verify-text-hint" className="panel-hint">
+                              Keep the wording specific. Context such as dates, places, and named people can improve the
+                              analysis.
+                           </p>
+                        </>
+                     )}
 
-                  {/* ── Image Tab ── */}
-                  {activeTab === "image" && (
-                     <div className="verify-panel box-panel">
-                        <label className="panel-label">
-                           <Icons name="image" size={14} />
-                           Upload a screenshot or image to verify
-                        </label>
+                     {activeTab === "image" && (
+                        <>
+                           <PanelHeading
+                              icon="image"
+                              title="Verify a claim shown in an image"
+                              description="Upload a screenshot or image containing text. TruthLens will extract and analyze the claim."
+                           />
+                           <UploadZone
+                              previewUrl={claimImagePreview}
+                              file={claimImage}
+                              inputRef={claimImageInputRef}
+                              accept="image/jpeg,image/png,image/webp"
+                              hint="PNG, JPG, or WEBP"
+                              onSelect={(file) =>
+                                 selectImage(file, setClaimImage, setClaimImagePreview, claimImageInputRef)
+                              }
+                              onRemove={() => clearFile(setClaimImage, claimImageInputRef, setClaimImagePreview)}
+                              previewAlt="Selected claim image preview"
+                           />
+                           <button
+                              type="button"
+                              className="verify-submit-btn full-width"
+                              onClick={handleImageVerify}
+                              disabled={loading || !claimImage}
+                           >
+                              <Icons name="scan-line" size={16} aria-hidden="true" />
+                              Verify image claim
+                           </button>
+                        </>
+                     )}
 
-                        <div
-                           className={`drop-zone ${imagePreview ? "has-image" : ""}`}
-                           onClick={() => !imagePreview && fileInputRef.current?.click()}
-                           onDrop={handleDrop}
-                           onDragOver={(e) => e.preventDefault()}
-                        >
-                           {imagePreview ? (
-                              <div className="image-preview-wrapper">
-                                 <img src={imagePreview} alt="Preview" className="image-preview" />
-                                 <button
-                                    className="remove-image-btn"
-                                    onClick={(e) => {
-                                       e.stopPropagation();
-                                       setImage(null);
-                                       setImagePreview(null);
-                                       setResult(null);
-                                    }}
-                                 >
-                                    <Icons name="x" size={14} /> Remove
-                                 </button>
-                              </div>
-                           ) : (
-                              <div className="drop-zone-content">
-                                 <Icons name="upload" size={32} color="#9ca3af" />
-                                 <p className="drop-zone-text">
-                                    Drag and drop an image here, or <span className="drop-zone-link">browse</span>
-                                 </p>
-                                 <p className="drop-zone-hint">PNG, JPG, WEBP supported</p>
-                              </div>
-                           )}
-                        </div>
+                     {activeTab === "file" && (
+                        <>
+                           <PanelHeading
+                              icon="file"
+                              title="Verify claims in a document"
+                              description="Upload a supported document so TruthLens can extract and analyze its claims."
+                           />
+                           <UploadZone
+                              file={docFile}
+                              inputRef={docFileInputRef}
+                              accept=".pdf,.docx,.txt"
+                              hint="PDF, DOCX, or TXT"
+                              onSelect={selectDocument}
+                              onRemove={() => clearFile(setDocFile, docFileInputRef)}
+                           />
+                           <button
+                              type="button"
+                              className="verify-submit-btn full-width"
+                              onClick={handleFileVerify}
+                              disabled={loading || !docFile}
+                           >
+                              <Icons name="scan-line" size={16} aria-hidden="true" />
+                              Verify document
+                           </button>
+                        </>
+                     )}
 
-                        {/* Hidden file input */}
-                        <input
-                           ref={fileInputRef}
-                           type="file"
-                           accept="image/*"
-                           className="hidden-file-input"
-                           onChange={handleImageSelect}
-                        />
-
-                        <button
-                           className="verify-submit-btn full-width"
-                           onClick={handleImageVerify}
-                           disabled={loading || !image}
-                        >
-                           {loading ? (
-                              <>
-                                 <div className="btn-spinner" />
-                                 Analyzing image...
-                              </>
-                           ) : (
-                              <>
-                                 <Icons name="scan-line" size={15} />
-                                 Verify Image
-                              </>
-                           )}
-                        </button>
-                        <p className="panel-hint">
-                           Our AI will extract text from the image using OCR and verify the claim.
-                        </p>
-                     </div>
-                  )}
-                  {/* Text Tab */}
-                  {activeTab === "text" && (
-                     <div className="verify-panel box-panel">
-                        <label className="panel-label">
-                           <Icons name="file-text" size={14} />
-                           Paste a claim, quote, or social media post
-                        </label>
-
-                        <textarea
-                           className="url-input"
-                           placeholder="e.g., 'The government just announced a nationwide lockdown starting tomorrow...'"
-                           value={text}
-                           onChange={(e) => setText(e.target.value)}
-                           disabled={loading}
-                           rows={5}
-                           style={{
-                              resize: "vertical",
-                              height: "auto",
-                              minHeight: "100px",
-                              padding: "12px",
-                              marginBottom: "15px",
-                              width: "100%",
-                           }}
-                        />
-
-                        <button
-                           className="verify-submit-btn full-width"
-                           onClick={handleTextVerify}
-                           disabled={loading || !text.trim()}
-                        >
-                           {loading ? (
-                              <>
-                                 <div className="btn-spinner" />
-                                 Analyzing text...
-                              </>
-                           ) : (
-                              <>
-                                 <Icons name="search" size={15} />
-                                 Verify Text
-                              </>
-                           )}
-                        </button>
-                        <p className="panel-hint">
-                           Our AI will extract the core claim, cross-reference it with live news, and evaluate its
-                           factual accuracy.
-                        </p>
-                     </div>
-                  )}
-
-                  {/* ── File Tab ── */}
-                  {activeTab === "file" && (
-                     <div className="verify-panel box-panel">
-                        <label className="panel-label">
-                           <Icons name="file" size={14} />
-                           Upload a document to verify
-                        </label>
-
-                        <div
-                           className={`drop-zone ${docFile ? "has-image" : ""}`}
-                           onClick={() => !docFile && docFileInputRef.current?.click()}
-                           onDrop={handleDocDrop}
-                           onDragOver={(e) => e.preventDefault()}
-                        >
-                           {docFile ? (
-                              <div className="image-preview-wrapper">
-                                 <div className="file-preview-box">
-                                    <Icons name="file-text" size={32} color="#4f46e5" />
-                                    <p className="file-name">{docFile.name}</p>
-                                    <p className="file-size">{(docFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                                 </div>
-                                 <button
-                                    className="remove-image-btn"
-                                    onClick={(e) => {
-                                       e.stopPropagation();
-                                       setDocFile(null);
-                                       setResult(null);
-                                    }}
-                                 >
-                                    <Icons name="x" size={14} /> Remove
-                                 </button>
-                              </div>
-                           ) : (
-                              <div className="drop-zone-content">
-                                 <Icons name="upload" size={32} color="#9ca3af" />
-                                 <p className="drop-zone-text">
-                                    Drag and drop a document here, or <span className="drop-zone-link">browse</span>
-                                 </p>
-                                 <p className="drop-zone-hint">PDF & TXT format supported</p>
-                              </div>
-                           )}
-                        </div>
-
-                        {/* Hidden file input */}
-                        <input
-                           ref={docFileInputRef}
-                           type="file"
-                           accept=".pdf,.docx,.txt"
-                           className="hidden-file-input"
-                           onChange={handleDocFileSelect}
-                        />
-
-                        <button
-                           className="verify-submit-btn full-width"
-                           onClick={handleFileVerify}
-                           disabled={loading || !docFile}
-                        >
-                           {loading ? (
-                              <>
-                                 <div className="btn-spinner" />
-                                 Analyzing document...
-                              </>
-                           ) : (
-                              <>
-                                 <Icons name="scan-line" size={15} />
-                                 Verify Document
-                              </>
-                           )}
-                        </button>
-                        <p className="panel-hint">
-                           Our AI will extract text from the document and cross-reference its claims.
-                        </p>
-                     </div>
-                  )}
-
-                  {/* Deepfake Tab */}
-                  {activeTab === "deepfake" && (
-                     <div className="verify-panel box-panel">
-                        <label className="panel-label">
-                           <Icons name="sparkles" size={14} />
-                           Upload a photo for Deepfake detection
-                        </label>
-
-                        <div
-                           className={`drop-zone ${imagePreview ? "has-image" : ""}`}
-                           onClick={() => !imagePreview && fileInputRef.current?.click()}
-                           onDrop={handleDrop}
-                           onDragOver={(e) => e.preventDefault()}
-                        >
-                           {imagePreview ? (
-                              <div className="image-preview-wrapper">
-                                 <img src={imagePreview} alt="Preview" className="image-preview" />
-                                 <button
-                                    className="remove-image-btn"
-                                    onClick={(e) => {
-                                       e.stopPropagation();
-                                       setImage(null);
-                                       setImagePreview(null);
-                                       setResult(null);
-                                    }}
-                                 >
-                                    <Icons name="x" size={14} /> Remove
-                                 </button>
-                              </div>
-                           ) : (
-                              <div className="drop-zone-content">
-                                 <Icons name="upload" size={32} color="#9ca3af" />
-                                 <p className="drop-zone-text">
-                                    Drag and drop an image here, or <span className="drop-zone-link">browse</span>
-                                 </p>
-                                 <p className="drop-zone-hint">PNG, JPG, WEBP supported</p>
-                              </div>
-                           )}
-                        </div>
-
-                        {/* Hidden file input */}
-                        <input
-                           ref={fileInputRef}
-                           type="file"
-                           accept="image/*"
-                           className="hidden-file-input"
-                           onChange={handleImageSelect}
-                        />
-
-                        <button
-                           className="verify-submit-btn full-width"
-                           onClick={handleDeepfakeTest}
-                           disabled={loading || !image}
-                        >
-                           {loading ? (
-                              <>
-                                 <div className="btn-spinner" />
-                                 Analyzing pixels...
-                              </>
-                           ) : (
-                              <>
-                                 <Icons name="scan-line" size={15} />
-                                 Run Deepfake Test
-                              </>
-                           )}
-                        </button>
-                        <p className="panel-hint">
-                           Our AI model will analyze the image for digital fabrication or AI generation.
-                        </p>
-                     </div>
-                  )}
+                     {activeTab === "deepfake" && (
+                        <>
+                           <PanelHeading
+                              icon="sparkles"
+                              title="Check for AI-generated image signals"
+                              description="Estimate whether an image contains patterns associated with AI generation. This does not verify the image's claim."
+                              tone="media"
+                           />
+                           <UploadZone
+                              previewUrl={mediaImagePreview}
+                              file={mediaImage}
+                              inputRef={mediaImageInputRef}
+                              accept="image/jpeg,image/png,image/webp"
+                              hint="PNG, JPG, or WEBP"
+                              onSelect={(file) =>
+                                 selectImage(file, setMediaImage, setMediaImagePreview, mediaImageInputRef)
+                              }
+                              onRemove={() => clearFile(setMediaImage, mediaImageInputRef, setMediaImagePreview)}
+                              previewAlt="Selected media preview"
+                           />
+                           <button
+                              type="button"
+                              className="verify-submit-btn full-width"
+                              onClick={handleDeepfakeTest}
+                              disabled={loading || !mediaImage}
+                           >
+                              <Icons name="scan-line" size={16} aria-hidden="true" />
+                              Check for AI-generated image signals
+                           </button>
+                           <p className="panel-hint">
+                              Automated image detection is one signal, not proof of authenticity or manipulation.
+                           </p>
+                        </>
+                     )}
+                  </section>
                </div>
 
-               {/* Right side results area */}
                {result && !loading && (
-                  <div className="verify-body-right verify-result-animator">
-                     {/* ── Standard Fact-Check Result ── */}
-                     {!result.isDeepfakeTest && (
-                        <ResultCard
-                           result={result}
-                           onEscalate={() => navigate(`/thread/create?claim_id=${result.id}`)}
-                        />
-                     )}
-
-                     {/* ── Deepfake Test Custom Result ── */}
-                     {result.isDeepfakeTest && (
-                        <div className="result-card box-panel">
-                           <div className="result-verdict-row">
-                              <span className="result-label">Deepfake Analysis:</span>
-                              <span
-                                 className="result-badge"
-                                 style={{
-                                    backgroundColor:
-                                       result.verdict === "AI GENERATED"
-                                          ? "var(--fake-bg, #fee2e2)"
-                                          : "var(--fact-bg, #dcfce7)",
-                                    color:
-                                       result.verdict === "AI GENERATED"
-                                          ? "var(--fake-text, #991b1b)"
-                                          : "var(--fact-text, #166534)",
-                                    border: `1px solid ${result.verdict === "AI GENERATED" ? "var(--fake-border, #f87171)" : "var(--fact-border, #86efac)"}`,
-                                 }}
-                              >
-                                 {result.verdict}
-                              </span>
-                           </div>
-
-                           <div className="result-summary-box">
-                              <p className="result-summary-title">AI Forensic Analysis</p>
-                              <p className="result-summary-text" style={{ marginBottom: "8px" }}>
-                                 The forensic model is <strong>{result.score}%</strong> confident that this image was
-                                 generated or manipulated by AI.
-                              </p>
-                              <div
-                                 style={{
-                                    borderTop: "1px solid #e5e7eb",
-                                    paddingTop: "8px",
-                                    fontSize: "13px",
-                                    color: "#4b5563",
-                                 }}
-                              >
-                                 <strong>Explanation:</strong> {result.summary}
-                              </div>
-                           </div>
-                        </div>
-                     )}
+                  <div ref={resultRef} className="verify-body-right verify-result-animator" tabIndex="-1">
+                     {result.isDeepfakeTest ? <DeepfakeResult result={result} /> : <ResultCard result={result} />}
                   </div>
                )}
             </div>
@@ -878,5 +971,81 @@ function VerifyPage() {
       </div>
    );
 }
+
+const readFileAsDataUrl = (file) =>
+   new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("The selected file could not be read."));
+      reader.readAsDataURL(file);
+   });
+
+const PanelHeading = ({ icon, title, description, tone = "claim" }) => (
+   <header className={`panel-heading panel-heading--${tone}`}>
+      <span className="panel-heading-icon" aria-hidden="true">
+         <Icons name={icon} size={18} />
+      </span>
+      <div>
+         <h2>{title}</h2>
+         <p>{description}</p>
+      </div>
+   </header>
+);
+
+const SubmitButton = ({ loading, disabled, label }) => (
+   <button type="submit" className="verify-submit-btn" disabled={loading || disabled}>
+      <Icons name="search" size={16} aria-hidden="true" />
+      {label}
+   </button>
+);
+
+const UploadZone = ({ previewUrl, file, inputRef, accept, hint, onSelect, onRemove, previewAlt }) => {
+   const handleDrop = (event) => {
+      event.preventDefault();
+      onSelect(event.dataTransfer.files?.[0]);
+   };
+
+   return (
+      <div
+         className={`upload-zone ${file ? "has-file" : ""}`}
+         onDrop={handleDrop}
+         onDragOver={(event) => event.preventDefault()}
+      >
+         {file ? (
+            <div className="upload-preview">
+               {previewUrl ? (
+                  <img src={previewUrl} alt={previewAlt} className="image-preview" />
+               ) : (
+                  <div className="file-preview-box">
+                     <Icons name="file-text" size={32} aria-hidden="true" />
+                     <p className="file-name">{file.name}</p>
+                     <p className="file-size">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                  </div>
+               )}
+               <button type="button" className="remove-file-btn" onClick={onRemove}>
+                  <Icons name="x" size={15} aria-hidden="true" />
+                  Remove file
+               </button>
+            </div>
+         ) : (
+            <button type="button" className="upload-zone-trigger" onClick={() => inputRef.current?.click()}>
+               <span className="upload-zone-icon" aria-hidden="true">
+                  <Icons name="upload" size={24} />
+               </span>
+               <span className="upload-zone-title">Drop a file here or choose from your device</span>
+               <span className="upload-zone-hint">{hint}</span>
+            </button>
+         )}
+         <input
+            ref={inputRef}
+            type="file"
+            accept={accept}
+            className="hidden-file-input"
+            tabIndex={-1}
+            onChange={(event) => onSelect(event.target.files?.[0])}
+         />
+      </div>
+   );
+};
 
 export default VerifyPage;
