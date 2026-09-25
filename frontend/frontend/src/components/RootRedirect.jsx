@@ -11,7 +11,7 @@ function RootRedirect() {
    }
 
    if (!token) {
-      return <Navigate to="/login" replace />;
+      return <Navigate to="/landing" replace />;
    }
 
    const destination = canAccessWorkspace(user) ? "/workspace" : "/community";

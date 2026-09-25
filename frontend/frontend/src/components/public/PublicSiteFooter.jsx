@@ -4,20 +4,15 @@ import "./PublicSiteFooter.css";
 
 function PublicSiteFooter() {
    const { pathname } = useLocation();
-   const isLandingPage = pathname === "/landing-page";
-   const sectionHref = (sectionId) =>
-      isLandingPage ? `#${sectionId}` : `/landing-page#${sectionId}`;
+   const isLandingPage = pathname === "/landing";
+   const sectionHref = (sectionId) => (isLandingPage ? `#${sectionId}` : `/landing#${sectionId}`);
 
    return (
       <footer className="public-site-footer">
          <div className="public-site-footer__container">
             <div className="public-site-footer__main">
                <div className="public-site-footer__brand">
-                  <Link
-                     to="/landing-page"
-                     className="public-site-footer__brand-link"
-                     aria-label="TruthLens home"
-                  >
+                  <Link to="/landing" className="public-site-footer__brand-link" aria-label="TruthLens home">
                      <img src={LogoImage} alt="" className="public-site-footer__logo" />
 
                      <span className="public-site-footer__brand-name">TruthLens</span>
@@ -67,9 +62,7 @@ function PublicSiteFooter() {
             <div className="public-site-footer__bottom">
                <span>© {new Date().getFullYear()} TruthLens. Investigate before you amplify.</span>
 
-               <span className="public-site-footer__status">
-                  AI-assisted verification • Evidence-aware results
-               </span>
+               <span className="public-site-footer__status">AI-assisted verification • Evidence-aware results</span>
             </div>
          </div>
       </footer>

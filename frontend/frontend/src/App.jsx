@@ -37,13 +37,11 @@ function App() {
          <BrowserRouter>
             <Routes>
                <Route element={<PublicShell />}>
-                  <Route path="/landing-page" element={<LandingPage />} />
+                  <Route path="/landing" element={<LandingPage />} />
+                  <Route path="/landing-page" element={<Navigate to="/landing" replace />} />
                   <Route path="/partners" element={<PartnersPage />} />
                   <Route path="/partners/:slug" element={<PartnerProfilePage />} />
-                  <Route
-                     path="/partners/:slug/fact-checks/:publicationId"
-                     element={<PublicFactCheckPage />}
-                  />
+                  <Route path="/partners/:slug/fact-checks/:publicationId" element={<PublicFactCheckPage />} />
                </Route>
                <Route path="/login" element={<LoginPage />} />
                <Route path="/register" element={<RegisterPage />} />
