@@ -2,7 +2,8 @@ export const getAccessToken = () => localStorage.getItem("access") || sessionSto
 
 export const getRefreshToken = () => localStorage.getItem("refresh") || sessionStorage.getItem("refresh");
 
-export const getAuthStorage = () => (localStorage.getItem("access") ? localStorage : sessionStorage);
+export const getAuthStorage = () =>
+   (localStorage.getItem("access") || localStorage.getItem("refresh") ? localStorage : sessionStorage);
 
 export const storeAuthTokens = (access, refresh, rememberMe = false) => {
    clearAuthTokens();

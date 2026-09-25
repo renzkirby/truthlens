@@ -4,10 +4,10 @@ import { canAccessWorkspace } from "../utils/workspace";
 import AuthRouteLoader from "./AuthRouteLoader";
 
 function RootRedirect() {
-   const { token, user, loading } = useAuth();
+   const { token, user, loading, sessionRestoreError, retrySessionRestore } = useAuth();
 
    if (loading) {
-      return <AuthRouteLoader />;
+      return <AuthRouteLoader error={sessionRestoreError} onRetry={retrySessionRestore} />;
    }
 
    if (!token) {

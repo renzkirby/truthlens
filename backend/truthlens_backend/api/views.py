@@ -36,7 +36,6 @@ from rest_framework.exceptions import (
     PermissionDenied,
     ValidationError,
 )
-from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.pagination import CursorPagination
 from rest_framework.parsers import (
     FormParser,
@@ -387,6 +386,7 @@ from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.views import SocialLoginView
 from .email_verification import send_email_verification
+from .auth_tokens import issue_refresh_token
 
 logger = logging.getLogger(__name__)
 
@@ -709,7 +709,7 @@ def verify_url(request):
 
 
 def get_tokens_for_user(user):
-    refresh = RefreshToken.for_user(user)
+    refresh = issue_refresh_token(user)
 
     return {
         "refresh": str(refresh),
@@ -804,7 +804,7 @@ def sync_guest_scan(request):
 def login_user(request):
     username = request.data.get("username")
     password = request.data.get("password")
-    remember_me = request.data.get("remember_me")
+    remember_me = request.data.get("remember_me") is True
 
     user = authenticate(request, username=username, password=password)
 
@@ -814,10 +814,7 @@ def login_user(request):
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
-    refresh = RefreshToken.for_user(user)
-
-    if remember_me:
-        refresh.set_exp(lifetime=timedelta(days=30))
+    refresh = issue_refresh_token(user, remember_me=remember_me)
 
     return Response(
         {
