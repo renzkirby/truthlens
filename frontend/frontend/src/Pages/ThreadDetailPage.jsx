@@ -1,1440 +1,1437 @@
-/**
- * Thread Detail Page
- * ══════════════════════════════════════════════════════════════════
- * Displays full thread discussion including claim verdict, evidence, and comments.
- *
- * Features:
- *   - Full claim information with AI verdict and verdict badge
- *   - Evidence collection (user-submitted supporting/contradicting evidence)
- *   - Comment thread for discussion
- *   - User reputation/trust scores
- *   - Evidence and comment editing capabilities
- *
- * Sections:
- *   - Main verdict display with AI analysis
- *   - Evidence tab: Browse and submit supporting/contradicting evidence
- *   - Comments tab: Read and participate in discussion
- */
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useNotification } from "../hooks/useNotification";
 import Icons from "../components/Icons";
 import EvidenceCard from "../components/EvidenceCard";
-
-// ── Utilities & Constants ──
-import { getEffectiveVerdict } from "../utils/verdict";
-import { VERDICT_CONFIG, VERDICT_META, EVIDENCE_VERDICT_META } from "../utils/constants";
-
-// ── Styles ──
+import { VERDICT_CONFIG, EVIDENCE_VERDICT_META } from "../utils/constants";
 import "./ThreadDetailPage.css";
-
-/**
- * Get trust score display color based on tier
- * @param {number} score - Trust score (0-100)
- * @returns {string} Hex color for the tier
- */
-function tierColor(score) {
-   if (score >= 75) return "#0e9f6e"; // Green: High trust
-   if (score >= 45) return "#d97706"; // Orange: Medium trust
-   return "#e02424"; // Red: Low trust
-}
-
-/**
- * Generate user avatar background/text colors deterministically from username
- * @param {string} username - Username to hash
- * @returns {object} { bg, color } for avatar styling
- */
-function avatarStyle(username = "") {
-   const palettes = [
-      { bg: "#ede9fe", color: "#7c3aed" },
-      { bg: "#fce7f3", color: "#db2777" },
-      { bg: "#e0f2fe", color: "#0284c7" },
-      { bg: "#fef3c7", color: "#d97706" },
-      { bg: "#f0fdf4", color: "#16a34a" },
-   ];
-   let hash = 0;
-   for (let i = 0; i < username.length; i++) hash += username.charCodeAt(i);
-   return palettes[hash % palettes.length];
-}
-
-// ── Sub-components ──
-
-/**
- * VerdictBadge: Display formatted verdict with icon and color
- */
-function VerdictBadge({ verdict }) {
-   const meta = VERDICT_CONFIG[verdict] || VERDICT_CONFIG.UNVERIFIED;
-   return (
-      <span
-         className="verdict-badge"
-         style={{
-            color: meta.color,
-            background: meta.bg,
-            borderColor: meta.border,
-         }}
-      >
-         <Icons name={meta.icon || "help-circle"} size={12} color={meta.color} strokeWidth={2.5} />
-         {meta.label}
-      </span>
-   );
-}
-
-/**
- * TrustGauge: SVG circular progress bar showing trust score
- */
-function TrustGauge({ score = 0 }) {
-   const r = 30;
-   const circ = 2 * Math.PI * r;
-   const filled = (Math.min(score, 100) / 100) * circ;
-   const color = tierColor(score);
-   return (
-      <div className="trust-gauge-wrap">
-         <svg width="76" height="76" viewBox="0 0 76 76">
-            <circle cx="38" cy="38" r={r} fill="none" stroke="#f3f4f6" strokeWidth="7" />
-            <circle
-               cx="38"
-               cy="38"
-               r={r}
-               fill="none"
-               stroke={color}
-               strokeWidth="7"
-               strokeDasharray={`${filled} ${circ}`}
-               strokeLinecap="round"
-               transform="rotate(-90 38 38)"
-            />
-            <text x="38" y="43" textAnchor="middle" fontSize="15" fontWeight="900" fill="#111827">
-               {score}
-            </text>
-         </svg>
-         <span className="trust-gauge-label">TRUST SCORE</span>
-      </div>
-   );
-}
-
-/**
- * UserAvatar: Colored circle with user initials
- */
-function UserAvatar({ username = "", size = 36 }) {
-   const style = avatarStyle(username);
-   const initials = username.replace("@", "").slice(0, 1).toUpperCase();
-   return (
-      <div
-         className="user-avatar"
-         style={{
-            width: size,
-            height: size,
-            background: style.bg,
-            color: style.color,
-            fontSize: size * 0.38,
-         }}
-      >
-         {initials || <Icons name="user-circle" size={size * 0.6} color={style.color} />}
-      </div>
-   );
-}
-
-const ThreadDetailSkeleton = () => {
-   return (
-      <div className="thread-layout">
-         <div className="tdp-page">
-            <div className="tdp-breadcrumb" style={{ borderBottomColor: "var(--border-default)" }}>
-               <div className="tdp-breadcrumb-left" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <div className="skeleton-box" style={{ width: "120px", height: "16px" }}></div>
-                  <span className="tdp-breadcrumb-dot">·</span>
-                  <div className="skeleton-box" style={{ width: "100px", height: "16px" }}></div>
-                  <span className="tdp-breadcrumb-dot">·</span>
-                  <div className="skeleton-box" style={{ width: "200px", height: "16px" }}></div>
-               </div>
-               <div className="tdp-breadcrumb-right">
-                  <div className="skeleton-box" style={{ width: "80px", height: "24px", borderRadius: "12px" }}></div>
-               </div>
-            </div>
-
-            <div
-               className="tdp-hero"
-               style={{
-                  background: "var(--bg-surface)",
-                  borderBottomColor: "var(--border-default)",
-               }}
-            >
-               <div className="tdp-hero-inner">
-                  <div
-                     className="tdp-hero-left"
-                     style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "12px",
-                        width: "100%",
-                     }}
-                  >
-                     <div className="skeleton-box" style={{ width: "200px", height: "14px" }}></div>
-                     <div className="skeleton-box" style={{ width: "100%", height: "28px", marginTop: "8px" }}></div>
-                     <div className="skeleton-box" style={{ width: "80%", height: "28px" }}></div>
-                     <div className="tdp-claim-meta" style={{ marginTop: "16px", display: "flex", gap: "16px" }}>
-                        <div className="skeleton-box" style={{ width: "150px", height: "14px" }}></div>
-                        <div className="skeleton-box" style={{ width: "100px", height: "14px" }}></div>
-                        <div className="skeleton-box" style={{ width: "160px", height: "14px" }}></div>
-                     </div>
-                  </div>
-                  <div className="tdp-verdict-card" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                     <div
-                        className="skeleton-box"
-                        style={{ width: "100px", height: "28px", borderRadius: "20px" }}
-                     ></div>
-                     <div className="skeleton-box" style={{ width: "100%", height: "14px", marginTop: "8px" }}></div>
-                     <div className="skeleton-box" style={{ width: "90%", height: "14px" }}></div>
-                     <div
-                        style={{
-                           display: "flex",
-                           justifyContent: "space-between",
-                           marginTop: "16px",
-                        }}
-                     >
-                        <div className="skeleton-box" style={{ width: "120px", height: "14px" }}></div>
-                        <div className="skeleton-box" style={{ width: "40px", height: "14px" }}></div>
-                     </div>
-                  </div>
-               </div>
-            </div>
-
-            <div className="tdp-body">
-               <div className="tdp-main">
-                  <div className="tdp-post-card">
-                     <div className="tdp-post-header">
-                        <div
-                           className="author-avatar skeleton-box"
-                           style={{ width: "38px", height: "38px", borderRadius: "50%" }}
-                        ></div>
-                        <div
-                           className="tdp-post-author"
-                           style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-                        >
-                           <div className="skeleton-box" style={{ width: "120px", height: "16px" }}></div>
-                           <div className="skeleton-box" style={{ width: "160px", height: "12px" }}></div>
-                        </div>
-                        <div className="tdp-post-actions">
-                           <div
-                              className="skeleton-box"
-                              style={{
-                                 width: "100px",
-                                 height: "24px",
-                                 borderRadius: "12px",
-                              }}
-                           ></div>
-                        </div>
-                     </div>
-                     <div
-                        className="tdp-snip-placeholder skeleton-box"
-                        style={{
-                           height: "300px",
-                           width: "100%",
-                           borderRadius: "12px",
-                           border: "none",
-                        }}
-                     ></div>
-                  </div>
-                  <div className="tdp-tabs-section" style={{ marginTop: "24px" }}>
-                     <div
-                        className="tdp-tab-bar"
-                        style={{
-                           display: "flex",
-                           gap: "16px",
-                           borderBottom: "2px solid var(--border-default)",
-                           paddingBottom: "12px",
-                        }}
-                     >
-                        <div className="skeleton-box" style={{ width: "100px", height: "24px" }}></div>
-                        <div className="skeleton-box" style={{ width: "100px", height: "24px" }}></div>
-                     </div>
-                     <div
-                        style={{
-                           marginTop: "24px",
-                           display: "flex",
-                           flexDirection: "column",
-                           gap: "16px",
-                        }}
-                     >
-                        <div
-                           className="skeleton-box"
-                           style={{ width: "100%", height: "120px", borderRadius: "12px" }}
-                        ></div>
-                        <div
-                           className="skeleton-box"
-                           style={{ width: "100%", height: "120px", borderRadius: "12px" }}
-                        ></div>
-                     </div>
-                  </div>
-               </div>
-            </div>
-         </div>
-      </div>
-   );
-};
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
 const apiUrl = (path) => `${API_BASE_URL.replace(/\/$/, "")}/${path}`;
 
-function ThreadDetailPage() {
-   const [searchParams, setSearchParams] = useSearchParams();
-   const initialTab = searchParams.get("tab") === "evidence" ? "evidence" : "comments";
-   const [thread, setThread] = useState(null);
-   const [comments, setComments] = useState([]);
-   const [evidenceList, setEvidenceList] = useState([]);
-   const [loading, setLoading] = useState(true);
-   const [error, setError] = useState(null);
-   const [currentSection, setCurrentSection] = useState(initialTab);
+function normalizeText(value) {
+   return (value || "").trim().replace(/\s+/g, " ").toLocaleLowerCase();
+}
 
-   // Evidence form state
-   const [showForm, setShowForm] = useState(false);
-   const [evidenceUrl, setEvidenceUrl] = useState("");
-   const [evidenceType, setEvidenceType] = useState("CONTRADICTS CLAIM");
-   const [explanation, setExplanation] = useState("");
-   const [evidenceVerdict, setEvidenceVerdict] = useState("UNVERIFIED");
-   const [submitting, setSubmitting] = useState(false);
+function isHttpUrl(value) {
+   if (!value) return false;
+   try {
+      const url = new URL(value);
+      return url.protocol === "http:" || url.protocol === "https:";
+   } catch {
+      return false;
+   }
+}
 
-   // Comment input state
-   const [newComment, setNewComment] = useState("");
-   const [editingCommentId, setEditingCommentId] = useState(null);
-   const [editingCommentText, setEditingCommentText] = useState("");
-   const [editingEvidenceId, setEditingEvidenceId] = useState(null);
-   const [editingEvidenceText, setEditingEvidenceText] = useState("");
-   const [editingEvidenceVerdict, setEditingEvidenceVerdict] = useState("UNVERIFIED");
-   const [votingEvidenceId, setVotingEvidenceId] = useState(null);
-   const [reporting, setReporting] = useState(false);
-   const [confirmDialog, setConfirmDialog] = useState({
-      open: false,
-      type: null,
-      targetId: null,
+function safeActionMessage(error, fallback) {
+   const status = Number(error?.status);
+   if (!Number.isInteger(status) || status < 400 || status >= 500) return fallback;
+   const candidate = [error?.detail, error?.message]
+      .find((value) => typeof value === "string" && value.trim())
+      ?.trim();
+   if (!candidate || candidate.length > 200) return fallback;
+   if (/<[a-z][\s\S]*>|traceback|stack trace|internal server|exception|sql|django|request failed|network error|unexpected token|parse error/i.test(candidate)) return fallback;
+   return candidate;
+}
+
+function formatDate(value, options = {}) {
+   if (!value) return "Date unavailable";
+   const date = new Date(value);
+   if (Number.isNaN(date.getTime())) return "Date unavailable";
+   return date.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      ...options,
    });
-   const [reportDialogOpen, setReportDialogOpen] = useState(false);
-   const [reportReason, setReportReason] = useState("OTHER");
-   const [reportNotes, setReportNotes] = useState("");
-   const tabsSectionRef = useRef(null);
-   const didAutoScrollRef = useRef(false);
+}
 
+function VerdictBadge({ verdict }) {
+   const key = (verdict || "UNVERIFIED").toUpperCase();
+   const meta = VERDICT_CONFIG[key] || VERDICT_CONFIG.UNVERIFIED;
+   return (
+      <span className={`thread-detail-verdict thread-detail-verdict--${key.toLowerCase()}`}>
+         <Icons name={meta.icon || "help-circle"} size={14} />
+         {meta.label || key}
+      </span>
+   );
+}
+
+function getUserInitials(username) {
+   const parts = String(username || "")
+      .split(/[\s._-]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+   if (!parts.length) return "?";
+   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+}
+
+function getRoleLabel(role) {
+   const normalized = String(role || "").toUpperCase();
+   if (["MOD", "MODERATOR"].includes(normalized)) return "Platform moderator";
+   return "Community member";
+}
+
+function makeLocalCommentId() {
+   if (globalThis.crypto?.randomUUID) return `local-${globalThis.crypto.randomUUID()}`;
+   return `local-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function Avatar({ user, size = "medium" }) {
+   const [imageFailed, setImageFailed] = useState(false);
+   const username = user?.username || "Unknown";
+   const tone = [...username].reduce((sum, character) => sum + character.charCodeAt(0), 0) % 5;
+   return (
+      <span className={`thread-detail-avatar thread-detail-avatar--${size} thread-detail-avatar--tone-${tone}`}>
+         {user?.avatar_url && !imageFailed ? (
+            <img src={user.avatar_url} alt="" onError={() => setImageFailed(true)} />
+         ) : (
+            <span className="thread-detail-avatar-fallback" aria-hidden="true">{getUserInitials(username)}</span>
+         )}
+      </span>
+   );
+}
+
+function ClaimMedia({ claim }) {
+   const [failed, setFailed] = useState(false);
+   if (!isHttpUrl(claim?.media_url)) return null;
+   if (failed) return <p className="thread-detail-media-error">Claim media is unavailable.</p>;
+   if (claim.claim_type === "VIDEO") {
+      return (
+         <video className="thread-detail-media" controls preload="metadata" onError={() => setFailed(true)}>
+            <source src={claim.media_url} />
+            Your browser cannot play this video.
+         </video>
+      );
+   }
+   return (
+      <img
+         className="thread-detail-media"
+         src={claim.media_url}
+         alt="Media attached to the claim"
+         onError={() => setFailed(true)}
+      />
+   );
+}
+
+function AccessibleDialog({ open, busy = false, labelledBy, describedBy, onClose, fallbackFocusRef, children }) {
+   const dialogRef = useRef(null);
+   const restoreFocusRef = useRef(null);
+   const onCloseRef = useRef(onClose);
+   const busyRef = useRef(busy);
+
+   useEffect(() => {
+      onCloseRef.current = onClose;
+      busyRef.current = busy;
+   }, [busy, onClose]);
+
+   useEffect(() => {
+      if (!open) return undefined;
+      restoreFocusRef.current = document.activeElement;
+      const fallbackFocusTarget = fallbackFocusRef?.current;
+      const dialog = dialogRef.current;
+      const initial = dialog?.querySelector("[data-dialog-initial]");
+      (initial || dialog)?.focus();
+      const handleKeyDown = (event) => {
+         if (event.key === "Escape" && !busyRef.current) {
+            event.preventDefault();
+            onCloseRef.current();
+            return;
+         }
+         if (event.key !== "Tab" || !dialog) return;
+         const controls = [...dialog.querySelectorAll(
+            'button:not([disabled]), select:not([disabled]), textarea:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+         )];
+         if (!controls.length) {
+            event.preventDefault();
+            dialog.focus();
+            return;
+         }
+         const first = controls[0];
+         const last = controls[controls.length - 1];
+         if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+         } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+         }
+      };
+      document.addEventListener("keydown", handleKeyDown);
+      return () => {
+         document.removeEventListener("keydown", handleKeyDown);
+         const previousFocus = restoreFocusRef.current;
+         if (previousFocus?.isConnected) {
+            previousFocus.focus();
+         } else if (fallbackFocusTarget?.isConnected) {
+            fallbackFocusTarget.focus();
+         }
+      };
+   }, [open, fallbackFocusRef]);
+
+   if (!open) return null;
+   return (
+      <div
+         className="thread-detail-dialog-backdrop"
+         onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !busy) onClose();
+         }}
+      >
+         <div
+            ref={dialogRef}
+            className="thread-detail-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={labelledBy}
+            aria-describedby={describedBy}
+            tabIndex={-1}
+         >
+            {children}
+         </div>
+      </div>
+   );
+}
+
+function buildCommentTree(comments) {
+   const nodes = new Map(comments.map((comment) => [String(comment.id), { ...comment, children: [] }]));
+   const roots = [];
+   nodes.forEach((comment) => {
+      const parent = comment.parent_id ? nodes.get(String(comment.parent_id)) : null;
+      if (parent) parent.children.push(comment);
+      else roots.push(comment);
+   });
+   const time = (comment) => new Date(comment.commented_at || 0).getTime();
+   roots.sort((left, right) => time(right) - time(left));
+   const sortReplies = (comment) => {
+      comment.children.sort((left, right) => time(left) - time(right));
+      comment.children.forEach(sortReplies);
+   };
+   roots.forEach(sortReplies);
+   return roots;
+}
+
+const DEFAULT_VISIBLE_REPLIES = 3;
+const REPLY_PAGE_SIZE = 5;
+
+function flattenReplies(comment, depth = 1, result = []) {
+   comment.children.forEach((child) => {
+      result.push({ comment: child, depth });
+      flattenReplies(child, depth + 1, result);
+   });
+   return result;
+}
+
+function findCommentThread(roots, targetId) {
+   const normalizedTarget = String(targetId);
+   for (const root of roots) {
+      if (String(root.id) === normalizedTarget) return { root, replyIndex: -1 };
+      const replies = flattenReplies(root);
+      const replyIndex = replies.findIndex(({ comment }) => String(comment.id) === normalizedTarget);
+      if (replyIndex >= 0) return { root, replyIndex };
+   }
+   return null;
+}
+
+function InlineReplyComposer({ target, currentUser, value, onChange, onSubmit, onCancel, inputRef }) {
+   const targetUsername = target?.commenter?.username || "Unknown";
+   return (
+      <form className="thread-detail-inline-reply" onSubmit={(event) => onSubmit(event, target)}>
+         <Avatar user={currentUser} />
+         <div className="thread-detail-inline-reply-body">
+            <div className="thread-detail-inline-reply-heading">
+               <span>Replying to</span>
+               <Link to={`/user/${encodeURIComponent(targetUsername)}`}>@{targetUsername}</Link>
+            </div>
+            <label className="sr-only" htmlFor={`reply-comment-${target.id}`}>Reply to @{targetUsername}</label>
+            <textarea
+               ref={inputRef}
+               id={`reply-comment-${target.id}`}
+               value={value}
+               onChange={(event) => onChange(event.target.value)}
+               placeholder={`Write a reply to @${targetUsername}`}
+               rows={3}
+            />
+            <div className="thread-detail-inline-reply-actions">
+               <button type="button" className="thread-detail-text-button" onClick={onCancel}>Cancel</button>
+               <button type="submit" className="thread-detail-primary-button" disabled={!value.trim()}>Reply</button>
+            </div>
+         </div>
+      </form>
+   );
+}
+
+function CommentItem({
+   comment,
+   visualDepth = 0,
+   isReply = false,
+   currentUserId,
+   editingId,
+   editingText,
+   highlightedId,
+   likingIds,
+   onEditingTextChange,
+   onStartEdit,
+   onCancelEdit,
+   onSaveEdit,
+   onDelete,
+   onReply,
+   onLike,
+   onShare,
+   onRetry,
+   onDiscard,
+}) {
+   const isOwner = String(comment.commenter?.id || "") === String(currentUserId || "");
+   const username = comment.commenter?.username || "Unknown";
+   const isModerator = ["MOD", "MODERATOR"].includes(String(comment.commenter?.role || "").toUpperCase());
+   const isEditing = editingId === comment.id;
+   const isLiking = likingIds.has(comment.id);
+   const sendState = comment._sendState;
+   const isSending = sendState === "sending";
+   const isFailed = sendState === "failed";
+   const isPersisted = !sendState;
+
+   return (
+      <article
+         id={`comment-${comment.id}`}
+         className={`thread-detail-comment ${isReply ? "thread-detail-comment--reply" : ""} ${highlightedId === comment.id ? "is-highlighted" : ""} ${isSending ? "is-sending" : ""} ${isFailed ? "is-send-failed" : ""}`}
+         style={{ "--reply-depth": Math.min(visualDepth, 2) }}
+         tabIndex={-1}
+      >
+         <Link className="thread-detail-comment-avatar-link" to={`/user/${encodeURIComponent(username)}`}>
+            <Avatar user={comment.commenter} />
+            <span className="sr-only">View @{username}&apos;s profile</span>
+         </Link>
+         <div className="thread-detail-comment-content">
+            <div className="thread-detail-comment-bubble">
+               <header className="thread-detail-comment-header">
+                  <Link to={`/user/${encodeURIComponent(username)}`}>@{username}</Link>
+                  {isModerator && <span className="thread-detail-role-label">Platform moderator</span>}
+                  {isSending ? (
+                     <span className="thread-detail-send-state" role="status">Sending…</span>
+                  ) : isFailed ? (
+                     <span className="thread-detail-send-state thread-detail-send-state--failed" role="status">Not sent</span>
+                  ) : (
+                     <time dateTime={comment.commented_at}>{formatDate(comment.commented_at, { hour: "numeric", minute: "2-digit" })}</time>
+                  )}
+               </header>
+
+               {comment.reply_to_username && (
+                  <p className="thread-detail-reply-context">
+                     Reply to <Link to={`/user/${encodeURIComponent(comment.reply_to_username)}`}>@{comment.reply_to_username}</Link>
+                  </p>
+               )}
+
+               {isEditing ? (
+                  <div className="thread-detail-inline-edit">
+                     <label className="sr-only" htmlFor={`edit-comment-${comment.id}`}>Edit comment</label>
+                     <textarea id={`edit-comment-${comment.id}`} value={editingText} onChange={(event) => onEditingTextChange(event.target.value)} rows={3} />
+                     <div className="thread-detail-inline-actions">
+                        <button type="button" className="thread-detail-primary-button" onClick={() => onSaveEdit(comment.id)}>Save</button>
+                        <button type="button" className="thread-detail-text-button" onClick={onCancelEdit}>Cancel</button>
+                     </div>
+                  </div>
+               ) : (
+                  <p className="thread-detail-comment-text">{comment.comment_text}</p>
+               )}
+            </div>
+
+            {!isEditing && isFailed && (
+               <div className="thread-detail-comment-actions" role="group" aria-label={`Recovery actions for ${username}'s comment`}>
+                  <button type="button" className="is-primary-text" onClick={() => onRetry(comment)}>Retry</button>
+                  <button type="button" onClick={() => onDiscard(comment)}>Discard</button>
+               </div>
+            )}
+
+            {!isEditing && isPersisted && (
+               <div className="thread-detail-comment-actions" role="group" aria-label={`Actions for ${username}'s comment`}>
+                  <button
+                     type="button"
+                     className={`thread-detail-comment-like ${comment.is_liked ? "is-selected" : ""}`}
+                     aria-pressed={Boolean(comment.is_liked)}
+                     aria-label={`${comment.is_liked ? "Unlike" : "Like"} ${username}'s comment. ${comment.like_count || 0} likes`}
+                     disabled={isLiking}
+                     onClick={() => onLike(comment)}
+                  >
+                     <Icons name="thumbs-up" size={13} />
+                     <span aria-hidden="true">{comment.like_count || 0}</span>
+                  </button>
+                  <button type="button" onClick={() => onReply(comment)}>Reply</button>
+                  <button type="button" onClick={() => onShare(comment)}>Share</button>
+                  {isOwner && (
+                     <>
+                        <button type="button" className="is-owner-action" onClick={() => onStartEdit(comment)}>Edit</button>
+                        <button type="button" className="is-danger is-owner-action" onClick={() => onDelete(comment.id)}>Delete</button>
+                     </>
+                  )}
+               </div>
+            )}
+         </div>
+      </article>
+   );
+}
+
+function CommentThread({
+   root,
+   visibleReplyCount,
+   currentUser,
+   editingId,
+   editingText,
+   highlightedId,
+   likingIds,
+   replyComposer,
+   replyInputRef,
+   onEditingTextChange,
+   onStartEdit,
+   onCancelEdit,
+   onSaveEdit,
+   onDelete,
+   onStartReply,
+   onReplyTextChange,
+   onSubmitReply,
+   onCancelReply,
+   onLike,
+   onShare,
+   onRetry,
+   onDiscard,
+   onShowReplies,
+   onShowMoreReplies,
+   onHideReplies,
+}) {
+   const replies = flattenReplies(root);
+   const safeVisibleCount = Math.max(0, Math.min(visibleReplyCount, replies.length));
+   const visibleReplies = replies.slice(0, safeVisibleCount);
+   const remainingReplies = replies.length - safeVisibleCount;
+   const rootHasReplyComposer = replyComposer?.targetId === root.id;
+
+   return (
+      <section className="thread-detail-thread-block" aria-label={`Comment thread by ${root.commenter?.username || "community member"}`}>
+         <CommentItem
+            comment={root}
+            currentUserId={currentUser?.id}
+            editingId={editingId}
+            editingText={editingText}
+            highlightedId={highlightedId}
+            likingIds={likingIds}
+            onEditingTextChange={onEditingTextChange}
+            onStartEdit={onStartEdit}
+            onCancelEdit={onCancelEdit}
+            onSaveEdit={onSaveEdit}
+            onDelete={onDelete}
+            onReply={(comment) => onStartReply(comment, root.id)}
+            onLike={onLike}
+            onShare={onShare}
+            onRetry={onRetry}
+            onDiscard={onDiscard}
+         />
+
+         {rootHasReplyComposer && (
+            <InlineReplyComposer
+               target={root}
+               currentUser={currentUser}
+               value={replyComposer.text}
+               onChange={onReplyTextChange}
+               onSubmit={onSubmitReply}
+               onCancel={onCancelReply}
+               inputRef={replyInputRef}
+            />
+         )}
+
+         {visibleReplies.length > 0 && (
+            <div className="thread-detail-replies" aria-label={`Replies to @${root.commenter?.username || "user"}`}>
+               {visibleReplies.map(({ comment, depth }) => (
+                  <div key={comment.id} className="thread-detail-reply-row">
+                     <CommentItem
+                        comment={comment}
+                        visualDepth={Math.min(depth, 2)}
+                        isReply
+                        currentUserId={currentUser?.id}
+                        editingId={editingId}
+                        editingText={editingText}
+                        highlightedId={highlightedId}
+                        likingIds={likingIds}
+                        onEditingTextChange={onEditingTextChange}
+                        onStartEdit={onStartEdit}
+                        onCancelEdit={onCancelEdit}
+                        onSaveEdit={onSaveEdit}
+                        onDelete={onDelete}
+                        onReply={(item) => onStartReply(item, root.id)}
+                        onLike={onLike}
+                        onShare={onShare}
+                        onRetry={onRetry}
+                        onDiscard={onDiscard}
+                     />
+                     {replyComposer?.targetId === comment.id && (
+                        <InlineReplyComposer
+                           target={comment}
+                           currentUser={currentUser}
+                           value={replyComposer.text}
+                           onChange={onReplyTextChange}
+                           onSubmit={onSubmitReply}
+                           onCancel={onCancelReply}
+                           inputRef={replyInputRef}
+                        />
+                     )}
+                  </div>
+               ))}
+            </div>
+         )}
+
+         {replies.length > 0 && (
+            <div className="thread-detail-reply-controls" role="group" aria-label={`Reply visibility for @${root.commenter?.username || "user"}'s comment`}>
+               {safeVisibleCount === 0 ? (
+                  <button type="button" onClick={() => onShowReplies(root.id, replies.length)} aria-expanded="false">
+                     View {replies.length} {replies.length === 1 ? "reply" : "replies"}
+                  </button>
+               ) : (
+                  <>
+                     {remainingReplies > 0 && (
+                        <button type="button" onClick={() => onShowMoreReplies(root.id, replies.length)}>
+                           View {remainingReplies} more {remainingReplies === 1 ? "reply" : "replies"}
+                        </button>
+                     )}
+                     <button type="button" onClick={() => onHideReplies(root.id)} aria-expanded="true">Hide replies</button>
+                  </>
+               )}
+            </div>
+         )}
+      </section>
+   );
+}
+
+function ThreadDetailSkeleton() {
+   return (
+      <main className="thread-detail-page thread-detail-skeleton-page" aria-busy="true">
+         <span className="sr-only" role="status">Loading thread…</span>
+         <div className="thread-detail-skeleton-shell" aria-hidden="true">
+            <div className="thread-detail-skeleton-topbar">
+               <div className="thread-detail-skeleton-topbar-inner">
+                  <div className="thread-detail-skeleton-row thread-detail-skeleton-row--breadcrumb">
+                     <span className="thread-detail-skeleton-block thread-detail-skeleton-block--back" />
+                     <span className="thread-detail-skeleton-block thread-detail-skeleton-block--meta" />
+                     <span className="thread-detail-skeleton-block thread-detail-skeleton-block--date" />
+                  </div>
+                  <div className="thread-detail-skeleton-row">
+                     <span className="thread-detail-skeleton-block thread-detail-skeleton-block--badge" />
+                     <span className="thread-detail-skeleton-block thread-detail-skeleton-block--status" />
+                  </div>
+               </div>
+            </div>
+
+            <section className="thread-detail-skeleton-hero">
+               <div className="thread-detail-skeleton-hero-inner">
+                  <div className="thread-detail-skeleton-claim">
+                     <span className="thread-detail-skeleton-block thread-detail-skeleton-block--eyebrow" />
+                     <span className="thread-detail-skeleton-block thread-detail-skeleton-block--claim-long" />
+                     <span className="thread-detail-skeleton-block thread-detail-skeleton-block--claim-medium" />
+                     <span className="thread-detail-skeleton-block thread-detail-skeleton-block--claim-short" />
+                     <div className="thread-detail-skeleton-row thread-detail-skeleton-row--activity">
+                        <span className="thread-detail-skeleton-block thread-detail-skeleton-block--activity" />
+                        <span className="thread-detail-skeleton-block thread-detail-skeleton-block--activity" />
+                     </div>
+                  </div>
+                  <div className="thread-detail-skeleton-assessment">
+                     <div className="thread-detail-skeleton-row thread-detail-skeleton-row--spread">
+                        <div className="thread-detail-skeleton-row">
+                           <span className="thread-detail-skeleton-block thread-detail-skeleton-block--logo" />
+                           <span className="thread-detail-skeleton-block thread-detail-skeleton-block--reviewer" />
+                        </div>
+                        <span className="thread-detail-skeleton-block thread-detail-skeleton-block--badge" />
+                     </div>
+                     <span className="thread-detail-skeleton-block thread-detail-skeleton-block--assessment-copy" />
+                     <div className="thread-detail-skeleton-metric">
+                        <span className="thread-detail-skeleton-block thread-detail-skeleton-block--metric-label" />
+                        <span className="thread-detail-skeleton-block thread-detail-skeleton-block--metric-value" />
+                     </div>
+                  </div>
+               </div>
+            </section>
+
+            <div className="thread-detail-skeleton-body">
+               <div className="thread-detail-skeleton-main">
+                  <div className="thread-detail-skeleton-card thread-detail-skeleton-post">
+                     <div className="thread-detail-skeleton-post-header">
+                        <div className="thread-detail-skeleton-row">
+                           <span className="thread-detail-skeleton-block thread-detail-skeleton-block--avatar" />
+                           <span className="thread-detail-skeleton-block thread-detail-skeleton-block--author" />
+                        </div>
+                        <span className="thread-detail-skeleton-block thread-detail-skeleton-block--post-kind" />
+                     </div>
+                     <div className="thread-detail-skeleton-context">
+                        <span className="thread-detail-skeleton-block thread-detail-skeleton-block--context-label" />
+                        <span className="thread-detail-skeleton-block thread-detail-skeleton-block--context-copy" />
+                     </div>
+                     <div className="thread-detail-skeleton-media">
+                        <span className="thread-detail-skeleton-block thread-detail-skeleton-block--media-icon" />
+                        <span className="thread-detail-skeleton-block thread-detail-skeleton-block--media-copy" />
+                     </div>
+                  </div>
+
+                  <div className="thread-detail-skeleton-cta">
+                     <span className="thread-detail-skeleton-block thread-detail-skeleton-block--cta" />
+                  </div>
+
+                  <div className="thread-detail-skeleton-card thread-detail-skeleton-discussion">
+                     <div className="thread-detail-skeleton-tabs">
+                        <span className="thread-detail-skeleton-block thread-detail-skeleton-block--tab" />
+                        <span className="thread-detail-skeleton-block thread-detail-skeleton-block--tab" />
+                     </div>
+                     <div className="thread-detail-skeleton-composer">
+                        <span className="thread-detail-skeleton-block thread-detail-skeleton-block--avatar" />
+                        <span className="thread-detail-skeleton-block thread-detail-skeleton-block--composer" />
+                        <span className="thread-detail-skeleton-block thread-detail-skeleton-block--send" />
+                     </div>
+                     <div className="thread-detail-skeleton-comment">
+                        <span className="thread-detail-skeleton-block thread-detail-skeleton-block--avatar" />
+                        <div>
+                           <span className="thread-detail-skeleton-block thread-detail-skeleton-block--comment-name" />
+                           <span className="thread-detail-skeleton-block thread-detail-skeleton-block--comment-line" />
+                           <span className="thread-detail-skeleton-block thread-detail-skeleton-block--comment-line-short" />
+                        </div>
+                     </div>
+                  </div>
+               </div>
+
+               <aside className="thread-detail-skeleton-sidebar">
+                  <div className="thread-detail-skeleton-card thread-detail-skeleton-sidebar-card">
+                     <span className="thread-detail-skeleton-block thread-detail-skeleton-block--sidebar-label" />
+                     <div className="thread-detail-skeleton-row thread-detail-skeleton-row--spread">
+                        <div className="thread-detail-skeleton-row">
+                           <span className="thread-detail-skeleton-block thread-detail-skeleton-block--avatar-large" />
+                           <span className="thread-detail-skeleton-block thread-detail-skeleton-block--sidebar-author" />
+                        </div>
+                        <span className="thread-detail-skeleton-block thread-detail-skeleton-block--trust-ring" />
+                     </div>
+                     <div className="thread-detail-skeleton-stats">
+                        <span /><span /><span />
+                     </div>
+                  </div>
+                  <div className="thread-detail-skeleton-card thread-detail-skeleton-sidebar-card">
+                     <span className="thread-detail-skeleton-block thread-detail-skeleton-block--sidebar-label" />
+                     <div className="thread-detail-skeleton-row thread-detail-skeleton-row--spread">
+                        <span className="thread-detail-skeleton-block thread-detail-skeleton-block--reputation" />
+                        <span className="thread-detail-skeleton-block thread-detail-skeleton-block--metric-value" />
+                     </div>
+                     <span className="thread-detail-skeleton-block thread-detail-skeleton-block--trust-track" />
+                     <span className="thread-detail-skeleton-block thread-detail-skeleton-block--trust-copy" />
+                     <span className="thread-detail-skeleton-block thread-detail-skeleton-block--profile-link" />
+                  </div>
+                  <div className="thread-detail-skeleton-actions">
+                     <span className="thread-detail-skeleton-block" />
+                     <span className="thread-detail-skeleton-block" />
+                  </div>
+               </aside>
+            </div>
+         </div>
+      </main>
+   );
+}
+
+export default function ThreadDetailPage() {
    const { authFetch, user } = useAuth();
    const { addToast } = useNotification();
    const { threadId } = useParams();
    const navigate = useNavigate();
+   const location = useLocation();
+   const [searchParams] = useSearchParams();
+   const commentHash = location.hash.startsWith("#comment-") ? location.hash.slice(1) : null;
+   const initialTab = commentHash ? "comments" : searchParams.get("tab") === "evidence" ? "evidence" : "comments";
 
-   // ── Fetch thread data from API ──
+   const [thread, setThread] = useState(null);
+   const [comments, setComments] = useState([]);
+   const [evidenceList, setEvidenceList] = useState([]);
+   const [loading, setLoading] = useState(true);
+   const [loadError, setLoadError] = useState("");
+   const [currentTab, setCurrentTab] = useState(initialTab);
+   const [showEvidenceForm, setShowEvidenceForm] = useState(false);
+   const [evidenceUrl, setEvidenceUrl] = useState("");
+   const [evidenceType, setEvidenceType] = useState("CONTRADICTS CLAIM");
+   const [evidenceAssessment, setEvidenceAssessment] = useState("UNVERIFIED");
+   const [evidenceExplanation, setEvidenceExplanation] = useState("");
+   const [submittingEvidence, setSubmittingEvidence] = useState(false);
+   const [newComment, setNewComment] = useState("");
+   const [replyComposer, setReplyComposer] = useState(null);
+   const [replyVisibility, setReplyVisibility] = useState({});
+   const [submittingComment, setSubmittingComment] = useState(false);
+   const [editingCommentId, setEditingCommentId] = useState(null);
+   const [editingCommentText, setEditingCommentText] = useState("");
+   const [likingIds, setLikingIds] = useState(new Set());
+   const [highlightedCommentId, setHighlightedCommentId] = useState(null);
+   const [editingEvidenceId, setEditingEvidenceId] = useState(null);
+   const [editingEvidenceText, setEditingEvidenceText] = useState("");
+   const [editingEvidenceVerdict, setEditingEvidenceVerdict] = useState("UNVERIFIED");
+   const [votingEvidenceId, setVotingEvidenceId] = useState(null);
+   const [confirmDialog, setConfirmDialog] = useState({ open: false, type: null, targetId: null });
+   const [dialogBusy, setDialogBusy] = useState(false);
+   const [reportDialogOpen, setReportDialogOpen] = useState(false);
+   const [reportReason, setReportReason] = useState("OTHER");
+   const [reportNotes, setReportNotes] = useState("");
+   const [reporting, setReporting] = useState(false);
+   const pageRef = useRef(null);
+   const replyInputRef = useRef(null);
+   const evidenceFormRef = useRef(null);
+   const tabRefs = useRef({});
+   const deepLinkHandledRef = useRef(false);
+
    const refreshThreadData = useCallback(async () => {
-      const threadData = await authFetch(apiUrl(`threads/${threadId}/`), { method: "GET" });
-
-      setThread(threadData);
-      setComments(threadData.comments || []);
-      setEvidenceList(threadData.evidence_submissions || []);
+      const data = await authFetch(apiUrl(`threads/${threadId}/`), { method: "GET" });
+      setThread(data);
+      setComments((current) => {
+         const transient = current.filter((comment) => comment._sendState && comment._threadId === threadId);
+         return [...transient, ...(data.comments || [])];
+      });
+      setEvidenceList(data.evidence_submissions || []);
+      return data;
    }, [authFetch, threadId]);
 
-   useEffect(() => {
-      const fetchThread = async () => {
-         try {
-            await refreshThreadData();
-         } catch (err) {
-            console.error("Failed to load thread:", err);
-            setError("Failed to load thread.");
-         } finally {
-            setLoading(false);
-         }
-      };
+   const commentTree = useMemo(() => buildCommentTree(comments), [comments]);
+   const activeCommentCount = useMemo(
+      () => comments.filter((comment) => comment._sendState !== "failed").length,
+      [comments],
+   );
 
-      fetchThread();
+   useEffect(() => {
+      let active = true;
+      setLoading(true);
+      setLoadError("");
+      refreshThreadData()
+         .catch((error) => {
+            console.error("Failed to load thread", error);
+            if (active) setLoadError(safeActionMessage(error, "We couldn't load this thread. Please try again."));
+         })
+         .finally(() => { if (active) setLoading(false); });
+      return () => { active = false; };
    }, [refreshThreadData]);
 
-   useEffect(() => {
-      didAutoScrollRef.current = false;
-   }, [threadId]);
+   useEffect(() => { deepLinkHandledRef.current = false; }, [threadId, commentHash]);
 
    useEffect(() => {
-      const tabFromQuery = searchParams.get("tab");
-      const openEvidenceFormFromQuery = searchParams.get("openForm") === "evidence";
-      const normalizedTab = tabFromQuery === "evidence" || openEvidenceFormFromQuery ? "evidence" : "comments";
-      setCurrentSection(normalizedTab);
+      const openForm = searchParams.get("openForm") === "evidence";
+      if (commentHash) setCurrentTab("comments");
+      else setCurrentTab(searchParams.get("tab") === "evidence" || openForm ? "evidence" : "comments");
+      if (openForm) setShowEvidenceForm(true);
+   }, [commentHash, searchParams]);
 
-      if (openEvidenceFormFromQuery) {
-         setShowForm(true);
+   useEffect(() => {
+      if (loading || !commentHash || deepLinkHandledRef.current || currentTab !== "comments") return undefined;
+      const targetId = commentHash.replace(/^comment-/, "");
+      const threadMatch = findCommentThread(commentTree, targetId);
+      if (threadMatch && threadMatch.replyIndex >= 0 && replyVisibility[threadMatch.root.id] !== Number.MAX_SAFE_INTEGER) {
+         setReplyVisibility((current) => ({ ...current, [threadMatch.root.id]: Number.MAX_SAFE_INTEGER }));
+         return undefined;
       }
 
-      if (!loading && tabFromQuery && tabsSectionRef.current && !didAutoScrollRef.current) {
-         const prefersReducedMotion =
-            typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-         tabsSectionRef.current.scrollIntoView({
-            behavior: prefersReducedMotion ? "auto" : "smooth",
-            block: "start",
-         });
-         didAutoScrollRef.current = true;
-      }
-   }, [searchParams, loading]);
-
-   const handleSectionChange = (section) => {
-      setCurrentSection(section);
-      setSearchParams({ tab: section });
-   };
-
-   const verdict = (getEffectiveVerdict(thread?.claim) || "UNVERIFIED").toLowerCase();
-   const vm = VERDICT_META[verdict] || VERDICT_META.unverified;
-   const sortedComments = [...comments].sort((a, b) => {
-      const aTime = new Date(a?.commented_at || a?.created_at || a?.timestamp || 0).getTime();
-      const bTime = new Date(b?.commented_at || b?.created_at || b?.timestamp || 0).getTime();
-      return bTime - aTime;
-   });
-   const evidenceTypeTone = (() => {
-      if (evidenceType.includes("SUPPORT")) return "is-supports";
-      if (evidenceType.includes("CONTRADICT")) return "is-contradicts";
-      if (evidenceType.includes("CONTEXT")) return "is-context";
-      if (evidenceType.includes("VERIFICATION")) return "is-verification";
-      return "is-neutral";
-   })();
-   const confirmActionMeta = useMemo(() => {
-      if (confirmDialog.type === "comment") {
-         return {
-            code: "REMOVE COMMENT",
-            title: "Policy Action: Remove Comment",
-            description: "This comment will be permanently removed from the discussion thread.",
-            cta: "Confirm Remove",
-         };
-      }
-
-      return {
-         code: "REMOVE EVIDENCE",
-         title: "Policy Action: Remove Evidence",
-         description: "This evidence item will be permanently removed from the thread.",
-         cta: "Confirm Remove",
+      const frame = window.requestAnimationFrame(() => {
+         const target = document.getElementById(commentHash);
+         if (!target) return;
+         const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+         target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
+         target.focus({ preventScroll: true });
+         setHighlightedCommentId(targetId);
+         deepLinkHandledRef.current = true;
+      });
+      const timeout = window.setTimeout(() => setHighlightedCommentId(null), 3000);
+      return () => {
+         window.cancelAnimationFrame(frame);
+         window.clearTimeout(timeout);
       };
-   }, [confirmDialog.type]);
+   }, [commentHash, commentTree, currentTab, loading, replyVisibility]);
 
-   const reportActionMeta = {
-      code: "REPORT THREAD",
-      title: "Policy Action: Report Thread",
-      description: "Submit a report so moderators can investigate this thread for policy concerns.",
-      cta: "Submit Report",
+   useEffect(() => {
+      if (!loading && showEvidenceForm && searchParams.get("openForm") === "evidence") {
+         const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+         evidenceFormRef.current?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+      }
+   }, [loading, searchParams, showEvidenceForm]);
+
+   const sortedEvidence = useMemo(() => [...evidenceList].sort((left, right) => {
+      const scoreDifference = Number(right.weighted_score || 0) - Number(left.weighted_score || 0);
+      if (scoreDifference) return scoreDifference;
+      const timeDifference = new Date(right.submitted_at || 0).getTime() - new Date(left.submitted_at || 0).getTime();
+      if (timeDifference) return timeDifference;
+      return String(left.id).localeCompare(String(right.id));
+   }), [evidenceList]);
+
+   const changeTab = useCallback((nextTab) => {
+      setCurrentTab(nextTab);
+      const params = new URLSearchParams(searchParams);
+      params.set("tab", nextTab);
+      params.delete("openForm");
+      navigate({ pathname: location.pathname, search: `?${params.toString()}`, hash: "" }, { replace: true });
+   }, [location.pathname, navigate, searchParams]);
+
+   const handleTabKeyDown = (event, activeTab) => {
+      const tabs = ["comments", "evidence"];
+      const index = tabs.indexOf(activeTab);
+      let next = null;
+      if (event.key === "ArrowRight") next = tabs[(index + 1) % tabs.length];
+      if (event.key === "ArrowLeft") next = tabs[(index - 1 + tabs.length) % tabs.length];
+      if (event.key === "Home") next = tabs[0];
+      if (event.key === "End") next = tabs[tabs.length - 1];
+      if (!next) return;
+      event.preventDefault();
+      changeTab(next);
+      tabRefs.current[next]?.focus();
    };
 
-   //Evidence submit handler
-   async function handleEvidenceSubmit(e) {
-      e.preventDefault();
-      if (!evidenceUrl.trim() || !explanation.trim()) return;
-      setSubmitting(true);
+   const shareUrl = useCallback(async (url, title, successMessage) => {
       try {
-         const payload = {
-            thread_id: threadId,
-            evidence_url: evidenceUrl,
-            evidence_type: evidenceType,
-            evidence_verdict: evidenceVerdict,
-            evidence_caption: explanation,
-         };
-
-         await authFetch(apiUrl("evidence/"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-         });
-
-         addToast({
-            type: "success",
-            message: "Evidence submitted successfully!",
-            duration: 3000,
-         });
-
-         await refreshThreadData();
-         setShowForm(false);
-         setEvidenceUrl("");
-         setExplanation("");
-         setEvidenceVerdict("UNVERIFIED");
-         handleSectionChange("evidence");
+         if (navigator.share) {
+            await navigator.share({ title, url });
+            return;
+         }
+         if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(url);
+            addToast({ type: "success", message: successMessage, duration: 2200 });
+            return;
+         }
+         throw new Error("Share unavailable");
       } catch (error) {
-         console.error("Error submitting evidence:", error);
-         addToast({
-            type: "error",
-            message: `Error submitting evidence: ${error.message || "Unknown error"}`,
-         });
-         setError(`Error: ${error.message}`);
-      } finally {
-         setSubmitting(false);
+         if (error?.name === "AbortError") return;
+         addToast({ type: "warning", message: "Sharing isn't available in this browser. Copy the page address instead." });
       }
-   }
+   }, [addToast]);
 
-   //Comment submit handler
-   async function handleCommentSubmit(e) {
-      e.preventDefault();
-      const trimmedComment = newComment.trim();
-      if (!trimmedComment) return;
+   const shareThread = () => shareUrl(`${window.location.origin}/thread/detail/${thread.id}`, "TruthLens thread", "Thread link copied.");
+   const shareComment = (comment) => shareUrl(
+      `${window.location.origin}/thread/detail/${thread.id}?tab=comments#comment-${comment.id}`,
+      `Comment by @${comment.commenter?.username || "TruthLens user"}`,
+      "Comment link copied.",
+   );
 
-      const optimisticId = `optimistic-${Date.now()}`;
-      const optimisticComment = {
-         id: optimisticId,
-         comment_text: trimmedComment,
+   function optimisticCommentFrom({ text, parent = null }) {
+      const commenterRole = user?.role || user?.profile?.role || "USER";
+      return {
+         id: makeLocalCommentId(),
          commenter: {
             id: user?.id,
             username: user?.username || "You",
-            role: user?.role || null,
+            avatar_url: user?.avatar_url || null,
+            role: commenterRole,
          },
+         parent_id: parent?.id || null,
+         reply_to_username: parent?.commenter?.username || null,
+         comment_text: text,
          commented_at: new Date().toISOString(),
-         likes: 0,
+         like_count: 0,
+         is_liked: false,
+         _sendState: "sending",
+         _threadId: threadId,
       };
+   }
 
-      const previousComments = comments;
-      const previousCommentCount = Number(thread?.comment_count ?? comments.length);
+   async function persistOptimisticComment(optimistic, successMessage) {
+      try {
+         const created = await authFetch(apiUrl("comments/"), {
+            method: "POST",
+            body: {
+               thread_id: threadId,
+               parent_id: optimistic.parent_id,
+               comment_text: optimistic.comment_text,
+            },
+         });
+         setComments((current) => current.map((comment) => comment.id === optimistic.id ? created : comment));
+         addToast({ type: "success", message: successMessage, duration: 1800 });
+         return true;
+      } catch (error) {
+         console.error("Failed to post comment", error);
+         const message = safeActionMessage(error, "We couldn't post this comment. You can retry it below.");
+         setComments((current) => current.map((comment) => comment.id === optimistic.id
+            ? { ...comment, _sendState: "failed", _sendError: message }
+            : comment));
+         addToast({ type: "error", message });
+         return false;
+      }
+   }
 
-      setComments((prev) => [optimisticComment, ...prev]);
-      setThread((prev) => {
-         if (!prev) return prev;
-         return {
-            ...prev,
-            comment_count: previousCommentCount + 1,
-         };
-      });
+   async function handleCommentSubmit(event) {
+      event.preventDefault();
+      const text = newComment.trim();
+      if (!text || submittingComment) return;
+
+      const optimistic = optimisticCommentFrom({ text });
+      setComments((current) => [optimistic, ...current]);
       setNewComment("");
+      setSubmittingComment(true);
+      try {
+         await persistOptimisticComment(optimistic, "Comment posted.");
+      } finally {
+         setSubmittingComment(false);
+      }
+   }
+
+   function startReply(comment, rootId) {
+      if (comment._sendState) return;
+      setReplyComposer({
+         targetId: comment.id,
+         rootId,
+         username: comment.commenter?.username || "Unknown",
+         text: "",
+      });
+      window.requestAnimationFrame(() => replyInputRef.current?.focus());
+   }
+
+   async function handleReplySubmit(event, targetComment) {
+      event.preventDefault();
+      const text = replyComposer?.text?.trim();
+      if (!text || !targetComment || replyComposer?.targetId !== targetComment.id) return;
+
+      const optimistic = optimisticCommentFrom({ text, parent: targetComment });
+      const rootId = replyComposer.rootId;
+      setComments((current) => [optimistic, ...current]);
+      setReplyVisibility((current) => ({ ...current, [rootId]: Number.MAX_SAFE_INTEGER }));
+      setReplyComposer(null);
+      await persistOptimisticComment(optimistic, "Reply posted.");
+   }
+
+   async function retryOptimisticComment(comment) {
+      if (comment._sendState !== "failed") return;
+      const optimistic = { ...comment, _sendState: "sending", _sendError: null };
+      setComments((current) => current.map((item) => item.id === comment.id ? optimistic : item));
+      await persistOptimisticComment(optimistic, comment.parent_id ? "Reply posted." : "Comment posted.");
+   }
+
+   function discardOptimisticComment(comment) {
+      if (!comment._sendState) return;
+      setComments((current) => current.filter((item) => item.id !== comment.id));
+   }
+
+   async function handleLike(comment) {
+      if (likingIds.has(comment.id) || comment._sendState) return;
+
+      const previousLiked = Boolean(comment.is_liked);
+      const previousCount = Number(comment.like_count || 0);
+      const optimisticLiked = !previousLiked;
+      const optimisticCount = Math.max(0, previousCount + (optimisticLiked ? 1 : -1));
+
+      setLikingIds((current) => new Set(current).add(comment.id));
+      setComments((current) => current.map((item) => item.id === comment.id
+         ? { ...item, is_liked: optimisticLiked, like_count: optimisticCount }
+         : item));
 
       try {
-         const createdComment = await authFetch(apiUrl("comments/"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ thread_id: threadId, comment_text: trimmedComment }),
+         const result = await authFetch(apiUrl(`comments/${comment.id}/like/`), {
+            method: previousLiked ? "DELETE" : "POST",
          });
-
-         setComments((prev) => prev.map((comment) => (comment.id === optimisticId ? createdComment : comment)));
-
-         addToast({
-            type: "success",
-            message: "Comment posted successfully!",
-            duration: 2000,
-         });
+         setComments((current) => current.map((item) => item.id === comment.id
+            ? { ...item, like_count: result.like_count, is_liked: result.is_liked }
+            : item));
       } catch (error) {
-         setComments(previousComments);
-         setThread((prev) => {
-            if (!prev) return prev;
-            return {
-               ...prev,
-               comment_count: previousCommentCount,
-            };
-         });
-         setNewComment(trimmedComment);
-         console.error("Error posting comment:", error);
-         addToast({
-            type: "error",
-            message: "Failed to post comment",
+         console.error("Failed to update comment like", error);
+         setComments((current) => current.map((item) => item.id === comment.id
+            ? { ...item, is_liked: previousLiked, like_count: previousCount }
+            : item));
+         addToast({ type: "error", message: safeActionMessage(error, "We couldn't update this like. Please try again.") });
+      } finally {
+         setLikingIds((current) => {
+            const next = new Set(current);
+            next.delete(comment.id);
+            return next;
          });
       }
    }
 
-   async function handleDeleteComment(commentId, shouldProceed = false) {
-      if (!shouldProceed) {
-         setConfirmDialog({ open: true, type: "comment", targetId: commentId });
-         return;
-      }
+   function visibleRepliesFor(root) {
+      const total = flattenReplies(root).length;
+      const configured = replyVisibility[root.id];
+      if (configured === 0) return 0;
+      if (Number.isInteger(configured)) return Math.min(configured, total);
+      return 0;
+   }
 
-      const previousComments = comments;
-      const previousCommentCount = Number(thread?.comment_count ?? comments.length);
-      const hasComment = comments.some((comment) => comment.id === commentId);
+   function showReplies(rootId, total) {
+      setReplyVisibility((current) => ({ ...current, [rootId]: Math.min(DEFAULT_VISIBLE_REPLIES, total) }));
+   }
 
-      if (hasComment) {
-         setComments((prev) => prev.filter((comment) => comment.id !== commentId));
-         setThread((prev) => {
-            if (!prev) return prev;
-            return {
-               ...prev,
-               comment_count: Math.max(0, previousCommentCount - 1),
-            };
-         });
-      }
+   function showMoreReplies(rootId, total) {
+      setReplyVisibility((current) => {
+         const configured = current[rootId];
+         const currentVisible = Number.isInteger(configured) && configured > 0
+            ? Math.min(configured, total)
+            : Math.min(DEFAULT_VISIBLE_REPLIES, total);
+         return { ...current, [rootId]: Math.min(total, currentVisible + REPLY_PAGE_SIZE) };
+      });
+   }
 
-      try {
-         await authFetch(apiUrl(`comments/${commentId}/`), {
-            method: "DELETE",
-         });
-         addToast({
-            type: "success",
-            message: "Comment deleted successfully",
-            duration: 2000,
-         });
-      } catch (error) {
-         if (hasComment) {
-            setComments(previousComments);
-            setThread((prev) => {
-               if (!prev) return prev;
-               return {
-                  ...prev,
-                  comment_count: previousCommentCount,
-               };
-            });
-         }
-         console.error("Error deleting comment:", error);
-         addToast({
-            type: "error",
-            message: "Failed to delete comment",
-         });
-      }
+   function hideReplies(rootId) {
+      setReplyVisibility((current) => ({ ...current, [rootId]: 0 }));
+      setReplyComposer((current) => current?.rootId === rootId ? null : current);
    }
 
    async function handleSaveCommentEdit(commentId) {
-      const trimmedComment = editingCommentText.trim();
-      if (!trimmedComment) return;
-
-      const previousComments = comments;
-      setComments((prev) =>
-         prev.map((comment) => (comment.id === commentId ? { ...comment, comment_text: trimmedComment } : comment)),
-      );
-      setEditingCommentId(null);
-      setEditingCommentText("");
-
+      const text = editingCommentText.trim();
+      if (!text) return;
       try {
-         const updatedComment = await authFetch(apiUrl(`comments/${commentId}/`), {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ comment_text: trimmedComment }),
-         });
-
-         setComments((prev) =>
-            prev.map((comment) => (comment.id === commentId ? { ...comment, ...updatedComment } : comment)),
-         );
-
-         addToast({
-            type: "success",
-            message: "Comment updated successfully",
-            duration: 2000,
-         });
+         const updated = await authFetch(apiUrl(`comments/${commentId}/`), { method: "PATCH", body: { comment_text: text } });
+         setComments((current) => current.map((comment) => comment.id === commentId ? { ...comment, ...updated } : comment));
+         setEditingCommentId(null);
+         setEditingCommentText("");
+         addToast({ type: "success", message: "Comment updated.", duration: 1800 });
       } catch (error) {
-         setComments(previousComments);
-         setEditingCommentId(commentId);
-         setEditingCommentText(trimmedComment);
-         console.error("Error editing comment:", error);
-         addToast({
-            type: "error",
-            message: "Failed to update comment",
-         });
+         console.error("Failed to edit comment", error);
+         addToast({ type: "error", message: safeActionMessage(error, "We couldn't update this comment. Please try again.") });
       }
    }
 
-   async function handleDeleteEvidence(evidenceId, shouldProceed = false) {
-      if (!shouldProceed) {
-         setConfirmDialog({ open: true, type: "evidence", targetId: evidenceId });
-         return;
-      }
+   async function performDelete() {
+      const { type, targetId } = confirmDialog;
+      if (!type || !targetId || dialogBusy) return;
+      setDialogBusy(true);
       try {
-         await authFetch(apiUrl(`evidence/${evidenceId}/`), {
-            method: "DELETE",
-         });
-         addToast({
-            type: "success",
-            message: "Evidence deleted successfully",
-            duration: 2000,
+         await authFetch(apiUrl(`${type === "comment" ? "comments" : "evidence"}/${targetId}/`), { method: "DELETE" });
+         if (type === "comment") {
+            setComments((current) => current
+               .filter((comment) => comment.id !== targetId)
+               .map((comment) => comment.parent_id === targetId ? { ...comment, parent_id: null, reply_to_username: null } : comment));
+            setReplyComposer((current) => current?.targetId === targetId ? null : current);
+            setThread((current) => current ? { ...current, comment_count: Math.max(0, Number(current.comment_count || 0) - 1) } : current);
+         } else await refreshThreadData();
+         setConfirmDialog({ open: false, type: null, targetId: null });
+         addToast({ type: "success", message: type === "comment" ? "Comment deleted." : "Evidence deleted.", duration: 1800 });
+      } catch (error) {
+         console.error("Failed to delete item", error);
+         addToast({ type: "error", message: safeActionMessage(error, `We couldn't delete this ${type}. Please try again.`) });
+      } finally {
+         setDialogBusy(false);
+      }
+   }
+
+   async function handleEvidenceSubmit(event) {
+      event.preventDefault();
+      if (!evidenceUrl.trim() || !evidenceExplanation.trim() || submittingEvidence) return;
+      setSubmittingEvidence(true);
+      try {
+         await authFetch(apiUrl("evidence/"), {
+            method: "POST",
+            body: {
+               thread_id: threadId,
+               evidence_url: evidenceUrl.trim(),
+               evidence_type: evidenceType,
+               evidence_verdict: evidenceAssessment,
+               evidence_caption: evidenceExplanation.trim(),
+            },
          });
          await refreshThreadData();
+         setEvidenceUrl("");
+         setEvidenceExplanation("");
+         setEvidenceAssessment("UNVERIFIED");
+         setShowEvidenceForm(false);
+         changeTab("evidence");
+         addToast({ type: "success", message: "Evidence submitted for community review.", duration: 2200 });
       } catch (error) {
-         console.error("Error deleting evidence:", error);
-         addToast({
-            type: "error",
-            message: "Failed to delete evidence",
-         });
+         console.error("Failed to submit evidence", error);
+         addToast({ type: "error", message: safeActionMessage(error, "We couldn't submit this evidence. Please review it and try again.") });
+      } finally {
+         setSubmittingEvidence(false);
       }
    }
 
-   async function handleSaveEvidenceEdit(evidenceId) {
-      if (!editingEvidenceText.trim()) return;
+   async function handleSaveEvidenceEdit(evidenceId, caption, verdict) {
+      if (!caption.trim()) return;
       try {
-         await authFetch(apiUrl(`evidence/${evidenceId}/`), {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-               evidence_caption: editingEvidenceText,
-               evidence_verdict: editingEvidenceVerdict,
-            }),
-         });
-         addToast({
-            type: "success",
-            message: "Evidence updated successfully",
-            duration: 2000,
-         });
+         await authFetch(apiUrl(`evidence/${evidenceId}/`), { method: "PATCH", body: { evidence_caption: caption.trim(), evidence_verdict: verdict } });
          await refreshThreadData();
          setEditingEvidenceId(null);
          setEditingEvidenceText("");
          setEditingEvidenceVerdict("UNVERIFIED");
+         addToast({ type: "success", message: "Evidence updated.", duration: 1800 });
       } catch (error) {
-         console.error("Error editing evidence:", error);
-         addToast({
-            type: "error",
-            message: "Failed to update evidence",
-         });
+         console.error("Failed to edit evidence", error);
+         addToast({ type: "error", message: safeActionMessage(error, "We couldn't update this evidence. Please try again.") });
       }
    }
 
-   function handleReportThread() {
-      if (!thread?.id || reporting) return;
-      setReportDialogOpen(true);
-   }
+   async function handleVote(evidence, nextValue) {
+      if (!evidence?.id || votingEvidenceId || evidence.contributor?.id === user?.id) return;
 
-   async function submitReportThread() {
-      const reasonInput = reportReason?.trim().toUpperCase();
-      if (!reasonInput) return;
+      const previousEvidence = { ...evidence };
+      const previousVoteValue = evidence.my_vote?.vote_value;
+      let nextUpvotes = Number(evidence.upvotes || 0);
+      let nextDownvotes = Number(evidence.downvotes || 0);
+      let nextMyVote = evidence.my_vote;
 
-      const allowedReasons = new Set(["INAPPROPRIATE", "SPAM", "HARASSMENT", "OTHER"]);
-      if (!allowedReasons.has(reasonInput)) {
-         addToast({
-            type: "error",
-            message: "Invalid reason. Use INAPPROPRIATE, SPAM, HARASSMENT, or OTHER.",
-         });
-         return;
+      if (!evidence.my_vote) {
+         if (nextValue) nextUpvotes += 1;
+         else nextDownvotes += 1;
+         nextMyVote = { id: `pending-${evidence.id}`, vote_value: nextValue };
+      } else if (previousVoteValue === nextValue) {
+         if (nextValue) nextUpvotes = Math.max(0, nextUpvotes - 1);
+         else nextDownvotes = Math.max(0, nextDownvotes - 1);
+         nextMyVote = null;
+      } else {
+         if (nextValue) {
+            nextUpvotes += 1;
+            nextDownvotes = Math.max(0, nextDownvotes - 1);
+         } else {
+            nextDownvotes += 1;
+            nextUpvotes = Math.max(0, nextUpvotes - 1);
+         }
+         nextMyVote = { ...evidence.my_vote, vote_value: nextValue };
       }
 
-      setReporting(true);
-      try {
-         await authFetch(apiUrl("thread-flags/"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-               thread_id: thread.id,
-               reason: reasonInput,
-               notes: reportNotes.trim(),
-            }),
-         });
-
-         addToast({
-            type: "success",
-            message: "Thread reported. Moderators have been notified.",
-            duration: 2500,
-         });
-
-         setReportDialogOpen(false);
-         setReportReason("OTHER");
-         setReportNotes("");
-         await refreshThreadData();
-      } catch (reportError) {
-         addToast({
-            type: "error",
-            message: reportError?.message || "Failed to report thread.",
-         });
-      } finally {
-         setReporting(false);
-      }
-   }
-
-   async function handleVote(evidence, nextVoteValue) {
-      if (!evidence?.id) return;
-
-      if (evidence?.contributor?.id === user?.id) {
-         addToast({
-            type: "error",
-            message: "You cannot vote on your own evidence.",
-         });
-         return;
-      }
-
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
       setVotingEvidenceId(evidence.id);
-
-      const previousEvidenceList = evidenceList;
-      const previousThreadEvidence = thread?.evidence_submissions || [];
-
-      const applyOptimisticVote = (item) => {
-         if (!item || item.id !== evidence.id) return item;
-
-         const upvotes = Number(item.upvotes || 0);
-         const downvotes = Number(item.downvotes || 0);
-         const currentVote = item.my_vote?.vote_value;
-
-         let nextUpvotes = upvotes;
-         let nextDownvotes = downvotes;
-         let nextMyVote = item.my_vote || null;
-
-         if (!item.my_vote) {
-            if (nextVoteValue) nextUpvotes += 1;
-            else nextDownvotes += 1;
-            nextMyVote = { id: "optimistic", vote_value: nextVoteValue };
-         } else if (currentVote === nextVoteValue) {
-            if (currentVote) nextUpvotes = Math.max(0, upvotes - 1);
-            else nextDownvotes = Math.max(0, downvotes - 1);
-            nextMyVote = null;
-         } else {
-            if (currentVote) {
-               nextUpvotes = Math.max(0, upvotes - 1);
-               nextDownvotes += 1;
-            } else {
-               nextDownvotes = Math.max(0, downvotes - 1);
-               nextUpvotes += 1;
-            }
-            nextMyVote = { ...(item.my_vote || {}), vote_value: nextVoteValue };
-         }
-
-         const contributorTrust = Number(item.contributor?.trust_score || 0);
-         const nextWeighted = Number((nextUpvotes * (contributorTrust / 100) - nextDownvotes * 0.5).toFixed(2));
-
-         return {
-            ...item,
-            upvotes: nextUpvotes,
-            downvotes: nextDownvotes,
-            my_vote: nextMyVote,
-            weighted_score: nextWeighted,
-         };
-      };
-
-      setEvidenceList((prev) => prev.map(applyOptimisticVote));
-      setThread((prev) => {
-         if (!prev) return prev;
-         return {
-            ...prev,
-            evidence_submissions: (prev.evidence_submissions || []).map(applyOptimisticVote),
-         };
-      });
+      setEvidenceList((current) => current.map((item) => item.id === evidence.id
+         ? { ...item, upvotes: nextUpvotes, downvotes: nextDownvotes, my_vote: nextMyVote }
+         : item));
 
       try {
-         const myVote = evidence.my_vote;
-
-         if (!myVote) {
-            await authFetch(`${API_BASE_URL}/votes/`, {
-               method: "POST",
-               headers: { "Content-Type": "application/json" },
-               body: JSON.stringify({
-                  evidence: evidence.id,
-                  vote_value: nextVoteValue,
-               }),
-            });
-         } else if (myVote.vote_value === nextVoteValue) {
-            await authFetch(`${API_BASE_URL}/votes/${myVote.id}/`, {
-               method: "DELETE",
-            });
-         } else {
-            await authFetch(`${API_BASE_URL}/votes/${myVote.id}/`, {
-               method: "PATCH",
-               headers: { "Content-Type": "application/json" },
-               body: JSON.stringify({ vote_value: nextVoteValue }),
-            });
-         }
-
+         if (!evidence.my_vote) await authFetch(apiUrl("votes/"), { method: "POST", body: { evidence: evidence.id, vote_value: nextValue } });
+         else if (previousVoteValue === nextValue) await authFetch(apiUrl(`votes/${evidence.my_vote.id}/`), { method: "DELETE" });
+         else await authFetch(apiUrl(`votes/${evidence.my_vote.id}/`), { method: "PATCH", body: { vote_value: nextValue } });
          await refreshThreadData();
-      } catch (voteError) {
-         setEvidenceList(previousEvidenceList);
-         setThread((prev) => {
-            if (!prev) return prev;
-            return {
-               ...prev,
-               evidence_submissions: previousThreadEvidence,
-            };
-         });
-         addToast({
-            type: "error",
-            message: voteError?.message || "Failed to cast vote.",
-         });
+      } catch (error) {
+         console.error("Failed to vote", error);
+         setEvidenceList((current) => current.map((item) => item.id === evidence.id ? previousEvidence : item));
+         addToast({ type: "error", message: safeActionMessage(error, "We couldn't record this vote. Please try again.") });
       } finally {
          setVotingEvidenceId(null);
       }
    }
 
-   async function handleConfirmAction() {
-      const { type, targetId } = confirmDialog;
-      if (!type || !targetId) return;
-
-      setConfirmDialog({ open: false, type: null, targetId: null });
-      if (type === "comment") {
-         await handleDeleteComment(targetId, true);
-      } else if (type === "evidence") {
-         await handleDeleteEvidence(targetId, true);
+   async function submitReport() {
+      if (reporting) return;
+      setReporting(true);
+      try {
+         await authFetch(apiUrl("thread-flags/"), { method: "POST", body: { thread_id: thread.id, reason: reportReason, notes: reportNotes.trim() } });
+         setReportDialogOpen(false);
+         setReportReason("OTHER");
+         setReportNotes("");
+         addToast({ type: "success", message: "Report submitted for platform safety review.", duration: 2200 });
+      } catch (error) {
+         console.error("Failed to report thread", error);
+         addToast({ type: "error", message: safeActionMessage(error, "We couldn't submit this report. Please try again.") });
+      } finally {
+         setReporting(false);
       }
    }
 
-   //Weight display
-   const trustScore = Number(user?.trust_breakdown?.trust_score ?? user?.trust_score ?? 0);
-   const weight = (1 + trustScore / 100).toFixed(1);
-   const authorTrustBreakdown = thread?.author?.trust_breakdown || {};
-
-   if (loading) {
-      return <ThreadDetailSkeleton />;
-   }
-
-   if (error || !thread) {
+   if (loading) return <ThreadDetailSkeleton />;
+   if (loadError || !thread) {
       return (
-         <>
-            <div className="tdp-error">
-               <Icons name="alert-triangle" size={32} color="#d97706" />
-               <p>{error || "Thread not found."}</p>
-               <button onClick={() => navigate("/community")}>Back to Community Feed</button>
-            </div>
-         </>
+         <main className="thread-detail-page thread-detail-state">
+            <Icons name="alert-triangle" size={30} />
+            <h1>Thread unavailable</h1>
+            <p>{loadError || "We couldn't find this thread."}</p>
+            <button type="button" className="thread-detail-primary-button" onClick={() => navigate("/community")}>Back to Community</button>
+         </main>
       );
    }
 
+   const claimText = thread.claim?.context_text?.trim() || thread.caption?.trim() || "Discussion";
+   const hasClaim = Boolean(thread.claim?.context_text?.trim());
+   const communityContext = hasClaim && thread.caption?.trim() && normalizeText(thread.caption) !== normalizeText(claimText) ? thread.caption.trim() : "";
+   const humanVerdict = thread.claim?.human_verdict;
+   const publishedFactCheck = thread.claim?.published_fact_check;
+   const assessmentVerdict = humanVerdict?.verdict || thread.claim?.ai_verdict || "UNVERIFIED";
+   const verifiedCount = Number(thread.claim?.verified_evidence_count || 0);
+   const confidenceValue = thread.claim?.consensus_score;
+   const confidence = Number(confidenceValue);
+   const hasConfidence = confidenceValue !== null && confidenceValue !== "" && Number.isFinite(confidence);
+   const authorUsername = thread.author?.username || "Unknown";
+   const authorRoleLabel = getRoleLabel(thread.author?.role);
+   const assessmentKey = String(assessmentVerdict || "UNVERIFIED").toUpperCase();
+   const assessmentMeta = VERDICT_CONFIG[assessmentKey] || VERDICT_CONFIG.UNVERIFIED;
+   const currentUserTrustScore = Number(user?.trust_breakdown?.trust_score ?? user?.trust_score ?? 0);
+   const currentUserWeight = (1 + currentUserTrustScore / 100).toFixed(1);
+   const evidenceTypeTone = evidenceType.includes("SUPPORT")
+      ? "supports"
+      : evidenceType.includes("CONTRADICT")
+        ? "contradicts"
+        : evidenceType.includes("CONTEXT")
+          ? "context"
+          : evidenceType.includes("VERIFICATION")
+            ? "verification"
+            : "neutral";
+
    return (
-      <div className="thread-layout">
-         <div className="tdp-page">
-            {/*Breadcrumb bar */}
-            <div className="tdp-breadcrumb" style={{ borderBottomColor: vm.color }}>
-               <div className="tdp-breadcrumb-left">
-                  <button className="tdp-back-btn" onClick={() => navigate("/community")}>
-                     <Icons name="arrow-left" size={14} />
-                     Community Feed
+      <main
+         ref={pageRef}
+         className={`thread-detail-page thread-detail-page--classic thread-detail-page--${assessmentKey.toLowerCase()}`}
+         style={{
+            "--thread-verdict-color": assessmentMeta.color,
+            "--thread-verdict-bg": assessmentMeta.bg,
+            "--thread-verdict-border": assessmentMeta.border,
+         }}
+         tabIndex={-1}
+      >
+         <header className="thread-detail-topbar thread-detail-topbar--classic">
+            <div className="thread-detail-topbar-inner">
+               <div className="thread-detail-breadcrumb-left">
+                  <button type="button" className="thread-detail-back" onClick={() => navigate("/community")}>
+                     <Icons name="arrow-left" size={15} /> Community Feed
                   </button>
-
-                  <span className="tdp-breadcrumb-dot">·</span>
-
-                  <span className="tdp-breadcrumb-thread">
-                     Thread #{thread.display_id ? thread.display_id : thread.id.substring(0, 6)}
-                  </span>
-
-                  <span className="tdp-breadcrumb-dot">·</span>
-
-                  <span className="tdp-breadcrumb-time">
-                     Started{" "}
-                     {new Date(thread.created_at).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                     })}{" "}
-                     by <strong>@{thread.author?.username || "unknown"}</strong>
-                  </span>
+                  <span className="thread-detail-breadcrumb-dot" aria-hidden="true">•</span>
+                  <strong>Thread #{thread.display_id || String(thread.id).slice(0, 6)}</strong>
+                  <span className="thread-detail-breadcrumb-dot" aria-hidden="true">•</span>
+                  <span>Started {formatDate(thread.created_at, { hour: "numeric", minute: "2-digit" })} by <strong>@{authorUsername}</strong></span>
                </div>
-               <div className="tdp-breadcrumb-right">
-                  <VerdictBadge verdict={verdict} />
-                  {thread.status && <span className="tdp-status-pill">{thread.status}</span>}
+               <div className="thread-detail-metadata">
+                  <VerdictBadge verdict={assessmentVerdict} />
+                  {thread.status && <span className="thread-detail-status">{thread.status}</span>}
                </div>
             </div>
+         </header>
 
-            {/*Claim Hero*/}
-            <div className="tdp-hero" style={{ background: vm.bg, borderBottomColor: `${vm.color}30` }}>
-               <div className="tdp-hero-inner">
-                  {/* Left: claim text */}
-                  <div className="tdp-hero-left">
-                     <div className="tdp-claim-label" style={{ color: vm.color }}>
-                        <Icons name="flag" size={11} color={vm.color} strokeWidth={2.5} />
-                        CLAIM UNDER INVESTIGATION
-                     </div>
-                     <h1 className="tdp-claim-text">{thread.caption}</h1>
-                     <div className="tdp-claim-meta">
-                        {thread.source && (
-                           <span>
-                              <Icons name="globe" size={12} color="#6b7280" />
-                              Sourced from <strong>{thread.source}</strong>
+         <section className={`thread-detail-hero thread-detail-hero--${String(assessmentVerdict || "UNVERIFIED").toLowerCase()}`} aria-labelledby="thread-detail-heading">
+            <div className="thread-detail-hero-inner">
+               <div className="thread-detail-hero-copy">
+                  <p className="thread-detail-eyebrow"><Icons name="flag" size={13} /> Claim</p>
+                  <h1 id="thread-detail-heading">{claimText}</h1>
+                  <div className="thread-detail-counts" aria-label="Thread activity">
+                     <span><Icons name="message-circle" size={14} /> <strong>{activeCommentCount}</strong> comments</span>
+                     <span><Icons name="paperclip" size={14} /> <strong>{evidenceList.length}</strong> evidence submissions</span>
+                     {thread.claim?.claim_type === "URL" && isHttpUrl(thread.claim?.url_link) && (
+                        <a href={thread.claim.url_link} target="_blank" rel="noopener noreferrer">Claim URL <Icons name="external-link" size={13} /></a>
+                     )}
+                  </div>
+               </div>
+
+               <aside className="thread-detail-assessment thread-detail-assessment--classic" aria-label="Current assessment">
+                  <div className="thread-detail-assessment-heading">
+                     <div className="thread-detail-assessment-source">
+                        {humanVerdict?.organization?.logo_url && <img src={humanVerdict.organization.logo_url} alt="" className="thread-detail-reviewer-logo" />}
+                        <div>
+                           <span className="thread-detail-assessment-kicker">
+                              {humanVerdict ? (humanVerdict.organization ? `Reviewed by ${humanVerdict.organization.name}` : "Human review") : "AI analysis"}
                            </span>
-                        )}
-                        <span>
-                           <Icons name="message-circle" size={12} color="#6b7280" />
-                           <strong>{comments.length}</strong> comments
-                        </span>
-                        <span>
-                           <Icons name="paperclip" size={12} color="#6b7280" />
-                           <strong>{evidenceList.length}</strong> evidence submissions
-                        </span>
+                           {humanVerdict?.reviewed_at && <time dateTime={humanVerdict.reviewed_at}>{formatDate(humanVerdict.reviewed_at)}</time>}
+                        </div>
                      </div>
+                     <VerdictBadge verdict={assessmentVerdict} />
                   </div>
 
-                  {/* Right: verdict card */}
-                  <div className="tdp-verdict-card">
-                     {thread.claim?.moderator_verdict_info ? (
-                        // HUMAN-REVIEWED VERDICT VERSION
-                        <>
-                           <div style={{ marginBottom: "12px" }}>
-                              <span
-                                 style={{
-                                    fontSize: "11px",
-                                    fontWeight: "600",
-                                    color: "#6b7280",
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.05em",
-                                 }}
-                              >
-                                 Human-Reviewed Verdict
-                              </span>
+                  {humanVerdict ? (
+                     <>
+                        <p className="thread-detail-assessment-copy">This verdict reflects attributable human review.</p>
+                        <div className="thread-detail-assessment-metric">
+                           <span>Verified evidence</span>
+                           <strong>{verifiedCount}</strong>
+                        </div>
+                     </>
+                  ) : (
+                     <>
+                        {thread.claim?.ai_summary && <p className="thread-detail-assessment-copy">{thread.claim.ai_summary}</p>}
+                        {hasConfidence && (
+                           <div className="thread-detail-confidence">
+                              <div><span>AI confidence</span><strong>{Math.max(0, Math.min(100, Math.round(confidence)))}%</strong></div>
+                              <div className="thread-detail-confidence-track"><span style={{ width: `${Math.max(0, Math.min(100, confidence))}%` }} /></div>
                            </div>
-                           <VerdictBadge verdict={thread.claim.moderator_verdict_info.verdict.toUpperCase()} />
-                           <p className="tdp-verdict-desc">
-                              {VERDICT_META[thread.claim.moderator_verdict_info.verdict.toLowerCase()]?.desc ||
-                                 "Evidence has been reviewed through human adjudication."}
-                           </p>
-                           <div className="tdp-evidence-count-row">
-                              <span className="tdp-confidence-label">Verified Evidence</span>
-                              <span className="tdp-evidence-count-val" style={{ color: "#10b981" }}>
-                                 {thread.claim.moderator_verdict_info.verified_evidence_count} item
-                                 {thread.claim.moderator_verdict_info.verified_evidence_count !== 1 ? "s" : ""}
-                              </span>
-                           </div>
+                        )}
+                        <div className="thread-detail-assessment-metric">
+                           <span>Evidence submissions</span>
+                           <strong>{evidenceList.length}</strong>
+                        </div>
+                     </>
+                  )}
+                  {!humanVerdict && verifiedCount > 0 && (
+                     <p className="thread-detail-neutral-note">{verifiedCount} verified evidence {verifiedCount === 1 ? "item is" : "items are"} available for human review.</p>
+                  )}
+                  {humanVerdict && publishedFactCheck?.organization?.slug && publishedFactCheck?.publication_id && (
+                     <div className="thread-detail-publication">
+                        <span className="thread-detail-publication-label">Published fact-check</span>
+                        <Link
+                           className="thread-detail-publication-link"
+                           to={`/partners/${encodeURIComponent(publishedFactCheck.organization.slug)}/fact-checks/${encodeURIComponent(publishedFactCheck.publication_id)}`}
+                           aria-label={`Read ${publishedFactCheck.organization.name} published fact-check: ${publishedFactCheck.headline}`}
+                        >
+                           <strong>{publishedFactCheck.headline}</strong>
+                           <span>Read full fact-check <Icons name="arrow-right" size={13} /></span>
+                        </Link>
+                     </div>
+                  )}
+               </aside>
+            </div>
+         </section>
 
-                           {/* REFINEMENT #9: Evidence Breakdown for MISLEADING verdicts */}
-                           {thread.claim.moderator_verdict_info.verdict === "MISLEADING" && (
-                              <div
-                                 style={{
-                                    marginTop: "12px",
-                                    padding: "10px",
-                                    backgroundColor: "#fef3c7",
-                                    borderRadius: "6px",
-                                    fontSize: "12px",
-                                 }}
-                              >
-                                 <span style={{ color: "#92400e", fontWeight: "500" }}>Mixed Evidence:</span>
-                                 <div style={{ marginTop: "6px", color: "#78350f" }}>
-                                    <div>Some evidence supports</div>
-                                    <div>Some evidence contradicts</div>
-                                    <div style={{ marginTop: "4px", fontSize: "11px" }}>
-                                       This claim is partially accurate
-                                    </div>
-                                 </div>
-                              </div>
-                           )}
-                        </>
-                     ) : thread.claim?.verified_evidence_count > 0 && !thread.claim?.moderator_verdict_info ? (
-                         // Evidence awaiting human adjudication
-                        <>
-                           <div style={{ marginBottom: "12px" }}>
-                              <span
-                                 style={{
-                                    fontSize: "11px",
-                                    fontWeight: "600",
-                                    color: "#d97706",
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.05em",
-                                 }}
-                              >
-                                 Verdict Pending
-                              </span>
-                           </div>
-                           <VerdictBadge verdict="unverified" />
-                           <p className="tdp-verdict-desc">Evidence awaiting human adjudication</p>
-                           <div className="tdp-evidence-count-row">
-                              <span className="tdp-confidence-label">Evidence Under Review</span>
-                              <span className="tdp-evidence-count-val" style={{ color: "#d97706" }}>
-                                 {thread.claim.verified_evidence_count} item
-                                 {thread.claim.verified_evidence_count !== 1 ? "s" : ""}
-                              </span>
-                           </div>
-                           <p
-                              style={{
-                                 marginTop: "10px",
-                                 fontSize: "12px",
-                                 color: "#9ca3af",
-                                 fontStyle: "italic",
-                              }}
-                           >
-                              Final verdict will be determined once human adjudication is complete
-                           </p>
-                        </>
+         <div className="thread-detail-body thread-detail-body--classic">
+            <div className="thread-detail-main-column">
+               <article className="thread-detail-post-card thread-detail-post-card--classic">
+                  <header className="thread-detail-post-header">
+                     <Link className="thread-detail-post-author" to={`/user/${encodeURIComponent(authorUsername)}`} aria-label={`View @${authorUsername}'s profile`}>
+                        <Avatar user={thread.author} size="large" />
+                        <span>
+                           <strong>{authorUsername}</strong>
+                           <small>{formatDate(thread.created_at, { hour: "numeric", minute: "2-digit" })}</small>
+                        </span>
+                     </Link>
+                     <span className="thread-detail-post-kind">Community post</span>
+                  </header>
+
+                  {communityContext && (
+                     <div className="thread-detail-community-context-strip">
+                        <span>Community context</span>
+                        <p>{communityContext}</p>
+                     </div>
+                  )}
+
+                  <div className="thread-detail-post-media">
+                     {thread.claim?.media_url ? (
+                        <ClaimMedia claim={thread.claim} />
                      ) : (
-                        // AI VERDICT VERSION (fallback)
-                        <>
-                           <VerdictBadge verdict={verdict} />
-                           <p className="tdp-verdict-desc">{vm.desc}</p>
-                           <div className="tdp-confidence">
-                              <div className="tdp-confidence-row">
-                                 <span className="tdp-confidence-label">AI Confidence</span>
-                                 <span className="tdp-confidence-value" style={{ color: vm.color }}>
-                                    {thread.claim.consensus_score ?? "—"}%
-                                 </span>
-                              </div>
-                              <div className="tdp-confidence-track">
-                                 <div
-                                    className="tdp-confidence-fill"
-                                    style={{
-                                       width: `${thread.claim.consensus_score ?? 0}%`,
-                                       background: vm.color,
-                                    }}
-                                 />
-                              </div>
-                           </div>
-                           <div className="tdp-evidence-count-row">
-                              <span className="tdp-confidence-label">Evidence submissions</span>
-                              <span className="tdp-evidence-count-val" style={{ color: vm.color }}>
-                                 {evidenceList.length}
-                              </span>
-                           </div>
-                        </>
+                        <div className="thread-detail-post-placeholder">
+                           <Icons name="message-square" size={30} />
+                           <span>No media attached to this claim.</span>
+                        </div>
                      )}
                   </div>
-               </div>
-            </div>
+               </article>
 
-            <div className="tdp-body">
-               {/* Left column*/}
-               <div className="tdp-main">
-                  {/* Post card */}
-                  <div className="tdp-post-card">
-                     <div className="tdp-post-header">
-                        <div
-                           className="tdp-author-profile-pic"
-                           style={{ overflow: "hidden" }}
-                           onClick={(e) => {
-                              e.stopPropagation(); // Prevents triggering the thread card click
-                              navigate(`/user/${thread.author.username}`);
-                           }}
-                        >
-                           {thread.author.avatar_url ? (
-                              <img
-                                 src={thread.author.avatar_url}
-                                 alt={`${thread.author.username}'s avatar`}
-                                 style={{
-                                    width: "100%",
-                                    height: "100%",
-                                    objectFit: "cover",
-                                 }}
-                              />
-                           ) : (
-                              <UserAvatar
-                                 username={thread.author?.username || thread.flagged_by?.username || ""}
-                                 size={38}
-                              />
-                           )}
-                        </div>
-                        <div className="tdp-post-author">
-                           <span
-                              className="tdp-author-name"
-                              onClick={(e) => {
-                                 e.stopPropagation(); // Prevents triggering the thread card click
-                                 navigate(`/user/${thread.author.username}`);
-                              }}
-                           >
-                              {thread.author?.username || thread.flagged_by?.username}
-                           </span>
-                           <div className="tdp-author-meta">
-                              <span>
-                                 {new Date(thread.created_at).toLocaleDateString("en-US", {
-                                    month: "short",
-                                    day: "numeric",
-                                    year: "numeric",
-                                    hour: "numeric",
-                                    minute: "2-digit",
-                                 })}{" "}
-                              </span>
-                           </div>
-                        </div>
-                        <div className="tdp-post-actions">
-                           <span className="tdp-original-pill">Original post</span>
-                           <a
-                              href={thread.source_url || "#"}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="tdp-icon-btn"
-                           >
-                              <Icons name="external-link" size={14} color="#6b7280" />
-                           </a>
-                        </div>
-                     </div>
-                     {/* Snipped image placeholder */}
-                     <div className="tdp-snip-placeholder">
-                        {thread.claim.media_url ? (
-                           <img src={thread.claim.media_url} alt="Snipped claim" className="card-media-image" />
-                        ) : (
-                           <>
-                              <div className="tdp-snip-icon-wrap">
-                                 <Icons name="globe" size={28} color="#9ca3af" />
-                              </div>
-                              <span className="tdp-snip-label">Snipped from {thread.source || "external source"}</span>
-                           </>
-                        )}
-                     </div>
-                  </div>
+               <button
+                  type="button"
+                  className="thread-detail-evidence-cta"
+                  onClick={() => {
+                     changeTab("evidence");
+                     setShowEvidenceForm(true);
+                     window.requestAnimationFrame(() => evidenceFormRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" }));
+                  }}
+               >
+                  <Icons name="paperclip" size={16} /> Submit Evidence for This Claim
+               </button>
 
-                  {/* Evidence submit toggle */}
-                  <div className="tdp-evidence-toggle-wrap">
-                     <button
-                        className={`tdp-evidence-toggle-btn ${showForm ? "open" : ""}`}
-                        onClick={() => setShowForm((v) => !v)}
-                     >
-                        <Icons name={showForm ? "x" : "paperclip"} size={15} color="#fff" strokeWidth={2.5} />
-                        {showForm ? "Cancel Evidence Submission" : "Submit Evidence for This Claim"}
+               <section className="thread-detail-discussion thread-detail-discussion--classic" aria-label="Thread discussion">
+                  <div className="thread-detail-tabs" role="tablist" aria-label="Thread content">
+                     <button ref={(node) => { tabRefs.current.comments = node; }} id="thread-detail-comments-tab" type="button" role="tab" aria-selected={currentTab === "comments"} aria-controls="thread-detail-comments-panel" tabIndex={currentTab === "comments" ? 0 : -1} onClick={() => changeTab("comments")} onKeyDown={(event) => handleTabKeyDown(event, "comments")}>
+                        <Icons name="message-circle" size={15} /> Comments <span>{activeCommentCount}</span>
                      </button>
-
-                     {/* Collapsible form */}
-                     {showForm && (
-                        <form className="tdp-evidence-form" onSubmit={handleEvidenceSubmit}>
-                           <div className="tdp-evidence-form-title">
-                              <Icons name="paperclip" size={13} color="#4f46e5" strokeWidth={2.5} />
-                              New Evidence Submission
-                           </div>
-                           <div className="tdp-form-row">
-                              <div className="tdp-form-group">
-                                 <label className="tdp-form-label">
-                                    Source URL <span className="tdp-required">*</span>
-                                 </label>
-                                 <div className="tdp-input-wrap">
-                                    <Icons name="link" size={12} color="#9ca3af" />
-                                    <input
-                                       type="url"
-                                       className="tdp-input"
-                                       placeholder="https://reliable-source.com/…"
-                                       value={evidenceUrl}
-                                       onChange={(e) => setEvidenceUrl(e.target.value)}
-                                       required
-                                    />
-                                 </div>
-                              </div>
-                              <div className="tdp-form-group">
-                                 <label className="tdp-form-label">Evidence</label>
-                                 <div className={`tdp-select-wrap tdp-evidence-type-wrap ${evidenceTypeTone}`}>
-                                    <select
-                                       className="tdp-select tdp-evidence-type-select"
-                                       value={evidenceType}
-                                       onChange={(e) => setEvidenceType(e.target.value)}
-                                    >
-                                       <option value={"CONTRADICTS CLAIM"}>Contradicts Claim</option>
-                                       <option value={"SUPPORTS CLAIM"}>Supports Claim</option>
-                                       <option value={"PROVIDES CONTEXT"}>Provides Context</option>
-                                       <option value={"SOURCE VERIFICATION"}>Source Verification</option>
-                                    </select>
-                                    <Icons
-                                       name="chevron-down"
-                                       size={13}
-                                       color="#6b7280"
-                                       className="tdp-select-chevron"
-                                    />
-                                 </div>
-                              </div>
-                           </div>
-                           <div className="tdp-form-group">
-                              <label className="tdp-form-label">Supporting Verdict</label>
-                              <div className="tdp-evidence-verdicts">
-                                 {Object.entries(EVIDENCE_VERDICT_META).map(([key, meta]) => {
-                                    return (
-                                       <button
-                                          type="button"
-                                          key={key}
-                                          className={`tdp-evidence-verdict tdp-evidence-verdict--${key.toLowerCase()} ${evidenceVerdict === key ? "selected" : ""}`}
-                                          onClick={() => {
-                                             setEvidenceVerdict(key);
-                                          }}
-                                       >
-                                          <Icons name={meta.icon} />
-                                          {meta.label}
-                                       </button>
-                                    );
-                                 })}
-                              </div>
-                           </div>
-                           <div className="tdp-form-group">
-                              <label className="tdp-form-label">
-                                 Explanation <span className="tdp-required">*</span>
-                              </label>
-                              <textarea
-                                 className="tdp-textarea"
-                                 placeholder="Explain why this source supports or refutes the claim…"
-                                 value={explanation}
-                                 onChange={(e) => setExplanation(e.target.value)}
-                                 rows={4}
-                                 required
-                              />
-                           </div>
-                           <div className="tdp-form-footer">
-                              <span className="tdp-weight-info">
-                                 <Icons name="bar-chart" size={11} color="#6b7280" />
-                                 Your weight: <strong className="tdp-weight-val">×{weight}</strong> (Trust Score{" "}
-                                 {trustScore})
-                              </span>
-                              <div className="tdp-form-btns">
-                                 <button type="button" className="tdp-btn-cancel" onClick={() => setShowForm(false)}>
-                                    Cancel
-                                 </button>
-                                 <button type="submit" className="tdp-btn-submit" disabled={submitting}>
-                                    {submitting ? "Submitting…" : "Submit"}
-                                    {!submitting && (
-                                       <Icons name="arrow-right" size={13} strokeWidth={2.5} color="#fff" />
-                                    )}
-                                 </button>
-                              </div>
-                           </div>
-                        </form>
-                     )}
+                     <button ref={(node) => { tabRefs.current.evidence = node; }} id="thread-detail-evidence-tab" type="button" role="tab" aria-selected={currentTab === "evidence"} aria-controls="thread-detail-evidence-panel" tabIndex={currentTab === "evidence" ? 0 : -1} onClick={() => changeTab("evidence")} onKeyDown={(event) => handleTabKeyDown(event, "evidence")}>
+                        <Icons name="paperclip" size={15} /> Evidence Board <span>{evidenceList.length}</span>
+                     </button>
                   </div>
 
-                  {/* Tabs */}
-                  <div className="tdp-tabs-section" ref={tabsSectionRef}>
-                     <div className="tdp-tab-bar">
-                        <button
-                           className={`tdp-tab ${currentSection === "comments" ? "active" : ""}`}
-                           onClick={() => handleSectionChange("comments")}
-                        >
-                           <Icons
-                              name="message-circle"
-                              size={13}
-                              color={currentSection === "comments" ? "#4f46e5" : "#6b7280"}
-                              strokeWidth={2.5}
-                           />
-                           Comments ({sortedComments.length})
-                        </button>
-                        <button
-                           className={`tdp-tab ${currentSection === "evidence" ? "active" : ""}`}
-                           onClick={() => handleSectionChange("evidence")}
-                        >
-                           <Icons
-                              name="paperclip"
-                              size={13}
-                              color={currentSection === "evidence" ? "#4f46e5" : "#6b7280"}
-                              strokeWidth={2.5}
-                           />
-                           Evidence Board ({evidenceList.length})
-                        </button>
-                     </div>
+                  {currentTab === "comments" && (
+                     <div id="thread-detail-comments-panel" role="tabpanel" aria-labelledby="thread-detail-comments-tab" className="thread-detail-panel thread-detail-panel--comments">
+                        <form className="thread-detail-composer thread-detail-composer--classic" onSubmit={handleCommentSubmit}>
+                           <Avatar user={user} />
+                           <div className="thread-detail-composer-body">
+                              <label className="sr-only" htmlFor="thread-comment-composer">Write a comment</label>
+                              <textarea id="thread-comment-composer" value={newComment} onChange={(event) => setNewComment(event.target.value)} placeholder="Write a comment…" rows={2} />
+                           </div>
+                           <button type="submit" className="thread-detail-comment-submit" disabled={!newComment.trim() || submittingComment} aria-label="Post comment">
+                              {submittingComment ? <span className="thread-detail-mini-spinner" aria-hidden="true" /> : <Icons name="send" size={16} />}
+                           </button>
+                        </form>
 
-                     {/*Comments tab*/}
-                     {currentSection === "comments" && (
-                        <div className="tdp-tab-content">
-                           {/* Comment input */}
-                           <form className="tdp-comment-input-row" onSubmit={handleCommentSubmit}>
-                              <UserAvatar username={user?.username || ""} size={34} />
-                              <input
-                                 type="text"
-                                 className="tdp-comment-input"
-                                 placeholder="Write a comment…"
-                                 value={newComment}
-                                 onChange={(e) => setNewComment(e.target.value)}
+                        <div className="thread-detail-comment-list">
+                           {!commentTree.length && <p className="thread-detail-empty">No comments yet. Start the discussion.</p>}
+                           {commentTree.map((comment) => (
+                              <CommentThread
+                                 key={comment.id}
+                                 root={comment}
+                                 visibleReplyCount={visibleRepliesFor(comment)}
+                                 currentUser={user}
+                                 editingId={editingCommentId}
+                                 editingText={editingCommentText}
+                                 highlightedId={highlightedCommentId}
+                                 likingIds={likingIds}
+                                 replyComposer={replyComposer}
+                                 replyInputRef={replyInputRef}
+                                 onEditingTextChange={setEditingCommentText}
+                                 onStartEdit={(item) => { setEditingCommentId(item.id); setEditingCommentText(item.comment_text || ""); }}
+                                 onCancelEdit={() => { setEditingCommentId(null); setEditingCommentText(""); }}
+                                 onSaveEdit={handleSaveCommentEdit}
+                                 onDelete={(id) => setConfirmDialog({ open: true, type: "comment", targetId: id })}
+                                 onStartReply={startReply}
+                                 onReplyTextChange={(text) => setReplyComposer((current) => current ? { ...current, text } : current)}
+                                 onSubmitReply={handleReplySubmit}
+                                 onCancelReply={() => setReplyComposer(null)}
+                                 onLike={handleLike}
+                                 onShare={shareComment}
+                                 onRetry={retryOptimisticComment}
+                                 onDiscard={discardOptimisticComment}
+                                 onShowReplies={showReplies}
+                                 onShowMoreReplies={showMoreReplies}
+                                 onHideReplies={hideReplies}
                               />
-                              {newComment.trim() && (
-                                 <button type="submit" className="tdp-comment-submit">
-                                    <Icons name="send" size={14} color="#fff" />
-                                 </button>
-                              )}
-                           </form>
-
-                           {/* Comment list */}
-                           <div className="tdp-comment-list">
-                              {sortedComments.length === 0 && (
-                                 <p className="tdp-empty">No comments yet. Be the first!</p>
-                              )}
-                              {sortedComments.map((comment, i) => {
-                                 const isPlatformModerator =
-                                    comment.commenter?.role === "MOD" || comment.commenter?.role === "MODERATOR";
-                                 const username = comment.commenter?.username || "Unknown";
-                                 const isOwner = comment.commenter?.id === user?.id;
-                                 const commentDateTime = comment.commented_at
-                                    ? new Date(comment.commented_at).toLocaleString()
-                                    : comment.created_at
-                                      ? new Date(comment.created_at).toLocaleString()
-                                      : comment.timestamp || "";
-                                 return (
-                                    <div key={comment.id || i} className="tdp-comment-item">
-                                       <div
-                                          className="tdp-commenter-profile-pic"
-                                          style={{ overflow: "hidden" }}
-                                          onClick={(e) => {
-                                             e.stopPropagation(); // Prevents triggering the thread card click
-                                             navigate(`/user/${comment.commenter.username}`);
-                                          }}
-                                       >
-                                          {comment.commenter.avatar_url ? (
-                                             <img
-                                                src={comment.commenter.avatar_url}
-                                                alt={`${comment.commenter.username}'s avatar`}
-                                                style={{
-                                                   width: "100%",
-                                                   height: "100%",
-                                                   objectFit: "cover",
-                                                }}
-                                             />
-                                          ) : (
-                                             <UserAvatar username={comment.commenter?.username || ""} size={38} />
-                                          )}
-                                       </div>
-                                       <div className="tdp-comment-body">
-                                          <div className="tdp-comment-bubble">
-                                             <div className="tdp-comment-header">
-                                                <span className="tdp-comment-user">{username}</span>
-                                                {isPlatformModerator && (
-                                                   <span className="tdp-mod-badge">
-                                                      <Icons name="shield" size={8} color="#059669" strokeWidth={2.5} />
-                                                      Platform Moderator
-                                                   </span>
-                                                )}
-                                                <span className="tdp-comment-time">{commentDateTime}</span>
-                                             </div>
-                                             {editingCommentId === comment.id ? (
-                                                <div className="tdp-inline-edit-wrap">
-                                                   <textarea
-                                                      className="tdp-inline-edit-textarea"
-                                                      value={editingCommentText}
-                                                      onChange={(e) => setEditingCommentText(e.target.value)}
-                                                      rows={3}
-                                                   />
-                                                   <div className="tdp-inline-edit-actions">
-                                                      <button
-                                                         className="tdp-owner-action save"
-                                                         type="button"
-                                                         onClick={() => handleSaveCommentEdit(comment.id)}
-                                                      >
-                                                         Save
-                                                      </button>
-                                                      <button
-                                                         className="tdp-owner-action"
-                                                         type="button"
-                                                         onClick={() => {
-                                                            setEditingCommentId(null);
-                                                            setEditingCommentText("");
-                                                         }}
-                                                      >
-                                                         Cancel
-                                                      </button>
-                                                   </div>
-                                                </div>
-                                             ) : (
-                                                <p className="tdp-comment-text">{comment.comment_text}</p>
-                                             )}
-                                          </div>
-                                          {editingCommentId !== comment.id && (
-                                             <div className="tdp-comment-actions">
-                                                <button className="tdp-comment-like">
-                                                   <Icons name="thumbs-up" size={11} color="#6b7280" strokeWidth={2} />
-                                                   {comment.likes ?? 0}
-                                                </button>
-                                                <button className="tdp-comment-reply">Reply</button>
-                                                {isOwner && (
-                                                   <>
-                                                      <button
-                                                         className="tdp-owner-action"
-                                                         type="button"
-                                                         onClick={() => {
-                                                            setEditingCommentId(comment.id);
-                                                            setEditingCommentText(comment.comment_text || "");
-                                                         }}
-                                                      >
-                                                         Edit
-                                                      </button>
-                                                      <button
-                                                         className="tdp-owner-action danger"
-                                                         type="button"
-                                                         onClick={() => handleDeleteComment(comment.id)}
-                                                      >
-                                                         Delete
-                                                      </button>
-                                                   </>
-                                                )}
-                                             </div>
-                                          )}
-                                       </div>
-                                    </div>
-                                 );
-                              })}
-                           </div>
-
-                           {comments.length > 5 && <button className="tdp-see-more">See More…</button>}
+                           ))}
                         </div>
-                     )}
+                     </div>
+                  )}
 
-                     {/*Evidence Board tab*/}
-                     {currentSection === "evidence" && (
-                        <div className="tdp-tab-content">
-                           <div className="tdp-evidence-sort-row">
-                              <span>
-                                 <Icons name="bar-chart" size={12} color="#6b7280" />
-                                 Sorted by weighted trust score
-                              </span>
-                              <span className="tdp-formula">weighted = (up × trust/100) − (down × 0.5)</span>
+                  {currentTab === "evidence" && (
+                     <div id="thread-detail-evidence-panel" role="tabpanel" aria-labelledby="thread-detail-evidence-tab" className="thread-detail-panel thread-detail-panel--evidence">
+                        <div className="thread-detail-evidence-toolbar thread-detail-evidence-toolbar--legacy">
+                           <div>
+                              <h2>Evidence Board</h2>
+                              <p>Community-submitted sources, ranked by weighted trust score.</p>
                            </div>
-
-                           {evidenceList.length === 0 && (
-                              <p className="tdp-empty">
-                                 No evidence yet.{" "}
-                                 <button className="tdp-empty-link" onClick={() => setShowForm(true)}>
-                                    Be the first to submit evidence.
-                                 </button>
-                              </p>
-                           )}
-
-                           {evidenceList.map((ev, i) => (
+                           <button type="button" className="thread-detail-text-button" onClick={() => setShowEvidenceForm((open) => !open)}>
+                              {showEvidenceForm ? "Close form" : "Contribute evidence"}
+                           </button>
+                        </div>
+                        {showEvidenceForm && (
+                           <form className="thread-detail-evidence-form thread-detail-evidence-form--legacy" ref={evidenceFormRef} onSubmit={handleEvidenceSubmit}>
+                              <div className="thread-detail-evidence-form-title">
+                                 <Icons name="paperclip" size={14} />
+                                 New Evidence Submission
+                              </div>
+                              <div className="thread-detail-evidence-form-row">
+                                 <div className="thread-detail-evidence-form-group">
+                                    <label htmlFor="evidence-source-url">Source URL <span aria-hidden="true">*</span></label>
+                                    <div className="thread-detail-evidence-input-shell">
+                                       <Icons name="link" size={13} />
+                                       <input id="evidence-source-url" type="url" value={evidenceUrl} onChange={(event) => setEvidenceUrl(event.target.value)} placeholder="https://reliable-source.com/..." required />
+                                    </div>
+                                 </div>
+                                 <div className="thread-detail-evidence-form-group">
+                                    <label htmlFor="evidence-type">Relationship to claim</label>
+                                    <div className={`thread-detail-evidence-select-shell thread-detail-evidence-select-shell--${evidenceTypeTone}`}>
+                                       <select id="evidence-type" value={evidenceType} onChange={(event) => setEvidenceType(event.target.value)}>
+                                          <option value="CONTRADICTS CLAIM">Contradicts Claim</option>
+                                          <option value="SUPPORTS CLAIM">Supports Claim</option>
+                                          <option value="PROVIDES CONTEXT">Provides Context</option>
+                                          <option value="SOURCE VERIFICATION">Source Verification</option>
+                                       </select>
+                                       <Icons name="chevron-down" size={13} />
+                                    </div>
+                                 </div>
+                              </div>
+                              <div className="thread-detail-evidence-form-row">
+                                 <div className="thread-detail-evidence-form-group thread-detail-evidence-form-group--assessment">
+                                    <label htmlFor="evidence-assessment">Your assessment</label>
+                                    <div className="thread-detail-evidence-select-shell">
+                                       <select id="evidence-assessment" value={evidenceAssessment} onChange={(event) => setEvidenceAssessment(event.target.value)}>
+                                          {Object.entries(EVIDENCE_VERDICT_META).map(([key, meta]) => <option key={key} value={key}>{meta.label}</option>)}
+                                       </select>
+                                       <Icons name="chevron-down" size={13} />
+                                    </div>
+                                    <small>Your assessment is your interpretation, not a TruthLens or professional verdict.</small>
+                                 </div>
+                              </div>
+                              <div className="thread-detail-evidence-form-group">
+                                 <label htmlFor="evidence-explanation">Explanation <span aria-hidden="true">*</span></label>
+                                 <textarea id="evidence-explanation" value={evidenceExplanation} onChange={(event) => setEvidenceExplanation(event.target.value)} rows={5} placeholder="Explain why this source supports, contradicts, or adds context to the claim..." required />
+                              </div>
+                              <div className="thread-detail-evidence-form-footer">
+                                 <span className="thread-detail-evidence-weight">
+                                    <Icons name="bar-chart" size={12} />
+                                    Your weight: <strong>×{currentUserWeight}</strong> <span>(Trust Score {currentUserTrustScore.toFixed(0)})</span>
+                                 </span>
+                                 <div className="thread-detail-evidence-form-buttons">
+                                    <button type="button" className="thread-detail-text-button" onClick={() => setShowEvidenceForm(false)} disabled={submittingEvidence}>Cancel</button>
+                                    <button type="submit" className="thread-detail-primary-button" disabled={submittingEvidence}>
+                                       {submittingEvidence ? "Submitting…" : "Submit"}
+                                       {!submittingEvidence && <Icons name="arrow-right" size={14} />}
+                                    </button>
+                                 </div>
+                              </div>
+                           </form>
+                        )}
+                        <div className="thread-detail-evidence-sort-row">
+                           <span><Icons name="bar-chart" size={13} /> Sorted by weighted trust score</span>
+                           <span className="thread-detail-evidence-formula">weighted = (up × trust/100) − (down × 0.5)</span>
+                        </div>
+                        <div className="thread-detail-evidence-list">
+                           {!sortedEvidence.length && <p className="thread-detail-empty">No community evidence has been submitted yet.</p>}
+                           {sortedEvidence.map((evidence, index) => (
                               <EvidenceCard
-                                 key={ev.id || i}
-                                 evidence={ev}
-                                 isOwner={ev.contributor?.id === user?.id}
+                                 key={evidence.id}
+                                 evidence={evidence}
+                                 isOwner={evidence.contributor?.id === user?.id}
                                  currentUserId={user?.id}
-                                 isTop={i === 0 && evidenceList.length > 1}
+                                 isTop={index === 0 && sortedEvidence.length > 1}
                                  onEdit={handleSaveEvidenceEdit}
-                                 onDelete={handleDeleteEvidence}
+                                 onDelete={(id) => setConfirmDialog({ open: true, type: "evidence", targetId: id })}
                                  onVote={handleVote}
                                  votingEvidenceId={votingEvidenceId}
                                  editingId={editingEvidenceId}
@@ -1445,255 +1442,68 @@ function ThreadDetailPage() {
                                  setEditingVerdict={setEditingEvidenceVerdict}
                               />
                            ))}
-
-                           {evidenceList.length > 5 && <button className="tdp-see-more">See More…</button>}
                         </div>
-                     )}
-                  </div>
-               </div>
-
-               {/*Right sidebar*/}
-               <aside className="tdp-sidebar">
-                  {/* Posted by */}
-                  <div className="tdp-sidebar-card">
-                     <div className="tdp-sidebar-card-label">POSTED BY</div>
-                     <div className="tdp-posted-by-row">
-                        <div
-                           className="tdp-author-profile-pic"
-                           style={{ overflow: "hidden" }}
-                           onClick={(e) => {
-                              e.stopPropagation(); // Prevents triggering the thread card click
-                              navigate(`/user/${thread.author.username}`);
-                           }}
-                        >
-                           {thread.author.avatar_url ? (
-                              <img
-                                 src={thread.author.avatar_url}
-                                 alt={`${thread.author.username}'s avatar`}
-                                 style={{
-                                    width: "100%",
-                                    height: "100%",
-                                    objectFit: "cover",
-                                 }}
-                              />
-                           ) : (
-                              <UserAvatar
-                                 username={thread.author?.username || thread.flagged_by?.username || ""}
-                                 size={38}
-                              />
-                           )}
-                        </div>
-                        <div className="tdp-posted-by-info">
-                           <div
-                              className="tdp-posted-by-name"
-                              onClick={(e) => {
-                                 e.stopPropagation(); // Prevents triggering the thread card click
-                                 navigate(`/user/${thread.author.username}`);
-                              }}
-                           >
-                              @{thread.author?.username || "Unknown"}
-                           </div>
-                           {thread.author?.trust_score >= 80 && (
-                              <div className="tdp-trusted-label">
-                                 <Icons name="badge-check" size={11} color="#0e9f6e" />
-                                 Trusted Contributor
-                              </div>
-                           )}
-                        </div>
-                        <TrustGauge score={thread.author?.trust_score ?? 0} />
-                     </div>
-                     <div className="tdp-poster-stats">
-                        <div className="tdp-poster-stat">
-                           <span className="tdp-stat-val">{thread.author?.trust_score?.toFixed(1) || "0.0"}</span>
-                           <span className="tdp-stat-lbl">Trust</span>
-                        </div>
-                        <div className="tdp-poster-stat">
-                           <span className="tdp-stat-val">{thread.evidence_count ?? 0}</span>
-                           <span className="tdp-stat-lbl">Evidence</span>
-                        </div>
-                        <div className="tdp-poster-stat">
-                           <span className="tdp-stat-val">{thread.comment_count ?? 0}</span>
-                           <span className="tdp-stat-lbl">Comments</span>
-                        </div>
-                     </div>
-                  </div>
-
-                  {/* Author Trust Score */}
-                  <div className="tdp-sidebar-card">
-                     <div className="tdp-sidebar-card-label">AUTHOR TRUST SCORE BREAKDOWN</div>
-                     {[
-                        {
-                           label: "Base Score",
-                           score: authorTrustBreakdown.base_score ?? 50,
-                           share: authorTrustBreakdown.base_share_pct ?? 0,
-                           max: 50,
-                           color: "#4f46e5",
-                        },
-                        {
-                           label: "Contribution Accuracy",
-                           score: authorTrustBreakdown.contribution_points ?? 0,
-                           share: authorTrustBreakdown.contribution_share_pct ?? 0,
-                           max: 30,
-                           color: "#0e9f6e",
-                        },
-                        {
-                           label: "Vote Balance",
-                           score: authorTrustBreakdown.vote_points ?? 0,
-                           share: authorTrustBreakdown.vote_share_pct ?? 0,
-                           max: 15,
-                           color: "#d97706",
-                        },
-                        {
-                           label: "Tenure Bonus",
-                           score: authorTrustBreakdown.tenure_points ?? 0,
-                           share: authorTrustBreakdown.tenure_share_pct ?? 0,
-                           max: 5,
-                           color: "#4f46e5",
-                        },
-                        {
-                           label: "Conduct Penalties",
-                           score: authorTrustBreakdown.penalties ?? 0,
-                           share: authorTrustBreakdown.penalties_share_pct ?? 0,
-                           max: 30,
-                           color: "#dc2626",
-                        },
-                     ].map(({ label, score, share, color }) => (
-                        <div key={label} className="tdp-trust-row">
-                           <div className="tdp-trust-row-header">
-                              <span className="tdp-trust-row-label">{label}</span>
-                              <span className="tdp-trust-row-val" style={{ color }}>
-                                 {Number(share || 0).toFixed(1)}%
-                              </span>
-                           </div>
-                           <div className="tdp-trust-track">
-                              <div
-                                 className="tdp-trust-fill"
-                                 style={{
-                                    width: `${Math.max(0, Math.min(100, Number(share || 0)))}%`,
-                                    background: color,
-                                 }}
-                              />
-                           </div>
-                           <div className="tdp-trust-impact">
-                              Impact: {label === "Conduct Penalties" ? "-" : "+"}
-                              {Math.abs(Number(score || 0)).toFixed(1)} pts
-                           </div>
-                        </div>
-                     ))}
-                     <div className="tdp-trust-breakdown-meta">
-                        Accuracy: {Math.round((authorTrustBreakdown.contribution_accuracy_rate || 0) * 100)}% | Net
-                        votes: {authorTrustBreakdown.net_votes ?? 0} | Months: {authorTrustBreakdown.months_active ?? 0}
-                     </div>
-                  </div>
-
-                  {/* Related claims */}
-                  {thread.related_claims?.length > 0 && (
-                     <div className="tdp-sidebar-card">
-                        <div className="tdp-sidebar-card-label">RELATED CLAIMS</div>
-                        {thread.related_claims.map((rc, i) => (
-                           <div
-                              key={rc.id || i}
-                              className={`tdp-related-claim ${i < thread.related_claims.length - 1 ? "bordered" : ""}`}
-                           >
-                              <VerdictBadge verdict={(getEffectiveVerdict(rc) || "UNVERIFIED").toLowerCase()} />
-                              <p className="tdp-related-text">{rc.caption}</p>
-                           </div>
-                        ))}
                      </div>
                   )}
-
-                  {/* Report / Share */}
-                  <div className="tdp-sidebar-actions">
-                     <button className="tdp-report-btn" onClick={handleReportThread} disabled={reporting}>
-                        <Icons name="flag" size={13} color="#e02424" strokeWidth={2.5} />
-                        {reporting ? "Reporting..." : "Report"}
-                     </button>
-                     <button className="tdp-share-btn">
-                        <Icons name="external-link" size={13} color="#6b7280" strokeWidth={2} />
-                        Share
-                     </button>
-                  </div>
-               </aside>
+               </section>
             </div>
+
+            <aside className="thread-detail-sidebar thread-detail-sidebar--classic" aria-label="Discussion details">
+               <section className="thread-detail-sidebar-card thread-detail-sidebar-card--author">
+                  <p className="thread-detail-sidebar-label">Posted by</p>
+                  <div className="thread-detail-sidebar-author-row">
+                     <Link className="thread-detail-sidebar-author" to={`/user/${encodeURIComponent(authorUsername)}`} aria-label={`View @${authorUsername}'s profile`}>
+                        <Avatar user={thread.author} size="large" />
+                        <span>
+                           <strong>@{authorUsername}</strong>
+                           <small>{authorRoleLabel}</small>
+                        </span>
+                     </Link>
+                     <div
+                        className="thread-detail-trust-ring"
+                        style={{ "--trust-value": `${Math.max(0, Math.min(100, Number(thread.author?.trust_score || 0)))}%` }}
+                        aria-label={`Community trust score ${Number(thread.author?.trust_score || 0).toFixed(1)}`}
+                     >
+                        <span>{Math.round(Number(thread.author?.trust_score || 0))}</span>
+                     </div>
+                  </div>
+                  <div className="thread-detail-poster-stats">
+                     <div><strong>{Number(thread.author?.trust_score || 0).toFixed(1)}</strong><span>Trust</span></div>
+                     <div><strong>{evidenceList.length}</strong><span>Evidence</span></div>
+                     <div><strong>{activeCommentCount}</strong><span>Comments</span></div>
+                  </div>
+               </section>
+
+               <section className="thread-detail-sidebar-card thread-detail-sidebar-card--trust">
+                  <p className="thread-detail-sidebar-label">Community trust score</p>
+                  <div className="thread-detail-trust-meter-row"><span>Reputation</span><strong>{Number(thread.author?.trust_score || 0).toFixed(1)}%</strong></div>
+                  <div className="thread-detail-trust-meter"><span style={{ width: `${Math.max(0, Math.min(100, Number(thread.author?.trust_score || 0)))}%` }} /></div>
+                  <p className="thread-detail-trust-note">Trust reflects community reputation and participation. It does not determine whether this claim is true.</p>
+                  <Link className="thread-detail-profile-link" to={`/user/${encodeURIComponent(authorUsername)}`}>View full profile <Icons name="arrow-right" size={13} /></Link>
+               </section>
+
+               <div className="thread-detail-sidebar-actions thread-detail-sidebar-actions--classic" role="group" aria-label="Thread actions">
+                  <button type="button" className="is-danger" onClick={() => setReportDialogOpen(true)}><Icons name="flag" size={15} /> Report</button>
+                  <button type="button" onClick={shareThread}><Icons name="share-2" size={15} /> Share</button>
+               </div>
+            </aside>
          </div>
 
-         {confirmDialog.open && (
-            <div className="tdp-dialog-overlay">
-               <div className="tdp-dialog">
-                  <div className="tdp-dialog-policy-chip danger">{confirmActionMeta.code}</div>
-                  <h3 className="tdp-dialog-title">{confirmActionMeta.title}</h3>
-                  <p className="tdp-dialog-text">{confirmActionMeta.description}</p>
-                  <div className="tdp-dialog-actions">
-                     <button
-                        type="button"
-                        className="tdp-dialog-btn secondary"
-                        onClick={() => setConfirmDialog({ open: false, type: null, targetId: null })}
-                     >
-                        Cancel
-                     </button>
-                     <button type="button" className="tdp-dialog-btn danger" onClick={handleConfirmAction}>
-                        {confirmActionMeta.cta}
-                     </button>
-                  </div>
-               </div>
-            </div>
-         )}
+         <AccessibleDialog open={confirmDialog.open} busy={dialogBusy} labelledBy="thread-detail-delete-title" describedBy="thread-detail-delete-description" onClose={() => setConfirmDialog({ open: false, type: null, targetId: null })} fallbackFocusRef={pageRef}>
+            <p className="thread-detail-dialog-kicker">Delete {confirmDialog.type}</p>
+            <h2 id="thread-detail-delete-title">Remove this {confirmDialog.type}?</h2>
+            <p id="thread-detail-delete-description">{confirmDialog.type === "comment" ? "This action cannot be undone. Replies remain in the discussion without a parent link." : "This action cannot be undone."}</p>
+            <div className="thread-detail-dialog-actions"><button type="button" className="thread-detail-text-button" data-dialog-initial onClick={() => setConfirmDialog({ open: false, type: null, targetId: null })} disabled={dialogBusy}>Cancel</button><button type="button" className="thread-detail-danger-button" onClick={performDelete} disabled={dialogBusy}>{dialogBusy ? "Deleting…" : "Delete"}</button></div>
+         </AccessibleDialog>
 
-         {reportDialogOpen && (
-            <div className="tdp-dialog-overlay">
-               <div className="tdp-dialog">
-                  <div className="tdp-dialog-policy-chip warning">{reportActionMeta.code}</div>
-                  <h3 className="tdp-dialog-title">{reportActionMeta.title}</h3>
-                  <p className="tdp-dialog-text">{reportActionMeta.description}</p>
-                  <div className="tdp-dialog-form-row">
-                     <label className="tdp-dialog-label">Reason</label>
-                     <select
-                        className="tdp-dialog-select"
-                        value={reportReason}
-                        onChange={(e) => setReportReason(e.target.value)}
-                     >
-                        <option value="INAPPROPRIATE">Inappropriate</option>
-                        <option value="SPAM">Spam</option>
-                        <option value="HARASSMENT">Harassment</option>
-                        <option value="OTHER">Other</option>
-                     </select>
-                  </div>
-                  <div className="tdp-dialog-form-row">
-                     <label className="tdp-dialog-label">Notes (optional)</label>
-                     <textarea
-                        className="tdp-dialog-textarea"
-                        rows={3}
-                        value={reportNotes}
-                        onChange={(e) => setReportNotes(e.target.value)}
-                     />
-                  </div>
-                  <div className="tdp-dialog-actions">
-                     <button
-                        type="button"
-                        className="tdp-dialog-btn secondary"
-                        disabled={reporting}
-                        onClick={() => {
-                           setReportDialogOpen(false);
-                           setReportReason("OTHER");
-                           setReportNotes("");
-                        }}
-                     >
-                        Cancel
-                     </button>
-                     <button
-                        type="button"
-                        className="tdp-dialog-btn warning"
-                        disabled={reporting}
-                        onClick={submitReportThread}
-                     >
-                        {reporting ? "Submitting..." : reportActionMeta.cta}
-                     </button>
-                  </div>
-               </div>
-            </div>
-         )}
-      </div>
+         <AccessibleDialog open={reportDialogOpen} busy={reporting} labelledBy="thread-detail-report-title" describedBy="thread-detail-report-description" onClose={() => setReportDialogOpen(false)} fallbackFocusRef={pageRef}>
+            <p className="thread-detail-dialog-kicker">Platform safety</p>
+            <h2 id="thread-detail-report-title">Report this thread</h2>
+            <p id="thread-detail-report-description">Send this thread to platform moderators for a safety review.</p>
+            <div className="thread-detail-field"><label htmlFor="thread-report-reason">Reason</label><select id="thread-report-reason" data-dialog-initial value={reportReason} onChange={(event) => setReportReason(event.target.value)} disabled={reporting}><option value="INAPPROPRIATE">Inappropriate</option><option value="SPAM">Spam</option><option value="HARASSMENT">Harassment</option><option value="OTHER">Other</option></select></div>
+            <div className="thread-detail-field"><label htmlFor="thread-report-notes">Notes (optional)</label><textarea id="thread-report-notes" rows={4} value={reportNotes} onChange={(event) => setReportNotes(event.target.value)} disabled={reporting} /></div>
+            <div className="thread-detail-dialog-actions"><button type="button" className="thread-detail-text-button" onClick={() => setReportDialogOpen(false)} disabled={reporting}>Cancel</button><button type="button" className="thread-detail-primary-button" onClick={submitReport} disabled={reporting}>{reporting ? "Submitting…" : "Submit report"}</button></div>
+         </AccessibleDialog>
+      </main>
    );
 }
-
-export default ThreadDetailPage;

@@ -45,6 +45,10 @@ from .organization_service import (
 from .organization_public_presence_service import (
     is_public_partner_eligible,
 )
+from .public_publication_query_service import (
+    PublicPublicationNotFound,
+    get_public_partner_fact_check_detail,
+)
 from .profile_avatar_service import (
     ProfileAvatarValidationError,
     validate_profile_avatar_data_url,
@@ -1127,6 +1131,111 @@ class CommunityFeedAuthorSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+def _serialize_public_human_verdict(claim):
+    provenance = get_claim_adjudication_provenance(claim)
+    if not provenance["is_attributable"]:
+        return None
+
+    decision = provenance["decision"]
+    organization = None
+
+    if provenance["status"] == AdjudicationProvenance.HUMAN_ADJUDICATION:
+        case = decision.moderation_case
+        if case and case.organization_id:
+            organization = case.organization
+    elif provenance["status"] == AdjudicationProvenance.LEGACY_HUMAN_REVIEW:
+        organization = decision.organization
+
+    public_organization = None
+    if organization and is_public_partner_eligible(organization):
+        public_organization = {
+            "id": str(organization.id),
+            "name": organization.name,
+            "slug": organization.slug,
+            "logo_url": (
+                organization.logo_url
+                if organization.public_logo_enabled and organization.logo_url
+                else None
+            ),
+        }
+
+    return {
+        "verdict": decision.verdict,
+        "reviewed_at": serializers.DateTimeField().to_representation(
+            decision.decided_at
+        ),
+        "organization": public_organization,
+    }
+
+
+def _serialize_thread_detail_published_fact_check(claim, human_verdict):
+    public_review_organization = (
+        human_verdict.get("organization") if human_verdict else None
+    )
+    if not public_review_organization:
+        return None
+
+    candidates = list(
+        OfficialFactCheck.objects.filter(
+            claim_id=claim.pk,
+            publication_status=OfficialFactCheck.PublicationStatus.PUBLISHED,
+            published_at__isnull=False,
+            adjudication_decision__isnull=False,
+            organization__isnull=False,
+            publication_snapshot__isnull=False,
+        )
+        .select_related("organization")
+        .order_by("id")[:2]
+    )
+    if len(candidates) != 1:
+        return None
+
+    candidate = candidates[0]
+    organization = candidate.organization
+    if (
+        str(organization.id) != public_review_organization.get("id")
+        or not is_public_partner_eligible(organization)
+    ):
+        return None
+
+    try:
+        public_detail = get_public_partner_fact_check_detail(
+            organization=organization,
+            publication_id=candidate.id,
+        )
+    except PublicPublicationNotFound:
+        return None
+
+    public_organization = public_detail.get("organization")
+    article = public_detail.get("article")
+    publication_id = public_detail.get("selected_publication_id")
+    published_at = public_detail.get("published_at")
+    if (
+        public_detail.get("history_state") != "CURRENT"
+        or public_detail.get("current_publication_id") != str(candidate.id)
+        or publication_id != str(candidate.id)
+        or public_detail.get("claim_id") != str(claim.pk)
+        or not isinstance(public_organization, Mapping)
+        or public_organization.get("id") != public_review_organization.get("id")
+        or not isinstance(article, Mapping)
+        or not article.get("headline")
+        or not published_at
+    ):
+        return None
+
+    return {
+        "publication_id": publication_id,
+        "headline": article["headline"],
+        "published_at": published_at,
+        "organization": {
+            "id": public_organization["id"],
+            "name": public_organization["name"],
+            "slug": public_organization["slug"],
+            "logo_url": public_organization.get("logo_url"),
+        },
+    }
+
+
 class CommunityFeedClaimSerializer(serializers.ModelSerializer):
     canonical_source_url = serializers.SerializerMethodField()
     human_verdict = serializers.SerializerMethodField()
@@ -1136,41 +1245,7 @@ class CommunityFeedClaimSerializer(serializers.ModelSerializer):
         return get_canonical_claim_source_url(obj)
 
     def get_human_verdict(self, obj):
-        provenance = get_claim_adjudication_provenance(obj)
-        if not provenance["is_attributable"]:
-            return None
-
-        decision = provenance["decision"]
-        organization = None
-
-        if provenance["status"] == AdjudicationProvenance.HUMAN_ADJUDICATION:
-            case = decision.moderation_case
-            if case and case.organization_id:
-                organization = case.organization
-        elif provenance["status"] == AdjudicationProvenance.LEGACY_HUMAN_REVIEW:
-            organization = decision.organization
-
-        public_organization = None
-
-        if organization and is_public_partner_eligible(organization):
-            public_organization = {
-                "id": str(organization.id),
-                "name": organization.name,
-                "slug": organization.slug,
-                "logo_url": (
-                    organization.logo_url
-                    if organization.public_logo_enabled and organization.logo_url
-                    else None
-                ),
-            }
-
-        return {
-            "verdict": decision.verdict,
-            "reviewed_at": serializers.DateTimeField().to_representation(
-                decision.decided_at
-            ),
-            "organization": public_organization,
-        }
+        return _serialize_public_human_verdict(obj)
 
     def get_verified_evidence_count(self, obj):
         return self.context["verified_evidence_count"]
@@ -1188,6 +1263,48 @@ class CommunityFeedClaimSerializer(serializers.ModelSerializer):
             "consensus_score",
             "human_verdict",
             "verified_evidence_count",
+        ]
+        read_only_fields = fields
+
+
+class ThreadDetailClaimSerializer(serializers.ModelSerializer):
+    human_verdict = serializers.SerializerMethodField()
+    published_fact_check = serializers.SerializerMethodField()
+    verified_evidence_count = serializers.SerializerMethodField()
+
+    def _human_verdict_for(self, obj):
+        cache = getattr(self, "_human_verdict_cache", {})
+        if obj.pk not in cache:
+            cache[obj.pk] = _serialize_public_human_verdict(obj)
+            self._human_verdict_cache = cache
+        return cache[obj.pk]
+
+    def get_human_verdict(self, obj):
+        return self._human_verdict_for(obj)
+
+    def get_published_fact_check(self, obj):
+        return _serialize_thread_detail_published_fact_check(
+            obj,
+            self._human_verdict_for(obj),
+        )
+
+    def get_verified_evidence_count(self, obj):
+        return self.context["verified_evidence_count"]
+
+    class Meta:
+        model = Claim
+        fields = [
+            "id",
+            "claim_type",
+            "context_text",
+            "media_url",
+            "url_link",
+            "ai_verdict",
+            "ai_summary",
+            "consensus_score",
+            "verified_evidence_count",
+            "human_verdict",
+            "published_fact_check",
         ]
         read_only_fields = fields
 
@@ -1876,9 +1993,77 @@ class EvidenceCaseDetailSerializer(EvidenceCaseSummarySerializer):
         read_only_fields = fields
 
 
+class ThreadDetailAuthorSerializer(serializers.ModelSerializer):
+    avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
+    role = serializers.CharField(source="profile.role", read_only=True)
+    trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
+
+    class Meta:
+        model = User
+        fields = ["id", "username", "avatar_url", "role", "trust_score"]
+        read_only_fields = fields
+
+
+class ThreadDetailCommenterSerializer(serializers.ModelSerializer):
+    avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
+    role = serializers.CharField(source="profile.role", read_only=True)
+
+    class Meta:
+        model = User
+        fields = ["id", "username", "avatar_url", "role"]
+        read_only_fields = fields
+
+
+class ThreadDetailEvidenceContributorSerializer(serializers.ModelSerializer):
+    avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
+    trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
+
+    class Meta:
+        model = User
+        fields = ["id", "username", "avatar_url", "trust_score"]
+        read_only_fields = fields
+
+
+class ThreadDetailVerifiedBySerializer(serializers.ModelSerializer):
+    avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
+
+    class Meta:
+        model = User
+        fields = ["id", "username", "avatar_url"]
+        read_only_fields = fields
+
+
 class ThreadCommentSerializer(serializers.ModelSerializer):
-    commenter = UserSerializer(read_only=True)
+    commenter = ThreadDetailCommenterSerializer(read_only=True)
     thread_id = serializers.UUIDField(write_only=True)
+    parent_id = serializers.PrimaryKeyRelatedField(
+        source="parent",
+        queryset=ThreadComment.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    reply_to_username = serializers.SerializerMethodField()
+    like_count = serializers.SerializerMethodField()
+    is_liked = serializers.SerializerMethodField()
+
+    def get_reply_to_username(self, obj):
+        return obj.parent.commenter.username if obj.parent_id else None
+
+    def get_like_count(self, obj):
+        prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("likes")
+        if prefetched is not None:
+            return len(prefetched)
+        return obj.likes.count()
+
+    def get_is_liked(self, obj):
+        request = self.context.get("request")
+        if not request or not request.user or not request.user.is_authenticated:
+            return False
+
+        prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("likes")
+        if prefetched is not None:
+            return any(like.user_id == request.user.id for like in prefetched)
+        return obj.likes.filter(user=request.user).exists()
 
     class Meta:
         model = ThreadComment
@@ -1886,15 +2071,37 @@ class ThreadCommentSerializer(serializers.ModelSerializer):
             "id",
             "thread_id",
             "commenter",
+            "parent_id",
+            "reply_to_username",
             "comment_text",
             "commented_at",
+            "like_count",
+            "is_liked",
         ]
-        read_only_fields = ["id", "commenter", "commented_at"]
+        read_only_fields = [
+            "id",
+            "commenter",
+            "reply_to_username",
+            "commented_at",
+            "like_count",
+            "is_liked",
+        ]
 
     def validate(self, attrs):
         if self.instance and "thread_id" in attrs:
             raise serializers.ValidationError(
                 {"thread_id": "Cannot be changed after comment creation."}
+            )
+        if self.instance and "parent" in attrs:
+            raise serializers.ValidationError(
+                {"parent_id": "Cannot be changed after comment creation."}
+            )
+
+        parent = attrs.get("parent")
+        thread_id = attrs.get("thread_id")
+        if parent is not None and thread_id is not None and parent.thread_id != thread_id:
+            raise serializers.ValidationError(
+                {"parent_id": "Parent comment must belong to the same thread."}
             )
         return attrs
 
@@ -2040,17 +2247,92 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class ThreadDetailSerializer(serializers.ModelSerializer):
-    author = UserWithTrustBreakdownSerializer(read_only=True)
-    claim = ClaimSerializer(read_only=True)
-    evidence_submissions = EvidenceSubmissionSerializer(many=True, read_only=True)
-    comments = ThreadCommentSerializer(many=True, read_only=True)
-    moderated_by = UserSerializer(read_only=True)
+class ThreadDetailEvidenceSubmissionSerializer(serializers.ModelSerializer):
+    contributor = ThreadDetailEvidenceContributorSerializer(read_only=True)
+    verified_by = ThreadDetailVerifiedBySerializer(read_only=True)
+    upvotes = serializers.SerializerMethodField()
+    downvotes = serializers.SerializerMethodField()
+    my_vote = serializers.SerializerMethodField()
+    weighted_score = serializers.SerializerMethodField()
 
-    claim_id = serializers.UUIDField(write_only=True)
+    def get_upvotes(self, obj):
+        prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("votes")
+        if prefetched is not None:
+            return sum(1 for vote in prefetched if vote.vote_value is True)
+        return obj.votes.filter(vote_value=True).count()
+
+    def get_downvotes(self, obj):
+        prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("votes")
+        if prefetched is not None:
+            return sum(1 for vote in prefetched if vote.vote_value is False)
+        return obj.votes.filter(vote_value=False).count()
+
+    def get_my_vote(self, obj):
+        request = self.context.get("request")
+        if not request or not request.user or not request.user.is_authenticated:
+            return None
+        prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("votes")
+        if prefetched is not None:
+            vote = next(
+                (entry for entry in prefetched if entry.voter_id == request.user.id),
+                None,
+            )
+        else:
+            vote = obj.votes.filter(voter=request.user).first()
+        if not vote:
+            return None
+        return {"id": str(vote.id), "vote_value": vote.vote_value}
+
+    def get_weighted_score(self, obj):
+        contributor_trust = (
+            obj.contributor.profile.trust_score
+            if hasattr(obj.contributor, "profile")
+            else 0
+        )
+        return round(
+            (self.get_upvotes(obj) * (contributor_trust / 100))
+            - (self.get_downvotes(obj) * 0.5),
+            2,
+        )
+
+    class Meta:
+        model = EvidenceSubmission
+        fields = [
+            "id",
+            "contributor",
+            "evidence_caption",
+            "evidence_url",
+            "evidence_type",
+            "evidence_verdict",
+            "evidence_status",
+            "submitted_at",
+            "verified_by",
+            "verified_at",
+            "upvotes",
+            "downvotes",
+            "my_vote",
+            "weighted_score",
+        ]
+        read_only_fields = fields
+
+
+class ThreadDetailSerializer(serializers.ModelSerializer):
+    author = ThreadDetailAuthorSerializer(read_only=True)
+    claim = serializers.SerializerMethodField()
+    evidence_submissions = ThreadDetailEvidenceSubmissionSerializer(
+        many=True,
+        read_only=True,
+    )
+    comments = ThreadCommentSerializer(many=True, read_only=True)
     evidence_count = serializers.SerializerMethodField()
     comment_count = serializers.SerializerMethodField()
-    flag_count = serializers.SerializerMethodField()
+
+    def get_claim(self, obj):
+        context = {
+            **self.context,
+            "verified_evidence_count": obj.verified_evidence_count,
+        }
+        return ThreadDetailClaimSerializer(obj.claim, context=context).data
 
     def get_evidence_count(self, obj):
         return obj.evidence_submissions.count()
@@ -2058,32 +2340,22 @@ class ThreadDetailSerializer(serializers.ModelSerializer):
     def get_comment_count(self, obj):
         return obj.comments.count()
 
-    def get_flag_count(self, obj):
-        return obj.flags.count()
-
     class Meta:
         model = Thread
         fields = [
             "id",
             "display_id",
             "claim",
-            "claim_id",
             "author",
             "caption",
             "status",
-            # "flag_reason",
-            "escalation_reason",
-            "moderator_verdict",
-            "moderator_notes",
-            "moderated_by",
-            "moderated_at",
             "created_at",
             "evidence_submissions",
             "comments",
             "evidence_count",
             "comment_count",
-            "flag_count",
         ]
+        read_only_fields = fields
 
 
 class _RejectUnsupportedAdjudicationFieldsMixin:
