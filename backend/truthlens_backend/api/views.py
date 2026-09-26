@@ -109,7 +109,11 @@ from .organization_service import (
     PartnerCapability,
     has_capability,
 )
-from .notification_service import dispatch_after_commit, notify_thread_commented
+from .notification_service import (
+    dispatch_after_commit,
+    notify_thread_commented,
+    notify_user_followed,
+)
 from .verification_metrics_query_service import (
     VerificationMetricsAuthorizationError,
     VerificationMetricsCompositionError,
@@ -413,7 +417,9 @@ class NotificationListView(APIView):
         inbox_filter = request.query_params.get("filter", "all")
         if inbox_filter not in ("all", "unread"):
             raise ValidationError({"filter": "Use all or unread."})
-        rows = Notification.objects.filter(recipient=request.user).select_related("actor", "organization")
+        rows = Notification.objects.filter(recipient=request.user).select_related(
+            "actor", "actor__profile", "organization"
+        )
         if inbox_filter == "unread":
             rows = rows.filter(read_at__isnull=True)
         paginator = NotificationCursorPagination()
@@ -3537,16 +3543,30 @@ def toggle_follow_user(request, username):
         return Response({"error": "You cannot follow yourself."}, status=400)
 
     target_user = get_object_or_404(User, username=username)
-    profile = target_user.profile
+    through_model = UserProfile.followers.through
 
-    # If already following, UNFOLLOW
-    if profile.followers.filter(id=request.user.id).exists():
-        profile.followers.remove(request.user)
-        is_following = False
-    # If not following, FOLLOW
-    else:
-        profile.followers.add(request.user)
-        is_following = True
+    with transaction.atomic():
+        profile = UserProfile.objects.select_for_update().get(user=target_user)
+        relationship = through_model.objects.filter(
+            userprofile_id=profile.pk,
+            user_id=request.user.pk,
+        ).first()
+
+        if relationship is not None:
+            relationship.delete()
+            is_following = False
+        else:
+            relationship = through_model.objects.create(
+                userprofile_id=profile.pk,
+                user_id=request.user.pk,
+            )
+            is_following = True
+            dispatch_after_commit(
+                notify_user_followed,
+                relationship_id=relationship.pk,
+                actor_id=request.user.pk,
+                recipient_id=target_user.pk,
+            )
 
     return Response(
         {"is_following": is_following, "followers_count": profile.followers.count()},

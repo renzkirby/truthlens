@@ -3,6 +3,7 @@
 import logging
 from urllib.parse import quote
 
+from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils.html import strip_tags
 
@@ -23,6 +24,7 @@ NOTIFICATION_METADATA = {
     Type.ORGANIZATION_MEMBERSHIP_CHANGED: ("ORGANIZATION", "IMPORTANT"),
     Type.THREAD_COMMENTED: ("COMMUNITY", "SOCIAL"),
     Type.EVIDENCE_REVIEWED: ("COMMUNITY", "INFORMATIONAL"),
+    Type.USER_FOLLOWED: ("COMMUNITY", "SOCIAL"),
 }
 
 
@@ -71,6 +73,10 @@ def notification_destination(notification):
     target = notification.target_type
     if target == Target.WORKSPACE:
         return "/workspace"
+    if target == Target.USER_PROFILE:
+        if notification.actor_id is None:
+            return None
+        return f"/user/{quote(notification.actor.username, safe='')}"
     if notification.target_id is None:
         return None
     if target == Target.CLAIM:
@@ -88,6 +94,22 @@ def notification_destination(notification):
                 slug = quote(publication.organization.slug, safe="")
                 return f"/partners/{slug}/fact-checks/{publication.pk}"
     return None
+
+
+def notify_user_followed(*, relationship_id, actor_id, recipient_id):
+    actor = User.objects.filter(pk=actor_id).only("username").first()
+    if actor is None:
+        return None
+    return create_notification_once(
+        recipient_id=recipient_id,
+        actor_id=actor_id,
+        notification_type=Type.USER_FOLLOWED,
+        target_type=Target.USER_PROFILE,
+        target_id=None,
+        dedupe_key=f"user-follow:{relationship_id}",
+        title="New follower",
+        message=f"{actor.username} started following you.",
+    )
 
 
 def notify_verification_finished(run):

@@ -113,6 +113,7 @@ class Notification(models.Model):
         ORGANIZATION_MEMBERSHIP_CHANGED = "ORGANIZATION_MEMBERSHIP_CHANGED", "Membership changed"
         THREAD_COMMENTED = "THREAD_COMMENTED", "Thread commented"
         EVIDENCE_REVIEWED = "EVIDENCE_REVIEWED", "Evidence reviewed"
+        USER_FOLLOWED = "USER_FOLLOWED", "User followed"
 
     class TargetType(models.TextChoices):
         CLAIM = "CLAIM", "Claim"
@@ -120,6 +121,7 @@ class Notification(models.Model):
         OFFICIAL_FACT_CHECK = "OFFICIAL_FACT_CHECK", "Official fact-check"
         WORKSPACE = "WORKSPACE", "Workspace"
         ORGANIZATION = "ORGANIZATION", "Organization"
+        USER_PROFILE = "USER_PROFILE", "User profile"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
@@ -143,10 +145,11 @@ class Notification(models.Model):
                 "PARTNER_FACT_CHECK_PUBLISHED", "PARTNER_FACT_CHECK_CORRECTED",
                 "ARTICLE_RETURNED_FOR_REWORK", "FACT_CHECK_PUBLISHED",
                 "FACTUAL_CORRECTION_PUBLISHED", "ORGANIZATION_MEMBERSHIP_CHANGED",
-                "THREAD_COMMENTED", "EVIDENCE_REVIEWED",
+                "THREAD_COMMENTED", "EVIDENCE_REVIEWED", "USER_FOLLOWED",
             ]), name="notification_type_valid"),
             models.CheckConstraint(condition=Q(target_type__in=[
                 "CLAIM", "THREAD", "OFFICIAL_FACT_CHECK", "WORKSPACE", "ORGANIZATION",
+                "USER_PROFILE",
             ]), name="notification_target_valid"),
         ]
         indexes = [
