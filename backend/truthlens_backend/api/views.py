@@ -109,7 +109,12 @@ from .organization_service import (
     PartnerCapability,
     has_capability,
 )
-from .notification_service import dispatch_after_commit, notify_thread_commented
+from .notification_service import (
+    dispatch_after_commit,
+    notify_thread_commented,
+    notify_user_followed,
+)
+from .notification_realtime import publish_notification_inbox_changed
 from .verification_metrics_query_service import (
     VerificationMetricsAuthorizationError,
     VerificationMetricsCompositionError,
@@ -414,10 +419,22 @@ class NotificationListView(APIView):
         inbox_filter = request.query_params.get("filter", "all")
         if inbox_filter not in ("all", "unread"):
             raise ValidationError({"filter": "Use all or unread."})
-        rows = Notification.objects.filter(recipient=request.user).select_related("actor", "organization")
+        page_size = request.query_params.get("page_size")
+        if page_size is not None:
+            try:
+                page_size = int(page_size)
+            except (TypeError, ValueError):
+                raise ValidationError({"page_size": "Use an integer from 1 to 20."})
+            if not 1 <= page_size <= 20:
+                raise ValidationError({"page_size": "Use an integer from 1 to 20."})
+        rows = Notification.objects.filter(recipient=request.user).select_related(
+            "actor", "actor__profile", "organization"
+        )
         if inbox_filter == "unread":
             rows = rows.filter(read_at__isnull=True)
         paginator = NotificationCursorPagination()
+        if page_size is not None:
+            paginator.page_size = page_size
         page = paginator.paginate_queryset(rows, request, view=self)
         return paginator.get_paginated_response(NotificationSerializer(page, many=True).data)
 
@@ -434,7 +451,13 @@ def notification_mark_read(request, notification_id):
     from .serializers import NotificationSerializer
     rows = Notification.objects.filter(recipient=request.user, pk=notification_id)
     notification = get_object_or_404(rows)
-    rows.filter(read_at__isnull=True).update(read_at=timezone.now())
+    updated_count = rows.filter(read_at__isnull=True).update(read_at=timezone.now())
+    if updated_count:
+        transaction.on_commit(
+            lambda recipient_id=request.user.pk: publish_notification_inbox_changed(
+                recipient_id
+            )
+        )
     notification.refresh_from_db()
     return Response(NotificationSerializer(notification).data)
 
@@ -443,6 +466,12 @@ def notification_mark_read(request, notification_id):
 @permission_classes([IsAuthenticated])
 def notification_mark_all_read(request):
     count = Notification.objects.filter(recipient=request.user, read_at__isnull=True).update(read_at=timezone.now())
+    if count:
+        transaction.on_commit(
+            lambda recipient_id=request.user.pk: publish_notification_inbox_changed(
+                recipient_id
+            )
+        )
     return Response({"updated_count": count})
 
 
@@ -3545,16 +3574,30 @@ def toggle_follow_user(request, username):
         return Response({"error": "You cannot follow yourself."}, status=400)
 
     target_user = get_object_or_404(User, username=username)
-    profile = target_user.profile
+    through_model = UserProfile.followers.through
 
-    # If already following, UNFOLLOW
-    if profile.followers.filter(id=request.user.id).exists():
-        profile.followers.remove(request.user)
-        is_following = False
-    # If not following, FOLLOW
-    else:
-        profile.followers.add(request.user)
-        is_following = True
+    with transaction.atomic():
+        profile = UserProfile.objects.select_for_update().get(user=target_user)
+        relationship = through_model.objects.filter(
+            userprofile_id=profile.pk,
+            user_id=request.user.pk,
+        ).first()
+
+        if relationship is not None:
+            relationship.delete()
+            is_following = False
+        else:
+            relationship = through_model.objects.create(
+                userprofile_id=profile.pk,
+                user_id=request.user.pk,
+            )
+            is_following = True
+            dispatch_after_commit(
+                notify_user_followed,
+                relationship_id=relationship.pk,
+                actor_id=request.user.pk,
+                recipient_id=target_user.pk,
+            )
 
     return Response(
         {"is_following": is_following, "followers_count": profile.followers.count()},

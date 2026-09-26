@@ -3,10 +3,12 @@
 import logging
 from urllib.parse import quote
 
+from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils.html import strip_tags
 
 from .models import EvidenceSubmission, Notification, OfficialFactCheck, VerificationRun
+from .notification_realtime import publish_notification_inbox_changed
 
 logger = logging.getLogger(__name__)
 Type = Notification.NotificationType
@@ -23,6 +25,7 @@ NOTIFICATION_METADATA = {
     Type.ORGANIZATION_MEMBERSHIP_CHANGED: ("ORGANIZATION", "IMPORTANT"),
     Type.THREAD_COMMENTED: ("COMMUNITY", "SOCIAL"),
     Type.EVIDENCE_REVIEWED: ("COMMUNITY", "INFORMATIONAL"),
+    Type.USER_FOLLOWED: ("COMMUNITY", "SOCIAL"),
 }
 
 
@@ -45,13 +48,19 @@ def create_notification_once(*, recipient_id, notification_type, target_type,
         message=plain_snapshot(message, 500),
     )
     candidate.clean_fields()
-    notification, _ = Notification.objects.get_or_create(
+    notification, created = Notification.objects.get_or_create(
         recipient_id=recipient_id, dedupe_key=dedupe_key,
         defaults={field: getattr(candidate, field) for field in (
             "actor_id", "organization_id", "notification_type", "target_type",
             "target_id", "title", "message",
         )},
     )
+    if created:
+        transaction.on_commit(
+            lambda recipient_id=recipient_id: publish_notification_inbox_changed(
+                recipient_id
+            )
+        )
     return notification
 
 
@@ -71,6 +80,13 @@ def notification_destination(notification):
     target = notification.target_type
     if target == Target.WORKSPACE:
         return "/workspace"
+    if target == Target.USER_PROFILE:
+        if notification.actor_id is None:
+            return None
+        username = notification.actor.username
+        if username in {".", ".."}:
+            return None
+        return f"/user/{quote(username, safe='')}"
     if notification.target_id is None:
         return None
     if target == Target.CLAIM:
@@ -88,6 +104,22 @@ def notification_destination(notification):
                 slug = quote(publication.organization.slug, safe="")
                 return f"/partners/{slug}/fact-checks/{publication.pk}"
     return None
+
+
+def notify_user_followed(*, relationship_id, actor_id, recipient_id):
+    actor = User.objects.filter(pk=actor_id).only("username").first()
+    if actor is None:
+        return None
+    return create_notification_once(
+        recipient_id=recipient_id,
+        actor_id=actor_id,
+        notification_type=Type.USER_FOLLOWED,
+        target_type=Target.USER_PROFILE,
+        target_id=None,
+        dedupe_key=f"user-follow:{relationship_id}",
+        title="New follower",
+        message=f"{actor.username} started following you.",
+    )
 
 
 def notify_verification_finished(run):

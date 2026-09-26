@@ -2,12 +2,14 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
 from .auth_tokens import SessionTokenRefreshView
+from .notification_stream import notification_stream
 
 urlpatterns = [
     path("notifications/", views.NotificationListView.as_view(), name="notification_list"),
     path("notifications/unread-count/", views.notification_unread_count, name="notification_unread_count"),
     path("notifications/<uuid:notification_id>/read/", views.notification_mark_read, name="notification_mark_read"),
     path("notifications/mark-all-read/", views.notification_mark_all_read, name="notification_mark_all_read"),
+    path("notifications/stream/", notification_stream, name="notification_stream"),
     path("analyze/", views.receive_snippet, name="analyze_snippet"),
     path("claims/<claim_id>/status", views.claim_polling_endpoint, name="claim_status"),
     path("verify-url/", views.verify_url, name="verify_url"),

@@ -80,6 +80,8 @@ export const VERDICT_CONFIG = {
 // ── API Configuration ──
 // Centralized API base URL (easily switch between environments)
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+export const NOTIFICATION_SSE_ENABLED =
+   String(import.meta.env.VITE_NOTIFICATION_SSE_ENABLED || "false").toLowerCase() === "true";
 
 // Common API endpoints (relative paths)
 export const API_ENDPOINTS = {
@@ -110,6 +112,7 @@ export const API_ENDPOINTS = {
    NOTIFICATION_MARK_READ: (notificationId) =>
       `notifications/${encodeURIComponent(notificationId)}/read/`,
    NOTIFICATION_MARK_ALL_READ: "notifications/mark-all-read/",
+   NOTIFICATION_STREAM: "notifications/stream/",
 
    // Claims & Threads
    CLAIMS: "claims/",

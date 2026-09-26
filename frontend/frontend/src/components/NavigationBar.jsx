@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import LogoImage from "../assets/truthlens_logo.png";
 import GlobalSearch from "./GlobalSearch.jsx";
 import Icons from "./Icons.jsx";
+import NotificationPopover from "./NotificationPopover.jsx";
 import "./NavigationBar.css";
 import Button from "./ui/Button.jsx";
 import { useAuth } from "../hooks/useAuth";
@@ -16,6 +17,7 @@ function NavigationBar() {
    const { user, logout } = useAuth();
    const { unreadCount } = useNotificationInbox();
    const [isOpen, setIsOpen] = useState(false);
+   const [notificationsOpen, setNotificationsOpen] = useState(false);
    const dropdownRef = useRef(null);
    const accountTriggerRef = useRef(null);
    const explicitLogoutRef = useRef(false);
@@ -57,7 +59,12 @@ function NavigationBar() {
 
    const closeNavigationOverlays = () => {
       setIsOpen(false);
+      setNotificationsOpen(false);
    };
+   const handleNotificationOpenChange = useCallback((nextOpen) => {
+      setNotificationsOpen(nextOpen);
+      if (nextOpen) setIsOpen(false);
+   }, []);
    const isModeratorUser = isModeratorRole(user?.role);
    const canUseWorkspace = canAccessWorkspace(user);
    const displayTrustScore = Number(user?.trust_breakdown?.trust_score ?? user?.trust_score ?? 0);
@@ -70,9 +77,6 @@ function NavigationBar() {
    const isWorkspaceRoute = location.pathname.startsWith("/workspace") || location.pathname === "/moderation";
    const isProfileRoute = location.pathname === "/profile";
    const isNotificationsRoute = location.pathname === "/notifications";
-   const notificationLabel =
-      unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications";
-
    return (
       <>
          <header className="top-navbar">
@@ -122,25 +126,21 @@ function NavigationBar() {
 
             <div className="tl-app-nav__actions">
                <GlobalSearch key={`${location.pathname}${location.search}`} />
-               <Link
-                  to="/notifications"
-                  className={`tl-app-nav__notifications ${isNotificationsRoute ? "active" : ""}`}
-                  aria-label={notificationLabel}
-                  aria-current={isNotificationsRoute ? "page" : undefined}
-               >
-                  <Icons name="bell" size={20} />
-                  {unreadCount > 0 && (
-                     <span className="tl-app-nav__notification-badge" aria-hidden="true">
-                        {unreadCount > 99 ? "99+" : unreadCount}
-                     </span>
-                  )}
-               </Link>
+               <NotificationPopover
+                  open={notificationsOpen}
+                  unreadCount={unreadCount}
+                  active={isNotificationsRoute}
+                  onOpenChange={handleNotificationOpenChange}
+               />
                <div className="tl-app-nav__account" ref={dropdownRef}>
                   <button
                      ref={accountTriggerRef}
                      type="button"
                      className={`tl-app-nav__account-trigger ${isOpen ? "open" : ""}`}
-                     onClick={() => setIsOpen((v) => !v)}
+                     onClick={() => {
+                        setNotificationsOpen(false);
+                        setIsOpen((v) => !v);
+                     }}
                      aria-expanded={isOpen}
                      aria-controls={ACCOUNT_PANEL_ID}
                   >

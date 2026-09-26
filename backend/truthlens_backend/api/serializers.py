@@ -91,7 +91,17 @@ class NotificationSerializer(serializers.ModelSerializer):
         return notification_destination(obj)
 
     def get_actor(self, obj):
-        return {"id": obj.actor_id, "username": obj.actor.username} if obj.actor_id else None
+        if not obj.actor_id:
+            return None
+        try:
+            avatar_url = obj.actor.profile.avatar_url
+        except UserProfile.DoesNotExist:
+            avatar_url = None
+        return {
+            "id": obj.actor_id,
+            "username": obj.actor.username,
+            "avatar_url": avatar_url,
+        }
 
     def get_organization(self, obj):
         return {"id": str(obj.organization_id), "name": obj.organization.name} if obj.organization_id else None
