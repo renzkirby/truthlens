@@ -1,875 +1,1075 @@
-/**
- * User Profile Page
- * ══════════════════════════════════════════════════════════════════
- * Displays user profile information, reputation metrics, and claim history.
- *
- * Features:
- *   - User identity and trust level
- *   - Reputation dashboard (trust score, accuracy rate)
- *   - Claim history (scans, contributions, drafts)
- *   - Activity timeline
- *
- * State Management:
- *   - Custom hook (useFetchClaims) handles claim fetching
- *   - Verdict utilities for consistent verdict display
- *   - Centralized constants
- */
-
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
-// ── Utilities & Hooks ──
-import { API_BASE_URL } from "../utils/constants";
 import Icons from "../components/Icons.jsx";
-
-// ── Styles ──
+import { useAuth } from "../hooks/useAuth";
+import { useNotification } from "../hooks/useNotification";
+import { resolveApiEndpoint } from "../utils/api";
 import "./UserProfile.css";
 
-/**
- * Get trust level label and color based on score
- * @param {number} score - User's trust score (0-100)
- * @returns {object} { label, color }
- */
+const TAB_PAGE_SIZE = 6;
+const TAB_SKELETON_COUNT = 3;
+const ACTIVITY_TABS = ["threads", "contributions"];
+
 function getTrustLevel(score) {
-   if (score >= 90) return { label: "Expert Analyst", color: "#22c55e" };
-   if (score >= 75) return { label: "Trusted Analyst", color: "#3b82f6" };
-   if (score >= 60) return { label: "Contributor", color: "#f97316" };
-   if (score >= 40) return { label: "Newcomer", color: "#4f46e5" };
-   if (score < 40) return { label: "At Risk", color: "#dc2626" };
-   if (score <= 25) return { label: "Untrusted", color: "#9ca3af" };
-   return { label: "Newcomer", color: "var(--text-muted)" };
+   if (score <= 25) return { label: "Untrusted", tone: "untrusted" };
+   if (score < 40) return { label: "At risk", tone: "at-risk" };
+   if (score < 60) return { label: "Newcomer", tone: "newcomer" };
+   if (score < 75) return { label: "Contributor", tone: "contributor" };
+   if (score < 90) return { label: "Trusted analyst", tone: "trusted" };
+   return { label: "Expert analyst", tone: "expert" };
 }
 
 function isPlatformModeratorRole(role) {
    return role === "MOD" || role === "MODERATOR";
 }
 
-/**
- * Format date string to readable format
- * @param {string} dateStr - ISO date string
- * @returns {string} Formatted date (e.g., "January 15, 2024")
- */
 function formatDate(dateStr) {
-   if (!dateStr) return "—";
-   return new Date(dateStr).toLocaleDateString("en-US", {
+   if (!dateStr) return "Date unavailable";
+   const date = new Date(dateStr);
+   if (Number.isNaN(date.getTime())) return "Date unavailable";
+   return date.toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
       day: "numeric",
    });
 }
 
-/**
- * Convert date to relative time format
- * @param {string} dateStr - ISO date string
- * @returns {string} Relative time (e.g., "2d ago", "Today")
- */
-function timeAgo(dateStr) {
-   if (!dateStr) return "—";
-   const diff = Date.now() - new Date(dateStr).getTime();
-   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-   if (days === 0) return "Today";
-   if (days === 1) return "Yesterday";
-   if (days < 7) return `${days}d ago`;
-   if (days < 30) return `${Math.floor(days / 7)}w ago`;
-   return `${Math.floor(days / 30)}mo ago`;
+function formatActivityDate(dateStr) {
+   if (!dateStr) return "Date unavailable";
+   const date = new Date(dateStr);
+   if (Number.isNaN(date.getTime())) return "Date unavailable";
+   return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+   });
 }
 
-const TAB_PAGE_SIZE = 6;
-const TAB_SKELETON_COUNT = 3;
+function humanizeValue(value, fallback = "Unspecified") {
+   if (!value) return fallback;
+   return String(value)
+      .toLowerCase()
+      .replaceAll("_", " ")
+      .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function getClaimContext(claim) {
+   if (claim?.context_text?.trim()) return claim.context_text.trim();
+   return `${humanizeValue(claim?.claim_type, "Claim")} claim`;
+}
 
 function getTabDescription(activeTab, isOwnProfile) {
    if (activeTab === "threads") {
-      return isOwnProfile ? "Threads you started for community verification." : "Threads initiated by this user.";
+      return isOwnProfile
+         ? "Threads you started for community verification."
+         : "Threads this member started for community verification.";
    }
    return isOwnProfile
-      ? "Evidence and comments you contributed across threads."
-      : "Evidence and comments contributed by this user.";
+      ? "Evidence and comments you contributed across community threads."
+      : "Evidence and comments this member contributed across community threads.";
 }
 
 function getEmptyTabMessage(activeTab, isOwnProfile) {
    if (activeTab === "threads") {
       return isOwnProfile
-         ? "You have not opened any community threads yet."
-         : "This user has not opened any community threads yet.";
+         ? "You have not started a community thread yet."
+         : "This member has not started a community thread yet.";
    }
    return isOwnProfile
       ? "You have not submitted evidence or comments yet."
-      : "This user has not submitted evidence or comments yet.";
+      : "This member has not submitted evidence or comments yet.";
 }
 
-/**
- * UserProfile Component
- * Shows user identity, reputation, and contribution history
- */
+function ProfileAvatar({ user, className = "" }) {
+   const username = user?.username || "Community member";
+
+   if (user?.avatar_url) {
+      return (
+         <span className={`user-profile__avatar ${className}`.trim()}>
+            <img src={user.avatar_url} alt={`${username}'s avatar`} />
+         </span>
+      );
+   }
+
+   return (
+      <span
+         className={`user-profile__avatar user-profile__avatar--fallback ${className}`.trim()}
+         role="img"
+         aria-label={`${username}'s avatar placeholder`}
+      >
+         <span aria-hidden="true">{username.charAt(0).toUpperCase()}</span>
+      </span>
+   );
+}
+
+function ProfileDialog({
+   children,
+   className = "",
+   describedBy,
+   initialFocusRef,
+   isBusy = false,
+   labelledBy,
+   onClose,
+   returnFocusRef,
+}) {
+   const dialogRef = useRef(null);
+   const onCloseRef = useRef(onClose);
+   const isBusyRef = useRef(isBusy);
+
+   useEffect(() => {
+      onCloseRef.current = onClose;
+      isBusyRef.current = isBusy;
+   }, [isBusy, onClose]);
+
+   useEffect(() => {
+      const returnTarget = returnFocusRef?.current || document.activeElement;
+      const previousBodyOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+
+      const focusDialog = window.requestAnimationFrame(() => {
+         (initialFocusRef?.current || dialogRef.current)?.focus();
+      });
+
+      const handleKeyDown = (event) => {
+         if (event.key === "Escape" && !isBusyRef.current) {
+            event.preventDefault();
+            onCloseRef.current();
+            return;
+         }
+
+         if (event.key !== "Tab") return;
+
+         const focusable = Array.from(
+            dialogRef.current?.querySelectorAll(
+               'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            ) || [],
+         ).filter((element) => !element.hasAttribute("hidden"));
+
+         if (focusable.length === 0) {
+            event.preventDefault();
+            dialogRef.current?.focus();
+            return;
+         }
+
+         const first = focusable[0];
+         const last = focusable[focusable.length - 1];
+         if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+         } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+         }
+      };
+
+      document.addEventListener("keydown", handleKeyDown);
+
+      return () => {
+         window.cancelAnimationFrame(focusDialog);
+         document.body.style.overflow = previousBodyOverflow;
+         document.removeEventListener("keydown", handleKeyDown);
+         window.requestAnimationFrame(() => returnTarget?.focus?.());
+      };
+   }, [initialFocusRef, returnFocusRef]);
+
+   return (
+      <div
+         className="user-profile__dialog-backdrop"
+         onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isBusy) onClose();
+         }}
+      >
+         <div
+            ref={dialogRef}
+            className={`user-profile__dialog ${className}`.trim()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={labelledBy}
+            aria-describedby={describedBy}
+            tabIndex={-1}
+         >
+            {children}
+         </div>
+      </div>
+   );
+}
+
 function UserProfile() {
-   const { username } = useParams(); // Get username from URL if it exists
+   const { username } = useParams();
    const navigate = useNavigate();
-   const { user: authUser, authFetch, refreshUser, logout } = useAuth();
-   const explicitLogoutRef = useRef(false);
+   const { user: authUser, authFetch, refreshUser } = useAuth();
+   const { addToast } = useNotification();
 
-   useEffect(() => () => {
-      // Finish ordinary logout after navigation removes the protected page.
-      if (explicitLogoutRef.current) {
-         explicitLogoutRef.current = false;
-         logout();
-      }
-   }, [logout]);
-
-   const [activeTab, setActiveTab] = useState("threads");
    const [publicUser, setPublicUser] = useState(null);
-   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
-   const [activityLoading, setActivityLoading] = useState(false);
-   const [activityError, setActivityError] = useState(null);
-   const [threadActivity, setThreadActivity] = useState([]);
-   const [evidenceActivity, setEvidenceActivity] = useState([]);
-   const [loadedActivityTabs, setLoadedActivityTabs] = useState({
-      threads: false,
-      evidence: false,
-   });
-   const [visibleCounts, setVisibleCounts] = useState({
-      threads: TAB_PAGE_SIZE,
-      evidence: TAB_PAGE_SIZE,
-   });
+   const [profileStatus, setProfileStatus] = useState("idle");
+   const [profileError, setProfileError] = useState("");
+   const [profileAttempt, setProfileAttempt] = useState(0);
 
-   // Determine if we are viewing our own profile or someone else's
    const isOwnProfile = !username || username === authUser?.username;
    const displayUser = isOwnProfile ? authUser : publicUser;
    const displayUsername = displayUser?.username;
-   const isPlatformModerator = isPlatformModeratorRole(displayUser?.role);
-
-   const activeTabItems = useMemo(() => {
-      if (activeTab === "threads") return threadActivity;
-      return evidenceActivity;
-   }, [activeTab, evidenceActivity, threadActivity]);
-
-   const currentTabLoading = activityLoading;
-   const currentTabError = activityError;
-   const currentTabDescription = getTabDescription(activeTab, isOwnProfile);
-   const currentTabEmptyMessage = getEmptyTabMessage(activeTab, isOwnProfile);
-
-   const visibleTabItems = useMemo(() => {
-      const visibleCount = visibleCounts[activeTab] ?? TAB_PAGE_SIZE;
-      return activeTabItems.slice(0, visibleCount);
-   }, [activeTab, activeTabItems, visibleCounts]);
-
-   const currentVisibleCount = visibleCounts[activeTab] ?? TAB_PAGE_SIZE;
-   const hasMoreTabItems = activeTabItems.length > currentVisibleCount;
-   const canShowLessTabItems = currentVisibleCount > TAB_PAGE_SIZE && activeTabItems.length > TAB_PAGE_SIZE;
-   // ── Follow System State ──
-   const [isFollowing, setIsFollowing] = useState(false);
-   const [followersCount, setFollowersCount] = useState(0);
-   const [followingCount, setFollowingCount] = useState(0);
-
-   // Sync state when the user data loads
-   useEffect(() => {
-      if (displayUser) {
-         setIsFollowing(displayUser.is_following || false);
-         setFollowersCount(displayUser.followers_count || 0);
-         setFollowingCount(displayUser.following_count || 0);
-      }
-   }, [displayUser]);
-
-   // Handle follow button click
-   const handleFollowToggle = async () => {
-      try {
-         // Updated to use the dynamic API_BASE_URL!
-         const response = await authFetch(`${API_BASE_URL}/users/${displayUser.username}/follow/`, {
-            method: "POST",
-         });
-         // Instantly update the UI with the backend's response
-         setIsFollowing(response.is_following);
-         setFollowersCount(response.followers_count);
-      } catch (err) {
-         console.error("Failed to toggle follow status:", err);
-      }
-   };
-   // ── Modal State ──
-   const [modalType, setModalType] = useState(null); // 'followers' or 'following'
-   const [modalData, setModalData] = useState([]);
-   const [isModalLoading, setIsModalLoading] = useState(false);
-
-   // ── Edit Profile State ──
-   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-   const [editBio, setEditBio] = useState("");
-   const [editAvatarBase64, setEditAvatarBase64] = useState(null);
-   const [isSavingProfile, setIsSavingProfile] = useState(false);
-
-   const openFollowModal = async (type) => {
-      setModalType(type);
-      setIsModalLoading(true);
-      try {
-         const response = await authFetch(
-            `${import.meta.env.VITE_API_BASE_URL}/users/${displayUser.username}/${type}/`,
-            {
-               method: "GET",
-            },
-         );
-
-         const data = response?.data || response?.results || response || [];
-         setModalData(Array.isArray(data) ? data : []);
-      } catch (err) {
-         console.error(`Failed to fetch ${type}:`, err);
-         setModalData([]);
-      } finally {
-         setIsModalLoading(false);
-      }
-   };
-
-   // Fetch public profile if we are viewing someone else
-   useEffect(() => {
-      if (isOwnProfile) {
-         refreshUser?.();
-      } else {
-         setIsLoadingProfile(true);
-         authFetch(`${API_BASE_URL}/users/${username}/`, { method: "GET" })
-            .then((data) => {
-               setPublicUser(data);
-            })
-            .catch((err) => console.error("Failed to load user", err))
-            .finally(() => setIsLoadingProfile(false));
-      }
-   }, [authFetch, refreshUser, username, isOwnProfile]);
-
-   const isActiveTabLoaded = loadedActivityTabs[activeTab];
 
    useEffect(() => {
-      setActiveTab("threads");
-      setActivityError(null);
-      setActivityLoading(false);
-      setThreadActivity([]);
-      setEvidenceActivity([]);
-      setLoadedActivityTabs({
-         threads: false,
-         evidence: false,
-      });
-      setVisibleCounts({
-         threads: TAB_PAGE_SIZE,
-         evidence: TAB_PAGE_SIZE,
-      });
-   }, [displayUsername, isOwnProfile]);
-
-   useEffect(() => {
-      if (!displayUsername) {
-         return;
-      }
-
-      if (isActiveTabLoaded) {
-         return;
-      }
-
-      const endpointMap = {
-         threads: `${API_BASE_URL}/users/${displayUsername}/threads/`,
-         evidence: `${API_BASE_URL}/users/${displayUsername}/evidence/`,
-      };
+      if (isOwnProfile) return undefined;
 
       let isCancelled = false;
-      setActivityLoading(true);
-      setActivityError(null);
+      setPublicUser(null);
+      setProfileStatus("loading");
+      setProfileError("");
 
-      authFetch(endpointMap[activeTab], { method: "GET" })
+      authFetch(resolveApiEndpoint("USER_PROFILE", username), { method: "GET" })
          .then((data) => {
-            if (isCancelled) {
+            if (isCancelled) return;
+            setPublicUser(data);
+            setProfileStatus("success");
+         })
+         .catch((error) => {
+            if (isCancelled) return;
+            if (error?.status === 404) {
+               setProfileStatus("not-found");
                return;
             }
-
-            const normalized = Array.isArray(data) ? data : Array.isArray(data?.results) ? data.results : [];
-
-            if (activeTab === "threads") {
-               setThreadActivity(normalized);
-            } else {
-               setEvidenceActivity(normalized);
-            }
-
-            setLoadedActivityTabs((prev) => ({
-               ...prev,
-               [activeTab]: true,
-            }));
-         })
-         .catch((err) => {
-            if (isCancelled) {
-               return;
-            }
-            setActivityError(err?.message || "Failed to load profile activity.");
-         })
-         .finally(() => {
-            if (!isCancelled) {
-               setActivityLoading(false);
-            }
+            setProfileStatus("error");
+            setProfileError("We couldn't load this profile. Check your connection and try again.");
          });
 
       return () => {
          isCancelled = true;
       };
-   }, [activeTab, authFetch, displayUsername, isActiveTabLoaded]);
+   }, [authFetch, isOwnProfile, profileAttempt, username]);
 
-   const handleLoadMore = () => {
-      setVisibleCounts((prev) => ({
-         ...prev,
-         [activeTab]: (prev[activeTab] ?? TAB_PAGE_SIZE) + TAB_PAGE_SIZE,
-      }));
-   };
+   useEffect(() => {
+      if (!isOwnProfile) return;
+      setProfileStatus(authUser ? "success" : "loading");
+      setProfileError("");
+   }, [authUser, isOwnProfile]);
 
-   const handleShowLess = () => {
-      setVisibleCounts((prev) => ({
-         ...prev,
-         [activeTab]: TAB_PAGE_SIZE,
-      }));
-   };
+   useEffect(() => {
+      if (isOwnProfile) refreshUser?.();
+   }, [isOwnProfile, refreshUser, username]);
 
-   if (isLoadingProfile) {
-      return (
-         <div className="profile-layout">
-            <main className="profile-container">
-               <p style={{ textAlign: "center", marginTop: "50px" }}>Loading profile...</p>
-            </main>
-         </div>
-      );
-   }
+   const [isFollowing, setIsFollowing] = useState(false);
+   const [followersCount, setFollowersCount] = useState(0);
+   const [followingCount, setFollowingCount] = useState(0);
+   const [isFollowPending, setIsFollowPending] = useState(false);
 
-   if (!displayUser && !isOwnProfile) {
-      return (
-         <div className="profile-layout">
-            <main className="profile-container">
-               <h2 style={{ textAlign: "center", marginTop: "50px" }}>User not found.</h2>
-            </main>
-         </div>
-      );
-   }
+   useEffect(() => {
+      if (!displayUser) return;
+      setIsFollowing(Boolean(displayUser.is_following));
+      setFollowersCount(Number(displayUser.followers_count) || 0);
+      setFollowingCount(Number(displayUser.following_count) || 0);
+   }, [displayUser]);
 
-   // ── Compute Profile Stats ──
-   const trustBreakdown = displayUser?.trust_breakdown || {};
-   const displayTrustScore = Number(trustBreakdown.trust_score ?? displayUser?.trust_score ?? 0);
-   const trustLevel = getTrustLevel(displayTrustScore);
-
-   const breakdownRows = [
-      {
-         label: "Base Score",
-         value: trustBreakdown.base_score ?? 50,
-         share: trustBreakdown.base_share_pct ?? 0,
-         max: 50,
-         color: "#4f46e5",
-      },
-      {
-         label: "Contribution Accuracy",
-         value: trustBreakdown.contribution_points ?? 0,
-         share: trustBreakdown.contribution_share_pct ?? 0,
-         max: 30,
-         color: "#0e9f6e",
-      },
-      {
-         label: "Vote Balance",
-         value: trustBreakdown.vote_points ?? 0,
-         share: trustBreakdown.vote_share_pct ?? 0,
-         max: 15,
-         color: "#d97706",
-      },
-      {
-         label: "Tenure Bonus",
-         value: trustBreakdown.tenure_points ?? 0,
-         share: trustBreakdown.tenure_share_pct ?? 0,
-         max: 5,
-         color: "#2563eb",
-      },
-      {
-         label: "Conduct Penalties",
-         value: trustBreakdown.penalties ?? 0,
-         share: trustBreakdown.penalties_share_pct ?? 0,
-         max: 30,
-         color: "#dc2626",
-      },
-   ];
-
-   const openEditModal = () => {
-      setEditBio(displayUser?.bio || "");
-      setEditAvatarBase64(null); // Reset pending image
-      setIsEditModalOpen(true);
-   };
-
-   // Convert chosen file to Base64
-   const handleImageUpload = (e) => {
-      const file = e.target.files[0];
-      if (file) {
-         const reader = new FileReader();
-         reader.onloadend = () => {
-            setEditAvatarBase64(reader.result);
-         };
-         reader.readAsDataURL(file);
+   const handleFollowToggle = async () => {
+      if (!displayUsername || isFollowPending) return;
+      setIsFollowPending(true);
+      try {
+         const response = await authFetch(resolveApiEndpoint("USER_FOLLOW", displayUsername), {
+            method: "POST",
+         });
+         setIsFollowing(Boolean(response.is_following));
+         setFollowersCount(Number(response.followers_count) || 0);
+      } catch {
+         addToast({
+            type: "error",
+            message: `We couldn't ${isFollowing ? "unfollow" : "follow"} this member. Please try again.`,
+         });
+      } finally {
+         setIsFollowPending(false);
       }
    };
 
-   // Save changes to the backend
-   const handleSaveProfile = async () => {
-      setIsSavingProfile(true);
-      try {
-         const payload = { bio: editBio };
-         if (editAvatarBase64) {
-            payload.avatar_base64 = editAvatarBase64;
-         }
+   const [activeTab, setActiveTab] = useState("threads");
+   const [activityState, setActivityState] = useState({
+      threads: { status: "idle", items: [], error: "" },
+      contributions: { status: "idle", items: [], error: "" },
+   });
+   const [visibleCounts, setVisibleCounts] = useState({
+      threads: TAB_PAGE_SIZE,
+      contributions: TAB_PAGE_SIZE,
+   });
+   const activityRequestGenerationRef = useRef({
+      threads: 0,
+      contributions: 0,
+   });
+   const activityUsernameRef = useRef(displayUsername);
 
-         await authFetch(`${API_BASE_URL}/auth/profile/update/`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
+   useEffect(() => {
+      activityUsernameRef.current = displayUsername;
+      activityRequestGenerationRef.current = {
+         threads: activityRequestGenerationRef.current.threads + 1,
+         contributions: activityRequestGenerationRef.current.contributions + 1,
+      };
+      setActiveTab("threads");
+      setActivityState({
+         threads: { status: "idle", items: [], error: "" },
+         contributions: { status: "idle", items: [], error: "" },
+      });
+      setVisibleCounts({
+         threads: TAB_PAGE_SIZE,
+         contributions: TAB_PAGE_SIZE,
+      });
+   }, [displayUsername]);
+
+   const activeActivity = activityState[activeTab];
+
+   useEffect(() => {
+      if (!displayUsername || activeActivity.status !== "idle") return undefined;
+
+      const requestedTab = activeTab;
+      const requestedUsername = displayUsername;
+      const requestGeneration = activityRequestGenerationRef.current[requestedTab] + 1;
+      activityRequestGenerationRef.current[requestedTab] = requestGeneration;
+      const endpoint = requestedTab === "threads" ? "USER_THREADS" : "USER_CONTRIBUTIONS";
+
+      const isCurrentRequest = () =>
+         activityUsernameRef.current === requestedUsername &&
+         activityRequestGenerationRef.current[requestedTab] === requestGeneration;
+
+      setActivityState((current) => ({
+         ...current,
+         [requestedTab]: { ...current[requestedTab], status: "loading", error: "" },
+      }));
+
+      authFetch(resolveApiEndpoint(endpoint, requestedUsername), { method: "GET" })
+         .then((data) => {
+            if (!isCurrentRequest()) return;
+            const items = Array.isArray(data) ? data : Array.isArray(data?.results) ? data.results : [];
+            setActivityState((current) => ({
+               ...current,
+               [requestedTab]: { status: "success", items, error: "" },
+            }));
+         })
+         .catch(() => {
+            if (!isCurrentRequest()) return;
+            setActivityState((current) => ({
+               ...current,
+               [requestedTab]: {
+                  ...current[requestedTab],
+                  status: "error",
+                  error: "We couldn't load this activity. Please try again.",
+               },
+            }));
          });
+   }, [activeActivity.status, activeTab, authFetch, displayUsername]);
 
-         await refreshUser?.();
-         setIsEditModalOpen(false);
-      } catch (err) {
-         console.error("Failed to update profile:", err);
+   const visibleTabItems = useMemo(() => {
+      const visibleCount = visibleCounts[activeTab] ?? TAB_PAGE_SIZE;
+      return activeActivity.items.slice(0, visibleCount);
+   }, [activeActivity.items, activeTab, visibleCounts]);
+
+   const currentVisibleCount = visibleCounts[activeTab] ?? TAB_PAGE_SIZE;
+   const hasMoreTabItems = activeActivity.items.length > currentVisibleCount;
+   const canShowLessTabItems = currentVisibleCount > TAB_PAGE_SIZE && activeActivity.items.length > TAB_PAGE_SIZE;
+
+   const selectTab = (tab) => setActiveTab(tab);
+
+   const handleTabKeyDown = (event) => {
+      const currentIndex = ACTIVITY_TABS.indexOf(activeTab);
+      let nextIndex = null;
+      if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % ACTIVITY_TABS.length;
+      if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + ACTIVITY_TABS.length) % ACTIVITY_TABS.length;
+      if (event.key === "Home") nextIndex = 0;
+      if (event.key === "End") nextIndex = ACTIVITY_TABS.length - 1;
+      if (nextIndex === null) return;
+      event.preventDefault();
+      const nextTab = ACTIVITY_TABS[nextIndex];
+      selectTab(nextTab);
+      document.getElementById(`profile-tab-${nextTab}`)?.focus();
+   };
+
+   const retryActivity = () => {
+      setActivityState((current) => ({
+         ...current,
+         [activeTab]: { ...current[activeTab], status: "idle", error: "" },
+      }));
+   };
+
+   const [connectionDialog, setConnectionDialog] = useState(null);
+   const [connectionState, setConnectionState] = useState({ status: "idle", items: [], error: "" });
+   const connectionDialogTriggerRef = useRef(null);
+   const connectionCloseRef = useRef(null);
+   const connectionRequestGenerationRef = useRef(0);
+
+   const loadConnections = async (type) => {
+      if (!displayUsername) return;
+      const requestGeneration = connectionRequestGenerationRef.current + 1;
+      connectionRequestGenerationRef.current = requestGeneration;
+      const endpoint = type === "followers" ? "USER_FOLLOWERS" : "USER_FOLLOWING";
+      setConnectionState({ status: "loading", items: [], error: "" });
+      try {
+         const data = await authFetch(resolveApiEndpoint(endpoint, displayUsername), { method: "GET" });
+         if (connectionRequestGenerationRef.current !== requestGeneration) return;
+         const items = Array.isArray(data) ? data : Array.isArray(data?.results) ? data.results : [];
+         setConnectionState({ status: "success", items, error: "" });
+      } catch {
+         if (connectionRequestGenerationRef.current !== requestGeneration) return;
+         setConnectionState({
+            status: "error",
+            items: [],
+            error: `We couldn't load ${type}. Please try again.`,
+         });
+      }
+   };
+
+   const openConnectionDialog = (type, trigger) => {
+      connectionDialogTriggerRef.current = trigger;
+      setConnectionDialog(type);
+      loadConnections(type);
+   };
+
+   const closeConnectionDialog = () => {
+      connectionRequestGenerationRef.current += 1;
+      setConnectionDialog(null);
+   };
+
+   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+   const [editUsername, setEditUsername] = useState("");
+   const [editBio, setEditBio] = useState("");
+   const [editAvatarBase64, setEditAvatarBase64] = useState(null);
+   const [editAvatarFileName, setEditAvatarFileName] = useState("");
+   const [isSavingProfile, setIsSavingProfile] = useState(false);
+   const [editError, setEditError] = useState("");
+   const editDialogTriggerRef = useRef(null);
+   const editUsernameRef = useRef(null);
+
+   const openEditDialog = (trigger) => {
+      editDialogTriggerRef.current = trigger;
+      setEditUsername(displayUser?.username || "");
+      setEditBio(displayUser?.bio || "");
+      setEditAvatarBase64(null);
+      setEditAvatarFileName("");
+      setEditError("");
+      setIsEditDialogOpen(true);
+   };
+
+   const closeEditDialog = () => {
+      if (!isSavingProfile) setIsEditDialogOpen(false);
+   };
+
+   const handleImageUpload = (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      setEditAvatarFileName(file.name);
+      const reader = new FileReader();
+      reader.onloadend = () => setEditAvatarBase64(reader.result);
+      reader.readAsDataURL(file);
+   };
+
+   const handleSaveProfile = async (event) => {
+      event.preventDefault();
+      const normalizedUsername = editUsername.trim();
+      if (!normalizedUsername) {
+         setEditError("Username is required.");
+         editUsernameRef.current?.focus();
+         return;
+      }
+
+      setIsSavingProfile(true);
+      setEditError("");
+      try {
+         const payload = { username: normalizedUsername, bio: editBio };
+         if (editAvatarBase64) payload.avatar_base64 = editAvatarBase64;
+         await authFetch(resolveApiEndpoint("PROFILE_UPDATE"), {
+            method: "PATCH",
+            body: payload,
+         });
+         const refreshedUser = await refreshUser?.();
+         const savedUsername = refreshedUser?.username || normalizedUsername;
+         setIsEditDialogOpen(false);
+         if (username && savedUsername !== username) {
+            navigate(`/user/${encodeURIComponent(savedUsername)}`, { replace: true });
+         }
+         addToast({ type: "success", message: "Profile updated." });
+      } catch (error) {
+         const usernameMessage = Array.isArray(error?.username) ? error.username[0] : error?.username;
+         setEditError(usernameMessage || "We couldn't save your profile. Review your changes and try again.");
       } finally {
          setIsSavingProfile(false);
       }
    };
 
-   return (
-      <div className="profile-layout">
-         <main className="profile-container">
-            {/* ── User Identity Header (X-Style Layout) ── */}
-            <div className="profile-header-container">
-               {/* 1. Cover Banner */}
-               <div className="profile-cover-banner">
-                  {displayUser?.cover_photo_url && <img src={displayUser.cover_photo_url} alt="Cover" />}
-               </div>
+   if (profileStatus === "loading" || profileStatus === "idle") {
+      return (
+         <main className="user-profile user-profile--state" aria-busy="true">
+            <div className="user-profile__page-state" role="status" aria-live="polite">
+               <span className="user-profile__state-icon user-profile__state-icon--loading" aria-hidden="true">
+                  <Icons name="loader" size={24} />
+               </span>
+               <h1>Loading profile</h1>
+               <p>Gathering this member's community activity.</p>
+            </div>
+         </main>
+      );
+   }
 
-               <div className="profile-header-body">
-                  {/* 2. Overlapping Avatar */}
-                  <div className="profile-avatar-wrapper">
-                     <div className="profile-avatar">
-                        {displayUser?.avatar_url ? (
-                           <img src={displayUser.avatar_url} alt={`${displayUser.username}'s avatar`} />
-                        ) : (
-                           displayUser?.username?.[0]?.toUpperCase() || "?"
-                        )}
-                     </div>
+   if (profileStatus === "not-found") {
+      return (
+         <main className="user-profile user-profile--state">
+            <div className="user-profile__page-state">
+               <span className="user-profile__state-icon" aria-hidden="true">
+                  <Icons name="user" size={24} />
+               </span>
+               <h1>Profile unavailable</h1>
+               <p>This community member could not be found.</p>
+               <Link className="user-profile__primary-button" to="/community">
+                  Back to community
+               </Link>
+            </div>
+         </main>
+      );
+   }
+
+   if (profileStatus === "error" || !displayUser) {
+      return (
+         <main className="user-profile user-profile--state">
+            <div className="user-profile__page-state" role="alert">
+               <span className="user-profile__state-icon user-profile__state-icon--error" aria-hidden="true">
+                  <Icons name="alert-circle" size={24} />
+               </span>
+               <h1>Profile could not load</h1>
+               <p>{profileError || "We couldn't load this profile. Please try again."}</p>
+               <button
+                  type="button"
+                  className="user-profile__primary-button"
+                  onClick={() => setProfileAttempt((attempt) => attempt + 1)}
+               >
+                  Try again
+               </button>
+            </div>
+         </main>
+      );
+   }
+
+   const numericTrustScore = Number(displayUser.trust_score);
+   const hasTrustScore =
+      displayUser.trust_score !== null && displayUser.trust_score !== undefined && Number.isFinite(numericTrustScore);
+   const trustLevel = hasTrustScore
+      ? getTrustLevel(numericTrustScore)
+      : { label: "Not available", tone: "unavailable" };
+   const isPlatformModerator = isPlatformModeratorRole(displayUser.role);
+   const roleLabel = isPlatformModerator ? "Platform moderator" : "Community member";
+   const currentTabDescription = getTabDescription(activeTab, isOwnProfile);
+   const currentTabEmptyMessage = getEmptyTabMessage(activeTab, isOwnProfile);
+
+   return (
+      <main className="user-profile">
+         <section className="user-profile__profile-card" aria-labelledby="profile-heading">
+            <div className="user-profile__identity">
+               <div className="user-profile__identity-top">
+                  <ProfileAvatar user={displayUser} className="user-profile__avatar--large" />
+
+                  <div className="user-profile__name-group">
+                     <h1 id="profile-heading">{displayUser.username}</h1>
+                     <p className="user-profile__handle">@{displayUser.username.toLowerCase()}</p>
                   </div>
 
-                  {/* 3. Action Buttons (Right Aligned) */}
-                  <div className="profile-action-row">
-                     {isOwnProfile ? (
-                        <button type="button" className="action-btn action-btn-edit" onClick={openEditModal}>
-                           Edit Profile
-                        </button>
-                     ) : displayUser ? (
+                  <div className={`user-profile__trust-compact is-${trustLevel.tone}`} aria-labelledby="trust-heading">
+                     <span id="trust-heading" className="user-profile__trust-compact-label">
+                        Trust Score
+                     </span>
+                     <div className="user-profile__trust-compact-value">
+                        <strong>{hasTrustScore ? numericTrustScore.toFixed(1) : "—"}</strong>
+                        <span>{trustLevel.label}</span>
+                     </div>
+                     <p className="user-profile__sr-only">
+                        Participation reputation on TruthLens, not verification or publication authority.
+                     </p>
+                  </div>
+               </div>
+
+               <div className="user-profile__identity-details">
+                  <p className={`user-profile__role ${isPlatformModerator ? "is-moderator" : ""}`}>
+                     {isPlatformModerator && <Icons name="shield-user" size={16} aria-hidden="true" />}
+                     {roleLabel}
+                  </p>
+
+                  <p className={`user-profile__bio ${displayUser.bio ? "" : "is-empty"}`.trim()}>
+                     {displayUser.bio ||
+                        (isOwnProfile ? "Add a bio to introduce yourself to the community." : "No bio shared.")}
+                  </p>
+
+                  <p className="user-profile__joined">
+                     <Icons name="calendar" size={15} aria-hidden="true" />
+                     Joined {formatDate(displayUser.date_joined)}
+                  </p>
+
+                  <div className="user-profile__profile-footer">
+                     <div className="user-profile__connections">
                         <button
                            type="button"
-                           className={`action-btn action-btn-follow ${isFollowing ? "following" : ""}`}
-                           onClick={handleFollowToggle}
+                           onClick={(event) => openConnectionDialog("following", event.currentTarget)}
+                           aria-label={`View ${followingCount.toLocaleString()} following`}
                         >
-                           {isFollowing ? "Following" : "Follow"}
+                           <strong>{followingCount.toLocaleString()}</strong> Following
                         </button>
-                     ) : null}
-                  </div>
-
-                  {/* 4. Identity & Bio */}
-                  <div className="profile-identity">
-                     <div className="profile-title-row">
-                        <h1 className="profile-username">{displayUser?.username || "—"}</h1>
-                        {isPlatformModerator ? (
-                           <span className="official-moderator-badge">
-                              <Icons name="shield-user" size={14} />
-                              Platform Moderator
-                           </span>
-                        ) : (
-                           <span className="trust-level-badge" style={{ backgroundColor: trustLevel.color }}>
-                              {trustLevel.label}
-                           </span>
-                        )}
+                        <button
+                           type="button"
+                           onClick={(event) => openConnectionDialog("followers", event.currentTarget)}
+                           aria-label={`View ${followersCount.toLocaleString()} followers`}
+                        >
+                           <strong>{followersCount.toLocaleString()}</strong> Followers
+                        </button>
                      </div>
 
-                     <p className="profile-handle">@{displayUser?.username?.toLowerCase() || "—"}</p>
-                  </div>
-
-                  {displayUser?.bio && <p className="user-bio">{displayUser.bio}</p>}
-
-                  {/* 5. Meta Info (Join Date, Trust Badge) */}
-                  <div className="profile-meta-row">
-                     <div className="meta-item">
-                        <Icons name="calendar" size={16} />
-                        Joined {formatDate(displayUser?.date_joined)}
-                     </div>
-                  </div>
-
-                  {/* 6. Follower Stats */}
-                  <div className="follow-stats">
-                     <span onClick={() => openFollowModal("following")}>
-                        <strong>{followingCount}</strong> Following
-                     </span>
-                     <span onClick={() => openFollowModal("followers")}>
-                        <strong>{followersCount}</strong> Followers
-                     </span>
+                     {isOwnProfile ? (
+                        <button
+                           type="button"
+                           className="user-profile__secondary-button user-profile__profile-action"
+                           onClick={(event) => openEditDialog(event.currentTarget)}
+                        >
+                           <Icons name="pencil" size={16} aria-hidden="true" />
+                           Edit profile
+                        </button>
+                     ) : (
+                        <button
+                           type="button"
+                           className={`user-profile__primary-button user-profile__profile-action ${isFollowing ? "is-following" : ""}`}
+                           onClick={handleFollowToggle}
+                           disabled={isFollowPending}
+                           aria-pressed={isFollowing}
+                        >
+                           <Icons name={isFollowing ? "user-check" : "user-plus"} size={16} aria-hidden="true" />
+                           {isFollowPending ? "Updating…" : isFollowing ? "Following" : "Follow"}
+                        </button>
+                     )}
                   </div>
                </div>
             </div>
-            {/* ── End Header ── */}
 
-            {/* ── Reputation Dashboard ── */}
-            <div className="box-panel">
-               <h2 className="section-title">Reputation Dashboard</h2>
-               <div className="stats-grid">
-                  <div className="stat-card" style={{ gridColumn: "1 / -1" }}>
-                     <p className="stat-label">Trust Score</p>
-                     <p className="stat-value">{displayTrustScore.toFixed(1)}</p>
-                     <div className="trust-bar-track">
-                        <div
-                           className="trust-bar-fill"
-                           style={{
-                              width: `${Math.min(displayTrustScore, 100)}%`,
-                              backgroundColor: trustLevel.color,
-                           }}
-                        />
-                     </div>
-                     <p className="stat-sublabel">{trustLevel.label} Level</p>
+            <section
+               className="user-profile__activity"
+               aria-labelledby="activity-heading"
+               aria-describedby="activity-description"
+            >
+               <h2 id="activity-heading" className="user-profile__sr-only">
+                  Community activity
+               </h2>
+               <p id="activity-description" className="user-profile__sr-only">
+                  {currentTabDescription}
+               </p>
+
+               <div className="user-profile__activity-nav">
+                  <div
+                     className="user-profile__tabs"
+                     role="tablist"
+                     aria-label="Community activity"
+                     onKeyDown={handleTabKeyDown}
+                  >
+                     {ACTIVITY_TABS.map((tab) => (
+                        <button
+                           key={tab}
+                           id={`profile-tab-${tab}`}
+                           type="button"
+                           role="tab"
+                           aria-selected={activeTab === tab}
+                           aria-controls={`profile-panel-${tab}`}
+                           tabIndex={activeTab === tab ? 0 : -1}
+                           onClick={() => selectTab(tab)}
+                        >
+                           {tab === "threads" ? "Threads" : "Contributions"}
+                        </button>
+                     ))}
                   </div>
+
+                  {activeActivity.status === "success" && activeActivity.items.length > 0 && (
+                     <span className="user-profile__activity-count">
+                        {activeActivity.items.length.toLocaleString()}{" "}
+                        {activeTab === "threads" ? "threads" : "contributions"}
+                     </span>
+                  )}
                </div>
 
-               <div className="trust-breakdown-card">
-                  <div className="trust-breakdown-header">
-                     <h3 className="trust-breakdown-title">Trust Score Breakdown</h3>
-                     <span className="trust-breakdown-formula">T = B + C + V + t - P</span>
-                  </div>
-                  <div className="trust-breakdown-list">
-                     {breakdownRows.map((row) => {
-                        const width = Math.max(0, Math.min(100, Number(row.share || 0)));
-                        return (
-                           <div className="trust-breakdown-row" key={row.label}>
-                              <div className="trust-breakdown-row-top">
-                                 <span className="trust-breakdown-row-label">{row.label}</span>
-                                 <span className="trust-breakdown-row-value" style={{ color: row.color }}>
-                                    {width.toFixed(1)}%
-                                 </span>
+               {ACTIVITY_TABS.map((tab) => {
+                  const isActivePanel = activeTab === tab;
+                  return (
+                     <div
+                        key={tab}
+                        id={`profile-panel-${tab}`}
+                        className="user-profile__tab-panel"
+                        role="tabpanel"
+                        aria-labelledby={`profile-tab-${tab}`}
+                        hidden={!isActivePanel}
+                        tabIndex={isActivePanel ? 0 : -1}
+                     >
+                        {isActivePanel &&
+                           (activeActivity.status === "loading" ? (
+                              <div className="user-profile__loading-block" role="status" aria-live="polite">
+                                 <span className="user-profile__sr-only">Loading {activeTab}.</span>
+                                 <div className="user-profile__skeleton-list" aria-hidden="true">
+                                    {Array.from({ length: TAB_SKELETON_COUNT }).map((_, index) => (
+                                       <div className="user-profile__skeleton-item" key={`activity-skeleton-${index}`}>
+                                          <span className="user-profile__skeleton-line is-short" />
+                                          <span className="user-profile__skeleton-line" />
+                                          <span className="user-profile__skeleton-line is-medium" />
+                                       </div>
+                                    ))}
+                                 </div>
                               </div>
-                              <div className="trust-breakdown-track">
-                                 <div
-                                    className="trust-breakdown-fill"
-                                    style={{ width: `${width}%`, backgroundColor: row.color }}
+                           ) : activeActivity.status === "error" ? (
+                              <div className="user-profile__inline-state is-error" role="alert">
+                                 <Icons name="alert-circle" size={20} aria-hidden="true" />
+                                 <div>
+                                    <h3>Activity could not load</h3>
+                                    <p>{activeActivity.error}</p>
+                                 </div>
+                                 <button type="button" onClick={retryActivity}>
+                                    Try again
+                                 </button>
+                              </div>
+                           ) : activeActivity.items.length === 0 ? (
+                              <div className="user-profile__empty-state">
+                                 <Icons
+                                    name={activeTab === "threads" ? "message-square" : "file-text"}
+                                    size={22}
+                                    aria-hidden="true"
                                  />
+                                 <h3>No {activeTab} yet</h3>
+                                 <p>{currentTabEmptyMessage}</p>
                               </div>
-                              <p className="trust-breakdown-impact">
-                                 Impact: {row.label === "Conduct Penalties" ? "-" : "+"}
-                                 {Math.abs(Number(row.value || 0)).toFixed(1)} pts
-                              </p>
-                           </div>
-                        );
-                     })}
-                  </div>
-               </div>
-            </div>
-
-            {/* ── Activity History & Claims ── */}
-            <div className="box-panel">
-               <div className="tabs-row">
-                  <button
-                     className={`tab-btn ${activeTab === "threads" ? "active" : ""}`}
-                     onClick={() => setActiveTab("threads")}
-                  >
-                     {isOwnProfile ? "My Threads" : "Threads"}
-                  </button>
-                  <button
-                     className={`tab-btn ${activeTab === "evidence" ? "active" : ""}`}
-                     onClick={() => setActiveTab("evidence")}
-                  >
-                     {isOwnProfile ? "My Evidence" : "Evidence"}
-                  </button>
-               </div>
-
-               <div className="tab-summary-row">
-                  <p className="tab-summary-copy">{currentTabDescription}</p>
-                  {!currentTabLoading && !currentTabError && activeTabItems.length > 0 && (
-                     <span className="tab-summary-count">
-                        Showing {visibleTabItems.length} of {activeTabItems.length}
-                     </span>
-                  )}
-               </div>
-
-               <div className="tab-content">
-                  {currentTabLoading ? (
-                     <div className="profile-skeleton-list" aria-hidden="true">
-                        {Array.from({ length: TAB_SKELETON_COUNT }).map((_, index) => (
-                           <div className="profile-skeleton-card" key={`activity-skeleton-${index}`}>
-                              <span className="profile-skeleton-line short skeleton-box" />
-                              <span className="profile-skeleton-line skeleton-box" />
-                              <span className="profile-skeleton-line long skeleton-box" />
-                           </div>
-                        ))}
-                     </div>
-                  ) : currentTabError ? (
-                     <p className="empty-msg">{currentTabError}</p>
-                  ) : activeTabItems.length === 0 ? (
-                     <p className="empty-msg">{currentTabEmptyMessage}</p>
-                  ) : (
-                     <>
-                        <div className="claims-list">
-                           {activeTab === "threads" &&
-                              visibleTabItems.map((thread) => (
-                                 <div className="claim-card" key={thread.id}>
-                                    <div className="claim-top">
-                                       <span className="claim-type-pill">{thread.status || "OPEN"}</span>
-                                       <span className="claim-time">{timeAgo(thread.created_at)}</span>
-                                    </div>
-                                    <p className="claim-summary">
-                                       {thread.caption || "Thread started without a caption."}
-                                    </p>
-                                    <p className="claim-summary claim-meta-summary">
-                                       Claim ID: {thread.claim_id} | {thread.evidence_count} evidence |{" "}
-                                       {thread.comment_count} comments
-                                    </p>
-                                    <button
-                                       type="button"
-                                       className="claim-source-link claim-source-button"
-                                       onClick={() => navigate(`/thread/detail/${thread.id}`)}
-                                    >
-                                       Open Thread →
-                                    </button>
+                           ) : (
+                              <>
+                                 <div className="user-profile__activity-list">
+                                    {activeTab === "threads"
+                                       ? visibleTabItems.map((thread) => (
+                                            <article className="user-profile__activity-item" key={thread.id}>
+                                               <div className="user-profile__activity-item-topline">
+                                                  <span
+                                                     className={`user-profile__status is-${String(thread.status || "open").toLowerCase()}`}
+                                                  >
+                                                     <Icons name="circle" size={10} aria-hidden="true" />
+                                                     {humanizeValue(thread.status, "Open")}
+                                                  </span>
+                                                  <time dateTime={thread.created_at}>
+                                                     {formatActivityDate(thread.created_at)}
+                                                  </time>
+                                               </div>
+                                               <div className="user-profile__activity-copy">
+                                                  <h3>{getClaimContext(thread.claim)}</h3>
+                                                  <p>
+                                                     {thread.caption ||
+                                                        "Community discussion started without additional context."}
+                                                  </p>
+                                               </div>
+                                               <div className="user-profile__activity-footer">
+                                                  <div
+                                                     className="user-profile__activity-metrics"
+                                                     aria-label="Thread activity"
+                                                  >
+                                                     <span>
+                                                        <Icons name="paperclip" size={15} aria-hidden="true" />
+                                                        {Number(thread.evidence_count || 0).toLocaleString()} evidence
+                                                     </span>
+                                                     <span>
+                                                        <Icons name="message-circle" size={15} aria-hidden="true" />
+                                                        {Number(thread.comment_count || 0).toLocaleString()} comments
+                                                     </span>
+                                                  </div>
+                                                  <Link to={`/thread/detail/${encodeURIComponent(thread.id)}`}>
+                                                     Open thread{" "}
+                                                     <Icons name="arrow-right" size={15} aria-hidden="true" />
+                                                  </Link>
+                                               </div>
+                                            </article>
+                                         ))
+                                       : visibleTabItems.map((item) => {
+                                            const isComment = item.activity_type === "COMMENT";
+                                            const contributionText = isComment
+                                               ? item.comment_text || "Comment submitted."
+                                               : item.evidence_caption || "Evidence submitted.";
+                                            return (
+                                               <article
+                                                  className="user-profile__activity-item"
+                                                  key={`${item.activity_type}-${item.id}`}
+                                               >
+                                                  <div className="user-profile__activity-item-topline">
+                                                     <span
+                                                        className={`user-profile__contribution-type ${isComment ? "is-comment" : "is-evidence"}`}
+                                                     >
+                                                        <Icons
+                                                           name={isComment ? "message-square" : "file-text"}
+                                                           size={15}
+                                                           aria-hidden="true"
+                                                        />
+                                                        {isComment ? "Comment" : "Evidence"}
+                                                     </span>
+                                                     <time dateTime={item.activity_at}>
+                                                        {formatActivityDate(item.activity_at)}
+                                                     </time>
+                                                  </div>
+                                                  <div className="user-profile__activity-copy">
+                                                     <h3>{contributionText}</h3>
+                                                     <p>
+                                                        <span>On: </span>
+                                                        {getClaimContext(item.thread?.claim)}
+                                                     </p>
+                                                     {item.thread?.caption && (
+                                                        <p className="user-profile__thread-caption">
+                                                           {item.thread.caption}
+                                                        </p>
+                                                     )}
+                                                  </div>
+                                                  <div className="user-profile__activity-footer">
+                                                     <div className="user-profile__activity-metrics">
+                                                        {!isComment && (
+                                                           <>
+                                                              <span>{humanizeValue(item.evidence_type)}</span>
+                                                              <span>
+                                                                 {humanizeValue(item.evidence_status, "Unverified")}
+                                                              </span>
+                                                           </>
+                                                        )}
+                                                        {item.evidence_url && (
+                                                           <a
+                                                              href={item.evidence_url}
+                                                              target="_blank"
+                                                              rel="noopener noreferrer"
+                                                           >
+                                                              Cited source{" "}
+                                                              <Icons
+                                                                 name="external-link"
+                                                                 size={14}
+                                                                 aria-hidden="true"
+                                                              />
+                                                           </a>
+                                                        )}
+                                                     </div>
+                                                     <Link to={`/thread/detail/${encodeURIComponent(item.thread?.id)}`}>
+                                                        Open thread{" "}
+                                                        <Icons name="arrow-right" size={15} aria-hidden="true" />
+                                                     </Link>
+                                                  </div>
+                                               </article>
+                                            );
+                                         })}
                                  </div>
-                              ))}
 
-                           {activeTab === "evidence" &&
-                              visibleTabItems.map((item) => (
-                                 <div className="claim-card" key={`${item.activity_type}-${item.id}`}>
-                                    <div className="claim-top">
-                                       <span className="claim-type-pill">{item.activity_type}</span>
-                                       <span className="claim-time">{timeAgo(item.activity_at)}</span>
-                                    </div>
-
-                                    {item.activity_type === "COMMENT" ? (
-                                       <>
-                                          <p className="claim-summary">{item.comment_text || "Comment submitted."}</p>
-                                          <p className="claim-summary claim-meta-summary">
-                                             On thread: {item.thread?.caption || item.thread?.id || "Unknown"}
-                                          </p>
-                                       </>
-                                    ) : (
-                                       <>
-                                          <p className="claim-summary">
-                                             {item.evidence_caption || "Evidence submitted."}
-                                          </p>
-                                          <p className="claim-summary claim-meta-summary">
-                                             Type: {item.evidence_type || "Unspecified"} | Status:{" "}
-                                             {item.evidence_status || "UNVERIFIED"}
-                                          </p>
-                                          {item.evidence_url && (
-                                             <a
-                                                href={item.evidence_url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="claim-source-link"
+                                 {(hasMoreTabItems || canShowLessTabItems) && (
+                                    <div className="user-profile__pagination">
+                                       <span>
+                                          Showing {visibleTabItems.length.toLocaleString()} of{" "}
+                                          {activeActivity.items.length.toLocaleString()}
+                                       </span>
+                                       <div>
+                                          {canShowLessTabItems && (
+                                             <button
+                                                type="button"
+                                                onClick={() =>
+                                                   setVisibleCounts((current) => ({
+                                                      ...current,
+                                                      [activeTab]: TAB_PAGE_SIZE,
+                                                   }))
+                                                }
                                              >
-                                                View cited source →
-                                             </a>
+                                                Show less
+                                             </button>
                                           )}
-                                       </>
-                                    )}
-                                 </div>
-                              ))}
+                                          {hasMoreTabItems && (
+                                             <button
+                                                type="button"
+                                                onClick={() =>
+                                                   setVisibleCounts((current) => ({
+                                                      ...current,
+                                                      [activeTab]:
+                                                         (current[activeTab] ?? TAB_PAGE_SIZE) + TAB_PAGE_SIZE,
+                                                   }))
+                                                }
+                                             >
+                                                Load more
+                                             </button>
+                                          )}
+                                       </div>
+                                    </div>
+                                 )}
+                              </>
+                           ))}
+                     </div>
+                  );
+               })}
+            </section>
+         </section>
 
-                        </div>
+         {connectionDialog && (
+            <ProfileDialog
+               labelledBy="connection-dialog-title"
+               describedBy="connection-dialog-description"
+               initialFocusRef={connectionCloseRef}
+               onClose={closeConnectionDialog}
+               returnFocusRef={connectionDialogTriggerRef}
+            >
+               <div className="user-profile__dialog-header">
+                  <div>
+                     <h2 id="connection-dialog-title">
+                        {connectionDialog === "followers" ? "Followers" : "Following"}
+                     </h2>
+                     <p id="connection-dialog-description">
+                        {connectionDialog === "followers"
+                           ? `People who follow @${displayUser.username}.`
+                           : `People @${displayUser.username} follows.`}
+                     </p>
+                  </div>
+                  <button
+                     ref={connectionCloseRef}
+                     type="button"
+                     className="user-profile__icon-button"
+                     onClick={closeConnectionDialog}
+                     aria-label="Close connections dialog"
+                  >
+                     <Icons name="x" size={20} aria-hidden="true" />
+                  </button>
+               </div>
 
-                        <div className="activity-pagination-row">
-                           <span className="activity-pagination-meta">
-                              Showing {visibleTabItems.length} of {activeTabItems.length}
+               <div className="user-profile__connection-list">
+                  {connectionState.status === "loading" ? (
+                     <div className="user-profile__dialog-state" role="status" aria-live="polite">
+                        <Icons name="loader" size={20} aria-hidden="true" />
+                        Loading {connectionDialog}…
+                     </div>
+                  ) : connectionState.status === "error" ? (
+                     <div className="user-profile__dialog-state is-error" role="alert">
+                        <Icons name="alert-circle" size={20} aria-hidden="true" />
+                        <p>{connectionState.error}</p>
+                        <button type="button" onClick={() => loadConnections(connectionDialog)}>
+                           Try again
+                        </button>
+                     </div>
+                  ) : connectionState.items.length === 0 ? (
+                     <div className="user-profile__dialog-state">
+                        <Icons name="users" size={20} aria-hidden="true" />
+                        No {connectionDialog} yet.
+                     </div>
+                  ) : (
+                     connectionState.items.map((member) => (
+                        <button
+                           type="button"
+                           className="user-profile__connection"
+                           key={member.id}
+                           onClick={() => {
+                              closeConnectionDialog();
+                              navigate(`/user/${encodeURIComponent(member.username)}`);
+                           }}
+                        >
+                           <ProfileAvatar user={member} />
+                           <span>
+                              <strong>{member.username}</strong>
+                              <small>
+                                 {isPlatformModeratorRole(member.role)
+                                    ? "Platform moderator"
+                                    : `Trust score ${Number(member.trust_score || 0).toFixed(1)}`}
+                              </small>
                            </span>
-                           <div className="activity-pagination-actions">
-                              {canShowLessTabItems && (
-                                 <button type="button" className="activity-show-less-btn" onClick={handleShowLess}>
-                                    Show Less
-                                 </button>
-                              )}
-                              {hasMoreTabItems && (
-                                 <button type="button" className="activity-load-more-btn" onClick={handleLoadMore}>
-                                    Load More
-                                 </button>
-                              )}
-                           </div>
-                        </div>
-                     </>
+                           <Icons name="chevron-right" size={18} aria-hidden="true" />
+                        </button>
+                     ))
                   )}
                </div>
-            </div>
+            </ProfileDialog>
+         )}
 
-            {/* Account Settings removed, migrated to Settings */}
-
-            {/* ── FOLLOW MODAL ── */}
-            {modalType && (
-               <div className="modal-overlay" onClick={() => setModalType(null)}>
-                  <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                     <div className="modal-header">
-                        <h3 style={{ margin: 0, fontSize: "18px" }}>
-                           {modalType === "followers" ? "Followers" : "Following"}
-                        </h3>
-                        <button className="close-modal-btn" onClick={() => setModalType(null)}>
-                           <Icons name="x" size={20} />
-                        </button>
+         {isEditDialogOpen && (
+            <ProfileDialog
+               className="user-profile__dialog--edit"
+               labelledBy="edit-profile-dialog-title"
+               describedBy="edit-profile-dialog-description"
+               initialFocusRef={editUsernameRef}
+               isBusy={isSavingProfile}
+               onClose={closeEditDialog}
+               returnFocusRef={editDialogTriggerRef}
+            >
+               <form onSubmit={handleSaveProfile}>
+                  <div className="user-profile__dialog-header">
+                     <div>
+                        <h2 id="edit-profile-dialog-title">Edit profile</h2>
+                        <p id="edit-profile-dialog-description">Update how you appear to the TruthLens community.</p>
                      </div>
-
-                     <div className="modal-user-list">
-                        {isModalLoading ? (
-                           <p className="empty-msg" style={{ padding: "20px" }}>
-                              Loading...
-                           </p>
-                        ) : modalData.length === 0 ? (
-                           <p className="empty-msg" style={{ padding: "20px" }}>
-                              No {modalType} found.
-                           </p>
-                        ) : (
-                           modalData.map((u) => (
-                              <div
-                                 key={u.id}
-                                 className="modal-user-item"
-                                 onClick={() => {
-                                    setModalType(null); // Close modal
-                                    navigate(`/user/${u.username}`);
-                                 }}
-                              >
-                                 {/* Added safe chaining to prevent crashes */}
-                                 <div className="modal-user-avatar" style={{ overflow: "hidden" }}>
-                                    {u.avatar_url ? (
-                                       <img
-                                          src={u.avatar_url}
-                                          alt={`${u.username}'s avatar`}
-                                          style={{
-                                             width: "100%",
-                                             height: "100%",
-                                             objectFit: "cover",
-                                          }}
-                                       />
-                                    ) : (
-                                       <Icons name="user" size={20} />
-                                    )}
-                                 </div>
-                                 <div className="modal-user-info">
-                                    <strong>{u?.username || "Unknown"}</strong>
-                                    <span>
-                                       {isPlatformModeratorRole(u?.role)
-                                          ? "Platform Moderator"
-                                          : getTrustLevel(u?.trust_score || 0).label}
-                                    </span>
-                                 </div>
-                              </div>
-                           ))
-                        )}
-                     </div>
+                     <button
+                        type="button"
+                        className="user-profile__icon-button"
+                        onClick={closeEditDialog}
+                        disabled={isSavingProfile}
+                        aria-label="Close edit profile dialog"
+                     >
+                        <Icons name="x" size={20} aria-hidden="true" />
+                     </button>
                   </div>
-               </div>
-            )}
-            {/* ── EDIT PROFILE MODAL ── */}
-            {isEditModalOpen && (
-               <div className="modal-overlay" onClick={() => setIsEditModalOpen(false)}>
-                  <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ padding: "24px" }}>
-                     <div className="modal-header" style={{ padding: "0 0 16px 0", marginBottom: "16px" }}>
-                        <h3 style={{ margin: 0, fontSize: "18px" }}>Edit Profile</h3>
-                        <button className="close-modal-btn" onClick={() => setIsEditModalOpen(false)}>
-                           <Icons name="x" size={20} />
-                        </button>
-                     </div>
 
-                     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                        {/* Avatar Upload */}
-                        <div>
-                           <label
-                              style={{
-                                 display: "block",
-                                 marginBottom: "8px",
-                                 fontWeight: "600",
-                                 fontSize: "14px",
-                              }}
-                           >
-                              Profile Picture
-                           </label>
-                           <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                              <div
-                                 className="profile-avatar"
-                                 style={{ width: "100%", height: "100%", overflow: "hidden" }}
-                              >
-                                 {editAvatarBase64 ? (
-                                    <img
-                                       src={editAvatarBase64}
-                                       style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                                    />
-                                 ) : displayUser?.avatar_url ? (
-                                    <img
-                                       src={displayUser.avatar_url}
-                                       style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                                    />
-                                 ) : (
-                                    displayUser?.username?.[0]?.toUpperCase()
-                                 )}
-                              </div>
+                  <div className="user-profile__edit-fields">
+                     <div className="user-profile__avatar-field">
+                        {editAvatarBase64 ? (
+                           <span className="user-profile__avatar user-profile__avatar--edit">
+                              <img src={editAvatarBase64} alt="New profile avatar preview" />
+                           </span>
+                        ) : (
+                           <ProfileAvatar user={displayUser} className="user-profile__avatar--edit" />
+                        )}
+                        <div className="user-profile__avatar-upload">
+                           <span>Profile picture</span>
+                           <label className="user-profile__file-button">
+                              <Icons name="upload" size={15} aria-hidden="true" />
+                              Choose photo
                               <input
+                                 className="user-profile__file-input"
                                  type="file"
                                  accept="image/*"
                                  onChange={handleImageUpload}
-                                 style={{ fontSize: "14px" }}
+                                 disabled={isSavingProfile}
                               />
-                           </div>
-                        </div>
-
-                        {/* Bio Textarea */}
-                        <div>
-                           <label
-                              style={{
-                                 display: "block",
-                                 marginBottom: "8px",
-                                 fontWeight: "600",
-                                 fontSize: "14px",
-                              }}
-                           >
-                              Bio
                            </label>
-                           <textarea
-                              value={editBio}
-                              onChange={(e) => setEditBio(e.target.value)}
-                              placeholder="Tell the community about yourself..."
-                              style={{
-                                 width: "100%",
-                                 padding: "8px",
-                                 borderRadius: "8px",
-                                 border: "1px solid #d1d5db",
-                                 minHeight: "80px",
-                                 resize: "vertical",
-                              }}
-                           />
+                           {editAvatarFileName && <small>{editAvatarFileName}</small>}
                         </div>
-
-                        {/* Save Button */}
-                        <button
-                           onClick={handleSaveProfile}
-                           disabled={isSavingProfile}
-                           className="follow-btn following"
-                           style={{ width: "100%", marginTop: "8px" }}
-                        >
-                           {isSavingProfile ? "Saving..." : "Save Changes"}
-                        </button>
                      </div>
-                  </div>
-               </div>
-            )}
 
-            {/* 7. Mobile-Only Profile Actions (Since top-nav is hidden on mobile) */}
-            {isOwnProfile && (
-               <div className="mobile-profile-nav">
-                  <button
-                     className="mobile-nav-pill"
-                     onClick={() => navigate("/dashboard")}
-                  >
-                     <Icons name="dashboard" size={16} /> Dashboard
-                  </button>
-                  <button className="mobile-nav-pill" onClick={() => navigate("/settings")}>
-                     <Icons name="settings" size={16} /> Settings
-                  </button>
-                  <button
-                     className="mobile-nav-pill danger"
-                     onClick={() => {
-                        explicitLogoutRef.current = true;
-                        navigate("/login", { replace: true, state: null });
-                     }}
-                  >
-                     <Icons name="logout" size={16} /> Log Out
-                  </button>
-               </div>
-            )}
-         </main>
-      </div>
+                     <label className="user-profile__edit-field">
+                        <span>Username</span>
+                        <input
+                           ref={editUsernameRef}
+                           type="text"
+                           value={editUsername}
+                           onChange={(event) => setEditUsername(event.target.value)}
+                           autoComplete="username"
+                           maxLength={150}
+                           required
+                           disabled={isSavingProfile}
+                        />
+                        <small>Your @handle and profile URL update with your username.</small>
+                     </label>
+
+                     <label className="user-profile__edit-field">
+                        <span>Bio</span>
+                        <textarea
+                           value={editBio}
+                           onChange={(event) => setEditBio(event.target.value)}
+                           placeholder="Tell the community about yourself."
+                           disabled={isSavingProfile}
+                        />
+                     </label>
+
+                     {editError && (
+                        <p className="user-profile__form-error" role="alert">
+                           <Icons name="alert-circle" size={17} aria-hidden="true" />
+                           {editError}
+                        </p>
+                     )}
+                  </div>
+
+                  <div className="user-profile__dialog-actions">
+                     <button
+                        type="button"
+                        className="user-profile__tertiary-button"
+                        onClick={closeEditDialog}
+                        disabled={isSavingProfile}
+                     >
+                        Cancel
+                     </button>
+                     <button type="submit" className="user-profile__primary-button" disabled={isSavingProfile}>
+                        {isSavingProfile ? "Saving…" : "Save changes"}
+                     </button>
+                  </div>
+               </form>
+            </ProfileDialog>
+         )}
+      </main>
    );
 }
 

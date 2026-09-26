@@ -97,6 +97,12 @@ export const API_ENDPOINTS = {
    VERIFY_EMAIL: "auth/verify-email/",
    SEND_VERIFICATION: "auth/send-verification/",
    USER_SEARCH: "users/search/",
+   USER_PROFILE: (username) => `users/${encodeURIComponent(username)}/`,
+   USER_THREADS: (username) => `users/${encodeURIComponent(username)}/threads/`,
+   USER_CONTRIBUTIONS: (username) => `users/${encodeURIComponent(username)}/evidence/`,
+   USER_FOLLOW: (username) => `users/${encodeURIComponent(username)}/follow/`,
+   USER_FOLLOWERS: (username) => `users/${encodeURIComponent(username)}/followers/`,
+   USER_FOLLOWING: (username) => `users/${encodeURIComponent(username)}/following/`,
 
    // Persistent Notifications
    NOTIFICATIONS: "notifications/",
