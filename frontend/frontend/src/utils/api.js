@@ -44,11 +44,14 @@ export function resolveApiEndpoint(endpoint, ...params) {
    return buildApiUrl(path);
 }
 
-export const getNotifications = (authFetch, { filter = "all", cursor = null } = {}) => {
+export const getNotifications = (authFetch, { filter = "all", cursor = null, pageSize = null } = {}) => {
    const url = new URL(resolveApiEndpoint("NOTIFICATIONS"));
    url.searchParams.set("filter", filter);
    if (cursor) {
       url.searchParams.set("cursor", cursor);
+   }
+   if (pageSize) {
+      url.searchParams.set("page_size", pageSize);
    }
    return authFetch(url.toString(), { method: "GET" });
 };

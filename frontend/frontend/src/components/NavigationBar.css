@@ -44,6 +44,9 @@
     border-radius: var(--tl-radius-md);
     color: rgba(255, 255, 255, 0.76);
     background: rgba(255, 255, 255, 0.06);
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
     text-decoration: none;
     transition:
         color var(--tl-duration-fast) ease,

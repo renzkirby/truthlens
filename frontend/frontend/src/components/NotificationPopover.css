@@ -1,0 +1,217 @@
+.tl-notification-popover {
+    position: relative;
+    flex: 0 0 auto;
+}
+
+.tl-notification-popover__panel {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    width: min(380px, calc(100vw - 24px));
+    max-height: min(620px, calc(100dvh - var(--tl-app-header-height) - 24px));
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--tl-color-border-default);
+    border-radius: var(--tl-radius-lg);
+    background: var(--tl-color-bg-surface);
+    box-shadow: var(--tl-shadow-lg);
+    color: var(--tl-color-text-main);
+    z-index: 120;
+}
+
+.tl-notification-popover__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--tl-space-3);
+    padding: var(--tl-space-4);
+    border-bottom: 1px solid var(--tl-color-border-light);
+}
+
+.tl-notification-popover__header h2 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.tl-notification-popover__header button,
+.tl-notification-popover__state button {
+    border: 0;
+    background: transparent;
+    color: var(--tl-color-brand-primary);
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.tl-notification-popover__header button:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+.tl-notification-popover__notice {
+    margin: 0;
+    padding: var(--tl-space-2) var(--tl-space-4);
+    background: var(--tl-color-fake-bg);
+    color: var(--tl-color-fake-text);
+    font-size: 0.75rem;
+}
+
+.tl-notification-popover__body {
+    min-height: 120px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.tl-notification-popover__state {
+    min-height: 150px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--tl-space-2);
+    padding: var(--tl-space-5);
+    color: var(--tl-color-text-muted);
+    font-size: 0.8125rem;
+    text-align: center;
+}
+
+.tl-notification-popover__spinner {
+    animation: tl-notification-spin 0.9s linear infinite;
+}
+
+@keyframes tl-notification-spin {
+    to { transform: rotate(360deg); }
+}
+
+.tl-notification-popover__list {
+    margin: 0;
+    padding: var(--tl-space-2) 0;
+    list-style: none;
+}
+
+.tl-notification-popover__list li > button,
+.tl-notification-popover__list li > div {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) 8px;
+    align-items: center;
+    gap: var(--tl-space-3);
+    box-sizing: border-box;
+    padding: 10px var(--tl-space-4);
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+}
+
+.tl-notification-popover__list li > button {
+    cursor: pointer;
+}
+
+.tl-notification-popover__list li.is-unread > button,
+.tl-notification-popover__list li.is-unread > div {
+    background: var(--tl-color-bg-subtle);
+}
+
+.tl-notification-popover__list li > button:hover {
+    background: var(--tl-color-brand-soft, #eef2ff);
+}
+
+.tl-notification-popover__list li > button:focus-visible,
+.tl-notification-popover__header button:focus-visible,
+.tl-notification-popover__state button:focus-visible,
+.tl-notification-popover__footer:focus-visible {
+    outline: var(--tl-focus-width) solid var(--tl-focus-color);
+    outline-offset: -2px;
+}
+
+.tl-notification-popover__avatar,
+.tl-notification-popover__system-icon {
+    position: relative;
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 50%;
+    background: var(--tl-color-bg-subtle);
+    color: var(--tl-color-brand-primary);
+    font-weight: 750;
+}
+
+.tl-notification-popover__avatar img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.tl-notification-popover__copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.tl-notification-popover__copy strong {
+    color: var(--tl-color-text-main);
+    font-size: 0.8125rem;
+    line-height: 1.35;
+}
+
+.tl-notification-popover__copy > span {
+    display: -webkit-box;
+    overflow: hidden;
+    color: var(--tl-color-text-body);
+    font-size: 0.75rem;
+    line-height: 1.4;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.tl-notification-popover__copy time {
+    color: var(--tl-color-text-muted);
+    font-size: 0.6875rem;
+}
+
+.tl-notification-popover__unread {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--tl-color-brand-primary);
+}
+
+.tl-notification-popover__footer {
+    min-height: 44px;
+    border: 0;
+    border-top: 1px solid var(--tl-color-border-light);
+    background: var(--tl-color-bg-surface);
+    color: var(--tl-color-brand-primary);
+    font: inherit;
+    font-size: 0.8125rem;
+    font-weight: 750;
+    cursor: pointer;
+}
+
+.tl-notification-popover__footer:hover {
+    background: var(--tl-color-bg-subtle);
+}
+
+@media (max-width: 480px) {
+    .tl-notification-popover__panel {
+        position: fixed;
+        top: calc(var(--tl-app-mobile-header-height) + 8px);
+        right: 8px;
+        width: calc(100vw - 16px);
+        max-height: calc(100dvh - var(--tl-app-mobile-header-height) - var(--tl-app-mobile-nav-height) - 24px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tl-notification-popover__spinner { animation: none; }
+}

@@ -154,6 +154,32 @@ class NotificationFoundationTests(TestCase):
         self.assertEqual(len(actual), len(set(actual)))
         self.assertEqual([len(page["results"]) for page in pages], [20, 20, 7])
 
+    def test_page_size_is_bounded_without_changing_the_default(self):
+        for index in range(22):
+            self.create(dedupe_key=f"page-size:{index}")
+
+        self.assertEqual(
+            len(self.client.get(reverse("notification_list")).data["results"]),
+            20,
+        )
+        for page_size in (1, 8, 20):
+            with self.subTest(page_size=page_size):
+                response = self.client.get(
+                    reverse("notification_list"),
+                    {"page_size": page_size},
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(len(response.data["results"]), page_size)
+
+        for page_size in ("invalid", 0, -1, 21, 1000):
+            with self.subTest(page_size=page_size):
+                response = self.client.get(
+                    reverse("notification_list"),
+                    {"page_size": page_size},
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("page_size", response.data)
+
     def test_read_endpoints_are_scoped_and_idempotent(self):
         own = self.create()
         other = self.create(recipient_id=self.other.pk)

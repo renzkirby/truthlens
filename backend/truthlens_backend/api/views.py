@@ -417,12 +417,22 @@ class NotificationListView(APIView):
         inbox_filter = request.query_params.get("filter", "all")
         if inbox_filter not in ("all", "unread"):
             raise ValidationError({"filter": "Use all or unread."})
+        page_size = request.query_params.get("page_size")
+        if page_size is not None:
+            try:
+                page_size = int(page_size)
+            except (TypeError, ValueError):
+                raise ValidationError({"page_size": "Use an integer from 1 to 20."})
+            if not 1 <= page_size <= 20:
+                raise ValidationError({"page_size": "Use an integer from 1 to 20."})
         rows = Notification.objects.filter(recipient=request.user).select_related(
             "actor", "actor__profile", "organization"
         )
         if inbox_filter == "unread":
             rows = rows.filter(read_at__isnull=True)
         paginator = NotificationCursorPagination()
+        if page_size is not None:
+            paginator.page_size = page_size
         page = paginator.paginate_queryset(rows, request, view=self)
         return paginator.get_paginated_response(NotificationSerializer(page, many=True).data)
 
