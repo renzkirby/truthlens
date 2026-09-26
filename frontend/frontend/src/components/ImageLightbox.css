@@ -48,6 +48,7 @@
    display: grid;
    min-width: 0;
    min-height: 0;
+   padding: 12px;
    overflow: hidden;
    place-items: center;
 }
@@ -55,16 +56,15 @@
 .image-lightbox__image {
    display: block;
    width: auto;
-   max-width: 100%;
    height: auto;
-   max-height: 100%;
+   max-width: min(92vw, 1200px);
+   max-height: min(82dvh, 900px);
    object-fit: contain;
 }
 
-
 .image-lightbox--profile .image-lightbox__image {
-   max-width: min(560px, 92vw);
-   max-height: min(560px, calc(100dvh - 96px));
+   max-width: min(560px, 88vw);
+   max-height: min(560px, 72dvh);
 }
 
 .image-lightbox__unavailable {
@@ -118,6 +118,20 @@
       gap: 6px;
       padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right))
          max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+   }
+
+   .image-lightbox__stage {
+      padding: 4px;
+   }
+
+   .image-lightbox__image {
+      max-width: 94vw;
+      max-height: 78dvh;
+   }
+
+   .image-lightbox--profile .image-lightbox__image {
+      max-width: 88vw;
+      max-height: 68dvh;
    }
 }
 

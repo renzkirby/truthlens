@@ -6,8 +6,9 @@
  * does not change the AI assessment or create an authoritative verdict.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import ImageLightbox from "../components/ImageLightbox.jsx";
 import Icons from "../components/Icons.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { ESCALATION_OPTIONS } from "../utils/constants";
@@ -31,6 +32,8 @@ function normalizeHttpUrl(value) {
 }
 
 function ClaimMaterialPreview({ claim }) {
+   const [isImageOpen, setIsImageOpen] = useState(false);
+   const imageTriggerRef = useRef(null);
    const claimType = String(claim?.claim_type || "").toUpperCase();
    const mediaUrl = typeof claim?.media_url === "string" ? claim.media_url.trim() : "";
 
@@ -51,15 +54,25 @@ function ClaimMaterialPreview({ claim }) {
          </div>
 
          {submittedImageUrl && (
-            <a
-               className="create-thread-material-media"
-               href={submittedImageUrl}
-               target="_blank"
-               rel="noopener noreferrer"
-               aria-label="Open submitted image in a new tab"
-            >
-               <img src={submittedImageUrl} alt="Submitted claim" loading="lazy" decoding="async" />
-            </a>
+            <>
+               <button
+                  ref={imageTriggerRef}
+                  type="button"
+                  className="image-view-trigger create-thread-material-media"
+                  aria-label="View full submitted image"
+                  onClick={() => setIsImageOpen(true)}
+               >
+                  <img src={submittedImageUrl} alt="Submitted claim" loading="lazy" decoding="async" />
+               </button>
+               <ImageLightbox
+                  open={isImageOpen}
+                  src={submittedImageUrl}
+                  alt="Full-size submitted claim image"
+                  ariaLabel="Full submitted image"
+                  onClose={() => setIsImageOpen(false)}
+                  returnFocusRef={imageTriggerRef}
+               />
+            </>
          )}
 
          {submittedUrl && (

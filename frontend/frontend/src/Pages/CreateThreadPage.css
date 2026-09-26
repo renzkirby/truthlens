@@ -219,21 +219,27 @@
 }
 
 .create-thread-material-media {
+   display: block;
    width: 100%;
    max-height: 320px;
+   padding: 0;
    overflow: hidden;
    border: 1px solid var(--tl-color-border-default);
    border-radius: var(--tl-radius-md);
+   color: inherit;
    background: var(--tl-color-bg-surface);
+   cursor: pointer;
 }
 
-.create-thread-material-media {
-   display: block;
+.create-thread-material-media:focus-visible {
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
 }
 
 .create-thread-material-media img {
    display: block;
    width: 100%;
+   height: auto;
    object-fit: contain;
 }
 
