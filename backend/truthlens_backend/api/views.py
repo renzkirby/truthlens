@@ -114,6 +114,7 @@ from .notification_service import (
     notify_thread_commented,
     notify_user_followed,
 )
+from .notification_realtime import publish_notification_inbox_changed
 from .verification_metrics_query_service import (
     VerificationMetricsAuthorizationError,
     VerificationMetricsCompositionError,
@@ -449,7 +450,13 @@ def notification_mark_read(request, notification_id):
     from .serializers import NotificationSerializer
     rows = Notification.objects.filter(recipient=request.user, pk=notification_id)
     notification = get_object_or_404(rows)
-    rows.filter(read_at__isnull=True).update(read_at=timezone.now())
+    updated_count = rows.filter(read_at__isnull=True).update(read_at=timezone.now())
+    if updated_count:
+        transaction.on_commit(
+            lambda recipient_id=request.user.pk: publish_notification_inbox_changed(
+                recipient_id
+            )
+        )
     notification.refresh_from_db()
     return Response(NotificationSerializer(notification).data)
 
@@ -458,6 +465,12 @@ def notification_mark_read(request, notification_id):
 @permission_classes([IsAuthenticated])
 def notification_mark_all_read(request):
     count = Notification.objects.filter(recipient=request.user, read_at__isnull=True).update(read_at=timezone.now())
+    if count:
+        transaction.on_commit(
+            lambda recipient_id=request.user.pk: publish_notification_inbox_changed(
+                recipient_id
+            )
+        )
     return Response({"updated_count": count})
 
 

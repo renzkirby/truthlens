@@ -261,6 +261,15 @@ CSRF_TRUSTED_ORIGINS = _split_csv_env(
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 
+# Realtime notifications are optional. REST remains authoritative when disabled
+# or when Redis/stream delivery is unavailable.
+NOTIFICATION_SSE_ENABLED = os.getenv("NOTIFICATION_SSE_ENABLED", "False").lower() == "true"
+NOTIFICATION_REDIS_URL = os.getenv("NOTIFICATION_REDIS_URL") or CELERY_BROKER_URL
+NOTIFICATION_SSE_MAX_SECONDS = int(os.getenv("NOTIFICATION_SSE_MAX_SECONDS", "600"))
+NOTIFICATION_SSE_HEARTBEAT_SECONDS = int(
+    os.getenv("NOTIFICATION_SSE_HEARTBEAT_SECONDS", "25")
+)
+
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),

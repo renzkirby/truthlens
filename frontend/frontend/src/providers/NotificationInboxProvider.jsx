@@ -7,6 +7,11 @@ import {
    markAllNotificationsRead,
    markNotificationRead,
 } from "../utils/api";
+import { NOTIFICATION_SSE_ENABLED } from "../utils/constants";
+import { consumeNotificationStream } from "../utils/notificationStream";
+
+const REALTIME_REFRESH_DELAY_MS = 250;
+const REALTIME_RECONNECT_MAX_MS = 30000;
 
 export function NotificationInboxProvider({ children }) {
    const { authFetch, loading: authLoading, token, user } = useAuth();
@@ -97,6 +102,72 @@ export function NotificationInboxProvider({ children }) {
 
       refreshUnreadCount().catch(() => {});
    }, [authReady, refreshUnreadCount, token]);
+
+   useEffect(() => {
+      if (!NOTIFICATION_SSE_ENABLED || !authReady) return undefined;
+
+      let disposed = false;
+      let controller = null;
+      let reconnectTimer = null;
+      let refreshTimer = null;
+      let reconnectAttempt = 0;
+
+      const reconcileInbox = () => {
+         if (disposed || refreshTimer !== null) return;
+         refreshTimer = window.setTimeout(() => {
+            refreshTimer = null;
+            Promise.allSettled([
+               refreshUnreadCount(),
+               refreshRecentNotifications(),
+            ]);
+         }, REALTIME_REFRESH_DELAY_MS);
+      };
+
+      const scheduleReconnect = (connect) => {
+         if (disposed) return;
+         const delay = Math.min(
+            1000 * (2 ** reconnectAttempt),
+            REALTIME_RECONNECT_MAX_MS,
+         );
+         reconnectAttempt += 1;
+         reconnectTimer = window.setTimeout(connect, delay);
+      };
+
+      const connect = async () => {
+         if (disposed) return;
+         controller?.abort();
+         controller = new AbortController();
+         try {
+            await consumeNotificationStream({
+               signal: controller.signal,
+               onOpen: () => { reconnectAttempt = 0; },
+               onInboxChanged: reconcileInbox,
+            });
+            if (!disposed) {
+               reconcileInbox();
+               scheduleReconnect(connect);
+            }
+         } catch (error) {
+            if (!disposed && error?.name !== "AbortError") {
+               reconcileInbox();
+               scheduleReconnect(connect);
+            }
+         }
+      };
+
+      connect();
+      return () => {
+         disposed = true;
+         controller?.abort();
+         if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
+         if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+      };
+   }, [
+      authReady,
+      refreshRecentNotifications,
+      refreshUnreadCount,
+      token,
+   ]);
 
    const markRead = useCallback(
       (notificationId, { wasRead = false } = {}) => {

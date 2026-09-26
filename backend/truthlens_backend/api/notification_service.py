@@ -8,6 +8,7 @@ from django.db import transaction
 from django.utils.html import strip_tags
 
 from .models import EvidenceSubmission, Notification, OfficialFactCheck, VerificationRun
+from .notification_realtime import publish_notification_inbox_changed
 
 logger = logging.getLogger(__name__)
 Type = Notification.NotificationType
@@ -47,13 +48,19 @@ def create_notification_once(*, recipient_id, notification_type, target_type,
         message=plain_snapshot(message, 500),
     )
     candidate.clean_fields()
-    notification, _ = Notification.objects.get_or_create(
+    notification, created = Notification.objects.get_or_create(
         recipient_id=recipient_id, dedupe_key=dedupe_key,
         defaults={field: getattr(candidate, field) for field in (
             "actor_id", "organization_id", "notification_type", "target_type",
             "target_id", "title", "message",
         )},
     )
+    if created:
+        transaction.on_commit(
+            lambda recipient_id=recipient_id: publish_notification_inbox_changed(
+                recipient_id
+            )
+        )
     return notification
 
 
