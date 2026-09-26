@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import ImageLightbox from "../components/ImageLightbox";
 import Icons from "../components/Icons";
 import { API_BASE_URL, VERDICT_META } from "../utils/constants";
 import "./DeepAnalysisPage.css";
@@ -118,7 +119,7 @@ function VerdictBadge({ verdict, labelPrefix }) {
    );
 }
 
-function ResilientImage({ src, alt, className, fallback }) {
+function ResilientImage({ src, alt, className, fallback, onError }) {
    const [failedSrc, setFailedSrc] = useState(null);
    const hasFailed = Boolean(src && failedSrc === src);
 
@@ -131,7 +132,10 @@ function ResilientImage({ src, alt, className, fallback }) {
          className={className}
          loading="lazy"
          decoding="async"
-         onError={() => setFailedSrc(src)}
+         onError={() => {
+            setFailedSrc(src);
+            onError?.();
+         }}
       />
    );
 }
@@ -341,6 +345,9 @@ function DeepAnalysisPage() {
    const [loading, setLoading] = useState(true);
    const [error, setError] = useState(false);
    const [requestVersion, setRequestVersion] = useState(0);
+   const [isOriginalImageOpen, setIsOriginalImageOpen] = useState(false);
+   const [originalMediaFailed, setOriginalMediaFailed] = useState(false);
+   const originalImageTriggerRef = useRef(null);
 
    useEffect(() => {
       let active = true;
@@ -351,6 +358,8 @@ function DeepAnalysisPage() {
          setStatusData(null);
          setError(false);
          setLoading(true);
+         setIsOriginalImageOpen(false);
+         setOriginalMediaFailed(false);
       });
 
       const analysisRequest = authFetch(buildClaimUrl(claimId, "analysis/"), { method: "GET" });
@@ -626,17 +635,27 @@ function DeepAnalysisPage() {
                      <div className="deep-analysis-original-material">
                         {originalMediaUrl && (
                            <div className="deep-analysis-media-frame">
-                              <ResilientImage
-                                 src={originalMediaUrl}
-                                 alt="Image submitted for AI analysis"
-                                 className="deep-analysis-media"
-                                 fallback={
-                                    <div className="deep-analysis-media-fallback">
-                                       <Icons name="image" size={22} aria-hidden="true" />
-                                       <span>The submitted image could not be displayed.</span>
-                                    </div>
-                                 }
-                              />
+                              {originalMediaFailed ? (
+                                 <div className="deep-analysis-media-fallback">
+                                    <Icons name="image" size={22} aria-hidden="true" />
+                                    <span>The submitted image could not be displayed.</span>
+                                 </div>
+                              ) : (
+                                 <button
+                                    ref={originalImageTriggerRef}
+                                    type="button"
+                                    className="image-view-trigger deep-analysis-media-trigger"
+                                    aria-label="View full image submitted for AI analysis"
+                                    onClick={() => setIsOriginalImageOpen(true)}
+                                 >
+                                    <ResilientImage
+                                       src={originalMediaUrl}
+                                       alt="Image submitted for AI analysis"
+                                       className="deep-analysis-media"
+                                       onError={() => setOriginalMediaFailed(true)}
+                                    />
+                                 </button>
+                              )}
                            </div>
                         )}
 
@@ -661,6 +680,15 @@ function DeepAnalysisPage() {
                      </div>
                   </section>
                )}
+
+               <ImageLightbox
+                  open={isOriginalImageOpen}
+                  src={originalMediaUrl}
+                  alt="Full-size image submitted for AI analysis"
+                  ariaLabel="Full image submitted for AI analysis"
+                  onClose={() => setIsOriginalImageOpen(false)}
+                  returnFocusRef={originalImageTriggerRef}
+               />
 
                {relatedFactChecks.length > 0 && (
                   <section className="deep-analysis-section" aria-labelledby="related-fact-checks-heading">

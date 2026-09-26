@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useNotification } from "../hooks/useNotification";
+import ImageLightbox from "../components/ImageLightbox";
 import Icons from "../components/Icons";
 import EvidenceCard from "../components/EvidenceCard";
-import { VERDICT_CONFIG, EVIDENCE_VERDICT_META } from "../utils/constants";
+import { VERDICT_CONFIG, EVIDENCE_VERDICT_META, ESCALATION_OPTIONS } from "../utils/constants";
 import "./ThreadDetailPage.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
@@ -96,6 +97,8 @@ function Avatar({ user, size = "medium" }) {
 
 function ClaimMedia({ claim }) {
    const [failed, setFailed] = useState(false);
+   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+   const imageTriggerRef = useRef(null);
    if (!isHttpUrl(claim?.media_url)) return null;
    if (failed) return <p className="thread-detail-media-error">Claim media is unavailable.</p>;
    if (claim.claim_type === "VIDEO") {
@@ -106,13 +109,43 @@ function ClaimMedia({ claim }) {
          </video>
       );
    }
+
+   if (claim.claim_type !== "IMAGE") {
+      return (
+         <img
+            className="thread-detail-media"
+            src={claim.media_url}
+            alt="Media attached to the claim"
+            onError={() => setFailed(true)}
+         />
+      );
+   }
+
    return (
-      <img
-         className="thread-detail-media"
-         src={claim.media_url}
-         alt="Media attached to the claim"
-         onError={() => setFailed(true)}
-      />
+      <>
+         <button
+            ref={imageTriggerRef}
+            type="button"
+            className="image-view-trigger thread-detail-media-trigger"
+            aria-label="View full image attached to the claim"
+            onClick={() => setIsLightboxOpen(true)}
+         >
+            <img
+               className="thread-detail-media"
+               src={claim.media_url}
+               alt="Media attached to the claim"
+               onError={() => setFailed(true)}
+            />
+         </button>
+         <ImageLightbox
+            open={isLightboxOpen}
+            src={claim.media_url}
+            alt="Full-size image attached to the claim"
+            ariaLabel="Full image attached to the claim"
+            onClose={() => setIsLightboxOpen(false)}
+            returnFocusRef={imageTriggerRef}
+         />
+      </>
    );
 }
 
@@ -1130,6 +1163,7 @@ export default function ThreadDetailPage() {
    const hasConfidence = confidenceValue !== null && confidenceValue !== "" && Number.isFinite(confidence);
    const authorUsername = thread.author?.username || "Unknown";
    const authorRoleLabel = getRoleLabel(thread.author?.role);
+   const escalationFocus = ESCALATION_OPTIONS.find((option) => option.value === thread.escalation_reason);
    const assessmentKey = String(assessmentVerdict || "UNVERIFIED").toUpperCase();
    const assessmentMeta = VERDICT_CONFIG[assessmentKey] || VERDICT_CONFIG.UNVERIFIED;
    const currentUserTrustScore = Number(user?.trust_breakdown?.trust_score ?? user?.trust_score ?? 0);
@@ -1257,6 +1291,16 @@ export default function ThreadDetailPage() {
                      </Link>
                      <span className="thread-detail-post-kind">Community post</span>
                   </header>
+
+                  {escalationFocus && (
+                     <section className="thread-detail-discussion-focus" aria-labelledby="thread-detail-discussion-focus-title">
+                        <div>
+                           <span>Discussion focus</span>
+                           <h2 id="thread-detail-discussion-focus-title">{escalationFocus.label}</h2>
+                        </div>
+                        <p>The thread author identified this as the main area for community review.</p>
+                     </section>
+                  )}
 
                   {communityContext && (
                      <div className="thread-detail-community-context-strip">

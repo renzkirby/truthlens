@@ -99,6 +99,12 @@ export const API_ENDPOINTS = {
    VERIFY_EMAIL: "auth/verify-email/",
    SEND_VERIFICATION: "auth/send-verification/",
    USER_SEARCH: "users/search/",
+   USER_PROFILE: (username) => `users/${encodeURIComponent(username)}/`,
+   USER_THREADS: (username) => `users/${encodeURIComponent(username)}/threads/`,
+   USER_CONTRIBUTIONS: (username) => `users/${encodeURIComponent(username)}/evidence/`,
+   USER_FOLLOW: (username) => `users/${encodeURIComponent(username)}/follow/`,
+   USER_FOLLOWERS: (username) => `users/${encodeURIComponent(username)}/followers/`,
+   USER_FOLLOWING: (username) => `users/${encodeURIComponent(username)}/following/`,
 
    // Persistent Notifications
    NOTIFICATIONS: "notifications/",
@@ -204,38 +210,44 @@ export const API_ENDPOINTS = {
    POLLING: "polling/",
 };
 
-// ── Flag Reason Options ──
-// Options for flagging/escalating claims to the community
-// Maps verdict types to visual properties for flag selection buttons
+// ── Community Investigation Focus Options ──
+// Author-selected context describing what contributors should examine.
+// These values do not change verdicts, confidence, priority, or authority.
 export const ESCALATION_OPTIONS = [
    {
       value: "INCORRECT_VERDICT",
-      label: "Incorrect Verdict",
-      desc: "AI gave an incorrect or unverified verdict",
+      label: "Question the AI assessment",
+      desc: "You think the AI verdict may be incorrect or deserves further examination.",
       icon: "alert-circle",
    },
    {
       value: "LOW_CONFIDENCE",
-      label: "Low Confidence",
-      desc: "AI confidence score is too low",
-      icon: "bar-chart-2",
+      label: "Low AI confidence",
+      desc: "The AI assessment is uncertain and more evidence may help.",
+      icon: "bar-chart",
+   },
+   {
+      value: "UNVERIFIED_RESULT",
+      label: "Needs further verification",
+      desc: "The claim remains unverified and would benefit from additional evidence or review.",
+      icon: "search",
    },
    {
       value: "MISSING_CONTEXT",
-      label: "Missing Context",
-      desc: "The context provided is incomplete",
+      label: "Missing context",
+      desc: "Important context may be absent from the claim or analysis.",
       icon: "help-circle",
    },
    {
       value: "OUTDATED_INFO",
-      label: "Outdated Information",
-      desc: "The analysis relied on outdated news",
+      label: "Possibly outdated information",
+      desc: "The claim or supporting information may have changed over time.",
       icon: "clock",
    },
    {
       value: "OTHER",
-      label: "Other",
-      desc: "Other miscellaneous reasons",
+      label: "Other concern",
+      desc: "There is another reason this claim would benefit from community review.",
       icon: "more-horizontal",
    },
 ];

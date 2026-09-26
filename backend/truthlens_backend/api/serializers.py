@@ -110,9 +110,6 @@ class NotificationSerializer(serializers.ModelSerializer):
 class PublicIdentityProfileSerializer(serializers.ModelSerializer):
     trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
     role = serializers.CharField(source="profile.role", read_only=True)
-    organization_name = serializers.CharField(
-        source="profile.organization_name", read_only=True
-    )
     avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
     bio = serializers.CharField(source="profile.bio", read_only=True)
     followers_count = serializers.SerializerMethodField()
@@ -138,7 +135,6 @@ class PublicIdentityProfileSerializer(serializers.ModelSerializer):
             "username",
             "trust_score",
             "role",
-            "organization_name",
             "avatar_url",
             "bio",
             "date_joined",
@@ -148,22 +144,34 @@ class PublicIdentityProfileSerializer(serializers.ModelSerializer):
         ]
 
 
+class CommunityUserIdentitySerializer(serializers.ModelSerializer):
+    trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
+    role = serializers.CharField(source="profile.role", read_only=True)
+    avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
+
+    class Meta:
+        model = User
+        fields = ["id", "username", "avatar_url", "role", "trust_score"]
+        read_only_fields = fields
+
+
+class PublicProfileClaimSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Claim
+        fields = ["id", "claim_type", "context_text"]
+        read_only_fields = fields
+
+
 class PublicUserThreadSerializer(serializers.ModelSerializer):
-    claim_id = serializers.UUIDField(read_only=True)
-    evidence_count = serializers.SerializerMethodField()
-    comment_count = serializers.SerializerMethodField()
-
-    def get_evidence_count(self, obj):
-        return obj.evidence_submissions.count()
-
-    def get_comment_count(self, obj):
-        return obj.comments.count()
+    claim = PublicProfileClaimSummarySerializer(read_only=True)
+    evidence_count = serializers.IntegerField(read_only=True)
+    comment_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Thread
         fields = [
             "id",
-            "claim_id",
+            "claim",
             "caption",
             "status",
             "escalation_reason",
@@ -181,10 +189,19 @@ class PublicThreadSummarySerializer(serializers.ModelSerializer):
         fields = ["id", "claim_id", "caption", "status", "created_at"]
 
 
+class PublicProfileThreadSummarySerializer(serializers.ModelSerializer):
+    claim = PublicProfileClaimSummarySerializer(read_only=True)
+
+    class Meta:
+        model = Thread
+        fields = ["id", "caption", "status", "created_at", "claim"]
+        read_only_fields = fields
+
+
 class PublicUserEvidenceSerializer(serializers.ModelSerializer):
     activity_type = serializers.CharField(default="EVIDENCE", read_only=True)
     activity_at = serializers.DateTimeField(source="submitted_at", read_only=True)
-    thread = PublicThreadSummarySerializer(read_only=True)
+    thread = PublicProfileThreadSummarySerializer(read_only=True)
 
     class Meta:
         model = EvidenceSubmission
@@ -204,7 +221,7 @@ class PublicUserEvidenceSerializer(serializers.ModelSerializer):
 class PublicUserCommentSerializer(serializers.ModelSerializer):
     activity_type = serializers.CharField(default="COMMENT", read_only=True)
     activity_at = serializers.DateTimeField(source="commented_at", read_only=True)
-    thread = PublicThreadSummarySerializer(read_only=True)
+    thread = PublicProfileThreadSummarySerializer(read_only=True)
 
     class Meta:
         model = ThreadComment
@@ -2358,6 +2375,7 @@ class ThreadDetailSerializer(serializers.ModelSerializer):
             "claim",
             "author",
             "caption",
+            "escalation_reason",
             "status",
             "created_at",
             "evidence_submissions",
