@@ -169,6 +169,27 @@ class ThreadDetailApiTests(TestCase):
             expected_decision_revision=decision.revision_number,
         )["fact_check"]
 
+    def test_thread_detail_exposes_stored_escalation_reason(self):
+        _claim, thread = self._create_thread("discussion focus")
+        thread.escalation_reason = Thread.EscalationReason.MISSING_CONTEXT
+        thread.save(update_fields=["escalation_reason"])
+
+        response = self._detail(thread)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["escalation_reason"],
+            Thread.EscalationReason.MISSING_CONTEXT,
+        )
+
+    def test_thread_detail_serializes_legacy_thread_without_escalation_reason(self):
+        _claim, thread = self._create_thread("legacy discussion")
+
+        response = self._detail(thread)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data["escalation_reason"])
+
     def test_thread_detail_uses_public_safe_identity_projections(self):
         _claim, thread = self._create_thread("safe identities")
         comment = ThreadComment.objects.create(

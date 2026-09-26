@@ -2348,6 +2348,7 @@ class ThreadDetailSerializer(serializers.ModelSerializer):
             "claim",
             "author",
             "caption",
+            "escalation_reason",
             "status",
             "created_at",
             "evidence_submissions",
