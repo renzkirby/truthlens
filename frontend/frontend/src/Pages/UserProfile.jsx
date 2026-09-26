@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import ImageLightbox from "../components/ImageLightbox.jsx";
 import Icons from "../components/Icons.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { useNotification } from "../hooks/useNotification";
@@ -81,13 +82,13 @@ function getEmptyTabMessage(activeTab, isOwnProfile) {
       : "This member has not submitted evidence or comments yet.";
 }
 
-function ProfileAvatar({ user, className = "" }) {
+function ProfileAvatar({ user, className = "", onImageError }) {
    const username = user?.username || "Community member";
 
    if (user?.avatar_url) {
       return (
          <span className={`user-profile__avatar ${className}`.trim()}>
-            <img src={user.avatar_url} alt={`${username}'s avatar`} />
+            <img src={user.avatar_url} alt={`${username}'s avatar`} onError={onImageError} />
          </span>
       );
    }
@@ -205,6 +206,9 @@ function UserProfile() {
    const [profileStatus, setProfileStatus] = useState("idle");
    const [profileError, setProfileError] = useState("");
    const [profileAttempt, setProfileAttempt] = useState(0);
+   const [failedProfileAvatarUrl, setFailedProfileAvatarUrl] = useState(null);
+   const [isProfileImageOpen, setIsProfileImageOpen] = useState(false);
+   const profileImageTriggerRef = useRef(null);
 
    const isOwnProfile = !username || username === authUser?.username;
    const displayUser = isOwnProfile ? authUser : publicUser;
@@ -310,6 +314,7 @@ function UserProfile() {
          threads: TAB_PAGE_SIZE,
          contributions: TAB_PAGE_SIZE,
       });
+      setIsProfileImageOpen(false);
    }, [displayUsername]);
 
    const activeActivity = activityState[activeTab];
@@ -552,13 +557,34 @@ function UserProfile() {
    const roleLabel = isPlatformModerator ? "Platform moderator" : "Community member";
    const currentTabDescription = getTabDescription(activeTab, isOwnProfile);
    const currentTabEmptyMessage = getEmptyTabMessage(activeTab, isOwnProfile);
+   const hasViewableProfileAvatar =
+      Boolean(displayUser.avatar_url) && failedProfileAvatarUrl !== displayUser.avatar_url;
 
    return (
       <main className="user-profile">
          <section className="user-profile__profile-card" aria-labelledby="profile-heading">
             <div className="user-profile__identity">
                <div className="user-profile__identity-top">
-                  <ProfileAvatar user={displayUser} className="user-profile__avatar--large" />
+                  {hasViewableProfileAvatar ? (
+                     <button
+                        ref={profileImageTriggerRef}
+                        type="button"
+                        className="image-view-trigger user-profile__avatar-trigger"
+                        aria-label={`View @${displayUser.username} profile picture`}
+                        onClick={() => setIsProfileImageOpen(true)}
+                     >
+                        <ProfileAvatar
+                           user={displayUser}
+                           className="user-profile__avatar--large"
+                           onImageError={() => setFailedProfileAvatarUrl(displayUser.avatar_url)}
+                        />
+                     </button>
+                  ) : (
+                     <ProfileAvatar
+                        user={{ ...displayUser, avatar_url: null }}
+                        className="user-profile__avatar--large"
+                     />
+                  )}
 
                   <div className="user-profile__name-group">
                      <h1 id="profile-heading">{displayUser.username}</h1>
@@ -889,6 +915,16 @@ function UserProfile() {
                })}
             </section>
          </section>
+
+         <ImageLightbox
+            open={isProfileImageOpen}
+            src={displayUser.avatar_url}
+            alt={`${displayUser.username}'s profile picture`}
+            ariaLabel={`Profile picture for @${displayUser.username}`}
+            onClose={() => setIsProfileImageOpen(false)}
+            returnFocusRef={profileImageTriggerRef}
+            variant="profile"
+         />
 
          {connectionDialog && (
             <ProfileDialog
