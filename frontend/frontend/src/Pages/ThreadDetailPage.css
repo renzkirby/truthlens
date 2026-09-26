@@ -259,6 +259,37 @@
    font-size: 10px;
    font-weight: 750;
 }
+.thread-detail-discussion-focus {
+   display: grid;
+   grid-template-columns: minmax(150px, 0.42fr) minmax(0, 1fr);
+   align-items: center;
+   gap: 16px;
+   padding: 14px 18px;
+   border-bottom: 1px solid var(--tl-color-border-light);
+   background: var(--tl-color-bg-subtle);
+}
+.thread-detail-discussion-focus span {
+   display: block;
+   margin-bottom: 4px;
+   color: var(--tl-color-text-muted);
+   font-size: 9px;
+   font-weight: 850;
+   letter-spacing: .08em;
+   text-transform: uppercase;
+}
+.thread-detail-discussion-focus h2 {
+   margin: 0;
+   color: var(--tl-color-text-main);
+   font-size: 13px;
+   font-weight: 800;
+   line-height: 1.4;
+}
+.thread-detail-discussion-focus p {
+   margin: 0;
+   color: var(--tl-color-text-body);
+   font-size: 12px;
+   line-height: 1.55;
+}
 .thread-detail-community-context-strip { padding: 14px 18px; border-bottom: 1px solid #eef2f7; background: #fff; }
 .thread-detail-community-context-strip span { display: block; margin-bottom: 5px; color: #64748b; font-size: 9px; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
 .thread-detail-community-context-strip p { margin: 0; color: #334155; font-size: 12px; line-height: 1.55; white-space: pre-wrap; }
@@ -591,6 +622,7 @@
    .thread-detail-hero h1 { font-size: 1.45rem; }
    .thread-detail-counts { gap: 12px; }
    .thread-detail-post-header { align-items: flex-start; }
+   .thread-detail-discussion-focus { grid-template-columns: minmax(0, 1fr); gap: 7px; padding-inline: 14px; }
    .thread-detail-post-kind { display: none; }
    .thread-detail-panel { padding: 14px; }
    .thread-detail-composer--classic { grid-template-columns: minmax(0,1fr) auto; }

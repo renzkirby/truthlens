@@ -4,7 +4,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useNotification } from "../hooks/useNotification";
 import Icons from "../components/Icons";
 import EvidenceCard from "../components/EvidenceCard";
-import { VERDICT_CONFIG, EVIDENCE_VERDICT_META } from "../utils/constants";
+import { VERDICT_CONFIG, EVIDENCE_VERDICT_META, ESCALATION_OPTIONS } from "../utils/constants";
 import "./ThreadDetailPage.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
@@ -1130,6 +1130,7 @@ export default function ThreadDetailPage() {
    const hasConfidence = confidenceValue !== null && confidenceValue !== "" && Number.isFinite(confidence);
    const authorUsername = thread.author?.username || "Unknown";
    const authorRoleLabel = getRoleLabel(thread.author?.role);
+   const escalationFocus = ESCALATION_OPTIONS.find((option) => option.value === thread.escalation_reason);
    const assessmentKey = String(assessmentVerdict || "UNVERIFIED").toUpperCase();
    const assessmentMeta = VERDICT_CONFIG[assessmentKey] || VERDICT_CONFIG.UNVERIFIED;
    const currentUserTrustScore = Number(user?.trust_breakdown?.trust_score ?? user?.trust_score ?? 0);
@@ -1257,6 +1258,16 @@ export default function ThreadDetailPage() {
                      </Link>
                      <span className="thread-detail-post-kind">Community post</span>
                   </header>
+
+                  {escalationFocus && (
+                     <section className="thread-detail-discussion-focus" aria-labelledby="thread-detail-discussion-focus-title">
+                        <div>
+                           <span>Discussion focus</span>
+                           <h2 id="thread-detail-discussion-focus-title">{escalationFocus.label}</h2>
+                        </div>
+                        <p>The thread author identified this as the main area for community review.</p>
+                     </section>
+                  )}
 
                   {communityContext && (
                      <div className="thread-detail-community-context-strip">
