@@ -306,6 +306,7 @@ from .serializers import (
     UserSerializer,
     PublicUserSearchSerializer,
     PublicIdentityProfileSerializer,
+    CommunityUserIdentitySerializer,
     CurrentUserSerializer,
     ProfileUpdateSerializer,
     UserProfileSerializer,
@@ -3436,9 +3437,9 @@ def search_users(request):
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def get_public_user_profile(request, username):
-    """Fetch read-only public identity fields for a user profile."""
+    """Fetch community-visible identity fields for an authenticated member."""
     target_user = get_object_or_404(
         User.objects.select_related("profile"), username=username
     )
@@ -3450,16 +3451,21 @@ def get_public_user_profile(request, username):
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def public_user_threads(request, username):
-    """Fetch public threads initiated by a specific user."""
+    """Fetch non-removed community threads initiated by a specific user."""
     target_user = get_object_or_404(
         User.objects.select_related("profile"), username=username
     )
 
     threads = (
         Thread.objects.filter(author=target_user)
-        .prefetch_related("evidence_submissions", "comments")
+        .exclude(status=Thread.Status.REJECTED)
+        .select_related("claim")
+        .annotate(
+            evidence_count=Count("evidence_submissions", distinct=True),
+            comment_count=Count("comments", distinct=True),
+        )
         .order_by("-created_at")
     )
 
@@ -3470,21 +3476,23 @@ def public_user_threads(request, username):
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def public_user_evidence(request, username):
-    """Fetch public evidence and comments submitted by a specific user."""
+    """Fetch contributions attached to non-removed community threads."""
     target_user = get_object_or_404(
         User.objects.select_related("profile"), username=username
     )
 
     evidence_items = list(
         EvidenceSubmission.objects.filter(contributor=target_user)
-        .select_related("thread")
+        .exclude(thread__status=Thread.Status.REJECTED)
+        .select_related("thread__claim")
         .order_by("-submitted_at")
     )
     comment_items = list(
         ThreadComment.objects.filter(commenter=target_user)
-        .select_related("thread")
+        .exclude(thread__status=Thread.Status.REJECTED)
+        .select_related("thread__claim")
         .order_by("-commented_at")
     )
 
@@ -3557,22 +3565,26 @@ def toggle_follow_user(request, username):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_user_followers(request, username):
-    """Get a list of users who follow this profile."""
+    """Get community-safe identities for users who follow this profile."""
     target_user = get_object_or_404(User, username=username)
-    # Get all User objects inside this profile's followers list
-    followers = target_user.profile.followers.all()
-    serializer = UserSerializer(followers, many=True, context={"request": request})
+    followers = target_user.profile.followers.select_related("profile").order_by(
+        "username"
+    )
+    serializer = CommunityUserIdentitySerializer(followers, many=True)
     return Response(serializer.data)
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_user_following(request, username):
-    """Get a list of users this profile is following."""
+    """Get community-safe identities this profile is following."""
     target_user = get_object_or_404(User, username=username)
-    # Find all Users whose profiles include the target_user as a follower
-    following = User.objects.filter(profile__followers=target_user)
-    serializer = UserSerializer(following, many=True, context={"request": request})
+    following = (
+        User.objects.filter(profile__followers=target_user)
+        .select_related("profile")
+        .order_by("username")
+    )
+    serializer = CommunityUserIdentitySerializer(following, many=True)
     return Response(serializer.data)
 
 
