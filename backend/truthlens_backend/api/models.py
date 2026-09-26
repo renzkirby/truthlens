@@ -1185,9 +1185,10 @@ class Thread(models.Model):
     class EscalationReason(models.TextChoices):
         INCORRECT_VERDICT = (
             "INCORRECT_VERDICT",
-            "AI gave an incorrect or unverified verdict",
+            "AI assessment may be incorrect",
         )
         LOW_CONFIDENCE = "LOW_CONFIDENCE", "AI confidence score is too low"
+        UNVERIFIED_RESULT = "UNVERIFIED_RESULT", "Claim remains unverified"
         MISSING_CONTEXT = (
             "MISSING_CONTEXT",
             "The context provided is incomplete or missing",

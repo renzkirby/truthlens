@@ -30,6 +30,7 @@ from api.publishing_service import (
     publish_fact_check,
     submit_fact_check_for_review,
 )
+from api.serializers import ThreadSerializer
 
 
 class ThreadDetailApiTests(TestCase):
@@ -171,7 +172,7 @@ class ThreadDetailApiTests(TestCase):
 
     def test_thread_detail_exposes_stored_escalation_reason(self):
         _claim, thread = self._create_thread("discussion focus")
-        thread.escalation_reason = Thread.EscalationReason.MISSING_CONTEXT
+        thread.escalation_reason = Thread.EscalationReason.UNVERIFIED_RESULT
         thread.save(update_fields=["escalation_reason"])
 
         response = self._detail(thread)
@@ -179,7 +180,26 @@ class ThreadDetailApiTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
             response.data["escalation_reason"],
-            Thread.EscalationReason.MISSING_CONTEXT,
+            Thread.EscalationReason.UNVERIFIED_RESULT,
+        )
+
+    def test_thread_serializer_accepts_unverified_result_escalation_reason(self):
+        claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="A claim that needs further verification.",
+        )
+        serializer = ThreadSerializer(
+            data={
+                "claim_id": str(claim.id),
+                "caption": "Please help verify this claim.",
+                "escalation_reason": Thread.EscalationReason.UNVERIFIED_RESULT,
+            }
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(
+            serializer.validated_data["escalation_reason"],
+            Thread.EscalationReason.UNVERIFIED_RESULT,
         )
 
     def test_thread_detail_serializes_legacy_thread_without_escalation_reason(self):

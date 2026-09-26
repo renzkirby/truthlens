@@ -218,6 +218,12 @@ export const ESCALATION_OPTIONS = [
       icon: "bar-chart",
    },
    {
+      value: "UNVERIFIED_RESULT",
+      label: "Needs further verification",
+      desc: "The claim remains unverified and would benefit from additional evidence or review.",
+      icon: "search",
+   },
+   {
       value: "MISSING_CONTEXT",
       label: "Missing context",
       desc: "Important context may be absent from the claim or analysis.",
