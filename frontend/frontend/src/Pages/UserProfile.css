@@ -92,6 +92,12 @@
    font-size: var(--tl-text-2xl);
 }
 
+.user-profile__avatar-trigger {
+   align-self: start;
+   border-radius: var(--tl-radius-xl);
+}
+
+
 .user-profile__name-group,
 .user-profile__section-heading > div,
 .user-profile__activity-copy,
@@ -1042,6 +1048,10 @@
       height: 68px;
       border-radius: var(--tl-radius-lg);
       font-size: var(--tl-text-xl);
+   }
+
+   .user-profile__avatar-trigger {
+      border-radius: var(--tl-radius-lg);
    }
 
    .user-profile__name-group {

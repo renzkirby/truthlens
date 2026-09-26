@@ -1,0 +1,128 @@
+.image-lightbox {
+   position: fixed;
+   z-index: 2000;
+   inset: 0;
+   display: grid;
+   grid-template-rows: auto minmax(0, 1fr);
+   width: 100%;
+   height: 100vh;
+   height: 100dvh;
+   box-sizing: border-box;
+   gap: 8px;
+   padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+      max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+   overflow: hidden;
+   background: rgba(2, 6, 23, 0.96);
+}
+
+.image-lightbox__close {
+   display: inline-grid;
+   width: 44px;
+   height: 44px;
+   padding: 0;
+   border: 1px solid rgba(255, 255, 255, 0.24);
+   border-radius: var(--tl-radius-lg);
+   color: #fff;
+   background: rgba(15, 23, 42, 0.84);
+   cursor: pointer;
+   justify-self: end;
+   place-items: center;
+}
+
+.image-lightbox__close:hover {
+   border-color: rgba(255, 255, 255, 0.5);
+   background: rgba(30, 41, 59, 0.96);
+}
+
+.image-lightbox__close:focus-visible {
+   outline: 3px solid var(--tl-color-brand-primary);
+   outline-offset: 3px;
+}
+
+.image-view-trigger:focus-visible {
+   outline: 3px solid var(--tl-color-brand-primary);
+   outline-offset: -4px;
+}
+
+.image-lightbox__stage {
+   display: grid;
+   min-width: 0;
+   min-height: 0;
+   overflow: hidden;
+   place-items: center;
+}
+
+.image-lightbox__image {
+   display: block;
+   width: auto;
+   max-width: 100%;
+   height: auto;
+   max-height: 100%;
+   object-fit: contain;
+}
+
+
+.image-lightbox--profile .image-lightbox__image {
+   max-width: min(560px, 92vw);
+   max-height: min(560px, calc(100dvh - 96px));
+}
+
+.image-lightbox__unavailable {
+   display: grid;
+   max-width: min(100%, 360px);
+   gap: var(--tl-space-3);
+   padding: var(--tl-space-6);
+   color: rgba(255, 255, 255, 0.82);
+   text-align: center;
+   place-items: center;
+}
+
+.image-lightbox__unavailable p {
+   margin: 0;
+   font-size: var(--tl-text-ui);
+   line-height: 1.5;
+}
+
+.image-view-trigger {
+   position: relative;
+   display: inline-grid;
+   min-width: 0;
+   padding: 0;
+   border: 0;
+   border-radius: inherit;
+   color: inherit;
+   background: transparent;
+   cursor: pointer;
+   font: inherit;
+   place-items: center;
+}
+
+.image-view-trigger::after {
+   position: absolute;
+   z-index: 1;
+   inset: 0;
+   border-radius: inherit;
+   background: rgba(15, 23, 42, 0);
+   content: "";
+   pointer-events: none;
+}
+
+.image-view-trigger:hover::after,
+.image-view-trigger:focus-visible::after {
+   background: rgba(15, 23, 42, 0.16);
+}
+
+
+@media (max-width: 480px) {
+   .image-lightbox {
+      gap: 6px;
+      padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right))
+         max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+   }
+}
+
+@media (forced-colors: active) {
+   .image-view-trigger {
+      border: 1px solid ButtonText;
+   }
+}

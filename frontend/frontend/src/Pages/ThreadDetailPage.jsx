@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useNotification } from "../hooks/useNotification";
+import ImageLightbox from "../components/ImageLightbox";
 import Icons from "../components/Icons";
 import EvidenceCard from "../components/EvidenceCard";
 import { VERDICT_CONFIG, EVIDENCE_VERDICT_META, ESCALATION_OPTIONS } from "../utils/constants";
@@ -96,6 +97,8 @@ function Avatar({ user, size = "medium" }) {
 
 function ClaimMedia({ claim }) {
    const [failed, setFailed] = useState(false);
+   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+   const imageTriggerRef = useRef(null);
    if (!isHttpUrl(claim?.media_url)) return null;
    if (failed) return <p className="thread-detail-media-error">Claim media is unavailable.</p>;
    if (claim.claim_type === "VIDEO") {
@@ -106,13 +109,43 @@ function ClaimMedia({ claim }) {
          </video>
       );
    }
+
+   if (claim.claim_type !== "IMAGE") {
+      return (
+         <img
+            className="thread-detail-media"
+            src={claim.media_url}
+            alt="Media attached to the claim"
+            onError={() => setFailed(true)}
+         />
+      );
+   }
+
    return (
-      <img
-         className="thread-detail-media"
-         src={claim.media_url}
-         alt="Media attached to the claim"
-         onError={() => setFailed(true)}
-      />
+      <>
+         <button
+            ref={imageTriggerRef}
+            type="button"
+            className="image-view-trigger thread-detail-media-trigger"
+            aria-label="View full image attached to the claim"
+            onClick={() => setIsLightboxOpen(true)}
+         >
+            <img
+               className="thread-detail-media"
+               src={claim.media_url}
+               alt="Media attached to the claim"
+               onError={() => setFailed(true)}
+            />
+         </button>
+         <ImageLightbox
+            open={isLightboxOpen}
+            src={claim.media_url}
+            alt="Full-size image attached to the claim"
+            ariaLabel="Full image attached to the claim"
+            onClose={() => setIsLightboxOpen(false)}
+            returnFocusRef={imageTriggerRef}
+         />
+      </>
    );
 }
 

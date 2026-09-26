@@ -628,6 +628,12 @@
    background: #eef2f7;
 }
 
+.deep-analysis-media-trigger {
+   width: 100%;
+   min-height: 220px;
+   border-radius: var(--tl-radius-lg);
+}
+
 .deep-analysis-media {
    display: block;
    max-width: 100%;
