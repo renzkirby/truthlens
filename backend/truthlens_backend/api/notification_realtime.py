@@ -9,6 +9,8 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 INBOX_CHANGED_EVENT = b"event: notification.inbox_changed\ndata: {}\n\n"
+PUBLISH_CONNECT_TIMEOUT_SECONDS = 2
+PUBLISH_SOCKET_TIMEOUT_SECONDS = 2
 
 
 def notification_channel(recipient_id):
@@ -20,21 +22,27 @@ def publish_notification_inbox_changed(recipient_id):
     if not settings.NOTIFICATION_SSE_ENABLED or recipient_id is None:
         return False
 
-    client = redis.Redis.from_url(settings.NOTIFICATION_REDIS_URL)
+    client = None
     try:
+        client = redis.Redis.from_url(
+            settings.NOTIFICATION_REDIS_URL,
+            socket_connect_timeout=PUBLISH_CONNECT_TIMEOUT_SECONDS,
+            socket_timeout=PUBLISH_SOCKET_TIMEOUT_SECONDS,
+        )
         client.publish(notification_channel(recipient_id), "{}")
         return True
-    except Exception:
+    except (redis.RedisError, OSError, ValueError):
         logger.exception(
             "Realtime notification inbox publication failed for recipient %s",
             recipient_id,
         )
         return False
     finally:
-        try:
-            client.close()
-        except Exception:
-            logger.exception("Failed to close realtime notification publisher")
+        if client is not None:
+            try:
+                client.close()
+            except Exception:
+                logger.exception("Failed to close realtime notification publisher")
 
 
 async def notification_event_stream(

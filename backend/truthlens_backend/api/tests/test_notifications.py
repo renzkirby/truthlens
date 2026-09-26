@@ -344,6 +344,27 @@ class FollowNotificationTests(TestCase):
         self.assertIsNone(notification.actor_id)
         self.assertIsNone(notification_destination(notification))
 
+    def test_profile_destination_rejects_dot_segments_only(self):
+        expected_destinations = {
+            ".": None,
+            "..": None,
+            "john.doe": "/user/john.doe",
+        }
+        for username, expected in expected_destinations.items():
+            with self.subTest(username=username):
+                actor = User.objects.create_user(username=username)
+                notification = Notification(
+                    recipient=self.followed,
+                    actor=actor,
+                    notification_type=Notification.NotificationType.USER_FOLLOWED,
+                    target_type=Notification.TargetType.USER_PROFILE,
+                    target_id=None,
+                    dedupe_key=f"dot-segment:{username}",
+                    title="New follower",
+                    message="Followed.",
+                )
+                self.assertEqual(notification_destination(notification), expected)
+
 
 @skipUnlessDBFeature("has_select_for_update")
 class FollowNotificationConcurrencyTests(TransactionTestCase):

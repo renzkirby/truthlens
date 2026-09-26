@@ -140,7 +140,7 @@ export function NotificationInboxProvider({ children }) {
          try {
             await consumeNotificationStream({
                signal: controller.signal,
-               onOpen: () => { reconnectAttempt = 0; },
+               onConnected: () => { reconnectAttempt = 0; },
                onInboxChanged: reconcileInbox,
             });
             if (!disposed) {

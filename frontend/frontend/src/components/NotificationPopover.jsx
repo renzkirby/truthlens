@@ -136,7 +136,6 @@ export default function NotificationPopover({ open, onOpenChange, unreadCount, a
             type="button"
             className={`tl-app-nav__notifications ${active || open ? "active" : ""}`}
             aria-label={label}
-            aria-haspopup="dialog"
             aria-expanded={open}
             aria-controls={PANEL_ID}
             onClick={() => onOpenChange(!open)}
@@ -153,7 +152,7 @@ export default function NotificationPopover({ open, onOpenChange, unreadCount, a
             <section
                id={PANEL_ID}
                className="tl-notification-popover__panel"
-               role="dialog"
+               role="region"
                aria-label="Recent notifications"
             >
                <header className="tl-notification-popover__header">

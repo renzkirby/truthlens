@@ -79,6 +79,46 @@ class RealtimeNotificationMutationTests(TestCase):
             self.assertEqual(response.data["updated_count"], 0)
             publish.assert_not_called()
 
+    @override_settings(NOTIFICATION_SSE_ENABLED=True)
+    def test_authoritative_state_survives_redis_client_construction_failure(self):
+        with patch(
+            "api.notification_realtime.redis.Redis.from_url",
+            side_effect=ValueError("invalid redis URL"),
+        ):
+            with self.assertLogs("api.notification_realtime", level="ERROR"):
+                with self.captureOnCommitCallbacks(execute=True):
+                    row = self.create("redis-config:create")
+
+                with self.captureOnCommitCallbacks(execute=True):
+                    response = self.client.patch(
+                        reverse("notification_mark_read", args=[row.pk])
+                    )
+
+        self.assertEqual(response.status_code, 200)
+        row.refresh_from_db()
+        self.assertIsNotNone(row.read_at)
+
+    @override_settings(NOTIFICATION_SSE_ENABLED=True)
+    def test_authoritative_state_survives_redis_publish_failure(self):
+        client = Mock()
+        client.publish.side_effect = OSError("redis unavailable")
+        with patch(
+            "api.notification_realtime.redis.Redis.from_url",
+            return_value=client,
+        ):
+            with self.assertLogs("api.notification_realtime", level="ERROR"):
+                with self.captureOnCommitCallbacks(execute=True):
+                    row = self.create("redis-publish:create")
+
+                with self.captureOnCommitCallbacks(execute=True):
+                    response = self.client.patch(
+                        reverse("notification_mark_read", args=[row.pk])
+                    )
+
+        self.assertEqual(response.status_code, 200)
+        row.refresh_from_db()
+        self.assertIsNotNone(row.read_at)
+
 
 class FakePubSub:
     def __init__(self, messages=None):
@@ -136,6 +176,30 @@ class NotificationRealtimeTransportTests(TestCase):
             with self.assertLogs("api.notification_realtime", level="ERROR"):
                 self.assertFalse(publish_notification_inbox_changed(42))
         client.close.assert_called_once_with()
+
+    def test_client_construction_failure_is_logged_and_isolated(self):
+        with patch(
+            "api.notification_realtime.redis.Redis.from_url",
+            side_effect=ValueError("invalid redis URL"),
+        ):
+            with self.assertLogs("api.notification_realtime", level="ERROR"):
+                self.assertFalse(publish_notification_inbox_changed(42))
+
+    def test_close_failure_is_logged_without_changing_publish_success(self):
+        client = Mock()
+        client.close.side_effect = OSError("close failed")
+        with patch(
+            "api.notification_realtime.redis.Redis.from_url",
+            return_value=client,
+        ) as from_url:
+            with self.assertLogs("api.notification_realtime", level="ERROR"):
+                self.assertTrue(publish_notification_inbox_changed(42))
+
+        from_url.assert_called_once_with(
+            "redis://realtime.invalid/0",
+            socket_connect_timeout=2,
+            socket_timeout=2,
+        )
 
     async def test_stream_formats_heartbeat_and_inbox_event_and_cleans_up(self):
         pubsub = FakePubSub([None, {"type": "message", "data": b"{}"}])

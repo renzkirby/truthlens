@@ -83,7 +83,10 @@ def notification_destination(notification):
     if target == Target.USER_PROFILE:
         if notification.actor_id is None:
             return None
-        return f"/user/{quote(notification.actor.username, safe='')}"
+        username = notification.actor.username
+        if username in {".", ".."}:
+            return None
+        return f"/user/{quote(username, safe='')}"
     if notification.target_id is None:
         return None
     if target == Target.CLAIM:
