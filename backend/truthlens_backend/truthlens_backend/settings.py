@@ -18,6 +18,7 @@ import dj_database_url
 
 from .environment import (
     resolve_app_environment,
+    resolve_database_conn_max_age,
     select_database_url,
     validate_debug_policy,
 )
@@ -159,6 +160,7 @@ WSGI_APPLICATION = "truthlens_backend.wsgi.application"
 #     }
 # }
 
+DB_CONN_MAX_AGE = resolve_database_conn_max_age()
 
 database_env, selected_db_url = select_database_url(APP_ENV)
 
@@ -177,7 +179,7 @@ else:
         "default": {
             **dj_database_url.parse(
                 selected_db_url,
-                conn_max_age=600,
+                conn_max_age=DB_CONN_MAX_AGE,
                 conn_health_checks=True,
             ),
             "TEST": {
@@ -263,7 +265,9 @@ CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:63
 
 # Realtime notifications are optional. REST remains authoritative when disabled
 # or when Redis/stream delivery is unavailable.
-NOTIFICATION_SSE_ENABLED = os.getenv("NOTIFICATION_SSE_ENABLED", "False").lower() == "true"
+NOTIFICATION_SSE_ENABLED = (
+    os.getenv("NOTIFICATION_SSE_ENABLED", "False").lower() == "true"
+)
 NOTIFICATION_REDIS_URL = os.getenv("NOTIFICATION_REDIS_URL") or CELERY_BROKER_URL
 NOTIFICATION_SSE_MAX_SECONDS = int(os.getenv("NOTIFICATION_SSE_MAX_SECONDS", "600"))
 NOTIFICATION_SSE_HEARTBEAT_SECONDS = int(
