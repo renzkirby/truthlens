@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
 import { resolveApiEndpoint } from "../utils/api";
+import { getAnalyzedClaimText } from "../utils/claimText";
 import Icons from "./Icons.jsx";
 import Button from "./ui/Button.jsx";
 import IconButton from "./ui/IconButton.jsx";
@@ -29,11 +30,7 @@ function normalizeResults(data) {
 }
 
 function getThreadTitle(thread) {
-   const caption = thread?.caption?.trim();
-   if (caption) return caption;
-
-   const claimText = thread?.claim?.context_text?.trim();
-   return claimText || "Untitled thread";
+   return getAnalyzedClaimText(thread?.claim, thread?.caption?.trim() || "Untitled thread");
 }
 
 function getThreadSubtitle(thread) {

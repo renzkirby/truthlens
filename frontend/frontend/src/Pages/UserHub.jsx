@@ -6,6 +6,7 @@ import Icons from "../components/Icons.jsx";
 import { getEffectiveVerdict } from "../utils/verdict";
 import { VERDICT_META } from "../utils/constants";
 import { buildApiUrl } from "../utils/api";
+import { getAnalyzedClaimText } from "../utils/claimText";
 
 const AnalysisModal = ({ claimId, onClose }) => {
    const { authFetch } = useAuth();
@@ -151,7 +152,7 @@ const AnalysisModal = ({ claimId, onClose }) => {
             <div className="br-modal-body">
                <div className="br-section">
                   <h4 className="br-section-title">Claim</h4>
-                  <p className="br-primary-text">{claimData.context_text || "No text extracted"}</p>
+                  <p className="br-primary-text">{getAnalyzedClaimText(claimData, "No text extracted")}</p>
                </div>
 
                <div className="br-section">
@@ -1838,8 +1839,8 @@ export default function UserHub() {
                                        </div>
 
                                        <p className="li-excerpt">
-                                          {claim.context_text
-                                             ? `"${claim.context_text}"`
+                                          {getAnalyzedClaimText(claim)
+                                             ? `"${getAnalyzedClaimText(claim)}"`
                                              : claim.ai_summary || "No summary available."}
                                        </p>
 

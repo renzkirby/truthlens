@@ -5,6 +5,7 @@ import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
 
 import { resolveApiEndpoint } from "../../utils/api";
+import { getAnalyzedClaimText } from "../../utils/claimText";
 
 import { VERDICT_CONFIG } from "../../utils/constants";
 
@@ -353,7 +354,7 @@ function VerificationIntakePanel({ organizationId, organizationName }) {
                                  <span className="intake-updated">Updated {formatDateTime(claim.last_updated)}</span>
                               </div>
 
-                              <h3 className="intake-claim-text">{claim.context_text || "Claim text unavailable"}</h3>
+                              <h3 className="intake-claim-text">{getAnalyzedClaimText(claim, "Claim text unavailable")}</h3>
 
                               {claim.ai_summary && <p className="intake-ai-summary">{claim.ai_summary}</p>}
 

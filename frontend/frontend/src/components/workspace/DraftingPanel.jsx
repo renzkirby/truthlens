@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../../hooks/useAuth";
 import { resolveApiEndpoint } from "../../utils/api";
+import { getAnalyzedClaimText } from "../../utils/claimText";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
@@ -175,7 +176,7 @@ function getItemState(item) {
 }
 
 function getClaimText(item) {
-   return item?.decision?.canonical_claim || item?.claim?.context_text || "Claim context unavailable";
+   return item?.decision?.canonical_claim || getAnalyzedClaimText(item?.claim, "Claim context unavailable");
 }
 
 function VerdictBadge({ verdict }) {

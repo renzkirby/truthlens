@@ -5,6 +5,7 @@ import Icons from "../components/Icons.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { useNotification } from "../hooks/useNotification";
 import { buildApiUrl, resolveApiEndpoint } from "../utils/api";
+import { getAnalyzedClaimText } from "../utils/claimText";
 import timeAgo from "../utils/timeAgo";
 import { getEffectiveVerdict } from "../utils/verdict";
 
@@ -790,7 +791,7 @@ function CommunityFeed() {
             {threads.length > 0 && (
                <div className="feed-posts" aria-label="Community discussions">
                   {threads.map((thread) => {
-                     const claimText = thread.claim?.context_text?.trim() || "";
+                     const claimText = getAnalyzedClaimText(thread.claim);
                      const captionText = thread.caption?.trim() || "";
                      const isEditing = editingThreadId === thread.id;
                      const contextsMatch = Boolean(claimText) && normalizeComparableText(claimText) === normalizeComparableText(captionText);

@@ -617,6 +617,34 @@
    margin-top: var(--tl-space-6);
 }
 
+.deep-analysis-source-context {
+   min-width: 0;
+   padding: var(--tl-space-4);
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: var(--tl-radius-lg);
+}
+
+.deep-analysis-source-context summary {
+   cursor: pointer;
+   font-weight: 650;
+}
+
+.deep-analysis-source-context summary:focus-visible {
+   outline: 2px solid var(--tl-color-brand-primary);
+   outline-offset: 3px;
+}
+
+.deep-analysis-source-context p {
+   color: var(--tl-color-text-muted);
+}
+
+.deep-analysis-source-context-text {
+   white-space: pre-wrap;
+   overflow-wrap: anywhere;
+   max-height: 32rem;
+   overflow-y: auto;
+}
+
 .deep-analysis-media-frame {
    display: flex;
    align-items: center;

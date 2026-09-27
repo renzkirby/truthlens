@@ -5,6 +5,7 @@ import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
 
 import { resolveApiEndpoint } from "../../utils/api";
+import { getAnalyzedClaimText } from "../../utils/claimText";
 
 import "./OrganizationWorkloadPanel.css";
 import InvestigationContextLinks from "./InvestigationContextLinks.jsx";
@@ -338,7 +339,7 @@ function OrganizationWorkloadPanel({ organizationId, organizationName, canReleas
                                  <span>Claimed {formatDateTime(assignment.claimed_at)}</span>
                               </div>
 
-                              <h3 className="workload-claim-text">{claim.context_text || "Claim text unavailable"}</h3>
+                              <h3 className="workload-claim-text">{getAnalyzedClaimText(claim, "Claim text unavailable")}</h3>
 
                               <dl className="workload-meta">
                                  <div>

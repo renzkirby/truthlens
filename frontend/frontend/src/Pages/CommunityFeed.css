@@ -412,6 +412,11 @@
   font-weight: 640;
   letter-spacing: -0.01em;
   line-height: 1.5;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
 }
 
 .feed-context-link {

@@ -6,6 +6,7 @@ import ImageLightbox from "../components/ImageLightbox";
 import Icons from "../components/Icons";
 import EvidenceCard from "../components/EvidenceCard";
 import { VERDICT_CONFIG, EVIDENCE_VERDICT_META, ESCALATION_OPTIONS } from "../utils/constants";
+import { getAnalyzedClaimText } from "../utils/claimText";
 import "./ThreadDetailPage.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
@@ -1151,8 +1152,9 @@ export default function ThreadDetailPage() {
       );
    }
 
-   const claimText = thread.claim?.context_text?.trim() || thread.caption?.trim() || "Discussion";
-   const hasClaim = Boolean(thread.claim?.context_text?.trim());
+   const analyzedClaimText = getAnalyzedClaimText(thread.claim);
+   const claimText = analyzedClaimText || thread.caption?.trim() || "Discussion";
+   const hasClaim = Boolean(analyzedClaimText);
    const communityContext = hasClaim && thread.caption?.trim() && normalizeText(thread.caption) !== normalizeText(claimText) ? thread.caption.trim() : "";
    const humanVerdict = thread.claim?.human_verdict;
    const publishedFactCheck = thread.claim?.published_fact_check;

@@ -6,6 +6,7 @@ import Icons from "../components/Icons.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { useNotification } from "../hooks/useNotification";
 import { resolveApiEndpoint } from "../utils/api";
+import { getAnalyzedClaimText } from "../utils/claimText";
 import "./UserProfile.css";
 
 const TAB_PAGE_SIZE = 6;
@@ -56,8 +57,7 @@ function humanizeValue(value, fallback = "Unspecified") {
 }
 
 function getClaimContext(claim) {
-   if (claim?.context_text?.trim()) return claim.context_text.trim();
-   return `${humanizeValue(claim?.claim_type, "Claim")} claim`;
+   return getAnalyzedClaimText(claim, `${humanizeValue(claim?.claim_type, "Claim")} claim`);
 }
 
 function getTabDescription(activeTab, isOwnProfile) {

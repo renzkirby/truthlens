@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { useAuth } from "../../hooks/useAuth";
 import { resolveApiEndpoint } from "../../utils/api";
+import { getAnalyzedClaimText } from "../../utils/claimText";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
@@ -96,7 +97,7 @@ function getEvidenceTitle(caseItem) {
 }
 
 function getClaimContext(caseItem) {
-   return caseItem?.thread?.claim?.context_text || caseItem?.thread?.caption || "Claim context unavailable";
+   return getAnalyzedClaimText(caseItem?.thread?.claim, caseItem?.thread?.caption || "Claim context unavailable");
 }
 
 function safeExternalUrl(value) {

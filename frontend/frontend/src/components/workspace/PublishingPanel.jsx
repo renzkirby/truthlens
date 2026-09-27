@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../../hooks/useAuth";
 import { resolveApiEndpoint } from "../../utils/api";
+import { getAnalyzedClaimText } from "../../utils/claimText";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
@@ -1120,8 +1121,7 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
                                        <strong>{item?.article?.headline || "Untitled fact check"}</strong>
                                        <span className="publishing-row-claim">
                                           {item?.decision?.canonical_claim ||
-                                             item?.claim?.context_text ||
-                                             "Claim context unavailable"}
+                                             getAnalyzedClaimText(item?.claim, "Claim context unavailable")}
                                        </span>
                                        <span className="publishing-row-metadata">
                                           Article v{item?.article?.version ?? "–"} ·{" "}

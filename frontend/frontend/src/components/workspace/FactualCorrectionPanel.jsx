@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../../hooks/useAuth";
 import { resolveApiEndpoint } from "../../utils/api";
+import { getAnalyzedClaimText } from "../../utils/claimText";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
 import Icons from "../Icons.jsx";
 import Badge from "../ui/Badge.jsx";
@@ -1986,9 +1987,8 @@ function FactualCorrectionContent({
                                     </span>
                                     <strong className="correction-queue-reason">{item.correction_reason}</strong>
                                     <span className="correction-queue-claim">
-                                       {item.claim?.context_text ||
-                                          item.predecessor_decision?.canonical_claim ||
-                                          "Claim context unavailable"}
+                                       {item.predecessor_decision?.canonical_claim ||
+                                          getAnalyzedClaimText(item.claim, "Claim context unavailable")}
                                     </span>
                                     <span>
                                        Article v{item.predecessor_publication?.version ?? "–"} · predecessor verdict{" "}

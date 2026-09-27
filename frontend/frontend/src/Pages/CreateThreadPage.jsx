@@ -13,6 +13,7 @@ import Icons from "../components/Icons.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { ESCALATION_OPTIONS } from "../utils/constants";
 import { resolveApiEndpoint } from "../utils/api";
+import { getAnalyzedClaimText } from "../utils/claimText";
 import { getAiVerdict } from "../utils/verdict";
 import "./CreateThreadPage.css";
 
@@ -348,7 +349,7 @@ function CreateThreadPage() {
                            )}
                         </div>
                         <p className="create-thread-claim-text">
-                           {claim.context_text?.trim() || "Claim context is not available."}
+                           {getAnalyzedClaimText(claim, "Claim context is not available.")}
                         </p>
                         <ClaimMaterialPreview claim={claim} />
                      </section>

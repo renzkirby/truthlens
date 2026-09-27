@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { useAuth } from "../../hooks/useAuth";
 import { resolveApiEndpoint } from "../../utils/api";
+import { getAnalyzedClaimText } from "../../utils/claimText";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
@@ -115,7 +116,7 @@ function getVerdictTone(value) {
 }
 
 function getClaimContext(caseItem) {
-   return caseItem?.claim?.context_text || "Claim context unavailable";
+   return getAnalyzedClaimText(caseItem?.claim, "Claim context unavailable");
 }
 
 function identifiersMatch(first, second) {

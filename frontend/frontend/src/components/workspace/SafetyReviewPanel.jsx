@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { useAuth } from "../../hooks/useAuth";
 import { resolveApiEndpoint } from "../../utils/api";
+import { getAnalyzedClaimText } from "../../utils/claimText";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
 import Select from "../ui/Select.jsx";
@@ -70,10 +71,9 @@ function formatDateTime(value) {
 }
 
 function getCaseTitle(caseItem) {
-   return (
-      caseItem?.thread?.claim?.context_text ||
-      caseItem?.thread?.caption ||
-      "Thread context unavailable"
+   return getAnalyzedClaimText(
+      caseItem?.thread?.claim,
+      caseItem?.thread?.caption || "Thread context unavailable"
    );
 }
 
