@@ -649,6 +649,8 @@ class Claim(models.Model):
     media_hash = models.CharField(max_length=64, blank=True, null=True)
     url_link = models.URLField(max_length=2000, blank=True, null=True)
     context_text = models.TextField(blank=True, null=True)
+    analyzed_claim = models.TextField(blank=True, null=True)
+    source_context = models.TextField(blank=True, null=True)
 
     ai_summary = models.TextField(blank=True, null=True)
     ai_reasoning = models.TextField(blank=True, null=True)

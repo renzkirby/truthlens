@@ -2944,6 +2944,7 @@ class ThreadViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(
                 Q(caption__icontains=search_query)
                 | Q(author__username__icontains=search_query)
+                | Q(claim__analyzed_claim__icontains=search_query)
                 | Q(claim__context_text__icontains=search_query)
                 | Q(claim__ai_summary__icontains=search_query)
                 | Q(claim__source_link__icontains=search_query)
@@ -3835,7 +3836,8 @@ class UserFactCheckLibraryView(APIView):
 
         if search_query:
             queryset = queryset.filter(
-                Q(context_text__icontains=search_query)
+                Q(analyzed_claim__icontains=search_query)
+                | Q(context_text__icontains=search_query)
                 | Q(ai_summary__icontains=search_query)
                 | Q(ai_verdict__icontains=search_query)
                 | Q(authoritative_final_verdict__icontains=search_query)

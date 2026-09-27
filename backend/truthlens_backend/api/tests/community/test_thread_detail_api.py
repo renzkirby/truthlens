@@ -258,6 +258,7 @@ class ThreadDetailApiTests(TestCase):
                 "id",
                 "claim_type",
                 "context_text",
+                "analyzed_claim",
                 "media_url",
                 "url_link",
                 "ai_verdict",

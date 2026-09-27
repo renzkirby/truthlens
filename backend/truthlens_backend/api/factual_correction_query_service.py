@@ -649,6 +649,7 @@ def _build_detail(request, actor, organization, capabilities, context):
             "id": str(request.claim_id),
             "claim_type": request.claim.claim_type,
             "context_text": request.claim.context_text,
+            "analyzed_claim": request.claim.analyzed_claim,
             "url_link": request.claim.url_link,
             "source_link": request.claim.source_link,
             "media_url": request.claim.media_url,

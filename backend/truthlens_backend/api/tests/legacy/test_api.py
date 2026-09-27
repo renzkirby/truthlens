@@ -5607,6 +5607,29 @@ class UserFactCheckLibraryTests(APITestCase):
             str(self.claim_fact.id),
         )
 
+    def test_search_matches_analyzed_claim_and_keeps_legacy_context_search(self):
+        self.claim_fact.analyzed_claim = "Distinct atomic aurora proposition."
+        self.claim_fact.save(update_fields=["analyzed_claim"])
+
+        analyzed_response = self.client.get(
+            self.url, {"view": "history", "search": "aurora"}
+        )
+        legacy_response = self.client.get(
+            self.url, {"view": "history", "search": "renewable"}
+        )
+
+        self.assertEqual(analyzed_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(analyzed_response.data["count"], 1)
+        self.assertEqual(
+            analyzed_response.data["results"][0]["id"], str(self.claim_fact.id)
+        )
+        self.assertEqual(
+            analyzed_response.data["results"][0]["analyzed_claim"],
+            self.claim_fact.analyzed_claim,
+        )
+        self.assertNotIn("source_context", analyzed_response.data["results"][0])
+        self.assertEqual(legacy_response.data["count"], 1)
+
     def test_verdict_filter(self):
         response = self.client.get(
             self.url,

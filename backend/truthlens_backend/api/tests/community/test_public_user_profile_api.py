@@ -120,7 +120,7 @@ class PublicUserProfileApiTests(TestCase):
             item for item in response.data if item["id"] == str(visible_threads[1].id)
         )
         self.assertEqual(
-            set(open_payload["claim"]), {"id", "claim_type", "context_text"}
+            set(open_payload["claim"]), {"id", "claim_type", "context_text", "analyzed_claim"}
         )
         self.assertEqual(open_payload["evidence_count"], 1)
         self.assertEqual(open_payload["comment_count"], 1)
@@ -167,7 +167,7 @@ class PublicUserProfileApiTests(TestCase):
             )
             self.assertEqual(
                 set(item["thread"]["claim"]),
-                {"id", "claim_type", "context_text"},
+                {"id", "claim_type", "context_text", "analyzed_claim"},
             )
             self.assertEqual(
                 item["thread"]["claim"]["context_text"],

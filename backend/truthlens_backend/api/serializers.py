@@ -158,7 +158,7 @@ class CommunityUserIdentitySerializer(serializers.ModelSerializer):
 class PublicProfileClaimSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = Claim
-        fields = ["id", "claim_type", "context_text"]
+        fields = ["id", "claim_type", "context_text", "analyzed_claim"]
         read_only_fields = fields
 
 
@@ -629,10 +629,12 @@ class ClaimSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Claim
+        read_only_fields = ["analyzed_claim"]
         fields = [
             "id",
             "claim_type",
             "context_text",
+            "analyzed_claim",
             "ai_verdict",
             "final_verdict",
             "effective_verdict",
@@ -658,11 +660,13 @@ class ClaimSerializer(serializers.ModelSerializer):
 
 class ClaimDeepAnalysisSerializer(ClaimSerializer):
     class Meta(ClaimSerializer.Meta):
+        read_only_fields = ClaimSerializer.Meta.read_only_fields + ["source_context"]
         fields = ClaimSerializer.Meta.fields + [
             "ai_reasoning",
             "ai_sources",
             "context_text",
             "url_link",
+            "source_context",
             "claim_fingerprint",
         ]
 
@@ -694,6 +698,7 @@ class VerificationIntakeClaimSerializer(serializers.ModelSerializer):
             "id",
             "claim_type",
             "context_text",
+            "analyzed_claim",
             "ai_verdict",
             "final_verdict",
             "ai_summary",
@@ -1283,6 +1288,7 @@ class CommunityFeedClaimSerializer(serializers.ModelSerializer):
             "id",
             "claim_type",
             "context_text",
+            "analyzed_claim",
             "media_url",
             "canonical_source_url",
             "ai_verdict",
@@ -1324,6 +1330,7 @@ class ThreadDetailClaimSerializer(serializers.ModelSerializer):
             "id",
             "claim_type",
             "context_text",
+            "analyzed_claim",
             "media_url",
             "url_link",
             "ai_verdict",
@@ -1525,7 +1532,7 @@ class SafetyUserSummarySerializer(serializers.ModelSerializer):
 class SafetyClaimSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = Claim
-        fields = ["id", "claim_type", "context_text"]
+        fields = ["id", "claim_type", "context_text", "analyzed_claim"]
         read_only_fields = fields
 
 
@@ -1780,6 +1787,7 @@ class EvidenceReviewClaimSummarySerializer(serializers.ModelSerializer):
             "id",
             "claim_type",
             "context_text",
+            "analyzed_claim",
             "url_link",
             "source_link",
             "media_url",
@@ -2162,6 +2170,7 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
                     {
                         "id": str(obj.thread.claim.id),
                         "context_text": obj.thread.claim.context_text,
+                        "analyzed_claim": obj.thread.claim.analyzed_claim,
                         "verdict": claim_provenance["verdict"]
                         or obj.thread.claim.ai_verdict,
                     }
@@ -2585,7 +2594,7 @@ class AdjudicationCaseQueueOrganizationSerializer(serializers.ModelSerializer):
 class AdjudicationCaseQueueClaimSerializer(serializers.ModelSerializer):
     class Meta:
         model = Claim
-        fields = ["id", "claim_type", "context_text"]
+        fields = ["id", "claim_type", "context_text", "analyzed_claim"]
         read_only_fields = fields
 
 
@@ -2715,6 +2724,7 @@ class AdjudicationCaseDetailClaimSerializer(serializers.ModelSerializer):
             "id",
             "claim_type",
             "context_text",
+            "analyzed_claim",
             "url_link",
             "source_link",
             "media_url",
@@ -3299,6 +3309,9 @@ class PublicationWorkflowClaimSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     claim_type = serializers.CharField()
     context_text = serializers.CharField(allow_blank=True, allow_null=True)
+    analyzed_claim = serializers.CharField(
+        allow_blank=True, allow_null=True, required=False
+    )
     url_link = serializers.URLField(allow_null=True, required=False)
     source_link = serializers.URLField(allow_null=True, required=False)
     media_url = serializers.CharField(allow_null=True, required=False)

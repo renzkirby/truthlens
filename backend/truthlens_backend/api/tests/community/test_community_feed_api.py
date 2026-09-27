@@ -145,6 +145,22 @@ class CommunityFeedApiTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(self._result_ids(response), [str(matching_thread.id)])
 
+    def test_search_matches_analyzed_claim_without_leaking_source_context(self):
+        claim, thread = self._create_thread("ordinary caption")
+        claim.analyzed_claim = "Distinct atomic aurora proposition."
+        claim.source_context = "Private long extracted article text."
+        claim.save(update_fields=["analyzed_claim", "source_context"])
+
+        response = self.client.get(self.url, {"search": "aurora"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self._result_ids(response), [str(thread.id)])
+        self.assertEqual(
+            response.data["results"][0]["claim"]["analyzed_claim"],
+            claim.analyzed_claim,
+        )
+        self.assertNotIn("source_context", response.data["results"][0]["claim"])
+
     def test_claim_type_filter_includes_video(self):
         _video_claim, video_thread = self._create_thread(
             "video claim",
@@ -499,6 +515,7 @@ class CommunityFeedApiTests(TestCase):
                 "id",
                 "claim_type",
                 "context_text",
+                "analyzed_claim",
                 "media_url",
                 "canonical_source_url",
                 "ai_verdict",

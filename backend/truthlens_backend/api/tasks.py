@@ -78,6 +78,32 @@ class ClaimPersistenceError(RuntimeError):
     """Raised when automated analysis cannot be persisted to a Claim."""
 
 
+def persist_analyzed_claim_representation(claim_id, analyzed_claim, source_context):
+    """Store ClaimGate's proposition and its input without changing analysis data."""
+    updates = {}
+    if analyzed_claim is not None:
+        if not isinstance(analyzed_claim, str):
+            raise ClaimPersistenceError("Analyzed claim must be text.")
+        normalized_claim = analyzed_claim.strip()
+        if normalized_claim and normalized_claim != "OUT_OF_SCOPE":
+            updates["analyzed_claim"] = normalized_claim
+    if source_context is not None:
+        if not isinstance(source_context, str):
+            raise ClaimPersistenceError("Source context must be text.")
+        normalized_context = source_context.strip()
+        if normalized_context:
+            updates["source_context"] = normalized_context
+    if not updates:
+        return
+    try:
+        # A missing claim historically stays on the pipeline's existing path.
+        Claim.objects.filter(pk=claim_id).update(**updates)
+    except Exception as exc:
+        raise ClaimPersistenceError(
+            f"Claim representation persistence failed for claim {claim_id}."
+        ) from exc
+
+
 def _resolve_exact_published_claim(claim, cleaned_claim):
     """Resolve cleaned factual text without storing AI/human verdict copies."""
     if claim is None:
@@ -907,6 +933,9 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
         # B.1A authority rule: AI may assist verification, but it must not be
         # required to restate a claim before deterministic identity can match.
         if is_image_claim and _resolve_exact_published_claim(run_claim, raw_text):
+            persist_analyzed_claim_representation(
+                claim_id, run_claim.analyzed_claim, raw_text
+            )
             published_resolution = True
             return
 
@@ -914,6 +943,9 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
         # automated cache reuse until canonical publication authority has had
         # the first opportunity to resolve the claim.
         if has_second_chance_match and not is_image_claim:
+            persist_analyzed_claim_representation(
+                claim_id, matched_claim.analyzed_claim, raw_text
+            )
             selected_verdict = _reuse_second_chance_ai_analysis(
                 matched_claim,
                 claim_id,
@@ -951,6 +983,10 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 return
 
             target_claim = Claim.objects.filter(id=claim_id).first()
+            if isinstance(cleaned_claim, str) and cleaned_claim.strip():
+                persist_analyzed_claim_representation(
+                    claim_id, cleaned_claim, raw_text
+                )
 
             # This shared pipeline also serves TEXT. IMAGE claims get both
             # deterministic canonical authority and strict proposition-equivalence
@@ -1535,6 +1571,10 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
             return
 
         target_claim = Claim.objects.filter(id=claim_id).first()
+        if isinstance(cleaned_claim, str) and cleaned_claim.strip():
+            persist_analyzed_claim_representation(
+                claim_id, cleaned_claim, cleaned_text
+            )
 
         # Human publication authority precedes automated SATIRE classification.
         if _resolve_exact_published_claim(target_claim, cleaned_claim):

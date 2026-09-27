@@ -68,6 +68,7 @@ def _claim_payload(claim):
         "id": str(claim.id),
         "claim_type": claim.claim_type,
         "context_text": claim.context_text,
+        "analyzed_claim": claim.analyzed_claim,
         "url_link": claim.url_link,
         "source_link": claim.source_link,
         "media_url": claim.media_url,

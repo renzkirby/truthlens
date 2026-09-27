@@ -613,7 +613,7 @@ class AdjudicationCaseQueueApiTests(APITestCase):
         )
         self.assertEqual(
             set(item["claim"]),
-            {"id", "claim_type", "context_text"},
+            {"id", "claim_type", "context_text", "analyzed_claim"},
         )
         self.assertEqual(
             set(item["evidence_review"]),

@@ -384,6 +384,8 @@ class VerificationRunURLRuntimeTests(TestCase):
         self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "SATIRE")
+        self.assertEqual(self.claim.analyzed_claim, self.cleaned["cleaned_claim"])
+        self.assertEqual(self.claim.source_context, self.cleaned_text)
         self.assertEqual(self.save_claim.call_args.args[4], self.url)
         self.vault.assert_called_once_with(
             "Example public claim.",
@@ -400,6 +402,9 @@ class VerificationRunURLRuntimeTests(TestCase):
             "sources": ["https://example.com/vault"],
         }
         self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.analyzed_claim, self.cleaned["cleaned_claim"])
+        self.assertEqual(self.claim.source_context, self.cleaned_text)
         self.save_claim.assert_called_once_with(
             self.claim.pk,
             self.verdict,
@@ -523,6 +528,9 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.evaluate_tavily.assert_not_called()
         self.fail_run.assert_not_called()
         self.assertEqual(VerificationEvidence.objects.count(), 0)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.analyzed_claim, self.cleaned["cleaned_claim"])
+        self.assertEqual(self.claim.source_context, self.cleaned_text)
 
     def test_missing_persisted_gfc_evidence_falls_through_to_tavily(self):
         self.render_dossier.side_effect = ["", "Persisted Tavily evidence."]
@@ -668,7 +676,65 @@ class VerificationRunURLRuntimeTests(TestCase):
         self._assert_terminal(self._execute(), VerificationRun.Status.ABSTAINED)
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
+        self.assertEqual(self.claim.analyzed_claim, self.cleaned["cleaned_claim"])
+        self.assertEqual(self.claim.source_context, self.cleaned_text)
         self.fail_run.assert_not_called()
+
+    def test_long_article_persists_claimgate_proposition_without_changing_queries(self):
+        article = "Long extracted article paragraph. " * 120
+        self.clean.return_value = article
+        self.cleaned["cleaned_claim"] = "Concise atomic proposition."
+        self.cleaned["search_query"] = "generated retrieval query"
+
+        self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
+
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.analyzed_claim, "Concise atomic proposition.")
+        self.assertEqual(self.claim.source_context, article.strip())
+        self.assertEqual(self.claim.context_text, article)
+        self.bridge.assert_called_once_with(
+            "generated retrieval query",
+            self.claim.pk,
+            stage_prefix="url_",
+            verification_run=self.claim.verification_runs.get(),
+        )
+
+    def test_long_article_tavily_fallback_preserves_proposition_and_query(self):
+        article = "Extracted background and qualifiers. " * 120
+        self.clean.return_value = article
+        self.cleaned["cleaned_claim"] = "Concise atomic proposition."
+        self.cleaned["search_query"] = "generated Tavily retrieval query"
+        self.bridge.return_value = {"claims": []}
+
+        self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
+
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.analyzed_claim, "Concise atomic proposition.")
+        self.assertEqual(self.claim.source_context, article.strip())
+        self.assertEqual(self.claim.context_text, article)
+        self.bridge.assert_called_once_with(
+            "generated Tavily retrieval query",
+            self.claim.pk,
+            stage_prefix="url_",
+            verification_run=self.claim.verification_runs.get(),
+        )
+        self.retrieve_tavily.assert_called_once_with(
+            "generated Tavily retrieval query",
+            self.claim.pk,
+            stage_prefix="url_",
+            verification_run=self.claim.verification_runs.get(),
+        )
+
+    def test_published_resolution_still_persists_analyzed_proposition(self):
+        self._patch("api.tasks._resolve_exact_published_claim", return_value=True)
+
+        self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
+
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.analyzed_claim, self.cleaned["cleaned_claim"])
+        self.assertEqual(self.claim.source_context, self.cleaned_text)
+        self.bridge.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
 
     def test_unrecovered_failure_records_metadata_and_preserves_exception(self):
         error = RuntimeError("Vault unavailable: " + "details " * 30)

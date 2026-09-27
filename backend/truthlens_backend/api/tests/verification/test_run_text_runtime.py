@@ -353,6 +353,8 @@ class VerificationRunTextRuntimeTests(TestCase):
         self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "SATIRE")
+        self.assertEqual(self.claim.analyzed_claim, self.cleaned["cleaned_claim"])
+        self.assertEqual(self.claim.source_context, "Raw submitted claim.")
         self.vault.assert_not_called()
         self.retrieve_gfc.assert_not_called()
         self.retrieve_tavily.assert_not_called()
@@ -364,6 +366,9 @@ class VerificationRunTextRuntimeTests(TestCase):
             "summary": "Verified summary.", "sources": ["https://example.com/vault"],
         }
         self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.analyzed_claim, self.cleaned["cleaned_claim"])
+        self.assertEqual(self.claim.source_context, "Raw submitted claim.")
         self.save_claim.assert_called_once_with(
             self.claim.id, self.verdict, "TruthLens Verified Vault",
             "Verified summary.", ["https://example.com/vault"],
@@ -500,7 +505,63 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
         self.assertEqual(self.claim.consensus_score, 40)
+        self.assertEqual(self.claim.analyzed_claim, self.cleaned["cleaned_claim"])
+        self.assertEqual(self.claim.source_context, "Raw submitted claim.")
         self.fail_run.assert_not_called()
+
+    def test_text_claim_preserves_analyzed_proposition_after_gfc_save(self):
+        self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.analyzed_claim, "Example public claim.")
+        self.assertEqual(self.claim.source_context, "Raw submitted claim.")
+        self.retrieve_gfc.assert_called_once_with(
+            "example public claim", self.claim.pk,
+            verification_run=self.claim.verification_runs.get(),
+        )
+
+    def test_image_claim_preserves_ocr_source_and_claimgate_proposition(self):
+        self.claim.claim_type = Claim.ClaimType.IMAGE
+        self.claim.save(update_fields=["claim_type"])
+
+        self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
+
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.analyzed_claim, "Example public claim.")
+        self.assertEqual(self.claim.source_context, "Raw submitted claim.")
+
+    def test_cache_reuse_copies_only_existing_analyzed_proposition(self):
+        cached = self._cached_claim("FACT")
+        cached.analyzed_claim = "Persisted cached proposition."
+        cached.save(update_fields=["analyzed_claim"])
+
+        self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
+
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.analyzed_claim, cached.analyzed_claim)
+        self.assertEqual(self.claim.source_context, "Raw submitted claim.")
+        self.clean.assert_not_called()
+
+    def test_legacy_cache_reuse_does_not_derive_claim_from_summary(self):
+        self._cached_claim("FACT")
+
+        self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
+
+        self.claim.refresh_from_db()
+        self.assertIsNone(self.claim.analyzed_claim)
+        self.assertEqual(self.claim.source_context, "Raw submitted claim.")
+        self.clean.assert_not_called()
+
+    def test_image_pre_gate_authority_keeps_legacy_fallback_without_inventing_claim(self):
+        self.claim.claim_type = Claim.ClaimType.IMAGE
+        self.claim.save(update_fields=["claim_type"])
+        self._patch("api.tasks._resolve_exact_published_claim", return_value=True)
+
+        self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
+
+        self.claim.refresh_from_db()
+        self.assertIsNone(self.claim.analyzed_claim)
+        self.assertEqual(self.claim.source_context, "Raw submitted claim.")
+        self.clean.assert_not_called()
 
     def test_fatal_core_exception_fails_with_original_metadata(self):
         error = RuntimeError("Preprocessor unavailable: " + "details " * 30)
