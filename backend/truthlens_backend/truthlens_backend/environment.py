@@ -152,3 +152,30 @@ def select_database_url(
 
     _validate_database_url_isolation(app_env, configured)
     return selected
+
+
+def resolve_database_conn_max_age(
+    environ: Mapping[str, str] | None = None,
+    *,
+    default: int = 600,
+) -> int:
+    """Resolve Django's persistent database connection lifetime safely."""
+
+    environment = os.environ if environ is None else environ
+    raw_value = environment.get("DB_CONN_MAX_AGE")
+
+    if raw_value is None:
+        return default
+
+    normalized = raw_value.strip()
+    try:
+        value = int(normalized)
+    except (TypeError, ValueError) as exc:
+        raise ImproperlyConfigured(
+            "DB_CONN_MAX_AGE must be a non-negative integer."
+        ) from exc
+
+    if value < 0:
+        raise ImproperlyConfigured("DB_CONN_MAX_AGE must be a non-negative integer.")
+
+    return value

@@ -10,6 +10,7 @@ from django.test import SimpleTestCase
 from truthlens_backend.environment import (
     normalize_supabase_pooler_port,
     resolve_app_environment,
+    resolve_database_conn_max_age,
     select_database_url,
     validate_debug_policy,
 )
@@ -45,6 +46,7 @@ print(
             "host": database.get("HOST", ""),
             "port": str(database.get("PORT", "")),
             "user": database.get("USER", ""),
+            "conn_max_age": database.get("CONN_MAX_AGE"),
         }}
     )
 )
@@ -402,3 +404,41 @@ class DjangoSettingsInitializationTests(SimpleTestCase):
                     },
                     f"DEBUG must be False when APP_ENV is {app_env}",
                 )
+
+    def test_production_can_disable_persistent_database_connections(self):
+        result = self.assert_initialization_succeeds(
+            {
+                "APP_ENV": "production",
+                "DEBUG": "False",
+                "SUPABASE_PRODUCTION_DB_URL": PRODUCTION_URL,
+                "DB_CONN_MAX_AGE": "0",
+            }
+        )
+
+        self.assertEqual(result["conn_max_age"], 0)
+
+
+class DatabaseConnectionLifetimeTests(SimpleTestCase):
+    def test_default_connection_lifetime_preserves_existing_behavior(self):
+        self.assertEqual(resolve_database_conn_max_age({}), 600)
+
+    def test_connection_lifetime_can_be_disabled_for_asgi(self):
+        self.assertEqual(
+            resolve_database_conn_max_age({"DB_CONN_MAX_AGE": "0"}),
+            0,
+        )
+
+    def test_connection_lifetime_accepts_non_negative_integer(self):
+        self.assertEqual(
+            resolve_database_conn_max_age({"DB_CONN_MAX_AGE": "120"}),
+            120,
+        )
+
+    def test_invalid_connection_lifetime_fails_closed(self):
+        for value in ("", "abc", "-1", "1.5"):
+            with self.subTest(value=value):
+                with self.assertRaisesMessage(
+                    ImproperlyConfigured,
+                    "DB_CONN_MAX_AGE must be a non-negative integer",
+                ):
+                    resolve_database_conn_max_age({"DB_CONN_MAX_AGE": value})
