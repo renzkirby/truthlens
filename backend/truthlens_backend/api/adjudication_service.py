@@ -145,6 +145,7 @@ def get_adjudication_case_queue(
             "claim__id",
             "claim__claim_type",
             "claim__context_text",
+            "claim__analyzed_claim",
             "claim__final_verdict",
         )
         .annotate(

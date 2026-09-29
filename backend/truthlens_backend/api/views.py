@@ -3949,7 +3949,7 @@ def toggle_save_claim(request, claim_id):
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def get_claim_analysis(request, claim_id):
     claim = get_object_or_404(Claim, id=claim_id)
     serializer = ClaimDeepAnalysisSerializer(claim, context={"request": request})

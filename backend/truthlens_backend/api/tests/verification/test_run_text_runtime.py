@@ -532,13 +532,16 @@ class VerificationRunTextRuntimeTests(TestCase):
     def test_cache_reuse_copies_only_existing_analyzed_proposition(self):
         cached = self._cached_claim("FACT")
         cached.analyzed_claim = "Persisted cached proposition."
-        cached.save(update_fields=["analyzed_claim"])
+        cached.source_context = "Different original submission."
+        cached.save(update_fields=["analyzed_claim", "source_context"])
 
         self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
 
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.analyzed_claim, cached.analyzed_claim)
         self.assertEqual(self.claim.source_context, "Raw submitted claim.")
+        cached.refresh_from_db()
+        self.assertEqual(cached.source_context, "Different original submission.")
         self.clean.assert_not_called()
 
     def test_legacy_cache_reuse_does_not_derive_claim_from_summary(self):
@@ -561,6 +564,56 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.claim.refresh_from_db()
         self.assertIsNone(self.claim.analyzed_claim)
         self.assertEqual(self.claim.source_context, "Raw submitted claim.")
+        self.clean.assert_not_called()
+
+    def test_image_pre_gate_authority_clears_stale_analyzed_claim(self):
+        self.claim.claim_type = Claim.ClaimType.IMAGE
+        self.claim.context_text = "New published proposition"
+        self.claim.analyzed_claim = "Old proposition"
+        self.claim.source_context = "Old OCR material"
+        self.claim.save(
+            update_fields=["claim_type", "context_text", "analyzed_claim", "source_context"]
+        )
+        self._patch(
+            "api.tasks.find_exact_canonical_published_fact_check",
+            return_value=Mock(fact_check=object()),
+        )
+        self._patch(
+            "api.tasks.record_authoritative_claim_fact_check_reference",
+            return_value=object(),
+        )
+
+        self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
+
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.context_text, "New published proposition")
+        self.assertEqual(self.claim.source_context, "New published proposition")
+        self.assertIsNone(self.claim.analyzed_claim)
+        self.clean.assert_not_called()
+
+    def test_image_pre_gate_authority_retains_identical_analyzed_claim(self):
+        self.claim.claim_type = Claim.ClaimType.IMAGE
+        self.claim.context_text = "New published proposition"
+        self.claim.analyzed_claim = "  NEW   published proposition  "
+        self.claim.source_context = "Old OCR material"
+        self.claim.save(
+            update_fields=["claim_type", "context_text", "analyzed_claim", "source_context"]
+        )
+        self._patch(
+            "api.tasks.find_exact_canonical_published_fact_check",
+            return_value=Mock(fact_check=object()),
+        )
+        self._patch(
+            "api.tasks.record_authoritative_claim_fact_check_reference",
+            return_value=object(),
+        )
+
+        self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
+
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.context_text, "New published proposition")
+        self.assertEqual(self.claim.source_context, "New published proposition")
+        self.assertEqual(self.claim.analyzed_claim, "NEW   published proposition")
         self.clean.assert_not_called()
 
     def test_fatal_core_exception_fails_with_original_metadata(self):

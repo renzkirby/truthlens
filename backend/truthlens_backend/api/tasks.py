@@ -78,10 +78,14 @@ class ClaimPersistenceError(RuntimeError):
     """Raised when automated analysis cannot be persisted to a Claim."""
 
 
-def persist_analyzed_claim_representation(claim_id, analyzed_claim, source_context):
+def persist_analyzed_claim_representation(
+    claim_id, analyzed_claim, source_context, *, clear_analyzed_claim=False
+):
     """Store ClaimGate's proposition and its input without changing analysis data."""
     updates = {}
-    if analyzed_claim is not None:
+    if clear_analyzed_claim:
+        updates["analyzed_claim"] = None
+    elif analyzed_claim is not None:
         if not isinstance(analyzed_claim, str):
             raise ClaimPersistenceError("Analyzed claim must be text.")
         normalized_claim = analyzed_claim.strip()
@@ -933,8 +937,18 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
         # B.1A authority rule: AI may assist verification, but it must not be
         # required to restate a claim before deterministic identity can match.
         if is_image_claim and _resolve_exact_published_claim(run_claim, raw_text):
+            existing_analyzed_claim = run_claim.analyzed_claim
+            same_proposition = (
+                isinstance(existing_analyzed_claim, str)
+                and bool(existing_analyzed_claim.strip())
+                and " ".join(existing_analyzed_claim.split()).casefold()
+                == " ".join(raw_text.split()).casefold()
+            )
             persist_analyzed_claim_representation(
-                claim_id, run_claim.analyzed_claim, raw_text
+                claim_id,
+                existing_analyzed_claim if same_proposition else None,
+                raw_text,
+                clear_analyzed_claim=not same_proposition,
             )
             published_resolution = True
             return

@@ -1,7 +1,11 @@
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
 from django.db import DatabaseError
 from django.test import TestCase
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APIClient
 
 from api.models import Claim
 from api.serializers import (
@@ -109,3 +113,39 @@ class AnalyzedClaimRepresentationTests(TestCase):
         self.assertTrue(detailed.is_valid(), detailed.errors)
         self.assertNotIn("analyzed_claim", ordinary.validated_data)
         self.assertNotIn("source_context", detailed.validated_data)
+
+
+class ClaimAnalysisAccessTests(TestCase):
+    def setUp(self):
+        self.claim = Claim.objects.create(
+            context_text="Legacy claim context.",
+            analyzed_claim="Concise analyzed proposition.",
+            source_context="Original submitted material.",
+        )
+        self.url = reverse("claim_analysis", kwargs={"claim_id": self.claim.pk})
+        self.client = APIClient()
+
+    def test_anonymous_request_requires_authentication(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_authenticated_request_includes_detailed_representation(self):
+        user = get_user_model().objects.create_user(
+            username="analysis_reader", password="test-password"
+        )
+        self.client.force_authenticate(user=user)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["analyzed_claim"], self.claim.analyzed_claim)
+        self.assertEqual(response.data["source_context"], self.claim.source_context)
+        self.assertNotIn("source_context", ClaimSerializer(self.claim).data)
+        self.assertNotIn(
+            "source_context", PublicProfileClaimSummarySerializer(self.claim).data
+        )
+        feed = CommunityFeedClaimSerializer(
+            self.claim, context={"verified_evidence_count": 0}
+        ).data
+        self.assertNotIn("source_context", feed)

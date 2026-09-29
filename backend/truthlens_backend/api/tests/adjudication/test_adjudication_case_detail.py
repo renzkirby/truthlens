@@ -434,6 +434,7 @@ class AdjudicationCaseDetailApiTests(APITestCase):
             {
                 "id",
                 "claim_type",
+                "analyzed_claim",
                 "context_text",
                 "url_link",
                 "source_link",
@@ -465,6 +466,7 @@ class AdjudicationCaseDetailApiTests(APITestCase):
             "consensus_score",
             "publication_status",
             "metadata",
+            "source_context",
         }
         self.assertFalse(forbidden & self._all_mapping_keys(response.data))
 
