@@ -466,7 +466,8 @@ def get_verification_intelligence_context(*, actor, organization, claim_id):
         "claim": {
             "id": str(claim.pk),
             **_fields(claim, (
-                "claim_type", "context_text", "url_link", "source_link", "media_url",
+                "claim_type", "analyzed_claim", "context_text", "url_link",
+                "source_link", "media_url",
             )),
             "last_updated": _timestamp(claim.last_updated),
         },

@@ -108,15 +108,32 @@ def _normalize_claim_gate_stance(result, *, has_known_satire_provenance):
     return normalized_result
 
 
+MAX_CLEANED_CLAIM_CHARACTERS = 1000
+MAX_CLEANED_CLAIM_WORDS = 150
+
+
+def validate_claim_gate_cleaned_claim(value):
+    """Normalize whitespace and reject output shaped like source material."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("ClaimGate returned an unusable cleaned claim")
+
+    cleaned_claim = " ".join(value.split())
+    # These generous shape limits catch source dumps; they do not infer meaning.
+    if cleaned_claim != "OUT_OF_SCOPE" and (
+        len(cleaned_claim) > MAX_CLEANED_CLAIM_CHARACTERS
+        or len(cleaned_claim.split()) > MAX_CLEANED_CLAIM_WORDS
+    ):
+        raise ValueError("ClaimGate returned an overlong cleaned claim")
+    return cleaned_claim
+
+
 def _normalize_claim_gate_queries(result):
     """Normalize bounded retrieval queries while preserving the primary query."""
     normalized_result = result.copy()
 
-    cleaned_claim = normalized_result.get("cleaned_claim")
-    if not isinstance(cleaned_claim, str) or not cleaned_claim.strip():
-        raise ValueError("ClaimGate returned an unusable cleaned claim")
-
-    cleaned_claim = cleaned_claim.strip()
+    cleaned_claim = validate_claim_gate_cleaned_claim(
+        normalized_result.get("cleaned_claim")
+    )
     normalized_result["cleaned_claim"] = cleaned_claim
 
     primary_query = normalized_result.get("search_query")

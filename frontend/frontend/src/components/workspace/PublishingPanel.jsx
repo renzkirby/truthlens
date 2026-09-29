@@ -1121,7 +1121,8 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
                                        <strong>{item?.article?.headline || "Untitled fact check"}</strong>
                                        <span className="publishing-row-claim">
                                           {item?.decision?.canonical_claim ||
-                                             getAnalyzedClaimText(item?.claim, "Claim context unavailable")}
+                                             getAnalyzedClaimText(item?.claim) ||
+                                             "Claim representation unavailable"}
                                        </span>
                                        <span className="publishing-row-metadata">
                                           Article v{item?.article?.version ?? "–"} ·{" "}

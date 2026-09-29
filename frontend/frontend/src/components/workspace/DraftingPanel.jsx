@@ -176,7 +176,7 @@ function getItemState(item) {
 }
 
 function getClaimText(item) {
-   return item?.decision?.canonical_claim || getAnalyzedClaimText(item?.claim, "Claim context unavailable");
+   return item?.decision?.canonical_claim || getAnalyzedClaimText(item?.claim) || "Claim representation unavailable";
 }
 
 function VerdictBadge({ verdict }) {

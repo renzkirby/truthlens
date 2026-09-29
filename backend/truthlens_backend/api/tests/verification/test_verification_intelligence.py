@@ -59,6 +59,7 @@ class VerificationIntelligenceTests(TestCase):
         )
         self.claim = Claim.objects.create(
             claim_type=Claim.ClaimType.URL,
+            analyzed_claim="Concise analyzed proposition",
             context_text="Persisted claim context",
             url_link="https://example.test/claim",
             source_link="https://example.test/source",
@@ -302,6 +303,7 @@ class VerificationIntelligenceTests(TestCase):
             {
                 "id",
                 "claim_type",
+                "analyzed_claim",
                 "context_text",
                 "url_link",
                 "source_link",
@@ -309,6 +311,10 @@ class VerificationIntelligenceTests(TestCase):
                 "last_updated",
             },
         )
+        self.assertEqual(
+            result["claim"]["analyzed_claim"], self.claim.analyzed_claim
+        )
+        self.assertNotIn("source_context", result["claim"])
         self.assertEqual(result["claim"]["context_text"], self.claim.context_text)
         self.assertNotIn("final_verdict", json.dumps(result))
         self.assertIsNone(result["adjudication"]["current_decision"])

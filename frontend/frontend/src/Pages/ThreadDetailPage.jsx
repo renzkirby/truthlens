@@ -1153,9 +1153,8 @@ export default function ThreadDetailPage() {
    }
 
    const analyzedClaimText = getAnalyzedClaimText(thread.claim);
-   const claimText = analyzedClaimText || thread.caption?.trim() || "Discussion";
-   const hasClaim = Boolean(analyzedClaimText);
-   const communityContext = hasClaim && thread.caption?.trim() && normalizeText(thread.caption) !== normalizeText(claimText) ? thread.caption.trim() : "";
+   const claimText = analyzedClaimText || "Analyzed claim unavailable";
+   const communityContext = thread.caption?.trim() && (!analyzedClaimText || normalizeText(thread.caption) !== normalizeText(analyzedClaimText)) ? thread.caption.trim() : "";
    const humanVerdict = thread.claim?.human_verdict;
    const publishedFactCheck = thread.claim?.published_fact_check;
    const assessmentVerdict = humanVerdict?.verdict || thread.claim?.ai_verdict || "UNVERIFIED";

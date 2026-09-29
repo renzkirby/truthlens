@@ -71,10 +71,7 @@ function formatDateTime(value) {
 }
 
 function getCaseTitle(caseItem) {
-   return getAnalyzedClaimText(
-      caseItem?.thread?.claim,
-      caseItem?.thread?.caption || "Thread context unavailable"
-   );
+   return getAnalyzedClaimText(caseItem?.thread?.claim) || "Analyzed claim unavailable";
 }
 
 function getAssignmentLabel(caseItem, currentUserId) {
@@ -1021,7 +1018,10 @@ function SafetyReviewPanel() {
                         </div>
 
                         <div className="safety-thread-context">
-                           <p>{detail.thread?.claim?.context_text || detail.thread?.caption || "Thread context unavailable"}</p>
+                           <p>{getCaseTitle(detail)}</p>
+                           {detail.thread?.caption && (
+                              <p><strong>Community context:</strong> {detail.thread.caption}</p>
+                           )}
                            <dl className="safety-thread-provenance">
                               <div>
                                  <dt>Claim type</dt>

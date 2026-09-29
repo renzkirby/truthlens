@@ -209,6 +209,60 @@ class ClaimGateSatireRegressionTests(SimpleTestCase):
 
 
 class ClaimGateFailureRegressionTests(SimpleTestCase):
+    @patch("api.services.call_llm_with_fallback")
+    def test_source_sized_cleaned_claim_is_rejected_without_truncation(self, mock_llm):
+        invalid_claims = (
+            "Historical article paragraph. " * 100,
+            "word " * 151,
+        )
+        for extractor, arguments in (
+            (clean_ocr_text, ("Raw submitted text",)),
+            (extract_search_query, ("Extracted article", "https://example.com")),
+        ):
+            for invalid in invalid_claims:
+                with self.subTest(extractor=extractor.__name__, claim=invalid[:30]):
+                    mock_llm.return_value = json.dumps(
+                        {
+                            "cleaned_claim": invalid,
+                            "search_query": "factual statement query",
+                            "article_stance": "NEUTRAL",
+                        }
+                    )
+                    with self.assertRaises(ClaimGateError):
+                        extractor(*arguments)
+
+    @patch("api.services.call_llm_with_fallback")
+    def test_newline_formatted_atomic_claim_is_normalized(self, mock_llm):
+        mock_llm.return_value = json.dumps(
+            {
+                "cleaned_claim": "A named official\nconfirmed the event\tin 2024.",
+                "search_query": "named official event confirmed 2024",
+                "article_stance": "REPORTING",
+            }
+        )
+
+        result = extract_search_query("Long source article", "https://example.com")
+
+        self.assertEqual(
+            result["cleaned_claim"],
+            "A named official confirmed the event in 2024.",
+        )
+
+    @patch("api.services.call_llm_with_fallback")
+    def test_valid_url_proposition_is_preserved_without_truncation(self, mock_llm):
+        proposition = "A qualified factual proposition about a named event in 2024."
+        mock_llm.return_value = json.dumps(
+            {
+                "cleaned_claim": proposition,
+                "search_query": "named event factual proposition 2024",
+                "article_stance": "REPORTING",
+            }
+        )
+
+        result = extract_search_query("Long source article", "https://example.com")
+
+        self.assertEqual(result["cleaned_claim"], proposition)
+
     @patch(
         "api.services.call_llm_with_fallback",
         return_value="not valid json",

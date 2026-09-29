@@ -116,7 +116,7 @@ function getVerdictTone(value) {
 }
 
 function getClaimContext(caseItem) {
-   return getAnalyzedClaimText(caseItem?.claim, "Claim context unavailable");
+   return getAnalyzedClaimText(caseItem?.claim) || "Analyzed claim unavailable";
 }
 
 function identifiersMatch(first, second) {
@@ -1843,8 +1843,8 @@ function AdjudicationReviewContent({
                                           </div>
 
                                           <div className="adjudication-reading-block prominent">
-                                             <strong>Claim text</strong>
-                                             <p>{detailClaim.context_text || "Claim text unavailable."}</p>
+                                             <strong>Analyzed claim</strong>
+                                             <p>{getAnalyzedClaimText(detailClaim) || "Analyzed claim unavailable."}</p>
                                           </div>
 
                                           <div className="adjudication-context-links">

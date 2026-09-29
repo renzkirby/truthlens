@@ -1988,7 +1988,8 @@ function FactualCorrectionContent({
                                     <strong className="correction-queue-reason">{item.correction_reason}</strong>
                                     <span className="correction-queue-claim">
                                        {item.predecessor_decision?.canonical_claim ||
-                                          getAnalyzedClaimText(item.claim, "Claim context unavailable")}
+                                          getAnalyzedClaimText(item.claim) ||
+                                          "Claim representation unavailable"}
                                     </span>
                                     <span>
                                        Article v{item.predecessor_publication?.version ?? "–"} · predecessor verdict{" "}
@@ -2143,8 +2144,12 @@ function FactualCorrectionContent({
                               </div>
                               <dl className="correction-metadata-grid">
                                  <div className="correction-metadata-wide">
-                                    <dt>Claim context</dt>
-                                    <dd>{detail.claim?.context_text || "Not recorded"}</dd>
+                                    <dt>Canonical claim</dt>
+                                    <dd>
+                                       {detail.predecessor_decision?.canonical_claim ||
+                                          getAnalyzedClaimText(detail.claim) ||
+                                          "Claim representation unavailable"}
+                                    </dd>
                                  </div>
                                  <div>
                                     <dt>Predecessor article</dt>

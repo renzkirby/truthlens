@@ -57,7 +57,7 @@ function humanizeValue(value, fallback = "Unspecified") {
 }
 
 function getClaimContext(claim) {
-   return getAnalyzedClaimText(claim, `${humanizeValue(claim?.claim_type, "Claim")} claim`);
+   return getAnalyzedClaimText(claim) || `${humanizeValue(claim?.claim_type, "Claim")} claim unavailable`;
 }
 
 function getTabDescription(activeTab, isOwnProfile) {

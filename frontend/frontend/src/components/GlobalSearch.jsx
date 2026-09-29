@@ -30,7 +30,7 @@ function normalizeResults(data) {
 }
 
 function getThreadTitle(thread) {
-   return getAnalyzedClaimText(thread?.claim, thread?.caption?.trim() || "Untitled thread");
+   return getAnalyzedClaimText(thread?.claim) || "Analyzed claim unavailable";
 }
 
 function getThreadSubtitle(thread) {

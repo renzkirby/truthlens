@@ -339,7 +339,7 @@ function OrganizationWorkloadPanel({ organizationId, organizationName, canReleas
                                  <span>Claimed {formatDateTime(assignment.claimed_at)}</span>
                               </div>
 
-                              <h3 className="workload-claim-text">{getAnalyzedClaimText(claim, "Claim text unavailable")}</h3>
+                              <h3 className="workload-claim-text">{getAnalyzedClaimText(claim) || "Analyzed claim unavailable"}</h3>
 
                               <dl className="workload-meta">
                                  <div>

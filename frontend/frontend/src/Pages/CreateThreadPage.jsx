@@ -349,7 +349,7 @@ function CreateThreadPage() {
                            )}
                         </div>
                         <p className="create-thread-claim-text">
-                           {getAnalyzedClaimText(claim, "Claim context is not available.")}
+                           {getAnalyzedClaimText(claim) || "Analyzed claim is unavailable for this historical record."}
                         </p>
                         <ClaimMaterialPreview claim={claim} />
                      </section>

@@ -6,7 +6,7 @@ import Icons from "../components/Icons.jsx";
 import { getEffectiveVerdict } from "../utils/verdict";
 import { VERDICT_META } from "../utils/constants";
 import { buildApiUrl } from "../utils/api";
-import { getAnalyzedClaimText } from "../utils/claimText";
+import { getAnalyzedClaimText, getOriginalMaterialText } from "../utils/claimText";
 
 const AnalysisModal = ({ claimId, onClose }) => {
    const { authFetch } = useAuth();
@@ -114,6 +114,12 @@ const AnalysisModal = ({ claimId, onClose }) => {
 
    const verdict = (getEffectiveVerdict(claimData) || "UNVERIFIED").toLowerCase();
    const vm = VERDICT_META[verdict] || VERDICT_META.unverified;
+   const analyzedClaimText = getAnalyzedClaimText(claimData);
+   const originalMaterialText = getOriginalMaterialText(claimData);
+   const comparableText = (value) => value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+   const showOriginalMaterial = Boolean(originalMaterialText) && (
+      !analyzedClaimText || comparableText(originalMaterialText) !== comparableText(analyzedClaimText)
+   );
 
    return (
       <div className="hub-modal-overlay" onClick={onClose}>
@@ -152,8 +158,22 @@ const AnalysisModal = ({ claimId, onClose }) => {
             <div className="br-modal-body">
                <div className="br-section">
                   <h4 className="br-section-title">Claim</h4>
-                  <p className="br-primary-text">{getAnalyzedClaimText(claimData, "No text extracted")}</p>
+                  <p className="br-primary-text">
+                     {analyzedClaimText || "Analyzed claim is unavailable for this historical record."}
+                  </p>
                </div>
+
+               {showOriginalMaterial && (
+                  <div className="br-section">
+                     <details>
+                        <summary className="br-section-title">Original material</summary>
+                        <p className="br-secondary-text">
+                           This stored source material is not the analyzed claim or independent evidence.
+                        </p>
+                        <p className="br-secondary-text">{originalMaterialText}</p>
+                     </details>
+                  </div>
+               )}
 
                <div className="br-section">
                   <h4 className="br-section-title">Summary</h4>
@@ -1841,7 +1861,7 @@ export default function UserHub() {
                                        <p className="li-excerpt">
                                           {getAnalyzedClaimText(claim)
                                              ? `"${getAnalyzedClaimText(claim)}"`
-                                             : claim.ai_summary || "No summary available."}
+                                             : "Analyzed claim unavailable"}
                                        </p>
 
                                        <div className="li-meta">

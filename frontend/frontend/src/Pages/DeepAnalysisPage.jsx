@@ -4,7 +4,7 @@ import { useAuth } from "../hooks/useAuth";
 import ImageLightbox from "../components/ImageLightbox";
 import Icons from "../components/Icons";
 import { API_BASE_URL, VERDICT_META } from "../utils/constants";
-import { getAnalyzedClaimText } from "../utils/claimText";
+import { getAnalyzedClaimText, getOriginalMaterialText } from "../utils/claimText";
 import "./DeepAnalysisPage.css";
 
 const SUPPORTED_VERDICTS = new Set(["FACT", "FAKE", "MISLEADING", "SATIRE", "UNVERIFIED", "OUT_OF_SCOPE", "PENDING"]);
@@ -451,7 +451,9 @@ function DeepAnalysisPage() {
    const originalUrl = rawClaimType === "URL" ? getSafeHttpUrl(claimData.url_link) : null;
    const originalMediaUrl = rawClaimType === "IMAGE" ? getSafeHttpUrl(claimData.media_url) : null;
    const analyzedClaimText = getAnalyzedClaimText(claimData);
-   const sourceContext = typeof claimData.source_context === "string" ? claimData.source_context.trim() : "";
+   const storedSourceContext = typeof claimData.source_context === "string" ? claimData.source_context.trim() : "";
+   const sourceContext = getOriginalMaterialText(claimData);
+   const hasLegacySourceContext = Boolean(sourceContext) && !storedSourceContext;
    const comparable = (value) => value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
    const showSourceContext = Boolean(sourceContext) && (
       rawClaimType !== "TEXT" || comparable(sourceContext) !== comparable(analyzedClaimText)
@@ -495,7 +497,7 @@ function DeepAnalysisPage() {
                         {claimType && <span className="deep-analysis-claim-type">{claimType}</span>}
                      </div>
                      <blockquote>
-                        {getAnalyzedClaimText(claimData, "No claim text is available for this analysis.")}
+                        {analyzedClaimText || "Analyzed claim is unavailable for this historical record."}
                      </blockquote>
                   </section>
                </header>
@@ -690,18 +692,22 @@ function DeepAnalysisPage() {
                            <details className="deep-analysis-source-context">
                               <summary>
                                  {rawClaimType === "URL"
-                                    ? "Extracted source context"
+                                    ? hasLegacySourceContext ? "Historical extracted source context" : "Extracted source context"
                                     : rawClaimType === "IMAGE"
-                                       ? "OCR-extracted text"
-                                       : "Original submitted wording"}
+                                       ? hasLegacySourceContext ? "Historical stored context" : "OCR-extracted text"
+                                       : hasLegacySourceContext ? "Historical stored context" : "Original submitted wording"}
                               </summary>
                               <p>
-                                 {rawClaimType === "URL"
-                                    ? "Cleaned text extracted from the submitted webpage and used to identify the analyzed claim."
-                                    : rawClaimType === "IMAGE"
-                                       ? "Text extracted from the submitted image and used to identify the analyzed claim."
-                                       : "Submitted text from which the analyzed claim was identified."}
-                                 {" "}This original material is not independent evidence.
+                                 {hasLegacySourceContext
+                                    ? rawClaimType === "URL"
+                                       ? "Historical text saved with this URL; it is not an analyzed claim."
+                                       : "Historical stored context may have different provenance across verification paths; it is not an analyzed claim."
+                                    : rawClaimType === "URL"
+                                       ? "Cleaned text extracted from the submitted webpage and used to identify the analyzed claim."
+                                       : rawClaimType === "IMAGE"
+                                          ? "Text extracted from the submitted image and used to identify the analyzed claim."
+                                          : "Submitted text from which the analyzed claim was identified."}
+                                 {" "}This material is not independent evidence.
                               </p>
                               <div className="deep-analysis-source-context-text">{sourceContext}</div>
                            </details>

@@ -7,11 +7,12 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from api.models import Claim
+from api.models import Claim, EvidenceSubmission, Thread
 from api.serializers import (
     ClaimDeepAnalysisSerializer,
     ClaimSerializer,
     CommunityFeedClaimSerializer,
+    EvidenceSubmissionSerializer,
     PublicProfileClaimSummarySerializer,
     SafetyClaimSummarySerializer,
     VerificationIntakeClaimSerializer,
@@ -149,3 +150,26 @@ class ClaimAnalysisAccessTests(TestCase):
             self.claim, context={"verified_evidence_count": 0}
         ).data
         self.assertNotIn("source_context", feed)
+
+
+class CompactClaimContractTests(TestCase):
+    def test_evidence_thread_claim_includes_type_without_source_context(self):
+        user = get_user_model().objects.create_user(username="evidence_author")
+        claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.URL,
+            context_text="Historical source material.",
+            analyzed_claim="Concise analyzed proposition.",
+            source_context="Full extracted source material.",
+        )
+        thread = Thread.objects.create(claim=claim, author=user)
+        evidence = EvidenceSubmission.objects.create(
+            thread=thread,
+            contributor=user,
+            evidence_caption="Submitted evidence.",
+        )
+
+        payload = EvidenceSubmissionSerializer().get_thread(evidence)["claim"]
+
+        self.assertEqual(payload["claim_type"], Claim.ClaimType.URL)
+        self.assertEqual(payload["analyzed_claim"], claim.analyzed_claim)
+        self.assertNotIn("source_context", payload)

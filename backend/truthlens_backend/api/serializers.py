@@ -2169,6 +2169,7 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
                 "claim": (
                     {
                         "id": str(obj.thread.claim.id),
+                        "claim_type": obj.thread.claim.claim_type,
                         "context_text": obj.thread.claim.context_text,
                         "analyzed_claim": obj.thread.claim.analyzed_claim,
                         "verdict": claim_provenance["verdict"]

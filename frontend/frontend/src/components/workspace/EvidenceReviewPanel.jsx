@@ -97,7 +97,7 @@ function getEvidenceTitle(caseItem) {
 }
 
 function getClaimContext(caseItem) {
-   return getAnalyzedClaimText(caseItem?.thread?.claim, caseItem?.thread?.caption || "Claim context unavailable");
+   return getAnalyzedClaimText(caseItem?.thread?.claim) || "Analyzed claim unavailable";
 }
 
 function safeExternalUrl(value) {
@@ -1099,7 +1099,7 @@ function EvidenceReviewContent({
                               </Link>
                            )}
                         </div>
-                        <p className="evidence-reading-text">{claim?.context_text || detail.thread?.caption || "Claim context unavailable"}</p>
+                        <p className="evidence-reading-text">{getClaimContext(detail)}</p>
                         <div className="evidence-context-links">
                            {claimUrl && <a href={claimUrl} target="_blank" rel="noopener noreferrer">Open original claim URL <Icons name="external-link" size={12} aria-hidden="true" /></a>}
                            {sourceUrl && <a href={sourceUrl} target="_blank" rel="noopener noreferrer">Open claim source <Icons name="external-link" size={12} aria-hidden="true" /></a>}

@@ -354,7 +354,7 @@ function VerificationIntakePanel({ organizationId, organizationName }) {
                                  <span className="intake-updated">Updated {formatDateTime(claim.last_updated)}</span>
                               </div>
 
-                              <h3 className="intake-claim-text">{getAnalyzedClaimText(claim, "Claim text unavailable")}</h3>
+                              <h3 className="intake-claim-text">{getAnalyzedClaimText(claim) || "Analyzed claim unavailable"}</h3>
 
                               {claim.ai_summary && <p className="intake-ai-summary">{claim.ai_summary}</p>}
 
