@@ -76,6 +76,7 @@ function NavigationBar() {
    const isDashboardRoute = location.pathname === "/dashboard";
    const isWorkspaceRoute = location.pathname.startsWith("/workspace") || location.pathname === "/moderation";
    const isProfileRoute = location.pathname === "/profile";
+   const isSettingsRoute = location.pathname === "/settings";
    const isNotificationsRoute = location.pathname === "/notifications";
    return (
       <>
@@ -125,6 +126,17 @@ function NavigationBar() {
             </div>
 
             <div className="tl-app-nav__actions">
+               {canUseWorkspace && (
+                  <Link
+                     to="/workspace"
+                     className={`tl-app-nav__mobile-workspace ${isWorkspaceRoute ? "active" : ""}`}
+                     onClick={closeNavigationOverlays}
+                     aria-label="Workspace"
+                     aria-current={isWorkspaceRoute ? "page" : undefined}
+                  >
+                     <Icons name="shield-check" size={20} />
+                  </Link>
+               )}
                <GlobalSearch key={`${location.pathname}${location.search}`} />
                <NotificationPopover
                   open={notificationsOpen}
@@ -230,15 +242,6 @@ function NavigationBar() {
                <span>Community</span>
             </Link>
             <Link
-               to="/verify"
-               className={`bottom-tab ${isVerifyRoute ? "active" : ""}`}
-               onClick={closeNavigationOverlays}
-               aria-current={isVerifyRoute ? "page" : undefined}
-            >
-               <Icons name="scan-line" size={20} />
-               <span>Verify</span>
-            </Link>
-            <Link
                to="/dashboard"
                className={`bottom-tab ${isDashboardRoute ? "active" : ""}`}
                onClick={closeNavigationOverlays}
@@ -247,17 +250,17 @@ function NavigationBar() {
                <Icons name="dashboard" size={20} />
                <span>Dashboard</span>
             </Link>
-            {canUseWorkspace && (
-               <Link
-                  to="/workspace"
-                  className={`bottom-tab ${isWorkspaceRoute ? "active" : ""}`}
-                  onClick={closeNavigationOverlays}
-                  aria-current={isWorkspaceRoute ? "page" : undefined}
-               >
-                  <Icons name="shield-check" size={20} />
-                  <span>Workspace</span>
-               </Link>
-            )}
+            <Link
+               to="/verify"
+               className={`bottom-tab bottom-tab--verify ${isVerifyRoute ? "active" : ""}`}
+               onClick={closeNavigationOverlays}
+               aria-current={isVerifyRoute ? "page" : undefined}
+            >
+               <span className="bottom-tab__verify-icon" aria-hidden="true">
+                  <Icons name="scan-line" size={24} />
+               </span>
+               <span>Verify</span>
+            </Link>
             <Link
                to="/profile"
                className={`bottom-tab ${isProfileRoute ? "active" : ""}`}
@@ -266,6 +269,15 @@ function NavigationBar() {
             >
                <Icons name="user" size={20} />
                <span>Profile</span>
+            </Link>
+            <Link
+               to="/settings"
+               className={`bottom-tab ${isSettingsRoute ? "active" : ""}`}
+               onClick={closeNavigationOverlays}
+               aria-current={isSettingsRoute ? "page" : undefined}
+            >
+               <Icons name="settings" size={20} />
+               <span>Settings</span>
             </Link>
          </nav>
       </>
