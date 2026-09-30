@@ -259,7 +259,7 @@ function NavigationBar() {
                <span className="bottom-tab__verify-icon" aria-hidden="true">
                   <Icons name="scan-line" size={24} />
                </span>
-               <span>Verify</span>
+               <span className="bottom-tab__verify-label">Verify</span>
             </Link>
             <Link
                to="/profile"
