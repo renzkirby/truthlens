@@ -583,6 +583,7 @@
     .bottom-tab__verify-label {
         display: block;
         line-height: 1.2;
+        transform: translateY(-3px);
     }
 
     .bottom-tab--verify.active {
