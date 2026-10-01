@@ -67,6 +67,7 @@ from .profile_avatar_service import (
     upload_profile_avatar,
 )
 from .claim_matching import compute_fingerprint, find_matching_claim, get_match_result
+from .knowledge_reuse_service import get_published_fact_check_resolution_for_claim
 from .tasks import (
     snippet_fact_check_process,
     url_fact_check_process,
@@ -636,41 +637,40 @@ def claim_polling_endpoint(request, claim_id):
         )
 
     ai_verdict = claim.ai_verdict
+    if ai_verdict is None:
+        published_resolution = get_published_fact_check_resolution_for_claim(claim)
+        if published_resolution is None:
+            return JsonResponse({"verdict": "PENDING"}, status=200)
+
     match_result = get_match_result(claim)
-    if (
-        match_result["resolution_source"] != "OFFICIAL_FACT_CHECK"
-        and ai_verdict is None
-    ):
-        return JsonResponse({"verdict": "PENDING"}, status=200)
-    else:
-        return JsonResponse(
-            {
-                "id": str(claim_id),
-                "verdict": (match_result["verdict"]),
-                "ai_verdict": (match_result["ai_verdict"]),
-                "final_verdict": (match_result["final_verdict"]),
-                "summary": (match_result["summary"]),
-                "confidence_score": (match_result["confidence_score"]),
-                "source_type": (match_result["source_type"]),
-                "source_url": (match_result["source_url"]),
-                "sources": (match_result["sources"]),
-                "is_ai_generated": (match_result["is_ai_generated"]),
-                "thread_id": (match_result["thread_id"]),
-                # Temporary compatibility name.
-                "has_community_verdict": (
-                    match_result["resolution_source"]
-                    in {
-                        "OFFICIAL_FACT_CHECK",
-                        "ADJUDICATION",
-                    }
-                ),
-                "score_context": (match_result["score_context"]),
-                "resolution_source": (match_result["resolution_source"]),
-                "official_fact_check": (match_result["official_fact_check"]),
-                "related_fact_checks": match_result["related_fact_checks"],
-            },
-            status=200,
-        )
+    return JsonResponse(
+        {
+            "id": str(claim_id),
+            "verdict": (match_result["verdict"]),
+            "ai_verdict": (match_result["ai_verdict"]),
+            "final_verdict": (match_result["final_verdict"]),
+            "summary": (match_result["summary"]),
+            "confidence_score": (match_result["confidence_score"]),
+            "source_type": (match_result["source_type"]),
+            "source_url": (match_result["source_url"]),
+            "sources": (match_result["sources"]),
+            "is_ai_generated": (match_result["is_ai_generated"]),
+            "thread_id": (match_result["thread_id"]),
+            # Temporary compatibility name.
+            "has_community_verdict": (
+                match_result["resolution_source"]
+                in {
+                    "OFFICIAL_FACT_CHECK",
+                    "ADJUDICATION",
+                }
+            ),
+            "score_context": (match_result["score_context"]),
+            "resolution_source": (match_result["resolution_source"]),
+            "official_fact_check": (match_result["official_fact_check"]),
+            "related_fact_checks": match_result["related_fact_checks"],
+        },
+        status=200,
+    )
 
 
 @csrf_exempt

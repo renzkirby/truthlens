@@ -2628,9 +2628,11 @@ class PublishedResolutionPollingTests(PublicationResolutionFixture):
         self.assertEqual(self.poll(), {"verdict": "PENDING"})
 
     def test_direct_publication_with_null_ai_verdict_is_completed(self):
-        self.assertEqual(
-            self.poll(self.source_claim)["resolution_source"], "OFFICIAL_FACT_CHECK"
-        )
+        with patch("api.views.get_match_result", wraps=get_match_result) as match_result:
+            result = self.poll(self.source_claim)
+
+        self.assertEqual(result["resolution_source"], "OFFICIAL_FACT_CHECK")
+        match_result.assert_called_once_with(self.source_claim)
 
     def test_related_and_wrong_method_references_remain_pending(self):
         for overrides in (
@@ -2644,12 +2646,14 @@ class PublishedResolutionPollingTests(PublicationResolutionFixture):
                 self.assertEqual(self.poll(), {"verdict": "PENDING"})
                 reference.delete()
 
-    def test_archived_publication_does_not_bypass_pending(self):
+    def test_non_published_publication_does_not_bypass_pending(self):
         self.record()
-        OfficialFactCheck.objects.filter(pk=self.publication.pk).update(
-            publication_status="ARCHIVED"
-        )
-        self.assertEqual(self.poll(), {"verdict": "PENDING"})
+        for publication_status in ("ARCHIVED", "DRAFT", "IN_REVIEW"):
+            with self.subTest(publication_status=publication_status):
+                OfficialFactCheck.objects.filter(pk=self.publication.pk).update(
+                    publication_status=publication_status
+                )
+                self.assertEqual(self.poll(), {"verdict": "PENDING"})
 
     def test_thread_and_reuse_event_do_not_bypass_pending(self):
         actor = User.objects.create_user(username="resolution-thread-user")
