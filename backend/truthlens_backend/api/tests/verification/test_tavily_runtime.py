@@ -1,10 +1,11 @@
 import os
+import threading
 from copy import deepcopy
 from unittest.mock import Mock, patch
 
 import requests
 from django.db import IntegrityError
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from api import tasks
 from api.models import (
@@ -233,6 +234,273 @@ class TavilyRuntimeBridgeTests(TestCase):
         self.log_stage.assert_not_called()
         self.provider.search_with_payload.assert_called_once()
         self.assertEqual(EvidenceSource.objects.count(), 0)
+
+
+class TavilyParallelRetrievalTests(SimpleTestCase):
+    queries = ["primary query", "alternate query 1", "alternate query 2"]
+
+    @staticmethod
+    def _retrieval_result(search_query):
+        return (
+            {
+                "answer": f"Answer for {search_query}",
+                "results": [
+                    {
+                        "url": f"https://example.com/{search_query.replace(' ', '-')}",
+                        "content": search_query,
+                    }
+                ],
+            },
+            [search_query],
+        )
+
+    def test_alternates_overlap_after_primary_and_persist_in_query_order(self):
+        caller_thread = threading.get_ident()
+        primary_persisted = threading.Event()
+        first_alternate_started = threading.Event()
+        second_alternate_started = threading.Event()
+        second_alternate_finished = threading.Event()
+        retrieval_threads = {}
+        retrieval_completion_order = []
+        persistence_calls = []
+        provenance_calls = []
+
+        def retrieve(search_query):
+            if search_query == self.queries[0]:
+                self.assertFalse(first_alternate_started.is_set())
+                self.assertFalse(second_alternate_started.is_set())
+                return self._retrieval_result(search_query)
+
+            self.assertTrue(primary_persisted.is_set())
+            retrieval_threads[search_query] = threading.get_ident()
+            if search_query == self.queries[1]:
+                first_alternate_started.set()
+                self.assertTrue(second_alternate_started.wait(timeout=2))
+                self.assertTrue(second_alternate_finished.wait(timeout=2))
+            else:
+                second_alternate_started.set()
+                self.assertTrue(first_alternate_started.wait(timeout=2))
+                retrieval_completion_order.append(search_query)
+                second_alternate_finished.set()
+                return self._retrieval_result(search_query)
+
+            retrieval_completion_order.append(search_query)
+            return self._retrieval_result(search_query)
+
+        def ingest(raw_evidence_items):
+            persistence_calls.append(
+                ("ingest", raw_evidence_items[0], threading.get_ident())
+            )
+            return [f"source:{raw_evidence_items[0]}"]
+
+        def link(verification_run, evidence_sources, *, evidence_role):
+            search_query = evidence_sources[0].removeprefix("source:")
+            persistence_calls.append(("link", search_query, threading.get_ident()))
+            return [f"link:{search_query}"]
+
+        def record(links, *, provider, query, query_index):
+            persistence_calls.append(("provenance", query, threading.get_ident()))
+            provenance_calls.append((provider, query, query_index))
+            if query_index == 0:
+                primary_persisted.set()
+
+        with (
+            patch("api.tasks._retrieve_tavily", side_effect=retrieve),
+            patch("api.tasks.ingest_raw_evidence", side_effect=ingest),
+            patch("api.tasks.link_evidence_sources_to_run", side_effect=link),
+            patch("api.tasks.record_retrieval_provenance", side_effect=record),
+            patch("api.tasks._log_stage") as log_stage,
+        ):
+            payload = tasks._retrieve_and_ingest_tavily_queries(
+                self.queries,
+                "claim-id",
+                stage_prefix="url_",
+                verification_run=Mock(pk=17),
+            )
+
+        self.assertEqual(
+            retrieval_completion_order,
+            [self.queries[2], self.queries[1]],
+        )
+        self.assertNotEqual(retrieval_threads[self.queries[1]], caller_thread)
+        self.assertNotEqual(retrieval_threads[self.queries[2]], caller_thread)
+        self.assertNotEqual(
+            retrieval_threads[self.queries[1]],
+            retrieval_threads[self.queries[2]],
+        )
+        self.assertEqual(
+            [call[1] for call in persistence_calls if call[0] == "ingest"],
+            self.queries,
+        )
+        self.assertTrue(all(call[2] == caller_thread for call in persistence_calls))
+        self.assertEqual(
+            provenance_calls,
+            [
+                (tasks.TAVILY_PROVIDER_NAME, self.queries[0], 0),
+                (tasks.TAVILY_PROVIDER_NAME, self.queries[1], 1),
+                (tasks.TAVILY_PROVIDER_NAME, self.queries[2], 2),
+            ],
+        )
+        self.assertEqual(
+            [result["content"] for result in payload["results"]],
+            self.queries,
+        )
+        self.assertTrue(
+            all(call.args[1].startswith("url_tavily_") for call in log_stage.call_args_list)
+        )
+
+    def test_primary_failure_does_not_start_alternate_retrieval(self):
+        retrieval_calls = []
+        primary_error = requests.Timeout("Primary unavailable")
+
+        def retrieve(search_query):
+            retrieval_calls.append(search_query)
+            raise primary_error
+
+        with (
+            patch("api.tasks._retrieve_tavily", side_effect=retrieve),
+            patch("api.tasks._persist_tavily_retrieval") as persist,
+        ):
+            with self.assertRaises(requests.Timeout) as raised:
+                tasks._retrieve_and_ingest_tavily_queries(
+                    self.queries,
+                    "claim-id",
+                )
+
+        self.assertIs(raised.exception, primary_error)
+        self.assertEqual(retrieval_calls, [self.queries[0]])
+        persist.assert_not_called()
+
+    def test_one_alternate_failure_retains_other_success(self):
+        def retrieve(search_query):
+            if search_query == self.queries[1]:
+                raise requests.Timeout("First alternate unavailable")
+            return self._retrieval_result(search_query)
+
+        def persist(
+            search_query,
+            claim_id,
+            payload,
+            raw_evidence_items,
+            **kwargs,
+        ):
+            return payload
+
+        with (
+            patch("api.tasks._retrieve_tavily", side_effect=retrieve),
+            patch("api.tasks._persist_tavily_retrieval", side_effect=persist),
+            patch("api.tasks._log_stage") as log_stage,
+        ):
+            payload = tasks._retrieve_and_ingest_tavily_queries(
+                self.queries,
+                "claim-id",
+                stage_prefix="url_",
+            )
+
+        self.assertEqual(
+            [result["content"] for result in payload["results"]],
+            [self.queries[0], self.queries[2]],
+        )
+        log_stage.assert_called_once()
+        self.assertEqual(
+            log_stage.call_args.args[1],
+            "url_tavily_alternate_query_failed",
+        )
+        self.assertEqual(log_stage.call_args.kwargs["query_index"], 2)
+        self.assertEqual(log_stage.call_args.kwargs["query_count"], 3)
+
+    def test_both_alternate_failures_preserve_primary_and_query_limit(self):
+        attempted_queries = []
+        queries = [*self.queries, "ignored query"]
+
+        def retrieve(search_query):
+            attempted_queries.append(search_query)
+            if search_query != self.queries[0]:
+                raise requests.Timeout(f"Unavailable: {search_query}")
+            return self._retrieval_result(search_query)
+
+        def persist(
+            search_query,
+            claim_id,
+            payload,
+            raw_evidence_items,
+            **kwargs,
+        ):
+            return payload
+
+        with (
+            patch("api.tasks._retrieve_tavily", side_effect=retrieve),
+            patch("api.tasks._persist_tavily_retrieval", side_effect=persist),
+            patch("api.tasks._log_stage") as log_stage,
+        ):
+            payload = tasks._retrieve_and_ingest_tavily_queries(
+                queries,
+                "claim-id",
+            )
+
+        self.assertEqual(len(attempted_queries), 3)
+        self.assertEqual(set(attempted_queries), set(self.queries))
+        self.assertNotIn("ignored query", attempted_queries)
+        self.assertEqual(
+            [result["content"] for result in payload["results"]],
+            [self.queries[0]],
+        )
+        self.assertEqual(log_stage.call_count, 2)
+        self.assertEqual(
+            [call.kwargs["query_index"] for call in log_stage.call_args_list],
+            [2, 3],
+        )
+
+    def test_each_overlapping_request_uses_an_independent_provider(self):
+        alternate_barrier = threading.Barrier(2)
+        provider_instances = []
+        provider_calls = []
+        lock = threading.Lock()
+
+        class Provider:
+            def __init__(self, timeout):
+                self.timeout = timeout
+                with lock:
+                    provider_instances.append(self)
+
+            def search_with_payload(self, search_query, *, limit):
+                if search_query != self.queries[0]:
+                    alternate_barrier.wait(timeout=2)
+                with lock:
+                    provider_calls.append((self, search_query, limit))
+                return self._retrieval_result(search_query)
+
+        def provider_factory(*, timeout):
+            provider = Provider(timeout)
+            provider.queries = self.queries
+            provider._retrieval_result = self._retrieval_result
+            return provider
+
+        def persist(
+            search_query,
+            claim_id,
+            payload,
+            raw_evidence_items,
+            **kwargs,
+        ):
+            return payload
+
+        with (
+            patch("api.tasks.TavilyProvider", side_effect=provider_factory),
+            patch("api.tasks._persist_tavily_retrieval", side_effect=persist),
+        ):
+            tasks._retrieve_and_ingest_tavily_queries(self.queries, "claim-id")
+
+        self.assertEqual(len(provider_instances), 3)
+        self.assertEqual(len({id(provider) for provider in provider_instances}), 3)
+        self.assertTrue(
+            all(
+                provider.timeout == tasks.DEFAULT_HTTP_TIMEOUT_SEC
+                for provider in provider_instances
+            )
+        )
+        self.assertEqual({query for _, query, _ in provider_calls}, set(self.queries))
+        self.assertTrue(all(limit == 5 for _, _, limit in provider_calls))
 
 
 class TavilyTextRuntimeIngestionTests(TestCase):
