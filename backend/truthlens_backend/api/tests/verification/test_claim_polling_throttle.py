@@ -1,4 +1,5 @@
 from unittest.mock import patch
+from uuid import uuid4
 
 from django.conf import settings
 from django.contrib.auth.models import User
@@ -8,6 +9,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
+from api.claim_matching import get_match_result
 from api.models import Claim
 from api.throttles import ClaimPollingRateThrottle
 from api.views import claim_polling_endpoint
@@ -112,6 +114,39 @@ class ClaimPollingThrottleTests(APITestCase):
         )
 
     def test_pending_response_is_unchanged(self):
-        response = APIClient().get(self.polling_url)
+        with patch(
+            "api.views.get_published_fact_check_resolution_for_claim",
+            return_value=None,
+        ) as published_resolution, patch("api.views.get_match_result") as match_result:
+            response = APIClient().get(self.polling_url)
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.json(), {"verdict": "PENDING"})
+        published_resolution.assert_called_once_with(self.claim)
+        match_result.assert_not_called()
+
+    def test_existing_ai_result_skips_pending_probe_and_uses_full_result(self):
+        self.claim.ai_verdict = "MISLEADING"
+        self.claim.ai_summary = "Existing AI result."
+        self.claim.save(update_fields=["ai_verdict", "ai_summary"])
+
+        with patch(
+            "api.views.get_published_fact_check_resolution_for_claim",
+        ) as published_resolution, patch(
+            "api.views.get_match_result",
+            wraps=get_match_result,
+        ) as match_result:
+            response = APIClient().get(self.polling_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["resolution_source"], "AI")
+        published_resolution.assert_not_called()
+        match_result.assert_called_once_with(self.claim)
+
+    def test_missing_claim_response_is_unchanged(self):
+        response = APIClient().get(
+            reverse("claim_status", kwargs={"claim_id": uuid4()})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.json(), {"detail": "Claim not found."})
