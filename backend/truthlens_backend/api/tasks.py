@@ -1,4 +1,5 @@
 from celery import shared_task
+from concurrent.futures import ThreadPoolExecutor
 import math
 import os
 import logging
@@ -403,18 +404,22 @@ def _retrieve_and_ingest_gfc_queries(
     return last_payload
 
 
-def _retrieve_and_ingest_tavily(
+def _retrieve_tavily(search_query):
+    """Retrieve Tavily evidence without performing Django persistence."""
+    provider = TavilyProvider(timeout=DEFAULT_HTTP_TIMEOUT_SEC)
+    return provider.search_with_payload(search_query, limit=5)
+
+
+def _persist_tavily_retrieval(
     search_query,
     claim_id,
+    payload,
+    raw_evidence_items,
     *,
     stage_prefix="",
     verification_run=None,
     retrieval_query_index=0,
 ):
-    """Retrieve once, preserving usable payloads if evidence persistence fails."""
-    provider = TavilyProvider(timeout=DEFAULT_HTTP_TIMEOUT_SEC)
-    payload, raw_evidence_items = provider.search_with_payload(search_query, limit=5)
-
     ingestion_started_at = time.perf_counter()
     try:
         evidence_sources = ingest_raw_evidence(raw_evidence_items)
@@ -498,6 +503,27 @@ def _retrieve_and_ingest_tavily(
     return payload
 
 
+def _retrieve_and_ingest_tavily(
+    search_query,
+    claim_id,
+    *,
+    stage_prefix="",
+    verification_run=None,
+    retrieval_query_index=0,
+):
+    """Retrieve once, preserving usable payloads if evidence persistence fails."""
+    payload, raw_evidence_items = _retrieve_tavily(search_query)
+    return _persist_tavily_retrieval(
+        search_query,
+        claim_id,
+        payload,
+        raw_evidence_items,
+        stage_prefix=stage_prefix,
+        verification_run=verification_run,
+        retrieval_query_index=retrieval_query_index,
+    )
+
+
 def _merge_tavily_payloads(payloads):
     if not payloads:
         return {}
@@ -568,31 +594,77 @@ def _retrieve_and_ingest_tavily_queries(
     if not bounded_queries:
         return {}
 
-    payloads = []
+    primary_query = bounded_queries[0]
+    primary_bridge_kwargs = {"verification_run": verification_run}
+    if stage_prefix:
+        primary_bridge_kwargs["stage_prefix"] = stage_prefix
+    primary_payload = _retrieve_and_ingest_tavily(
+        primary_query,
+        claim_id,
+        **primary_bridge_kwargs,
+    )
+    payloads = [primary_payload]
+    alternate_queries = list(enumerate(bounded_queries[1:], start=1))
+    if not alternate_queries:
+        return _merge_tavily_payloads(payloads)
+
     query_count = len(bounded_queries)
-    for query_index, search_query in enumerate(bounded_queries):
-        query_started_at = time.perf_counter()
+    retrieval_outcomes = {}
+    query_started_at = {}
+
+    if len(alternate_queries) == 1:
+        query_index, search_query = alternate_queries[0]
+        query_started_at[query_index] = time.perf_counter()
         try:
-            bridge_kwargs = {"verification_run": verification_run}
-            if stage_prefix:
-                bridge_kwargs["stage_prefix"] = stage_prefix
-            if query_index:
-                bridge_kwargs["retrieval_query_index"] = query_index
-            payload = _retrieve_and_ingest_tavily(
-                search_query,
-                claim_id,
-                **bridge_kwargs,
-            )
+            retrieval_outcomes[query_index] = (True, _retrieve_tavily(search_query))
         except Exception as exc:
-            if query_index == 0:
-                raise
+            retrieval_outcomes[query_index] = (False, exc)
+    else:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            retrieval_futures = {}
+            for query_index, search_query in alternate_queries:
+                query_started_at[query_index] = time.perf_counter()
+                retrieval_futures[query_index] = executor.submit(
+                    _retrieve_tavily,
+                    search_query,
+                )
+
+            for query_index, _search_query in alternate_queries:
+                try:
+                    retrieval_outcomes[query_index] = (
+                        True,
+                        retrieval_futures[query_index].result(),
+                    )
+                except Exception as exc:
+                    retrieval_outcomes[query_index] = (False, exc)
+
+    for query_index, search_query in alternate_queries:
+        retrieval_succeeded, retrieval_result = retrieval_outcomes[query_index]
+        if retrieval_succeeded:
+            payload, raw_evidence_items = retrieval_result
+            try:
+                payload = _persist_tavily_retrieval(
+                    search_query,
+                    claim_id,
+                    payload,
+                    raw_evidence_items,
+                    stage_prefix=stage_prefix,
+                    verification_run=verification_run,
+                    retrieval_query_index=query_index,
+                )
+            except Exception as exc:
+                retrieval_succeeded = False
+                retrieval_result = exc
+
+        if not retrieval_succeeded:
+            exc = retrieval_result
 
             error_label = type(exc).__name__
             logged_query_index = query_index + 1
             _log_stage(
                 claim_id,
                 f"{stage_prefix}tavily_alternate_query_failed",
-                query_started_at,
+                query_started_at[query_index],
                 query_index=logged_query_index,
                 query_count=query_count,
                 error=error_label,
