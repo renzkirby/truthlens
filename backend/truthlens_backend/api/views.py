@@ -94,6 +94,7 @@ from .models import (
     OfficialFactCheck,
     FactualCorrectionRequest,
     VerificationAssignment,
+    VerificationRun,
 )
 from .moderation_service import ModerationCaseError, ensure_safety_case
 from .safety_review_service import (
@@ -640,7 +641,57 @@ def claim_polling_endpoint(request, claim_id):
     if ai_verdict is None:
         published_resolution = get_published_fact_check_resolution_for_claim(claim)
         if published_resolution is None:
-            return JsonResponse({"verdict": "PENDING"}, status=200)
+            latest_run = claim.verification_runs.only(
+                "status",
+                "failure_code",
+                "abstention_reason",
+            ).first()
+            if latest_run is None or latest_run.status in {
+                VerificationRun.Status.PENDING,
+                VerificationRun.Status.RUNNING,
+            }:
+                return JsonResponse({"verdict": "PENDING"}, status=200)
+
+            terminal_payload = {
+                "id": str(claim_id),
+                "verdict": "PENDING",
+                "ai_verdict": None,
+                "final_verdict": None,
+                "run_status": latest_run.status,
+            }
+            if latest_run.status == VerificationRun.Status.FAILED:
+                terminal_payload.update({
+                    "failure_code": latest_run.failure_code,
+                    "detail": (
+                        "TruthLens couldn't complete this analysis. Please try again."
+                    ),
+                })
+            elif latest_run.status == VerificationRun.Status.CANCELLED:
+                terminal_payload["detail"] = "This analysis was cancelled."
+            elif latest_run.status == VerificationRun.Status.ABSTAINED:
+                terminal_payload["abstention_reason"] = (
+                    latest_run.abstention_reason
+                )
+                if (
+                    latest_run.abstention_reason
+                    == VerificationRun.AbstentionReason.OUT_OF_SCOPE
+                ):
+                    terminal_payload.update({
+                        "verdict": "OUT_OF_SCOPE",
+                        "summary": (
+                            "This input does not contain a sufficiently verifiable "
+                            "public factual claim for automated fact-checking."
+                        ),
+                    })
+                else:
+                    terminal_payload["detail"] = (
+                        "Analysis finished without a supported automated conclusion."
+                    )
+            else:
+                terminal_payload["detail"] = (
+                    "Analysis finished, but no automated verdict is available."
+                )
+            return JsonResponse(terminal_payload, status=200)
 
     match_result = get_match_result(claim)
     return JsonResponse(

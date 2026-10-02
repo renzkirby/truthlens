@@ -23,6 +23,13 @@ const normalizeResult = (payload, claimId) => ({
    id: payload?.id || payload?.claim_id || claimId,
 });
 
+const isOutOfScopeAbstention = (result) =>
+   result?.run_status === "ABSTAINED" && result?.abstention_reason === "OUT_OF_SCOPE";
+
+const isLifecycleOnlyResult = (result) =>
+   result?.run_status === "ABSTAINED" ||
+   (result?.run_status === "COMPLETED" && result?.verdict === "PENDING");
+
 const isResolvedMatch = (match) => Boolean(match?.verdict && match.verdict !== "PENDING");
 const hasNumericValue = (value) =>
    value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
@@ -377,6 +384,60 @@ const ResultCard = ({ result }) => {
    );
 };
 
+const TerminalResultCard = ({ result }) => {
+   const isOutOfScope = isOutOfScopeAbstention(result);
+   const title = isOutOfScope ? "Out of scope" : "Analysis finished";
+   const detail = isOutOfScope
+      ? result.summary ||
+        "This input does not contain a sufficiently verifiable public factual claim for automated fact-checking."
+      : result.detail || "Analysis finished without a supported automated conclusion.";
+
+   return (
+      <article className="result-card terminal-result-card" aria-labelledby="terminal-result-title">
+         <header className={`result-provenance result-provenance--${isOutOfScope ? "out-of-scope" : "terminal"}`}>
+            <span className="result-provenance-icon" aria-hidden="true">
+               <Icons name={isOutOfScope ? "alert-octagon" : "info"} size={18} />
+            </span>
+            <div>
+               <h2 id="terminal-result-title">{title}</h2>
+               <p>
+                  {isOutOfScope
+                     ? "No automated factual verdict was produced for this submission."
+                     : "No automated verdict is available for this completed analysis."}
+               </p>
+            </div>
+         </header>
+
+         {isOutOfScope && (
+            <section className="result-conclusion" aria-labelledby="terminal-conclusion-title">
+               <p id="terminal-conclusion-title" className="result-section-title">
+                  Analysis outcome
+               </p>
+               <div className="result-verdict-row">
+                  <VerdictBadge verdict="OUT_OF_SCOPE" />
+               </div>
+            </section>
+         )}
+
+         <section className="result-summary-box terminal-result-summary" aria-labelledby="terminal-summary-title">
+            <h3 id="terminal-summary-title" className="result-section-title">
+               What this means
+            </h3>
+            <p className="result-summary-text">{detail}</p>
+         </section>
+
+         {result.id && (
+            <div className="result-action-buttons">
+               <Link to={`/analysis/${encodeURIComponent(result.id)}`} className="result-action result-action--secondary">
+                  View analysis status
+                  <Icons name="arrow-right" size={16} aria-hidden="true" />
+               </Link>
+            </div>
+         )}
+      </article>
+   );
+};
+
 const DeepfakeResult = ({ result }) => {
    const detected = result.detected;
 
@@ -502,6 +563,27 @@ function VerifyPage() {
          try {
             const data = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/claims/${claimId}/status`);
             if (operationRef.current !== operationId) return;
+
+            if (data.run_status === "FAILED") {
+               failOperation(operationId, "TruthLens couldn't complete this analysis. Please try again.");
+               return;
+            }
+
+            if (data.run_status === "CANCELLED") {
+               failOperation(operationId, "This analysis was cancelled. Please submit the claim again to retry.");
+               return;
+            }
+
+            if (data.run_status === "ABSTAINED" || data.run_status === "COMPLETED") {
+               setResult(normalizeResult(data, claimId));
+               setLoading(false);
+               return;
+            }
+
+            if (data.run_status === "PENDING" || data.run_status === "RUNNING") {
+               pollTimerRef.current = setTimeout(poll, POLL_INTERVAL_MS);
+               return;
+            }
 
             if (data.verdict !== "PENDING") {
                setResult(normalizeResult(data, claimId));
@@ -963,7 +1045,13 @@ function VerifyPage() {
 
                {result && !loading && (
                   <div ref={resultRef} className="verify-body-right verify-result-animator" tabIndex="-1">
-                     {result.isDeepfakeTest ? <DeepfakeResult result={result} /> : <ResultCard result={result} />}
+                     {result.isDeepfakeTest ? (
+                        <DeepfakeResult result={result} />
+                     ) : isLifecycleOnlyResult(result) ? (
+                        <TerminalResultCard result={result} />
+                     ) : (
+                        <ResultCard result={result} />
+                     )}
                   </div>
                )}
             </div>

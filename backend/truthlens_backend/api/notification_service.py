@@ -132,11 +132,22 @@ def notify_verification_finished(run):
     elif run.status in (VerificationRun.Status.COMPLETED, VerificationRun.Status.ABSTAINED):
         notification_type = Type.AUTOMATED_VERIFICATION_COMPLETED
         title = "Your TruthLens analysis is ready"
-        message = (
-            "Analysis finished without enough evidence to reach a supported conclusion."
-            if run.status == VerificationRun.Status.ABSTAINED
-            else "Analysis is complete. Open the results to review the findings."
-        )
+        if (
+            run.status == VerificationRun.Status.ABSTAINED
+            and run.abstention_reason
+            == VerificationRun.AbstentionReason.OUT_OF_SCOPE
+        ):
+            message = (
+                "Analysis finished because the submitted content did not contain "
+                "a sufficiently verifiable public factual claim."
+            )
+        elif run.status == VerificationRun.Status.ABSTAINED:
+            message = (
+                "Analysis finished without enough evidence to reach a supported "
+                "conclusion."
+            )
+        else:
+            message = "Analysis is complete. Open the results to review the findings."
     else:
         return
     # Generic completion also covers publication reuse, without copying a verdict.

@@ -586,6 +586,16 @@
    background: var(--tl-color-status-success-bg);
 }
 
+.result-provenance--out-of-scope .result-provenance-icon {
+   color: var(--tl-color-outofscope-text);
+   background: var(--tl-color-outofscope-bg);
+}
+
+.result-provenance--terminal .result-provenance-icon {
+   color: var(--tl-color-status-info-text);
+   background: var(--tl-color-status-info-bg);
+}
+
 .result-provenance h2 {
    margin: 0;
    color: var(--tl-color-text-main);
@@ -772,6 +782,10 @@
    padding: var(--tl-space-4);
    border-radius: var(--tl-radius-lg);
    background: var(--tl-color-bg-subtle);
+}
+
+.terminal-result-summary {
+   border: 1px solid var(--tl-color-border-light);
 }
 
 .ai-context {

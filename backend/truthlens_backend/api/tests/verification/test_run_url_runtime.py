@@ -363,9 +363,11 @@ class VerificationRunURLRuntimeTests(TestCase):
     def test_out_of_scope_abstains_without_persisting_verdict(self):
         self.cleaned["cleaned_claim"] = "OUT_OF_SCOPE"
 
-        self._assert_terminal(
-            self._execute(),
-            VerificationRun.Status.ABSTAINED,
+        run = self._execute()
+        self._assert_terminal(run, VerificationRun.Status.ABSTAINED)
+        self.assertEqual(
+            run.abstention_reason,
+            VerificationRun.AbstentionReason.OUT_OF_SCOPE,
         )
 
         self.claim.refresh_from_db()

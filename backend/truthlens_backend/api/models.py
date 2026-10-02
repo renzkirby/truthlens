@@ -1026,6 +1026,9 @@ class VerificationRun(models.Model):
         FAILED = "FAILED", "Failed"
         CANCELLED = "CANCELLED", "Cancelled"
 
+    class AbstentionReason(models.TextChoices):
+        OUT_OF_SCOPE = "OUT_OF_SCOPE", "Out of scope"
+
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -1082,6 +1085,13 @@ class VerificationRun(models.Model):
     )
 
     failure_message = models.TextField(
+        blank=True,
+        null=True,
+    )
+
+    abstention_reason = models.CharField(
+        max_length=50,
+        choices=AbstentionReason.choices,
         blank=True,
         null=True,
     )

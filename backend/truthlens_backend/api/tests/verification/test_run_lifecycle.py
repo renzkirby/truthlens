@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 
@@ -92,6 +94,28 @@ class VerificationRunLifecycleTests(TestCase):
             VerificationRun.Status.ABSTAINED,
         )
         self.assertIsNotNone(run.completed_at)
+        self.assertIsNone(run.abstention_reason)
+
+    def test_abstain_persists_explicit_reason_under_row_lock(self):
+        run = start_verification_run(create_verification_run(self.claim))
+        manager = VerificationRun.objects
+
+        with patch.object(
+            manager,
+            "select_for_update",
+            wraps=manager.select_for_update,
+        ) as select_for_update:
+            run = abstain_verification_run(
+                run,
+                abstention_reason=VerificationRun.AbstentionReason.OUT_OF_SCOPE,
+            )
+
+        self.assertEqual(run.status, VerificationRun.Status.ABSTAINED)
+        self.assertEqual(
+            run.abstention_reason,
+            VerificationRun.AbstentionReason.OUT_OF_SCOPE,
+        )
+        select_for_update.assert_called_once_with()
 
     def test_fail_records_failure_metadata(
         self,
@@ -122,6 +146,7 @@ class VerificationRunLifecycleTests(TestCase):
             run.failure_message,
             ("Google Fact Check unavailable."),
         )
+        self.assertIsNone(run.abstention_reason)
 
     def test_pending_run_can_be_cancelled(
         self,
@@ -204,3 +229,32 @@ class VerificationRunLifecycleTests(TestCase):
         self.assertIsNone(run.failure_stage)
         self.assertIsNone(run.failure_code)
         self.assertIsNone(run.failure_message)
+
+    def test_start_and_terminal_non_abstention_transitions_clear_stale_reason(self):
+        transition_cases = (
+            ("start", None),
+            ("complete", complete_verification_run),
+            ("fail", fail_verification_run),
+            ("cancel", cancel_verification_run),
+        )
+        for name, transition in transition_cases:
+            with self.subTest(transition=name):
+                run = create_verification_run(self.claim)
+                VerificationRun.objects.filter(pk=run.pk).update(
+                    abstention_reason=VerificationRun.AbstentionReason.OUT_OF_SCOPE
+                )
+                run.refresh_from_db()
+
+                if name == "start":
+                    run = start_verification_run(run)
+                elif name == "cancel":
+                    run = transition(run)
+                else:
+                    run = start_verification_run(run)
+                    VerificationRun.objects.filter(pk=run.pk).update(
+                        abstention_reason=VerificationRun.AbstentionReason.OUT_OF_SCOPE
+                    )
+                    run.refresh_from_db()
+                    run = transition(run)
+
+                self.assertIsNone(run.abstention_reason)
