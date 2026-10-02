@@ -1,4 +1,5 @@
 import math
+from dataclasses import dataclass
 from numbers import Real
 
 from django.db import transaction
@@ -6,6 +7,12 @@ from django.db import transaction
 from ..models import VerificationEvidence
 from .evidence_assessment import EvidenceAssessment
 from .evidence_dossier import ReasoningEvidenceItem
+
+
+@dataclass(frozen=True)
+class EvidenceAssessmentPersistenceOutcome:
+    persisted: bool
+    error: Exception | None = None
 
 
 def _is_valid_score(value):
@@ -41,33 +48,109 @@ def persist_evidence_assessment(
     assessment: EvidenceAssessment,
 ) -> bool:
     """Persist a valid assessment without overwriting existing assessment data."""
-    if not isinstance(assessment, EvidenceAssessment):
-        raise ValueError("assessment must be an EvidenceAssessment.")
-    if _is_unavailable_assessment(assessment):
-        return False
-    _validate_assessment(assessment)
+    outcome = persist_evidence_assessments_batch([evidence_item], [assessment])[0]
+    if outcome.error is not None:
+        raise outcome.error
+    return outcome.persisted
+
+
+def persist_evidence_assessments_batch(
+    evidence_items: list[ReasoningEvidenceItem],
+    assessments: list[EvidenceAssessment],
+) -> list[EvidenceAssessmentPersistenceOutcome]:
+    """Persist independently valid assessments in one locked database batch."""
+    evidence_items = list(evidence_items)
+    assessments = list(assessments)
+    outcomes = [None] * len(evidence_items)
+    candidates = []
+
+    for index, evidence_item in enumerate(evidence_items):
+        try:
+            assessment = assessments[index]
+        except IndexError:
+            outcomes[index] = EvidenceAssessmentPersistenceOutcome(
+                persisted=False,
+                error=ValueError("assessment is missing for evidence item."),
+            )
+            continue
+
+        try:
+            if not isinstance(assessment, EvidenceAssessment):
+                raise ValueError("assessment must be an EvidenceAssessment.")
+            if _is_unavailable_assessment(assessment):
+                outcomes[index] = EvidenceAssessmentPersistenceOutcome(
+                    persisted=False
+                )
+                continue
+            _validate_assessment(assessment)
+            evidence_link_id = evidence_item.evidence_link_id
+            evidence_source_id = evidence_item.evidence_source_id
+        except Exception as exc:
+            outcomes[index] = EvidenceAssessmentPersistenceOutcome(
+                persisted=False,
+                error=exc,
+            )
+            continue
+
+        candidates.append(
+            (
+                index,
+                evidence_link_id,
+                evidence_source_id,
+                assessment,
+            )
+        )
+
+    if not candidates:
+        return outcomes
 
     with transaction.atomic():
-        target = VerificationEvidence.objects.select_for_update().get(
-            pk=evidence_item.evidence_link_id
-        )
-        if target.evidence_source_id != evidence_item.evidence_source_id:
-            raise ValueError(
-                "ReasoningEvidenceItem evidence_source_id does not match its "
-                "VerificationEvidence target."
+        targets_by_id = {
+            target.pk: target
+            for target in VerificationEvidence.objects.select_for_update().filter(
+                pk__in={candidate[1] for candidate in candidates}
             )
-        if (
-            target.stance != VerificationEvidence.Stance.UNKNOWN
-            or target.relevance_score is not None
-            or target.directness_score is not None
-        ):
-            return False
+        }
+        targets_to_update = []
 
-        target.stance = assessment.stance
-        target.relevance_score = float(assessment.relevance_score)
-        target.directness_score = float(assessment.directness_score)
-        target.save(
-            update_fields=["stance", "relevance_score", "directness_score"]
+        for index, evidence_link_id, evidence_source_id, assessment in candidates:
+            target = targets_by_id.get(evidence_link_id)
+            if target is None:
+                outcomes[index] = EvidenceAssessmentPersistenceOutcome(
+                    persisted=False,
+                    error=VerificationEvidence.DoesNotExist(
+                        "VerificationEvidence matching query does not exist."
+                    ),
+                )
+                continue
+            if target.evidence_source_id != evidence_source_id:
+                outcomes[index] = EvidenceAssessmentPersistenceOutcome(
+                    persisted=False,
+                    error=ValueError(
+                        "ReasoningEvidenceItem evidence_source_id does not match its "
+                        "VerificationEvidence target."
+                    ),
+                )
+                continue
+            if (
+                target.stance != VerificationEvidence.Stance.UNKNOWN
+                or target.relevance_score is not None
+                or target.directness_score is not None
+            ):
+                outcomes[index] = EvidenceAssessmentPersistenceOutcome(
+                    persisted=False
+                )
+                continue
+
+            target.stance = assessment.stance
+            target.relevance_score = float(assessment.relevance_score)
+            target.directness_score = float(assessment.directness_score)
+            targets_to_update.append(target)
+            outcomes[index] = EvidenceAssessmentPersistenceOutcome(persisted=True)
+
+        VerificationEvidence.objects.bulk_update(
+            targets_to_update,
+            fields=["stance", "relevance_score", "directness_score"],
         )
 
-    return True
+    return outcomes

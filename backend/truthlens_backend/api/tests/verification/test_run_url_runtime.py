@@ -963,9 +963,14 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
 
         self.bridge.side_effect = add_recency_after_linking
 
-        run = self._execute()
+        with patch(
+            "api.tasks.load_reasoning_evidence_dossier_for_run",
+            wraps=tasks.load_reasoning_evidence_dossier_for_run,
+        ) as load_dossier:
+            run = self._execute()
 
         self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        self.assertEqual(load_dossier.call_count, 2)
         link = VerificationEvidence.objects.get()
         link.refresh_from_db()
         self.assertEqual(
@@ -1136,7 +1141,7 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
 
     def test_persistence_exception_is_best_effort(self):
         with patch(
-            "api.tasks.persist_evidence_assessment",
+            "api.tasks.persist_evidence_assessments_batch",
             side_effect=RuntimeError("Assessment storage unavailable"),
         ), self.assertLogs("api.tasks", level="ERROR") as logs:
             run = self._execute()
@@ -1196,9 +1201,14 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
         ]
         self.assessor.return_value = assessments
 
-        run = self._execute()
+        with patch(
+            "api.tasks.persist_evidence_assessments_batch",
+            wraps=tasks.persist_evidence_assessments_batch,
+        ) as persist_batch:
+            run = self._execute()
 
         self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        persist_batch.assert_called_once()
         self.assessor.assert_called_once()
         assessed_items = self.assessor.call_args.args[1]
         self.assertEqual(len(assessed_items), 2)

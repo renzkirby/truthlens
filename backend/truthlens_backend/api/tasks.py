@@ -50,7 +50,7 @@ from .verification.evidence_dossier import (
     load_reasoning_evidence_dossier_for_run,
     render_reasoning_evidence_dossier,
 )
-from .verification.evidence_enrichment import persist_evidence_assessment
+from .verification.evidence_enrichment import persist_evidence_assessments_batch
 from .verification.ingestion import ingest_raw_evidence
 from .verification.linking import (
     link_evidence_sources_to_run,
@@ -749,11 +749,14 @@ def _assess_and_persist_reasoning_evidence(
         eligible_items=len(eligible_items),
     )
 
-    for evidence_item, assessment in zip(eligible_items, assessments):
-        persistence_started_at = time.perf_counter()
-        try:
-            persisted = persist_evidence_assessment(evidence_item, assessment)
-        except Exception as exc:
+    persistence_started_at = time.perf_counter()
+    try:
+        persistence_outcomes = persist_evidence_assessments_batch(
+            eligible_items,
+            assessments,
+        )
+    except Exception as exc:
+        for evidence_item in eligible_items:
             _log_stage(
                 claim_id,
                 stage_name,
@@ -768,14 +771,32 @@ def _assess_and_persist_reasoning_evidence(
                 evidence_item.evidence_link_id,
                 exc,
             )
-            continue
+        return
 
+    for evidence_item, outcome in zip(eligible_items, persistence_outcomes):
+        if outcome.error is not None:
+            _log_stage(
+                claim_id,
+                stage_name,
+                persistence_started_at,
+                evidence_link_id=evidence_item.evidence_link_id,
+                outcome="persistence_failed",
+                error=str(outcome.error)[:120],
+            )
+            logger.error(
+                "Evidence assessment persistence failed for claim %s, "
+                "link %s: %s",
+                claim_id,
+                evidence_item.evidence_link_id,
+                outcome.error,
+            )
+            continue
         _log_stage(
             claim_id,
             stage_name,
             persistence_started_at,
             evidence_link_id=evidence_item.evidence_link_id,
-            persisted=persisted,
+            persisted=outcome.persisted,
         )
 
 
