@@ -15,7 +15,8 @@ from api.evidence_review_service import review_evidence_submission
 from api.models import (
     AccountabilityEvent, Claim, ClaimCheckHistory, EvidenceSubmission, Notification,
     ModerationCase, ModerationEvent, OfficialFactCheck, Organization,
-    OrganizationMembership, Thread, VerificationAssignment, VerificationRun,
+    OrganizationFollow, OrganizationMembership, Thread, VerificationAssignment,
+    VerificationRun,
 )
 from api.organization_membership_service import (
     change_organization_membership_role, suspend_organization_membership,
@@ -525,6 +526,10 @@ class PublicationNotificationTests(PublicationTransactionFixtures, TestCase):
             role=OrganizationMembership.Role.LEAD_VERIFIER, status=OrganizationMembership.Status.ACTIVE)
         self.enterContext(patch("api.publishing_service._queue_fact_check_index"))
 
+    def make_public_partner(self):
+        self.organization.public_profile_enabled = True
+        self.organization.save(update_fields=["public_profile_enabled"])
+
     def submitted(self, *, source=True, author=None):
         context = self.make_decided_context()
         if author:
@@ -564,6 +569,134 @@ class PublicationNotificationTests(PublicationTransactionFixtures, TestCase):
         self.assertEqual(set(Notification.objects.values_list("target_id", flat=True)), {published.pk})
         inbox.notify_fact_check_published(published, actor_id=self.publisher.pk)
         self.assertEqual(Notification.objects.count(), 2)
+
+    def test_current_followers_receive_safe_idempotent_publication_notification(self):
+        self.make_public_partner()
+        follower = User.objects.create_user(username="publication-follower")
+        non_follower = User.objects.create_user(username="publication-non-follower")
+        OrganizationFollow.objects.create(
+            organization=self.organization,
+            user=follower,
+        )
+        context = self.submitted()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            published = self.publish(context)
+
+        notification = Notification.objects.get(recipient=follower)
+        self.assertEqual(
+            notification.notification_type,
+            Type.PARTNER_FACT_CHECK_PUBLISHED,
+        )
+        self.assertEqual(notification.target_id, published.pk)
+        self.assertEqual(notification.organization, self.organization)
+        self.assertEqual(
+            notification.title,
+            f"{self.organization.name} published a new fact-check",
+        )
+        self.assertEqual(
+            notification.message,
+            f'"{published.headline}" is now available.',
+        )
+        self.assertNotIn(published.article_body, notification.message)
+        self.assertFalse(Notification.objects.filter(recipient=non_follower).exists())
+        self.assertEqual(
+            inbox.notification_destination(notification),
+            f"/community/partners/{self.organization.slug}/fact-checks/{published.pk}",
+        )
+
+        inbox.notify_fact_check_published(published, actor_id=self.publisher.pk)
+        self.assertEqual(Notification.objects.filter(recipient=follower).count(), 1)
+
+        self.organization.public_profile_enabled = False
+        self.organization.save(update_fields=["public_profile_enabled"])
+        self.assertIsNone(inbox.notification_destination(notification))
+
+        self.organization.public_profile_enabled = True
+        self.organization.save(update_fields=["public_profile_enabled"])
+        published.publication_status = OfficialFactCheck.PublicationStatus.ARCHIVED
+        published.save(update_fields=["publication_status"])
+        self.assertIsNone(inbox.notification_destination(notification))
+
+    def test_draft_and_in_review_publications_do_not_notify_followers(self):
+        self.make_public_partner()
+        follower = User.objects.create_user(username="unpublished-follower")
+        OrganizationFollow.objects.create(
+            organization=self.organization,
+            user=follower,
+        )
+        context = self.make_decided_context()
+        draft = self.make_draft(context)
+        inbox.notify_fact_check_published(draft, actor_id=self.publisher.pk)
+
+        in_review = publishing_service.submit_fact_check_for_review(
+            fact_check=draft,
+            actor=self.lead,
+            organization_id=self.organization.pk,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
+        )
+        inbox.notify_fact_check_published(in_review, actor_id=self.publisher.pk)
+
+        self.assertFalse(Notification.objects.filter(recipient=follower).exists())
+
+    def test_unfollow_stops_future_delivery_without_deleting_history(self):
+        self.make_public_partner()
+        follower = User.objects.create_user(username="former-publication-follower")
+        relationship = OrganizationFollow.objects.create(
+            organization=self.organization,
+            user=follower,
+        )
+        first_context = self.submitted()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.publish(first_context)
+        self.assertEqual(Notification.objects.filter(recipient=follower).count(), 1)
+
+        relationship.delete()
+        second_context = self.submitted()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.publish(second_context)
+
+        self.assertEqual(Notification.objects.filter(recipient=follower).count(), 1)
+
+    def test_ineligible_organization_does_not_fan_out_to_followers(self):
+        follower = User.objects.create_user(username="private-partner-follower")
+        OrganizationFollow.objects.create(
+            organization=self.organization,
+            user=follower,
+        )
+        context = self.submitted()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.publish(context)
+
+        self.assertFalse(Notification.objects.filter(recipient=follower).exists())
+
+    def test_specific_recipient_roles_win_over_follower_delivery(self):
+        self.make_public_partner()
+        OrganizationFollow.objects.create(
+            organization=self.organization,
+            user=self.author,
+        )
+        OrganizationFollow.objects.create(
+            organization=self.organization,
+            user=self.lead,
+        )
+        context = self.submitted()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.publish(context)
+
+        self.assertEqual(Notification.objects.filter(recipient=self.author).count(), 1)
+        self.assertEqual(
+            Notification.objects.get(recipient=self.author).notification_type,
+            Type.PARTNER_FACT_CHECK_PUBLISHED,
+        )
+        self.assertEqual(Notification.objects.filter(recipient=self.lead).count(), 1)
+        self.assertEqual(
+            Notification.objects.get(recipient=self.lead).notification_type,
+            Type.FACT_CHECK_PUBLISHED,
+        )
 
     def test_missing_source_thread_does_not_notify_claim_history(self):
         context = self.submitted(source=False)
@@ -665,6 +798,72 @@ class CorrectionNotificationTests(FactualCorrectionHandoffFixtures, TestCase):
             workspace_recipient_ids=(self.lead.pk, self.lead.pk))
         self.assertEqual(Notification.objects.count(), 2)
 
+    def test_correction_notifies_followers_with_safe_copy_and_is_idempotent(self):
+        self.organization.public_profile_enabled = True
+        self.organization.save(update_fields=["public_profile_enabled"])
+        follower = User.objects.create_user(username="correction-follower")
+        OrganizationFollow.objects.create(
+            organization=self.organization,
+            user=follower,
+        )
+        context = self.make_prepared_context()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            result = self.handoff(context)
+
+        successor = result["fact_check"]
+        notification = Notification.objects.get(recipient=follower)
+        self.assertEqual(
+            notification.notification_type,
+            Type.PARTNER_FACT_CHECK_CORRECTED,
+        )
+        self.assertEqual(notification.target_id, successor.pk)
+        self.assertEqual(notification.organization, self.organization)
+        self.assertEqual(
+            notification.title,
+            f"{self.organization.name} published a fact-check correction",
+        )
+        self.assertIn("A correction to", notification.message)
+        self.assertNotIn(successor.article_body, notification.message)
+        self.assertEqual(
+            inbox.notification_destination(notification),
+            f"/community/partners/{self.organization.slug}/fact-checks/{successor.pk}",
+        )
+
+        inbox.notify_factual_correction_published(
+            successor,
+            actor_id=self.publisher.pk,
+            workspace_recipient_ids=(self.lead.pk,),
+        )
+        self.assertEqual(Notification.objects.filter(recipient=follower).count(), 1)
+
+    def test_correction_specific_roles_win_over_follower_delivery(self):
+        self.organization.public_profile_enabled = True
+        self.organization.save(update_fields=["public_profile_enabled"])
+        OrganizationFollow.objects.create(
+            organization=self.organization,
+            user=self.author,
+        )
+        OrganizationFollow.objects.create(
+            organization=self.organization,
+            user=self.lead,
+        )
+        context = self.make_prepared_context()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.handoff(context)
+
+        self.assertEqual(Notification.objects.filter(recipient=self.author).count(), 1)
+        self.assertEqual(
+            Notification.objects.get(recipient=self.author).notification_type,
+            Type.PARTNER_FACT_CHECK_CORRECTED,
+        )
+        self.assertEqual(Notification.objects.filter(recipient=self.lead).count(), 1)
+        self.assertEqual(
+            Notification.objects.get(recipient=self.lead).notification_type,
+            Type.FACTUAL_CORRECTION_PUBLISHED,
+        )
+
     def test_correction_distinct_requester_and_preparer_are_both_notified(self):
         context = self.make_proposal_context()
         proposal = self.save_proposal(context)
@@ -728,7 +927,15 @@ class CorrectionNotificationTests(FactualCorrectionHandoffFixtures, TestCase):
         self.assertFalse(Notification.objects.exists())
 
     def test_editorial_rework_and_publication_notify_drafter(self):
+        self.organization.public_profile_enabled = True
+        self.organization.save(update_fields=["public_profile_enabled"])
+        follower = User.objects.create_user(username="editorial-revision-follower")
+        OrganizationFollow.objects.create(
+            organization=self.organization,
+            user=follower,
+        )
         context = self.make_published_context()
+        Notification.objects.filter(recipient=follower).delete()
         revision = self.make_submitted_revision(context)
         with self.captureOnCommitCallbacks(execute=True):
             revision = publishing_service.return_editorial_revision_for_rework(
@@ -748,6 +955,14 @@ class CorrectionNotificationTests(FactualCorrectionHandoffFixtures, TestCase):
             self.replace(context, revision, actor=self.publisher)
         self.assertEqual(Notification.objects.filter(recipient=self.lead,
             notification_type=Type.FACT_CHECK_PUBLISHED).count(), 1)
+        self.assertEqual(
+            Notification.objects.filter(
+                recipient=follower,
+                notification_type=Type.PARTNER_FACT_CHECK_PUBLISHED,
+                target_id=revision.pk,
+            ).count(),
+            1,
+        )
 
 
 class MembershipNotificationTests(TestCase):

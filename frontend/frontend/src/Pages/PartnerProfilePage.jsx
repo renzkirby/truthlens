@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, ExternalLink, Info, RefreshCw } from "lucide-react";
+import { ArrowLeft, ArrowRight, ExternalLink, Info } from "lucide-react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { useNotification } from "../hooks/useNotification";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { resolveApiEndpoint } from "../utils/api";
 import { createPublicReachEventId, recordPublicReach } from "../utils/publicReach";
 import PartnerLogo from "../components/partners/PartnerLogo";
+import Icons from "../components/Icons.jsx";
+import "./UserProfile.css";
 import "./PartnerProfilePage.css";
 
 const PUBLICATION_PAGE_SIZE = 6;
+const PARTNER_PROFILE_TABS = ["published", "about"];
 
 const VERDICT_META = {
    FACT: { label: "Fact", className: "fact" },
@@ -49,8 +53,9 @@ function verdictMeta(value) {
    );
 }
 
-function factCheckRoute(slug, publicationId) {
-   return `/partners/${encodeURIComponent(slug)}/fact-checks/${encodeURIComponent(publicationId)}`;
+function factCheckRoute(slug, publicationId, isCommunity) {
+   const prefix = isCommunity ? "/community/partners" : "/partners";
+   return `${prefix}/${encodeURIComponent(slug)}/fact-checks/${encodeURIComponent(publicationId)}`;
 }
 
 function factChecksEndpoint(slug, offset) {
@@ -92,12 +97,13 @@ function mergePublications(current, incoming) {
    return dedupePublications([...current, ...incoming]);
 }
 
-function PublishedFactCheckCard({ slug, publication }) {
+
+function PublishedFactCheckCard({ slug, publication, isCommunity }) {
    const decision = publication?.decision || {};
    const article = publication?.article || {};
    const history = publication?.history || {};
    const verdict = verdictMeta(decision.verdict);
-   const publicationPath = factCheckRoute(slug, publication.publication_id);
+   const publicationPath = factCheckRoute(slug, publication.publication_id, isCommunity);
    const headline = article.headline || "Published fact-check";
    const previousVersions = Number.isInteger(history.previous_versions_count)
       ? history.previous_versions_count
@@ -105,49 +111,37 @@ function PublishedFactCheckCard({ slug, publication }) {
 
    return (
       <article
-         className={`partner-publication-card partner-publication-card--${verdict.className}`}
+         className={`user-profile__activity-item partner-publication-card partner-publication-card--${verdict.className}`}
       >
-         <div className="partner-publication-card__topline">
-            <div className="partner-publication-verdict">
-               <span>Human factual verdict</span>
-               <strong>{verdict.label}</strong>
-            </div>
-
-            <div className="partner-publication-card__version">
-               <span>Article v{article.version}</span>
-               <span aria-hidden="true">·</span>
-               <span>{revisionLabel(article.revision_kind)}</span>
-            </div>
+         <div className="user-profile__activity-item-topline">
+            <span
+               className={`user-profile__status partner-publication-verdict partner-publication-verdict--${verdict.className}`}
+            >
+               {verdict.label}
+            </span>
+            <time dateTime={publication.published_at}>{formatPublishedDate(publication.published_at)}</time>
          </div>
 
-         <h3>{headline}</h3>
-
-         <div className="partner-publication-claim">
-            <span>Claim</span>
-            <blockquote>
+         <div className="user-profile__activity-copy">
+            <h3>{headline}</h3>
+            <p className="partner-publication-claim">
+               <span>Claim: </span>
                {decision.canonical_claim || "Claim text unavailable for this publication."}
-            </blockquote>
+            </p>
+            {article.summary && <p>{article.summary}</p>}
          </div>
 
-         {article.summary && <p className="partner-publication-summary">{article.summary}</p>}
-
-         <div className="partner-publication-card__footer">
-            <div className="partner-publication-card__metadata">
-               <time dateTime={publication.published_at}>
-                  {formatPublishedDate(publication.published_at)}
-               </time>
-
+         <div className="user-profile__activity-footer">
+            <div className="user-profile__activity-metrics">
+               {article.version != null && <span>Article v{article.version}</span>}
+               <span>{revisionLabel(article.revision_kind)}</span>
                {previousVersions > 0 && (
                   <span>
-                     {previousVersions} previous published{" "}
-                     {previousVersions === 1 ? "version" : "versions"}
+                     {previousVersions} previous published {previousVersions === 1 ? "version" : "versions"}
                   </span>
                )}
-
                {history.has_factual_correction && (
-                  <span className="partner-publication-card__correction">
-                     Includes factual correction history
-                  </span>
+                  <span className="partner-publication-card__correction">Correction history</span>
                )}
             </div>
 
@@ -164,7 +158,7 @@ function PublishedFactCheckCard({ slug, publication }) {
    );
 }
 
-function PartnerPublishedFactChecks({ slug }) {
+function PartnerPublishedFactChecks({ slug, isCommunity, onCountChange }) {
    const { authFetch } = useAuth();
    const [factChecks, setFactChecks] = useState([]);
    const [count, setCount] = useState(0);
@@ -189,6 +183,7 @@ function PartnerPublishedFactChecks({ slug }) {
             setCount(page.count);
             setNextOffset(page.offset + page.results.length);
             setInitialError(false);
+            onCountChange?.(page.count);
          })
          .catch(() => {
             if (requestId === initialRequestIdRef.current) {
@@ -205,7 +200,7 @@ function PartnerPublishedFactChecks({ slug }) {
          initialRequestIdRef.current += 1;
          loadMoreRequestIdRef.current += 1;
       };
-   }, [authFetch, retryVersion, slug]);
+   }, [authFetch, onCountChange, retryVersion, slug]);
 
    const retryInitialLoad = () => {
       setInitialError(false);
@@ -230,6 +225,7 @@ function PartnerPublishedFactChecks({ slug }) {
             setFactChecks((current) => mergePublications(current, page.results));
             setCount(page.count);
             setNextOffset(page.offset + page.results.length);
+            onCountChange?.(page.count);
          })
          .catch(() => {
             if (requestId === loadMoreRequestIdRef.current) {
@@ -245,29 +241,31 @@ function PartnerPublishedFactChecks({ slug }) {
 
    if (isInitialLoading) {
       return (
-         <div
-            className="partner-publications-state partner-publications-state--loading"
-            aria-busy="true"
-            aria-live="polite"
-         >
-            <div className="partner-publications-skeleton" aria-hidden="true">
-               <span />
-               <span />
-               <span />
+         <div className="user-profile__loading-block" role="status" aria-live="polite">
+            <span className="user-profile__sr-only">Loading published fact-checks.</span>
+            <div className="user-profile__skeleton-list" aria-hidden="true">
+               {Array.from({ length: 3 }).map((_, index) => (
+                  <div className="user-profile__skeleton-item" key={`partner-publication-skeleton-${index}`}>
+                     <span className="user-profile__skeleton-line is-short" />
+                     <span className="user-profile__skeleton-line" />
+                     <span className="user-profile__skeleton-line is-medium" />
+                  </div>
+               ))}
             </div>
-            <p>Loading published fact-checks…</p>
          </div>
       );
    }
 
    if (initialError) {
       return (
-         <div className="partner-publications-state" role="status">
-            <strong>Published fact-checks could not be loaded.</strong>
-            <p>The organization profile is still available. You can retry this section.</p>
+         <div className="user-profile__inline-state is-error" role="alert">
+            <Icons name="alert-circle" size={20} aria-hidden="true" />
+            <div>
+               <h3>Published fact-checks could not load</h3>
+               <p>The organization profile is still available. You can retry this section.</p>
+            </div>
             <button type="button" onClick={retryInitialLoad}>
-               <RefreshCw aria-hidden="true" />
-               Retry published fact-checks
+               Try again
             </button>
          </div>
       );
@@ -275,8 +273,10 @@ function PartnerPublishedFactChecks({ slug }) {
 
    if (factChecks.length === 0) {
       return (
-         <div className="partner-publications-state">
-            <strong>No published fact-checks are currently available from this organization.</strong>
+         <div className="user-profile__empty-state">
+            <Icons name="file-text" size={22} aria-hidden="true" />
+            <h3>No published fact-checks yet</h3>
+            <p>This organization has no public fact-check publications available right now.</p>
          </div>
       );
    }
@@ -285,30 +285,39 @@ function PartnerPublishedFactChecks({ slug }) {
 
    return (
       <>
-         <div className="partner-publications-summary" aria-live="polite">
-            Showing {factChecks.length} of {count} published fact-check{count === 1 ? "" : "s"}.
-         </div>
-
-         <ul className="partner-publications-list">
+         <ul className="user-profile__activity-list partner-publications-list">
             {factChecks.map((publication) => (
                <li key={publication.publication_id}>
-                  <PublishedFactCheckCard slug={slug} publication={publication} />
+                  <PublishedFactCheckCard
+                     slug={slug}
+                     publication={publication}
+                     isCommunity={isCommunity}
+                  />
                </li>
             ))}
          </ul>
 
          {(hasMore || loadMoreError) && (
-            <div className="partner-publications-more">
-               {loadMoreError && (
-                  <p role="status">
-                     More published fact-checks could not be loaded. Already loaded publications
-                     remain available.
-                  </p>
-               )}
+            <div className="user-profile__pagination partner-publications-pagination">
+               <div>
+                  <span>
+                     Showing {factChecks.length.toLocaleString()} of {count.toLocaleString()}
+                  </span>
+                  {loadMoreError && (
+                     <span className="partner-publications-pagination__error" role="status">
+                        More publications could not be loaded.
+                     </span>
+                  )}
+               </div>
 
                {hasMore && (
-                  <button type="button" onClick={loadMore} disabled={isLoadingMore}>
-                     {isLoadingMore ? "Loading more…" : loadMoreError ? "Try again" : "Load more"}
+                  <button
+                     type="button"
+                     className="user-profile__secondary-button"
+                     onClick={loadMore}
+                     disabled={isLoadingMore}
+                  >
+                     {isLoadingMore ? "Loading…" : loadMoreError ? "Try again" : "Load more"}
                   </button>
                )}
             </div>
@@ -317,15 +326,19 @@ function PartnerPublishedFactChecks({ slug }) {
    );
 }
 
-function PartnerProfileContent({ slug }) {
+function PartnerProfileContent({ slug, isCommunity }) {
    const { authFetch } = useAuth();
+   const { addToast } = useNotification();
    const [partner, setPartner] = useState(null);
    const [isLoading, setIsLoading] = useState(true);
    const [error, setError] = useState(null);
    const [retryVersion, setRetryVersion] = useState(0);
+   const [isFollowPending, setIsFollowPending] = useState(false);
+   const [activeTab, setActiveTab] = useState("published");
+   const [publicationCount, setPublicationCount] = useState(null);
    const requestIdRef = useRef(0);
    const reachEventIdRef = useRef(null);
-   let documentTitle = "Partner Profile | TruthLens";
+   let documentTitle = isCommunity ? "Partner Organization | TruthLens Community" : "Partner Profile | TruthLens";
    if (partner?.name) documentTitle = `${partner.name} | TruthLens Partners`;
    if (error) documentTitle = "Partner Profile Unavailable | TruthLens";
 
@@ -334,7 +347,9 @@ function PartnerProfileContent({ slug }) {
    useEffect(() => {
       const requestId = ++requestIdRef.current;
 
-      if (!reachEventIdRef.current) reachEventIdRef.current = createPublicReachEventId();
+      if (!isCommunity && !reachEventIdRef.current) {
+         reachEventIdRef.current = createPublicReachEventId();
+      }
 
       authFetch(resolveApiEndpoint("PUBLIC_PARTNER_DETAIL", slug))
          .then((response) => {
@@ -356,17 +371,17 @@ function PartnerProfileContent({ slug }) {
       return () => {
          requestIdRef.current += 1;
       };
-   }, [authFetch, retryVersion, slug]);
+   }, [authFetch, isCommunity, retryVersion, slug]);
 
    useEffect(() => {
-      if (isLoading || error || !partner) return;
+      if (isCommunity || isLoading || error || !partner) return;
       void recordPublicReach({
          clientEventId: reachEventIdRef.current,
          eventType: "PARTNER_PROFILE_VIEW",
          sourceSurface: "PUBLIC_PARTNER_PROFILE",
          organizationSlug: partner.slug,
       });
-   }, [error, isLoading, partner]);
+   }, [error, isCommunity, isLoading, partner]);
 
    const retry = () => {
       setPartner(null);
@@ -375,106 +390,292 @@ function PartnerProfileContent({ slug }) {
       setRetryVersion((value) => value + 1);
    };
 
-   return (
-      <>
-         {isLoading && (
-            <section className="partner-profile-state" aria-busy="true" aria-live="polite">
-               <div className="skeleton-box partner-profile-state__logo" aria-hidden="true" />
-               <h1>Public partner profile</h1>
-               <p>Loading public partner profile…</p>
-            </section>
-         )}
+   const toggleFollow = async () => {
+      if (!partner || isFollowPending) return;
 
-         {!isLoading && error && (
-            <section className="partner-profile-state" role="alert">
+      setIsFollowPending(true);
+      try {
+         const response = await authFetch(
+            resolveApiEndpoint("PUBLIC_PARTNER_FOLLOW", partner.slug),
+            { method: "POST" },
+         );
+         setPartner((current) =>
+            current
+               ? {
+                    ...current,
+                    is_following: Boolean(response.is_following),
+                    followers_count: Number(response.followers_count) || 0,
+                 }
+               : current,
+         );
+      } catch {
+         addToast({
+            type: "error",
+            message: `We couldn't ${partner.is_following ? "unfollow" : "follow"} this organization. Please try again.`,
+         });
+      } finally {
+         setIsFollowPending(false);
+      }
+   };
+
+   const selectTab = (tab) => setActiveTab(tab);
+
+   const handleTabKeyDown = (event) => {
+      const currentIndex = PARTNER_PROFILE_TABS.indexOf(activeTab);
+      let nextIndex = null;
+
+      if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % PARTNER_PROFILE_TABS.length;
+      if (event.key === "ArrowLeft") {
+         nextIndex = (currentIndex - 1 + PARTNER_PROFILE_TABS.length) % PARTNER_PROFILE_TABS.length;
+      }
+      if (event.key === "Home") nextIndex = 0;
+      if (event.key === "End") nextIndex = PARTNER_PROFILE_TABS.length - 1;
+      if (nextIndex === null) return;
+
+      event.preventDefault();
+      const nextTab = PARTNER_PROFILE_TABS[nextIndex];
+      selectTab(nextTab);
+      document.getElementById(`partner-profile-tab-${nextTab}`)?.focus();
+   };
+
+   if (isLoading) {
+      return (
+         <div className="partner-profile-state-shell" aria-busy="true">
+            <div className="user-profile__page-state" role="status" aria-live="polite">
+               <span className="user-profile__state-icon partner-profile__state-logo" aria-hidden="true">
+                  <Icons name="loader" size={24} />
+               </span>
+               <h1>Loading partner profile</h1>
+               <p>Gathering this organization&apos;s public identity and publications.</p>
+            </div>
+         </div>
+      );
+   }
+
+   if (error || !partner) {
+      return (
+         <div className="partner-profile-state-shell">
+            <div className="user-profile__page-state" role="alert">
+               <span className="user-profile__state-icon user-profile__state-icon--error" aria-hidden="true">
+                  <Icons name="alert-circle" size={24} />
+               </span>
                <h1>Partner profile unavailable</h1>
                <p>This public partner profile could not be found or is not currently available.</p>
                {error === "request" && (
-                  <button type="button" onClick={retry}>
-                     Retry
+                  <button type="button" className="user-profile__primary-button" onClick={retry}>
+                     Try again
                   </button>
                )}
-            </section>
-         )}
+            </div>
+         </div>
+      );
+   }
 
-         {!isLoading && !error && partner && (
-            <article className="partner-profile">
-               <header className="partner-profile-hero">
-                  <PartnerLogo
-                     logoUrl={partner.logo_url}
-                     organizationName={partner.name}
-                     size="profile"
-                  />
-                  <div>
-                     <p className="partner-profile-eyebrow">Public partner profile</p>
-                     <h1>{partner.name}</h1>
-                     <p className="partner-profile-type">{partner.organization_type_label}</p>
-                  </div>
-               </header>
+   const followerCount = Number(partner.followers_count || 0);
+   const expertiseAreas = Array.isArray(partner.expertise_areas) ? partner.expertise_areas : [];
+   const currentTabDescription =
+      activeTab === "published"
+         ? `Institutionally published fact-checks from ${partner.name}.`
+         : `Public information about ${partner.name}.`;
 
-               <div className="partner-profile-content">
-                  <section aria-labelledby="partner-about-heading">
-                     <h2 id="partner-about-heading">About</h2>
-                     <p className="partner-profile-description">
-                        {partner.description || "This organization has not provided a public description."}
-                     </p>
-                  </section>
+   return (
+      <section className="user-profile__profile-card partner-profile" aria-labelledby="partner-profile-heading">
+         <div className="user-profile__identity">
+            <div className="user-profile__identity-top">
+               <PartnerLogo
+                  logoUrl={partner.logo_url}
+                  organizationName={partner.name}
+                  size="profile"
+               />
 
-                  <section
-                     className="partner-profile-publications"
-                     aria-labelledby="partner-publications-heading"
-                  >
-                     <div className="partner-profile-publications__heading">
-                        <div>
-                           <h2 id="partner-publications-heading">Published fact-checks</h2>
-                           <p>Fact-checks institutionally published by this organization.</p>
-                        </div>
-                     </div>
-
-                     <PartnerPublishedFactChecks slug={slug} />
-                  </section>
-
-                  {Array.isArray(partner.expertise_areas) && partner.expertise_areas.length > 0 && (
-                     <section aria-labelledby="partner-expertise-heading">
-                        <h2 id="partner-expertise-heading">Expertise</h2>
-                        <ul className="partner-profile-expertise">
-                           {partner.expertise_areas.map((area, index) => (
-                              <li key={`${area}-${index}`}>{area}</li>
-                           ))}
-                        </ul>
-                     </section>
-                  )}
-
-                  {partner.website && (
-                     <section aria-labelledby="partner-website-heading">
-                        <h2 id="partner-website-heading">Website</h2>
-                        <a
-                           className="partner-profile-website"
-                           href={partner.website}
-                           target="_blank"
-                           rel="noopener noreferrer"
-                        >
-                           Visit organization website
-                           <ExternalLink aria-hidden="true" />
-                        </a>
-                     </section>
-                  )}
-
-                  <aside className="partner-profile-context" aria-labelledby="partner-context-heading">
-                     <Info aria-hidden="true" />
-                     <div>
-                        <h2 id="partner-context-heading">Partnership context</h2>
-                        <p>
-                           This public profile indicates that the organization has chosen to maintain a public
-                           presence on TruthLens. Partner participation does not automatically imply endorsement
-                           of all TruthLens analyses, verdicts, or content.
-                        </p>
-                     </div>
-                  </aside>
+               <div className="user-profile__name-group">
+                  <h1 id="partner-profile-heading">{partner.name}</h1>
+                  <p className="user-profile__handle">
+                     {partner.organization_type_label || "Partner Organization"}
+                  </p>
                </div>
-            </article>
-         )}
-      </>
+
+            </div>
+
+            <div className="user-profile__identity-details">
+               <p className="user-profile__role partner-profile__role">
+                  <span className="partner-profile__role-mark" aria-hidden="true" />
+                  Partner Organization
+               </p>
+
+               <p className={`user-profile__bio ${partner.description ? "" : "is-empty"}`.trim()}>
+                  {partner.description || "This organization has not provided a public description."}
+               </p>
+
+               {partner.website && (
+                  <a
+                     className="user-profile__joined partner-profile__website-inline"
+                     href={partner.website}
+                     target="_blank"
+                     rel="noopener noreferrer"
+                  >
+                     <ExternalLink aria-hidden="true" />
+                     Visit organization website
+                  </a>
+               )}
+
+               <div className="user-profile__profile-footer">
+                  <div className="user-profile__connections">
+                     <span
+                        className="partner-profile__connection-stat"
+                        aria-label={`${followerCount.toLocaleString()} ${followerCount === 1 ? "follower" : "followers"}`}
+                     >
+                        <strong>{followerCount.toLocaleString()}</strong>{" "}
+                        {followerCount === 1 ? "Follower" : "Followers"}
+                     </span>
+                  </div>
+
+                  {isCommunity && (
+                     <button
+                        type="button"
+                        className={`user-profile__primary-button user-profile__profile-action ${
+                           partner.is_following ? "is-following" : ""
+                        }`}
+                        onClick={toggleFollow}
+                        disabled={isFollowPending}
+                        aria-pressed={Boolean(partner.is_following)}
+                     >
+                        <Icons
+                           name={partner.is_following ? "user-check" : "user-plus"}
+                           size={16}
+                           aria-hidden="true"
+                        />
+                        {isFollowPending ? "Updating…" : partner.is_following ? "Following" : "Follow"}
+                     </button>
+                  )}
+               </div>
+            </div>
+         </div>
+
+         <section
+            className="user-profile__activity partner-profile__activity"
+            aria-labelledby="partner-profile-activity-heading"
+            aria-describedby="partner-profile-activity-description"
+         >
+            <h2 id="partner-profile-activity-heading" className="user-profile__sr-only">
+               Partner organization profile content
+            </h2>
+            <p id="partner-profile-activity-description" className="user-profile__sr-only">
+               {currentTabDescription}
+            </p>
+
+            <div className="user-profile__activity-nav">
+               <div
+                  className="user-profile__tabs"
+                  role="tablist"
+                  aria-label="Partner organization profile"
+                  onKeyDown={handleTabKeyDown}
+               >
+                  {PARTNER_PROFILE_TABS.map((tab) => (
+                     <button
+                        key={tab}
+                        id={`partner-profile-tab-${tab}`}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeTab === tab}
+                        aria-controls={`partner-profile-panel-${tab}`}
+                        tabIndex={activeTab === tab ? 0 : -1}
+                        onClick={() => selectTab(tab)}
+                     >
+                        {tab === "published" ? "Fact-Checks" : "About"}
+                     </button>
+                  ))}
+               </div>
+
+               {activeTab === "published" && Number.isInteger(publicationCount) && publicationCount >= 0 && (
+                  <span className="user-profile__activity-count">
+                     {publicationCount.toLocaleString()} {publicationCount === 1 ? "publication" : "publications"}
+                  </span>
+               )}
+            </div>
+
+            <div
+               id="partner-profile-panel-published"
+               className="user-profile__tab-panel"
+               role="tabpanel"
+               aria-labelledby="partner-profile-tab-published"
+               hidden={activeTab !== "published"}
+               tabIndex={activeTab === "published" ? 0 : -1}
+            >
+               <PartnerPublishedFactChecks
+                  slug={slug}
+                  isCommunity={isCommunity}
+                  onCountChange={setPublicationCount}
+               />
+            </div>
+
+            <div
+               id="partner-profile-panel-about"
+               className="user-profile__tab-panel"
+               role="tabpanel"
+               aria-labelledby="partner-profile-tab-about"
+               hidden={activeTab !== "about"}
+               tabIndex={activeTab === "about" ? 0 : -1}
+            >
+               {activeTab === "about" && (
+                  <div className="user-profile__activity-list partner-profile__about-list">
+                     <section className="user-profile__activity-item partner-profile__about-section">
+                        <div className="user-profile__activity-copy">
+                           <h3>About</h3>
+                           <p>
+                              {partner.description || "This organization has not provided a public description."}
+                           </p>
+                        </div>
+                     </section>
+
+                     <section className="user-profile__activity-item partner-profile__about-section">
+                        <div className="user-profile__activity-copy">
+                           <h3>Expertise</h3>
+                           {expertiseAreas.length > 0 ? (
+                              <ul className="partner-profile-expertise">
+                                 {expertiseAreas.map((area, index) => (
+                                    <li key={`${area}-${index}`}>{area}</li>
+                                 ))}
+                              </ul>
+                           ) : (
+                              <p>No public expertise areas have been listed.</p>
+                           )}
+                        </div>
+                     </section>
+
+                     {partner.website && (
+                        <section className="user-profile__activity-item partner-profile__about-section">
+                           <div className="user-profile__activity-copy">
+                              <h3>Website</h3>
+                              <a
+                                 className="partner-profile-website"
+                                 href={partner.website}
+                                 target="_blank"
+                                 rel="noopener noreferrer"
+                              >
+                                 Visit organization website
+                                 <ExternalLink aria-hidden="true" />
+                              </a>
+                           </div>
+                        </section>
+                     )}
+
+                     <aside className="user-profile__activity-item partner-profile-context">
+                        <Info aria-hidden="true" />
+                        <div>
+                           <h3>Partnership context</h3>
+                           <p>
+                              This public profile indicates that the organization has chosen to maintain a public
+                              presence on TruthLens. Partner participation does not automatically imply endorsement
+                              of all TruthLens analyses, verdicts, or content.
+                           </p>
+                        </div>
+                     </aside>
+                  </div>
+               )}
+            </div>
+         </section>
+      </section>
    );
 }
 
@@ -482,21 +683,29 @@ function PartnerProfilePage() {
    const { slug } = useParams();
    const location = useLocation();
    const previousSearch = location.state?.fromPartners;
+   const isCommunity = location.pathname.startsWith("/community/partners/");
    const partnersPath =
-      typeof previousSearch === "string" && (previousSearch === "" || previousSearch.startsWith("?"))
+      typeof previousSearch === "string" &&
+      (previousSearch === "" || previousSearch.startsWith("?"))
          ? `/partners${previousSearch}`
          : "/partners";
 
    return (
-      <div className="partner-profile-page">
-         <div className="partner-profile-main">
-            <Link to={partnersPath} className="partner-profile-back">
-               <ArrowLeft aria-hidden="true" />
-               Back to partners
-            </Link>
+      <div className={`partner-profile-page ${isCommunity ? "partner-profile-page--community" : ""}`}>
+         <main className="user-profile partner-profile-main">
+            {!isCommunity && (
+               <Link to={partnersPath} className="partner-profile-back">
+                  <ArrowLeft aria-hidden="true" />
+                  Back to partners
+               </Link>
+            )}
 
-            <PartnerProfileContent key={slug} slug={slug} />
-         </div>
+            <PartnerProfileContent
+               key={`${isCommunity ? "community" : "public"}-${slug}`}
+               slug={slug}
+               isCommunity={isCommunity}
+            />
+         </main>
       </div>
    );
 }

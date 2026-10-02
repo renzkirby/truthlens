@@ -105,6 +105,14 @@
     list-style: none;
 }
 
+.tl-global-search__person-result > .partner-affiliations--compact {
+    padding: 0 var(--tl-space-2) var(--tl-space-2) calc(34px + var(--tl-space-5));
+}
+
+.tl-global-search__result > .partner-logo--compact {
+    flex: 0 0 auto;
+}
+
 .tl-global-search__result {
     display: flex;
     align-items: center;

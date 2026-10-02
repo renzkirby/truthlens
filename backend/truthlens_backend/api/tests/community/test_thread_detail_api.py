@@ -230,14 +230,21 @@ class ThreadDetailApiTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
             set(response.data["author"]),
-            {"id", "username", "avatar_url", "role", "trust_score"},
+            {
+                "id",
+                "username",
+                "avatar_url",
+                "role",
+                "trust_score",
+                "partner_affiliations",
+            },
         )
         serialized_comment = next(
             item for item in response.data["comments"] if item["id"] == str(comment.id)
         )
         self.assertEqual(
             set(serialized_comment["commenter"]),
-            {"id", "username", "avatar_url", "role"},
+            {"id", "username", "avatar_url", "role", "partner_affiliations"},
         )
         serialized_evidence = next(
             item
@@ -246,7 +253,13 @@ class ThreadDetailApiTests(TestCase):
         )
         self.assertEqual(
             set(serialized_evidence["contributor"]),
-            {"id", "username", "avatar_url", "trust_score"},
+            {
+                "id",
+                "username",
+                "avatar_url",
+                "trust_score",
+                "partner_affiliations",
+            },
         )
         self.assertEqual(
             set(serialized_evidence["verified_by"]),
@@ -278,6 +291,48 @@ class ThreadDetailApiTests(TestCase):
             self.assertNotIn("is_email_verified", identity)
             self.assertNotIn("has_completed_onboarding", identity)
             self.assertNotIn("organization_name", identity)
+
+    def test_evidence_detail_uses_safe_affiliated_contributor_projection(self):
+        _claim, thread = self._create_thread("evidence identity")
+        evidence = EvidenceSubmission.objects.create(
+            thread=thread,
+            contributor=self.reviewer,
+            verified_by=self.reviewer,
+            evidence_caption="Partner-contributed community evidence.",
+            evidence_type=EvidenceSubmission.EvidenceType.PROVIDES_CONTEXT,
+        )
+
+        response = self.client.get(reverse("evidence-detail", args=[evidence.id]))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            set(response.data["contributor"]),
+            {
+                "id",
+                "username",
+                "avatar_url",
+                "trust_score",
+                "partner_affiliations",
+            },
+        )
+        self.assertEqual(
+            response.data["contributor"]["partner_affiliations"],
+            [
+                {
+                    "id": str(self.organization.id),
+                    "name": self.organization.name,
+                    "slug": self.organization.slug,
+                    "logo_url": self.organization.logo_url,
+                }
+            ],
+        )
+        self.assertEqual(
+            set(response.data["verified_by"]),
+            {"id", "username", "avatar_url"},
+        )
+        serialized = str(response.data)
+        self.assertNotIn(self.reviewer.email, serialized)
+        self.assertNotIn(OrganizationMembership.Role.LEAD_VERIFIER, serialized)
 
     def test_attributable_canonical_human_verdict_projection(self):
         claim, thread = self._create_thread("canonical verdict")

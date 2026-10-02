@@ -9,7 +9,7 @@ import {
    RefreshCw,
    ShieldCheck,
 } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import PartnerLogo from "../components/partners/PartnerLogo";
 import { useAuth } from "../hooks/useAuth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -92,8 +92,13 @@ function safeSource(value) {
    }
 }
 
-function routeForVersion(organizationSlug, publicationId) {
-   return `/partners/${encodeURIComponent(organizationSlug)}/fact-checks/${encodeURIComponent(publicationId)}`;
+function partnerProfileRoute(organizationSlug, isCommunity) {
+   const prefix = isCommunity ? "/community/partners" : "/partners";
+   return `${prefix}/${encodeURIComponent(organizationSlug)}`;
+}
+
+function routeForVersion(organizationSlug, publicationId, isCommunity) {
+   return `${partnerProfileRoute(organizationSlug, isCommunity)}/fact-checks/${encodeURIComponent(publicationId)}`;
 }
 
 function Verdict({ value, compact = false }) {
@@ -186,6 +191,8 @@ function SourceItem({ source }) {
 
 function PublicFactCheckPage() {
    const { slug, publicationId } = useParams();
+   const location = useLocation();
+   const isCommunity = location.pathname.startsWith("/community/partners/");
    const { authFetch } = useAuth();
    const [detailState, setDetailState] = useState(null);
    const [errorState, setErrorState] = useState(null);
@@ -211,10 +218,10 @@ function PublicFactCheckPage() {
 
    useEffect(() => {
       const requestId = ++requestIdRef.current;
-      if (reachAttemptRef.current?.routeKey !== routeKey) {
+      if (!isCommunity && reachAttemptRef.current?.routeKey !== routeKey) {
          reachAttemptRef.current = { routeKey, eventId: createPublicReachEventId() };
       }
-      const reachEventId = reachAttemptRef.current.eventId;
+      const reachEventId = reachAttemptRef.current?.eventId || null;
 
       authFetch(resolveApiEndpoint("PUBLIC_PARTNER_FACT_CHECK_DETAIL", slug, publicationId))
          .then((response) => {
@@ -245,10 +252,10 @@ function PublicFactCheckPage() {
       return () => {
          requestIdRef.current += 1;
       };
-   }, [authFetch, publicationId, retryVersion, routeKey, slug]);
+   }, [authFetch, isCommunity, publicationId, retryVersion, routeKey, slug]);
 
    useEffect(() => {
-      if (!detail || error || showLoading || reachAttemptRef.current?.routeKey !== routeKey
+      if (isCommunity || !detail || error || showLoading || reachAttemptRef.current?.routeKey !== routeKey
          || detailState.reachEventId !== reachAttemptRef.current.eventId) return;
       void recordPublicReach({
          clientEventId: detailState.reachEventId,
@@ -257,7 +264,7 @@ function PublicFactCheckPage() {
          organizationSlug: detail.organization.slug,
          publicationId: detail.selected_publication_id,
       });
-   }, [detail, detailState, error, routeKey, showLoading]);
+   }, [detail, detailState, error, isCommunity, routeKey, showLoading]);
 
    useEffect(() => {
       if (!detail || focusRouteKey !== routeKey) return undefined;
@@ -312,7 +319,9 @@ function PublicFactCheckPage() {
                         Retry
                      </button>
                   )}
-                  <Link to="/partners">Browse public partners</Link>
+                  <Link to={isCommunity ? "/community" : "/partners"}>
+                     {isCommunity ? "Back to community" : "Browse public partners"}
+                  </Link>
                </div>
             </section>
          </div>
@@ -338,7 +347,12 @@ function PublicFactCheckPage() {
    const selectedIsCorrection = article.revision_kind === "FACTUAL_CORRECTION";
    const hasCorrectionHistory = lineage.some((item) => item?.revision_kind === "FACTUAL_CORRECTION");
    const sources = Array.isArray(detail.sources) ? detail.sources : [];
-   const currentRoute = routeForVersion(organization.slug, detail.current_publication_id);
+   const currentRoute = routeForVersion(
+      organization.slug,
+      detail.current_publication_id,
+      isCommunity,
+   );
+   const organizationRoute = partnerProfileRoute(organization.slug, isCommunity);
 
    const markHistoryNavigation = (item) => {
       if (item?.publication_id) {
@@ -352,11 +366,13 @@ function PublicFactCheckPage() {
             <nav className="public-fact-check-breadcrumb" aria-label="Breadcrumb">
                <ol>
                   <li>
-                     <Link to="/partners">Partners</Link>
+                     <Link to={isCommunity ? "/community" : "/partners"}>
+                        {isCommunity ? "Community" : "Partners"}
+                     </Link>
                   </li>
                   <li aria-hidden="true">/</li>
                   <li>
-                     <Link to={`/partners/${encodeURIComponent(organization.slug)}`}>{organization.name}</Link>
+                     <Link to={organizationRoute}>{organization.name}</Link>
                   </li>
                </ol>
             </nav>
@@ -385,7 +401,7 @@ function PublicFactCheckPage() {
                      <div className="public-fact-check-attribution__row">
                         <Link
                            className="public-fact-check-attribution__identity"
-                           to={`/partners/${encodeURIComponent(organization.slug)}`}
+                           to={organizationRoute}
                         >
                            <PartnerLogo logoUrl={organization.logo_url} organizationName={organization.name} />
                            <span>
@@ -540,7 +556,7 @@ function PublicFactCheckPage() {
                      <div>
                         <dt>Published by</dt>
                         <dd>
-                           <Link to={`/partners/${encodeURIComponent(organization.slug)}`}>{organization.name}</Link>
+                           <Link to={organizationRoute}>{organization.name}</Link>
                         </dd>
                      </div>
                      <div>
@@ -586,7 +602,11 @@ function PublicFactCheckPage() {
                               >
                                  <span className="public-fact-check-history__marker" aria-hidden="true" />
                                  <Link
-                                    to={routeForVersion(organization.slug, item.publication_id)}
+                                    to={routeForVersion(
+                                       organization.slug,
+                                       item.publication_id,
+                                       isCommunity,
+                                    )}
                                     aria-current={selected ? "page" : undefined}
                                     onClick={() => {
                                        if (!selected) markHistoryNavigation(item);

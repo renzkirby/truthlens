@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import ImageLightbox from "../components/ImageLightbox.jsx";
 import Icons from "../components/Icons.jsx";
+import PartnerAffiliations from "../components/partners/PartnerAffiliations.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { useNotification } from "../hooks/useNotification";
 import { resolveApiEndpoint } from "../utils/api";
@@ -610,6 +611,11 @@ function UserProfile() {
                      {isPlatformModerator && <Icons name="shield-user" size={16} aria-hidden="true" />}
                      {roleLabel}
                   </p>
+
+                  <PartnerAffiliations
+                     affiliations={displayUser.partner_affiliations}
+                     className="user-profile__partner-affiliations"
+                  />
 
                   <p className={`user-profile__bio ${displayUser.bio ? "" : "is-empty"}`.trim()}>
                      {displayUser.bio ||

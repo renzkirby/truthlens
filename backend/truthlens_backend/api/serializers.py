@@ -45,6 +45,9 @@ from .organization_service import (
 from .organization_public_presence_service import (
     is_public_partner_eligible,
 )
+from .organization_public_affiliation_service import (
+    get_public_partner_affiliations,
+)
 from .public_publication_query_service import (
     PublicPublicationNotFound,
     get_public_partner_fact_check_detail,
@@ -107,6 +110,11 @@ class NotificationSerializer(serializers.ModelSerializer):
         return {"id": str(obj.organization_id), "name": obj.organization.name} if obj.organization_id else None
 
 
+class PublicPartnerAffiliationsField(serializers.Field):
+    def to_representation(self, user):
+        return get_public_partner_affiliations(user)
+
+
 class PublicIdentityProfileSerializer(serializers.ModelSerializer):
     trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
     role = serializers.CharField(source="profile.role", read_only=True)
@@ -115,6 +123,10 @@ class PublicIdentityProfileSerializer(serializers.ModelSerializer):
     followers_count = serializers.SerializerMethodField()
     following_count = serializers.SerializerMethodField()
     is_following = serializers.SerializerMethodField()
+    partner_affiliations = PublicPartnerAffiliationsField(
+        source="*",
+        read_only=True,
+    )
 
     def get_followers_count(self, obj):
         return obj.profile.followers.count()
@@ -141,6 +153,7 @@ class PublicIdentityProfileSerializer(serializers.ModelSerializer):
             "followers_count",
             "following_count",
             "is_following",
+            "partner_affiliations",
         ]
 
 
@@ -148,10 +161,21 @@ class CommunityUserIdentitySerializer(serializers.ModelSerializer):
     trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
     role = serializers.CharField(source="profile.role", read_only=True)
     avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
+    partner_affiliations = PublicPartnerAffiliationsField(
+        source="*",
+        read_only=True,
+    )
 
     class Meta:
         model = User
-        fields = ["id", "username", "avatar_url", "role", "trust_score"]
+        fields = [
+            "id",
+            "username",
+            "avatar_url",
+            "role",
+            "trust_score",
+            "partner_affiliations",
+        ]
         read_only_fields = fields
 
 
@@ -323,12 +347,13 @@ class UserSerializer(serializers.ModelSerializer):
 class PublicUserSearchSerializer(serializers.ModelSerializer):
     trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
     role = serializers.CharField(source="profile.role", read_only=True)
-    organization_name = serializers.CharField(
-        source="profile.organization_name", read_only=True
-    )
     avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
     bio = serializers.CharField(source="profile.bio", read_only=True)
     followers_count = serializers.SerializerMethodField()
+    partner_affiliations = PublicPartnerAffiliationsField(
+        source="*",
+        read_only=True,
+    )
 
     def get_followers_count(self, obj):
         return obj.profile.followers.count()
@@ -340,10 +365,10 @@ class PublicUserSearchSerializer(serializers.ModelSerializer):
             "username",
             "trust_score",
             "role",
-            "organization_name",
             "avatar_url",
             "bio",
             "followers_count",
+            "partner_affiliations",
         ]
 
 
@@ -360,6 +385,10 @@ class UserWithTrustBreakdownSerializer(UserSerializer):
 class CurrentUserSerializer(UserWithTrustBreakdownSerializer):
     workspace = serializers.SerializerMethodField()
     auth_methods = serializers.SerializerMethodField()
+    partner_affiliations = PublicPartnerAffiliationsField(
+        source="*",
+        read_only=True,
+    )
 
     def get_workspace(self, obj):
         return get_workspace_access_context(obj)
@@ -379,6 +408,7 @@ class CurrentUserSerializer(UserWithTrustBreakdownSerializer):
         fields = UserWithTrustBreakdownSerializer.Meta.fields + [
             "workspace",
             "auth_methods",
+            "partner_affiliations",
         ]
 
 
@@ -796,7 +826,24 @@ class PublicPartnerSummarySerializer(serializers.ModelSerializer):
 
 
 class PublicPartnerDetailSerializer(PublicPartnerSummarySerializer):
-    pass
+    followers_count = serializers.SerializerMethodField()
+    is_following = serializers.SerializerMethodField()
+
+    def get_followers_count(self, obj):
+        return obj.followers.count()
+
+    def get_is_following(self, obj):
+        request = self.context.get("request")
+        if request and request.user and request.user.is_authenticated:
+            return obj.followers.filter(user=request.user).exists()
+        return False
+
+    class Meta(PublicPartnerSummarySerializer.Meta):
+        fields = PublicPartnerSummarySerializer.Meta.fields + [
+            "followers_count",
+            "is_following",
+        ]
+        read_only_fields = fields
 
 
 class StrictBooleanField(serializers.BooleanField):
@@ -1151,10 +1198,14 @@ class VerificationAssignmentClaimSerializer(serializers.Serializer):
 
 class CommunityFeedAuthorSerializer(serializers.ModelSerializer):
     avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
+    partner_affiliations = PublicPartnerAffiliationsField(
+        source="*",
+        read_only=True,
+    )
 
     class Meta:
         model = User
-        fields = ["id", "username", "avatar_url"]
+        fields = ["id", "username", "avatar_url", "partner_affiliations"]
         read_only_fields = fields
 
 
@@ -2024,30 +2075,55 @@ class ThreadDetailAuthorSerializer(serializers.ModelSerializer):
     avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
     role = serializers.CharField(source="profile.role", read_only=True)
     trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
+    partner_affiliations = PublicPartnerAffiliationsField(
+        source="*",
+        read_only=True,
+    )
 
     class Meta:
         model = User
-        fields = ["id", "username", "avatar_url", "role", "trust_score"]
+        fields = [
+            "id",
+            "username",
+            "avatar_url",
+            "role",
+            "trust_score",
+            "partner_affiliations",
+        ]
         read_only_fields = fields
 
 
 class ThreadDetailCommenterSerializer(serializers.ModelSerializer):
     avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
     role = serializers.CharField(source="profile.role", read_only=True)
+    partner_affiliations = PublicPartnerAffiliationsField(
+        source="*",
+        read_only=True,
+    )
 
     class Meta:
         model = User
-        fields = ["id", "username", "avatar_url", "role"]
+        fields = ["id", "username", "avatar_url", "role", "partner_affiliations"]
         read_only_fields = fields
 
 
 class ThreadDetailEvidenceContributorSerializer(serializers.ModelSerializer):
     avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
     trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
+    partner_affiliations = PublicPartnerAffiliationsField(
+        source="*",
+        read_only=True,
+    )
 
     class Meta:
         model = User
-        fields = ["id", "username", "avatar_url", "trust_score"]
+        fields = [
+            "id",
+            "username",
+            "avatar_url",
+            "trust_score",
+            "partner_affiliations",
+        ]
         read_only_fields = fields
 
 
@@ -2134,8 +2210,8 @@ class ThreadCommentSerializer(serializers.ModelSerializer):
 
 
 class EvidenceSubmissionSerializer(serializers.ModelSerializer):
-    contributor = UserSerializer(read_only=True)
-    verified_by = UserSerializer(read_only=True)  # Serialize moderator who verified it
+    contributor = ThreadDetailEvidenceContributorSerializer(read_only=True)
+    verified_by = ThreadDetailVerifiedBySerializer(read_only=True)
     thread_id = serializers.UUIDField(write_only=True)
     # Include full thread and claim for moderation context
     thread = serializers.SerializerMethodField(read_only=True)

@@ -467,6 +467,49 @@ class OrganizationMembership(models.Model):
         return f"{self.user.username} - " f"{self.organization.name} " f"({self.role})"
 
 
+class OrganizationFollow(models.Model):
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="followers",
+    )
+
+    user = models.ForeignKey(
+        "auth.User",
+        on_delete=models.CASCADE,
+        related_name="organization_follows",
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    class Meta:
+        ordering = [
+            "organization_id",
+            "user_id",
+        ]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "organization",
+                    "user",
+                ],
+                name="unique_user_organization_follow",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} follows {self.organization.name}"
+
+
 class OrganizationInvitation(models.Model):
     class Status(models.TextChoices):
         PENDING = (

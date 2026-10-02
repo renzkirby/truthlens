@@ -30,6 +30,20 @@ import AccountActionShell from "./components/account/AccountActionShell.jsx";
 import OnboardingShell from "./components/account/OnboardingShell.jsx";
 import WorkspaceShell from "./components/workspace/WorkspaceShell.jsx";
 
+
+function CommunityFactCheckPage() {
+   return (
+      <div
+         style={{
+            "--tl-public-gutter-left": "var(--tl-space-6)",
+            "--tl-public-gutter-right": "var(--tl-space-6)",
+         }}
+      >
+         <PublicFactCheckPage />
+      </div>
+   );
+}
+
 function App() {
    return (
       <>
@@ -61,6 +75,11 @@ function App() {
 
                   <Route element={<AppShell />}>
                      <Route path="/community" element={<CommunityFeed />} />
+                     <Route path="/community/partners/:slug" element={<PartnerProfilePage />} />
+                     <Route
+                        path="/community/partners/:slug/fact-checks/:publicationId"
+                        element={<CommunityFactCheckPage />}
+                     />
                      <Route path="/dashboard" element={<UserHub />} />
                      <Route path="/verify" element={<VerifyPage />} />
                      <Route path="/thread/create" element={<CreateThreadPage />} />

@@ -7,7 +7,15 @@ from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils.html import strip_tags
 
-from .models import EvidenceSubmission, Notification, OfficialFactCheck, VerificationRun
+from .models import (
+    EvidenceSubmission,
+    Notification,
+    OfficialFactCheck,
+    Organization,
+    OrganizationFollow,
+    VerificationRun,
+)
+from .organization_public_presence_service import PUBLIC_PARTNER_ELIGIBILITY
 from .notification_realtime import publish_notification_inbox_changed
 
 logger = logging.getLogger(__name__)
@@ -102,7 +110,7 @@ def notification_destination(notification):
             from .organization_public_presence_service import is_public_partner_eligible
             if is_public_partner_eligible(publication.organization):
                 slug = quote(publication.organization.slug, safe="")
-                return f"/partners/{slug}/fact-checks/{publication.pk}"
+                return f"/community/partners/{slug}/fact-checks/{publication.pk}"
     return None
 
 
@@ -174,6 +182,42 @@ def _source_thread_author(publication, *, include_predecessors=False):
     return None
 
 
+def _notify_public_partner_followers(
+    fact_check,
+    *,
+    common,
+    notification_type,
+    title,
+    message,
+):
+    if (
+        fact_check.publication_status
+        != OfficialFactCheck.PublicationStatus.PUBLISHED
+        or fact_check.organization_id is None
+    ):
+        return
+
+    organization = Organization.objects.filter(
+        pk=fact_check.organization_id,
+        **PUBLIC_PARTNER_ELIGIBILITY,
+    ).only("name").first()
+    if organization is None:
+        return
+
+    follower_ids = OrganizationFollow.objects.filter(
+        organization_id=organization.pk,
+    ).order_by("user_id").values_list("user_id", flat=True)
+
+    for recipient_id in follower_ids:
+        create_notification_once(
+            **common,
+            recipient_id=recipient_id,
+            notification_type=notification_type,
+            title=title(organization),
+            message=message(organization),
+        )
+
+
 def notify_fact_check_published(fact_check, *, actor_id):
     if fact_check.publication_status != OfficialFactCheck.PublicationStatus.PUBLISHED:
         return
@@ -196,6 +240,17 @@ def notify_fact_check_published(fact_check, *, actor_id):
             title="A verification partner published a fact-check for your post",
             message="A verification partner published its review of your claim. Open the fact-check to read the findings.",
         )
+    _notify_public_partner_followers(
+        fact_check,
+        common=common,
+        notification_type=Type.PARTNER_FACT_CHECK_PUBLISHED,
+        title=lambda organization: (
+            f"{organization.name} published a new fact-check"
+        ),
+        message=lambda _organization: (
+            f'"{plain_snapshot(fact_check.headline, 160)}" is now available.'
+        ),
+    )
 
 
 def notify_article_returned_for_rework(fact_check, *, actor_id):
@@ -234,6 +289,17 @@ def notify_factual_correction_published(successor, *, actor_id, workspace_recipi
             title="A fact-check related to your post was corrected",
             message="A verification partner published a factual correction to its fact-check.",
         )
+    _notify_public_partner_followers(
+        successor,
+        common=common,
+        notification_type=Type.PARTNER_FACT_CHECK_CORRECTED,
+        title=lambda organization: (
+            f"{organization.name} published a fact-check correction"
+        ),
+        message=lambda _organization: (
+            f'A correction to "{plain_snapshot(successor.headline, 150)}" is now available.'
+        ),
+    )
 
 
 def notify_membership_changed(membership, *, actor_id, event_id, change):

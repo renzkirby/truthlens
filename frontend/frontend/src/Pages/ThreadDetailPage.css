@@ -3229,6 +3229,19 @@
     text-decoration: none;
 }
 
+.thread-detail-post-identity,
+.evidence-card-contributor-identity {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.thread-detail-post-identity .partner-affiliations--compact,
+.evidence-card-contributor-identity .partner-affiliations--compact {
+    padding-left: 44px;
+}
+
 .thread-detail-post-author > span:last-child {
     min-width: 0;
     display: flex;
