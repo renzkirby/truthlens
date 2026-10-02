@@ -1,6 +1,7 @@
 import json
 import logging
 import math
+import os
 from dataclasses import dataclass
 from numbers import Real
 
@@ -100,6 +101,25 @@ key exactly and return one assessment per supplied evidence passage:
 """
 
 
+def _gemini_timeout_ms_from_env():
+    raw_timeout = os.getenv("EVIDENCE_ASSESSMENT_GEMINI_TIMEOUT_MS")
+    if raw_timeout is None or not raw_timeout.strip():
+        return None
+    try:
+        timeout_ms = int(raw_timeout)
+    except ValueError:
+        timeout_ms = -1
+    if timeout_ms == 0:
+        return None
+    if timeout_ms < 0:
+        logger.warning(
+            "Invalid EVIDENCE_ASSESSMENT_GEMINI_TIMEOUT_MS; expected a "
+            "non-negative integer, so the evidence-assessment timeout is disabled."
+        )
+        return None
+    return timeout_ms
+
+
 def _valid_score(value):
     return (
         isinstance(value, Real)
@@ -165,7 +185,15 @@ def assess_reasoning_evidence_batch_against_claim(
     user_prompt = f"UNTRUSTED ASSESSMENT DATA:\n{assessment_data}"
 
     try:
-        response_text = call_llm_with_fallback(_SYSTEM_INSTRUCTIONS, user_prompt)
+        provider_options = {"operation": "evidence_assessment"}
+        gemini_timeout_ms = _gemini_timeout_ms_from_env()
+        if gemini_timeout_ms is not None:
+            provider_options["gemini_timeout_ms"] = gemini_timeout_ms
+        response_text = call_llm_with_fallback(
+            _SYSTEM_INSTRUCTIONS,
+            user_prompt,
+            **provider_options,
+        )
         parsed_result = _parse_llm_json(response_text)
         if not isinstance(parsed_result, dict) or set(parsed_result) != {
             "assessments"

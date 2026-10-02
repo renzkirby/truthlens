@@ -1,5 +1,6 @@
 import json
 import math
+import os
 import uuid
 from dataclasses import FrozenInstanceError, asdict
 from types import SimpleNamespace
@@ -88,6 +89,64 @@ class EvidenceAssessmentTests(SimpleTestCase):
                 directness_score=0.9,
             ),
         )
+
+    def test_missing_timeout_env_labels_operation_without_timeout(self):
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("EVIDENCE_ASSESSMENT_GEMINI_TIMEOUT_MS", None)
+            _, call_llm = self._assess()
+
+        self.assertEqual(
+            call_llm.call_args.kwargs,
+            {"operation": "evidence_assessment"},
+        )
+
+    def test_blank_and_zero_timeout_env_are_disabled(self):
+        for raw_timeout in ("", "  \t", "0"):
+            with self.subTest(raw_timeout=raw_timeout), patch.dict(
+                os.environ,
+                {"EVIDENCE_ASSESSMENT_GEMINI_TIMEOUT_MS": raw_timeout},
+            ):
+                _, call_llm = self._assess()
+
+            self.assertEqual(
+                call_llm.call_args.kwargs,
+                {"operation": "evidence_assessment"},
+            )
+
+    def test_positive_timeout_env_is_forwarded_in_milliseconds(self):
+        with patch.dict(
+            os.environ,
+            {"EVIDENCE_ASSESSMENT_GEMINI_TIMEOUT_MS": "2750"},
+        ):
+            _, call_llm = self._assess()
+
+        self.assertEqual(
+            call_llm.call_args.kwargs,
+            {
+                "operation": "evidence_assessment",
+                "gemini_timeout_ms": 2750,
+            },
+        )
+
+    def test_invalid_and_negative_timeout_env_warn_and_are_disabled(self):
+        for raw_timeout in ("not-a-number", "-1"):
+            with self.subTest(raw_timeout=raw_timeout), patch.dict(
+                os.environ,
+                {"EVIDENCE_ASSESSMENT_GEMINI_TIMEOUT_MS": raw_timeout},
+            ), self.assertLogs(
+                "api.verification.evidence_assessment",
+                level="WARNING",
+            ) as logs:
+                _, call_llm = self._assess()
+
+            self.assertEqual(
+                call_llm.call_args.kwargs,
+                {"operation": "evidence_assessment"},
+            )
+            self.assertIn(
+                "evidence-assessment timeout is disabled",
+                "\n".join(logs.output),
+            )
 
     def test_valid_refutes_result(self):
         assessment, _ = self._assess(self._result(stance="REFUTES"))

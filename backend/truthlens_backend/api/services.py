@@ -8,6 +8,7 @@ import json
 import math
 import re
 import logging
+import time
 from numbers import Number
 from urllib.parse import urlparse
 import ipaddress
@@ -177,26 +178,89 @@ def _provider_error_label(error):
     return type(error).__name__
 
 
-def call_llm_with_fallback(system_instructions, user_prompt):
+def _log_llm_provider_call(operation, provider, started_at, outcome, error=None):
+    operation_label = operation or "unspecified"
+    duration_ms = int((time.perf_counter() - started_at) * 1000)
+    if error is None:
+        logger.info(
+            "LLM_PROVIDER_CALL operation=%s provider=%s duration_ms=%s outcome=%s",
+            operation_label,
+            provider,
+            duration_ms,
+            outcome,
+        )
+        return
+    logger.info(
+        "LLM_PROVIDER_CALL operation=%s provider=%s duration_ms=%s "
+        "outcome=%s error=%s",
+        operation_label,
+        provider,
+        duration_ms,
+        outcome,
+        _provider_error_label(error),
+    )
+
+
+def call_llm_with_fallback(
+    system_instructions,
+    user_prompt,
+    *,
+    operation=None,
+    gemini_timeout_ms=None,
+):
     """Use Gemini first unless Groq has already taken over in this job."""
     if not _gemini_degraded.get():
+        gemini_config = {
+            "system_instruction": system_instructions,
+            "response_mime_type": "application/json",
+            "temperature": 0.1,
+        }
         try:
-            response = gemini_client.models.generate_content(
-                model=_model_from_env("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
-                contents=user_prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instructions,
-                    response_mime_type="application/json",
-                    temperature=0.1,
-                ),
-            )
-            return response.text
+            if (
+                isinstance(gemini_timeout_ms, int)
+                and not isinstance(gemini_timeout_ms, bool)
+                and gemini_timeout_ms > 0
+            ):
+                gemini_config["http_options"] = types.HttpOptions(
+                    timeout=gemini_timeout_ms
+                )
+            request_config = types.GenerateContentConfig(**gemini_config)
         except Exception as gemini_err:
             logger.warning(
                 "Gemini API failed (%s); trying Groq fallback.",
                 _provider_error_label(gemini_err),
             )
+        else:
+            gemini_started_at = time.perf_counter()
+            try:
+                response = gemini_client.models.generate_content(
+                    model=_model_from_env("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
+                    contents=user_prompt,
+                    config=request_config,
+                )
+                content = response.text
+            except Exception as gemini_err:
+                _log_llm_provider_call(
+                    operation,
+                    "gemini",
+                    gemini_started_at,
+                    "failed",
+                    gemini_err,
+                )
+                logger.warning(
+                    "Gemini API failed (%s); trying Groq fallback.",
+                    _provider_error_label(gemini_err),
+                )
+            else:
+                _log_llm_provider_call(
+                    operation,
+                    "gemini",
+                    gemini_started_at,
+                    "success",
+                )
+                return content
 
+    groq_started_at = time.perf_counter()
     try:
         chat_completion = groq_client.chat.completions.create(
             messages=[
@@ -209,6 +273,13 @@ def call_llm_with_fallback(system_instructions, user_prompt):
         )
         content = chat_completion.choices[0].message.content
     except Exception as groq_err:
+        _log_llm_provider_call(
+            operation,
+            "groq",
+            groq_started_at,
+            "failed",
+            groq_err,
+        )
         logger.error(
             "Groq fallback failed (%s).",
             _provider_error_label(groq_err),
@@ -217,6 +288,12 @@ def call_llm_with_fallback(system_instructions, user_prompt):
             "No configured LLM provider successfully completed this request."
         ) from groq_err
 
+    _log_llm_provider_call(
+        operation,
+        "groq",
+        groq_started_at,
+        "success",
+    )
     # Outside an explicit job scope, retain independent Gemini-first calls.
     if _gemini_degraded.get() is not None:
         _gemini_degraded.set(True)
