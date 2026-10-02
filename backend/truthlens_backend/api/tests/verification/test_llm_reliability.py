@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from django.test import SimpleTestCase
-from google.genai import errors
+from google.genai import errors, types
 
 from api.services import (
     DEFAULT_GEMINI_MODEL,
@@ -33,8 +33,144 @@ class LLMProviderReliabilityTests(SimpleTestCase):
             "api.services.groq_client", self.groq_client,
         ))
 
-    def _call(self):
-        return call_llm_with_fallback("System instructions", "User prompt")
+    def _call(self, **kwargs):
+        return call_llm_with_fallback(
+            "System instructions",
+            "User prompt",
+            **kwargs,
+        )
+
+    def test_default_call_has_no_gemini_timeout(self):
+        self.assertEqual(self._call(), '{"provider": "gemini"}')
+
+        config = self.gemini_client.models.generate_content.call_args.kwargs[
+            "config"
+        ]
+        self.assertIsNone(config.http_options)
+        self.assertEqual(config.system_instruction, "System instructions")
+        self.assertEqual(config.response_mime_type, "application/json")
+        self.assertEqual(config.temperature, 0.1)
+
+    def test_positive_timeout_uses_supported_request_http_options(self):
+        result = self._call(
+            operation="evidence_assessment",
+            gemini_timeout_ms=1250,
+        )
+
+        self.assertEqual(result, '{"provider": "gemini"}')
+        config = self.gemini_client.models.generate_content.call_args.kwargs[
+            "config"
+        ]
+        self.assertIsInstance(config.http_options, types.HttpOptions)
+        self.assertEqual(config.http_options.timeout, 1250)
+        self.groq_client.chat.completions.create.assert_not_called()
+
+    def test_timeout_failure_falls_back_without_passing_timeout_to_groq(self):
+        self.gemini_client.models.generate_content.side_effect = TimeoutError(
+            "Gemini timed out"
+        )
+
+        result = self._call(
+            operation="evidence_assessment",
+            gemini_timeout_ms=1250,
+        )
+
+        self.assertEqual(result, '{"provider": "groq"}')
+        groq_kwargs = self.groq_client.chat.completions.create.call_args.kwargs
+        self.assertNotIn("timeout", groq_kwargs)
+        self.assertNotIn("http_options", groq_kwargs)
+
+    def test_timeout_fallback_preserves_scope_degradation_and_scope_reset(self):
+        self.gemini_client.models.generate_content.side_effect = [
+            TimeoutError("Gemini timed out"),
+            SimpleNamespace(text='{"provider": "gemini"}'),
+        ]
+
+        with llm_provider_scope():
+            self.assertEqual(
+                self._call(gemini_timeout_ms=1250),
+                '{"provider": "groq"}',
+            )
+            self.assertEqual(
+                self._call(gemini_timeout_ms=1250),
+                '{"provider": "groq"}',
+            )
+        with llm_provider_scope():
+            self.assertEqual(
+                self._call(gemini_timeout_ms=1250),
+                '{"provider": "gemini"}',
+            )
+
+        self.assertEqual(self.gemini_client.models.generate_content.call_count, 2)
+        self.assertEqual(self.groq_client.chat.completions.create.call_count, 2)
+
+    def test_successful_gemini_telemetry_is_structured_and_timed(self):
+        with (
+            patch("api.services.time.perf_counter", side_effect=[10.0, 10.25]),
+            self.assertLogs("api.services", level="INFO") as logs,
+        ):
+            self._call(operation="evidence_assessment")
+
+        provider_logs = [
+            line for line in logs.output if "LLM_PROVIDER_CALL" in line
+        ]
+        self.assertEqual(len(provider_logs), 1)
+        self.assertIn("operation=evidence_assessment", provider_logs[0])
+        self.assertIn("provider=gemini", provider_logs[0])
+        self.assertIn("duration_ms=250", provider_logs[0])
+        self.assertIn("outcome=success", provider_logs[0])
+        self.assertNotIn("provider=groq", "\n".join(provider_logs))
+
+    def test_failure_telemetry_is_sanitized_and_logs_only_called_providers(self):
+        secret = "provider-secret"
+        self.gemini_client.models.generate_content.side_effect = RuntimeError(
+            f"Gemini request contained {secret}"
+        )
+        with (
+            patch(
+                "api.services.time.perf_counter",
+                side_effect=[1.0, 1.5, 2.0, 2.25],
+            ),
+            self.assertLogs("api.services", level="INFO") as logs,
+        ):
+            self._call(operation="evidence_assessment")
+
+        output = "\n".join(logs.output)
+        self.assertIn(
+            "operation=evidence_assessment provider=gemini "
+            "duration_ms=500 outcome=failed error=RuntimeError",
+            output,
+        )
+        self.assertIn(
+            "operation=evidence_assessment provider=groq "
+            "duration_ms=250 outcome=success",
+            output,
+        )
+        self.assertNotIn(secret, output)
+
+    def test_degraded_scope_logs_only_the_actual_groq_request(self):
+        self.gemini_client.models.generate_content.side_effect = RuntimeError(
+            "Gemini unavailable"
+        )
+
+        with llm_provider_scope():
+            self._call(operation="evidence_assessment")
+            with (
+                patch(
+                    "api.services.time.perf_counter",
+                    side_effect=[3.0, 3.125],
+                ),
+                self.assertLogs("api.services", level="INFO") as logs,
+            ):
+                self._call(operation="evidence_assessment")
+
+        provider_logs = [
+            line for line in logs.output if "LLM_PROVIDER_CALL" in line
+        ]
+        self.assertEqual(len(provider_logs), 1)
+        self.assertIn("provider=groq", provider_logs[0])
+        self.assertIn("duration_ms=125", provider_logs[0])
+        self.assertNotIn("provider=gemini", provider_logs[0])
 
     def test_gemini_success_uses_configured_model_without_groq(self):
         with patch.dict(os.environ, {"GEMINI_MODEL": " custom-gemini "}):
