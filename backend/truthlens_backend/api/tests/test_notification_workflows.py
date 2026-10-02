@@ -410,6 +410,20 @@ class VerificationNotificationTests(TestCase):
             inbox.notify_verification_finished(cancelled)
         self.assertFalse(Notification.objects.exists())
 
+    def test_out_of_scope_abstention_uses_scope_specific_safe_wording(self):
+        run = self.started()
+        with self.captureOnCommitCallbacks(execute=True):
+            run = runs.abstain_verification_run(
+                run,
+                abstention_reason=VerificationRun.AbstentionReason.OUT_OF_SCOPE,
+            )
+
+        row = Notification.objects.get(
+            dedupe_key=f"verification-run:{run.pk}:finished"
+        )
+        self.assertIn("sufficiently verifiable public factual claim", row.message)
+        self.assertNotIn("without enough evidence", row.message)
+
     def test_completion_does_not_fabricate_a_claim_verdict(self):
         with self.captureOnCommitCallbacks(execute=True):
             runs.complete_verification_run(self.started())

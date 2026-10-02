@@ -972,6 +972,24 @@
    background: var(--tl-color-status-critical-bg);
 }
 
+.deep-analysis-error--neutral {
+   border-color: var(--tl-color-status-info-border);
+}
+
+.deep-analysis-error--neutral .deep-analysis-error-icon {
+   color: var(--tl-color-status-info-text);
+   background: var(--tl-color-status-info-bg);
+}
+
+.deep-analysis-error--out-of-scope {
+   border-color: var(--tl-color-outofscope-border);
+}
+
+.deep-analysis-error--out-of-scope .deep-analysis-error-icon {
+   color: var(--tl-color-outofscope-text);
+   background: var(--tl-color-outofscope-bg);
+}
+
 .deep-analysis-error h1 {
    margin: var(--tl-space-5) 0 0;
    color: var(--tl-color-text-main);

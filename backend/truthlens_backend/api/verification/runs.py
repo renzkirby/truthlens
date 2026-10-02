@@ -80,6 +80,7 @@ def start_verification_run(
     locked.failure_stage = None
     locked.failure_code = None
     locked.failure_message = None
+    locked.abstention_reason = None
 
     locked.save(
         update_fields=[
@@ -89,6 +90,7 @@ def start_verification_run(
             "failure_stage",
             "failure_code",
             "failure_message",
+            "abstention_reason",
         ]
     )
 
@@ -111,6 +113,7 @@ def complete_verification_run(
     locked.failure_stage = None
     locked.failure_code = None
     locked.failure_message = None
+    locked.abstention_reason = None
 
     locked.save(
         update_fields=[
@@ -119,6 +122,7 @@ def complete_verification_run(
             "failure_stage",
             "failure_code",
             "failure_message",
+            "abstention_reason",
         ]
     )
 
@@ -129,6 +133,8 @@ def complete_verification_run(
 @transaction.atomic
 def abstain_verification_run(
     run: VerificationRun,
+    *,
+    abstention_reason: str | None = None,
 ) -> VerificationRun:
     locked = _locked_run(run)
 
@@ -142,6 +148,7 @@ def abstain_verification_run(
     locked.failure_stage = None
     locked.failure_code = None
     locked.failure_message = None
+    locked.abstention_reason = abstention_reason
 
     locked.save(
         update_fields=[
@@ -150,6 +157,7 @@ def abstain_verification_run(
             "failure_stage",
             "failure_code",
             "failure_message",
+            "abstention_reason",
         ]
     )
 
@@ -177,6 +185,7 @@ def fail_verification_run(
     locked.failure_stage = failure_stage
     locked.failure_code = failure_code
     locked.failure_message = failure_message
+    locked.abstention_reason = None
 
     locked.save(
         update_fields=[
@@ -185,6 +194,7 @@ def fail_verification_run(
             "failure_stage",
             "failure_code",
             "failure_message",
+            "abstention_reason",
         ]
     )
 
@@ -209,6 +219,7 @@ def cancel_verification_run(
     locked.failure_stage = None
     locked.failure_code = None
     locked.failure_message = None
+    locked.abstention_reason = None
 
     locked.save(
         update_fields=[
@@ -217,6 +228,7 @@ def cancel_verification_run(
             "failure_stage",
             "failure_code",
             "failure_message",
+            "abstention_reason",
         ]
     )
 

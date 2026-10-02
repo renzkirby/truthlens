@@ -336,12 +336,50 @@ function DeepAnalysisSkeleton() {
    );
 }
 
+function DeepAnalysisTerminalState({ tone = "critical", icon, title, detail, onBack, onRetry }) {
+   const isCritical = tone === "critical";
+
+   return (
+      <main className="deep-analysis-page">
+         <div className="deep-analysis-shell deep-analysis-error-shell">
+            <button type="button" className="deep-analysis-back-button" onClick={onBack}>
+               <Icons name="arrow-left" size={17} aria-hidden="true" />
+               Back
+            </button>
+            <section
+               className={`deep-analysis-error deep-analysis-error--${tone}`}
+               role={isCritical ? "alert" : "status"}
+               aria-live={isCritical ? "assertive" : "polite"}
+            >
+               <span className="deep-analysis-error-icon" aria-hidden="true">
+                  <Icons name={icon} size={24} />
+               </span>
+               <h1>{title}</h1>
+               <p>{detail}</p>
+               <div className="deep-analysis-error-actions">
+                  {onRetry && (
+                     <button type="button" className="deep-analysis-primary-action" onClick={onRetry}>
+                        <Icons name="refresh-cw" size={16} aria-hidden="true" />
+                        Retry
+                     </button>
+                  )}
+                  <Link className="deep-analysis-secondary-action" to="/verify">
+                     Back to Verify
+                  </Link>
+               </div>
+            </section>
+         </div>
+      </main>
+   );
+}
+
 function DeepAnalysisPage() {
    const { claimId } = useParams();
    const navigate = useNavigate();
    const { authFetch } = useAuth();
    const [claimData, setClaimData] = useState(null);
    const [statusData, setStatusData] = useState(null);
+   const [statusSettled, setStatusSettled] = useState(false);
    const [loading, setLoading] = useState(true);
    const [error, setError] = useState(false);
    const [requestVersion, setRequestVersion] = useState(0);
@@ -356,6 +394,7 @@ function DeepAnalysisPage() {
          if (!active) return;
          setClaimData(null);
          setStatusData(null);
+         setStatusSettled(false);
          setError(false);
          setLoading(true);
          setIsOriginalImageOpen(false);
@@ -371,6 +410,9 @@ function DeepAnalysisPage() {
          })
          .catch(() => {
             if (active) setStatusData(null);
+         })
+         .finally(() => {
+            if (active) setStatusSettled(true);
          });
 
       analysisRequest
@@ -404,44 +446,86 @@ function DeepAnalysisPage() {
       }
    };
 
-   if (loading) return <DeepAnalysisSkeleton />;
+   if (loading || !statusSettled) return <DeepAnalysisSkeleton />;
 
-   if (error || !claimData) {
+   const retry = () => setRequestVersion((version) => version + 1);
+   const runStatus = statusData?.run_status;
+
+   if (runStatus === "FAILED") {
       return (
-         <main className="deep-analysis-page">
-            <div className="deep-analysis-shell deep-analysis-error-shell">
-               <button type="button" className="deep-analysis-back-button" onClick={handleBack}>
-                  <Icons name="arrow-left" size={17} aria-hidden="true" />
-                  Back
-               </button>
-               <section className="deep-analysis-error" role="alert" aria-live="assertive">
-                  <span className="deep-analysis-error-icon" aria-hidden="true">
-                     <Icons name="alert-triangle" size={24} />
-                  </span>
-                  <h1>We couldn&apos;t load this analysis report</h1>
-                  <p>
-                     The report may be temporarily unavailable. Try again, or return to Verify to check another claim.
-                  </p>
-                  <div className="deep-analysis-error-actions">
-                     <button
-                        type="button"
-                        className="deep-analysis-primary-action"
-                        onClick={() => setRequestVersion((version) => version + 1)}
-                     >
-                        <Icons name="refresh-cw" size={16} aria-hidden="true" />
-                        Retry
-                     </button>
-                     <Link className="deep-analysis-secondary-action" to="/verify">
-                        Back to Verify
-                     </Link>
-                  </div>
-               </section>
-            </div>
-         </main>
+         <DeepAnalysisTerminalState
+            icon="alert-triangle"
+            title="TruthLens couldn't complete this analysis"
+            detail="A technical problem prevented the automated analysis from finishing. Please try the verification again."
+            onBack={handleBack}
+         />
       );
    }
 
-   const aiVerdict = normalizeVerdict(claimData.ai_verdict);
+   if (runStatus === "CANCELLED") {
+      return (
+         <DeepAnalysisTerminalState
+            tone="neutral"
+            icon="info"
+            title="This analysis was cancelled"
+            detail="No automated factual conclusion was produced. Return to Verify to submit the claim again."
+            onBack={handleBack}
+         />
+      );
+   }
+
+   if (runStatus === "ABSTAINED" && statusData?.abstention_reason === "OUT_OF_SCOPE") {
+      return (
+         <DeepAnalysisTerminalState
+            tone="out-of-scope"
+            icon="alert-octagon"
+            title="Out of scope"
+            detail="No substantive automated fact-check verdict was produced because the submitted material did not contain a sufficiently verifiable public factual claim."
+            onBack={handleBack}
+         />
+      );
+   }
+
+   if (runStatus === "ABSTAINED") {
+      return (
+         <DeepAnalysisTerminalState
+            tone="neutral"
+            icon="info"
+            title="Analysis finished without an automated verdict"
+            detail="TruthLens did not produce a supported automated conclusion for this submission."
+            onBack={handleBack}
+         />
+      );
+   }
+
+   if (error || !claimData) {
+      return (
+         <DeepAnalysisTerminalState
+            icon="alert-triangle"
+            title="We couldn't load this analysis report"
+            detail="The report may be temporarily unavailable. Try again, or return to Verify to check another claim."
+            onBack={handleBack}
+            onRetry={retry}
+         />
+      );
+   }
+
+   const aiVerdict = normalizeVerdict(claimData.ai_verdict, null);
+   const hasAuthoritativeResolution =
+      statusData?.resolution_source === "ADJUDICATION" || statusData?.resolution_source === "OFFICIAL_FACT_CHECK";
+
+   if (!aiVerdict && !hasAuthoritativeResolution) {
+      return (
+         <DeepAnalysisTerminalState
+            tone="neutral"
+            icon="info"
+            title="No automated verdict is available"
+            detail="TruthLens does not have a supported automated factual conclusion for this claim."
+            onBack={handleBack}
+         />
+      );
+   }
+
    const aiSources = normalizeSources(claimData.ai_sources);
    const confidence = getConfidence(claimData.consensus_score);
    const claimType = formatClaimType(claimData.claim_type);

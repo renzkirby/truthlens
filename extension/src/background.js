@@ -308,7 +308,34 @@ function startPollingClaim({
 
       try {
          const claim = await fetchClaimResult(claimId);
+
+         if (claim.run_status === "PENDING" || claim.run_status === "RUNNING") {
+            return;
+         }
+
+         if (claim.run_status === "FAILED") {
+            stopWithError("TruthLens couldn't complete this analysis. Please try again.");
+            return;
+         }
+
+         if (claim.run_status === "CANCELLED") {
+            stopWithError("This analysis was cancelled. Please start the verification again.");
+            return;
+         }
+
+         if (
+            claim.run_status === "ABSTAINED" &&
+            !(claim.abstention_reason === "OUT_OF_SCOPE" && claim.verdict === "OUT_OF_SCOPE")
+         ) {
+            stopWithError("Analysis finished without a supported automated conclusion.");
+            return;
+         }
+
          if (claim.verdict === "PENDING") {
+            if (claim.run_status && claim.run_status !== "PENDING" && claim.run_status !== "RUNNING") {
+               stopWithError("Analysis finished without a supported automated conclusion.");
+               return;
+            }
             return;
          }
 

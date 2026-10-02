@@ -40,6 +40,7 @@ from .models import (
     OfficialFactCheck,
     UserProfile,
     VerificationEvidence,
+    VerificationRun,
 )
 from .trust_service import recompute_user_trust_score
 from .verification.evidence_assessment import (
@@ -1540,7 +1541,14 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 ):
                     complete_verification_run(run)
                 else:
-                    abstain_verification_run(run)
+                    abstain_verification_run(
+                        run,
+                        abstention_reason=(
+                            VerificationRun.AbstentionReason.OUT_OF_SCOPE
+                            if selected_verdict == "OUT_OF_SCOPE"
+                            else None
+                        ),
+                    )
             except Exception:
                 if not runtime_error_propagating:
                     raise
@@ -2073,7 +2081,14 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                 ):
                     complete_verification_run(run)
                 else:
-                    abstain_verification_run(run)
+                    abstain_verification_run(
+                        run,
+                        abstention_reason=(
+                            VerificationRun.AbstentionReason.OUT_OF_SCOPE
+                            if selected_verdict == "OUT_OF_SCOPE"
+                            else None
+                        ),
+                    )
             except Exception:
                 if not runtime_error_propagating:
                     raise
