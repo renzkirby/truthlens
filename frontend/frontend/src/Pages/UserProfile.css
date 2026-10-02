@@ -150,6 +150,11 @@
    background: var(--tl-color-status-info-bg);
 }
 
+.user-profile__partner-affiliations {
+   margin-top: 0.15rem;
+   max-width: min(100%, 34rem);
+}
+
 .user-profile__bio {
    max-width: 68ch;
    margin: 0 !important;

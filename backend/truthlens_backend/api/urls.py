@@ -50,6 +50,11 @@ urlpatterns = [
         name="public_partner_fact_check_detail",
     ),
     path(
+        "partners/<slug:slug>/follow/",
+        views.toggle_public_partner_follow_view,
+        name="public_partner_follow",
+    ),
+    path(
         "partners/<slug:slug>/",
         views.public_partner_detail,
         name="public_partner_detail",

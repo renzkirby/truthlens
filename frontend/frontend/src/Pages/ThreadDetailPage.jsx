@@ -5,6 +5,7 @@ import { useNotification } from "../hooks/useNotification";
 import ImageLightbox from "../components/ImageLightbox";
 import Icons from "../components/Icons";
 import EvidenceCard from "../components/EvidenceCard";
+import PartnerAffiliations from "../components/partners/PartnerAffiliations.jsx";
 import { VERDICT_CONFIG, EVIDENCE_VERDICT_META, ESCALATION_OPTIONS } from "../utils/constants";
 import "./ThreadDetailPage.css";
 
@@ -341,6 +342,7 @@ function CommentItem({
                <header className="thread-detail-comment-header">
                   <Link to={`/user/${encodeURIComponent(username)}`}>@{username}</Link>
                   {isModerator && <span className="thread-detail-role-label">Platform moderator</span>}
+                  <PartnerAffiliations affiliations={comment.commenter?.partner_affiliations} compact />
                   {isSending ? (
                      <span className="thread-detail-send-state" role="status">Sending…</span>
                   ) : isFailed ? (
@@ -842,6 +844,7 @@ export default function ThreadDetailPage() {
             username: user?.username || "You",
             avatar_url: user?.avatar_url || null,
             role: commenterRole,
+            partner_affiliations: user?.partner_affiliations || [],
          },
          parent_id: parent?.id || null,
          reply_to_username: parent?.commenter?.username || null,
@@ -1266,7 +1269,7 @@ export default function ThreadDetailPage() {
                         <span className="thread-detail-publication-label">Published fact-check</span>
                         <Link
                            className="thread-detail-publication-link"
-                           to={`/partners/${encodeURIComponent(publishedFactCheck.organization.slug)}/fact-checks/${encodeURIComponent(publishedFactCheck.publication_id)}`}
+                           to={`/community/partners/${encodeURIComponent(publishedFactCheck.organization.slug)}/fact-checks/${encodeURIComponent(publishedFactCheck.publication_id)}`}
                            aria-label={`Read ${publishedFactCheck.organization.name} published fact-check: ${publishedFactCheck.headline}`}
                         >
                            <strong>{publishedFactCheck.headline}</strong>
@@ -1282,13 +1285,16 @@ export default function ThreadDetailPage() {
             <div className="thread-detail-main-column">
                <article className="thread-detail-post-card thread-detail-post-card--classic">
                   <header className="thread-detail-post-header">
-                     <Link className="thread-detail-post-author" to={`/user/${encodeURIComponent(authorUsername)}`} aria-label={`View @${authorUsername}'s profile`}>
-                        <Avatar user={thread.author} size="large" />
-                        <span>
-                           <strong>{authorUsername}</strong>
-                           <small>{formatDate(thread.created_at, { hour: "numeric", minute: "2-digit" })}</small>
-                        </span>
-                     </Link>
+                     <div className="thread-detail-post-identity">
+                        <Link className="thread-detail-post-author" to={`/user/${encodeURIComponent(authorUsername)}`} aria-label={`View @${authorUsername}'s profile`}>
+                           <Avatar user={thread.author} size="large" />
+                           <span>
+                              <strong>{authorUsername}</strong>
+                              <small>{formatDate(thread.created_at, { hour: "numeric", minute: "2-digit" })}</small>
+                           </span>
+                        </Link>
+                        <PartnerAffiliations affiliations={thread.author?.partner_affiliations} compact />
+                     </div>
                      <span className="thread-detail-post-kind">Community post</span>
                   </header>
 

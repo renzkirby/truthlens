@@ -491,7 +491,11 @@ class CommunityFeedApiTests(TestCase):
                 "claim",
             },
         )
-        self.assertEqual(set(item["author"]), {"id", "username", "avatar_url"})
+        self.assertEqual(
+            set(item["author"]),
+            {"id", "username", "avatar_url", "partner_affiliations"},
+        )
+        self.assertEqual(item["author"]["partner_affiliations"], [])
         self.assertNotIn("email", item["author"])
         self.assertEqual(
             set(item["claim"]),

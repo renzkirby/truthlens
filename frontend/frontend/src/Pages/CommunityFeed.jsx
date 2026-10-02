@@ -2,6 +2,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import Icons from "../components/Icons.jsx";
+import PartnerAffiliations from "../components/partners/PartnerAffiliations.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { useNotification } from "../hooks/useNotification";
 import { buildApiUrl, resolveApiEndpoint } from "../utils/api";
@@ -148,7 +149,7 @@ function AssessmentSummary({ claim }) {
          <section className="feed-assessment" aria-label="Human review assessment">
             <div className="feed-assessment-heading">
                {organization?.slug ? (
-                  <Link className="feed-provenance-link" to={`/partners/${organization.slug}`}>
+                  <Link className="feed-provenance-link" to={`/community/partners/${encodeURIComponent(organization.slug)}`}>
                      {provenanceContent}
                   </Link>
                ) : (
@@ -803,19 +804,22 @@ function CommunityFeed() {
                      return (
                         <article key={thread.id} className="feed-card" aria-label={`Discussion by ${thread.author.username}`}>
                            <header className="feed-card-header">
-                              <Link className="feed-author-link" to={`/user/${thread.author.username}`}>
-                                 <span className="feed-author-avatar" aria-hidden={!thread.author.avatar_url}>
-                                    {thread.author.avatar_url ? (
-                                       <img src={thread.author.avatar_url} alt={`${thread.author.username}'s avatar`} loading="lazy" />
-                                    ) : (
-                                       <Icons name="user" size={19} aria-hidden="true" />
-                                    )}
-                                 </span>
-                                 <span className="feed-author-meta">
-                                    <span className="feed-author-name">@{thread.author.username}</span>
-                                    <time className="feed-author-time" dateTime={thread.created_at}>{timeAgo(thread.created_at)}</time>
-                                 </span>
-                              </Link>
+                              <div className="feed-author-identity">
+                                 <Link className="feed-author-link" to={`/user/${thread.author.username}`}>
+                                    <span className="feed-author-avatar" aria-hidden={!thread.author.avatar_url}>
+                                       {thread.author.avatar_url ? (
+                                          <img src={thread.author.avatar_url} alt={`${thread.author.username}'s avatar`} loading="lazy" />
+                                       ) : (
+                                          <Icons name="user" size={19} aria-hidden="true" />
+                                       )}
+                                    </span>
+                                    <span className="feed-author-meta">
+                                       <span className="feed-author-name">@{thread.author.username}</span>
+                                       <time className="feed-author-time" dateTime={thread.created_at}>{timeAgo(thread.created_at)}</time>
+                                    </span>
+                                 </Link>
+                                 <PartnerAffiliations affiliations={thread.author.partner_affiliations} compact />
+                              </div>
 
                               <div className="feed-thread-menu-wrap">
                                  <button

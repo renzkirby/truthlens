@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import Icons from "./Icons";
 import { EVIDENCE_VERDICT_META } from "../utils/constants";
 import "./EvidenceCard.css";
+import PartnerAffiliations from "./partners/PartnerAffiliations.jsx";
 
 function EvidenceAvatar({ contributor }) {
    const [failed, setFailed] = useState(false);
@@ -96,13 +97,16 @@ export default function EvidenceCard({
    return (
       <article className={`evidence-card evidence-card--${typeTone}`}>
          <header className="evidence-card-header">
-            <Link className="evidence-card-contributor" to={`/user/${encodeURIComponent(username)}`}>
-               <EvidenceAvatar contributor={evidence.contributor} />
-               <span>
-                  <strong>@{username}</strong>
-                  <small>Trust: <b>{contributorTrust.toFixed(1)}</b></small>
-               </span>
-            </Link>
+            <div className="evidence-card-contributor-identity">
+               <Link className="evidence-card-contributor" to={`/user/${encodeURIComponent(username)}`}>
+                  <EvidenceAvatar contributor={evidence.contributor} />
+                  <span>
+                     <strong>@{username}</strong>
+                     <small>Trust: <b>{contributorTrust.toFixed(1)}</b></small>
+                  </span>
+               </Link>
+               <PartnerAffiliations affiliations={evidence.contributor?.partner_affiliations} compact />
+            </div>
             <div className="evidence-card-header-actions">
                {isTop && <span className="evidence-card-rank"><Icons name="star" size={12} /> Top ranked</span>}
                {isOwner && !isEditing && (

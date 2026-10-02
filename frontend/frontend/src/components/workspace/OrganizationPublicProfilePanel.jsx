@@ -18,13 +18,7 @@ const EMPTY_DRAFT = {
    public_logo_enabled: false,
 };
 
-const EDITABLE_FIELDS = [
-   "description",
-   "website",
-   "expertise_areas",
-   "public_profile_enabled",
-   "public_logo_enabled",
-];
+const EDITABLE_FIELDS = ["description", "website", "expertise_areas", "public_profile_enabled", "public_logo_enabled"];
 
 const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 const SUPPORTED_LOGO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -624,7 +618,9 @@ function OrganizationPublicProfilePanel({ organizationId }) {
                      </div>
                      <div>
                         <strong>{savedProfile.name}</strong>
-                        <span>{savedProfile.organization_type_label || formatStatus(savedProfile.organization_type)}</span>
+                        <span>
+                           {savedProfile.organization_type_label || formatStatus(savedProfile.organization_type)}
+                        </span>
                         {savedProfile.slug && <code>{savedProfile.slug}</code>}
                      </div>
                   </div>
@@ -655,7 +651,7 @@ function OrganizationPublicProfilePanel({ organizationId }) {
                            {savedProfile.publicly_visible === true && savedProfile.slug && (
                               <div className="org-public-profile-link">
                                  <a
-                                    href={`/partners/${encodeURIComponent(savedProfile.slug)}`}
+                                    href={`community/partners/${encodeURIComponent(savedProfile.slug)}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                  >
@@ -721,7 +717,11 @@ function OrganizationPublicProfilePanel({ organizationId }) {
                            Optional public organization website. Include http:// or https://.
                         </span>
                         {fieldErrors.website && (
-                           <span id="org-public-profile-website-error" className="org-public-profile-field-error" role="alert">
+                           <span
+                              id="org-public-profile-website-error"
+                              className="org-public-profile-field-error"
+                              role="alert"
+                           >
                               {fieldErrors.website}
                            </span>
                         )}
@@ -831,7 +831,11 @@ function OrganizationPublicProfilePanel({ organizationId }) {
                               </div>
 
                               {confirmLogoRemoval && !selectedLogo && (
-                                 <div className="org-public-logo-remove-confirmation" role="group" aria-label="Remove logo confirmation">
+                                 <div
+                                    className="org-public-logo-remove-confirmation"
+                                    role="group"
+                                    aria-label="Remove logo confirmation"
+                                 >
                                     <strong>Remove this logo?</strong>
                                     <div>
                                        <Button

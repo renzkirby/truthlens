@@ -3,7 +3,14 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from api.models import Claim, EvidenceSubmission, Thread, ThreadComment
+from api.models import (
+    Claim,
+    EvidenceSubmission,
+    Organization,
+    OrganizationMembership,
+    Thread,
+    ThreadComment,
+)
 
 
 class PublicUserProfileApiTests(TestCase):
@@ -54,6 +61,40 @@ class PublicUserProfileApiTests(TestCase):
         self.assertEqual(response.data["username"], self.member.username)
         self._assert_private_account_fields_absent(response.data)
 
+    def test_profile_exposes_eligible_membership_as_safe_affiliation(self):
+        organization = Organization.objects.create(
+            name="Profile Affiliation Partner",
+            slug="profile-affiliation-partner",
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.ACTIVE,
+            public_profile_enabled=True,
+            public_logo_enabled=False,
+            logo_url="https://example.com/private-logo.png",
+        )
+        OrganizationMembership.objects.create(
+            organization=organization,
+            user=self.member,
+            role=OrganizationMembership.Role.ADMIN,
+            status=OrganizationMembership.Status.ACTIVE,
+        )
+
+        response = self.client.get(self._url())
+
+        self.assertEqual(
+            response.data["partner_affiliations"],
+            [
+                {
+                    "id": str(organization.pk),
+                    "name": organization.name,
+                    "slug": organization.slug,
+                    "logo_url": None,
+                }
+            ],
+        )
+        serialized = str(response.data)
+        self.assertNotIn(OrganizationMembership.Role.ADMIN, serialized)
+        self.assertNotIn(self.member.email, serialized)
+
     def test_profile_activity_endpoints_require_authentication(self):
         self.client.force_authenticate(user=None)
 
@@ -88,9 +129,36 @@ class PublicUserProfileApiTests(TestCase):
         for payload in (followers_response.data[0], following_response.data[0]):
             self.assertEqual(
                 set(payload),
-                {"id", "username", "avatar_url", "role", "trust_score"},
+                {
+                    "id",
+                    "username",
+                    "avatar_url",
+                    "role",
+                    "trust_score",
+                    "partner_affiliations",
+                },
             )
             self._assert_private_account_fields_absent(payload)
+
+    def test_user_search_uses_safe_affiliation_identity_projection(self):
+        response = self.client.get(
+            "/api/users/search/",
+            {"search": self.member.username},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertIn("partner_affiliations", response.data[0])
+        self.assertEqual(response.data[0]["partner_affiliations"], [])
+        for field in (
+            "email",
+            "is_email_verified",
+            "has_completed_onboarding",
+            "workspace",
+            "auth_methods",
+            "organization_name",
+        ):
+            self.assertNotIn(field, response.data[0])
 
     def test_threads_include_community_states_and_exclude_rejected_content(self):
         visible_threads = [
@@ -127,7 +195,9 @@ class PublicUserProfileApiTests(TestCase):
 
     def test_contributions_include_safe_context_and_exclude_rejected_threads(self):
         visible_thread = self._create_thread("visible activity", Thread.Status.OPEN)
-        rejected_thread = self._create_thread("removed activity", Thread.Status.REJECTED)
+        rejected_thread = self._create_thread(
+            "removed activity", Thread.Status.REJECTED
+        )
         visible_evidence = EvidenceSubmission.objects.create(
             thread=visible_thread,
             contributor=self.member,
@@ -186,9 +256,7 @@ class PublicUserProfileApiTests(TestCase):
         self.assertEqual(unfollow_response.data["followers_count"], 0)
 
     def test_self_follow_remains_rejected(self):
-        response = self.client.post(
-            f"/api/users/{self.viewer.username}/follow/"
-        )
+        response = self.client.post(f"/api/users/{self.viewer.username}/follow/")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["error"], "You cannot follow yourself.")

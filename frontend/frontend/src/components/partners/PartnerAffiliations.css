@@ -1,0 +1,78 @@
+.partner-affiliations {
+   display: flex;
+   flex-wrap: wrap;
+   gap: var(--tl-space-2);
+   margin: 0;
+   padding: 0;
+   list-style: none;
+}
+
+.partner-affiliations li {
+   min-width: 0;
+   max-width: 100%;
+}
+
+.partner-affiliations a {
+   display: inline-flex;
+   align-items: center;
+   gap: var(--tl-space-2);
+   max-width: 100%;
+   color: var(--tl-color-text-main);
+   text-decoration: none;
+}
+
+.partner-affiliations a:hover strong {
+   color: var(--tl-color-brand-primary-hover);
+   text-decoration: underline;
+   text-underline-offset: 0.2em;
+}
+
+.partner-affiliations a:focus-visible {
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
+   border-radius: var(--tl-radius-sm);
+}
+
+.partner-affiliations a > span {
+   display: flex;
+   min-width: 0;
+   flex-direction: column;
+   gap: 1px;
+}
+
+.partner-affiliations small {
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-xs);
+   font-weight: 650;
+}
+
+.partner-affiliations strong {
+   overflow-wrap: anywhere;
+   font-size: var(--tl-text-sm);
+   font-weight: 700;
+   transition: color var(--tl-duration-fast) ease;
+}
+
+.partner-affiliations--compact {
+   gap: var(--tl-space-1) var(--tl-space-2);
+}
+
+.partner-affiliations--compact a > span {
+   display: inline-flex;
+   flex-direction: row;
+   gap: var(--tl-space-1);
+   align-items: baseline;
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-xs);
+}
+
+.partner-affiliations--compact small,
+.partner-affiliations--compact strong {
+   font-size: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+   .partner-affiliations strong {
+      transition: none;
+   }
+}

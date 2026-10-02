@@ -150,6 +150,14 @@ from .organization_public_presence_service import (
     get_public_partner_by_slug,
     get_public_partner_directory,
 )
+from .organization_follow_service import (
+    PublicPartnerFollowUnavailable,
+    toggle_public_partner_follow,
+)
+from .organization_public_affiliation_service import (
+    prefetch_public_partner_affiliations,
+    public_partner_affiliation_prefetch,
+)
 from .public_publication_query_service import (
     PublicPublicationNotFound,
     get_public_partner_fact_check_detail,
@@ -2983,6 +2991,7 @@ class ThreadViewSet(viewsets.ModelViewSet):
             .select_related("claim", "author", "author__profile")
             .order_by(order_field)
         )
+        queryset = prefetch_public_partner_affiliations(queryset, "author")
 
         search_query = self.request.query_params.get("search", "").strip()[:120]
         if search_query or assessment_source:
@@ -3039,20 +3048,26 @@ class ThreadViewSet(viewsets.ModelViewSet):
                     ),
                     distinct=True,
                 ),
-            ).prefetch_related(
+            )
+            comment_queryset = prefetch_public_partner_affiliations(
+                ThreadComment.objects.select_related(
+                    "commenter__profile",
+                    "parent__commenter",
+                )
+                .prefetch_related("likes")
+                .order_by("-commented_at"),
+                "commenter",
+            )
+            queryset = queryset.prefetch_related(
                 "evidence_submissions__votes",
                 "evidence_submissions__contributor__profile",
                 "evidence_submissions__verified_by__profile",
+                public_partner_affiliation_prefetch(
+                    "evidence_submissions__contributor"
+                ),
                 Prefetch(
                     "comments",
-                    queryset=(
-                        ThreadComment.objects.select_related(
-                            "commenter__profile",
-                            "parent__commenter",
-                        )
-                        .prefetch_related("likes")
-                        .order_by("-commented_at")
-                    ),
+                    queryset=comment_queryset,
                 ),
             )
         else:
@@ -3149,7 +3164,15 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
     ]
 
     def get_queryset(self):
-        return EvidenceSubmission.objects.all()
+        queryset = (
+            EvidenceSubmission.objects.select_related(
+                "contributor__profile",
+                "verified_by__profile",
+                "thread__claim",
+            )
+            .prefetch_related("votes")
+        )
+        return prefetch_public_partner_affiliations(queryset, "contributor")
 
     def perform_create(self, serializer):
         thread_id = serializer.validated_data.pop("thread_id")
@@ -3188,7 +3211,7 @@ class ThreadCommentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsCommenterOrReadOnly]
 
     def get_queryset(self):
-        return (
+        queryset = (
             ThreadComment.objects.select_related(
                 "commenter__profile",
                 "parent__commenter",
@@ -3196,6 +3219,7 @@ class ThreadCommentViewSet(viewsets.ModelViewSet):
             .prefetch_related("likes")
             .order_by("-commented_at")
         )
+        return prefetch_public_partner_affiliations(queryset, "commenter")
 
     def perform_create(self, serializer):
         thread_id = serializer.validated_data.pop("thread_id")
@@ -3507,8 +3531,9 @@ def search_users(request):
         User.objects.select_related("profile")
         .filter(Q(username__icontains=query) | Q(profile__bio__icontains=query))
         .exclude(id=request.user.id)
-        .order_by("username")[:limit]
+        .order_by("username")
     )
+    users = prefetch_public_partner_affiliations(users)[:limit]
 
     serializer = PublicUserSearchSerializer(
         users, many=True, context={"request": request}
@@ -3521,7 +3546,10 @@ def search_users(request):
 def get_public_user_profile(request, username):
     """Fetch community-visible identity fields for an authenticated member."""
     target_user = get_object_or_404(
-        User.objects.select_related("profile"), username=username
+        prefetch_public_partner_affiliations(
+            User.objects.select_related("profile")
+        ),
+        username=username,
     )
 
     serializer = PublicIdentityProfileSerializer(
@@ -3661,8 +3689,10 @@ def toggle_follow_user(request, username):
 def get_user_followers(request, username):
     """Get community-safe identities for users who follow this profile."""
     target_user = get_object_or_404(User, username=username)
-    followers = target_user.profile.followers.select_related("profile").order_by(
-        "username"
+    followers = prefetch_public_partner_affiliations(
+        target_user.profile.followers.select_related("profile").order_by(
+            "username"
+        )
     )
     serializer = CommunityUserIdentitySerializer(followers, many=True)
     return Response(serializer.data)
@@ -3678,6 +3708,7 @@ def get_user_following(request, username):
         .select_related("profile")
         .order_by("username")
     )
+    following = prefetch_public_partner_affiliations(following)
     serializer = CommunityUserIdentitySerializer(following, many=True)
     return Response(serializer.data)
 
@@ -4313,7 +4344,25 @@ def public_partner_detail(
     return Response(
         PublicPartnerDetailSerializer(
             organization,
+            context={"request": request},
         ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def toggle_public_partner_follow_view(request, slug):
+    try:
+        result = toggle_public_partner_follow(
+            slug=slug,
+            user=request.user,
+        )
+    except PublicPartnerFollowUnavailable as error:
+        raise NotFound() from error
+
+    return Response(
+        result,
         status=status.HTTP_200_OK,
     )
 

@@ -5,6 +5,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { resolveApiEndpoint } from "../utils/api";
 import Icons from "./Icons.jsx";
+import PartnerAffiliations from "./partners/PartnerAffiliations.jsx";
+import PartnerLogo from "./partners/PartnerLogo.jsx";
 import Button from "./ui/Button.jsx";
 import IconButton from "./ui/IconButton.jsx";
 import Input from "./ui/Input.jsx";
@@ -13,6 +15,7 @@ import "./GlobalSearch.css";
 
 const THREADS_ENDPOINT = resolveApiEndpoint("THREADS");
 const USERS_SEARCH_ENDPOINT = resolveApiEndpoint("USER_SEARCH");
+const PARTNERS_SEARCH_ENDPOINT = resolveApiEndpoint("PUBLIC_PARTNERS");
 const MOBILE_DIALOG_ID = "tl-global-search-mobile-dialog";
 const FOCUSABLE_SELECTOR = [
    "a[href]",
@@ -43,8 +46,8 @@ function getThreadSubtitle(thread) {
    return authoritativeVerdict ? `${authorName} · ${authoritativeVerdict}` : authorName;
 }
 
-function SearchResults({ idPrefix, query, loading, error, users, threads, onNavigate }) {
-   const hasResults = users.length > 0 || threads.length > 0;
+function SearchResults({ idPrefix, query, loading, error, users, organizations, threads, onNavigate }) {
+   const hasResults = users.length > 0 || organizations.length > 0 || threads.length > 0;
    const statusMessage = loading
       ? "Searching TruthLens…"
       : error || (query && !hasResults ? `No results found for “${query}”.` : "");
@@ -71,7 +74,7 @@ function SearchResults({ idPrefix, query, loading, error, users, threads, onNavi
                </h3>
                <ul className="tl-global-search__list">
                   {users.map((searchUser) => (
-                     <li key={searchUser.id ?? searchUser.username}>
+                     <li key={searchUser.id ?? searchUser.username} className="tl-global-search__person-result">
                         <Link
                            to={`/user/${searchUser.username}`}
                            className="tl-global-search__result"
@@ -99,6 +102,39 @@ function SearchResults({ idPrefix, query, loading, error, users, threads, onNavi
                                     Safety
                                  </span>
                               )}
+                           </span>
+                        </Link>
+                        <PartnerAffiliations affiliations={searchUser.partner_affiliations} compact />
+                     </li>
+                  ))}
+               </ul>
+            </section>
+         )}
+
+         {!loading && !error && organizations.length > 0 && (
+            <section className="tl-global-search__section" aria-labelledby={`${idPrefix}-organizations-title`}>
+               <h3 id={`${idPrefix}-organizations-title`} className="tl-global-search__section-title">
+                  Partner Organizations
+               </h3>
+               <ul className="tl-global-search__list">
+                  {organizations.map((organization) => (
+                     <li key={organization.id ?? organization.slug}>
+                        <Link
+                           to={`/community/partners/${encodeURIComponent(organization.slug)}`}
+                           className="tl-global-search__result"
+                           onClick={onNavigate}
+                        >
+                           <PartnerLogo
+                              logoUrl={organization.logo_url}
+                              organizationName={organization.name}
+                              size="compact"
+                           />
+                           <span className="tl-global-search__result-copy">
+                              <span className="tl-global-search__result-title">{organization.name}</span>
+                              <span className="tl-global-search__result-subtitle">
+                                 {organization.organization_type_label || "Partner Organization"}
+                                 {organization.description ? ` · ${organization.description}` : ""}
+                              </span>
                            </span>
                         </Link>
                      </li>
@@ -157,6 +193,7 @@ function GlobalSearch() {
    const [searchLoading, setSearchLoading] = useState(false);
    const [searchError, setSearchError] = useState("");
    const [searchUsers, setSearchUsers] = useState([]);
+   const [searchOrganizations, setSearchOrganizations] = useState([]);
    const [searchThreads, setSearchThreads] = useState([]);
    const desktopContainerRef = useRef(null);
    const desktopInputRef = useRef(null);
@@ -174,6 +211,7 @@ function GlobalSearch() {
       setSearchLoading(false);
       setSearchError("");
       setSearchUsers([]);
+      setSearchOrganizations([]);
       setSearchThreads([]);
    }, []);
 
@@ -204,13 +242,19 @@ function GlobalSearch() {
       const encodedQuery = encodeURIComponent(query);
       const threadSearchUrl = `${THREADS_ENDPOINT}?search=${encodedQuery}`;
       const userSearchUrl = `${USERS_SEARCH_ENDPOINT}?search=${encodedQuery}&limit=6`;
+      const partnerSearchUrl = `${PARTNERS_SEARCH_ENDPOINT}?search=${encodedQuery}`;
 
-      Promise.all([authFetch(threadSearchUrl, { method: "GET" }), authFetch(userSearchUrl, { method: "GET" })])
-         .then(([threadData, userData]) => {
+      Promise.all([
+         authFetch(threadSearchUrl, { method: "GET" }),
+         authFetch(userSearchUrl, { method: "GET" }),
+         authFetch(partnerSearchUrl, { method: "GET" }),
+      ])
+         .then(([threadData, userData, partnerData]) => {
             if (!effectIsCurrent || requestId !== searchRequestIdRef.current) return;
 
             setSearchThreads(normalizeResults(threadData).slice(0, 6));
             setSearchUsers(normalizeResults(userData).slice(0, 6));
+            setSearchOrganizations(normalizeResults(partnerData).slice(0, 6));
             setSearchError("");
          })
          .catch(() => {
@@ -218,6 +262,7 @@ function GlobalSearch() {
 
             setSearchThreads([]);
             setSearchUsers([]);
+            setSearchOrganizations([]);
             setSearchError("We couldn’t load search results. Try again.");
          })
          .finally(() => {
@@ -349,6 +394,7 @@ function GlobalSearch() {
          setDesktopResultsOpen(false);
          setSearchLoading(false);
          setSearchUsers([]);
+         setSearchOrganizations([]);
          setSearchThreads([]);
       }
    };
@@ -404,13 +450,13 @@ function GlobalSearch() {
                   density="compact"
                   surface="subtle"
                   className="tl-global-search__input"
-                  placeholder="Search people and claims..."
+                  placeholder="Search people, organizations, and claims..."
                   value={searchInput}
                   onFocus={() => {
                      if (searchInput.trim()) setDesktopResultsOpen(true);
                   }}
                   onChange={(event) => handleSearchInputChange(event, true)}
-                  aria-label="Search people and claims"
+                  aria-label="Search people, organizations, and claims"
                   leadingIcon={<Icons name="search" size={16} />}
                   trailingAdornment={
                      searchInput ? (
@@ -435,6 +481,7 @@ function GlobalSearch() {
                      loading={searchLoading}
                      error={searchError}
                      users={searchUsers}
+                     organizations={searchOrganizations}
                      threads={searchThreads}
                      onNavigate={handleResultNavigation}
                   />
@@ -479,10 +526,10 @@ function GlobalSearch() {
                            density="comfortable"
                            surface="surface"
                            className="tl-global-search__mobile-input"
-                           placeholder="Search people and claims..."
+                           placeholder="Search people, organizations, and claims..."
                            value={searchInput}
                            onChange={(event) => handleSearchInputChange(event, false)}
-                           aria-label="Search people and claims"
+                           aria-label="Search people, organizations, and claims"
                            leadingIcon={<Icons name="search" size={18} />}
                            trailingAdornment={
                               searchInput ? (
@@ -515,6 +562,7 @@ function GlobalSearch() {
                         loading={searchLoading}
                         error={searchError}
                         users={searchUsers}
+                        organizations={searchOrganizations}
                         threads={searchThreads}
                         onNavigate={handleResultNavigation}
                      />
