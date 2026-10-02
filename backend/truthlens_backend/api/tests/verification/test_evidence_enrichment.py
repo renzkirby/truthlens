@@ -3,12 +3,17 @@ import uuid
 from dataclasses import asdict
 from unittest.mock import patch
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from api.models import Claim, EvidenceSource, VerificationEvidence, VerificationRun
 from api.verification.evidence_assessment import EvidenceAssessment
 from api.verification.evidence_dossier import ReasoningEvidenceItem
-from api.verification.evidence_enrichment import persist_evidence_assessment
+from api.verification.evidence_enrichment import (
+    persist_evidence_assessment,
+    persist_evidence_assessments_batch,
+)
 
 
 class EvidenceAssessmentPersistenceTests(TestCase):
@@ -261,3 +266,209 @@ class EvidenceAssessmentPersistenceTests(TestCase):
             self.assertTrue(self._persist_and_refresh())
         assess.assert_not_called()
         call_llm.assert_not_called()
+
+
+class BatchEvidenceAssessmentPersistenceTests(TestCase):
+    def setUp(self):
+        self.claim = Claim.objects.create(context_text="Batch persistence claim.")
+        self.run = VerificationRun.objects.create(claim=self.claim)
+
+    def _link(self, index, **overrides):
+        source = EvidenceSource.objects.create(
+            provider="TAVILY",
+            canonical_url=f"https://example.com/batch-{index}",
+            content=f"Batch evidence {index}.",
+        )
+        values = {
+            "verification_run": self.run,
+            "evidence_source": source,
+            "evidence_role": VerificationEvidence.EvidenceRole.SECONDARY,
+            "recency_score": 0.25,
+            "retrieval_provenance": [{"provider": "TAVILY", "rank": index}],
+        }
+        values.update(overrides)
+        return VerificationEvidence.objects.create(**values)
+
+    def _item(self, link, **overrides):
+        values = {
+            "evidence_link_id": link.pk,
+            "evidence_source_id": link.evidence_source_id,
+            "provider": link.evidence_source.provider,
+            "url": link.evidence_source.url,
+            "canonical_url": link.evidence_source.canonical_url,
+            "title": link.evidence_source.title,
+            "publisher": link.evidence_source.publisher,
+            "source_type": link.evidence_source.source_type,
+            "content": link.evidence_source.content,
+            "published_at": link.evidence_source.published_at,
+            "retrieved_at": link.evidence_source.retrieved_at,
+            "evidence_role": link.evidence_role,
+            "stance": link.stance,
+            "relevance_score": link.relevance_score,
+            "directness_score": link.directness_score,
+            "recency_score": link.recency_score,
+        }
+        values.update(overrides)
+        return ReasoningEvidenceItem(**values)
+
+    def _assessment(self, index=0, **overrides):
+        values = {
+            "stance": VerificationEvidence.Stance.SUPPORTS,
+            "relevance_score": 0.8 - (index * 0.1),
+            "directness_score": 0.7 - (index * 0.1),
+        }
+        values.update(overrides)
+        return EvidenceAssessment(**values)
+
+    def test_multiple_valid_assessments_use_one_lock_and_one_bulk_update(self):
+        links = [self._link(index) for index in range(3)]
+        items = [self._item(link) for link in links]
+        assessments = [self._assessment(index) for index in range(3)]
+        original_values = [
+            {
+                "verification_run_id": link.verification_run_id,
+                "evidence_source_id": link.evidence_source_id,
+                "evidence_role": link.evidence_role,
+                "recency_score": link.recency_score,
+                "retrieval_provenance": link.retrieval_provenance,
+                "created_at": link.created_at,
+            }
+            for link in links
+        ]
+        manager = VerificationEvidence.objects
+
+        with (
+            patch.object(
+                manager,
+                "select_for_update",
+                wraps=manager.select_for_update,
+            ) as select_for_update,
+            patch.object(
+                manager,
+                "bulk_update",
+                wraps=manager.bulk_update,
+            ) as bulk_update,
+        ):
+            outcomes = persist_evidence_assessments_batch(items, assessments)
+
+        self.assertEqual([outcome.persisted for outcome in outcomes], [True] * 3)
+        self.assertEqual([outcome.error for outcome in outcomes], [None] * 3)
+        select_for_update.assert_called_once_with()
+        bulk_update.assert_called_once()
+        updated_rows, = bulk_update.call_args.args
+        self.assertEqual({row.pk for row in updated_rows}, {link.pk for link in links})
+        self.assertEqual(
+            bulk_update.call_args.kwargs["fields"],
+            ["stance", "relevance_score", "directness_score"],
+        )
+
+        for link, assessment, original in zip(links, assessments, original_values):
+            link.refresh_from_db()
+            self.assertEqual(link.stance, assessment.stance)
+            self.assertEqual(link.relevance_score, assessment.relevance_score)
+            self.assertEqual(link.directness_score, assessment.directness_score)
+            for field_name, value in original.items():
+                self.assertEqual(getattr(link, field_name), value)
+
+    def test_unavailable_invalid_missing_and_mismatch_are_isolated_in_order(self):
+        links = [self._link(index) for index in range(4)]
+        missing_item = self._item(
+            links[2],
+            evidence_link_id=uuid.uuid4(),
+        )
+        mismatched_item = self._item(
+            links[3],
+            evidence_source_id=uuid.uuid4(),
+        )
+        items = [
+            self._item(links[0]),
+            self._item(links[1]),
+            missing_item,
+            mismatched_item,
+            self._item(links[2]),
+        ]
+        assessments = [
+            EvidenceAssessment(
+                stance=VerificationEvidence.Stance.UNKNOWN,
+                relevance_score=None,
+                directness_score=None,
+            ),
+            self._assessment(relevance_score="invalid"),
+            self._assessment(),
+            self._assessment(),
+            self._assessment(stance=VerificationEvidence.Stance.REFUTES),
+        ]
+
+        outcomes = persist_evidence_assessments_batch(items, assessments)
+
+        self.assertEqual(
+            [outcome.persisted for outcome in outcomes],
+            [False, False, False, False, True],
+        )
+        self.assertIsNone(outcomes[0].error)
+        self.assertIsInstance(outcomes[1].error, ValueError)
+        self.assertIsInstance(outcomes[2].error, VerificationEvidence.DoesNotExist)
+        self.assertIsInstance(outcomes[3].error, ValueError)
+        self.assertIsNone(outcomes[4].error)
+        for link in (links[0], links[1], links[3]):
+            link.refresh_from_db()
+            self.assertEqual(link.stance, VerificationEvidence.Stance.UNKNOWN)
+            self.assertIsNone(link.relevance_score)
+            self.assertIsNone(link.directness_score)
+        links[2].refresh_from_db()
+        self.assertEqual(links[2].stance, VerificationEvidence.Stance.REFUTES)
+
+    def test_existing_and_partially_assessed_rows_are_not_overwritten(self):
+        assessed = self._link(
+            1,
+            stance=VerificationEvidence.Stance.CONTEXT,
+            relevance_score=0.4,
+            directness_score=0.3,
+        )
+        partial = self._link(2, directness_score=0.2)
+        pristine = self._link(3)
+        before = {
+            link.pk: VerificationEvidence.objects.values().get(pk=link.pk)
+            for link in (assessed, partial)
+        }
+
+        outcomes = persist_evidence_assessments_batch(
+            [self._item(link) for link in (assessed, partial, pristine)],
+            [self._assessment()] * 3,
+        )
+
+        self.assertEqual(
+            [outcome.persisted for outcome in outcomes],
+            [False, False, True],
+        )
+        self.assertEqual(
+            VerificationEvidence.objects.values().get(pk=assessed.pk),
+            before[assessed.pk],
+        )
+        self.assertEqual(
+            VerificationEvidence.objects.values().get(pk=partial.pk),
+            before[partial.pk],
+        )
+
+    def test_valid_batch_uses_a_constant_bounded_number_of_queries(self):
+        links = [self._link(index) for index in range(5)]
+        items = [self._item(link) for link in links]
+        assessments = [self._assessment(index) for index in range(5)]
+        table_name = VerificationEvidence._meta.db_table.upper()
+
+        with CaptureQueriesContext(connection) as queries:
+            outcomes = persist_evidence_assessments_batch(items, assessments)
+
+        statements = [query["sql"].upper() for query in queries]
+        evidence_selects = [
+            sql for sql in statements
+            if sql.lstrip().startswith("SELECT") and table_name in sql
+        ]
+        evidence_updates = [
+            sql for sql in statements
+            if sql.lstrip().startswith("UPDATE") and table_name in sql
+        ]
+        self.assertEqual([outcome.persisted for outcome in outcomes], [True] * 5)
+        self.assertEqual(len(evidence_selects), 1)
+        self.assertEqual(len(evidence_updates), 1)
+        self.assertLessEqual(len(statements), 4)
