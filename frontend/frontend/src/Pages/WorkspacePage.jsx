@@ -168,6 +168,10 @@ function formatRole(role) {
       return "Member";
    }
 
+   if (role === "OWNER") {
+      return "Primary Admin";
+   }
+
    return role
       .split("_")
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())

@@ -165,6 +165,11 @@ class OrganizationInvitationApiTests(APITestCase):
         )
 
         self.assertEqual(
+            invitation.purpose,
+            OrganizationInvitation.InvitationPurpose.MEMBERSHIP,
+        )
+
+        self.assertEqual(
             len(mail.outbox),
             1,
         )
@@ -172,6 +177,57 @@ class OrganizationInvitationApiTests(APITestCase):
         self.assertNotIn(
             "token_digest",
             response.data,
+        )
+
+    def test_ordinary_endpoint_cannot_create_owner_invitation(self):
+        response = self.client_for(
+            self.owner,
+        ).post(
+            self.list_url,
+            {
+                "email": "forbidden-owner@example.com",
+                "invited_role": OrganizationMembership.Role.OWNER,
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertFalse(
+            OrganizationInvitation.objects.filter(
+                organization=self.organization,
+                email="forbidden-owner@example.com",
+            ).exists()
+        )
+
+    def test_ordinary_endpoint_cannot_select_onboarding_purpose(self):
+        response = self.client_for(
+            self.owner,
+        ).post(
+            self.list_url,
+            {
+                "email": "ordinary-purpose@example.com",
+                "invited_role": OrganizationMembership.Role.RESEARCHER,
+                "purpose": (
+                    OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+                ),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+        )
+        invitation = OrganizationInvitation.objects.get(
+            organization=self.organization,
+            email="ordinary-purpose@example.com",
+        )
+        self.assertEqual(
+            invitation.purpose,
+            OrganizationInvitation.InvitationPurpose.MEMBERSHIP,
         )
 
     def test_admin_cannot_invite_admin(

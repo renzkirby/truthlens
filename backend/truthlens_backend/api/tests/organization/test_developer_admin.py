@@ -1,7 +1,9 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib import admin
 from django.contrib.auth.models import User
+from django.core import mail
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -24,9 +26,14 @@ from api.organization_service import (
     PartnerCapability,
     has_capability,
 )
+from api.organization_provisioning_service import (
+    create_and_send_primary_admin_invitation,
+)
 
 
 @override_settings(
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    DEFAULT_FROM_EMAIL="noreply@truthlens.test",
     PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"]
 )
 class DeveloperConsoleTests(TestCase):
@@ -105,6 +112,15 @@ class DeveloperConsoleTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("/developer-console/login/", response.url)
 
+    def create_unowned_organization(self, suffix=""):
+        return Organization.objects.create(
+            name=f"Unowned Developer Partner{suffix}",
+            slug=f"unowned-developer-partner{suffix}",
+            organization_type=Organization.OrganizationType.FACT_CHECKING,
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.ACTIVE,
+        )
+
     def test_active_superuser_can_access_developer_console(self):
         self.client.force_login(self.superuser)
 
@@ -171,6 +187,196 @@ class DeveloperConsoleTests(TestCase):
         self.assertIn("public_logo_enabled", readonly_fields)
         self.assertNotIn("verification_status", readonly_fields)
         self.assertNotIn("partner_status", readonly_fields)
+
+    def test_organization_without_owner_exposes_primary_admin_action(self):
+        organization = self.create_unowned_organization()
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(
+            reverse(
+                "developer_admin:api_organization_change",
+                args=(organization.pk,),
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Primary Admin")
+        self.assertContains(response, "Not yet assigned")
+        self.assertContains(response, "Provision Primary Admin")
+
+    def test_organization_with_owner_hides_initial_provision_action(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(
+            reverse(
+                "developer_admin:api_organization_change",
+                args=(self.organization.pk,),
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.owner.username)
+        self.assertContains(response, self.owner.email)
+        self.assertContains(response, "Membership status: Active")
+        self.assertNotContains(response, "Provision Primary Admin")
+
+    def test_developer_console_can_provision_primary_admin_invitation(self):
+        organization = self.create_unowned_organization("-provision")
+        self.client.force_login(self.superuser)
+        url = reverse(
+            "developer_admin:api_organization_primary_admin_provision",
+            args=(organization.pk,),
+        )
+
+        response = self.client.post(
+            url,
+            {"email": "Console.Primary@Example.com"},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "developer_admin:api_organization_change",
+                args=(organization.pk,),
+            ),
+        )
+        invitation = OrganizationInvitation.objects.get(
+            organization=organization,
+            email="console.primary@example.com",
+        )
+        self.assertEqual(
+            invitation.purpose,
+            OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING,
+        )
+        self.assertEqual(
+            invitation.invited_role,
+            OrganizationMembership.Role.OWNER,
+        )
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_primary_admin_provision_form_requests_only_email(self):
+        organization = self.create_unowned_organization("-form")
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(
+            reverse(
+                "developer_admin:api_organization_primary_admin_provision",
+                args=(organization.pk,),
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("developer_admin:index"))
+        self.assertContains(
+            response,
+            reverse(
+                "developer_admin:app_list",
+                kwargs={"app_label": "api"},
+            ),
+        )
+        self.assertContains(
+            response,
+            reverse("developer_admin:api_organization_changelist"),
+        )
+        self.assertContains(response, "Primary Admin Email")
+        self.assertContains(response, 'name="email"')
+        self.assertNotContains(response, 'name="password"')
+        self.assertNotContains(response, 'name="username"')
+
+    def test_pending_primary_admin_invitation_is_visible_without_token(self):
+        organization = self.create_unowned_organization("-pending")
+        raw_token = "developer-console-primary-admin-token"
+
+        with patch(
+            "api.organization_provisioning_service.generate_invitation_token",
+            return_value=raw_token,
+        ):
+            invitation = create_and_send_primary_admin_invitation(
+                organization=organization,
+                email="pending-primary@example.com",
+                actor=self.superuser,
+            )
+
+        self.client.force_login(self.superuser)
+        response = self.client.get(
+            reverse(
+                "developer_admin:api_organization_change",
+                args=(organization.pk,),
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Primary Admin invitation pending")
+        self.assertContains(response, invitation.email)
+        self.assertContains(response, "Sent:")
+        self.assertContains(response, "Expires:")
+        self.assertContains(response, "Resend invitation")
+        self.assertNotContains(response, raw_token)
+        self.assertNotContains(response, invitation.token_digest)
+
+    def test_developer_console_can_resend_primary_admin_invitation(self):
+        organization = self.create_unowned_organization("-resend")
+        invitation = create_and_send_primary_admin_invitation(
+            organization=organization,
+            email="resend-primary@example.com",
+            actor=self.superuser,
+        )
+        old_digest = invitation.token_digest
+        mail.outbox.clear()
+        self.client.force_login(self.superuser)
+
+        resend_url = reverse(
+            "developer_admin:api_organization_primary_admin_resend",
+            args=(organization.pk,),
+        )
+        confirmation = self.client.get(resend_url)
+
+        self.assertEqual(confirmation.status_code, 200)
+        self.assertContains(confirmation, reverse("developer_admin:index"))
+        self.assertContains(
+            confirmation,
+            reverse(
+                "developer_admin:app_list",
+                kwargs={"app_label": "api"},
+            ),
+        )
+        self.assertContains(
+            confirmation,
+            reverse("developer_admin:api_organization_changelist"),
+        )
+        self.assertContains(confirmation, invitation.email)
+        self.assertNotContains(confirmation, invitation.token_digest)
+
+        response = self.client.post(
+            resend_url,
+            {},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "developer_admin:api_organization_change",
+                args=(organization.pk,),
+            ),
+        )
+        invitation.refresh_from_db()
+        self.assertNotEqual(invitation.token_digest, old_digest)
+        self.assertEqual(invitation.send_count, 2)
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_non_superuser_cannot_access_primary_admin_custom_view(self):
+        organization = self.create_unowned_organization("-denied")
+        self.client.force_login(self.staff_user)
+
+        response = self.client.get(
+            reverse(
+                "developer_admin:api_organization_primary_admin_provision",
+                args=(organization.pk,),
+            )
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/developer-console/login/", response.url)
 
     def test_organization_platform_status_can_change_without_profile_mutation(self):
         self.client.force_login(self.superuser)

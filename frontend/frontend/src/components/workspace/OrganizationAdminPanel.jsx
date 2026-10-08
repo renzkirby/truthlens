@@ -18,6 +18,10 @@ function formatLabel(value) {
       return "Unknown";
    }
 
+   if (value === "OWNER") {
+      return "Primary Admin";
+   }
+
    return String(value)
       .replaceAll("_", " ")
       .toLowerCase()
@@ -1634,7 +1638,9 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                                  </>
                               ) : (
                                  <span className="org-member-protected-label">
-                                    {membership.role === "OWNER" ? "Ownership protected" : "Managed by owner"}
+                                    {membership.role === "OWNER"
+                                       ? "Primary Admin protected"
+                                       : "Managed by Primary Admin"}
                                  </span>
                               )}
                            </div>
