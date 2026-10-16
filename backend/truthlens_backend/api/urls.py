@@ -3,8 +3,44 @@ from rest_framework.routers import DefaultRouter
 from . import views
 from .auth_tokens import SessionTokenRefreshView
 from .notification_stream import notification_stream
+from . import management_views
 
 urlpatterns = [
+    path(
+        "management/overview/",
+        management_views.ManagementOverviewView.as_view(),
+        name="management_overview",
+    ),
+    path(
+        "management/organizations/",
+        management_views.ManagementOrganizationListView.as_view(),
+        name="management_organizations",
+    ),
+    path(
+        "management/organizations/<uuid:organization_id>/",
+        management_views.ManagementOrganizationDetailView.as_view(),
+        name="management_organization_detail",
+    ),
+    path(
+        "management/memberships/",
+        management_views.ManagementMembershipListView.as_view(),
+        name="management_memberships",
+    ),
+    path(
+        "management/memberships/<uuid:membership_id>/",
+        management_views.ManagementMembershipDetailView.as_view(),
+        name="management_membership_detail",
+    ),
+    path(
+        "management/invitations/",
+        management_views.ManagementInvitationListView.as_view(),
+        name="management_invitations",
+    ),
+    path(
+        "management/invitations/<uuid:invitation_id>/",
+        management_views.ManagementInvitationDetailView.as_view(),
+        name="management_invitation_detail",
+    ),
     path("notifications/", views.NotificationListView.as_view(), name="notification_list"),
     path("notifications/unread-count/", views.notification_unread_count, name="notification_unread_count"),
     path("notifications/<uuid:notification_id>/read/", views.notification_mark_read, name="notification_mark_read"),

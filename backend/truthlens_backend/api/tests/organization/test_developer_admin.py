@@ -515,10 +515,11 @@ class DeveloperConsoleTests(TestCase):
         )
 
         self.assertEqual(detail_response.status_code, 200)
-        self.assertContains(detail_response, self.invitation.token_digest)
+        self.assertNotContains(detail_response, self.invitation.token_digest)
 
         model_admin = developer_admin_site._registry[OrganizationInvitation]
-        self.assertIn("token_digest", model_admin.readonly_fields)
+        self.assertNotIn("token_digest", model_admin.fields)
+        self.assertNotIn("token_digest", model_admin.readonly_fields)
 
         mutation_response = self.client.post(
             reverse(

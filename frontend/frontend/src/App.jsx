@@ -29,6 +29,15 @@ import PublicShell from "./components/public/PublicShell.jsx";
 import AccountActionShell from "./components/account/AccountActionShell.jsx";
 import OnboardingShell from "./components/account/OnboardingShell.jsx";
 import WorkspaceShell from "./components/workspace/WorkspaceShell.jsx";
+import ManagementRoute from "./components/ManagementRoute.jsx";
+import ManagementConsoleShell from "./components/management/ManagementConsoleShell.jsx";
+import ManagementOverviewPage from "./Pages/ManagementOverviewPage.jsx";
+import ManagementOrganizationsPage from "./Pages/ManagementOrganizationsPage.jsx";
+import ManagementOrganizationDetailPage from "./Pages/ManagementOrganizationDetailPage.jsx";
+import ManagementMembershipsPage from "./Pages/ManagementMembershipsPage.jsx";
+import ManagementMembershipDetailPage from "./Pages/ManagementMembershipDetailPage.jsx";
+import ManagementInvitationsPage from "./Pages/ManagementInvitationsPage.jsx";
+import ManagementInvitationDetailPage from "./Pages/ManagementInvitationDetailPage.jsx";
 
 
 function CommunityFactCheckPage() {
@@ -69,6 +78,27 @@ function App() {
 
                {/* Protected Routes - accessible to any authenticated user */}
                <Route element={<PrivateRoute />}>
+                  <Route element={<ManagementRoute />}>
+                     <Route element={<ManagementConsoleShell />}>
+                        <Route path="/management" element={<ManagementOverviewPage />} />
+                        <Route path="/management/organizations" element={<ManagementOrganizationsPage />} />
+                        <Route
+                           path="/management/organizations/:organizationId"
+                           element={<ManagementOrganizationDetailPage />}
+                        />
+                        <Route path="/management/memberships" element={<ManagementMembershipsPage />} />
+                        <Route
+                           path="/management/memberships/:membershipId"
+                           element={<ManagementMembershipDetailPage />}
+                        />
+                        <Route path="/management/invitations" element={<ManagementInvitationsPage />} />
+                        <Route
+                           path="/management/invitations/:invitationId"
+                           element={<ManagementInvitationDetailPage />}
+                        />
+                     </Route>
+                  </Route>
+
                   <Route element={<OnboardingShell />}>
                      <Route path="/onboarding" element={<OnboardingPage />} />
                   </Route>

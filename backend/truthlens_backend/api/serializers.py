@@ -42,6 +42,7 @@ import json, ast
 from .organization_service import (
     get_workspace_access_context,
 )
+from .management_permissions import can_access_management_console
 from .organization_invitation_service import (
     get_invitation_role_label,
 )
@@ -387,6 +388,7 @@ class UserWithTrustBreakdownSerializer(UserSerializer):
 
 class CurrentUserSerializer(UserWithTrustBreakdownSerializer):
     workspace = serializers.SerializerMethodField()
+    management_console = serializers.SerializerMethodField()
     auth_methods = serializers.SerializerMethodField()
     partner_affiliations = PublicPartnerAffiliationsField(
         source="*",
@@ -395,6 +397,9 @@ class CurrentUserSerializer(UserWithTrustBreakdownSerializer):
 
     def get_workspace(self, obj):
         return get_workspace_access_context(obj)
+
+    def get_management_console(self, obj):
+        return {"can_access": can_access_management_console(obj)}
 
     def get_auth_methods(self, obj):
         methods = []
@@ -410,6 +415,7 @@ class CurrentUserSerializer(UserWithTrustBreakdownSerializer):
     class Meta(UserWithTrustBreakdownSerializer.Meta):
         fields = UserWithTrustBreakdownSerializer.Meta.fields + [
             "workspace",
+            "management_console",
             "auth_methods",
             "partner_affiliations",
         ]

@@ -9,6 +9,7 @@ import Button from "./ui/Button.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { useNotificationInbox } from "../hooks/useNotificationInbox";
 import { canAccessWorkspace } from "../utils/workspace";
+import { canAccessManagementConsole } from "../utils/management";
 
 const isModeratorRole = (role) => role === "MOD" || role === "MODERATOR";
 const ACCOUNT_PANEL_ID = "tl-app-nav-account-panel";
@@ -67,6 +68,7 @@ function NavigationBar() {
    }, []);
    const isModeratorUser = isModeratorRole(user?.role);
    const canUseWorkspace = canAccessWorkspace(user);
+   const canUseManagementConsole = canAccessManagementConsole(user);
    const displayTrustScore = Number(user?.trust_breakdown?.trust_score ?? user?.trust_score ?? 0);
    const isCommunityRoute =
       location.pathname === "/community" ||
@@ -189,6 +191,16 @@ function NavigationBar() {
                         </div>
 
                         <div className="tl-app-nav__account-links">
+                           {canUseManagementConsole && (
+                              <Link
+                                 to="/management"
+                                 className="tl-app-nav__account-link"
+                                 onClick={() => setIsOpen(false)}
+                              >
+                                 <Icons name="landmark" />
+                                 Management Console
+                              </Link>
+                           )}
                            <Link
                               to="/profile"
                               className={`tl-app-nav__account-link ${location.pathname === "/profile" ? "active" : ""}`}
