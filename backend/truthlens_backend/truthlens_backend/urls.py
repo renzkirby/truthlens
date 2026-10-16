@@ -23,9 +23,11 @@ from api.auth_tokens import (
     SessionTokenObtainPairView,
     SessionTokenRefreshView,
 )
+from api.developer_admin import developer_admin_site
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("developer-console/", developer_admin_site.urls),
     path(
         "api/token/",
         SessionTokenObtainPairView.as_view(),

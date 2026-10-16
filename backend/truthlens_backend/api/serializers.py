@@ -42,6 +42,9 @@ import json, ast
 from .organization_service import (
     get_workspace_access_context,
 )
+from .organization_invitation_service import (
+    get_invitation_role_label,
+)
 from .organization_public_presence_service import (
     is_public_partner_eligible,
 )
@@ -1056,10 +1059,13 @@ class OrganizationInvitationPublicSerializer(serializers.ModelSerializer):
         read_only=True,
     )
 
-    invited_role_label = serializers.CharField(
-        source="get_invited_role_display",
-        read_only=True,
-    )
+    invited_role_label = serializers.SerializerMethodField()
+
+    def get_invited_role_label(
+        self,
+        obj,
+    ):
+        return get_invitation_role_label(obj)
 
     def get_organization(
         self,

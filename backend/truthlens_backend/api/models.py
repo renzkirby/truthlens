@@ -511,6 +511,16 @@ class OrganizationFollow(models.Model):
 
 
 class OrganizationInvitation(models.Model):
+    class InvitationPurpose(models.TextChoices):
+        MEMBERSHIP = (
+            "MEMBERSHIP",
+            "Membership",
+        )
+        PRIMARY_ADMIN_ONBOARDING = (
+            "PRIMARY_ADMIN_ONBOARDING",
+            "Primary Admin onboarding",
+        )
+
     class Status(models.TextChoices):
         PENDING = (
             "PENDING",
@@ -549,6 +559,12 @@ class OrganizationInvitation(models.Model):
     invited_role = models.CharField(
         max_length=30,
         choices=(OrganizationMembership.Role.choices),
+    )
+
+    purpose = models.CharField(
+        max_length=40,
+        choices=InvitationPurpose.choices,
+        default=InvitationPurpose.MEMBERSHIP,
     )
 
     invited_by = models.ForeignKey(
@@ -633,6 +649,16 @@ class OrganizationInvitation(models.Model):
                     status="PENDING",
                 ),
                 name=("unique_pending_org_" "invitation_email"),
+            ),
+            models.UniqueConstraint(
+                fields=[
+                    "organization",
+                ],
+                condition=Q(
+                    purpose="PRIMARY_ADMIN_ONBOARDING",
+                    status="PENDING",
+                ),
+                name=("unique_pending_primary_admin_" "invite_org"),
             ),
         ]
 

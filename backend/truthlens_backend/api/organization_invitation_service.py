@@ -99,6 +99,19 @@ def generate_invitation_token():
     return secrets.token_urlsafe(32)
 
 
+def get_invitation_role_label(
+    invitation,
+):
+    if (
+        invitation.purpose
+        == OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+        and invitation.invited_role == OrganizationMembership.Role.OWNER
+    ):
+        return "Primary Admin"
+
+    return invitation.get_invited_role_display()
+
+
 def _normalize_invitation_token(
     raw_token,
 ):
@@ -207,10 +220,38 @@ def accept_organization_invitation(
     membership = None
 
     with transaction.atomic():
+        preflight_invitation = _get_invitation_from_token(
+            raw_token,
+            for_update=False,
+        )
+
+        locked_organization = None
+
+        if (
+            preflight_invitation.purpose
+            == OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+        ):
+            locked_organization = Organization.objects.select_for_update(
+                of=("self",),
+            ).get(
+                pk=preflight_invitation.organization_id,
+            )
+
         invitation = _get_invitation_from_token(
             raw_token,
             for_update=True,
         )
+
+        if (
+            locked_organization is not None
+            and invitation.organization_id != locked_organization.pk
+        ):
+            raise OrganizationInvitationConflict(
+                "This invitation cannot be accepted."
+            )
+
+        if locked_organization is not None:
+            invitation.organization = locked_organization
 
         now = timezone.now()
 
@@ -288,10 +329,44 @@ def accept_organization_invitation(
                     )
                 )
 
-            # Defense in depth. Ordinary
-            # invitations must never produce
-            # organization ownership.
-            if invitation.invited_role not in OWNER_INVITABLE_ROLES:
+            is_primary_admin_onboarding = (
+                invitation.purpose
+                == OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+            )
+
+            if is_primary_admin_onboarding:
+                if invitation.invited_role != OrganizationMembership.Role.OWNER:
+                    raise InvalidOrganizationInvitationRole(
+                        "This Primary Admin invitation contains an invalid role."
+                    )
+
+                current_owner = (
+                    OrganizationMembership.objects.select_for_update(
+                        of=("self",),
+                    )
+                    .filter(
+                        organization=invitation.organization,
+                        role=OrganizationMembership.Role.OWNER,
+                    )
+                    .exclude(
+                        status=OrganizationMembership.Status.LEFT,
+                    )
+                    .first()
+                )
+
+                if current_owner:
+                    raise OrganizationInvitationConflict(
+                        "This organization already has a current Primary Admin."
+                    )
+
+            elif (
+                invitation.purpose
+                != OrganizationInvitation.InvitationPurpose.MEMBERSHIP
+                or invitation.invited_role not in OWNER_INVITABLE_ROLES
+            ):
+                # Defense in depth. Ordinary
+                # invitations must never produce
+                # organization ownership.
                 raise (
                     InvalidOrganizationInvitationRole(
                         "This invitation contains " "an invalid organization " "role."
@@ -392,6 +467,7 @@ def accept_organization_invitation(
                 previous_state={"status": OrganizationInvitation.Status.PENDING},
                 new_state={
                     "status": OrganizationInvitation.Status.ACCEPTED,
+                    "invitation_purpose": invitation.purpose,
                     "membership_id": str(membership.pk),
                     "membership_role": membership.role,
                     "membership_status": membership.status,
@@ -430,7 +506,7 @@ def send_organization_invitation_email(
         raw_token,
     )
 
-    role_label = invitation.get_invited_role_display()
+    role_label = get_invitation_role_label(invitation)
 
     inviter_name = (
         invitation.invited_by.username
@@ -627,6 +703,7 @@ def create_organization_invitation(
             organization=organization,
             email=normalized_email,
             invited_role=invited_role,
+            purpose=OrganizationInvitation.InvitationPurpose.MEMBERSHIP,
             invited_by=actor,
             token_digest=(hash_invitation_token(raw_token)),
             status=(OrganizationInvitation.Status.PENDING),
@@ -650,6 +727,7 @@ def create_organization_invitation(
         capability=PartnerCapability.MANAGE_ORGANIZATION,
         new_state={
             "status": invitation.status,
+            "invitation_purpose": invitation.purpose,
             "invited_role": invitation.invited_role,
             "send_count": invitation.send_count,
         },
@@ -706,6 +784,7 @@ def get_organization_invitations(
     return (
         OrganizationInvitation.objects.filter(
             organization=organization,
+            purpose=OrganizationInvitation.InvitationPurpose.MEMBERSHIP,
         )
         .select_related(
             "organization",
@@ -775,6 +854,14 @@ def resend_organization_invitation(
     invitation,
     actor,
 ):
+    if (
+        invitation.purpose
+        != OrganizationInvitation.InvitationPurpose.MEMBERSHIP
+    ):
+        raise OrganizationInvitationAuthorizationError(
+            "Primary Admin onboarding invitations require Developer Console authority."
+        )
+
     organization = invitation.organization
 
     if not has_capability(
@@ -873,6 +960,14 @@ def cancel_organization_invitation(
     invitation,
     actor,
 ):
+    if (
+        invitation.purpose
+        != OrganizationInvitation.InvitationPurpose.MEMBERSHIP
+    ):
+        raise OrganizationInvitationAuthorizationError(
+            "Primary Admin onboarding invitations require Developer Console authority."
+        )
+
     organization = invitation.organization
 
     if not has_capability(
