@@ -516,7 +516,6 @@ class DeveloperOrganizationInvitationAdmin(ReadOnlyInspectionAdmin):
         "purpose",
         "status",
         "invited_by",
-        "token_digest",
         "expires_at",
         "last_sent_at",
         "send_count",
