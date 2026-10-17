@@ -18,8 +18,11 @@ from api.models import (
 from api.verification import runs
 from api.verification.contracts import RawEvidence
 from api.verification.persistence import persist_evidence_source
-from api.verification.providers.tavily import TavilyProvider
+from api.verification.providers.tavily import INCLUDE_DOMAINS, TavilyProvider
 
+class TavilyProviderConfigurationTests(SimpleTestCase):
+    def test_pressone_is_included_in_trusted_search_domains(self):
+        self.assertIn("pressone.ph", INCLUDE_DOMAINS)
 
 class TavilyRuntimeBridgeTests(TestCase):
     def setUp(self):
