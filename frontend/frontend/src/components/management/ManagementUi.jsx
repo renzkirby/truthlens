@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 
 import { formatManagementDate, managementStatusTone } from "../../utils/management";
@@ -5,7 +6,16 @@ import Icons from "../Icons";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 
-export function ManagementPageHeader({ title, subtitle, backTo, backLabel = "Back" }) {
+const FOCUSABLE_SELECTOR = [
+   "button:not([disabled])",
+   "[href]",
+   "input:not([disabled])",
+   "select:not([disabled])",
+   "textarea:not([disabled])",
+   '[tabindex]:not([tabindex="-1"])',
+].join(",");
+
+export function ManagementPageHeader({ title, subtitle, backTo, backLabel = "Back", actions }) {
    return (
       <header className="management-page-header">
          {backTo ? (
@@ -14,9 +24,131 @@ export function ManagementPageHeader({ title, subtitle, backTo, backLabel = "Bac
                {backLabel}
             </Link>
          ) : null}
-         <h1>{title}</h1>
-         {subtitle ? <p>{subtitle}</p> : null}
+         <div className="management-page-header__content">
+            <div>
+               <h1>{title}</h1>
+               {subtitle ? <p>{subtitle}</p> : null}
+            </div>
+            {actions ? <div className="management-page-header__actions">{actions}</div> : null}
+         </div>
       </header>
+   );
+}
+
+export function ManagementFeedback({ tone = "success", children }) {
+   if (!children) return null;
+   return (
+      <div
+         className={`management-feedback management-feedback--${tone}`}
+         role={tone === "error" ? "alert" : "status"}
+         aria-live="polite"
+      >
+         <Icons name={tone === "error" ? "alert-circle" : "check-circle"} size={18} />
+         <span>{children}</span>
+      </div>
+   );
+}
+
+export function ManagementConfirmDialog({
+   open,
+   title,
+   description,
+   warning,
+   error,
+   confirmLabel,
+   processing = false,
+   confirmVariant = "primary",
+   returnFocusRef,
+   onConfirm,
+   onClose,
+}) {
+   const dialogRef = useRef(null);
+   const cancelRef = useRef(null);
+   const onCloseRef = useRef(onClose);
+   const processingRef = useRef(processing);
+
+   useEffect(() => {
+      onCloseRef.current = onClose;
+      processingRef.current = processing;
+   }, [onClose, processing]);
+
+   useEffect(() => {
+      if (!open) return undefined;
+
+      const previousFocus = document.activeElement;
+      const explicitReturnTarget = returnFocusRef?.current;
+      cancelRef.current?.focus();
+
+      const handleKeyDown = (event) => {
+         if (event.key === "Escape" && !processingRef.current) {
+            event.preventDefault();
+            onCloseRef.current();
+            return;
+         }
+         if (event.key !== "Tab") return;
+
+         const focusable = Array.from(
+            dialogRef.current?.querySelectorAll(FOCUSABLE_SELECTOR) || [],
+         ).filter((element) => !element.hidden);
+         if (!focusable.length) return;
+         const first = focusable[0];
+         const last = focusable[focusable.length - 1];
+
+         if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+         } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+         }
+      };
+
+      document.addEventListener("keydown", handleKeyDown);
+      return () => {
+         document.removeEventListener("keydown", handleKeyDown);
+         const returnTarget = explicitReturnTarget?.isConnected
+            ? explicitReturnTarget
+            : previousFocus;
+         if (returnTarget?.isConnected) returnTarget.focus();
+      };
+   }, [open, returnFocusRef]);
+
+   if (!open) return null;
+
+   return (
+      <div
+         className="management-dialog-backdrop"
+         onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !processing) onClose();
+         }}
+      >
+         <div
+            ref={dialogRef}
+            className="management-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="management-confirm-title"
+            aria-describedby="management-confirm-description"
+         >
+            <h2 id="management-confirm-title">{title}</h2>
+            <p id="management-confirm-description">{description}</p>
+            {warning ? <div className="management-dialog__warning">{warning}</div> : null}
+            {error ? <div className="management-dialog__error" role="alert">{error}</div> : null}
+            <div className="management-dialog__actions">
+               <Button ref={cancelRef} variant="secondary" disabled={processing} onClick={onClose}>
+                  Cancel
+               </Button>
+               <Button
+                  variant={confirmVariant}
+                  loading={processing}
+                  loadingLabel="Working…"
+                  onClick={onConfirm}
+               >
+                  {confirmLabel}
+               </Button>
+            </div>
+         </div>
+      </div>
    );
 }
 

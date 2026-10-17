@@ -85,11 +85,17 @@ export const NOTIFICATION_SSE_ENABLED =
 
 // Common API endpoints (relative paths)
 export const API_ENDPOINTS = {
-   // Management Console (read-only governance)
+   // Management Console governance
    MANAGEMENT_OVERVIEW: "management/overview/",
    MANAGEMENT_ORGANIZATIONS: "management/organizations/",
    MANAGEMENT_ORGANIZATION_DETAIL: (organizationId) =>
       `management/organizations/${encodeURIComponent(organizationId)}/`,
+   MANAGEMENT_ORGANIZATION_PLATFORM_TRUST: (organizationId) =>
+      `management/organizations/${encodeURIComponent(organizationId)}/platform-trust/`,
+   MANAGEMENT_PRIMARY_ADMIN_PROVISION: (organizationId) =>
+      `management/organizations/${encodeURIComponent(organizationId)}/primary-admin/`,
+   MANAGEMENT_PRIMARY_ADMIN_RESEND: (organizationId) =>
+      `management/organizations/${encodeURIComponent(organizationId)}/primary-admin/resend/`,
    MANAGEMENT_MEMBERSHIPS: "management/memberships/",
    MANAGEMENT_MEMBERSHIP_DETAIL: (membershipId) =>
       `management/memberships/${encodeURIComponent(membershipId)}/`,

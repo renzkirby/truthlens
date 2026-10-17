@@ -1,0 +1,237 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import validate_slug
+from django.db import IntegrityError, transaction
+
+from .accountability_service import record_accountability_event
+from .models import AccountabilityEvent, Organization
+
+
+MANAGE_PARTNER_ORGANIZATION = "MANAGE_PARTNER_ORGANIZATION"
+
+
+class ManagementGovernanceError(ValueError):
+    pass
+
+
+class ManagementGovernanceAuthorizationError(ManagementGovernanceError):
+    pass
+
+
+class ManagementGovernanceValidationError(ManagementGovernanceError):
+    def __init__(self, message, *, field=None):
+        super().__init__(message)
+        self.field = field
+
+
+class ManagementGovernanceConflict(ManagementGovernanceError):
+    def __init__(self, message, *, field=None):
+        super().__init__(message)
+        self.field = field
+
+
+def _require_platform_management_authority(actor):
+    if not (
+        actor
+        and actor.is_authenticated
+        and actor.is_active
+        and actor.is_superuser
+    ):
+        raise ManagementGovernanceAuthorizationError(
+            "Platform management administrator access is required."
+        )
+
+
+def _organization_state(organization):
+    return {
+        "name": organization.name,
+        "slug": organization.slug,
+        "organization_type": organization.organization_type,
+        "verification_status": organization.verification_status,
+        "partner_status": organization.partner_status,
+    }
+
+
+def _validate_choice(value, choices, field):
+    if value not in {choice for choice, _label in choices}:
+        raise ManagementGovernanceValidationError(
+            "Select a valid choice.",
+            field=field,
+        )
+
+
+def _validate_creation_values(*, name, slug, organization_type, verification_status, partner_status):
+    if not isinstance(name, str) or not name.strip():
+        raise ManagementGovernanceValidationError(
+            "Organization name must not be blank.",
+            field="name",
+        )
+    if len(name.strip()) > 255:
+        raise ManagementGovernanceValidationError(
+            "Organization name must be 255 characters or fewer.",
+            field="name",
+        )
+    if not isinstance(slug, str) or not slug.strip():
+        raise ManagementGovernanceValidationError(
+            "Slug must not be blank.",
+            field="slug",
+        )
+    if len(slug.strip()) > 255:
+        raise ManagementGovernanceValidationError(
+            "Slug must be 255 characters or fewer.",
+            field="slug",
+        )
+    try:
+        validate_slug(slug.strip())
+    except DjangoValidationError as error:
+        raise ManagementGovernanceValidationError(
+            "Enter a valid slug.",
+            field="slug",
+        ) from error
+
+    _validate_choice(
+        organization_type,
+        Organization.OrganizationType.choices,
+        "organization_type",
+    )
+    _validate_choice(
+        verification_status,
+        Organization.VerificationStatus.choices,
+        "verification_status",
+    )
+    _validate_choice(
+        partner_status,
+        Organization.PartnerStatus.choices,
+        "partner_status",
+    )
+
+
+@transaction.atomic
+def create_partner_organization(
+    *,
+    name,
+    slug,
+    organization_type,
+    verification_status=Organization.VerificationStatus.UNVERIFIED,
+    partner_status=Organization.PartnerStatus.NONE,
+    actor,
+):
+    _require_platform_management_authority(actor)
+    name = name.strip() if isinstance(name, str) else name
+    slug = slug.strip() if isinstance(slug, str) else slug
+    _validate_creation_values(
+        name=name,
+        slug=slug,
+        organization_type=organization_type,
+        verification_status=verification_status,
+        partner_status=partner_status,
+    )
+
+    if Organization.objects.filter(name__iexact=name).exists():
+        raise ManagementGovernanceConflict(
+            "An organization with this name already exists.",
+            field="name",
+        )
+    if Organization.objects.filter(slug=slug).exists():
+        raise ManagementGovernanceConflict(
+            "An organization with this slug already exists.",
+            field="slug",
+        )
+
+    try:
+        with transaction.atomic():
+            organization = Organization.objects.create(
+                name=name,
+                slug=slug,
+                organization_type=organization_type,
+                verification_status=verification_status,
+                partner_status=partner_status,
+            )
+    except IntegrityError as error:
+        raise ManagementGovernanceConflict(
+            "An organization with this name or slug already exists."
+        ) from error
+
+    record_accountability_event(
+        action_type=AccountabilityEvent.ActionType.ORGANIZATION_CREATED,
+        resource_type=AccountabilityEvent.ResourceType.ORGANIZATION,
+        resource_id=organization.pk,
+        authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+        actor=actor,
+        authority_organization=None,
+        subject_organization=organization,
+        capability=MANAGE_PARTNER_ORGANIZATION,
+        new_state=_organization_state(organization),
+    )
+
+    return organization
+
+
+@transaction.atomic
+def update_organization_platform_trust(
+    *,
+    organization_id,
+    actor,
+    verification_status=None,
+    partner_status=None,
+):
+    _require_platform_management_authority(actor)
+
+    if verification_status is None and partner_status is None:
+        raise ManagementGovernanceValidationError(
+            "Supply verification_status, partner_status, or both."
+        )
+    if verification_status is not None:
+        _validate_choice(
+            verification_status,
+            Organization.VerificationStatus.choices,
+            "verification_status",
+        )
+    if partner_status is not None:
+        _validate_choice(
+            partner_status,
+            Organization.PartnerStatus.choices,
+            "partner_status",
+        )
+
+    organization = Organization.objects.select_for_update(
+        of=("self",),
+    ).get(pk=organization_id)
+    previous_state = {
+        "verification_status": organization.verification_status,
+        "partner_status": organization.partner_status,
+    }
+    changed_fields = []
+
+    if (
+        verification_status is not None
+        and verification_status != organization.verification_status
+    ):
+        organization.verification_status = verification_status
+        changed_fields.append("verification_status")
+    if partner_status is not None and partner_status != organization.partner_status:
+        organization.partner_status = partner_status
+        changed_fields.append("partner_status")
+
+    if not changed_fields:
+        return organization
+
+    organization.save(update_fields=[*changed_fields, "updated_at"])
+    record_accountability_event(
+        action_type=(
+            AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED
+        ),
+        resource_type=AccountabilityEvent.ResourceType.ORGANIZATION,
+        resource_id=organization.pk,
+        authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+        actor=actor,
+        authority_organization=None,
+        subject_organization=organization,
+        capability=MANAGE_PARTNER_ORGANIZATION,
+        previous_state=previous_state,
+        new_state={
+            "verification_status": organization.verification_status,
+            "partner_status": organization.partner_status,
+        },
+    )
+
+    return organization

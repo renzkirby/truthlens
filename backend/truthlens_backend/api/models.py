@@ -1920,6 +1920,14 @@ class AccountabilityEvent(models.Model):
         SYSTEM = "SYSTEM", "System"
 
     class ActionType(models.TextChoices):
+        ORGANIZATION_CREATED = (
+            "ORGANIZATION_CREATED",
+            "Organization Created",
+        )
+        ORGANIZATION_PLATFORM_TRUST_UPDATED = (
+            "ORGANIZATION_PLATFORM_TRUST_UPDATED",
+            "Organization Platform Trust Updated",
+        )
         VERIFICATION_ASSIGNMENT_CREATED = (
             "VERIFICATION_ASSIGNMENT_CREATED",
             "Verification Assignment Created",

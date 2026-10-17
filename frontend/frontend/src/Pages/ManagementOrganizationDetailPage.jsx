@@ -1,16 +1,228 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import {
    DetailList,
+   ManagementConfirmDialog,
+   ManagementFeedback,
    ManagementPageHeader,
    ManagementRequestState,
    ManagementStatus,
 } from "../components/management/ManagementUi";
+import Button from "../components/ui/Button";
+import Input from "../components/ui/Input";
+import Select from "../components/ui/Select";
+import { useManagementMutation } from "../hooks/useManagementMutation";
 import { useManagementRequest } from "../hooks/useManagementRequest";
 import { resolveApiEndpoint } from "../utils/api";
-import { formatManagementDate } from "../utils/management";
+import {
+   formatManagementDate,
+   MANAGEMENT_PARTNER_STATUSES,
+   MANAGEMENT_VERIFICATION_STATUSES,
+} from "../utils/management";
 
-function PrimaryAdminState({ primaryAdmin }) {
+function FieldError({ id, children }) {
+   if (!children) return null;
+   return <span id={id} className="management-field-error">{children}</span>;
+}
+
+function PlatformTrustSection({
+   organization,
+   onRefresh,
+   onFeedback,
+   returnFocusAfterRefreshRef,
+}) {
+   const [editing, setEditing] = useState(false);
+   const [confirmationOpen, setConfirmationOpen] = useState(false);
+   const editButtonRef = useRef(null);
+   const saveButtonRef = useRef(null);
+   const [values, setValues] = useState({
+      verification_status: organization.verification_status,
+      partner_status: organization.partner_status,
+   });
+   const { mutate, pending, error, reset } = useManagementMutation();
+
+   useEffect(() => {
+      if (returnFocusAfterRefreshRef.current && editButtonRef.current) {
+         returnFocusAfterRefreshRef.current = false;
+         editButtonRef.current.focus();
+      }
+   }, [returnFocusAfterRefreshRef]);
+
+   const hasChanges =
+      values.verification_status !== organization.verification_status ||
+      values.partner_status !== organization.partner_status;
+   const isHighImpactChange =
+      (
+         values.verification_status !== organization.verification_status &&
+         values.verification_status === "REJECTED"
+      ) ||
+      (
+         values.partner_status !== organization.partner_status &&
+         ["SUSPENDED", "FORMER"].includes(values.partner_status)
+      );
+
+   const beginEditing = () => {
+      reset();
+      setValues({
+         verification_status: organization.verification_status,
+         partner_status: organization.partner_status,
+      });
+      setEditing(true);
+   };
+
+   const cancelEditing = () => {
+      if (pending) return;
+      reset();
+      setConfirmationOpen(false);
+      setEditing(false);
+   };
+
+   const saveChanges = async () => {
+      const body = {};
+      if (values.verification_status !== organization.verification_status) {
+         body.verification_status = values.verification_status;
+      }
+      if (values.partner_status !== organization.partner_status) {
+         body.partner_status = values.partner_status;
+      }
+
+      const result = await mutate(
+         resolveApiEndpoint("MANAGEMENT_ORGANIZATION_PLATFORM_TRUST", organization.id),
+         { method: "PATCH", body },
+      );
+      if (!result.ok) return;
+
+      returnFocusAfterRefreshRef.current = true;
+      setConfirmationOpen(false);
+      setEditing(false);
+      onFeedback("Platform trust updated.");
+      onRefresh();
+   };
+
+   const submit = (event) => {
+      event.preventDefault();
+      if (!hasChanges || pending) return;
+      if (isHighImpactChange) {
+         setConfirmationOpen(true);
+         return;
+      }
+      saveChanges();
+   };
+
+   return (
+      <section className="management-detail-section management-detail-section--trust">
+         <div className="management-trust-heading">
+            <h2>Platform Trust</h2>
+            {!editing ? (
+               <Button ref={editButtonRef} variant="secondary" density="compact" onClick={beginEditing}>
+                  Edit platform trust
+               </Button>
+            ) : null}
+         </div>
+
+         {!editing ? (
+            <div className="management-trust-statuses">
+               <div><span>Verification</span><ManagementStatus value={organization.verification_status} label={organization.verification_status_label} /></div>
+               <div><span>Partner status</span><ManagementStatus value={organization.partner_status} label={organization.partner_status_label} /></div>
+            </div>
+         ) : (
+            <form className="management-trust-editor" onSubmit={submit}>
+               <label className="management-form-field">
+                  <span>Verification status</span>
+                  <Select
+                     value={values.verification_status}
+                     onChange={(event) => {
+                        reset();
+                        setValues((current) => ({ ...current, verification_status: event.target.value }));
+                     }}
+                     invalid={Boolean(error?.fields.verification_status)}
+                     aria-describedby={error?.fields.verification_status ? "trust-verification-error" : undefined}
+                     disabled={pending}
+                  >
+                     {MANAGEMENT_VERIFICATION_STATUSES.map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                     ))}
+                  </Select>
+                  <FieldError id="trust-verification-error">{error?.fields.verification_status}</FieldError>
+               </label>
+               <label className="management-form-field">
+                  <span>Partner status</span>
+                  <Select
+                     value={values.partner_status}
+                     onChange={(event) => {
+                        reset();
+                        setValues((current) => ({ ...current, partner_status: event.target.value }));
+                     }}
+                     invalid={Boolean(error?.fields.partner_status)}
+                     aria-describedby={error?.fields.partner_status ? "trust-partner-error" : undefined}
+                     disabled={pending}
+                  >
+                     {MANAGEMENT_PARTNER_STATUSES.map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                     ))}
+                  </Select>
+                  <FieldError id="trust-partner-error">{error?.fields.partner_status}</FieldError>
+               </label>
+               <div className="management-inline-actions">
+                  <Button variant="secondary" disabled={pending} onClick={cancelEditing}>Cancel</Button>
+                  <Button ref={saveButtonRef} type="submit" loading={pending} loadingLabel="Saving…" disabled={!hasChanges}>
+                     Save changes
+                  </Button>
+               </div>
+               {error ? <ManagementFeedback tone="error">{error.message}</ManagementFeedback> : null}
+            </form>
+         )}
+
+         <ManagementConfirmDialog
+            open={confirmationOpen}
+            title="Confirm high-impact trust change"
+            description="Review the selected governance statuses before saving this organization record."
+            warning="Rejected, suspended, and former statuses are high-impact platform trust choices. Confirm that the selected values are intentional."
+            error={error?.message}
+            confirmLabel="Save trust changes"
+            confirmVariant="destructive"
+            processing={pending}
+            returnFocusRef={saveButtonRef}
+            onConfirm={saveChanges}
+            onClose={() => setConfirmationOpen(false)}
+         />
+      </section>
+   );
+}
+
+function PrimaryAdminState({ organizationId, primaryAdmin, onRefresh, onFeedback }) {
+   const [provisioningOpen, setProvisioningOpen] = useState(false);
+   const [resendConfirmationOpen, setResendConfirmationOpen] = useState(false);
+   const [email, setEmail] = useState("");
+   const { mutate, pending, error, reset } = useManagementMutation();
+
+   const submitProvision = async (event) => {
+      event.preventDefault();
+      const result = await mutate(
+         resolveApiEndpoint("MANAGEMENT_PRIMARY_ADMIN_PROVISION", organizationId),
+         { method: "POST", body: { email } },
+      );
+      if (!result.ok) return;
+
+      setProvisioningOpen(false);
+      setEmail("");
+      onFeedback(`Primary Admin invitation sent to ${result.data.email}.`);
+      onRefresh();
+   };
+
+   const resend = async () => {
+      const result = await mutate(
+         resolveApiEndpoint("MANAGEMENT_PRIMARY_ADMIN_RESEND", organizationId),
+         { method: "POST", body: {} },
+      );
+      if (!result.ok) return;
+
+      setResendConfirmationOpen(false);
+      onFeedback(`A new invitation link was sent to ${result.data.email}.`);
+      onRefresh();
+   };
+
    if (primaryAdmin?.state === "CURRENT") {
       const membership = primaryAdmin.membership;
       return (
@@ -50,7 +262,30 @@ function PrimaryAdminState({ primaryAdmin }) {
                { label: "Expires", node: formatManagementDate(invitation.expires_at) },
                { label: "Deliveries", value: String(invitation.send_count) },
             ]} />
-            <Link className="management-inline-link" to={`/management/invitations/${invitation.id}`}>View invitation record</Link>
+            <div className="management-record-actions">
+               <Link className="management-inline-link" to={`/management/invitations/${invitation.id}`}>View invitation record</Link>
+               <Button
+                  variant="secondary"
+                  onClick={() => {
+                     reset();
+                     setResendConfirmationOpen(true);
+                  }}
+               >
+                  Resend invitation
+               </Button>
+            </div>
+            {error ? <ManagementFeedback tone="error">{error.message}</ManagementFeedback> : null}
+            <ManagementConfirmDialog
+               open={resendConfirmationOpen}
+               title="Resend Primary Admin invitation?"
+               description={`Send a new invitation link to ${invitation.email}?`}
+               warning="Resending invalidates the previous invitation link."
+               error={error?.message}
+               confirmLabel="Resend invitation"
+               processing={pending}
+               onConfirm={resend}
+               onClose={() => setResendConfirmationOpen(false)}
+            />
          </>
       );
    }
@@ -59,16 +294,72 @@ function PrimaryAdminState({ primaryAdmin }) {
       <>
          <h2>Primary Admin</h2>
          <p className="management-section__description">Highest organization authority within TruthLens.</p>
-         <p className="management-empty-value">Not yet assigned</p>
+         {!provisioningOpen ? (
+            <div className="management-empty-action">
+               <p>Not yet assigned</p>
+               <Button onClick={() => {
+                  reset();
+                  setProvisioningOpen(true);
+               }}>
+                  Provision Primary Admin
+               </Button>
+            </div>
+         ) : (
+            <form className="management-provision-form" onSubmit={submitProvision}>
+               <div className="management-provision-form__intro">
+                  <strong>Invite the organization’s first Primary Admin</strong>
+                  <p>
+                     The recipient uses their own TruthLens account, and the invited email must match their verified account when accepting. TruthLens does not create or know their password. This role does not imply legal or business ownership.
+                  </p>
+               </div>
+               <label className="management-form-field">
+                  <span>Email</span>
+                  <Input
+                     type="email"
+                     value={email}
+                     onChange={(event) => {
+                        reset();
+                        setEmail(event.target.value);
+                     }}
+                     invalid={Boolean(error?.fields.email)}
+                     aria-describedby={error?.fields.email ? "primary-admin-email-error" : undefined}
+                     autoComplete="email"
+                     required
+                     disabled={pending}
+                  />
+                  <FieldError id="primary-admin-email-error">{error?.fields.email}</FieldError>
+               </label>
+               <div className="management-inline-actions">
+                  <Button
+                     variant="secondary"
+                     disabled={pending}
+                     onClick={() => {
+                        reset();
+                        setEmail("");
+                        setProvisioningOpen(false);
+                     }}
+                  >
+                     Cancel
+                  </Button>
+                  <Button type="submit" loading={pending} loadingLabel="Sending invitation…">
+                     Send invitation
+                  </Button>
+               </div>
+               {error ? <ManagementFeedback tone="error">{error.message}</ManagementFeedback> : null}
+            </form>
+         )}
       </>
    );
 }
 
 function ManagementOrganizationDetailPage() {
    const { organizationId } = useParams();
+   const [feedback, setFeedback] = useState("");
+   const returnFocusAfterTrustRefreshRef = useRef(false);
    const { data, loading, error, retry } = useManagementRequest(
       resolveApiEndpoint("MANAGEMENT_ORGANIZATION_DETAIL", organizationId),
    );
+   const showFeedback = useCallback((message) => setFeedback(message), []);
 
    return (
       <div className="management-page">
@@ -78,17 +369,24 @@ function ManagementOrganizationDetailPage() {
             backTo="/management/organizations"
             backLabel="Partner Organizations"
          />
+         {feedback ? <ManagementFeedback>{feedback}</ManagementFeedback> : null}
          <ManagementRequestState loading={loading} error={error} onRetry={retry}>
             {data ? (
                <div className="management-detail-sections">
-                  <section className="management-detail-section management-detail-section--trust">
-                     <h2>Platform Trust</h2>
-                     <div className="management-trust-statuses">
-                        <div><span>Verification</span><ManagementStatus value={data.verification_status} label={data.verification_status_label} /></div>
-                        <div><span>Partner status</span><ManagementStatus value={data.partner_status} label={data.partner_status_label} /></div>
-                     </div>
+                  <PlatformTrustSection
+                     organization={data}
+                     onRefresh={retry}
+                     onFeedback={showFeedback}
+                     returnFocusAfterRefreshRef={returnFocusAfterTrustRefreshRef}
+                  />
+                  <section className="management-detail-section">
+                     <PrimaryAdminState
+                        organizationId={data.id}
+                        primaryAdmin={data.primary_admin}
+                        onRefresh={retry}
+                        onFeedback={showFeedback}
+                     />
                   </section>
-                  <section className="management-detail-section"><PrimaryAdminState primaryAdmin={data.primary_admin} /></section>
                   <section className="management-detail-section">
                      <h2>Institutional Identity</h2>
                      <DetailList items={[

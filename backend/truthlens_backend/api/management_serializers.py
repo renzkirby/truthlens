@@ -7,6 +7,63 @@ from .models import (
 )
 
 
+class StrictFieldsSerializer(serializers.Serializer):
+    def to_internal_value(self, data):
+        if hasattr(data, "keys"):
+            unexpected_fields = sorted(set(data.keys()) - set(self.fields))
+            if unexpected_fields:
+                raise serializers.ValidationError(
+                    {
+                        field: "This field is not supported."
+                        for field in unexpected_fields
+                    }
+                )
+
+        return super().to_internal_value(data)
+
+
+class ManagementOrganizationCreateSerializer(StrictFieldsSerializer):
+    name = serializers.CharField(max_length=255, allow_blank=False, trim_whitespace=True)
+    slug = serializers.SlugField(max_length=255, allow_blank=False)
+    organization_type = serializers.ChoiceField(
+        choices=Organization.OrganizationType.choices
+    )
+    verification_status = serializers.ChoiceField(
+        choices=Organization.VerificationStatus.choices,
+        default=Organization.VerificationStatus.UNVERIFIED,
+    )
+    partner_status = serializers.ChoiceField(
+        choices=Organization.PartnerStatus.choices,
+        default=Organization.PartnerStatus.NONE,
+    )
+
+
+class ManagementPlatformTrustUpdateSerializer(StrictFieldsSerializer):
+    verification_status = serializers.ChoiceField(
+        choices=Organization.VerificationStatus.choices,
+        required=False,
+    )
+    partner_status = serializers.ChoiceField(
+        choices=Organization.PartnerStatus.choices,
+        required=False,
+    )
+
+    def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError(
+                "Supply verification_status, partner_status, or both."
+            )
+        return attrs
+
+
+class ManagementPrimaryAdminProvisionSerializer(StrictFieldsSerializer):
+    email = serializers.EmailField()
+
+
+class ManagementEmptyMutationSerializer(StrictFieldsSerializer):
+    pass
+
+
 def management_role_label(role):
     if role == OrganizationMembership.Role.OWNER:
         return "Primary Admin"
