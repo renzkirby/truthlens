@@ -20,3 +20,27 @@ export function managementStatusTone(status) {
    if (["SUSPENDED", "REJECTED", "CANCELLED", "EXPIRED"].includes(status)) return "critical";
    return "neutral";
 }
+
+export const MANAGEMENT_ORGANIZATION_TYPES = [
+   ["FACT_CHECKING", "Fact-Checking Organization"],
+   ["NEWS", "News Organization"],
+   ["UNIVERSITY", "University"],
+   ["RESEARCH", "Research Organization"],
+   ["NGO", "Non-Governmental Organization"],
+   ["GOVERNMENT", "Government Organization"],
+   ["OTHER", "Other"],
+];
+
+export const MANAGEMENT_VERIFICATION_STATUSES = [
+   ["UNVERIFIED", "Unverified"],
+   ["PENDING", "Pending Verification"],
+   ["VERIFIED", "Verified"],
+   ["REJECTED", "Rejected"],
+];
+
+export const MANAGEMENT_PARTNER_STATUSES = [
+   ["NONE", "Not a Partner"],
+   ["ACTIVE", "Active"],
+   ["SUSPENDED", "Suspended"],
+   ["FORMER", "Former Partner"],
+];

@@ -58,6 +58,12 @@ function ManagementOrganizationsPage() {
          <ManagementPageHeader
             title="Partner Organizations"
             subtitle="Inspect institutional identity and platform trust."
+            actions={(
+               <Link to="/management/organizations/new" className="tl-button tl-button--primary tl-button--standard">
+                  <Icons name="circle-plus" size={16} />
+                  <span className="tl-button__label">Add organization</span>
+               </Link>
+            )}
          />
 
          <section className="management-filter-panel" aria-label="Organization filters">

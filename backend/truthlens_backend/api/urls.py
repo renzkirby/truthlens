@@ -22,6 +22,21 @@ urlpatterns = [
         name="management_organization_detail",
     ),
     path(
+        "management/organizations/<uuid:organization_id>/platform-trust/",
+        management_views.ManagementOrganizationPlatformTrustView.as_view(),
+        name="management_organization_platform_trust",
+    ),
+    path(
+        "management/organizations/<uuid:organization_id>/primary-admin/",
+        management_views.ManagementPrimaryAdminProvisionView.as_view(),
+        name="management_primary_admin_provision",
+    ),
+    path(
+        "management/organizations/<uuid:organization_id>/primary-admin/resend/",
+        management_views.ManagementPrimaryAdminResendView.as_view(),
+        name="management_primary_admin_resend",
+    ),
+    path(
         "management/memberships/",
         management_views.ManagementMembershipListView.as_view(),
         name="management_memberships",

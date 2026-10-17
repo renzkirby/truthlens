@@ -33,6 +33,7 @@ import ManagementRoute from "./components/ManagementRoute.jsx";
 import ManagementConsoleShell from "./components/management/ManagementConsoleShell.jsx";
 import ManagementOverviewPage from "./Pages/ManagementOverviewPage.jsx";
 import ManagementOrganizationsPage from "./Pages/ManagementOrganizationsPage.jsx";
+import ManagementOrganizationCreatePage from "./Pages/ManagementOrganizationCreatePage.jsx";
 import ManagementOrganizationDetailPage from "./Pages/ManagementOrganizationDetailPage.jsx";
 import ManagementMembershipsPage from "./Pages/ManagementMembershipsPage.jsx";
 import ManagementMembershipDetailPage from "./Pages/ManagementMembershipDetailPage.jsx";
@@ -82,6 +83,7 @@ function App() {
                      <Route element={<ManagementConsoleShell />}>
                         <Route path="/management" element={<ManagementOverviewPage />} />
                         <Route path="/management/organizations" element={<ManagementOrganizationsPage />} />
+                        <Route path="/management/organizations/new" element={<ManagementOrganizationCreatePage />} />
                         <Route
                            path="/management/organizations/:organizationId"
                            element={<ManagementOrganizationDetailPage />}
