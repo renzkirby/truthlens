@@ -11,6 +11,7 @@ PROVIDER_NAME = "TAVILY"
 
 # Preserve the existing shared text/URL search preset during adapter staging.
 INCLUDE_DOMAINS = (
+    "pressone.ph",
     "gmanetwork.com",
     "rappler.com",
     "philstar.com",
