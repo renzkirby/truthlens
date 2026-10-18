@@ -15,7 +15,6 @@ from api.models import (
 from api.verification.contracts import RawEvidence
 from api.verification.canonical_sources import assign_canonical_source
 from api.verification.ingestion import ingest_provider_evidence, ingest_raw_evidence
-from api.verification.persistence import persist_evidence_source
 from api.verification.providers.tavily import TavilyProvider
 
 
@@ -151,7 +150,7 @@ class TavilyIngestionTests(TestCase):
         provider, client, _ = self._build_provider([])
         error = TavilyTimeoutError(12.0)
         client.search.side_effect = error
-        with patch("api.verification.ingestion.persist_evidence_source") as persist:
+        with patch("api.verification.ingestion.persist_evidence_sources") as persist:
             with self.assertRaises(TavilyTimeoutError) as caught:
                 ingest_provider_evidence(provider, "claim")
         self.assertIs(caught.exception, error)
@@ -175,7 +174,7 @@ class TavilyIngestionTests(TestCase):
 
     def test_empty_evidence_produces_no_writes(self):
         provider, _, _ = self._build_provider([])
-        with patch("api.verification.ingestion.persist_evidence_source") as persist:
+        with patch("api.verification.ingestion.persist_evidence_sources") as persist:
             self.assertEqual(ingest_provider_evidence(provider, "claim"), [])
         persist.assert_not_called()
         self.assertEqual(EvidenceSource.objects.count(), 0)
@@ -208,24 +207,26 @@ class TavilyIngestionTests(TestCase):
         existing = ingest_raw_evidence([RawEvidence(
             provider="TAVILY", url="https://example.com/existing",
         )])[0]
-        calls = []
+        created_rows = []
+        create = EvidenceSource.objects.create
 
-        def persist_then_fail(evidence):
-            calls.append(evidence)
-            if len(calls) == 2:
+        def create_then_fail(**fields):
+            if created_rows:
                 self.assertTrue(EvidenceSource.objects.filter(
                     canonical_url="https://example.com/1"
                 ).exists())
                 raise RuntimeError("Simulated batch persistence failure")
-            return persist_evidence_source(evidence)
+            source = create(**fields)
+            created_rows.append(source.pk)
+            return source
 
         with patch(
-            "api.verification.ingestion.persist_evidence_source",
-            side_effect=persist_then_fail,
+            "api.verification.persistence.EvidenceSource.objects.create",
+            side_effect=create_then_fail,
         ):
             with self.assertRaisesRegex(RuntimeError, "Simulated batch persistence"):
                 ingest_provider_evidence(provider, "claim")
-        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(created_rows), 1)
         self.assertEqual(
             list(EvidenceSource.objects.values_list("pk", flat=True)), [existing.pk]
         )
@@ -237,22 +238,21 @@ class TavilyIngestionTests(TestCase):
         ])
         calls = []
 
-        def assign_then_fail(source):
-            calls.append(source.pk)
-            if len(calls) == 2:
-                self.assertEqual(EvidenceSource.objects.count(), 2)
-                self.assertEqual(CanonicalSource.objects.count(), 1)
-                raise RuntimeError("Simulated canonical assignment failure")
-            return assign_canonical_source(source)
+        def assign_then_fail(sources):
+            calls.append([source.pk for source in sources])
+            assign_canonical_source(sources[0])
+            self.assertEqual(EvidenceSource.objects.count(), 2)
+            self.assertEqual(CanonicalSource.objects.count(), 1)
+            raise RuntimeError("Simulated canonical assignment failure")
 
         with patch(
-            "api.verification.ingestion.assign_canonical_source",
+            "api.verification.ingestion.assign_canonical_sources",
             side_effect=assign_then_fail,
         ):
             with self.assertRaisesRegex(RuntimeError, "canonical assignment failure"):
                 ingest_provider_evidence(provider, "claim")
 
-        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(calls), 1)
         self.assertEqual(EvidenceSource.objects.count(), 0)
         self.assertEqual(CanonicalSource.objects.count(), 0)
 

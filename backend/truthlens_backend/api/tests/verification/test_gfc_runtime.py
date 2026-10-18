@@ -854,22 +854,26 @@ class GoogleFactCheckEvidenceLinkingTests(TestCase):
             provider="GOOGLE_FACT_CHECK", url="https://example.com/second",
             content="Second fact check", source_type="FACT_CHECK",
         ))
-        get_or_create = VerificationEvidence.objects.get_or_create
+        create = VerificationEvidence.objects.create
 
-        def fail_second_link(**kwargs):
-            if kwargs["evidence_source"].url == "https://example.com/second":
-                self.assertEqual(VerificationEvidence.objects.count(), 1)
-                raise IntegrityError("Second link failed")
-            return get_or_create(**kwargs)
+        def fail_after_first_link(objects, **kwargs):
+            first = objects[0]
+            create(
+                verification_run_id=first.verification_run_id,
+                evidence_source_id=first.evidence_source_id,
+                evidence_role=first.evidence_role,
+            )
+            self.assertEqual(VerificationEvidence.objects.count(), 1)
+            raise IntegrityError("Second link failed")
 
         with patch(
-            "api.verification.linking.VerificationEvidence.objects.get_or_create",
-            side_effect=fail_second_link,
+            "api.verification.linking.VerificationEvidence.objects.bulk_create",
+            side_effect=fail_after_first_link,
         ) as create_link:
             returned = self._retrieve(verification_run=self.run)
 
         self.assertIs(returned, self.payload)
-        self.assertEqual(create_link.call_count, 2)
+        create_link.assert_called_once()
         self.assertEqual(EvidenceSource.objects.count(), 2)
         self.assertEqual(VerificationEvidence.objects.count(), 0)
         self.assertEqual(self._stages(), ["gfc_evidence_ingestion", "gfc_evidence_linking_failed"])

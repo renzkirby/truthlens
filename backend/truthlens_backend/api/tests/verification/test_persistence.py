@@ -4,6 +4,7 @@ from api.models import EvidenceSource
 from api.verification.contracts import NormalizedEvidence
 from api.verification.persistence import (
     persist_evidence_source,
+    persist_evidence_sources,
 )
 
 
@@ -189,3 +190,73 @@ class EvidenceSourcePersistenceTests(TestCase):
             EvidenceSource.objects.count(),
             0,
         )
+
+    def test_batch_preserves_canonical_url_precedence_over_content_hash(self):
+        url_match = EvidenceSource.objects.create(
+            provider="TAVILY",
+            canonical_url="https://example.com/url-match",
+            content_hash="a" * 64,
+        )
+        hash_match = EvidenceSource.objects.create(
+            provider="TAVILY",
+            canonical_url="https://example.com/hash-match",
+            content_hash="b" * 64,
+        )
+
+        [(resolved, created)] = persist_evidence_sources([
+            NormalizedEvidence(
+                provider="TAVILY",
+                canonical_url=url_match.canonical_url,
+                content_hash=hash_match.content_hash,
+            )
+        ])
+
+        self.assertFalse(created)
+        self.assertEqual(resolved.pk, url_match.pk)
+
+    def test_batch_content_hash_duplicate_preserves_first_representation(self):
+        evidence = [
+            NormalizedEvidence(
+                provider="TAVILY",
+                canonical_url="https://example.com/first",
+                content_hash="c" * 64,
+                raw_reference={"tavily_result_index": 0},
+            ),
+            NormalizedEvidence(
+                provider="TAVILY",
+                canonical_url="https://example.com/second",
+                content_hash="c" * 64,
+                raw_reference={"tavily_result_index": 1},
+            ),
+        ]
+
+        results = persist_evidence_sources(evidence)
+
+        self.assertEqual([source.pk for source, _created in results], [
+            results[0][0].pk,
+            results[0][0].pk,
+        ])
+        self.assertEqual([created for _source, created in results], [True, False])
+        self.assertEqual(EvidenceSource.objects.count(), 1)
+        self.assertEqual(
+            EvidenceSource.objects.get().raw_reference,
+            {"tavily_result_index": 0},
+        )
+
+    def test_batch_identity_remains_provider_scoped(self):
+        results = persist_evidence_sources([
+            NormalizedEvidence(
+                provider="TAVILY",
+                canonical_url="https://example.com/shared",
+                content_hash="d" * 64,
+            ),
+            NormalizedEvidence(
+                provider="GOOGLE_FACT_CHECK",
+                canonical_url="https://example.com/shared",
+                content_hash="d" * 64,
+            ),
+        ])
+
+        self.assertEqual([created for _source, created in results], [True, True])
+        self.assertNotEqual(results[0][0].pk, results[1][0].pk)
+        self.assertEqual(EvidenceSource.objects.count(), 2)

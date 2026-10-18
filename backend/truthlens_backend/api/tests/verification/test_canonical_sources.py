@@ -5,6 +5,7 @@ from api.verification.canonical_sources import (
     AmbiguousCanonicalSourceHostError,
     CanonicalSourceHostCollisionError,
     assign_canonical_source,
+    assign_canonical_sources,
     canonical_source_id_for_host,
 )
 
@@ -189,3 +190,13 @@ class CanonicalSourceHostIdentityTests(TestCase):
             assign_canonical_source(source)
 
         self.assertEqual(CanonicalSource.objects.count(), 0)
+
+    def test_batch_reuses_one_host_and_preserves_first_seen_source_order(self):
+        first = self._source(canonical_url="https://www.example.com/first")
+        second = self._source(canonical_url="https://EXAMPLE.com/second")
+
+        assigned = assign_canonical_sources([second, first, second])
+
+        self.assertEqual([source.pk for source in assigned], [second.pk, first.pk])
+        self.assertEqual(assigned[0].canonical_source_id, assigned[1].canonical_source_id)
+        self.assertEqual(CanonicalSource.objects.count(), 1)

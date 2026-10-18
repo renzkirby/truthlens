@@ -4,7 +4,10 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from api.models import Claim, EvidenceSource, VerificationEvidence, VerificationRun
-from api.verification.linking import link_evidence_sources_to_run
+from api.verification.linking import (
+    link_evidence_sources_to_run,
+    record_retrieval_provenance,
+)
 
 
 class EvidenceLinkingTests(TestCase):
@@ -143,18 +146,71 @@ class EvidenceLinkingTests(TestCase):
         other_source = EvidenceSource.objects.create(provider="GOOGLE_FACT_CHECK")
         existing = self._link([other_source])[0]
         before = VerificationEvidence.objects.values().get(pk=existing.pk)
-        get_or_create = VerificationEvidence.objects.get_or_create
+        create = VerificationEvidence.objects.create
 
-        def fail_second_source(**kwargs):
-            if kwargs["evidence_source"].pk == self.second.pk:
-                raise IntegrityError("Simulated second link failure")
-            return get_or_create(**kwargs)
+        def fail_after_first_source(objects, **kwargs):
+            first = objects[0]
+            create(
+                verification_run_id=first.verification_run_id,
+                evidence_source_id=first.evidence_source_id,
+                evidence_role=first.evidence_role,
+            )
+            raise IntegrityError("Simulated second link failure")
 
         with patch(
-            "api.verification.linking.VerificationEvidence.objects.get_or_create",
-            side_effect=fail_second_source,
+            "api.verification.linking.VerificationEvidence.objects.bulk_create",
+            side_effect=fail_after_first_source,
         ):
             with self.assertRaisesMessage(IntegrityError, "Simulated second link failure"):
                 self._link([other_source, self.first, self.second])
 
         self.assertEqual(list(VerificationEvidence.objects.values()), [before])
+
+    def test_retrieval_provenance_normalizes_and_avoids_duplicates(self):
+        links = self._link([self.first, self.second])
+
+        first = record_retrieval_provenance(
+            [links[0], links[1], links[0]],
+            provider=" TAVILY ",
+            query=" primary   query ",
+            query_index=0,
+        )
+        second = record_retrieval_provenance(
+            links,
+            provider="TAVILY",
+            query="primary query",
+            query_index=0,
+        )
+
+        self.assertEqual([link.pk for link in first], [link.pk for link in links])
+        self.assertEqual([link.pk for link in second], [link.pk for link in links])
+        for link in VerificationEvidence.objects.filter(pk__in=[link.pk for link in links]):
+            self.assertEqual(link.retrieval_provenance, [
+                {"provider": "TAVILY", "query": "primary query", "query_index": 0},
+            ])
+
+    def test_retrieval_provenance_preserves_existing_entries(self):
+        link = self._link([self.first])[0]
+        link.retrieval_provenance = [
+            {"provider": "GFC", "query": "older", "query_index": 0}
+        ]
+        link.save(update_fields=["retrieval_provenance"])
+
+        record_retrieval_provenance(
+            [link],
+            provider="TAVILY",
+            query="new query",
+            query_index=2,
+        )
+        record_retrieval_provenance(
+            [link],
+            provider="TAVILY",
+            query="new query",
+            query_index=2,
+        )
+
+        link.refresh_from_db()
+        self.assertEqual(link.retrieval_provenance, [
+            {"provider": "GFC", "query": "older", "query_index": 0},
+            {"provider": "TAVILY", "query": "new query", "query_index": 2},
+        ])
