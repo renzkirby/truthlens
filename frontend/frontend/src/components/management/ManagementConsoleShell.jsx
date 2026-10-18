@@ -10,7 +10,8 @@ import "./ManagementConsole.css";
 
 const NAVIGATION_ITEMS = [
    { to: "/management", label: "Overview", icon: "dashboard", end: true },
-   { to: "/management/organizations", label: "Organizations", icon: "landmark" },
+   { to: "/management/pipeline", label: "Pipeline Health", icon: "activity", section: "Operations" },
+   { to: "/management/organizations", label: "Organizations", icon: "landmark", section: "Governance" },
    { to: "/management/memberships", label: "Memberships", icon: "users" },
    { to: "/management/invitations", label: "Invitations", icon: "mail" },
    { to: "/management/audit", label: "Governance Audit", icon: "shield-check" },
@@ -23,8 +24,8 @@ function ManagementNavigation({ label, onNavigate, firstLinkRef }) {
       <>
          <nav aria-label={label}>
             {NAVIGATION_ITEMS.map((item, index) => (
-               <div key={item.to} className={index === 1 ? "management-shell__governance" : ""}>
-                  {index === 1 ? <span className="management-shell__nav-label">Governance</span> : null}
+               <div key={item.to} className={item.section ? "management-shell__nav-section" : ""}>
+                  {item.section ? <span className="management-shell__nav-label">{item.section}</span> : null}
                   <NavLink
                      ref={index === 0 ? firstLinkRef : undefined}
                      to={item.to}

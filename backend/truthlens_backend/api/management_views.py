@@ -16,6 +16,13 @@ from .accountability_query_service import (
     list_management_governance_accountability_events,
 )
 from .management_permissions import IsPlatformManagementAdmin
+from .management_pipeline_service import (
+    ManagementPipelineRunNotFound,
+    build_management_pipeline_overview,
+    get_management_pipeline_run,
+    list_management_pipeline_runs,
+    serialize_management_pipeline_run,
+)
 from .management_governance_service import (
     ManagementGovernanceAuthorizationError,
     ManagementGovernanceConflict,
@@ -35,6 +42,9 @@ from .management_serializers import (
     ManagementPlatformTrustUpdateSerializer,
     ManagementPrimaryAdminInvitationSerializer,
     ManagementPrimaryAdminProvisionSerializer,
+    ManagementPipelineOverviewQuerySerializer,
+    ManagementPipelineRunDetailQuerySerializer,
+    ManagementPipelineRunListQuerySerializer,
 )
 from .models import (
     Organization,
@@ -106,6 +116,55 @@ class ManagementOverviewView(APIView):
             ),
         )
         return Response({"organizations": counts}, status=status.HTTP_200_OK)
+
+
+class ManagementPipelineOverviewView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def get(self, request):
+        serializer = ManagementPipelineOverviewQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        payload = build_management_pipeline_overview(
+            window_value=serializer.validated_data["window"]
+        )
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class ManagementPipelineRunListView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def get(self, request):
+        serializer = ManagementPipelineRunListQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        queryset = list_management_pipeline_runs(
+            window_value=data["window"],
+            status=data.get("status", ""),
+            claim_type=data.get("claim_type", ""),
+        )
+        paginator = ManagementPagination()
+        page = paginator.paginate_queryset(queryset, request, view=self)
+        return paginator.get_paginated_response(
+            [serialize_management_pipeline_run(run) for run in page]
+        )
+
+
+class ManagementPipelineRunDetailView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def get(self, request, run_id):
+        serializer = ManagementPipelineRunDetailQuerySerializer(
+            data=request.query_params
+        )
+        serializer.is_valid(raise_exception=True)
+        try:
+            payload = get_management_pipeline_run(run_id=run_id)
+        except ManagementPipelineRunNotFound:
+            return Response(
+                {"detail": "Verification run not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 def _governance_conflict_response(error):
