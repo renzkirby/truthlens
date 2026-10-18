@@ -331,3 +331,92 @@ def resend_primary_admin_invitation(
         ) from error
 
     return locked_invitation
+
+
+@transaction.atomic
+def cancel_primary_admin_invitation(
+    *,
+    invitation,
+    actor,
+):
+    _require_developer_authority(actor)
+
+    locked_organization = _lock_organization(invitation.organization)
+    _ensure_no_current_owner(locked_organization)
+
+    try:
+        locked_invitation = (
+            OrganizationInvitation.objects.select_for_update(
+                of=("self",),
+            )
+            .select_related("organization", "invited_by")
+            .get(pk=invitation.pk)
+        )
+    except OrganizationInvitation.DoesNotExist as error:
+        raise OrganizationProvisioningConflict(
+            "This invitation is no longer available."
+        ) from error
+
+    if locked_invitation.organization_id != locked_organization.pk:
+        raise OrganizationProvisioningConflict(
+            "This invitation does not belong to the selected organization."
+        )
+
+    if (
+        locked_invitation.purpose
+        != OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+        or locked_invitation.invited_role != OrganizationMembership.Role.OWNER
+    ):
+        raise OrganizationProvisioningConflict(
+            "Only a Primary Admin onboarding invitation can be cancelled here."
+        )
+
+    if (
+        locked_invitation.status != OrganizationInvitation.Status.PENDING
+        or locked_invitation.expires_at <= timezone.now()
+    ):
+        raise OrganizationProvisioningConflict(
+            "This invitation is no longer active."
+        )
+
+    now = timezone.now()
+    send_count = locked_invitation.send_count
+    locked_invitation.status = OrganizationInvitation.Status.CANCELLED
+    locked_invitation.cancelled_by = actor
+    locked_invitation.cancelled_at = now
+    locked_invitation.token_digest = hash_invitation_token(
+        generate_invitation_token()
+    )
+    locked_invitation.save(
+        update_fields=[
+            "status",
+            "cancelled_by",
+            "cancelled_at",
+            "token_digest",
+            "updated_at",
+        ]
+    )
+
+    record_accountability_event(
+        action_type=AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED,
+        resource_type=AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION,
+        resource_id=locked_invitation.pk,
+        authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+        actor=actor,
+        subject_organization=locked_organization,
+        capability=PROVISION_PARTNER_ORGANIZATION,
+        previous_state={
+            "status": OrganizationInvitation.Status.PENDING,
+            "invitation_purpose": locked_invitation.purpose,
+            "invited_role": locked_invitation.invited_role,
+            "send_count": send_count,
+        },
+        new_state={
+            "status": locked_invitation.status,
+            "invitation_purpose": locked_invitation.purpose,
+            "invited_role": locked_invitation.invited_role,
+            "send_count": send_count,
+        },
+    )
+
+    return locked_invitation

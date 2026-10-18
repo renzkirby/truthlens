@@ -10,8 +10,12 @@ from .models import (
     OrganizationInvitation,
     OrganizationMembership,
 )
+from .management_governance_service import (
+    persist_developer_console_organization,
+)
 from .organization_provisioning_service import (
     OrganizationProvisioningError,
+    cancel_primary_admin_invitation,
     create_and_send_primary_admin_invitation,
     resend_primary_admin_invitation,
 )
@@ -52,6 +56,23 @@ class PrimaryAdminProvisionForm(forms.Form):
             "with this verified email address."
         ),
     )
+
+
+class DeveloperOrganizationForm(forms.ModelForm):
+    class Meta:
+        model = Organization
+        fields = "__all__"
+
+    def clean_name(self):
+        name = self.cleaned_data["name"].strip()
+        organizations = Organization.objects.filter(name__iexact=name)
+        if self.instance.pk:
+            organizations = organizations.exclude(pk=self.instance.pk)
+        if organizations.exists():
+            raise forms.ValidationError(
+                "An organization with this name already exists."
+            )
+        return name
 
 
 class MembershipRoleFilter(admin.SimpleListFilter):
@@ -122,6 +143,7 @@ class ReadOnlyInspectionAdmin(admin.ModelAdmin):
 
 @admin.register(Organization, site=developer_admin_site)
 class DeveloperOrganizationAdmin(admin.ModelAdmin):
+    form = DeveloperOrganizationForm
     change_form_template = (
         "admin/developer_console/organization_change_form.html"
     )
@@ -186,6 +208,13 @@ class DeveloperOrganizationAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
 
+    def save_model(self, request, obj, form, change):
+        persist_developer_console_organization(
+            organization=obj,
+            actor=request.user,
+            is_creation=not change,
+        )
+
     def get_urls(self):
         custom_urls = [
             path(
@@ -201,6 +230,13 @@ class DeveloperOrganizationAdmin(admin.ModelAdmin):
                     self.resend_primary_admin_view,
                 ),
                 name="api_organization_primary_admin_resend",
+            ),
+            path(
+                "<path:object_id>/primary-admin/cancel/",
+                self.admin_site.admin_view(
+                    self.cancel_primary_admin_view,
+                ),
+                name="api_organization_primary_admin_cancel",
             ),
         ]
 
@@ -242,6 +278,7 @@ class DeveloperOrganizationAdmin(admin.ModelAdmin):
                     purpose=(
                         OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
                     ),
+                    invited_role=OrganizationMembership.Role.OWNER,
                     status=OrganizationInvitation.Status.PENDING,
                     expires_at__gt=timezone.now(),
                 )
@@ -263,6 +300,13 @@ class DeveloperOrganizationAdmin(admin.ModelAdmin):
                 (
                     f"{self.admin_site.name}:"
                     "api_organization_primary_admin_resend"
+                ),
+                args=(organization.pk,),
+            ),
+            "cancel_url": reverse(
+                (
+                    f"{self.admin_site.name}:"
+                    "api_organization_primary_admin_cancel"
                 ),
                 args=(organization.pk,),
             ),
@@ -374,6 +418,7 @@ class DeveloperOrganizationAdmin(admin.ModelAdmin):
                 purpose=(
                     OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
                 ),
+                invited_role=OrganizationMembership.Role.OWNER,
                 status=OrganizationInvitation.Status.PENDING,
                 expires_at__gt=timezone.now(),
             )
@@ -430,6 +475,81 @@ class DeveloperOrganizationAdmin(admin.ModelAdmin):
         return TemplateResponse(
             request,
             "admin/developer_console/primary_admin_resend.html",
+            context,
+        )
+
+    def cancel_primary_admin_view(
+        self,
+        request,
+        object_id,
+    ):
+        organization = self._get_organization(
+            request,
+            object_id,
+        )
+        has_current_primary_admin = (
+            OrganizationMembership.objects.filter(
+                organization=organization,
+                role=OrganizationMembership.Role.OWNER,
+            )
+            .exclude(status=OrganizationMembership.Status.LEFT)
+            .exists()
+        )
+        invitation = (
+            OrganizationInvitation.objects.filter(
+                organization=organization,
+                purpose=(
+                    OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+                ),
+                invited_role=OrganizationMembership.Role.OWNER,
+                status=OrganizationInvitation.Status.PENDING,
+                expires_at__gt=timezone.now(),
+            )
+            .order_by("-created_at", "-id")
+            .first()
+        )
+
+        if has_current_primary_admin or invitation is None:
+            self.message_user(
+                request,
+                "There is no active Primary Admin invitation to cancel.",
+                level=messages.WARNING,
+            )
+            return HttpResponseRedirect(
+                self._change_url(organization),
+            )
+
+        error_message = ""
+
+        if request.method == "POST":
+            try:
+                cancel_primary_admin_invitation(
+                    invitation=invitation,
+                    actor=request.user,
+                )
+            except OrganizationProvisioningError as error:
+                error_message = str(error)
+            else:
+                self.message_user(
+                    request,
+                    "Primary Admin invitation cancelled.",
+                    level=messages.SUCCESS,
+                )
+                return HttpResponseRedirect(
+                    self._change_url(organization),
+                )
+
+        context = self._provisioning_view_context(
+            request=request,
+            organization=organization,
+            title="Cancel Primary Admin Invitation",
+            invitation=invitation,
+            error_message=error_message,
+        )
+
+        return TemplateResponse(
+            request,
+            "admin/developer_console/primary_admin_cancel.html",
             context,
         )
 

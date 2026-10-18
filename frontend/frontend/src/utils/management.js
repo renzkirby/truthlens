@@ -44,3 +44,55 @@ export const MANAGEMENT_PARTNER_STATUSES = [
    ["SUSPENDED", "Suspended"],
    ["FORMER", "Former Partner"],
 ];
+
+export const MANAGEMENT_GOVERNANCE_ACTIONS = [
+   ["ORGANIZATION_CREATED", "Organization Created"],
+   ["ORGANIZATION_PLATFORM_TRUST_UPDATED", "Organization Platform Trust Updated"],
+   ["ORGANIZATION_INVITATION_CREATED", "Primary Admin Invitation Created"],
+   ["ORGANIZATION_INVITATION_RESENT", "Primary Admin Invitation Resent"],
+   ["ORGANIZATION_INVITATION_CANCELLED", "Primary Admin Invitation Cancelled"],
+];
+
+const MANAGEMENT_GOVERNANCE_ACTION_LABELS = new Map(MANAGEMENT_GOVERNANCE_ACTIONS);
+
+export function formatManagementGovernanceAction(actionType, fallbackLabel) {
+   return MANAGEMENT_GOVERNANCE_ACTION_LABELS.get(actionType)
+      || fallbackLabel
+      || actionType
+      || "Unknown governance action";
+}
+
+const AUDIT_VALUE_LABELS = {
+   UNVERIFIED: "Unverified",
+   PENDING: "Pending",
+   VERIFIED: "Verified",
+   REJECTED: "Rejected",
+   NONE: "Not a Partner",
+   ACTIVE: "Active",
+   SUSPENDED: "Suspended",
+   FORMER: "Former Partner",
+   FACT_CHECKING: "Fact-Checking Organization",
+   NEWS: "News Organization",
+   UNIVERSITY: "University",
+   RESEARCH: "Research Organization",
+   NGO: "Non-Governmental Organization",
+   GOVERNMENT: "Government Organization",
+   OTHER: "Other",
+   PRIMARY_ADMIN_ONBOARDING: "Primary Admin onboarding",
+   OWNER: "Primary Admin",
+   CANCELLED: "Cancelled",
+};
+
+export function formatManagementAuditValue(value) {
+   if (value === null || value === undefined || value === "") return "Not set";
+   if (typeof value === "boolean") return value ? "Yes" : "No";
+   if (Array.isArray(value)) return value.length ? value.join(", ") : "None";
+   if (typeof value === "object") return "Structured value";
+   return AUDIT_VALUE_LABELS[value] || String(value);
+}
+
+export function formatManagementCapability(value) {
+   if (value === "MANAGE_PARTNER_ORGANIZATION") return "Manage Partner Organization";
+   if (value === "PROVISION_PARTNER_ORGANIZATION") return "Provision Partner Organization";
+   return value || "Not recorded";
+}

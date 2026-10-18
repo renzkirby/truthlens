@@ -1,6 +1,8 @@
 from rest_framework import serializers
 
+from .accountability_query_service import MANAGEMENT_GOVERNANCE_ACTIONS
 from .models import (
+    AccountabilityEvent,
     Organization,
     OrganizationInvitation,
     OrganizationMembership,
@@ -61,6 +63,50 @@ class ManagementPrimaryAdminProvisionSerializer(StrictFieldsSerializer):
 
 
 class ManagementEmptyMutationSerializer(StrictFieldsSerializer):
+    pass
+
+
+class ManagementGovernanceAuditQuerySerializer(StrictFieldsSerializer):
+    action_type = serializers.ChoiceField(
+        choices=[
+            (value, dict(AccountabilityEvent.ActionType.choices)[value])
+            for value in MANAGEMENT_GOVERNANCE_ACTIONS
+        ],
+        required=False,
+        allow_blank=True,
+    )
+    organization = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        max_length=255,
+    )
+    actor = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        max_length=150,
+    )
+    created_after = serializers.DateTimeField(required=False, allow_null=True)
+    created_before = serializers.DateTimeField(required=False, allow_null=True)
+    limit = serializers.IntegerField(default=25, min_value=1, max_value=100)
+    offset = serializers.IntegerField(default=0, min_value=0)
+
+    def validate(self, attrs):
+        created_after = attrs.get("created_after")
+        created_before = attrs.get("created_before")
+        if created_after and created_before and created_after > created_before:
+            raise serializers.ValidationError(
+                {
+                    "created_before": (
+                        "created_before must be at or after created_after."
+                    )
+                }
+            )
+        return attrs
+
+
+class ManagementGovernanceAuditDetailQuerySerializer(StrictFieldsSerializer):
     pass
 
 

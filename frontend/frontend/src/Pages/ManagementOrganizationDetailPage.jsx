@@ -191,11 +191,31 @@ function PlatformTrustSection({
    );
 }
 
-function PrimaryAdminState({ organizationId, primaryAdmin, onRefresh, onFeedback }) {
+function PrimaryAdminState({
+   organizationId,
+   primaryAdmin,
+   onRefresh,
+   onFeedback,
+   returnFocusAfterRefreshRef,
+}) {
    const [provisioningOpen, setProvisioningOpen] = useState(false);
    const [resendConfirmationOpen, setResendConfirmationOpen] = useState(false);
+   const [cancelConfirmationOpen, setCancelConfirmationOpen] = useState(false);
    const [email, setEmail] = useState("");
+   const cancelInvitationButtonRef = useRef(null);
+   const provisionButtonRef = useRef(null);
    const { mutate, pending, error, reset } = useManagementMutation();
+
+   useEffect(() => {
+      if (
+         primaryAdmin?.state === "NONE"
+         && returnFocusAfterRefreshRef.current
+         && provisionButtonRef.current
+      ) {
+         returnFocusAfterRefreshRef.current = false;
+         provisionButtonRef.current.focus();
+      }
+   }, [primaryAdmin?.state, returnFocusAfterRefreshRef]);
 
    const submitProvision = async (event) => {
       event.preventDefault();
@@ -220,6 +240,19 @@ function PrimaryAdminState({ organizationId, primaryAdmin, onRefresh, onFeedback
 
       setResendConfirmationOpen(false);
       onFeedback(`A new invitation link was sent to ${result.data.email}.`);
+      onRefresh();
+   };
+
+   const cancelInvitation = async () => {
+      const result = await mutate(
+         resolveApiEndpoint("MANAGEMENT_PRIMARY_ADMIN_CANCEL", organizationId),
+         { method: "POST", body: {} },
+      );
+      if (!result.ok) return;
+
+      returnFocusAfterRefreshRef.current = true;
+      setCancelConfirmationOpen(false);
+      onFeedback("Primary Admin invitation cancelled.");
       onRefresh();
    };
 
@@ -264,15 +297,27 @@ function PrimaryAdminState({ organizationId, primaryAdmin, onRefresh, onFeedback
             ]} />
             <div className="management-record-actions">
                <Link className="management-inline-link" to={`/management/invitations/${invitation.id}`}>View invitation record</Link>
-               <Button
-                  variant="secondary"
-                  onClick={() => {
-                     reset();
-                     setResendConfirmationOpen(true);
-                  }}
-               >
-                  Resend invitation
-               </Button>
+               <div className="management-inline-actions">
+                  <Button
+                     variant="secondary"
+                     onClick={() => {
+                        reset();
+                        setResendConfirmationOpen(true);
+                     }}
+                  >
+                     Resend invitation
+                  </Button>
+                  <Button
+                     ref={cancelInvitationButtonRef}
+                     variant="destructive"
+                     onClick={() => {
+                        reset();
+                        setCancelConfirmationOpen(true);
+                     }}
+                  >
+                     Cancel invitation
+                  </Button>
+               </div>
             </div>
             {error ? <ManagementFeedback tone="error">{error.message}</ManagementFeedback> : null}
             <ManagementConfirmDialog
@@ -286,6 +331,19 @@ function PrimaryAdminState({ organizationId, primaryAdmin, onRefresh, onFeedback
                onConfirm={resend}
                onClose={() => setResendConfirmationOpen(false)}
             />
+            <ManagementConfirmDialog
+               open={cancelConfirmationOpen}
+               title="Cancel Primary Admin invitation?"
+               description="Cancel the pending onboarding invitation for this organization?"
+               warning="The current invitation link will stop working immediately. The organization will return to having no assigned Primary Admin until a new invitation is issued."
+               error={error?.message}
+               confirmLabel="Cancel invitation"
+               confirmVariant="destructive"
+               processing={pending}
+               returnFocusRef={cancelInvitationButtonRef}
+               onConfirm={cancelInvitation}
+               onClose={() => setCancelConfirmationOpen(false)}
+            />
          </>
       );
    }
@@ -297,10 +355,13 @@ function PrimaryAdminState({ organizationId, primaryAdmin, onRefresh, onFeedback
          {!provisioningOpen ? (
             <div className="management-empty-action">
                <p>Not yet assigned</p>
-               <Button onClick={() => {
-                  reset();
-                  setProvisioningOpen(true);
-               }}>
+               <Button
+                  ref={provisionButtonRef}
+                  onClick={() => {
+                     reset();
+                     setProvisioningOpen(true);
+                  }}
+               >
                   Provision Primary Admin
                </Button>
             </div>
@@ -356,6 +417,7 @@ function ManagementOrganizationDetailPage() {
    const { organizationId } = useParams();
    const [feedback, setFeedback] = useState("");
    const returnFocusAfterTrustRefreshRef = useRef(false);
+   const returnFocusAfterPrimaryAdminRefreshRef = useRef(false);
    const { data, loading, error, retry } = useManagementRequest(
       resolveApiEndpoint("MANAGEMENT_ORGANIZATION_DETAIL", organizationId),
    );
@@ -368,6 +430,14 @@ function ManagementOrganizationDetailPage() {
             subtitle={data ? `${data.organization_type_label} · ${data.slug}` : "Institutional governance record"}
             backTo="/management/organizations"
             backLabel="Partner Organizations"
+            actions={data ? (
+               <Link
+                  className="tl-button tl-button--secondary tl-button--compact"
+                  to={`/management/audit?${new URLSearchParams({ organization: data.name }).toString()}`}
+               >
+                  View governance audit
+               </Link>
+            ) : null}
          />
          {feedback ? <ManagementFeedback>{feedback}</ManagementFeedback> : null}
          <ManagementRequestState loading={loading} error={error} onRetry={retry}>
@@ -385,6 +455,7 @@ function ManagementOrganizationDetailPage() {
                         primaryAdmin={data.primary_admin}
                         onRefresh={retry}
                         onFeedback={showFeedback}
+                        returnFocusAfterRefreshRef={returnFocusAfterPrimaryAdminRefreshRef}
                      />
                   </section>
                   <section className="management-detail-section">

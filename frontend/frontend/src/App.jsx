@@ -39,6 +39,8 @@ import ManagementMembershipsPage from "./Pages/ManagementMembershipsPage.jsx";
 import ManagementMembershipDetailPage from "./Pages/ManagementMembershipDetailPage.jsx";
 import ManagementInvitationsPage from "./Pages/ManagementInvitationsPage.jsx";
 import ManagementInvitationDetailPage from "./Pages/ManagementInvitationDetailPage.jsx";
+import ManagementGovernanceAuditPage from "./Pages/ManagementGovernanceAuditPage.jsx";
+import ManagementGovernanceAuditDetailPage from "./Pages/ManagementGovernanceAuditDetailPage.jsx";
 
 
 function CommunityFactCheckPage() {
@@ -97,6 +99,11 @@ function App() {
                         <Route
                            path="/management/invitations/:invitationId"
                            element={<ManagementInvitationDetailPage />}
+                        />
+                        <Route path="/management/audit" element={<ManagementGovernanceAuditPage />} />
+                        <Route
+                           path="/management/audit/:eventId"
+                           element={<ManagementGovernanceAuditDetailPage />}
                         />
                      </Route>
                   </Route>

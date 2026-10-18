@@ -105,6 +105,54 @@ def _validate_creation_values(*, name, slug, organization_type, verification_sta
     )
 
 
+def _ensure_unique_organization_identity(*, name, slug, exclude_id=None):
+    organizations = Organization.objects.all()
+    if exclude_id is not None:
+        organizations = organizations.exclude(pk=exclude_id)
+
+    if organizations.filter(name__iexact=name).exists():
+        raise ManagementGovernanceConflict(
+            "An organization with this name already exists.",
+            field="name",
+        )
+    if organizations.filter(slug=slug).exists():
+        raise ManagementGovernanceConflict(
+            "An organization with this slug already exists.",
+            field="slug",
+        )
+
+
+def _record_organization_created(*, organization, actor):
+    record_accountability_event(
+        action_type=AccountabilityEvent.ActionType.ORGANIZATION_CREATED,
+        resource_type=AccountabilityEvent.ResourceType.ORGANIZATION,
+        resource_id=organization.pk,
+        authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+        actor=actor,
+        authority_organization=None,
+        subject_organization=organization,
+        capability=MANAGE_PARTNER_ORGANIZATION,
+        new_state=_organization_state(organization),
+    )
+
+
+def _persist_new_organization(*, organization, actor):
+    _ensure_unique_organization_identity(
+        name=organization.name,
+        slug=organization.slug,
+    )
+    try:
+        with transaction.atomic():
+            organization.save()
+    except IntegrityError as error:
+        raise ManagementGovernanceConflict(
+            "An organization with this name or slug already exists."
+        ) from error
+
+    _record_organization_created(organization=organization, actor=actor)
+    return organization
+
+
 @transaction.atomic
 def create_partner_organization(
     *,
@@ -126,44 +174,14 @@ def create_partner_organization(
         partner_status=partner_status,
     )
 
-    if Organization.objects.filter(name__iexact=name).exists():
-        raise ManagementGovernanceConflict(
-            "An organization with this name already exists.",
-            field="name",
-        )
-    if Organization.objects.filter(slug=slug).exists():
-        raise ManagementGovernanceConflict(
-            "An organization with this slug already exists.",
-            field="slug",
-        )
-
-    try:
-        with transaction.atomic():
-            organization = Organization.objects.create(
-                name=name,
-                slug=slug,
-                organization_type=organization_type,
-                verification_status=verification_status,
-                partner_status=partner_status,
-            )
-    except IntegrityError as error:
-        raise ManagementGovernanceConflict(
-            "An organization with this name or slug already exists."
-        ) from error
-
-    record_accountability_event(
-        action_type=AccountabilityEvent.ActionType.ORGANIZATION_CREATED,
-        resource_type=AccountabilityEvent.ResourceType.ORGANIZATION,
-        resource_id=organization.pk,
-        authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
-        actor=actor,
-        authority_organization=None,
-        subject_organization=organization,
-        capability=MANAGE_PARTNER_ORGANIZATION,
-        new_state=_organization_state(organization),
+    organization = Organization(
+        name=name,
+        slug=slug,
+        organization_type=organization_type,
+        verification_status=verification_status,
+        partner_status=partner_status,
     )
-
-    return organization
+    return _persist_new_organization(organization=organization, actor=actor)
 
 
 @transaction.atomic
@@ -235,3 +253,40 @@ def update_organization_platform_trust(
     )
 
     return organization
+
+
+@transaction.atomic
+def persist_developer_console_organization(*, organization, actor, is_creation):
+    """Persist the Django Admin Organization form through governance controls."""
+
+    _require_platform_management_authority(actor)
+
+    if is_creation:
+        organization.name = (
+            organization.name.strip()
+            if isinstance(organization.name, str)
+            else organization.name
+        )
+        organization.slug = (
+            organization.slug.strip()
+            if isinstance(organization.slug, str)
+            else organization.slug
+        )
+        _validate_creation_values(
+            name=organization.name,
+            slug=organization.slug,
+            organization_type=organization.organization_type,
+            verification_status=organization.verification_status,
+            partner_status=organization.partner_status,
+        )
+        return _persist_new_organization(
+            organization=organization,
+            actor=actor,
+        )
+
+    return update_organization_platform_trust(
+        organization_id=organization.pk,
+        actor=actor,
+        verification_status=organization.verification_status,
+        partner_status=organization.partner_status,
+    )

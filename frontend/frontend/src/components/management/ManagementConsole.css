@@ -199,6 +199,18 @@
   line-height: 1.55;
 }
 
+.management-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .management-back-link,
 .management-inline-link {
   display: inline-flex;
@@ -338,6 +350,36 @@
   border-radius: var(--tl-radius-lg);
 }
 
+.management-boundary-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--tl-space-3);
+  margin-bottom: var(--tl-space-5);
+  padding: var(--tl-space-4) var(--tl-space-5);
+  color: var(--tl-color-text-body);
+  background: var(--tl-color-bg-subtle);
+  border: 1px solid var(--tl-color-border-default);
+  border-radius: var(--tl-radius-md);
+}
+
+.management-boundary-note svg {
+  flex: 0 0 auto;
+  color: var(--tl-color-brand-primary);
+}
+
+.management-boundary-note strong {
+  color: var(--tl-color-text-main);
+  font-size: var(--tl-text-ui);
+}
+
+.management-boundary-note p {
+  max-width: 72ch;
+  margin: var(--tl-space-1) 0 0;
+  color: var(--tl-color-text-muted);
+  font-size: var(--tl-text-sm);
+  line-height: 1.5;
+}
+
 .management-search {
   display: grid;
   max-width: 620px;
@@ -373,6 +415,30 @@
   display: grid;
   min-width: 0;
   gap: var(--tl-space-2);
+}
+
+.management-audit-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: var(--tl-space-4);
+}
+
+.management-audit-filters label {
+  display: grid;
+  min-width: 0;
+  gap: var(--tl-space-2);
+}
+
+.management-audit-filters label > span {
+  color: var(--tl-color-text-body);
+  font-size: var(--tl-text-sm);
+  font-weight: 650;
+}
+
+.management-filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--tl-space-3);
 }
 
 .management-table-wrap,
@@ -422,6 +488,14 @@
   white-space: nowrap;
   overflow-wrap: normal;
   word-break: normal;
+}
+
+.management-table__username small {
+  display: block;
+  margin-top: var(--tl-space-1);
+  color: var(--tl-color-text-muted);
+  font-size: var(--tl-text-xs);
+  white-space: normal;
 }
 
 .management-table tbody tr:last-child td {
@@ -622,6 +696,89 @@
   background: var(--tl-color-bg-subtle);
   border-radius: var(--tl-radius-md);
   font-size: var(--tl-text-ui);
+}
+
+.management-audit-transition {
+  margin-top: var(--tl-space-5);
+  border-top: 1px solid var(--tl-color-border-default);
+}
+
+.management-audit-transition__header,
+.management-audit-transition__row {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) repeat(2, minmax(0, 1fr));
+  gap: var(--tl-space-4);
+}
+
+.management-audit-transition__header {
+  padding: var(--tl-space-3) 0;
+  color: var(--tl-color-text-muted);
+  border-bottom: 1px solid var(--tl-color-border-default);
+  font-size: var(--tl-text-xs);
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.management-audit-transition__row {
+  align-items: start;
+  padding: var(--tl-space-4) 0;
+  color: var(--tl-color-text-body);
+  border-bottom: 1px solid var(--tl-color-border-light);
+  font-size: var(--tl-text-ui);
+  line-height: 1.5;
+}
+
+.management-audit-transition__row > strong {
+  color: var(--tl-color-text-main);
+  font-size: var(--tl-text-sm);
+}
+
+.management-audit-transition__row > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.management-audit-transition__row > div > span {
+  display: none;
+}
+
+.management-audit-context {
+  margin-top: var(--tl-space-5);
+  padding-top: var(--tl-space-4);
+  border-top: 1px solid var(--tl-color-border-light);
+}
+
+.management-audit-context summary {
+  width: fit-content;
+  color: var(--tl-color-brand-primary);
+  font-size: var(--tl-text-sm);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.management-audit-context dl {
+  display: grid;
+  gap: var(--tl-space-3);
+  margin: var(--tl-space-4) 0 0;
+}
+
+.management-audit-context dl > div {
+  display: grid;
+  gap: var(--tl-space-1);
+}
+
+.management-audit-context dt {
+  color: var(--tl-color-text-muted);
+  font-size: var(--tl-text-xs);
+  font-weight: 650;
+}
+
+.management-audit-context dd {
+  margin: 0;
+  color: var(--tl-color-text-body);
+  font-size: var(--tl-text-ui);
+  line-height: 1.55;
 }
 
 .management-feedback {
@@ -882,6 +1039,10 @@
   .management-filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .management-audit-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 800px) {
@@ -1083,6 +1244,7 @@
   .management-destinations,
   .management-filters,
   .management-filters--compact,
+  .management-audit-filters,
   .management-detail-list,
   .management-form-grid,
   .management-trust-editor {
@@ -1091,7 +1253,8 @@
 
   .management-page-header__content,
   .management-empty-action,
-  .management-record-actions {
+  .management-record-actions,
+  .management-record-actions .management-inline-actions {
     align-items: stretch;
     flex-direction: column;
   }
@@ -1117,6 +1280,7 @@
   }
 
   .management-filter-panel,
+  .management-boundary-note,
   .management-detail-section,
   .management-form-section,
   .management-dialog {
@@ -1125,6 +1289,7 @@
 
   .management-form-actions,
   .management-inline-actions,
+  .management-filter-actions,
   .management-dialog__actions {
     align-items: stretch;
     flex-direction: column-reverse;
@@ -1132,6 +1297,7 @@
 
   .management-form-actions .tl-button,
   .management-inline-actions .tl-button,
+  .management-filter-actions .tl-button,
   .management-dialog__actions .tl-button {
     width: 100%;
   }
@@ -1139,6 +1305,28 @@
   .management-table td {
     grid-template-columns: 1fr;
     gap: var(--tl-space-1);
+  }
+
+  .management-audit-transition__header {
+    display: none;
+  }
+
+  .management-audit-transition__row {
+    grid-template-columns: 1fr;
+    gap: var(--tl-space-3);
+  }
+
+  .management-audit-transition__row > div {
+    display: grid;
+    grid-template-columns: minmax(64px, auto) minmax(0, 1fr);
+    gap: var(--tl-space-3);
+  }
+
+  .management-audit-transition__row > div > span {
+    display: inline;
+    color: var(--tl-color-text-muted);
+    font-size: var(--tl-text-xs);
+    font-weight: 650;
   }
 
   .management-pagination {

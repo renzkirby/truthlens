@@ -19,6 +19,7 @@
         <p>Expires: {{ primary_admin_state.pending_invitation.expires_at }}</p>
         <p>
           <a class="button" href="{{ primary_admin_state.resend_url }}">Resend invitation</a>
+          <a class="button" href="{{ primary_admin_state.cancel_url }}">Cancel invitation</a>
         </p>
       {% else %}
         <p><strong>Not yet assigned</strong></p>

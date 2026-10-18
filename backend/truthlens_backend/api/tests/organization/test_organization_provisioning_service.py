@@ -19,6 +19,7 @@ from api.organization_invitation_service import (
     OrganizationInvitationConflict,
     OrganizationInvitationNotFound,
     accept_organization_invitation,
+    cancel_organization_invitation,
     create_organization_invitation,
     hash_invitation_token,
     resend_organization_invitation,
@@ -27,6 +28,7 @@ from api.organization_provisioning_service import (
     PROVISION_PARTNER_ORGANIZATION,
     OrganizationProvisioningAuthorizationError,
     OrganizationProvisioningConflict,
+    cancel_primary_admin_invitation,
     create_and_send_primary_admin_invitation,
     resend_primary_admin_invitation,
 )
@@ -252,6 +254,227 @@ class OrganizationProvisioningServiceTests(TestCase):
                 actor=self.ordinary_user,
             )
 
+    def test_active_superuser_can_cancel_primary_admin_invitation_safely(self):
+        invitation, original_token = self.provision_with_token(
+            "original-primary-admin-token"
+        )
+        original_digest = invitation.token_digest
+        replacement_token = "internal-cancellation-token"
+
+        with patch(
+            "api.organization_provisioning_service.generate_invitation_token",
+            return_value=replacement_token,
+        ):
+            cancelled = cancel_primary_admin_invitation(
+                invitation=invitation,
+                actor=self.developer,
+            )
+
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, OrganizationInvitation.Status.CANCELLED)
+        self.assertEqual(invitation.cancelled_by, self.developer)
+        self.assertIsNotNone(invitation.cancelled_at)
+        self.assertNotEqual(invitation.token_digest, original_digest)
+        self.assertEqual(
+            invitation.token_digest,
+            hash_invitation_token(replacement_token),
+        )
+        self.assertEqual(cancelled.pk, invitation.pk)
+        self.assertFalse(hasattr(cancelled, "raw_token"))
+        self.assertNotIn(replacement_token, str(cancelled.__dict__))
+
+        events = AccountabilityEvent.objects.filter(
+            action_type=AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED,
+            resource_id=str(invitation.pk),
+        )
+        self.assertEqual(events.count(), 1)
+        event = events.get()
+        self.assertEqual(
+            event.authority_scope,
+            AccountabilityEvent.AuthorityScope.PLATFORM,
+        )
+        self.assertEqual(event.actor, self.developer)
+        self.assertIsNone(event.authority_organization)
+        self.assertEqual(event.subject_organization, self.organization)
+        self.assertEqual(event.capability, PROVISION_PARTNER_ORGANIZATION)
+        self.assertEqual(
+            event.previous_state,
+            {
+                "status": OrganizationInvitation.Status.PENDING,
+                "invitation_purpose": (
+                    OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+                ),
+                "invited_role": OrganizationMembership.Role.OWNER,
+                "send_count": 1,
+            },
+        )
+        self.assertEqual(
+            event.new_state,
+            {
+                "status": OrganizationInvitation.Status.CANCELLED,
+                "invitation_purpose": (
+                    OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+                ),
+                "invited_role": OrganizationMembership.Role.OWNER,
+                "send_count": 1,
+            },
+        )
+        event_payload = json.dumps(
+            {
+                "previous_state": event.previous_state,
+                "new_state": event.new_state,
+                "context": event.context,
+                "notes": event.notes,
+            }
+        ).lower()
+        self.assertNotIn(invitation.email.lower(), event_payload)
+        self.assertNotIn("token", event_payload)
+        self.assertNotIn("digest", event_payload)
+
+        with self.assertRaises(OrganizationInvitationNotFound):
+            accept_organization_invitation(
+                raw_token=original_token,
+                actor=self.verify_email(self.recipient),
+            )
+
+        replacement = self.provision(email="replacement-primary@example.com")
+        self.assertEqual(replacement.status, OrganizationInvitation.Status.PENDING)
+
+    def test_primary_admin_cancellation_rejects_invalid_invitation_lifecycle(self):
+        now = timezone.now()
+        cases = (
+            (
+                OrganizationInvitation.InvitationPurpose.MEMBERSHIP,
+                OrganizationMembership.Role.RESEARCHER,
+                OrganizationInvitation.Status.PENDING,
+                now + timedelta(days=1),
+            ),
+            (
+                OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING,
+                OrganizationMembership.Role.RESEARCHER,
+                OrganizationInvitation.Status.PENDING,
+                now + timedelta(days=1),
+            ),
+            (
+                OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING,
+                OrganizationMembership.Role.OWNER,
+                OrganizationInvitation.Status.CANCELLED,
+                now + timedelta(days=1),
+            ),
+            (
+                OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING,
+                OrganizationMembership.Role.OWNER,
+                OrganizationInvitation.Status.ACCEPTED,
+                now + timedelta(days=1),
+            ),
+            (
+                OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING,
+                OrganizationMembership.Role.OWNER,
+                OrganizationInvitation.Status.EXPIRED,
+                now - timedelta(seconds=1),
+            ),
+            (
+                OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING,
+                OrganizationMembership.Role.OWNER,
+                OrganizationInvitation.Status.PENDING,
+                now - timedelta(seconds=1),
+            ),
+        )
+
+        for index, (purpose, role, invitation_status, expires_at) in enumerate(cases):
+            with self.subTest(
+                purpose=purpose,
+                role=role,
+                status=invitation_status,
+            ):
+                organization = Organization.objects.create(
+                    name=f"Cancellation Boundary {index}",
+                    slug=f"cancellation-boundary-{index}",
+                )
+                invitation = OrganizationInvitation.objects.create(
+                    organization=organization,
+                    email=f"boundary-{index}@example.com",
+                    invited_role=role,
+                    purpose=purpose,
+                    invited_by=self.developer,
+                    token_digest=hash_invitation_token(f"boundary-token-{index}"),
+                    status=invitation_status,
+                    expires_at=expires_at,
+                    last_sent_at=now,
+                )
+                original_digest = invitation.token_digest
+
+                with self.assertRaises(OrganizationProvisioningConflict):
+                    cancel_primary_admin_invitation(
+                        invitation=invitation,
+                        actor=self.developer,
+                    )
+
+                invitation.refresh_from_db()
+                self.assertEqual(invitation.status, invitation_status)
+                self.assertEqual(invitation.token_digest, original_digest)
+                self.assertIsNone(invitation.cancelled_by)
+                self.assertIsNone(invitation.cancelled_at)
+
+    def test_primary_admin_cancellation_rejects_current_owner_and_invalid_actor(self):
+        invitation = self.provision()
+        self.create_management_membership(
+            self.owner_manager,
+            OrganizationMembership.Role.OWNER,
+        )
+
+        with self.assertRaises(OrganizationProvisioningConflict):
+            cancel_primary_admin_invitation(
+                invitation=invitation,
+                actor=self.developer,
+            )
+
+        self.owner_manager.organization_memberships.all().delete()
+        inactive_superuser = User.objects.create_superuser(
+            username="inactive-cancellation-developer",
+            email="inactive-cancellation@example.com",
+            password="test-password",
+            is_active=False,
+        )
+        for actor in (self.ordinary_user, inactive_superuser):
+            with self.subTest(actor=actor), self.assertRaises(
+                OrganizationProvisioningAuthorizationError
+            ):
+                cancel_primary_admin_invitation(
+                    invitation=invitation,
+                    actor=actor,
+                )
+
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, OrganizationInvitation.Status.PENDING)
+
+    def test_primary_admin_cancellation_rolls_back_when_audit_fails(self):
+        invitation = self.provision()
+        original_digest = invitation.token_digest
+
+        with patch(
+            "api.organization_provisioning_service.record_accountability_event",
+            side_effect=RuntimeError("audit unavailable"),
+        ), self.assertRaises(RuntimeError):
+            cancel_primary_admin_invitation(
+                invitation=invitation,
+                actor=self.developer,
+            )
+
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, OrganizationInvitation.Status.PENDING)
+        self.assertIsNone(invitation.cancelled_by)
+        self.assertIsNone(invitation.cancelled_at)
+        self.assertEqual(invitation.token_digest, original_digest)
+        self.assertFalse(
+            AccountabilityEvent.objects.filter(
+                action_type=(
+                    AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED
+                ),
+                resource_id=str(invitation.pk),
+            ).exists()
+        )
+
     def test_ordinary_invitation_service_rejects_owner(self):
         self.create_management_membership(
             self.owner_manager,
@@ -275,6 +498,19 @@ class OrganizationProvisioningServiceTests(TestCase):
 
         with self.assertRaises(OrganizationInvitationAuthorizationError):
             resend_organization_invitation(
+                invitation=invitation,
+                actor=self.organization_admin,
+            )
+
+    def test_ordinary_invitation_cannot_cancel_onboarding_invitation(self):
+        invitation = self.provision()
+        self.create_management_membership(
+            self.organization_admin,
+            OrganizationMembership.Role.ADMIN,
+        )
+
+        with self.assertRaises(OrganizationInvitationAuthorizationError):
+            cancel_organization_invitation(
                 invitation=invitation,
                 actor=self.organization_admin,
             )

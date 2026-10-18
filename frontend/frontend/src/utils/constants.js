@@ -96,6 +96,11 @@ export const API_ENDPOINTS = {
       `management/organizations/${encodeURIComponent(organizationId)}/primary-admin/`,
    MANAGEMENT_PRIMARY_ADMIN_RESEND: (organizationId) =>
       `management/organizations/${encodeURIComponent(organizationId)}/primary-admin/resend/`,
+   MANAGEMENT_PRIMARY_ADMIN_CANCEL: (organizationId) =>
+      `management/organizations/${encodeURIComponent(organizationId)}/primary-admin/cancel/`,
+   MANAGEMENT_GOVERNANCE_AUDIT: "management/audit/",
+   MANAGEMENT_GOVERNANCE_AUDIT_DETAIL: (eventId) =>
+      `management/audit/${encodeURIComponent(eventId)}/`,
    MANAGEMENT_MEMBERSHIPS: "management/memberships/",
    MANAGEMENT_MEMBERSHIP_DETAIL: (membershipId) =>
       `management/memberships/${encodeURIComponent(membershipId)}/`,
