@@ -485,7 +485,7 @@ class EquivalentReferencePersistenceTests(PublicationResolutionFixture):
                     canonical_claim=self.canonical, publication_status="PUBLISHED"
                 )
 
-                def change_during_request(*args):
+                def change_during_request(*args, **kwargs):
                     OfficialFactCheck.objects.filter(pk=self.publication.pk).update(
                         **changes
                     )
@@ -578,7 +578,7 @@ class EquivalentReferencePersistenceTests(PublicationResolutionFixture):
         )
         self.set_equivalence_candidates(self.publication, competing)
 
-        def classify(_instructions, user_prompt):
+        def classify(_instructions, user_prompt, **kwargs):
             canonical = json.loads(user_prompt)["published_canonical_claim"]
             equivalent = canonical == self.canonical
             return json.dumps(
@@ -1676,7 +1676,9 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.tavily_retrieval = self._patch(
             "api.tasks._retrieve_and_ingest_tavily", return_value={"results": []}
         )
-        self._patch("api.tasks.is_fact_check_relevant", return_value=True)
+        self.relevance = self._patch(
+            "api.tasks.is_fact_check_relevant", return_value=True
+        )
         self._patch(
             "api.tasks.load_reasoning_evidence_dossier_for_run",
             return_value=["Persisted dossier"],
@@ -1697,7 +1699,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             "api.knowledge_reuse_service.generate_embedding", return_value=None
         )
         self.llm = self._patch("api.services.call_llm_with_fallback")
-        self._patch("api.tasks._log_stage")
+        self.log_stage = self._patch("api.tasks._log_stage")
         self.save_claim = self._patch("api.tasks._save_claim", wraps=tasks._save_claim)
 
     def _patch(self, target, **kwargs):
@@ -1746,6 +1748,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             self.llm,
         ):
             mocked.assert_not_called()
+        self.relevance.assert_not_called()
         reference = self.target.fact_check_references.get()
         self.assertEqual(reference.fact_check_id, self.publication.pk)
         self.assertEqual(reference.relationship_kind, "AUTHORITATIVE")
@@ -1767,6 +1770,34 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
                 match_method="SEMANTIC",
                 similarity_score=0.91,
             )
+        )
+
+    def astronomy_earthquake_context(self):
+        self.cleaned["cleaned_claim"] = (
+            "Astronomers identified a green star that is a white dwarf."
+        )
+        self.cleaned["search_query"] = "green star white dwarf discovery"
+        earthquake_claim = (
+            "A viral post falsely predicted a major earthquake in Calayan."
+        )
+        OfficialFactCheck.objects.filter(pk=self.publication.pk).update(
+            canonical_claim=earthquake_claim,
+            headline="No evidence supports the Calayan earthquake prediction",
+        )
+        self.publication.refresh_from_db()
+        candidate = PublishedFactCheckMatch(
+            fact_check=self.publication,
+            match_method=KnowledgeReuseEvent.MatchMethod.SEMANTIC,
+            similarity_score=0.91,
+        )
+        self.vault.return_value = build_published_fact_check_payload(candidate)
+        self.authority_candidates.return_value = [candidate]
+        self.llm.return_value = json.dumps(
+            {
+                "equivalent": False,
+                "reasoning": "The claims concern different events and subjects.",
+                "material_differences": ["Astronomy versus earthquake prediction."],
+            }
         )
 
     def assert_related_context(self, method):
@@ -1833,7 +1864,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.image()
 
         self.clean_ocr.assert_called_once_with(self.canonical)
-        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
+        self.assert_ai_path(self.persisted_eval, related_method="SEMANTIC")
 
     def test_image_exact_canonical_bypasses_evaluators_and_completes_run(self):
         self.image()
@@ -1913,17 +1944,114 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
 
         self.image()
 
-        self.assert_ai_path(self.image_gfc, related_method="EXACT_CANONICAL")
+        self.assert_ai_path(self.persisted_eval, related_method="EXACT_CANONICAL")
 
-    def test_image_semantic_match_retains_existing_ai_vault_path(self):
+    def test_image_semantic_match_continues_normal_evidence_path(self):
         self.semantic_context()
         self.image()
-        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
+        self.assert_ai_path(self.persisted_eval, related_method="SEMANTIC")
+        self.image_gfc.assert_not_called()
+        self.gfc_retrieval.assert_called_once()
+        self.target.refresh_from_db()
+        self.assertNotEqual(self.target.source_type, "TruthLens Verified Vault")
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("vault_related_relevance_check", stages)
+        self.assertNotIn("vault_search_success", stages)
+        self.assertEqual(
+            self.relevance.call_args_list[0].args,
+            (self.cleaned["cleaned_claim"], self.publication.canonical_claim),
+        )
 
-    def test_url_semantic_match_retains_existing_ai_vault_path(self):
+    def test_url_semantic_match_continues_normal_evidence_path(self):
         self.semantic_context()
         self.url()
-        self.assert_ai_path(self.url_gfc, related_method="SEMANTIC")
+        self.assert_ai_path(self.persisted_eval, related_method="SEMANTIC")
+        self.url_gfc.assert_not_called()
+        self.gfc_retrieval.assert_called_once()
+        self.target.refresh_from_db()
+        self.assertNotEqual(self.target.source_type, "TruthLens Verified Vault")
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("url_vault_related_relevance_check", stages)
+        self.assertNotIn("url_vault_search_success", stages)
+        self.assertEqual(
+            self.relevance.call_args_list[0].args,
+            (self.cleaned["cleaned_claim"], self.publication.canonical_claim),
+        )
+
+    def test_image_gma_astronomy_candidate_rejects_earthquake_context(self):
+        self.astronomy_earthquake_context()
+        self.relevance.side_effect = [False, True]
+
+        self.image()
+
+        self.assert_ai_path(self.persisted_eval)
+        self.image_gfc.assert_not_called()
+        self.gfc_retrieval.assert_called_once()
+        self.target.refresh_from_db()
+        self.assertNotEqual(self.target.source_type, "TruthLens Verified Vault")
+        self.assertEqual(
+            self.relevance.call_args_list[0].args,
+            (
+                self.cleaned["cleaned_claim"],
+                self.publication.canonical_claim,
+            ),
+        )
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("vault_related_relevance_check", stages)
+        self.assertNotIn("vault_search_success", stages)
+        related_stage = next(
+            call
+            for call in self.log_stage.call_args_list
+            if call.args[1] == "vault_related_relevance_check"
+        )
+        self.assertEqual(related_stage.kwargs, {"relevant": False})
+
+    def test_url_gma_astronomy_candidate_rejects_earthquake_context(self):
+        self.astronomy_earthquake_context()
+        self.relevance.side_effect = [False, True]
+
+        self.url()
+
+        self.assert_ai_path(self.persisted_eval)
+        self.url_gfc.assert_not_called()
+        self.gfc_retrieval.assert_called_once()
+        self.target.refresh_from_db()
+        self.assertNotEqual(self.target.source_type, "TruthLens Verified Vault")
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("url_vault_related_relevance_check", stages)
+        self.assertNotIn("url_vault_search_success", stages)
+        related_stage = next(
+            call
+            for call in self.log_stage.call_args_list
+            if call.args[1] == "url_vault_related_relevance_check"
+        )
+        self.assertEqual(related_stage.kwargs, {"relevant": False})
+
+    def test_vault_related_relevance_unavailable_fails_closed_and_continues(self):
+        self.astronomy_earthquake_context()
+        self.relevance.side_effect = [
+            LLMProviderUnavailableError("Related relevance unavailable."),
+            True,
+        ]
+
+        with self.assertLogs("api.tasks", level="WARNING"):
+            self.image()
+
+        self.assert_ai_path(self.persisted_eval)
+        self.image_gfc.assert_not_called()
+        self.gfc_retrieval.assert_called_once()
+        self.target.refresh_from_db()
+        self.assertNotEqual(self.target.source_type, "TruthLens Verified Vault")
+        self.assertEqual(
+            self.target.verification_runs.get().status,
+            VerificationRun.Status.COMPLETED,
+        )
+        related_stage = next(
+            call
+            for call in self.log_stage.call_args_list
+            if call.args[1] == "vault_related_relevance_check"
+        )
+        self.assertEqual(related_stage.kwargs, {"relevant": False})
 
     def test_image_headline_exact_retains_ai_evaluation(self):
         self.cleaned["cleaned_claim"] = self.publication.headline
@@ -1935,7 +2063,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             )
         )
         self.image()
-        self.assert_ai_path(self.image_gfc, related_method="EXACT_HEADLINE")
+        self.assert_ai_path(self.persisted_eval, related_method="EXACT_HEADLINE")
 
     def test_image_full_text_match_retains_ai_evaluation(self):
         self.cleaned["cleaned_claim"] = "vaccines tracking microchips"
@@ -1947,7 +2075,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             )
         )
         self.image()
-        self.assert_ai_path(self.image_gfc, related_method="FULL_TEXT")
+        self.assert_ai_path(self.persisted_eval, related_method="FULL_TEXT")
 
     def test_url_nonexact_without_vault_retains_gfc_evidence_evaluator(self):
         self.cleaned["cleaned_claim"] = "An unrelated public factual claim."
@@ -1994,11 +2122,10 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
 
     def test_image_nonexact_provider_exhaustion_preserves_failure_integrity(self):
         self.semantic_context()
-        self.image_gfc.side_effect = services.evaluate_image_claim_with_gfc
         error = LLMProviderUnavailableError(
             "No configured LLM provider successfully completed this request."
         )
-        self.llm.side_effect = error
+        self.persisted_eval.side_effect = error
         with self.assertRaises(LLMProviderUnavailableError) as raised:
             self.image()
         self.assertIs(raised.exception, error)
@@ -2098,6 +2225,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             self.save_claim,
         ):
             evaluator.assert_not_called()
+        self.relevance.assert_not_called()
         self.vault.assert_called_once_with(
             self.cleaned["cleaned_claim"], target_claim=self.target
         )
@@ -2301,10 +2429,10 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
 
         self.image()
 
-        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
+        self.assert_ai_path(self.persisted_eval, related_method="SEMANTIC")
         self.assertEqual(self.llm.call_count, 2)
 
-    def test_image_complete_partial_conflict_keeps_vault_ai_evaluator(self):
+    def test_image_complete_partial_conflict_continues_normal_evidence(self):
         canonical = "Hoshi suffered a complete ACL tear during rehearsal."
         OfficialFactCheck.objects.filter(pk=self.publication.pk).update(
             canonical_claim=canonical
@@ -2315,14 +2443,14 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             "Hoshi suffered a partial ACL tear during rehearsal."
         )
         self.image()
-        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
+        self.assert_ai_path(self.persisted_eval, related_method="SEMANTIC")
         self.llm.assert_called_once()
         self.assertEqual(
             json.loads(self.llm.call_args.args[1])["published_canonical_claim"],
             canonical,
         )
 
-    def test_image_underspecified_related_candidate_keeps_vault_ai_evaluator(self):
+    def test_image_underspecified_related_candidate_continues_normal_evidence(self):
         canonical = "Hoshi suffered a complete ACL tear during rehearsal."
         OfficialFactCheck.objects.filter(pk=self.publication.pk).update(
             canonical_claim=canonical
@@ -2331,20 +2459,20 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.equivalent_context(equivalent=False)
         self.cleaned["cleaned_claim"] = "Hoshi injured his knee during rehearsal."
         self.image()
-        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
+        self.assert_ai_path(self.persisted_eval, related_method="SEMANTIC")
         self.llm.assert_called_once()
 
-    def test_url_non_equivalent_candidate_keeps_existing_vault_ai_path(self):
+    def test_url_non_equivalent_candidate_continues_normal_evidence_path(self):
         self.equivalent_context(equivalent=False)
         self.url()
-        self.assert_ai_path(self.url_gfc, related_method="SEMANTIC")
+        self.assert_ai_path(self.persisted_eval, related_method="SEMANTIC")
         self.llm.assert_called_once()
 
     def test_image_invalid_equivalence_output_keeps_existing_ai_path(self):
         self.equivalent_context()
         self.llm.return_value = '{"equivalent": true}'
         self.image()
-        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
+        self.assert_ai_path(self.persisted_eval, related_method="SEMANTIC")
 
     def test_image_equivalence_provider_exhaustion_has_no_authority_or_verdict_copy(
         self,
@@ -2403,13 +2531,13 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             self.llm.assert_called_once()
             return self.ai_result
 
-        self.image_gfc.side_effect = evaluate_after_provenance
+        self.persisted_eval.side_effect = evaluate_after_provenance
         with patch(
             "api.knowledge_reuse_service.find_published_fact_check_match",
             return_value=candidate,
         ):
             self.image()
-        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
+        self.assert_ai_path(self.persisted_eval, related_method="SEMANTIC")
         self.assertEqual(
             KnowledgeReuseEvent.objects.filter(target_claim=self.target).count(), 1
         )
@@ -2417,7 +2545,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
     def test_non_equivalent_image_full_text_context_creates_related_full_text(self):
         self.equivalent_context(method="FULL_TEXT", equivalent=False)
         self.image()
-        self.assert_ai_path(self.image_gfc, related_method="FULL_TEXT")
+        self.assert_ai_path(self.persisted_eval, related_method="FULL_TEXT")
         self.llm.assert_called_once()
         self.assertIsNone(self.target.fact_check_references.get().similarity_score)
 
@@ -2428,27 +2556,27 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.vault.return_value["canonical_claim"] = self.cleaned["cleaned_claim"]
         self.vault.return_value["headline"] = "A stale unrelated headline."
         self.image()
-        self.assert_ai_path(self.image_gfc, related_method="EXACT_HEADLINE")
+        self.assert_ai_path(self.persisted_eval, related_method="EXACT_HEADLINE")
         self.llm.assert_called_once()
 
     def test_non_equivalent_url_full_text_context_creates_related_full_text(self):
         self.equivalent_context(method="FULL_TEXT", equivalent=False)
         self.url()
-        self.assert_ai_path(self.url_gfc, related_method="FULL_TEXT")
+        self.assert_ai_path(self.persisted_eval, related_method="FULL_TEXT")
         self.llm.assert_called_once()
 
     def test_non_equivalent_url_headline_context_creates_related_headline(self):
         self.equivalent_context(method="EXACT_TEXT", equivalent=False)
         self.cleaned["cleaned_claim"] = self.publication.headline
         self.url()
-        self.assert_ai_path(self.url_gfc, related_method="EXACT_HEADLINE")
+        self.assert_ai_path(self.persisted_eval, related_method="EXACT_HEADLINE")
         self.llm.assert_called_once()
 
     def test_stale_exact_text_candidate_fails_closed_without_affecting_ai(self):
         self.equivalent_context(method="EXACT_TEXT", equivalent=False)
         # Neither the current canonical claim nor current headline matches.
         self.image()
-        self.assert_ai_path(self.image_gfc)
+        self.assert_ai_path(self.persisted_eval)
         self.llm.assert_called_once()
 
     def test_archived_related_candidate_is_not_recorded(self):
@@ -2457,7 +2585,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             publication_status="ARCHIVED"
         )
         self.image()
-        self.assert_ai_path(self.image_gfc)
+        self.assert_ai_path(self.persisted_eval)
 
     def assert_related_operational_failure_continues(self, process, evaluator):
         self.equivalent_context(equivalent=False)
@@ -2472,10 +2600,14 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.llm.assert_called_once()
 
     def test_image_related_operational_failure_preserves_ai_result(self):
-        self.assert_related_operational_failure_continues(self.image, self.image_gfc)
+        self.assert_related_operational_failure_continues(
+            self.image, self.persisted_eval
+        )
 
     def test_url_related_operational_failure_preserves_ai_result(self):
-        self.assert_related_operational_failure_continues(self.url, self.url_gfc)
+        self.assert_related_operational_failure_continues(
+            self.url, self.persisted_eval
+        )
 
     def test_related_database_failure_rolls_back_savepoint_and_preserves_ai_result(
         self,
@@ -2491,7 +2623,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
                 side_effect=failing_related_storage,
             ), self.assertLogs("api.tasks", level="WARNING"):
                 self.image()
-            self.assert_ai_path(self.image_gfc)
+            self.assert_ai_path(self.persisted_eval)
 
     def test_provider_exhaustion_never_enters_related_persistence(self):
         self.equivalent_context()

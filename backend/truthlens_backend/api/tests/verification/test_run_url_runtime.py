@@ -394,7 +394,7 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.bridge.assert_not_called()
         self.assess_evidence.assert_not_called()
 
-    def test_vault_substantive_verdict_completes_before_gfc(self):
+    def test_rejected_vault_candidate_continues_to_gfc(self):
         self.vault.return_value = {
             "canonical_claim": "Verified claim.",
             "verdict": "False",
@@ -405,13 +405,17 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.save_claim.assert_called_once_with(
             self.claim.pk,
             self.verdict,
-            "TruthLens Verified Vault",
-            "Verified summary.",
-            ["https://example.com/vault"],
+            "Official Fact Check",
+            self.cleaned_text,
+            ["https://example.com/fact-check"],
         )
-        self.bridge.assert_not_called()
+        self.bridge.assert_called_once()
+        self.evaluate_persisted.assert_called_once()
+        self.evaluate_gfc.assert_not_called()
         self.retrieve_tavily.assert_not_called()
-        self.assess_evidence.assert_not_called()
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("url_vault_related_relevance_check", stages)
+        self.assertNotIn("url_vault_search_success", stages)
 
     def test_gfc_receives_active_running_run_and_completes(self):
         observed = []
