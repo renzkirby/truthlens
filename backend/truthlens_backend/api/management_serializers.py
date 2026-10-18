@@ -6,6 +6,8 @@ from .models import (
     Organization,
     OrganizationInvitation,
     OrganizationMembership,
+    Claim,
+    VerificationRun,
 )
 
 
@@ -107,6 +109,36 @@ class ManagementGovernanceAuditQuerySerializer(StrictFieldsSerializer):
 
 
 class ManagementGovernanceAuditDetailQuerySerializer(StrictFieldsSerializer):
+    pass
+
+
+class ManagementPipelineOverviewQuerySerializer(StrictFieldsSerializer):
+    window = serializers.ChoiceField(
+        choices=("24h", "7d", "30d"),
+        default="7d",
+    )
+
+
+class ManagementPipelineRunListQuerySerializer(StrictFieldsSerializer):
+    window = serializers.ChoiceField(
+        choices=("24h", "7d", "30d"),
+        default="7d",
+    )
+    status = serializers.ChoiceField(
+        choices=VerificationRun.Status.choices,
+        required=False,
+        allow_blank=True,
+    )
+    claim_type = serializers.ChoiceField(
+        choices=Claim.ClaimType.choices,
+        required=False,
+        allow_blank=True,
+    )
+    page = serializers.IntegerField(required=False, min_value=1)
+    page_size = serializers.IntegerField(required=False, min_value=1, max_value=100)
+
+
+class ManagementPipelineRunDetailQuerySerializer(StrictFieldsSerializer):
     pass
 
 

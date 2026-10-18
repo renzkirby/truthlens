@@ -5,12 +5,19 @@ import requests
 from django.test import TestCase
 
 from api import services, tasks
-from api.models import Claim, EvidenceSource, VerificationEvidence, VerificationRun
+from api.models import (
+    Claim,
+    EvidenceSource,
+    VerificationEvidence,
+    VerificationRun,
+    VerificationTelemetryEvent,
+)
 from api.verification.evidence_assessment import EvidenceAssessment
 from api.verification.contracts import RawEvidence
 from api.verification.evidence_dossier import ReasoningEvidenceItem
 from api.verification import runs
 from api.services import LLMProviderUnavailableError
+from api.verification.telemetry import record_pipeline_stage
 
 
 class VerificationRunTextRuntimeTests(TestCase):
@@ -328,6 +335,25 @@ class VerificationRunTextRuntimeTests(TestCase):
         self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
         self.clean.assert_called_once()
         self.assertEqual(self.claim.verification_runs.count(), 1)
+
+    def test_telemetry_flush_failure_preserves_completed_run_and_claim_result(self):
+        def clean_with_telemetry(*args, **kwargs):
+            record_pipeline_stage("claim_gate", 10, text_length=20)
+            return self.cleaned
+
+        self.clean.side_effect = clean_with_telemetry
+        with patch.object(
+            VerificationTelemetryEvent.objects,
+            "bulk_create",
+            side_effect=RuntimeError("telemetry database unavailable"),
+        ):
+            run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, self.verdict["verdict"])
+        self.assertEqual(self.claim.ai_summary, self.verdict["summary"])
+        self.assertFalse(run.telemetry_events.exists())
 
     def test_out_of_scope_abstains_without_persisting_verdict(self):
         self.cleaned["cleaned_claim"] = "OUT_OF_SCOPE"

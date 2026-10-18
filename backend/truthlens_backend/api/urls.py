@@ -12,6 +12,21 @@ urlpatterns = [
         name="management_overview",
     ),
     path(
+        "management/pipeline/overview/",
+        management_views.ManagementPipelineOverviewView.as_view(),
+        name="management_pipeline_overview",
+    ),
+    path(
+        "management/pipeline/runs/",
+        management_views.ManagementPipelineRunListView.as_view(),
+        name="management_pipeline_runs",
+    ),
+    path(
+        "management/pipeline/runs/<uuid:run_id>/",
+        management_views.ManagementPipelineRunDetailView.as_view(),
+        name="management_pipeline_run_detail",
+    ),
+    path(
         "management/organizations/",
         management_views.ManagementOrganizationListView.as_view(),
         name="management_organizations",

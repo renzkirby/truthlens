@@ -162,7 +162,7 @@ export function ManagementRequestState({ loading, error, empty, emptyMessage, on
          <div className="management-state" role="status" aria-live="polite">
             <Icons name="loader" className="management-state__spinner" size={22} />
             <strong>Loading management data</strong>
-            <span>Please wait while the latest governance records are retrieved.</span>
+            <span>Please wait while the latest records are retrieved.</span>
          </div>
       );
    }

@@ -41,6 +41,8 @@ import ManagementInvitationsPage from "./Pages/ManagementInvitationsPage.jsx";
 import ManagementInvitationDetailPage from "./Pages/ManagementInvitationDetailPage.jsx";
 import ManagementGovernanceAuditPage from "./Pages/ManagementGovernanceAuditPage.jsx";
 import ManagementGovernanceAuditDetailPage from "./Pages/ManagementGovernanceAuditDetailPage.jsx";
+import ManagementPipelineHealthPage from "./Pages/ManagementPipelineHealthPage.jsx";
+import ManagementPipelineRunDetailPage from "./Pages/ManagementPipelineRunDetailPage.jsx";
 
 
 function CommunityFactCheckPage() {
@@ -104,6 +106,11 @@ function App() {
                         <Route
                            path="/management/audit/:eventId"
                            element={<ManagementGovernanceAuditDetailPage />}
+                        />
+                        <Route path="/management/pipeline" element={<ManagementPipelineHealthPage />} />
+                        <Route
+                           path="/management/pipeline/runs/:runId"
+                           element={<ManagementPipelineRunDetailPage />}
                         />
                      </Route>
                   </Route>

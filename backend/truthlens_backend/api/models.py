@@ -1176,6 +1176,56 @@ class VerificationRun(models.Model):
         return f"VerificationRun {self.id} - {self.status}"
 
 
+class VerificationTelemetryEvent(models.Model):
+    class EventType(models.TextChoices):
+        PIPELINE_STAGE = "PIPELINE_STAGE", "Pipeline stage"
+        LLM_PROVIDER_CALL = "LLM_PROVIDER_CALL", "LLM provider call"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    verification_run = models.ForeignKey(
+        VerificationRun,
+        on_delete=models.CASCADE,
+        related_name="telemetry_events",
+    )
+    sequence = models.PositiveIntegerField()
+    event_type = models.CharField(max_length=32, choices=EventType.choices)
+    name = models.CharField(max_length=128)
+    provider = models.CharField(max_length=32, blank=True)
+    provider_call_id = models.UUIDField(null=True, blank=True)
+    duration_ms = models.PositiveIntegerField()
+    outcome = models.CharField(max_length=64, blank=True)
+    error_label = models.CharField(max_length=128, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    occurred_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["verification_run_id", "sequence"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["verification_run", "sequence"],
+                name="uniq_vte_run_seq",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["event_type", "name", "occurred_at"],
+                name="vte_type_name_time",
+            ),
+            models.Index(
+                fields=["event_type", "provider", "occurred_at"],
+                name="vte_type_prov_time",
+            ),
+            models.Index(
+                fields=["verification_run", "event_type", "sequence"],
+                name="vte_run_type_seq",
+            ),
+        ]
+
+
 class VerificationEvidence(models.Model):
     class Stance(models.TextChoices):
         SUPPORTS = "SUPPORTS", "Supports"

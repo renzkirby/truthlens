@@ -15,10 +15,39 @@ export function formatManagementDate(value, { dateOnly = false } = {}) {
 }
 
 export function managementStatusTone(status) {
-   if (["ACTIVE", "VERIFIED", "ACCEPTED"].includes(status)) return "success";
-   if (["PENDING", "UNVERIFIED"].includes(status)) return "warning";
-   if (["SUSPENDED", "REJECTED", "CANCELLED", "EXPIRED"].includes(status)) return "critical";
+   if (["ACTIVE", "VERIFIED", "ACCEPTED", "COMPLETED"].includes(status)) return "success";
+   if (["PENDING", "RUNNING", "UNVERIFIED"].includes(status)) return "warning";
+   if (["SUSPENDED", "REJECTED", "CANCELLED", "EXPIRED", "FAILED"].includes(status)) return "critical";
    return "neutral";
+}
+
+export function formatManagementDuration(value) {
+   if (value === null || value === undefined || Number.isNaN(Number(value))) {
+      return "Not recorded";
+   }
+   const milliseconds = Math.max(0, Number(value));
+   if (milliseconds < 1000) return `${Math.round(milliseconds)} ms`;
+   if (milliseconds < 60000) return `${(milliseconds / 1000).toFixed(milliseconds < 10000 ? 1 : 0)} s`;
+   const minutes = Math.floor(milliseconds / 60000);
+   const seconds = Math.round((milliseconds % 60000) / 1000);
+   return `${minutes}m ${seconds}s`;
+}
+
+export function formatManagementOperationalLabel(value) {
+   if (!value) return "Not recorded";
+   return String(value)
+      .replaceAll("_", " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+export function formatManagementClaimType(value) {
+   return {
+      TEXT: "Text",
+      IMAGE: "Image",
+      VIDEO: "Video",
+      URL: "URL",
+      FILE: "File",
+   }[value] || value || "Not recorded";
 }
 
 export const MANAGEMENT_ORGANIZATION_TYPES = [

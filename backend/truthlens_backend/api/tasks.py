@@ -72,6 +72,11 @@ from .verification.runs import (
     fail_verification_run,
     start_verification_run,
 )
+from .verification.telemetry import (
+    bind_verification_run,
+    record_pipeline_stage,
+    verification_telemetry_scope,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -690,13 +695,15 @@ def _elapsed_ms(started_at):
 
 
 def _log_stage(claim_id, stage, started_at, **metadata):
+    duration_ms = _elapsed_ms(started_at)
     details = " ".join(
         f"{key}={value}" for key, value in metadata.items() if value is not None
     )
-    message = f"PIPELINE_STAGE claim_id={claim_id} stage={stage} duration_ms={_elapsed_ms(started_at)}"
+    message = f"PIPELINE_STAGE claim_id={claim_id} stage={stage} duration_ms={duration_ms}"
     if details:
         message = f"{message} {details}"
     logger.info(message)
+    record_pipeline_stage(stage, duration_ms, **metadata)
 
 
 def _assess_and_persist_reasoning_evidence(
@@ -803,6 +810,7 @@ def _assess_and_persist_reasoning_evidence(
 
 # IMAGE PIPELINE
 @shared_task
+@verification_telemetry_scope()
 def snippet_fact_check_process(
     image_hash, claim_id, check_deepfake=False, base64_string=None, triggered_by_id=None
 ):
@@ -941,6 +949,7 @@ def snippet_fact_check_process(
 
 # TEXT PIPELINE
 @shared_task
+@verification_telemetry_scope()
 def text_fact_check_process(raw_text, claim_id, triggered_by_id=None):
     task_started_at = time.perf_counter()
     logger.info("Received raw text. Passing to Core Text Pipeline...")
@@ -957,6 +966,7 @@ def _resolve_triggered_by(triggered_by_id):
     return User.objects.filter(pk=triggered_by_id).first()
 
 
+@verification_telemetry_scope()
 @llm_provider_scope()
 def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
     """The shared brain for both Snippets and pure Text claims."""
@@ -973,6 +983,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
             run_claim, triggered_by=_resolve_triggered_by(triggered_by_id)
         )
         run = start_verification_run(run)
+        bind_verification_run(run)
 
     selected_verdict = None
     published_resolution = False
@@ -1561,6 +1572,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
 
 # URL PIPELINE
 @shared_task
+@verification_telemetry_scope()
 @llm_provider_scope()
 def url_fact_check_process(url, claim_id, triggered_by_id=None):
     pipeline_started_at = time.perf_counter()
@@ -1612,6 +1624,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
             run_claim, triggered_by=_resolve_triggered_by(triggered_by_id)
         )
         run = start_verification_run(run)
+        bind_verification_run(run)
 
     selected_verdict = None
     published_resolution = False

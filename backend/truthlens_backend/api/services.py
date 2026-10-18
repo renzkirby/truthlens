@@ -20,6 +20,8 @@ from io import BytesIO
 from PIL import Image
 from supabase import create_client
 
+from .verification.telemetry import record_llm_provider_call
+
 logger = logging.getLogger(__name__)
 
 
@@ -178,9 +180,25 @@ def _provider_error_label(error):
     return type(error).__name__
 
 
-def _log_llm_provider_call(operation, provider, started_at, outcome, error=None):
+def _log_llm_provider_call(
+    operation,
+    provider,
+    provider_call_id,
+    started_at,
+    outcome,
+    error=None,
+):
     operation_label = operation or "unspecified"
     duration_ms = int((time.perf_counter() - started_at) * 1000)
+    error_label = _provider_error_label(error) if error is not None else ""
+    record_llm_provider_call(
+        operation_label,
+        provider,
+        provider_call_id,
+        duration_ms,
+        outcome,
+        error_label,
+    )
     if error is None:
         logger.info(
             "LLM_PROVIDER_CALL operation=%s provider=%s duration_ms=%s outcome=%s",
@@ -197,7 +215,7 @@ def _log_llm_provider_call(operation, provider, started_at, outcome, error=None)
         provider,
         duration_ms,
         outcome,
-        _provider_error_label(error),
+        error_label,
     )
 
 
@@ -209,6 +227,7 @@ def call_llm_with_fallback(
     gemini_timeout_ms=None,
 ):
     """Use Gemini first unless Groq has already taken over in this job."""
+    provider_call_id = uuid.uuid4()
     if not _gemini_degraded.get():
         gemini_config = {
             "system_instruction": system_instructions,
@@ -243,6 +262,7 @@ def call_llm_with_fallback(
                 _log_llm_provider_call(
                     operation,
                     "gemini",
+                    provider_call_id,
                     gemini_started_at,
                     "failed",
                     gemini_err,
@@ -255,6 +275,7 @@ def call_llm_with_fallback(
                 _log_llm_provider_call(
                     operation,
                     "gemini",
+                    provider_call_id,
                     gemini_started_at,
                     "success",
                 )
@@ -276,6 +297,7 @@ def call_llm_with_fallback(
         _log_llm_provider_call(
             operation,
             "groq",
+            provider_call_id,
             groq_started_at,
             "failed",
             groq_err,
@@ -291,6 +313,7 @@ def call_llm_with_fallback(
     _log_llm_provider_call(
         operation,
         "groq",
+        provider_call_id,
         groq_started_at,
         "success",
     )
@@ -530,7 +553,11 @@ def clean_ocr_text(raw_text):
     """
 
     try:
-        response_text = call_llm_with_fallback(system_instructions, f"Text: {raw_text}")
+        response_text = call_llm_with_fallback(
+            system_instructions,
+            f"Text: {raw_text}",
+            operation="claim_gate",
+        )
         result = _parse_llm_json(response_text)
         result = _normalize_claim_gate_queries(result)
         return _normalize_claim_gate_stance(
@@ -597,6 +624,7 @@ Never include a factual verdict."""
             "incoming_claim": incoming_claim,
             "published_canonical_claim": published_canonical_claim,
         }),
+        operation="claim_equivalence",
     )
     try:
         result = _parse_llm_json(response_text)
@@ -633,6 +661,7 @@ def is_fact_check_relevant(original_text, fact_check_text):
         response_text = call_llm_with_fallback(
             system_instructions,
             f'Claim: "{original_text}"\n\nFact Check: "{fact_check_text}"',
+            operation="fact_check_relevance",
         )
         result = _parse_llm_json(response_text)
         logger.debug("is_fact_check_relevant RESPONSE: %s", result)
@@ -720,7 +749,11 @@ def evaluate_image_claim_with_gfc(
     )
 
     try:
-        response_text = call_llm_with_fallback(system_instructions, user_data)
+        response_text = call_llm_with_fallback(
+            system_instructions,
+            user_data,
+            operation="gfc_evaluation",
+        )
         logger.debug("evaluate_image_claim_with_gfc OUTPUT: %s", response_text)
         parsed_result = _parse_llm_json(response_text)
         parsed_result["confidence_score"] = _normalize_verdict_confidence_score(
@@ -804,7 +837,11 @@ def evaluate_image_claim_with_tavily(
     )
 
     try:
-        response_text = call_llm_with_fallback(system_instructions, user_data)
+        response_text = call_llm_with_fallback(
+            system_instructions,
+            user_data,
+            operation="tavily_evaluation",
+        )
         logger.debug("evaluate_image_claim_with_tavily OUTPUT: %s", response_text)
         parsed_result = _parse_llm_json(response_text)
         parsed_result["confidence_score"] = _normalize_verdict_confidence_score(
@@ -879,7 +916,11 @@ def evaluate_claim_with_persisted_evidence(
     )
 
     try:
-        response_text = call_llm_with_fallback(system_instructions, user_data)
+        response_text = call_llm_with_fallback(
+            system_instructions,
+            user_data,
+            operation="persisted_evidence_evaluation",
+        )
         parsed_result = _parse_llm_json(response_text)
         required_fields = {
             "reasoning",
@@ -980,7 +1021,9 @@ def extract_search_query(text, source_url=""):
     """
     try:
         response_text = call_llm_with_fallback(
-            system_instructions, f"Source URL: {source_url}\n\nText: {text}"
+            system_instructions,
+            f"Source URL: {source_url}\n\nText: {text}",
+            operation="claim_gate",
         )
         result = _parse_llm_json(response_text)
         result = _normalize_claim_gate_queries(result)
@@ -1064,7 +1107,11 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
     )
 
     try:
-        response_text = call_llm_with_fallback(system_instructions, user_data)
+        response_text = call_llm_with_fallback(
+            system_instructions,
+            user_data,
+            operation="gfc_evaluation",
+        )
         parsed_result = _parse_llm_json(response_text)
         parsed_result["confidence_score"] = _normalize_verdict_confidence_score(
             parsed_result.get("confidence_score")
@@ -1141,7 +1188,11 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
     )
 
     try:
-        response_text = call_llm_with_fallback(system_instructions, user_data)
+        response_text = call_llm_with_fallback(
+            system_instructions,
+            user_data,
+            operation="tavily_evaluation",
+        )
         parsed_result = _parse_llm_json(response_text)
         parsed_result["confidence_score"] = _normalize_verdict_confidence_score(
             parsed_result.get("confidence_score")
