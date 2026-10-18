@@ -37,6 +37,21 @@ urlpatterns = [
         name="management_primary_admin_resend",
     ),
     path(
+        "management/organizations/<uuid:organization_id>/primary-admin/cancel/",
+        management_views.ManagementPrimaryAdminCancelView.as_view(),
+        name="management_primary_admin_cancel",
+    ),
+    path(
+        "management/audit/",
+        management_views.ManagementGovernanceAuditListView.as_view(),
+        name="management_governance_audit",
+    ),
+    path(
+        "management/audit/<uuid:event_id>/",
+        management_views.ManagementGovernanceAuditDetailView.as_view(),
+        name="management_governance_audit_detail",
+    ),
+    path(
         "management/memberships/",
         management_views.ManagementMembershipListView.as_view(),
         name="management_memberships",

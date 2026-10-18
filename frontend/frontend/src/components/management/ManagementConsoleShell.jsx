@@ -13,6 +13,7 @@ const NAVIGATION_ITEMS = [
    { to: "/management/organizations", label: "Organizations", icon: "landmark" },
    { to: "/management/memberships", label: "Memberships", icon: "users" },
    { to: "/management/invitations", label: "Invitations", icon: "mail" },
+   { to: "/management/audit", label: "Governance Audit", icon: "shield-check" },
 ];
 
 const MOBILE_NAVIGATION_ID = "management-mobile-navigation";

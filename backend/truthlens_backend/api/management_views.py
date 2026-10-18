@@ -8,6 +8,13 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .accountability_query_service import (
+    AccountabilityQueryAuthorizationError,
+    AccountabilityQueryInputError,
+    AccountabilityQueryNotFound,
+    get_management_governance_accountability_event,
+    list_management_governance_accountability_events,
+)
 from .management_permissions import IsPlatformManagementAdmin
 from .management_governance_service import (
     ManagementGovernanceAuthorizationError,
@@ -18,6 +25,8 @@ from .management_governance_service import (
 )
 from .management_serializers import (
     ManagementEmptyMutationSerializer,
+    ManagementGovernanceAuditDetailQuerySerializer,
+    ManagementGovernanceAuditQuerySerializer,
     ManagementInvitationSerializer,
     ManagementMembershipSerializer,
     ManagementOrganizationCreateSerializer,
@@ -37,9 +46,11 @@ from .organization_provisioning_service import (
     OrganizationProvisioningConflict,
     OrganizationProvisioningDeliveryError,
     OrganizationProvisioningError,
+    cancel_primary_admin_invitation,
     create_and_send_primary_admin_invitation,
     resend_primary_admin_invitation,
 )
+from .serializers import AccountabilityEventSerializer, AccountabilityPageSerializer
 
 
 class ManagementPagination(PageNumberPagination):
@@ -324,6 +335,125 @@ class ManagementPrimaryAdminResendView(APIView):
 
         return Response(
             ManagementPrimaryAdminInvitationSerializer(invitation).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class ManagementPrimaryAdminCancelView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def post(self, request, organization_id):
+        serializer = ManagementEmptyMutationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        organization = get_object_or_404(Organization, pk=organization_id)
+
+        has_current_primary_admin = (
+            organization.memberships.filter(
+                role=OrganizationMembership.Role.OWNER,
+            )
+            .exclude(status=OrganizationMembership.Status.LEFT)
+            .exists()
+        )
+        if has_current_primary_admin:
+            return Response(
+                {"detail": "This organization already has a current Primary Admin."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        invitation = (
+            organization.invitations.filter(
+                purpose=(
+                    OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+                ),
+                invited_role=OrganizationMembership.Role.OWNER,
+                status=OrganizationInvitation.Status.PENDING,
+                expires_at__gt=timezone.now(),
+            )
+            .order_by("-created_at", "-id")
+            .first()
+        )
+        if invitation is None:
+            return Response(
+                {"detail": "There is no active Primary Admin invitation to cancel."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        try:
+            invitation = cancel_primary_admin_invitation(
+                invitation=invitation,
+                actor=request.user,
+            )
+        except OrganizationProvisioningError as error:
+            return _provisioning_error_response(error)
+
+        return Response(
+            ManagementPrimaryAdminInvitationSerializer(invitation).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class ManagementGovernanceAuditListView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def get(self, request):
+        serializer = ManagementGovernanceAuditQuerySerializer(
+            data=request.query_params
+        )
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        try:
+            payload = list_management_governance_accountability_events(
+                actor=request.user,
+                action_type=data.get("action_type", ""),
+                organization_search=data.get("organization", ""),
+                actor_search=data.get("actor", ""),
+                created_after=data.get("created_after"),
+                created_before=data.get("created_before"),
+                limit=data["limit"],
+                offset=data["offset"],
+            )
+        except AccountabilityQueryAuthorizationError as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except AccountabilityQueryInputError as error:
+            raise ValidationError({"detail": str(error)}) from error
+
+        return Response(
+            AccountabilityPageSerializer(payload).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class ManagementGovernanceAuditDetailView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def get(self, request, event_id):
+        serializer = ManagementGovernanceAuditDetailQuerySerializer(
+            data=request.query_params
+        )
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            payload = get_management_governance_accountability_event(
+                actor=request.user,
+                event_id=event_id,
+            )
+        except AccountabilityQueryAuthorizationError as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except AccountabilityQueryNotFound:
+            return Response(
+                {"detail": "Management governance audit event not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response(
+            AccountabilityEventSerializer(payload).data,
             status=status.HTTP_200_OK,
         )
 

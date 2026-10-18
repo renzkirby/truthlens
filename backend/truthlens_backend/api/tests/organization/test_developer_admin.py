@@ -13,6 +13,7 @@ from api.developer_admin import (
     developer_admin_site,
 )
 from api.models import (
+    AccountabilityEvent,
     Organization,
     OrganizationInvitation,
     OrganizationMembership,
@@ -27,8 +28,10 @@ from api.organization_service import (
     has_capability,
 )
 from api.organization_provisioning_service import (
+    PROVISION_PARTNER_ORGANIZATION,
     create_and_send_primary_admin_invitation,
 )
+from api.management_governance_service import MANAGE_PARTNER_ORGANIZATION
 
 
 @override_settings(
@@ -219,6 +222,7 @@ class DeveloperConsoleTests(TestCase):
         self.assertContains(response, self.owner.email)
         self.assertContains(response, "Membership status: Active")
         self.assertNotContains(response, "Provision Primary Admin")
+        self.assertNotContains(response, "Cancel invitation")
 
     def test_developer_console_can_provision_primary_admin_invitation(self):
         organization = self.create_unowned_organization("-provision")
@@ -253,6 +257,12 @@ class DeveloperConsoleTests(TestCase):
             OrganizationMembership.Role.OWNER,
         )
         self.assertEqual(len(mail.outbox), 1)
+        events = AccountabilityEvent.objects.filter(
+            action_type=AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CREATED,
+            resource_id=str(invitation.pk),
+        )
+        self.assertEqual(events.count(), 1)
+        self.assertEqual(events.get().capability, PROVISION_PARTNER_ORGANIZATION)
 
     def test_primary_admin_provision_form_requests_only_email(self):
         organization = self.create_unowned_organization("-form")
@@ -311,6 +321,7 @@ class DeveloperConsoleTests(TestCase):
         self.assertContains(response, "Sent:")
         self.assertContains(response, "Expires:")
         self.assertContains(response, "Resend invitation")
+        self.assertContains(response, "Cancel invitation")
         self.assertNotContains(response, raw_token)
         self.assertNotContains(response, invitation.token_digest)
 
@@ -363,20 +374,143 @@ class DeveloperConsoleTests(TestCase):
         self.assertNotEqual(invitation.token_digest, old_digest)
         self.assertEqual(invitation.send_count, 2)
         self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(
+            AccountabilityEvent.objects.filter(
+                action_type=AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CREATED,
+                resource_id=str(invitation.pk),
+                capability=PROVISION_PARTNER_ORGANIZATION,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            AccountabilityEvent.objects.filter(
+                action_type=AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_RESENT,
+                resource_id=str(invitation.pk),
+                capability=PROVISION_PARTNER_ORGANIZATION,
+            ).count(),
+            1,
+        )
+
+    def test_developer_console_can_cancel_primary_admin_invitation(self):
+        organization = self.create_unowned_organization("-cancel")
+        raw_token = "developer-console-cancelled-token"
+        with patch(
+            "api.organization_provisioning_service.generate_invitation_token",
+            return_value=raw_token,
+        ):
+            invitation = create_and_send_primary_admin_invitation(
+                organization=organization,
+                email="cancel-primary@example.com",
+                actor=self.superuser,
+            )
+        original_digest = invitation.token_digest
+        self.client.force_login(self.superuser)
+        cancel_url = reverse(
+            "developer_admin:api_organization_primary_admin_cancel",
+            args=(organization.pk,),
+        )
+
+        confirmation = self.client.get(cancel_url)
+
+        self.assertEqual(confirmation.status_code, 200)
+        self.assertContains(confirmation, "Cancel Primary Admin Invitation")
+        self.assertContains(
+            confirmation,
+            "This immediately invalidates the current onboarding link.",
+        )
+        self.assertContains(confirmation, "Cancel Invitation")
+        self.assertContains(confirmation, "Keep Invitation")
+        self.assertNotContains(confirmation, raw_token)
+        self.assertNotContains(confirmation, original_digest)
+
+        response = self.client.post(cancel_url, {})
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "developer_admin:api_organization_change",
+                args=(organization.pk,),
+            ),
+        )
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, OrganizationInvitation.Status.CANCELLED)
+        self.assertEqual(invitation.cancelled_by, self.superuser)
+        self.assertIsNotNone(invitation.cancelled_at)
+        self.assertNotEqual(invitation.token_digest, original_digest)
+        events = AccountabilityEvent.objects.filter(
+            action_type=AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED,
+            resource_id=str(invitation.pk),
+            authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+            capability=PROVISION_PARTNER_ORGANIZATION,
+        )
+        self.assertEqual(events.count(), 1)
+
+        replacement = self.client.post(
+            reverse(
+                "developer_admin:api_organization_primary_admin_provision",
+                args=(organization.pk,),
+            ),
+            {"email": "replacement-console-primary@example.com"},
+        )
+        self.assertRedirects(
+            replacement,
+            reverse(
+                "developer_admin:api_organization_change",
+                args=(organization.pk,),
+            ),
+        )
+        self.assertEqual(
+            OrganizationInvitation.objects.filter(
+                organization=organization,
+                status=OrganizationInvitation.Status.PENDING,
+                purpose=(
+                    OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+                ),
+            ).count(),
+            1,
+        )
+
+    def test_primary_admin_cancel_without_active_invitation_redirects_with_warning(self):
+        organization = self.create_unowned_organization("-cancel-missing")
+        self.client.force_login(self.superuser)
+        response = self.client.get(
+            reverse(
+                "developer_admin:api_organization_primary_admin_cancel",
+                args=(organization.pk,),
+            ),
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertRedirects(
+            response,
+            reverse(
+                "developer_admin:api_organization_change",
+                args=(organization.pk,),
+            ),
+        )
+        self.assertContains(
+            response,
+            "There is no active Primary Admin invitation to cancel.",
+        )
 
     def test_non_superuser_cannot_access_primary_admin_custom_view(self):
         organization = self.create_unowned_organization("-denied")
         self.client.force_login(self.staff_user)
+        for route_name in (
+            "developer_admin:api_organization_primary_admin_provision",
+            "developer_admin:api_organization_primary_admin_cancel",
+        ):
+            with self.subTest(route_name=route_name):
+                response = self.client.get(
+                    reverse(
+                        route_name,
+                        args=(organization.pk,),
+                    )
+                )
 
-        response = self.client.get(
-            reverse(
-                "developer_admin:api_organization_primary_admin_provision",
-                args=(organization.pk,),
-            )
-        )
-
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/developer-console/login/", response.url)
+                self.assertEqual(response.status_code, 302)
+                self.assertIn("/developer-console/login/", response.url)
 
     def test_organization_platform_status_can_change_without_profile_mutation(self):
         self.client.force_login(self.superuser)
@@ -429,6 +563,30 @@ class DeveloperConsoleTests(TestCase):
         )
         self.assertTrue(self.organization.public_profile_enabled)
 
+        event = AccountabilityEvent.objects.get(
+            action_type=(
+                AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED
+            ),
+            subject_organization=self.organization,
+        )
+        self.assertEqual(event.authority_scope, AccountabilityEvent.AuthorityScope.PLATFORM)
+        self.assertEqual(event.actor, self.superuser)
+        self.assertEqual(event.capability, MANAGE_PARTNER_ORGANIZATION)
+        self.assertEqual(
+            event.previous_state,
+            {
+                "verification_status": Organization.VerificationStatus.VERIFIED,
+                "partner_status": Organization.PartnerStatus.ACTIVE,
+            },
+        )
+        self.assertEqual(
+            event.new_state,
+            {
+                "verification_status": Organization.VerificationStatus.REJECTED,
+                "partner_status": Organization.PartnerStatus.SUSPENDED,
+            },
+        )
+
     def test_developer_can_create_organization_identity_record(self):
         self.client.force_login(self.superuser)
 
@@ -448,14 +606,191 @@ class DeveloperConsoleTests(TestCase):
             response,
             reverse("developer_admin:api_organization_changelist"),
         )
-        self.assertTrue(
-            Organization.objects.filter(
+        organization = Organization.objects.get(
                 name="New Institutional Partner",
                 slug="new-institutional-partner",
                 organization_type=Organization.OrganizationType.UNIVERSITY,
                 verification_status=Organization.VerificationStatus.PENDING,
                 partner_status=Organization.PartnerStatus.NONE,
+        )
+        event = AccountabilityEvent.objects.get(
+            action_type=AccountabilityEvent.ActionType.ORGANIZATION_CREATED,
+            subject_organization=organization,
+        )
+        self.assertEqual(event.authority_scope, AccountabilityEvent.AuthorityScope.PLATFORM)
+        self.assertEqual(event.actor, self.superuser)
+        self.assertEqual(event.subject_organization, organization)
+        self.assertEqual(event.resource_type, AccountabilityEvent.ResourceType.ORGANIZATION)
+        self.assertEqual(event.resource_id, str(organization.pk))
+        self.assertEqual(event.capability, MANAGE_PARTNER_ORGANIZATION)
+        self.assertEqual(
+            event.new_state,
+            {
+                "name": "New Institutional Partner",
+                "slug": "new-institutional-partner",
+                "organization_type": Organization.OrganizationType.UNIVERSITY,
+                "verification_status": Organization.VerificationStatus.PENDING,
+                "partner_status": Organization.PartnerStatus.NONE,
+            },
+        )
+
+    def test_developer_creation_rejects_case_insensitive_name_and_duplicate_slug(self):
+        self.client.force_login(self.superuser)
+        for payload, field_name in (
+            (
+                {
+                    "name": self.organization.name.swapcase(),
+                    "slug": "unique-developer-console-slug",
+                },
+                "name",
+            ),
+            (
+                {
+                    "name": "Unique Developer Console Name",
+                    "slug": self.organization.slug,
+                },
+                "slug",
+            ),
+        ):
+            with self.subTest(field=field_name):
+                response = self.client.post(
+                    reverse("developer_admin:api_organization_add"),
+                    {
+                        **payload,
+                        "organization_type": Organization.OrganizationType.NEWS,
+                        "verification_status": Organization.VerificationStatus.PENDING,
+                        "partner_status": Organization.PartnerStatus.NONE,
+                        "_save": "Save",
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertFormError(
+                    response.context["adminform"].form,
+                    field_name,
+                    (
+                        "An organization with this name already exists."
+                        if field_name == "name"
+                        else "Organization with this Slug already exists."
+                    ),
+                )
+
+        self.assertFalse(
+            AccountabilityEvent.objects.filter(
+                action_type=AccountabilityEvent.ActionType.ORGANIZATION_CREATED
             ).exists()
+        )
+
+    def test_developer_creation_rolls_back_when_accountability_fails(self):
+        self.client.force_login(self.superuser)
+        with patch(
+            "api.management_governance_service.record_accountability_event",
+            side_effect=RuntimeError("audit unavailable"),
+        ), self.assertRaises(RuntimeError):
+            self.client.post(
+                reverse("developer_admin:api_organization_add"),
+                {
+                    "name": "Rollback Organization",
+                    "slug": "rollback-organization",
+                    "organization_type": Organization.OrganizationType.NEWS,
+                    "verification_status": Organization.VerificationStatus.PENDING,
+                    "partner_status": Organization.PartnerStatus.NONE,
+                    "_save": "Save",
+                },
+            )
+
+        self.assertFalse(
+            Organization.objects.filter(slug="rollback-organization").exists()
+        )
+
+    def test_developer_trust_changes_are_single_audited_events_and_no_op_is_quiet(self):
+        self.client.force_login(self.superuser)
+        url = reverse(
+            "developer_admin:api_organization_change",
+            args=(self.organization.pk,),
+        )
+
+        response = self.client.post(
+            url,
+            {
+                "verification_status": Organization.VerificationStatus.REJECTED,
+                "partner_status": self.organization.partner_status,
+                "_save": "Save",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        response = self.client.post(
+            url,
+            {
+                "verification_status": Organization.VerificationStatus.REJECTED,
+                "partner_status": Organization.PartnerStatus.FORMER,
+                "_save": "Save",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+
+        events = AccountabilityEvent.objects.filter(
+            action_type=(
+                AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED
+            ),
+            subject_organization=self.organization,
+        ).order_by("created_at")
+        self.assertEqual(events.count(), 2)
+        self.assertEqual(
+            events[0].new_state,
+            {
+                "verification_status": Organization.VerificationStatus.REJECTED,
+                "partner_status": Organization.PartnerStatus.ACTIVE,
+            },
+        )
+        self.assertEqual(
+            events[1].previous_state,
+            events[0].new_state,
+        )
+        self.assertEqual(
+            events[1].new_state,
+            {
+                "verification_status": Organization.VerificationStatus.REJECTED,
+                "partner_status": Organization.PartnerStatus.FORMER,
+            },
+        )
+
+        no_op = self.client.post(
+            url,
+            {
+                "verification_status": Organization.VerificationStatus.REJECTED,
+                "partner_status": Organization.PartnerStatus.FORMER,
+                "_save": "Save",
+            },
+        )
+        self.assertEqual(no_op.status_code, 302)
+        self.assertEqual(events.count(), 2)
+
+    def test_developer_trust_change_rolls_back_when_accountability_fails(self):
+        self.client.force_login(self.superuser)
+        with patch(
+            "api.management_governance_service.record_accountability_event",
+            side_effect=RuntimeError("audit unavailable"),
+        ), self.assertRaises(RuntimeError):
+            self.client.post(
+                reverse(
+                    "developer_admin:api_organization_change",
+                    args=(self.organization.pk,),
+                ),
+                {
+                    "verification_status": Organization.VerificationStatus.REJECTED,
+                    "partner_status": Organization.PartnerStatus.SUSPENDED,
+                    "_save": "Save",
+                },
+            )
+
+        self.organization.refresh_from_db()
+        self.assertEqual(
+            self.organization.verification_status,
+            Organization.VerificationStatus.VERIFIED,
+        )
+        self.assertEqual(
+            self.organization.partner_status,
+            Organization.PartnerStatus.ACTIVE,
         )
 
     def test_membership_is_available_for_readonly_inspection(self):

@@ -2,7 +2,12 @@
 
 import re
 
+from django.db.models import Q
+
+from .management_governance_service import MANAGE_PARTNER_ORGANIZATION
+from .management_permissions import can_access_management_console
 from .models import AccountabilityEvent
+from .organization_provisioning_service import PROVISION_PARTNER_ORGANIZATION
 from .organization_service import PartnerCapability, has_capability
 
 
@@ -14,6 +19,7 @@ class AccountabilityDomain:
     ADJUDICATION = "ADJUDICATION"
     PUBLICATION = "PUBLICATION"
     FACTUAL_CORRECTION = "FACTUAL_CORRECTION"
+    PLATFORM_GOVERNANCE = "PLATFORM_GOVERNANCE"
 
 
 DOMAIN_LABELS = {
@@ -24,6 +30,7 @@ DOMAIN_LABELS = {
     AccountabilityDomain.ADJUDICATION: "Adjudication",
     AccountabilityDomain.PUBLICATION: "Publication",
     AccountabilityDomain.FACTUAL_CORRECTION: "Factual Correction",
+    AccountabilityDomain.PLATFORM_GOVERNANCE: "Platform Governance",
 }
 
 DOMAIN_ACTIONS = {
@@ -81,11 +88,34 @@ DOMAIN_ACTIONS = {
         AccountabilityEvent.ActionType.FACTUAL_CORRECTION_CANCELLED,
         AccountabilityEvent.ActionType.FACTUAL_CORRECTION_PUBLISHED,
     ),
+    AccountabilityDomain.PLATFORM_GOVERNANCE: (
+        AccountabilityEvent.ActionType.ORGANIZATION_CREATED,
+        AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED,
+        AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CREATED,
+        AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_RESENT,
+        AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED,
+    ),
 }
 
 ACTION_DOMAINS = {
     action: domain for domain, actions in DOMAIN_ACTIONS.items() for action in actions
 }
+# Invitation actions remain Organization Admin records in organization-scoped
+# projections. Their platform-provisioning variants are projected explicitly as
+# Platform Governance below.
+ACTION_DOMAINS.update(
+    {
+        AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CREATED: (
+            AccountabilityDomain.ORGANIZATION_ADMIN
+        ),
+        AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_RESENT: (
+            AccountabilityDomain.ORGANIZATION_ADMIN
+        ),
+        AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED: (
+            AccountabilityDomain.ORGANIZATION_ADMIN
+        ),
+    }
+)
 
 ORGANIZATION_DOMAINS = (
     AccountabilityDomain.VERIFICATION,
@@ -147,16 +177,40 @@ DOMAIN_RESOURCES = {
         AccountabilityEvent.ResourceType.ADJUDICATION_DECISION,
         AccountabilityEvent.ResourceType.OFFICIAL_FACT_CHECK,
     },
+    AccountabilityDomain.PLATFORM_GOVERNANCE: {
+        AccountabilityEvent.ResourceType.ORGANIZATION,
+        AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION,
+    },
 }
 
 ORGANIZATION_ACTIONS = tuple(
     action for domain in ORGANIZATION_DOMAINS for action in DOMAIN_ACTIONS[domain]
 )
 SAFETY_ACTIONS = DOMAIN_ACTIONS[AccountabilityDomain.SAFETY]
+MANAGEMENT_GOVERNANCE_ACTIONS = DOMAIN_ACTIONS[
+    AccountabilityDomain.PLATFORM_GOVERNANCE
+]
+MANAGEMENT_GOVERNANCE_ACTION_CAPABILITIES = {
+    AccountabilityEvent.ActionType.ORGANIZATION_CREATED: (
+        MANAGE_PARTNER_ORGANIZATION
+    ),
+    AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED: (
+        MANAGE_PARTNER_ORGANIZATION
+    ),
+    AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CREATED: (
+        PROVISION_PARTNER_ORGANIZATION
+    ),
+    AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_RESENT: (
+        PROVISION_PARTNER_ORGANIZATION
+    ),
+    AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED: (
+        PROVISION_PARTNER_ORGANIZATION
+    ),
+}
 
 _ACTION_LABELS = dict(AccountabilityEvent.ActionType.choices)
 _RESOURCE_LABELS = dict(AccountabilityEvent.ResourceType.choices)
-_VALID_DOMAINS = frozenset(DOMAIN_ACTIONS)
+_VALID_DOMAINS = frozenset((*ORGANIZATION_DOMAINS, AccountabilityDomain.SAFETY))
 _VALID_ACTIONS = frozenset(ACTION_DOMAINS)
 _VALID_RESOURCES = frozenset(_RESOURCE_LABELS)
 
@@ -199,6 +253,10 @@ class AccountabilityQueryAuthorizationError(AccountabilityQueryError):
 
 
 class AccountabilityQueryInputError(AccountabilityQueryError):
+    pass
+
+
+class AccountabilityQueryNotFound(AccountabilityQueryError):
     pass
 
 
@@ -328,9 +386,9 @@ def _actor_payload(event, context):
     }
 
 
-def _event_payload(event):
+def _event_payload(event, *, domain_override=None):
     context = _sanitize_json(event.context or {})
-    domain = ACTION_DOMAINS[event.action_type]
+    domain = domain_override or ACTION_DOMAINS[event.action_type]
     return {
         "id": str(event.pk),
         "action_type": event.action_type,
@@ -365,7 +423,11 @@ def _event_payload(event):
 
 
 def _filter_options(domains):
-    actions = [action for domain in domains for action in DOMAIN_ACTIONS[domain]]
+    actions = [
+        (domain, action)
+        for domain in domains
+        for action in DOMAIN_ACTIONS[domain]
+    ]
     resources = {
         resource for domain in domains for resource in DOMAIN_RESOURCES[domain]
     }
@@ -377,9 +439,9 @@ def _filter_options(domains):
             {
                 "value": action,
                 "label": _ACTION_LABELS[action],
-                "domain": ACTION_DOMAINS[action],
+                "domain": domain,
             }
-            for action in actions
+            for domain, action in actions
         ],
         "resources": [
             {"value": value, "label": label}
@@ -389,7 +451,9 @@ def _filter_options(domains):
     }
 
 
-def _page_payload(*, queryset, limit, offset, scope, organization, domains):
+def _page_payload(
+    *, queryset, limit, offset, scope, organization, domains, event_domain=None
+):
     count = queryset.count()
     events = queryset.order_by("-created_at", "-id")[offset : offset + limit]
     return {
@@ -403,8 +467,114 @@ def _page_payload(*, queryset, limit, offset, scope, organization, domains):
             else None
         ),
         "filter_options": _filter_options(domains),
-        "results": [_event_payload(event) for event in events],
+        "results": [
+            _event_payload(event, domain_override=event_domain) for event in events
+        ],
     }
+
+
+def _require_management_governance_authority(actor):
+    if not can_access_management_console(actor):
+        raise AccountabilityQueryAuthorizationError(
+            "Platform management administrator access is required."
+        )
+
+
+def _management_governance_queryset():
+    governance_pairs = Q()
+    for action_type, capability in MANAGEMENT_GOVERNANCE_ACTION_CAPABILITIES.items():
+        resource_type = (
+            AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION
+            if action_type
+            in {
+                AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CREATED,
+                AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_RESENT,
+                AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED,
+            }
+            else AccountabilityEvent.ResourceType.ORGANIZATION
+        )
+        governance_pairs |= Q(
+            action_type=action_type,
+            capability=capability,
+            resource_type=resource_type,
+        )
+
+    return (
+        AccountabilityEvent.objects.filter(
+            authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+        )
+        .filter(governance_pairs)
+        .select_related("actor", "authority_organization", "subject_organization")
+    )
+
+
+def list_management_governance_accountability_events(
+    *,
+    actor,
+    action_type="",
+    organization_search="",
+    actor_search="",
+    created_after=None,
+    created_before=None,
+    limit=25,
+    offset=0,
+):
+    _require_management_governance_authority(actor)
+    _validate_query_inputs(
+        domain="",
+        action_type=action_type,
+        resource_type="",
+        created_after=created_after,
+        created_before=created_before,
+        limit=limit,
+        offset=offset,
+    )
+    if action_type and action_type not in MANAGEMENT_GOVERNANCE_ACTIONS:
+        raise AccountabilityQueryInputError(
+            "Select a valid Management Governance action."
+        )
+
+    queryset = _management_governance_queryset()
+    if action_type:
+        queryset = queryset.filter(action_type=action_type)
+    if organization_search:
+        queryset = queryset.filter(
+            Q(subject_organization_name_snapshot__icontains=organization_search)
+            | Q(subject_organization__name__icontains=organization_search)
+        )
+    if actor_search:
+        queryset = queryset.filter(
+            actor_username_snapshot__icontains=actor_search
+        )
+    if created_after:
+        queryset = queryset.filter(created_at__gte=created_after)
+    if created_before:
+        queryset = queryset.filter(created_at__lte=created_before)
+
+    return _page_payload(
+        queryset=queryset,
+        limit=limit,
+        offset=offset,
+        scope="PLATFORM",
+        organization=None,
+        domains=(AccountabilityDomain.PLATFORM_GOVERNANCE,),
+        event_domain=AccountabilityDomain.PLATFORM_GOVERNANCE,
+    )
+
+
+def get_management_governance_accountability_event(*, actor, event_id):
+    _require_management_governance_authority(actor)
+    try:
+        event = _management_governance_queryset().get(pk=event_id)
+    except AccountabilityEvent.DoesNotExist as error:
+        raise AccountabilityQueryNotFound(
+            "Management governance audit event not found."
+        ) from error
+
+    return _event_payload(
+        event,
+        domain_override=AccountabilityDomain.PLATFORM_GOVERNANCE,
+    )
 
 
 def list_organization_accountability_events(

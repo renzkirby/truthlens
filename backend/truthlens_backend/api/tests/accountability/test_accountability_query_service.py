@@ -9,14 +9,21 @@ from api.accountability_query_service import (
     AccountabilityDomain,
     AccountabilityQueryAuthorizationError,
     AccountabilityQueryInputError,
+    AccountabilityQueryNotFound,
+    ACTION_DOMAINS,
     DOMAIN_ACTIONS,
+    MANAGEMENT_GOVERNANCE_ACTIONS,
     ORGANIZATION_DOMAINS,
     _actor_payload,
+    get_management_governance_accountability_event,
+    list_management_governance_accountability_events,
     list_organization_accountability_events,
     list_platform_accountability_events,
 )
 from api.models import AccountabilityEvent, Organization, OrganizationMembership, UserProfile
 from api.organization_service import PartnerCapability
+from api.management_governance_service import MANAGE_PARTNER_ORGANIZATION
+from api.organization_provisioning_service import PROVISION_PARTNER_ORGANIZATION
 
 
 class AccountabilityQueryServiceTests(TestCase):
@@ -40,6 +47,9 @@ class AccountabilityQueryServiceTests(TestCase):
         self.safety_moderator = User.objects.create_user(username="safety-moderator")
         self.event_actor = User.objects.create_user(
             username="historical-actor", email="actor-private@example.com"
+        )
+        self.platform_admin = User.objects.create_superuser(
+            username="accountability-platform-admin"
         )
         self.owner.profile.trust_score = 99
         self.owner.profile.save(update_fields=["trust_score"])
@@ -173,6 +183,131 @@ class AccountabilityQueryServiceTests(TestCase):
                 actor=self.safety_moderator,
                 organization=self.organization,
             )
+
+    def test_management_governance_projection_requires_active_superuser(self):
+        for actor in (self.owner, self.safety_moderator):
+            with self.subTest(actor=actor), self.assertRaises(
+                AccountabilityQueryAuthorizationError
+            ):
+                list_management_governance_accountability_events(actor=actor)
+
+    def test_management_governance_projection_is_separate_and_pair_scoped(self):
+        allowed = self.make_event(
+            action_type=AccountabilityEvent.ActionType.ORGANIZATION_CREATED,
+            authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+            actor=self.event_actor,
+            resource_type=AccountabilityEvent.ResourceType.ORGANIZATION,
+            capability=MANAGE_PARTNER_ORGANIZATION,
+        )
+        excluded = self.make_event(
+            action_type=AccountabilityEvent.ActionType.ORGANIZATION_CREATED,
+            authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+            actor=self.event_actor,
+            resource_type=AccountabilityEvent.ResourceType.ORGANIZATION,
+            capability="REVIEW_SAFETY",
+        )
+
+        page = list_management_governance_accountability_events(
+            actor=self.platform_admin
+        )
+
+        self.assertEqual([result["id"] for result in page["results"]], [str(allowed.pk)])
+        self.assertEqual(
+            page["results"][0]["domain"],
+            AccountabilityDomain.PLATFORM_GOVERNANCE,
+        )
+        self.assertEqual(
+            tuple(
+                option["value"] for option in page["filter_options"]["actions"]
+            ),
+            MANAGEMENT_GOVERNANCE_ACTIONS,
+        )
+        self.assertNotIn(AccountabilityDomain.PLATFORM_GOVERNANCE, ORGANIZATION_DOMAINS)
+        with self.assertRaises(AccountabilityQueryNotFound):
+            get_management_governance_accountability_event(
+                actor=self.platform_admin,
+                event_id=excluded.pk,
+            )
+
+    def test_invitation_cancellation_preserves_organization_and_management_domains(self):
+        ordinary_cancellation = self.make_event(
+            action_type=(
+                AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED
+            ),
+            actor=self.owner,
+            resource_type=AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION,
+            capability=PartnerCapability.MANAGE_ORGANIZATION,
+        )
+        platform_cancellation = self.make_event(
+            action_type=(
+                AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED
+            ),
+            authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+            actor=self.platform_admin,
+            resource_type=AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION,
+            capability=PROVISION_PARTNER_ORGANIZATION,
+        )
+        wrong_capability = self.make_event(
+            action_type=(
+                AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED
+            ),
+            authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+            actor=self.platform_admin,
+            resource_type=AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION,
+            capability=MANAGE_PARTNER_ORGANIZATION,
+        )
+        wrong_resource = self.make_event(
+            action_type=(
+                AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED
+            ),
+            authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+            actor=self.platform_admin,
+            resource_type=AccountabilityEvent.ResourceType.ORGANIZATION,
+            capability=PROVISION_PARTNER_ORGANIZATION,
+        )
+
+        management_page = list_management_governance_accountability_events(
+            actor=self.platform_admin,
+            action_type=(
+                AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED
+            ),
+        )
+        self.assertEqual(
+            [result["id"] for result in management_page["results"]],
+            [str(platform_cancellation.pk)],
+        )
+        self.assertEqual(
+            management_page["results"][0]["domain"],
+            AccountabilityDomain.PLATFORM_GOVERNANCE,
+        )
+        for excluded in (ordinary_cancellation, wrong_capability, wrong_resource):
+            with self.subTest(excluded=excluded.pk), self.assertRaises(
+                AccountabilityQueryNotFound
+            ):
+                get_management_governance_accountability_event(
+                    actor=self.platform_admin,
+                    event_id=excluded.pk,
+                )
+
+        organization_page = list_organization_accountability_events(
+            actor=self.owner,
+            organization=self.organization,
+            domain=AccountabilityDomain.ORGANIZATION_ADMIN,
+            action_type=(
+                AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED
+            ),
+        )
+        self.assertIn(
+            str(ordinary_cancellation.pk),
+            {result["id"] for result in organization_page["results"]},
+        )
+        self.assertEqual(
+            ACTION_DOMAINS[
+                AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED
+            ],
+            AccountabilityDomain.ORGANIZATION_ADMIN,
+        )
+        self.assertNotIn(AccountabilityDomain.PLATFORM_GOVERNANCE, ORGANIZATION_DOMAINS)
 
     def test_organization_scope_uses_subject_and_includes_personal_and_system(self):
         personal = self.make_event(

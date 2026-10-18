@@ -1,6 +1,7 @@
 import json
 from datetime import timedelta
 from unittest.mock import patch
+from uuid import uuid4
 
 from django.contrib.auth.models import User
 from django.test import override_settings
@@ -190,6 +191,14 @@ class ManagementApiTests(APITestCase):
                 "post",
                 reverse(
                     "management_primary_admin_resend",
+                    kwargs={"organization_id": self.pending_organization.id},
+                ),
+                {},
+            ),
+            (
+                "post",
+                reverse(
+                    "management_primary_admin_cancel",
                     kwargs={"organization_id": self.pending_organization.id},
                 ),
                 {},
@@ -816,3 +825,151 @@ class ManagementApiTests(APITestCase):
         self.assertEqual(current_response.status_code, status.HTTP_409_CONFLICT)
         self.assertEqual(missing_response.status_code, status.HTTP_409_CONFLICT)
         self.assertEqual(expired_response.status_code, status.HTTP_409_CONFLICT)
+
+    def test_pending_primary_admin_invitation_can_be_cancelled_safely(self):
+        original_digest = self.pending_primary_admin_invitation.token_digest
+        response = self.client_for(self.superuser).post(
+            reverse(
+                "management_primary_admin_cancel",
+                kwargs={"organization_id": self.pending_organization.id},
+            ),
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            set(response.data),
+            {
+                "id",
+                "email",
+                "role_label",
+                "status",
+                "last_sent_at",
+                "expires_at",
+                "send_count",
+            },
+        )
+        serialized = json.dumps(response.data).lower()
+        self.assertNotIn("token", serialized)
+        self.assertNotIn("token_digest", serialized)
+        self.assertNotIn("raw_token", serialized)
+
+        self.pending_primary_admin_invitation.refresh_from_db()
+        self.assertEqual(
+            self.pending_primary_admin_invitation.status,
+            OrganizationInvitation.Status.CANCELLED,
+        )
+        self.assertNotEqual(
+            self.pending_primary_admin_invitation.token_digest,
+            original_digest,
+        )
+        detail = self.client_for(self.superuser).get(
+            reverse(
+                "management_organization_detail",
+                kwargs={"organization_id": self.pending_organization.id},
+            )
+        )
+        self.assertEqual(detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail.data["primary_admin"]["state"], "NONE")
+
+        events = AccountabilityEvent.objects.filter(
+            action_type=AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED,
+            resource_id=str(self.pending_primary_admin_invitation.pk),
+            authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+            capability=PROVISION_PARTNER_ORGANIZATION,
+        )
+        self.assertEqual(events.count(), 1)
+
+        replacement = self.client_for(self.superuser).post(
+            reverse(
+                "management_primary_admin_provision",
+                kwargs={"organization_id": self.pending_organization.id},
+            ),
+            {"email": "replacement-primary@example.com"},
+            format="json",
+        )
+        self.assertEqual(replacement.status_code, status.HTTP_201_CREATED)
+
+    def test_primary_admin_cancel_rejects_unsupported_and_inactive_states(self):
+        cancel_url = reverse(
+            "management_primary_admin_cancel",
+            kwargs={"organization_id": self.pending_organization.id},
+        )
+        unknown = self.client_for(self.superuser).post(
+            cancel_url,
+            {"email": "not-accepted@example.com"},
+            format="json",
+        )
+        self.assertEqual(unknown.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("email", unknown.data)
+
+        no_invitation_organization = Organization.objects.create(
+            name="No Cancellation Invitation",
+            slug="no-cancellation-invitation",
+        )
+        missing = self.client_for(self.superuser).post(
+            reverse(
+                "management_primary_admin_cancel",
+                kwargs={"organization_id": no_invitation_organization.id},
+            ),
+            {},
+            format="json",
+        )
+        current = self.client_for(self.superuser).post(
+            reverse(
+                "management_primary_admin_cancel",
+                kwargs={"organization_id": self.organization.id},
+            ),
+            {},
+            format="json",
+        )
+
+        invalid_organization = Organization.objects.create(
+            name="Invalid Cancellation Invitation",
+            slug="invalid-cancellation-invitation",
+        )
+        OrganizationInvitation.objects.create(
+            organization=invalid_organization,
+            email="ordinary-cancellation@example.com",
+            invited_role=OrganizationMembership.Role.RESEARCHER,
+            purpose=OrganizationInvitation.InvitationPurpose.MEMBERSHIP,
+            invited_by=self.superuser,
+            token_digest="c" * 64,
+            status=OrganizationInvitation.Status.PENDING,
+            expires_at=timezone.now() + timedelta(days=1),
+            last_sent_at=timezone.now(),
+        )
+        wrong_purpose = self.client_for(self.superuser).post(
+            reverse(
+                "management_primary_admin_cancel",
+                kwargs={"organization_id": invalid_organization.id},
+            ),
+            {},
+            format="json",
+        )
+
+        self.pending_primary_admin_invitation.expires_at = (
+            timezone.now() - timedelta(seconds=1)
+        )
+        self.pending_primary_admin_invitation.save(update_fields=["expires_at"])
+        expired = self.client_for(self.superuser).post(
+            cancel_url,
+            {},
+            format="json",
+        )
+
+        self.assertEqual(missing.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(current.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(wrong_purpose.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(expired.status_code, status.HTTP_409_CONFLICT)
+
+        not_found = self.client_for(self.superuser).post(
+            reverse(
+                "management_primary_admin_cancel",
+                kwargs={"organization_id": uuid4()},
+            ),
+            {},
+            format="json",
+        )
+        self.assertEqual(not_found.status_code, status.HTTP_404_NOT_FOUND)
