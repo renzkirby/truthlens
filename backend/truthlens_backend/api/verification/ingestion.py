@@ -3,10 +3,10 @@ from collections.abc import Iterable
 from django.db import transaction
 
 from ..models import EvidenceSource
-from .canonical_sources import assign_canonical_source
+from .canonical_sources import assign_canonical_sources
 from .contracts import RawEvidence
 from .normalizers import normalize_evidence
-from .persistence import persist_evidence_source
+from .persistence import persist_evidence_sources
 from .providers.base import EvidenceProvider
 
 
@@ -20,33 +20,24 @@ def ingest_raw_evidence(
     data without performing the external provider request twice.
     """
 
-    persisted_sources: list[EvidenceSource] = []
-    seen_source_ids: set[object] = set()
+    normalized_evidence_items = [
+        normalize_evidence(raw_evidence)
+        for raw_evidence in raw_evidence_items
+    ]
+    if not normalized_evidence_items:
+        return []
 
     with transaction.atomic():
-        for raw_evidence in raw_evidence_items:
-            normalized_evidence = normalize_evidence(
-                raw_evidence
-            )
-
-            evidence_source, _ = (
-                persist_evidence_source(
-                    normalized_evidence
-                )
-            )
-
-            evidence_source = assign_canonical_source(evidence_source)
-
+        persistence_results = persist_evidence_sources(normalized_evidence_items)
+        unique_sources = []
+        seen_source_ids: set[object] = set()
+        for evidence_source, _created in persistence_results:
             if evidence_source.pk in seen_source_ids:
                 continue
+            seen_source_ids.add(evidence_source.pk)
+            unique_sources.append(evidence_source)
 
-            seen_source_ids.add(
-                evidence_source.pk
-            )
-
-            persisted_sources.append(
-                evidence_source
-            )
+        persisted_sources = assign_canonical_sources(unique_sources)
 
     return persisted_sources
 

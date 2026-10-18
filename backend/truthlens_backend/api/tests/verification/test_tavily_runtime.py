@@ -17,7 +17,6 @@ from api.models import (
 )
 from api.verification import runs
 from api.verification.contracts import RawEvidence
-from api.verification.persistence import persist_evidence_source
 from api.verification.providers.tavily import INCLUDE_DOMAINS, TavilyProvider
 
 class TavilyProviderConfigurationTests(SimpleTestCase):
@@ -97,22 +96,26 @@ class TavilyRuntimeBridgeTests(TestCase):
         self.raw_items.append(RawEvidence(
             provider="TAVILY", url="https://example.com/second", content="Second source",
         ))
-        original_get_or_create = VerificationEvidence.objects.get_or_create
+        create = VerificationEvidence.objects.create
         before = deepcopy(self.payload)
 
-        def fail_second_link(**kwargs):
-            if kwargs["evidence_source"].canonical_url == "https://example.com/second":
-                self.assertEqual(VerificationEvidence.objects.count(), 1)
-                raise IntegrityError("Second link failed")
-            return original_get_or_create(**kwargs)
+        def fail_after_first_link(objects, **kwargs):
+            first = objects[0]
+            create(
+                verification_run_id=first.verification_run_id,
+                evidence_source_id=first.evidence_source_id,
+                evidence_role=first.evidence_role,
+            )
+            self.assertEqual(VerificationEvidence.objects.count(), 1)
+            raise IntegrityError("Second link failed")
 
         with patch(
-            "api.verification.linking.VerificationEvidence.objects.get_or_create",
-            side_effect=fail_second_link,
-        ) as get_or_create:
+            "api.verification.linking.VerificationEvidence.objects.bulk_create",
+            side_effect=fail_after_first_link,
+        ) as bulk_create:
             with self.assertLogs("api.tasks", level="ERROR") as logs:
                 self.assertIs(self._retrieve(verification_run=run), self.payload)
-        self.assertEqual(get_or_create.call_count, 2)
+        bulk_create.assert_called_once()
         self.assertEqual(self.payload, before)
         self.assertEqual(EvidenceSource.objects.count(), 2)
         self.assertEqual(VerificationEvidence.objects.count(), 0)
@@ -190,18 +193,24 @@ class TavilyRuntimeBridgeTests(TestCase):
             provider="TAVILY", url="https://example.com/second", content="Second source",
         ))
 
-        def fail_second_source(evidence):
-            if evidence.url == "https://example.com/second":
+        create = EvidenceSource.objects.create
+        created_rows = []
+
+        def fail_second_source(**fields):
+            if created_rows:
                 self.assertEqual(EvidenceSource.objects.count(), 1)
                 raise IntegrityError("Second source failed")
-            return persist_evidence_source(evidence)
+            source = create(**fields)
+            created_rows.append(source.pk)
+            return source
 
         with patch(
-            "api.verification.ingestion.persist_evidence_source", side_effect=fail_second_source,
-        ) as persist:
+            "api.verification.persistence.EvidenceSource.objects.create",
+            side_effect=fail_second_source,
+        ) as create_source:
             returned = self._retrieve()
         self.assertIs(returned, self.payload)
-        self.assertEqual(persist.call_count, 2)
+        self.assertEqual(create_source.call_count, 2)
         self.assertEqual(EvidenceSource.objects.count(), 0)
         self.assertEqual(VerificationEvidence.objects.count(), 0)
         self.provider.search_with_payload.assert_called_once()

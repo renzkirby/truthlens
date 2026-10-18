@@ -1,6 +1,6 @@
 from collections.abc import Iterable
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from ..models import EvidenceSource, VerificationEvidence, VerificationRun
 
@@ -30,19 +30,56 @@ def link_evidence_sources_to_run(
     if not sources:
         return []
 
-    links = []
     with transaction.atomic():
         # Serialize linking batches for this run without changing its lifecycle.
         locked_run = VerificationRun.objects.select_for_update().get(
             pk=verification_run.pk
         )
-        for source in sources:
-            link, _ = VerificationEvidence.objects.get_or_create(
+        source_ids = [source.pk for source in sources]
+        existing_by_source_id = {
+            link.evidence_source_id: link
+            for link in VerificationEvidence.objects.filter(
                 verification_run=locked_run,
-                evidence_source=source,
-                defaults={"evidence_role": evidence_role},
+                evidence_source_id__in=source_ids,
             )
-            links.append(link)
+        }
+        missing_source_ids = [
+            source_id
+            for source_id in source_ids
+            if source_id not in existing_by_source_id
+        ]
+        if missing_source_ids:
+            VerificationEvidence.objects.bulk_create(
+                [
+                    VerificationEvidence(
+                        verification_run=locked_run,
+                        evidence_source_id=source_id,
+                        evidence_role=evidence_role,
+                    )
+                    for source_id in missing_source_ids
+                ],
+                ignore_conflicts=True,
+            )
+
+            existing_by_source_id.update({
+                link.evidence_source_id: link
+                for link in VerificationEvidence.objects.filter(
+                    verification_run=locked_run,
+                    evidence_source_id__in=missing_source_ids,
+                )
+            })
+
+        unresolved_source_ids = [
+            source_id
+            for source_id in source_ids
+            if source_id not in existing_by_source_id
+        ]
+        if unresolved_source_ids:
+            raise IntegrityError(
+                "VerificationEvidence batch creation did not persist every link."
+            )
+
+        links = [existing_by_source_id[source_id] for source_id in source_ids]
 
     return links
 
