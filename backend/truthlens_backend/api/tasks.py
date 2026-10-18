@@ -152,7 +152,9 @@ def _record_related_published_claim(claim, query_text, vault_match):
             method = vault_match.get("match_method")
             if method == KnowledgeReuseEvent.MatchMethod.EXACT_TEXT:
                 normalized_query = " ".join(query_text.split()).casefold()
-                canonical = " ".join((publication.canonical_claim or "").split()).casefold()
+                canonical = " ".join(
+                    (publication.canonical_claim or "").split()
+                ).casefold()
                 headline = " ".join((publication.headline or "").split()).casefold()
                 if normalized_query == canonical:
                     method = ClaimFactCheckReference.MatchMethod.EXACT_CANONICAL
@@ -179,6 +181,41 @@ def _record_related_published_claim(claim, query_text, vault_match):
             claim.pk,
             exc_info=True,
         )
+
+
+def _record_related_published_claim_if_relevant(
+    claim,
+    query_text,
+    vault_match,
+    *,
+    claim_id,
+    stage,
+):
+    """Record rejected authority candidates only after strict relevance passes."""
+    started_at = time.perf_counter()
+    canonical_claim = vault_match.get("canonical_claim")
+    relevant = False
+    if isinstance(canonical_claim, str) and canonical_claim.strip():
+        try:
+            relevant = bool(is_fact_check_relevant(query_text, canonical_claim))
+        except Exception as exc:
+            logger.warning(
+                "Vault related relevance check failed closed for claim %s "
+                "(error=%s).",
+                claim_id,
+                type(exc).__name__,
+            )
+
+    _log_stage(
+        claim_id,
+        stage,
+        started_at,
+        relevant=relevant,
+    )
+    if relevant:
+        _record_related_published_claim(claim, query_text, vault_match)
+
+    return relevant
 
 
 def _reuse_second_chance_ai_analysis(matched_claim, claim_id):
@@ -699,7 +736,9 @@ def _log_stage(claim_id, stage, started_at, **metadata):
     details = " ".join(
         f"{key}={value}" for key, value in metadata.items() if value is not None
     )
-    message = f"PIPELINE_STAGE claim_id={claim_id} stage={stage} duration_ms={duration_ms}"
+    message = (
+        f"PIPELINE_STAGE claim_id={claim_id} stage={stage} duration_ms={duration_ms}"
+    )
     if details:
         message = f"{message} {details}"
     logger.info(message)
@@ -792,8 +831,7 @@ def _assess_and_persist_reasoning_evidence(
                 error=str(outcome.error)[:120],
             )
             logger.error(
-                "Evidence assessment persistence failed for claim %s, "
-                "link %s: %s",
+                "Evidence assessment persistence failed for claim %s, " "link %s: %s",
                 claim_id,
                 evidence_item.evidence_link_id,
                 outcome.error,
@@ -1070,7 +1108,6 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     published_resolution = True
                     return
 
-                vault_started_at = time.perf_counter()
                 vault_match = search_official_vault(
                     cleaned_claim,
                     target_claim=target_claim,
@@ -1082,9 +1119,17 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     ):
                         published_resolution = True
                         return
-                    _record_related_published_claim(
-                        target_claim, cleaned_claim, vault_match
+                    _record_related_published_claim_if_relevant(
+                        target_claim,
+                        cleaned_claim,
+                        vault_match,
+                        claim_id=claim_id,
+                        stage="vault_related_relevance_check",
                     )
+                    # IMAGE candidates have completed their only permitted
+                    # authority/context gates and must not reach the historical
+                    # TEXT Vault verdict evaluator below.
+                    vault_match = None
 
                 if has_second_chance_match:
                     selected_verdict = _reuse_second_chance_ai_analysis(
@@ -1115,8 +1160,8 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 )
                 return
 
-            # Preserve historical TEXT ordering. IMAGE already performed this
-            # Vault lookup above and reuses the same payload for AI context.
+            # Preserve historical TEXT ordering. IMAGE already handled its Vault
+            # candidate above and rejected candidates must not reach this evaluator.
             if not is_image_claim:
                 vault_started_at = time.perf_counter()
                 vault_match = search_official_vault(
@@ -1124,7 +1169,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     target_claim=target_claim,
                 )
 
-            if vault_match:
+            if vault_match and not is_image_claim:
                 logger.info("Vault match found for claim %s!", claim_id)
 
                 # We found a highly similar past rumor. Now we ask Gemini to evaluate the NEW claim
@@ -1655,7 +1700,6 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
             published_resolution = True
             return
 
-        vault_started_at = time.perf_counter()
         vault_match = search_official_vault(
             cleaned_claim,
             target_claim=target_claim,
@@ -1667,7 +1711,16 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
             ):
                 published_resolution = True
                 return
-            _record_related_published_claim(target_claim, cleaned_claim, vault_match)
+            _record_related_published_claim_if_relevant(
+                target_claim,
+                cleaned_claim,
+                vault_match,
+                claim_id=claim_id,
+                stage="url_vault_related_relevance_check",
+            )
+            # URL candidates that fail authority are context-only candidates;
+            # normal GFC/Tavily verification must continue.
+            vault_match = None
 
         if article_stance == "SATIRE":
             _save_claim(
@@ -1683,43 +1736,6 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
             )
             outcome = "satire_stance_shortcut"
             selected_verdict = "SATIRE"
-            _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
-            return
-
-        if vault_match:
-            # Reuse the already-retrieved Vault payload for AI evaluation.
-            vault_eval_started_at = time.perf_counter()
-            ai_verdict = evaluate_url_claim_with_gfc(
-                cleaned_claim,
-                {
-                    "claims": [
-                        {
-                            "text": vault_match["canonical_claim"],
-                            "claimReview": [
-                                {
-                                    "textualRating": vault_match["verdict"],
-                                    "publisher": {"name": "TruthLens Official Vault"},
-                                }
-                            ],
-                        }
-                    ]
-                },
-                article_stance,
-            )
-
-            _save_claim(
-                claim_id,
-                ai_verdict,
-                "TruthLens Verified Vault",
-                vault_match["summary"],
-                vault_match.get("sources", []),
-            )
-
-            _log_stage(claim_id, "url_vault_search_success", vault_started_at)
-            outcome = "completed_vault"
-            selected_verdict = (
-                ai_verdict.get("verdict") if isinstance(ai_verdict, dict) else None
-            )
             _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
             return
 
