@@ -80,6 +80,16 @@ function OrganizationInvitationPage() {
       setLoadState("loading");
 
       try {
+         if (authToken && !authLoading) {
+            const data = await authFetch(invitationDetailEndpoint, {
+               method: "GET",
+            });
+
+            setInvitation(data);
+            setLoadState("ready");
+            return;
+         }
+
          const response = await fetch(invitationDetailEndpoint, {
             method: "GET",
          });
@@ -101,10 +111,16 @@ function OrganizationInvitationPage() {
       } catch (error) {
          console.error("Failed to load organization invitation:", error);
 
+         if (error?.status === 404) {
+            setInvitation(null);
+            setLoadState("invalid");
+            return;
+         }
+
          setInvitation(null);
          setLoadState("error");
       }
-   }, [invitationDetailEndpoint]);
+   }, [authFetch, authLoading, authToken, invitationDetailEndpoint]);
 
    useEffect(() => {
       loadInvitation();
@@ -307,6 +323,10 @@ function OrganizationInvitationPage() {
 
    const isAuthenticated = Boolean(authToken);
 
+   const authenticatedAccountMismatch =
+      isAuthenticated &&
+      invitation?.recipient_matches_current_user === false;
+
    const effectiveUser = acceptedUser || user;
 
    const successDestination = canAccessWorkspace(effectiveUser) ? "/workspace" : "/dashboard";
@@ -469,6 +489,31 @@ function OrganizationInvitationPage() {
                      Reload account
                   </Button>
                </div>
+            ) : authenticatedAccountMismatch || acceptanceState === "wrong-account" ? (
+               <div className="org-invite-actions">
+                  <div className="org-invite-message org-invite-message--critical" role="alert">
+                     <Icons name="alert-triangle" size={18} aria-hidden="true" />
+
+                     <div>
+                        <strong>This invitation belongs to another account</strong>
+
+                        <p>
+                           {actionMessage ||
+                              `You're signed in as ${user.email}, but this invitation was issued to a different TruthLens account.`}
+                        </p>
+                     </div>
+                  </div>
+
+                  <Button
+                     type="button"
+                     variant="primary"
+                     density="comfortable"
+                     fullWidth
+                     onClick={handleUseAnotherAccount}
+                  >
+                     Switch account
+                  </Button>
+               </div>
             ) : !user.is_email_verified || acceptanceState === "verification-required" ? (
                <div className="org-invite-actions">
                   <div className="org-invite-message org-invite-message--warning" role="status">
@@ -516,28 +561,6 @@ function OrganizationInvitationPage() {
                      I've verified my email
                   </Button>
                </div>
-            ) : acceptanceState === "wrong-account" ? (
-               <div className="org-invite-actions">
-                  <div className="org-invite-message org-invite-message--critical" role="alert">
-                     <Icons name="alert-triangle" size={18} aria-hidden="true" />
-
-                     <div>
-                        <strong>This invitation belongs to another account</strong>
-
-                        <p>{actionMessage || "Sign in with the account this invitation was issued to."}</p>
-                     </div>
-                  </div>
-
-                  <Button
-                     type="button"
-                     variant="primary"
-                     density="comfortable"
-                     fullWidth
-                     onClick={handleUseAnotherAccount}
-                  >
-                     Sign in with another account
-                  </Button>
-               </div>
             ) : (
                <div className="org-invite-actions">
                   <div className="org-invite-account">
@@ -567,7 +590,21 @@ function OrganizationInvitationPage() {
                      Accept invitation
                   </Button>
 
-                  <p className="org-invite-consent">Membership is not activated until you explicitly accept.</p>
+                  <Button
+                     type="button"
+                     variant="secondary"
+                     density="comfortable"
+                     fullWidth
+                     onClick={handleUseAnotherAccount}
+                     disabled={isAccepting}
+                  >
+                     Use another account
+                  </Button>
+
+                  <p className="org-invite-consent">
+                     Membership is not activated until you explicitly accept. If this invitation was sent to another
+                     email address, switch accounts first.
+                  </p>
                </div>
             )}
       </div>

@@ -1067,11 +1067,28 @@ class OrganizationInvitationPublicSerializer(serializers.ModelSerializer):
 
     invited_role_label = serializers.SerializerMethodField()
 
+    recipient_matches_current_user = serializers.SerializerMethodField()
+
     def get_invited_role_label(
         self,
         obj,
     ):
         return get_invitation_role_label(obj)
+
+    def get_recipient_matches_current_user(
+        self,
+        obj,
+    ):
+        request = self.context.get("request")
+        actor = getattr(request, "user", None)
+
+        if not actor or not actor.is_authenticated:
+            return None
+
+        actor_email = str(actor.email or "").strip().casefold()
+        invited_email = str(obj.email or "").strip().casefold()
+
+        return bool(actor_email and actor_email == invited_email)
 
     def get_organization(
         self,
@@ -1095,6 +1112,7 @@ class OrganizationInvitationPublicSerializer(serializers.ModelSerializer):
             "organization",
             "invited_role",
             "invited_role_label",
+            "recipient_matches_current_user",
             "status",
             "expires_at",
             "invited_by",
