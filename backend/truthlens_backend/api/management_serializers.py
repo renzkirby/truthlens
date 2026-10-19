@@ -32,14 +32,8 @@ class ManagementOrganizationCreateSerializer(StrictFieldsSerializer):
     organization_type = serializers.ChoiceField(
         choices=Organization.OrganizationType.choices
     )
-    verification_status = serializers.ChoiceField(
-        choices=Organization.VerificationStatus.choices,
-        default=Organization.VerificationStatus.UNVERIFIED,
-    )
-    partner_status = serializers.ChoiceField(
-        choices=Organization.PartnerStatus.choices,
-        default=Organization.PartnerStatus.NONE,
-    )
+    # Creation accepts institutional identity only. Trust defaults are set
+    # by the service and updated through a separate governed endpoint.
 
 
 class ManagementPlatformTrustUpdateSerializer(StrictFieldsSerializer):

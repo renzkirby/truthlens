@@ -191,6 +191,13 @@ class DeveloperConsoleTests(TestCase):
         self.assertNotIn("verification_status", readonly_fields)
         self.assertNotIn("partner_status", readonly_fields)
 
+    def test_organization_add_form_hides_platform_trust_selects(self):
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse("developer_admin:api_organization_add"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'name="verification_status"')
+        self.assertNotContains(response, 'name="partner_status"')
+
     def test_organization_without_owner_exposes_primary_admin_action(self):
         organization = self.create_unowned_organization()
         self.client.force_login(self.superuser)

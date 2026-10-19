@@ -526,6 +526,13 @@ class ManagementApiTests(APITestCase):
             ({"organization_type": "INVALID"}, "organization_type"),
             ({"verification_status": "INVALID"}, "verification_status"),
             ({"partner_status": "INVALID"}, "partner_status"),
+            ({"verification_status": Organization.VerificationStatus.UNVERIFIED}, "verification_status"),
+            ({"verification_status": Organization.VerificationStatus.PENDING}, "verification_status"),
+            ({"verification_status": Organization.VerificationStatus.VERIFIED}, "verification_status"),
+            ({"partner_status": Organization.PartnerStatus.NONE}, "partner_status"),
+            ({"partner_status": Organization.PartnerStatus.ACTIVE}, "partner_status"),
+            ({"partner_status": Organization.PartnerStatus.SUSPENDED}, "partner_status"),
+            ({"partner_status": Organization.PartnerStatus.FORMER}, "partner_status"),
         ):
             with self.subTest(field=expected_field):
                 response = self.client_for(self.superuser).post(
