@@ -8,6 +8,7 @@ import IconButton from "../ui/IconButton.jsx";
 import Input from "../ui/Input.jsx";
 import Select from "../ui/Select.jsx";
 import OrganizationPublicProfilePanel from "./OrganizationPublicProfilePanel.jsx";
+import OrganizationVerificationScopePanel from "./OrganizationVerificationScopePanel.jsx";
 
 import { resolveApiEndpoint } from "../../utils/api";
 
@@ -359,6 +360,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
    const [invitationsRequestVersion, setInvitationsRequestVersion] = useState(0);
    const [activeAdminView, setActiveAdminView] = useState("members");
    const [hasOpenedPublicPresence, setHasOpenedPublicPresence] = useState(false);
+   const [hasOpenedVerificationScope, setHasOpenedVerificationScope] = useState(false);
 
    const [roster, setRoster] = useState({
       organization: null,
@@ -1236,6 +1238,17 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
             >
                Public presence
             </button>
+            <button
+               type="button"
+               aria-pressed={activeAdminView === "verification-scope"}
+               aria-controls="organization-admin-verification-scope-view"
+               onClick={() => {
+                  setHasOpenedVerificationScope(true);
+                  setActiveAdminView("verification-scope");
+               }}
+            >
+               Verification scope
+            </button>
          </div>
 
          <div
@@ -1933,6 +1946,15 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
          )}
          </div>
 
+         {hasOpenedVerificationScope && (
+            <div
+               id="organization-admin-verification-scope-view"
+               className="org-admin-view-region"
+               hidden={activeAdminView !== "verification-scope"}
+            >
+               <OrganizationVerificationScopePanel organizationId={organizationId} />
+            </div>
+         )}
          {hasOpenedPublicPresence && (
             <div
                id="organization-admin-public-presence-view"
