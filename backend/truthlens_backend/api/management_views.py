@@ -681,7 +681,7 @@ class ManagementInvestigationClassificationView(APIView):
 
 
 class ManagementUnclassifiedIntakeView(APIView):
-    """Safe reviewer queue for available work awaiting manual classification."""
+    """Read-only exception queue for unresolved automatic classifications."""
 
     permission_classes = [IsPlatformManagementAdmin]
 
@@ -692,7 +692,7 @@ class ManagementUnclassifiedIntakeView(APIView):
                 organization__isnull=True,
                 claim__investigation_classification__isnull=True,
             )
-            .select_related("claim")
+            .select_related("claim", "claim__classification_assessment")
             .order_by("-created_at")
         )
         paginator = ManagementPagination()
@@ -704,6 +704,16 @@ class ManagementUnclassifiedIntakeView(APIView):
                 "claim_type": item.claim.claim_type,
                 "claim_text": (item.claim.context_text or "")[:500],
                 "created_at": item.created_at,
+                "classification_status": (
+                    item.claim.classification_assessment.status
+                    if hasattr(item.claim, "classification_assessment")
+                    else "NOT_ATTEMPTED"
+                ),
+                "classification_reason": (
+                    item.claim.classification_assessment.reason_code
+                    if hasattr(item.claim, "classification_assessment")
+                    else ""
+                ),
             }
             for item in page
         ])

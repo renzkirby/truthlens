@@ -5013,7 +5013,11 @@ class KnowledgeReuseEvent(models.Model):
 
 
 class ClaimInvestigationClassification(models.Model):
-    """Manual, platform-governed domain/scope metadata for partner intake."""
+    """Authoritative subject/scope classification, independent of claim verdict."""
+
+    class Source(models.TextChoices):
+        MANUAL = "MANUAL", "Manual legacy classification"
+        AUTOMATIC = "AUTOMATIC", "Validated automated classification"
 
     claim = models.OneToOneField(
         Claim,
@@ -5024,6 +5028,9 @@ class ClaimInvestigationClassification(models.Model):
     domains = models.JSONField(default=list)
     jurisdiction = models.CharField(max_length=32)
     rationale = models.TextField(max_length=2000)
+    source = models.CharField(
+        max_length=16, choices=Source.choices, default=Source.MANUAL
+    )
     classified_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -5035,3 +5042,30 @@ class ClaimInvestigationClassification(models.Model):
 
     def __str__(self):
         return f"Investigation classification for {self.claim_id}"
+
+
+class InvestigationClassificationAssessment(models.Model):
+    """Operational history of the latest automatic classification attempt."""
+
+    class Status(models.TextChoices):
+        SUGGESTED = "SUGGESTED", "Shadow-mode suggestion only"
+        APPLIED = "APPLIED", "Validated automatic result applied"
+        ABSTAINED = "ABSTAINED", "Insufficient classification evidence"
+        FAILED = "FAILED", "Classification unavailable"
+
+    claim = models.OneToOneField(
+        Claim,
+        primary_key=True,
+        on_delete=models.CASCADE,
+        related_name="classification_assessment",
+    )
+    status = models.CharField(max_length=16, choices=Status.choices)
+    candidate_domains = models.JSONField(default=list, blank=True)
+    candidate_jurisdiction = models.CharField(max_length=32, blank=True)
+    reason_code = models.CharField(max_length=64, blank=True)
+    classifier_version = models.CharField(max_length=32, default="v1")
+    input_fingerprint = models.CharField(max_length=64, blank=True)
+    assessed_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"Automatic classification assessment for {self.claim_id}"

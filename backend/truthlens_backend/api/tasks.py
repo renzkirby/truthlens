@@ -985,6 +985,12 @@ def snippet_fact_check_process(
     _log_stage(claim_id, "snippet_task_total", task_started_at, outcome=outcome)
 
 
+@shared_task
+def classify_investigation_claim_task(claim_id):
+    from .investigation_classifier import classify_investigation_claim
+    return classify_investigation_claim(claim_id)
+
+
 # TEXT PIPELINE
 @shared_task
 @verification_telemetry_scope()

@@ -3162,6 +3162,10 @@ class ThreadViewSet(viewsets.ModelViewSet):
             ensure_verification_assignment(
                 claim=claim,
             )
+            from .investigation_classifier import dispatch_classification_task
+            transaction.on_commit(
+                lambda claim_id=claim.pk: dispatch_classification_task(claim_id)
+            )
 
     def _find_existing_thread(self, claim):
         """
