@@ -5,6 +5,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useNotification } from "../hooks/useNotification";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { resolveApiEndpoint } from "../utils/api";
+import { formatVerificationDomain } from "../utils/management";
 import { createPublicReachEventId, recordPublicReach } from "../utils/publicReach";
 import PartnerLogo from "../components/partners/PartnerLogo";
 import Icons from "../components/Icons.jsx";
@@ -635,7 +636,7 @@ function PartnerProfileContent({ slug, isCommunity }) {
                            {expertiseAreas.length > 0 ? (
                               <ul className="partner-profile-expertise">
                                  {expertiseAreas.map((area, index) => (
-                                    <li key={`${area}-${index}`}>{area}</li>
+                                    <li key={`${area}-${index}`}>{formatVerificationDomain(area)}</li>
                                  ))}
                               </ul>
                            ) : (

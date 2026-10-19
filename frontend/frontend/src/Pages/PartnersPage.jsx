@@ -4,6 +4,7 @@ import { Search, SlidersHorizontal } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { resolveApiEndpoint } from "../utils/api";
+import { formatVerificationDomain } from "../utils/management";
 import PartnerLogo from "../components/partners/PartnerLogo";
 import "./PartnersPage.css";
 
@@ -46,7 +47,7 @@ function PartnerCard({ partner, directorySearch }) {
          {visibleExpertise.length > 0 && (
             <ul className="partner-directory-card__expertise" aria-label="Authorized investigation specializations">
                {visibleExpertise.map((area, index) => (
-                  <li key={`${area}-${index}`}>{area}</li>
+                  <li key={`${area}-${index}`}>{formatVerificationDomain(area)}</li>
                ))}
                {remainingExpertise > 0 && <li>+{remainingExpertise} more</li>}
             </ul>
