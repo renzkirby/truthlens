@@ -51,6 +51,8 @@ DOMAIN_ACTIONS = {
         AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_ACCEPTED,
         AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_EXPIRED,
         AccountabilityEvent.ActionType.ORGANIZATION_PUBLIC_PROFILE_UPDATED,
+        AccountabilityEvent.ActionType.ORGANIZATION_VERIFICATION_SCOPE_REQUESTED,
+        AccountabilityEvent.ActionType.ORGANIZATION_VERIFICATION_SCOPE_ACTIVATED,
         AccountabilityEvent.ActionType.ORGANIZATION_LOGO_UPDATED,
         AccountabilityEvent.ActionType.ORGANIZATION_LOGO_REMOVED,
     ),

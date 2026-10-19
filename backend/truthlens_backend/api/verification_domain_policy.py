@@ -65,6 +65,25 @@ def jurisdiction_covers(approved, actual):
     )
 
 
+def effective_organization_scope(organization):
+    """Never grant more than platform-approved authority.
+
+    Directly-created historical/test records that have never configured an
+    operational scope use their approved scope for backward compatibility.
+    New organizations can choose explicit active sets after requesting scope.
+    """
+    approved_domains = set(organization.approved_verification_domains or [])
+    approved_jurisdictions = set(organization.approved_verification_jurisdictions or [])
+    if organization.active_scope_configured:
+        domains = approved_domains & set(organization.active_verification_domains or [])
+        jurisdictions = approved_jurisdictions & set(
+            organization.active_verification_jurisdictions or []
+        )
+    else:
+        domains, jurisdictions = approved_domains, approved_jurisdictions
+    return sorted(domains), sorted(jurisdictions)
+
+
 def eligibility_reason(*, classification, approved_domains, approved_jurisdictions):
     """Return a stable reason or None when all classified topics are covered."""
     if classification is None or not classification.domains or not classification.jurisdiction:

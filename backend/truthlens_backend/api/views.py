@@ -2726,6 +2726,41 @@ def organization_verification_metrics(request, organization_id):
     return Response(metrics)
 
 
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAuthenticated])
+def organization_verification_scope(request, organization_id):
+    """Organization leadership can request or activate; cannot self-approve."""
+    from .organization_scope_service import (
+        OrganizationScopeForbidden,
+        OrganizationScopeInvalid,
+        ensure_scope_manager,
+        submit_scope_request,
+        configure_active_scope,
+        serialize_organization_scope,
+    )
+    from .organization_scope_serializers import OrganizationScopeMutationSerializer
+
+    organization = get_object_or_404(Organization, pk=organization_id)
+    try:
+        ensure_scope_manager(organization=organization, actor=request.user)
+        if request.method == "PATCH":
+            serializer = OrganizationScopeMutationSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            payload = dict(serializer.validated_data)
+            action = payload.pop("action")
+            mutation = (
+                submit_scope_request if action == "REQUEST" else configure_active_scope
+            )
+            organization = mutation(
+                organization=organization, actor=request.user, **payload
+            )
+    except OrganizationScopeForbidden as error:
+        return Response({"detail": str(error)}, status=status.HTTP_403_FORBIDDEN)
+    except OrganizationScopeInvalid as error:
+        return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(serialize_organization_scope(organization))
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def verification_intake(request):
@@ -2759,7 +2794,11 @@ def verification_intake(request):
     limit, offset = _parse_verification_pagination(request)
 
     queryset = get_available_verification_assignments()
-    from .verification_domain_policy import eligibility_reason
+    from .verification_domain_policy import (
+        eligibility_reason,
+        effective_organization_scope,
+    )
+    active_domains, active_jurisdictions = effective_organization_scope(organization)
 
     # Partner intake lists only eligible, already classified claims. The
     # claim-time service independently enforces the same rule under a lock.
@@ -2772,8 +2811,8 @@ def verification_intake(request):
         )
         if eligibility_reason(
             classification=classification,
-            approved_domains=organization.approved_verification_domains,
-            approved_jurisdictions=organization.approved_verification_jurisdictions,
+            approved_domains=active_domains,
+            approved_jurisdictions=active_jurisdictions,
         ) is None:
             eligible.append(assignment)
 

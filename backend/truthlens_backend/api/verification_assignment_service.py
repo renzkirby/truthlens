@@ -22,7 +22,7 @@ from .organization_service import (
     PartnerCapability,
     has_capability,
 )
-from .verification_domain_policy import eligibility_reason
+from .verification_domain_policy import eligibility_reason, effective_organization_scope
 
 OPEN_ASSIGNMENT_STATUSES = {
     VerificationAssignment.Status.AVAILABLE,
@@ -408,10 +408,13 @@ def claim_verification_assignment(
         locked_organization = type(organization).objects.select_for_update().get(
             pk=organization.pk,
         )
+        active_domains, active_jurisdictions = effective_organization_scope(
+            locked_organization,
+        )
         refusal = eligibility_reason(
             classification=classification,
-            approved_domains=locked_organization.approved_verification_domains,
-            approved_jurisdictions=locked_organization.approved_verification_jurisdictions,
+            approved_domains=active_domains,
+            approved_jurisdictions=active_jurisdictions,
         )
         if refusal:
             raise VerificationAssignmentAuthorizationError(

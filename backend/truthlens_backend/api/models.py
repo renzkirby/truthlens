@@ -329,6 +329,12 @@ class Organization(models.Model):
         help_text="Platform-approved ISO-style geographic scopes.",
     )
 
+    requested_verification_domains = models.JSONField(default=list, blank=True)
+    requested_verification_jurisdictions = models.JSONField(default=list, blank=True)
+    active_verification_domains = models.JSONField(default=list, blank=True)
+    active_verification_jurisdictions = models.JSONField(default=list, blank=True)
+    active_scope_configured = models.BooleanField(default=False)
+
     expertise_areas = models.JSONField(
         default=list,
         blank=True,
@@ -1993,6 +1999,14 @@ class AccountabilityEvent(models.Model):
         ORGANIZATION_VERIFICATION_SCOPE_APPROVED = (
             "ORGANIZATION_VERIFICATION_SCOPE_APPROVED",
             "Organization Verification Scope Approved",
+        )
+        ORGANIZATION_VERIFICATION_SCOPE_REQUESTED = (
+            "ORGANIZATION_VERIFICATION_SCOPE_REQUESTED",
+            "Organization Verification Scope Requested",
+        )
+        ORGANIZATION_VERIFICATION_SCOPE_ACTIVATED = (
+            "ORGANIZATION_VERIFICATION_SCOPE_ACTIVATED",
+            "Organization Verification Scope Activated",
         )
         CLAIM_INVESTIGATION_CLASSIFIED = (
             "CLAIM_INVESTIGATION_CLASSIFIED",
