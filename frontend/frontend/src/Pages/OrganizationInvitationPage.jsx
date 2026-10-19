@@ -43,6 +43,25 @@ function getOrganizationInitials(name = "") {
       .toUpperCase();
 }
 
+function getSignedInIdentity(user) {
+   const username = typeof user?.username === "string" ? user.username.trim() : "";
+   const email = typeof user?.email === "string" ? user.email.trim() : "";
+
+   if (username && email) {
+      return `@${username} (${email})`;
+   }
+
+   if (username) {
+      return `@${username}`;
+   }
+
+   if (email) {
+      return email;
+   }
+
+   return "your current account";
+}
+
 function OrganizationInvitationPage() {
    const { token } = useParams();
    const location = useLocation();
@@ -327,6 +346,8 @@ function OrganizationInvitationPage() {
       isAuthenticated &&
       invitation?.recipient_matches_current_user === false;
 
+   const signedInIdentity = getSignedInIdentity(user);
+
    const effectiveUser = acceptedUser || user;
 
    const successDestination = canAccessWorkspace(effectiveUser) ? "/workspace" : "/dashboard";
@@ -498,8 +519,12 @@ function OrganizationInvitationPage() {
                         <strong>This invitation belongs to another account</strong>
 
                         <p>
-                           {actionMessage ||
-                              `You're signed in as ${user.email}, but this invitation was issued to a different TruthLens account.`}
+                           {actionMessage || (
+                              <>
+                                 You're signed in as <strong>{signedInIdentity}</strong>, but this invitation was issued
+                                 to a different TruthLens account.
+                              </>
+                           )}
                         </p>
                      </div>
                   </div>
@@ -566,7 +591,7 @@ function OrganizationInvitationPage() {
                   <div className="org-invite-account">
                      <span>Signed in as</span>
 
-                     <strong>{user.email}</strong>
+                     <strong>{signedInIdentity}</strong>
                   </div>
 
                   {(acceptanceState === "conflict" || acceptanceState === "error") && (
