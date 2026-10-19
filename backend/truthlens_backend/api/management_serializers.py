@@ -306,6 +306,8 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
             "website",
             "logo_url",
             "expertise_areas",
+            "approved_verification_domains",
+            "approved_verification_jurisdictions",
             "public_logo_enabled",
             "primary_admin",
             "created_at",

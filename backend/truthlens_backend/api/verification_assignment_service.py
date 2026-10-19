@@ -22,6 +22,7 @@ from .organization_service import (
     PartnerCapability,
     has_capability,
 )
+from .verification_domain_policy import eligibility_reason
 
 OPEN_ASSIGNMENT_STATUSES = {
     VerificationAssignment.Status.AVAILABLE,
@@ -167,6 +168,7 @@ def get_available_verification_assignments():
         )
         .select_related(
             "claim",
+            "claim__investigation_classification",
             "organization",
             "claimed_by",
         )
@@ -394,6 +396,30 @@ def claim_verification_assignment(
             raise VerificationAssignmentConflict(
                 "Available verification work must not "
                 "already belong to an organization."
+            )
+
+        # Enforce approved expertise and location while holding the Claim
+        # lock; the policy is not dependent on what an intake UI displays.
+        classification = (
+            locked_claim.investigation_classification
+            if hasattr(locked_claim, "investigation_classification")
+            else None
+        )
+        locked_organization = type(organization).objects.select_for_update().get(
+            pk=organization.pk,
+        )
+        refusal = eligibility_reason(
+            classification=classification,
+            approved_domains=locked_organization.approved_verification_domains,
+            approved_jurisdictions=locked_organization.approved_verification_jurisdictions,
+        )
+        if refusal:
+            raise VerificationAssignmentAuthorizationError(
+                {
+                    "NEEDS_CLASSIFICATION": "This claim must be classified by a platform reviewer before assignment.",
+                    "OUTSIDE_APPROVED_DOMAINS": "The claim is outside this organization's approved verification domains.",
+                    "OUTSIDE_APPROVED_JURISDICTION": "The claim is outside this organization's approved verification jurisdiction.",
+                }[refusal]
             )
 
         locked_assignment.organization = organization

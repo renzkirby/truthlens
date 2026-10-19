@@ -2759,10 +2759,26 @@ def verification_intake(request):
     limit, offset = _parse_verification_pagination(request)
 
     queryset = get_available_verification_assignments()
+    from .verification_domain_policy import eligibility_reason
 
-    total_count = queryset.count()
+    # Partner intake lists only eligible, already classified claims. The
+    # claim-time service independently enforces the same rule under a lock.
+    eligible = []
+    for assignment in queryset:
+        classification = getattr(
+            assignment.claim,
+            "investigation_classification",
+            None,
+        )
+        if eligibility_reason(
+            classification=classification,
+            approved_domains=organization.approved_verification_domains,
+            approved_jurisdictions=organization.approved_verification_jurisdictions,
+        ) is None:
+            eligible.append(assignment)
 
-    assignments = queryset[offset : offset + limit]
+    total_count = len(eligible)
+    assignments = eligible[offset : offset + limit]
 
     serializer = VerificationAssignmentSerializer(
         assignments,
