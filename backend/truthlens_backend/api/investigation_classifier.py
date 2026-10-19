@@ -201,9 +201,11 @@ def classify_investigation_claim(claim_id):
 def dispatch_classification_task(claim_id):
     """Never undo committed threads when Celery's queue is unavailable."""
     if classification_mode() == "off":
-        return
+        return False
     from .tasks import classify_investigation_claim_task
     try:
         classify_investigation_claim_task.delay(str(claim_id))
+        return True
     except Exception:
         logger.exception("Could not queue investigation classification for claim %s", claim_id)
+        return False

@@ -47,6 +47,11 @@ urlpatterns = [
         name="management_unclassified_intake",
     ),
     path(
+        "management/claims/<uuid:claim_id>/classification-retry/",
+        management_views.ManagementClassificationRetryView.as_view(),
+        name="management_classification_retry",
+    ),
+    path(
         "management/claims/<uuid:claim_id>/investigation-classification/",
         management_views.ManagementInvestigationClassificationView.as_view(),
         name="management_investigation_classification",

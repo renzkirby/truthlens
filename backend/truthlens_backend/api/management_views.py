@@ -717,3 +717,45 @@ class ManagementUnclassifiedIntakeView(APIView):
             }
             for item in page
         ])
+
+class ManagementClassificationRetryView(APIView):
+    """Retry automatic classification without granting manual claim authority."""
+
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def post(self, request, claim_id):
+        from .investigation_classifier import (
+            classification_mode, dispatch_classification_task,
+        )
+        from .management_serializers import ManagementEmptyMutationSerializer
+
+        serializer = ManagementEmptyMutationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if classification_mode() == "off":
+            return Response(
+                {"detail": "Automatic classification is disabled until accuracy testing is complete."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if not VerificationAssignment.objects.filter(
+            claim_id=claim_id,
+            status=VerificationAssignment.Status.AVAILABLE,
+            organization__isnull=True,
+        ).exists():
+            return Response(
+                {"detail": "Claim is not in unassigned investigation intake."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if ClaimInvestigationClassification.objects.filter(claim_id=claim_id).exists():
+            return Response(
+                {"detail": "This claim already has an authoritative classification."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if not dispatch_classification_task(claim_id):
+            return Response(
+                {"detail": "Classification job could not be queued."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response(
+            {"detail": "Automatic classification retry has been queued."},
+            status=status.HTTP_202_ACCEPTED,
+        )

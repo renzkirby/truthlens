@@ -99,6 +99,8 @@ export const API_ENDPOINTS = {
    MANAGEMENT_ORGANIZATION_VERIFICATION_SCOPE: (organizationId) =>
       `management/organizations/${encodeURIComponent(organizationId)}/verification-scope/`,
    MANAGEMENT_UNCLASSIFIED_INTAKE: "management/verification-intake/unclassified/",
+   MANAGEMENT_CLASSIFICATION_RETRY: (claimId) =>
+      `management/claims/${encodeURIComponent(claimId)}/classification-retry/`,
    MANAGEMENT_CLASSIFY_CLAIM: (claimId) =>
       `management/claims/${encodeURIComponent(claimId)}/investigation-classification/`,
    MANAGEMENT_PRIMARY_ADMIN_PROVISION: (organizationId) =>
