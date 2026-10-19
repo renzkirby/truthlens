@@ -54,6 +54,24 @@ class ManagementPlatformTrustUpdateSerializer(StrictFieldsSerializer):
         return attrs
 
 
+class ManagementApprovedVerificationScopeSerializer(StrictFieldsSerializer):
+    domains = serializers.ListField(
+        child=serializers.CharField(), allow_empty=True, max_length=12
+    )
+    jurisdictions = serializers.ListField(
+        child=serializers.CharField(), allow_empty=True, max_length=50
+    )
+    rationale = serializers.CharField(min_length=12, max_length=2000)
+
+
+class ManagementClaimClassificationSerializer(StrictFieldsSerializer):
+    domains = serializers.ListField(
+        child=serializers.CharField(), allow_empty=False, max_length=12
+    )
+    jurisdiction = serializers.CharField(max_length=32)
+    rationale = serializers.CharField(min_length=12, max_length=2000)
+
+
 class ManagementPrimaryAdminProvisionSerializer(StrictFieldsSerializer):
     email = serializers.EmailField()
 
@@ -235,6 +253,12 @@ class ManagementPrimaryAdminInvitationSerializer(serializers.ModelSerializer):
 
 
 class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerializer):
+    approved_verification_domains = serializers.ListField(
+        child=serializers.CharField(), read_only=True
+    )
+    approved_verification_jurisdictions = serializers.ListField(
+        child=serializers.CharField(), read_only=True
+    )
     primary_admin = serializers.SerializerMethodField()
 
     def get_primary_admin(self, obj):

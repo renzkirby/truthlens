@@ -47,6 +47,9 @@ from .management_serializers import (
     ManagementPipelineRunListQuerySerializer,
 )
 from .models import (
+    Claim,
+    ClaimInvestigationClassification,
+    VerificationAssignment,
     Organization,
     OrganizationInvitation,
     OrganizationMembership,
@@ -616,3 +619,91 @@ class ManagementInvitationDetailView(generics.RetrieveAPIView):
         "cancelled_by",
     )
     lookup_url_kwarg = "invitation_id"
+
+class ManagementVerificationScopeView(APIView):
+    """Explicit platform approval; partner public expertise is not authority."""
+
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def patch(self, request, organization_id):
+        from .management_governance_service import (
+            approve_organization_verification_scope,
+        )
+        from .management_serializers import ManagementApprovedVerificationScopeSerializer
+
+        serializer = ManagementApprovedVerificationScopeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            organization = approve_organization_verification_scope(
+                organization_id=organization_id,
+                actor=request.user,
+                **serializer.validated_data,
+            )
+        except Organization.DoesNotExist:
+            return Response({"detail": "Organization not found."}, status=status.HTTP_404_NOT_FOUND)
+        except ManagementGovernanceValidationError as error:
+            return _governance_validation_response(error)
+        return Response(_serialize_management_organization(organization))
+
+
+class ManagementInvestigationClassificationView(APIView):
+    """Manual platform-governed classification, separate from AI claim verdicts."""
+
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def put(self, request, claim_id):
+        from .management_governance_service import (
+            classify_claim_for_investigation,
+        )
+        from .management_serializers import ManagementClaimClassificationSerializer
+
+        serializer = ManagementClaimClassificationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            classification = classify_claim_for_investigation(
+                claim_id=claim_id,
+                actor=request.user,
+                **serializer.validated_data,
+            )
+        except Claim.DoesNotExist:
+            return Response({"detail": "Claim not found."}, status=status.HTTP_404_NOT_FOUND)
+        except ManagementGovernanceValidationError as error:
+            return _governance_validation_response(error)
+        except ManagementGovernanceConflict as error:
+            return _governance_conflict_response(error)
+        return Response({
+            "claim_id": str(classification.claim_id),
+            "domains": classification.domains,
+            "jurisdiction": classification.jurisdiction,
+            "classified_by": classification.classified_by.username if classification.classified_by else None,
+            "classified_at": classification.classified_at,
+        })
+
+
+class ManagementUnclassifiedIntakeView(APIView):
+    """Safe reviewer queue for available work awaiting manual classification."""
+
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def get(self, request):
+        queryset = (
+            VerificationAssignment.objects.filter(
+                status=VerificationAssignment.Status.AVAILABLE,
+                organization__isnull=True,
+                claim__investigation_classification__isnull=True,
+            )
+            .select_related("claim")
+            .order_by("-created_at")
+        )
+        paginator = ManagementPagination()
+        page = paginator.paginate_queryset(queryset, request, view=self)
+        return paginator.get_paginated_response([
+            {
+                "assignment_id": str(item.pk),
+                "claim_id": str(item.claim_id),
+                "claim_type": item.claim.claim_type,
+                "claim_text": (item.claim.context_text or "")[:500],
+                "created_at": item.created_at,
+            }
+            for item in page
+        ])

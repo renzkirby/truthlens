@@ -317,6 +317,18 @@ class Organization(models.Model):
         db_index=True,
     )
 
+    approved_verification_domains = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Platform-approved investigation domains, distinct from public expertise_areas.",
+    )
+
+    approved_verification_jurisdictions = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Platform-approved ISO-style geographic scopes.",
+    )
+
     expertise_areas = models.JSONField(
         default=list,
         blank=True,
@@ -1978,6 +1990,14 @@ class AccountabilityEvent(models.Model):
             "ORGANIZATION_PLATFORM_TRUST_UPDATED",
             "Organization Platform Trust Updated",
         )
+        ORGANIZATION_VERIFICATION_SCOPE_APPROVED = (
+            "ORGANIZATION_VERIFICATION_SCOPE_APPROVED",
+            "Organization Verification Scope Approved",
+        )
+        CLAIM_INVESTIGATION_CLASSIFIED = (
+            "CLAIM_INVESTIGATION_CLASSIFIED",
+            "Claim Investigation Classified",
+        )
         VERIFICATION_ASSIGNMENT_CREATED = (
             "VERIFICATION_ASSIGNMENT_CREATED",
             "Verification Assignment Created",
@@ -2105,6 +2125,7 @@ class AccountabilityEvent(models.Model):
             "Organization Invitation",
         )
         ORGANIZATION = "ORGANIZATION", "Organization"
+        CLAIM = "CLAIM", "Claim"
         MODERATION_CASE = "MODERATION_CASE", "Moderation Case"
         THREAD = "THREAD", "Thread"
         EVIDENCE_SUBMISSION = "EVIDENCE_SUBMISSION", "Evidence Submission"
@@ -4975,3 +4996,28 @@ class KnowledgeReuseEvent(models.Model):
         raise ValidationError(
             "Knowledge reuse events are durable and cannot be deleted directly."
         )
+
+
+class ClaimInvestigationClassification(models.Model):
+    """Manual, platform-governed domain/scope metadata for partner intake."""
+
+    claim = models.OneToOneField(
+        Claim,
+        primary_key=True,
+        on_delete=models.CASCADE,
+        related_name="investigation_classification",
+    )
+    domains = models.JSONField(default=list)
+    jurisdiction = models.CharField(max_length=32)
+    rationale = models.TextField(max_length=2000)
+    classified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="investigation_classifications",
+    )
+    classified_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Investigation classification for {self.claim_id}"
