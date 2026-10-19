@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { Link } from "react-router-dom";
 
 import { formatManagementDate, managementStatusTone } from "../../utils/management";
@@ -45,6 +45,100 @@ export function ManagementFeedback({ tone = "success", children }) {
       >
          <Icons name={tone === "error" ? "alert-circle" : "check-circle"} size={18} />
          <span>{children}</span>
+      </div>
+   );
+}
+
+
+export function ManagementFormDialog({
+   open,
+   title,
+   description,
+   onClose,
+   processing = false,
+   children,
+   returnFocusRef,
+}) {
+   const id = useId();
+   const dialogRef = useRef(null);
+   const cancelRef = useRef(onClose);
+   const processingRef = useRef(processing);
+   const titleId = `${id}-title`;
+   const descriptionId = `${id}-description`;
+
+   useEffect(() => {
+      cancelRef.current = onClose;
+      processingRef.current = processing;
+   }, [onClose, processing]);
+
+   useEffect(() => {
+      if (!open) return undefined;
+      const previousFocus = document.activeElement;
+      const previousOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      const initialFocus = dialogRef.current?.querySelector(FOCUSABLE_SELECTOR);
+      initialFocus?.focus();
+
+      const handleKeyDown = (event) => {
+         if (event.key === "Escape" && !processingRef.current) {
+            event.preventDefault();
+            cancelRef.current?.();
+            return;
+         }
+         if (event.key !== "Tab") return;
+         const items = Array.from(
+            dialogRef.current?.querySelectorAll(FOCUSABLE_SELECTOR) || [],
+         ).filter((node) => !node.hidden && node.getClientRects().length > 0);
+         if (!items.length) {
+            event.preventDefault();
+            return;
+         }
+         const first = items[0];
+         const last = items[items.length - 1];
+         if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+         } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+         }
+      };
+      document.addEventListener("keydown", handleKeyDown);
+      return () => {
+         document.removeEventListener("keydown", handleKeyDown);
+         document.body.style.overflow = previousOverflow;
+         const target = returnFocusRef?.current?.isConnected
+            ? returnFocusRef.current : previousFocus;
+         if (target?.isConnected) target.focus();
+      };
+   }, [open, returnFocusRef]);
+
+   if (!open) return null;
+
+   return (
+      <div className="management-dialog-backdrop" onMouseDown={(event) => {
+         if (event.target === event.currentTarget && !processing) onClose();
+      }}>
+         <div
+            ref={dialogRef}
+            className="management-dialog management-dialog--form"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            aria-describedby={descriptionId}
+         >
+            <div className="management-form-dialog__heading">
+               <div>
+                  <h2 id={titleId}>{title}</h2>
+                  <p id={descriptionId}>{description}</p>
+               </div>
+               <button type="button" className="management-form-dialog__close"
+                  onClick={onClose} disabled={processing} aria-label="Close dialog">
+                  <Icons name="x" size={20} />
+               </button>
+            </div>
+            <div className="management-form-dialog__body">{children}</div>
+         </div>
       </div>
    );
 }

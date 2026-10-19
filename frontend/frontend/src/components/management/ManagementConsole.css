@@ -1664,3 +1664,86 @@
    outline: 2px solid currentColor;
    outline-offset: 3px;
 }
+
+/* Accessible governed-scope dialogs and structured subject options */
+.management-dialog--form {
+   width: min(790px, calc(100vw - 32px));
+   max-height: min(90vh, 900px);
+   display: flex;
+   flex-direction: column;
+   padding: 0;
+   overflow: hidden;
+}
+.management-form-dialog__heading {
+   display: flex;
+   align-items: flex-start;
+   justify-content: space-between;
+   gap: 16px;
+   padding: 22px 24px 14px;
+   border-bottom: 1px solid var(--tl-color-border-default);
+}
+.management-form-dialog__heading h2 { margin: 0 0 6px; }
+.management-form-dialog__heading p {
+   margin: 0;
+   color: var(--tl-color-text-secondary, #475569);
+   line-height: 1.5;
+}
+.management-form-dialog__close {
+   border: 1px solid var(--tl-color-border-default);
+   background: transparent;
+   color: inherit;
+   border-radius: 10px;
+   min-width: 40px; min-height: 40px;
+   display: inline-flex; align-items: center; justify-content: center;
+   cursor: pointer;
+}
+.management-form-dialog__body { padding: 20px 24px 24px; overflow-y: auto; }
+.management-modal-form { display: grid; gap: 20px; }
+.management-modal-fieldset {
+   border: 0; padding: 0; margin: 0; min-width: 0;
+}
+.management-modal-fieldset legend {
+   color: var(--tl-color-text-primary, #0f172a);
+   font-weight: 750;
+   font-size: 0.95rem;
+}
+.management-modal-fieldset > p { color: var(--tl-color-text-secondary, #475569); }
+.management-scope-request-summary {
+   padding: 12px 14px;
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: 10px;
+   color: var(--tl-color-text-primary, #0f172a);
+}
+.management-scope-options {
+   display: grid;
+   grid-template-columns: repeat(2, minmax(0, 1fr));
+   gap: 10px;
+}
+.management-scope-option {
+   display: flex; align-items: center; gap: 10px;
+   padding: 12px;
+   background: var(--tl-color-bg-surface, #fff);
+   border: 1px solid var(--tl-color-border-default, #cbd5e1);
+   border-radius: 10px;
+   font-weight: 550;
+   color: var(--tl-color-text-primary, #0f172a);
+   cursor: pointer;
+}
+.management-scope-option.is-selected {
+   border-color: var(--tl-color-brand, #5146e6);
+   background: color-mix(in srgb, var(--tl-color-brand, #5146e6) 9%, white);
+}
+.management-scope-option input[type="checkbox"] {
+   accent-color: var(--tl-color-brand, #5146e6);
+   inline-size: 18px; block-size: 18px;
+}
+.management-scope-option:focus-within {
+   outline: 2px solid var(--tl-color-brand, #5146e6);
+   outline-offset: 2px;
+}
+.management-modal-form .management-form-field strong { color: var(--tl-color-text-primary, #0f172a); }
+@media (max-width: 650px) {
+   .management-scope-options { grid-template-columns: 1fr; }
+   .management-form-dialog__heading,
+   .management-form-dialog__body { padding: 16px; }
+}
