@@ -18,6 +18,7 @@ from api.models import (
     AccountabilityEvent,
     AdjudicationDecision,
     Claim,
+    ClaimInvestigationClassification,
     EvidenceSubmission,
     ModerationCase,
     OfficialFactCheck,
@@ -84,6 +85,8 @@ class AccountabilityInstrumentationTests(TestCase):
             slug="accountability-partner",
             verification_status=Organization.VerificationStatus.VERIFIED,
             partner_status=Organization.PartnerStatus.ACTIVE,
+            approved_verification_domains=["SCIENCE"],
+            approved_verification_jurisdictions=["PH"],
         )
         OrganizationMembership.objects.create(
             organization=self.organization,
@@ -98,12 +101,21 @@ class AccountabilityInstrumentationTests(TestCase):
             status=OrganizationMembership.Status.ACTIVE,
         )
 
+    def _classify_test_claim(self, claim):
+        return ClaimInvestigationClassification.objects.create(
+            claim=claim,
+            domains=["SCIENCE"],
+            jurisdiction="PH",
+            rationale="Synthetic classification for accountability tests.",
+        )
+
     def test_assignment_evidence_adjudication_and_publication_are_attributed(self):
         claim = Claim.objects.create(
             claim_type=Claim.ClaimType.TEXT,
             context_text="Accountability workflow claim",
             ai_verdict="FAKE",
         )
+        self._classify_test_claim(claim)
         thread = Thread.objects.create(
             claim=claim,
             author=self.contributor,
@@ -250,6 +262,7 @@ class AccountabilityInstrumentationTests(TestCase):
 
     def test_evidence_decisions_and_reopen_are_correlated_to_claim(self):
         claim = Claim.objects.create(context_text="Evidence correlation claim")
+        self._classify_test_claim(claim)
         thread = Thread.objects.create(
             claim=claim,
             author=self.contributor,
@@ -314,6 +327,7 @@ class AccountabilityInstrumentationTests(TestCase):
 
     def test_release_conflict_unauthorized_action_and_rollback_leave_no_extra_event(self):
         claim = Claim.objects.create(context_text="Assignment release audit")
+        self._classify_test_claim(claim)
         assignment = ensure_verification_assignment(claim=claim)
         with self.assertRaises(VerificationAssignmentAuthorizationError):
             claim_verification_assignment(
