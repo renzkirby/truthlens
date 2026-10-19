@@ -9,6 +9,7 @@ from rest_framework.test import (
 
 from api.models import (
     Claim,
+    ClaimInvestigationClassification,
     EvidenceSubmission,
     Organization,
     OrganizationMembership,
@@ -77,6 +78,8 @@ class VerificationAssignmentApiTests(APITestCase):
             organization_type=(Organization.OrganizationType.FACT_CHECKING),
             verification_status=(Organization.VerificationStatus.VERIFIED),
             partner_status=(Organization.PartnerStatus.ACTIVE),
+            approved_verification_domains=["SCIENCE"],
+            approved_verification_jurisdictions=["PH"],
         )
 
         self.organization_b = Organization.objects.create(
@@ -85,6 +88,8 @@ class VerificationAssignmentApiTests(APITestCase):
             organization_type=(Organization.OrganizationType.FACT_CHECKING),
             verification_status=(Organization.VerificationStatus.VERIFIED),
             partner_status=(Organization.PartnerStatus.ACTIVE),
+            approved_verification_domains=["SCIENCE"],
+            approved_verification_jurisdictions=["PH"],
         )
 
         # ---------------------------------
@@ -153,6 +158,11 @@ class VerificationAssignmentApiTests(APITestCase):
             ai_verdict="UNVERIFIED",
             ai_summary=("This claim requires professional " "verification."),
             consensus_score=55.0,
+        )
+
+        ClaimInvestigationClassification.objects.create(
+            claim=claim, domains=["SCIENCE"], jurisdiction="PH",
+            rationale="Reviewed test fixture for science and geography.",
         )
 
         thread = Thread.objects.create(
@@ -269,6 +279,15 @@ class VerificationAssignmentApiTests(APITestCase):
     # =====================================
     # Available intake
     # =====================================
+
+    def test_unclassified_intake_is_not_visible_to_partner(self):
+        fixture = self._create_available_assignment(suffix="needs-classification")
+        ClaimInvestigationClassification.objects.filter(claim=fixture["claim"]).delete()
+        response = self.lead_a_client.get(
+            reverse("verification_intake"), {"organization_id": str(self.organization_a.id)},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 0)
 
     def test_lead_verifier_can_view_available_intake(
         self,

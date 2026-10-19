@@ -12,6 +12,7 @@ from api.evidence_review_service import (
 from api.models import (
     AdjudicationDecision,
     Claim,
+    ClaimInvestigationClassification,
     EvidenceSubmission,
     ModerationCase,
     Organization,
@@ -64,6 +65,8 @@ class VerificationAssignmentServiceTests(TestCase):
             organization_type=(Organization.OrganizationType.FACT_CHECKING),
             verification_status=(Organization.VerificationStatus.VERIFIED),
             partner_status=(Organization.PartnerStatus.ACTIVE),
+            approved_verification_domains=["SCIENCE"],
+            approved_verification_jurisdictions=["PH"],
         )
 
         self.organization_b = Organization.objects.create(
@@ -72,6 +75,8 @@ class VerificationAssignmentServiceTests(TestCase):
             organization_type=(Organization.OrganizationType.FACT_CHECKING),
             verification_status=(Organization.VerificationStatus.VERIFIED),
             partner_status=(Organization.PartnerStatus.ACTIVE),
+            approved_verification_domains=["SCIENCE"],
+            approved_verification_jurisdictions=["PH"],
         )
 
         OrganizationMembership.objects.create(
@@ -91,6 +96,11 @@ class VerificationAssignmentServiceTests(TestCase):
         self.claim = Claim.objects.create(
             claim_type=Claim.ClaimType.TEXT,
             context_text=("A claim awaiting professional " "verification."),
+        )
+
+        ClaimInvestigationClassification.objects.create(
+            claim=self.claim, domains=["SCIENCE"], jurisdiction="PH",
+            rationale="Reviewed test fixture for science and geography.",
         )
 
         self.thread = Thread.objects.create(
@@ -258,6 +268,35 @@ class VerificationAssignmentServiceTests(TestCase):
             listed[0].claim._current_adjudication_decisions,
             [],
         )
+
+    def test_unclassified_work_cannot_be_claimed(self):
+        assignment = self._create_assignment()
+        ClaimInvestigationClassification.objects.filter(claim=self.claim).delete()
+        with self.assertRaises(VerificationAssignmentAuthorizationError):
+            claim_verification_assignment(
+                assignment=assignment, organization=self.organization_a, actor=self.lead_a,
+            )
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.status, VerificationAssignment.Status.AVAILABLE)
+
+    def test_unapproved_self_declared_expertise_cannot_authorize_claim(self):
+        assignment = self._create_assignment()
+        self.organization_a.approved_verification_domains = []
+        self.organization_a.expertise_areas = ["science"]
+        self.organization_a.save(update_fields=["approved_verification_domains", "expertise_areas"])
+        with self.assertRaises(VerificationAssignmentAuthorizationError):
+            claim_verification_assignment(
+                assignment=assignment, organization=self.organization_a, actor=self.lead_a,
+            )
+
+    def test_outside_approved_domain_cannot_claim(self):
+        assignment = self._create_assignment()
+        self.organization_a.approved_verification_domains = ["SPORTS"]
+        self.organization_a.save(update_fields=["approved_verification_domains"])
+        with self.assertRaises(VerificationAssignmentAuthorizationError):
+            claim_verification_assignment(
+                assignment=assignment, organization=self.organization_a, actor=self.lead_a,
+            )
 
     def test_lead_verifier_can_claim_available_work(
         self,
