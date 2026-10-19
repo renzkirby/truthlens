@@ -329,19 +329,44 @@ def approve_organization_verification_scope(
         )
 
     organization = Organization.objects.select_for_update().get(pk=organization_id)
+
+    # Convert legacy implicit approval into explicit active state *before*
+    # applying new approval. Thus new grants remain inactive until leadership
+    # activates them; previously approved work remains uninterrupted.
+    if not organization.active_scope_configured:
+        from .verification_domain_policy import effective_organization_scope
+        active_domains, active_jurisdictions = effective_organization_scope(
+            organization
+        )
+        organization.active_verification_domains = active_domains
+        organization.active_verification_jurisdictions = active_jurisdictions
+        organization.active_scope_configured = True
+
     previous = {
         "domains": organization.approved_verification_domains,
         "jurisdictions": organization.approved_verification_jurisdictions,
     }
     target = {"domains": domains, "jurisdictions": jurisdictions}
     if previous == target:
+        # No governance state change: do not save an implicit conversion.
         return organization
 
     organization.approved_verification_domains = domains
     organization.approved_verification_jurisdictions = jurisdictions
+    # Revocations immediately remove affected active authority, while
+    # newly approved specializations still await organization activation.
+    organization.active_verification_domains = sorted(
+        set(organization.active_verification_domains) & set(domains)
+    )
+    organization.active_verification_jurisdictions = sorted(
+        set(organization.active_verification_jurisdictions) & set(jurisdictions)
+    )
     organization.save(update_fields=[
         "approved_verification_domains",
         "approved_verification_jurisdictions",
+        "active_verification_domains",
+        "active_verification_jurisdictions",
+        "active_scope_configured",
         "updated_at",
     ])
     record_accountability_event(
