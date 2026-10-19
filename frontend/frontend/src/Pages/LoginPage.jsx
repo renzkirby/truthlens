@@ -54,24 +54,35 @@ function LoginPage() {
    });
    const { addToast } = useNotification();
 
-   // When user data loads after login, redirect to appropriate dashboard
+   // A browser profile has one active TruthLens identity. Restored sessions
+   // leave the sign-in route immediately; switching accounts must begin with
+   // an explicit logout/account-switch action.
    useEffect(() => {
-      if (justLoggedIn && user && !loading) {
-         setJustLoggedIn(false);
+      if (loading) {
+         return;
+      }
 
-         addToast({
-            type: "success",
-            title: "Signed in",
-            message: "Welcome back to TruthLens.",
-            duration: 3000,
-         });
+      if (user) {
+         if (justLoggedIn) {
+            addToast({
+               type: "success",
+               title: "Signed in",
+               message: "Welcome back to TruthLens.",
+               duration: 3000,
+            });
+         }
+
+         setJustLoggedIn(false);
 
          const destination = from || (canAccessWorkspace(user) ? "/workspace" : "/community");
 
          navigate(destination, {
             replace: true,
          });
-      } else if (justLoggedIn && !user && !loading) {
+         return;
+      }
+
+      if (justLoggedIn) {
          setJustLoggedIn(false);
          setError("Your session could not be restored. Please sign in again.");
       }
@@ -176,7 +187,7 @@ function LoginPage() {
       },
    });
 
-   if (justLoggedIn && loading) {
+   if (loading || user) {
       return <AuthRouteLoader error={sessionRestoreError} onRetry={retrySessionRestore} />;
    }
 

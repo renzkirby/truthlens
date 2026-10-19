@@ -5,9 +5,17 @@ import { API_BASE_URL } from "../utils/constants";
 import {
    getAccessToken,
    getRefreshToken,
+   getAuthSnapshot,
    storeAuthTokens,
    updateAuthTokens,
    clearAuthTokens,
+   applyAuthSnapshot,
+   chooseFreshestAuthSnapshot,
+   isSameAuthSnapshot,
+   shouldApplyAuthClear,
+   subscribeToAuthSessionSync,
+   requestSharedAuthSession,
+   publishCurrentAuthSession,
 } from "../utils/authStorage";
 
 const API_ROOT_URL = API_BASE_URL.replace(/\/api\/?$/, "");
@@ -42,10 +50,10 @@ const createSessionInitializationError = () => {
 export function AuthProvider({ children }) {
    const [token, setToken] = useState(getAccessToken() || null);
    const [user, setUser] = useState(null);
-   const [loading, setLoading] = useState(Boolean(getAccessToken() || getRefreshToken()));
+   const [loading, setLoading] = useState(true);
    const [sessionRestoreError, setSessionRestoreError] = useState(null);
    const authGenerationRef = useRef(0);
-   const sessionHydratingRef = useRef(Boolean(getAccessToken() || getRefreshToken()));
+   const sessionHydratingRef = useRef(true);
    const hydrationPromiseRef = useRef(null);
    const automaticRetryCountRef = useRef(0);
    const apiClientRef = useRef(
@@ -284,6 +292,63 @@ export function AuthProvider({ children }) {
       return hydrateSession(savedAccess, generation).catch(() => null);
    }, [hydrateSession, logout]);
 
+   useEffect(() => {
+      const unsubscribe = subscribeToAuthSessionSync((message) => {
+         const currentSnapshot = getAuthSnapshot();
+
+         if (message?.type === "SESSION_CLEARED") {
+            if (!shouldApplyAuthClear(currentSnapshot, message)) {
+               return;
+            }
+
+            authGenerationRef.current += 1;
+            sessionHydratingRef.current = false;
+            hydrationPromiseRef.current = null;
+            automaticRetryCountRef.current = 0;
+            clearAuthTokens({ broadcast: false, reason: "remote_logout" });
+            setToken(null);
+            setUser(null);
+            setLoading(false);
+            setSessionRestoreError(null);
+            return;
+         }
+
+         if (message?.type !== "SESSION_UPDATED" || !message.snapshot) {
+            return;
+         }
+
+         const preferredSnapshot = chooseFreshestAuthSnapshot(
+            currentSnapshot,
+            message.snapshot,
+         );
+
+         if (
+            !preferredSnapshot ||
+            !isSameAuthSnapshot(preferredSnapshot, message.snapshot) ||
+            isSameAuthSnapshot(currentSnapshot, message.snapshot)
+         ) {
+            return;
+         }
+
+         const generation = ++authGenerationRef.current;
+         sessionHydratingRef.current = true;
+         hydrationPromiseRef.current = null;
+         automaticRetryCountRef.current = 0;
+         applyAuthSnapshot(message.snapshot, {
+            broadcast: false,
+            reason: "remote_sync",
+         });
+         setToken(getAccessToken());
+         setUser(null);
+         setLoading(true);
+         setSessionRestoreError(null);
+
+         hydrateSession(getAccessToken(), generation).catch(() => null);
+      });
+
+      return unsubscribe;
+   }, [hydrateSession]);
+
    const login = async (access, refresh, rememberMe = false) => {
       const generation = ++authGenerationRef.current;
       sessionHydratingRef.current = true;
@@ -365,16 +430,54 @@ export function AuthProvider({ children }) {
    }, [fetchUser]);
 
    useEffect(() => {
-      const savedAccess = getAccessToken();
-      const savedRefresh = getRefreshToken();
+      let cancelled = false;
 
-      if (savedAccess || savedRefresh) {
-         const generation = authGenerationRef.current;
-         hydrateSession(savedAccess, generation).catch(() => null);
-      } else {
+      const restoreBrowserSession = async () => {
+         const startingSnapshot = getAuthSnapshot();
+         const sharedSnapshot = await requestSharedAuthSession();
+
+         if (cancelled) {
+            return;
+         }
+
+         const currentSnapshot = getAuthSnapshot();
+         const preferredSnapshot = chooseFreshestAuthSnapshot(
+            currentSnapshot,
+            startingSnapshot,
+            sharedSnapshot,
+         );
+
+         if (preferredSnapshot && !isSameAuthSnapshot(preferredSnapshot, currentSnapshot)) {
+            applyAuthSnapshot(preferredSnapshot, {
+               broadcast: false,
+               reason: "startup_reconcile",
+            });
+         }
+
+         if (preferredSnapshot) {
+            publishCurrentAuthSession("startup_reconcile");
+         }
+
+         const activeSnapshot = getAuthSnapshot();
+
+         if (activeSnapshot?.access || activeSnapshot?.refresh) {
+            const generation = authGenerationRef.current;
+            hydrateSession(activeSnapshot.access, generation).catch(() => null);
+            return;
+         }
+
          sessionHydratingRef.current = false;
+         setToken(null);
+         setUser(null);
          setLoading(false);
-      }
+         setSessionRestoreError(null);
+      };
+
+      restoreBrowserSession();
+
+      return () => {
+         cancelled = true;
+      };
    }, [hydrateSession]);
 
    useEffect(() => {
