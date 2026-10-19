@@ -11,6 +11,7 @@ Modes:
 import hashlib
 import json
 import logging
+import re
 
 from django.conf import settings
 from django.db import transaction
@@ -88,7 +89,13 @@ def validate_model_suggestion(text, payload):
     # Extra guard against a model mapping geographic evidence to an
     # unrelated jurisdiction. Unknown countries/subdivisions abstain.
     terms = JURISDICTION_TERMS.get(jurisdiction)
-    if not terms or not any(term in str(geo_evidence).casefold() for term in terms):
+    if not terms or not any(
+        re.search(
+            r"(?<![a-z])" + re.escape(term) + r"(?![a-z])",
+            str(geo_evidence).casefold(),
+        )
+        for term in terms
+    ):
         return None
     return sorted(codes), jurisdiction
 
@@ -139,6 +146,11 @@ def classify_investigation_claim(claim_id):
 
     with transaction.atomic():
         locked = Claim.objects.select_for_update().get(pk=claim_id)
+        # Classification must correspond to the exact text evaluated. Late
+        # provider responses may not classify a subsequently revised claim.
+        current_text = (locked.context_text or "").strip()
+        if hashlib.sha256(current_text.encode("utf-8")).hexdigest() != fingerprint:
+            return "STALE_CONTEXT"
         # Once work has been claimed or concluded, late jobs cannot alter
         # the assignment's governing classification.
         if VerificationAssignment.objects.filter(

@@ -298,6 +298,44 @@ class VerificationAssignmentServiceTests(TestCase):
                 assignment=assignment, organization=self.organization_a, actor=self.lead_a,
             )
 
+    def test_platform_approval_without_active_selection_cannot_claim(self):
+        assignment = self._create_assignment()
+        self.organization_a.active_scope_configured = True
+        self.organization_a.active_verification_domains = []
+        self.organization_a.active_verification_jurisdictions = []
+        self.organization_a.save(update_fields=[
+            "active_scope_configured",
+            "active_verification_domains",
+            "active_verification_jurisdictions",
+        ])
+        with self.assertRaises(VerificationAssignmentAuthorizationError):
+            claim_verification_assignment(
+                assignment=assignment,
+                organization=self.organization_a,
+                actor=self.lead_a,
+            )
+        self.organization_a.active_verification_domains = ["SCIENCE"]
+        self.organization_a.active_verification_jurisdictions = ["PH"]
+        self.organization_a.save(update_fields=[
+            "active_verification_domains", "active_verification_jurisdictions",
+        ])
+        claimed = claim_verification_assignment(
+            assignment=assignment,
+            organization=self.organization_a,
+            actor=self.lead_a,
+        )
+        self.assertEqual(claimed.status, VerificationAssignment.Status.ACTIVE)
+
+        # Later deactivation does not rewrite existing ownership.
+        self.organization_a.active_verification_domains = []
+        self.organization_a.active_verification_jurisdictions = []
+        self.organization_a.save(update_fields=[
+            "active_verification_domains", "active_verification_jurisdictions",
+        ])
+        claimed.refresh_from_db()
+        self.assertEqual(claimed.status, VerificationAssignment.Status.ACTIVE)
+        self.assertEqual(claimed.organization_id, self.organization_a.pk)
+
     def test_lead_verifier_can_claim_available_work(
         self,
     ):
