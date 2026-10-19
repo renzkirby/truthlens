@@ -1630,3 +1630,37 @@
 @keyframes management-drawer-in {
   from { transform: translateX(-100%); }
 }
+
+/* PARTNER-GOV-1 — platform-controlled verification scope editors. */
+.management-scope-options {
+   display: grid;
+   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+   gap: 10px 18px;
+   margin-top: 12px;
+}
+.management-scope-options label {
+   display: flex;
+   align-items: center;
+   gap: 9px;
+   cursor: pointer;
+}
+.management-scope-options input[type="checkbox"] {
+   flex-shrink: 0;
+   width: 17px;
+   height: 17px;
+}
+.management-trust-editor textarea {
+   width: 100%;
+   min-height: 92px;
+   border: 1px solid var(--tl-border, #a0a0a0);
+   border-radius: 8px;
+   padding: 12px;
+   font: inherit;
+   background: var(--tl-surface, #fff);
+   color: inherit;
+}
+.management-trust-editor textarea:focus-visible,
+.management-scope-options input:focus-visible {
+   outline: 2px solid currentColor;
+   outline-offset: 3px;
+}

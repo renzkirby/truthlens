@@ -96,6 +96,11 @@ export const API_ENDPOINTS = {
       `management/organizations/${encodeURIComponent(organizationId)}/`,
    MANAGEMENT_ORGANIZATION_PLATFORM_TRUST: (organizationId) =>
       `management/organizations/${encodeURIComponent(organizationId)}/platform-trust/`,
+   MANAGEMENT_ORGANIZATION_VERIFICATION_SCOPE: (organizationId) =>
+      `management/organizations/${encodeURIComponent(organizationId)}/verification-scope/`,
+   MANAGEMENT_UNCLASSIFIED_INTAKE: "management/verification-intake/unclassified/",
+   MANAGEMENT_CLASSIFY_CLAIM: (claimId) =>
+      `management/claims/${encodeURIComponent(claimId)}/investigation-classification/`,
    MANAGEMENT_PRIMARY_ADMIN_PROVISION: (organizationId) =>
       `management/organizations/${encodeURIComponent(organizationId)}/primary-admin/`,
    MANAGEMENT_PRIMARY_ADMIN_RESEND: (organizationId) =>

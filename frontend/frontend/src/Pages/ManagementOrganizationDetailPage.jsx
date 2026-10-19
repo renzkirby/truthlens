@@ -19,6 +19,8 @@ import {
    formatManagementDate,
    MANAGEMENT_PARTNER_STATUSES,
    MANAGEMENT_VERIFICATION_STATUSES,
+   MANAGEMENT_VERIFICATION_DOMAINS,
+   formatVerificationDomain,
 } from "../utils/management";
 
 function FieldError({ id, children }) {
@@ -187,6 +189,144 @@ function PlatformTrustSection({
             onConfirm={saveChanges}
             onClose={() => setConfirmationOpen(false)}
          />
+      </section>
+   );
+}
+
+
+function VerificationScopeSection({ organization, onRefresh, onFeedback }) {
+   const [editing, setEditing] = useState(false);
+   const [domains, setDomains] = useState([]);
+   const [jurisdictions, setJurisdictions] = useState("");
+   const [rationale, setRationale] = useState("");
+   const { mutate, pending, error, reset } = useManagementMutation();
+
+   const startEditing = () => {
+      setDomains(organization.approved_verification_domains || []);
+      setJurisdictions((organization.approved_verification_jurisdictions || []).join(", "));
+      setRationale("");
+      reset();
+      setEditing(true);
+   };
+
+   const save = async (event) => {
+      event.preventDefault();
+      const normalizedJurisdictions = [...new Set(
+         jurisdictions.split(",").map((value) => value.trim().toUpperCase()).filter(Boolean),
+      )];
+      const result = await mutate(
+         resolveApiEndpoint("MANAGEMENT_ORGANIZATION_VERIFICATION_SCOPE", organization.id),
+         {
+            method: "PATCH",
+            body: {
+               domains,
+               jurisdictions: normalizedJurisdictions,
+               rationale: rationale.trim(),
+            },
+         },
+      );
+      if (!result.ok) return;
+      setEditing(false);
+      onFeedback("Platform-approved verification scope updated.");
+      onRefresh();
+   };
+
+   const currentDomains = organization.approved_verification_domains || [];
+   const currentJurisdictions = organization.approved_verification_jurisdictions || [];
+
+   return (
+      <section className="management-detail-section">
+         <div className="management-trust-heading">
+            <h2>Approved Verification Scope</h2>
+            {!editing ? (
+               <Button variant="secondary" density="compact" onClick={startEditing}>
+                  Review approved scope
+               </Button>
+            ) : null}
+         </div>
+         <p className="management-section__description">
+            Only platform-approved subjects and jurisdictions authorize new investigations.
+            Public-profile expertise is self-declared and does not grant permission.
+         </p>
+         <DetailList items={[
+            {
+               label: "Approved subjects",
+               value: currentDomains.length
+                  ? currentDomains.map(formatVerificationDomain).join(", ")
+                  : "None approved",
+            },
+            {
+               label: "Approved jurisdictions",
+               value: currentJurisdictions.length
+                  ? currentJurisdictions.join(", ")
+                  : "None approved",
+            },
+         ]} />
+         {editing ? (
+            <form className="management-trust-editor" onSubmit={save}>
+               <fieldset className="management-form-field" disabled={pending}>
+                  <legend>Approved investigation subjects</legend>
+                  <div className="management-scope-options">
+                     {MANAGEMENT_VERIFICATION_DOMAINS.map(([code, label]) => (
+                        <label key={code}>
+                           <input
+                              type="checkbox"
+                              checked={domains.includes(code)}
+                              onChange={(event) => {
+                                 reset();
+                                 setDomains((current) => event.target.checked
+                                    ? [...current, code]
+                                    : current.filter((entry) => entry !== code));
+                              }}
+                           />
+                           <span>{label}</span>
+                        </label>
+                     ))}
+                  </div>
+               </fieldset>
+               <label className="management-form-field">
+                  <span>Approved jurisdictions</span>
+                  <Input
+                     value={jurisdictions}
+                     placeholder="PH, PH-NCR, or GLOBAL"
+                     onChange={(event) => {
+                        reset();
+                        setJurisdictions(event.target.value);
+                     }}
+                     disabled={pending}
+                  />
+                  <small>Comma-separated country/subdivision codes. GLOBAL means worldwide authority and should be explicitly approved.</small>
+               </label>
+               <label className="management-form-field">
+                  <span>Review rationale (required)</span>
+                  <textarea
+                     rows={3}
+                     maxLength={2000}
+                     value={rationale}
+                     onChange={(event) => { reset(); setRationale(event.target.value); }}
+                     placeholder="Explain the organization's demonstrated competence and authorized geographic scope"
+                     required
+                     minLength={12}
+                     disabled={pending}
+                  />
+               </label>
+               {error ? <ManagementFeedback tone="error">{error.message}</ManagementFeedback> : null}
+               <div className="management-inline-actions">
+                  <Button type="button" variant="secondary" disabled={pending} onClick={() => {
+                     reset();
+                     setEditing(false);
+                  }}>Cancel</Button>
+                  <Button type="submit" disabled={pending || rationale.trim().length < 12 || Boolean(domains.length) !== Boolean(jurisdictions.trim())}
+                     loading={pending} loadingLabel="Saving…">
+                     Save approved scope
+                  </Button>
+               </div>
+               <p className="management-section__description">
+                  To revoke all approval, clear all subjects and jurisdictions and provide a rationale.
+                  Changes affect new claims of available work, not investigations already assigned.
+               </p>
+            </form>
+         ) : null}
       </section>
    );
 }
@@ -448,6 +588,11 @@ function ManagementOrganizationDetailPage() {
                      onRefresh={retry}
                      onFeedback={showFeedback}
                      returnFocusAfterRefreshRef={returnFocusAfterTrustRefreshRef}
+                  />
+                  <VerificationScopeSection
+                     organization={data}
+                     onRefresh={retry}
+                     onFeedback={showFeedback}
                   />
                   <section className="management-detail-section">
                      <PrimaryAdminState

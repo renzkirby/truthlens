@@ -12,6 +12,7 @@ const NAVIGATION_ITEMS = [
    { to: "/management", label: "Overview", icon: "dashboard", end: true },
    { to: "/management/pipeline", label: "Pipeline Health", icon: "activity", section: "Operations" },
    { to: "/management/organizations", label: "Organizations", icon: "landmark", section: "Governance" },
+   { to: "/management/classification", label: "Claims Needing Classification", icon: "clipboard-list" },
    { to: "/management/memberships", label: "Memberships", icon: "users" },
    { to: "/management/invitations", label: "Invitations", icon: "mail" },
    { to: "/management/audit", label: "Governance Audit", icon: "shield-check" },
