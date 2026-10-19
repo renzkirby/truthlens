@@ -193,12 +193,21 @@ function App() {
       hydratePopupSession();
 
       const handleStorageChange = (changes, areaName) => {
-         if (areaName !== "local") {
+         if (areaName !== "local" && areaName !== "session") {
             return;
          }
 
-         if (changes[AUTH_STORAGE_KEYS.ACCESS_TOKEN] || changes[AUTH_STORAGE_KEYS.REFRESH_TOKEN]) {
+         if (
+            changes[AUTH_STORAGE_KEYS.ACCESS_TOKEN] ||
+            changes[AUTH_STORAGE_KEYS.REFRESH_TOKEN] ||
+            changes[AUTH_STORAGE_KEYS.SESSION_ID] ||
+            changes[AUTH_STORAGE_KEYS.PERSISTENCE]
+         ) {
             hydratePopupSession();
+            return;
+         }
+
+         if (areaName !== "local") {
             return;
          }
 
