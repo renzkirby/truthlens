@@ -591,7 +591,7 @@ function ManagementOrganizationDetailPage() {
                         { label: "Description", value: data.description },
                         { label: "Website", node: data.website ? <a href={data.website} target="_blank" rel="noreferrer">{data.website}</a> : "Not provided" },
                         { label: "Logo URL", value: data.logo_url || "Not provided" },
-                        { label: "Expertise", value: data.expertise_areas?.length ? data.expertise_areas.join(", ") : "Not provided" },
+                        { label: "Legacy descriptive interests (not authorization)", value: data.expertise_areas?.length ? data.expertise_areas.join(", ") : "Not provided" },
                         { label: "Public profile", value: data.public_profile_enabled ? "Enabled" : "Disabled" },
                         { label: "Public logo", value: data.public_logo_enabled ? "Enabled" : "Disabled" },
                      ]} />

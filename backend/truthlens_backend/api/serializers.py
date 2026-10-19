@@ -801,6 +801,12 @@ class PublicPartnerDirectoryQuerySerializer(serializers.Serializer):
 
 class PublicPartnerSummarySerializer(serializers.ModelSerializer):
     logo_url = serializers.SerializerMethodField()
+    authorized_verification_domains = serializers.SerializerMethodField()
+
+    def get_authorized_verification_domains(self, obj):
+        from .verification_domain_policy import effective_organization_scope
+        domains, _jurisdictions = effective_organization_scope(obj)
+        return domains
 
     organization_type_label = serializers.CharField(
         source="get_organization_type_display",
@@ -829,6 +835,7 @@ class PublicPartnerSummarySerializer(serializers.ModelSerializer):
             "organization_type",
             "organization_type_label",
             "expertise_areas",
+            "authorized_verification_domains",
         ]
 
         read_only_fields = fields

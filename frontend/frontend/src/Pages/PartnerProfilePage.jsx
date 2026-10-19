@@ -472,7 +472,8 @@ function PartnerProfileContent({ slug, isCommunity }) {
    }
 
    const followerCount = Number(partner.followers_count || 0);
-   const expertiseAreas = Array.isArray(partner.expertise_areas) ? partner.expertise_areas : [];
+   const expertiseAreas = Array.isArray(partner.authorized_verification_domains)
+      ? partner.authorized_verification_domains : [];
    const currentTabDescription =
       activeTab === "published"
          ? `Institutionally published fact-checks from ${partner.name}.`
@@ -630,7 +631,7 @@ function PartnerProfileContent({ slug, isCommunity }) {
 
                      <section className="user-profile__activity-item partner-profile__about-section">
                         <div className="user-profile__activity-copy">
-                           <h3>Expertise</h3>
+                           <h3>Authorized investigation specializations</h3>
                            {expertiseAreas.length > 0 ? (
                               <ul className="partner-profile-expertise">
                                  {expertiseAreas.map((area, index) => (
@@ -638,7 +639,7 @@ function PartnerProfileContent({ slug, isCommunity }) {
                                  ))}
                               </ul>
                            ) : (
-                              <p>No public expertise areas have been listed.</p>
+                              <p>No specializations are currently authorized and active.</p>
                            )}
                         </div>
                      </section>
