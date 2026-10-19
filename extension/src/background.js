@@ -424,6 +424,12 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             accepted: true,
             access: session?.accessToken || null,
             refresh: session?.refreshToken || null,
+            persistence: session?.persistence || null,
+            sessionId: session?.sessionId || null,
+            sessionStartedAt: session?.sessionStartedAt || null,
+            updatedAt: session?.lastSyncAt
+               ? new Date(session.lastSyncAt).getTime()
+               : null,
          });
       })().catch((error) => {
          sendResponse({
@@ -500,6 +506,13 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 
       const accessToken = typeof payload.access === "string" && payload.access.trim() ? payload.access : null;
       const refreshToken = typeof payload.refresh === "string" && payload.refresh.trim() ? payload.refresh : null;
+      const persistence = payload.persistence === "local" ? "local" : "session";
+      const sessionId =
+         typeof payload.sessionId === "string" && payload.sessionId.trim()
+            ? payload.sessionId.trim()
+            : null;
+      const sessionStartedAt = Number(payload.sessionStartedAt) || null;
+      const updatedAt = Number(payload.updatedAt) || null;
 
       (async () => {
          if (!accessToken && !refreshToken) {
@@ -513,6 +526,10 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             accessToken,
             refreshToken,
             origin: senderOrigin,
+            persistence,
+            sessionId,
+            sessionStartedAt,
+            updatedAt,
          });
 
          const guestSync = await maybeSyncGuestScansAfterLogin();

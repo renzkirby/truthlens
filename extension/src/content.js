@@ -6,18 +6,42 @@ const BRIDGE_EVENT_SOURCE = "TRUTHLENS_WEB_AUTH_BRIDGE";
 const EXTENSION_EVENT_SOURCE = "TRUTHLENS_EXTENSION";
 const BRIDGE_SCRIPT_ID = "truthlens-auth-bridge-script";
 const TOKEN_SYNC_POLL_MS = 3000;
+const WEB_AUTH_SESSION_ID_KEY = "truthlens_auth_session_id";
+const WEB_AUTH_SESSION_STARTED_AT_KEY = "truthlens_auth_session_started_at";
+const WEB_AUTH_UPDATED_AT_KEY = "truthlens_auth_updated_at";
 
 let lastSyncedTokenFingerprint = null;
 
 function normalizeTokenPayload(payload = {}) {
    const access = typeof payload.access === "string" && payload.access.trim() ? payload.access.trim() : null;
    const refresh = typeof payload.refresh === "string" && payload.refresh.trim() ? payload.refresh.trim() : null;
+   const persistence = payload.persistence === "local" ? "local" : access || refresh ? "session" : null;
+   const sessionId =
+      typeof payload.sessionId === "string" && payload.sessionId.trim()
+         ? payload.sessionId.trim()
+         : null;
+   const sessionStartedAt = Number(payload.sessionStartedAt) || null;
+   const updatedAt = Number(payload.updatedAt) || null;
 
-   return { access, refresh };
+   return {
+      access,
+      refresh,
+      persistence,
+      sessionId,
+      sessionStartedAt,
+      updatedAt,
+   };
 }
 
 function getTokenFingerprint(tokens) {
-   return `${tokens?.access || ""}::${tokens?.refresh || ""}`;
+   return [
+      tokens?.access || "",
+      tokens?.refresh || "",
+      tokens?.persistence || "",
+      tokens?.sessionId || "",
+      tokens?.sessionStartedAt || "",
+      tokens?.updatedAt || "",
+   ].join("::");
 }
 
 function syncTokensToWorker(tokens, reason = "unknown") {
@@ -52,13 +76,31 @@ function syncTokensToWorker(tokens, reason = "unknown") {
 
 function readTokensFromPageStorage() {
    try {
-      return normalizeTokenPayload({
-         access: window.localStorage.getItem("access") || window.sessionStorage.getItem("access"),
+      const readStorage = (storage, persistence) => {
+         const access = storage.getItem("access");
+         const refresh = storage.getItem("refresh");
 
-         refresh: window.localStorage.getItem("refresh") || window.sessionStorage.getItem("refresh"),
-      });
+         if (!access && !refresh) {
+            return null;
+         }
+
+         return normalizeTokenPayload({
+            access,
+            refresh,
+            persistence,
+            sessionId: storage.getItem(WEB_AUTH_SESSION_ID_KEY),
+            sessionStartedAt: storage.getItem(WEB_AUTH_SESSION_STARTED_AT_KEY),
+            updatedAt: storage.getItem(WEB_AUTH_UPDATED_AT_KEY),
+         });
+      };
+
+      return (
+         readStorage(window.localStorage, "local") ||
+         readStorage(window.sessionStorage, "session") ||
+         normalizeTokenPayload()
+      );
    } catch {
-      return { access: null, refresh: null };
+      return normalizeTokenPayload();
    }
 }
 
@@ -245,23 +287,50 @@ function restoreTokensFromWorker(onComplete) {
             return;
          }
 
-         const access = typeof response.access === "string" && response.access.trim() ? response.access.trim() : null;
-
-         const refresh =
-            typeof response.refresh === "string" && response.refresh.trim() ? response.refresh.trim() : null;
+         const restored = normalizeTokenPayload(response);
 
          try {
             const pageAccess = window.localStorage.getItem("access") || window.sessionStorage.getItem("access");
             const pageRefresh = window.localStorage.getItem("refresh") || window.sessionStorage.getItem("refresh");
             const pageHasAuthMaterial = Boolean(pageAccess || pageRefresh);
 
-            if (!pageHasAuthMaterial) {
-               if (access) {
-                  window.sessionStorage.setItem("access", access);
+            if (!pageHasAuthMaterial && (restored.access || restored.refresh)) {
+               const targetStorage =
+                  restored.persistence === "local"
+                     ? window.localStorage
+                     : window.sessionStorage;
+               const otherStorage =
+                  restored.persistence === "local"
+                     ? window.sessionStorage
+                     : window.localStorage;
+
+               ["access", "refresh", WEB_AUTH_SESSION_ID_KEY, WEB_AUTH_SESSION_STARTED_AT_KEY, WEB_AUTH_UPDATED_AT_KEY]
+                  .forEach((key) => otherStorage.removeItem(key));
+
+               if (restored.access) {
+                  targetStorage.setItem("access", restored.access);
                }
 
-               if (refresh) {
-                  window.sessionStorage.setItem("refresh", refresh);
+               if (restored.refresh) {
+                  targetStorage.setItem("refresh", restored.refresh);
+               }
+
+               if (restored.sessionId) {
+                  targetStorage.setItem(WEB_AUTH_SESSION_ID_KEY, restored.sessionId);
+               }
+
+               if (restored.sessionStartedAt) {
+                  targetStorage.setItem(
+                     WEB_AUTH_SESSION_STARTED_AT_KEY,
+                     String(restored.sessionStartedAt),
+                  );
+               }
+
+               if (restored.updatedAt) {
+                  targetStorage.setItem(
+                     WEB_AUTH_UPDATED_AT_KEY,
+                     String(restored.updatedAt),
+                  );
                }
             }
          } catch (error) {

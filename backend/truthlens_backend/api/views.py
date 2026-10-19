@@ -4993,6 +4993,9 @@ def organization_invitation_detail(
     return Response(
         OrganizationInvitationPublicSerializer(
             invitation,
+            context={
+                "request": request,
+            },
         ).data,
         status=status.HTTP_200_OK,
     )
@@ -5023,6 +5026,9 @@ def organization_invitation_accept(
             "invitation": (
                 OrganizationInvitationPublicSerializer(
                     invitation,
+                    context={
+                        "request": request,
+                    },
                 ).data
             ),
             "membership": {

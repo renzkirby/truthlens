@@ -153,6 +153,55 @@ class OrganizationInvitationAcceptanceApiTests(APITestCase):
             OrganizationInvitation.Status.PENDING,
         )
 
+        self.assertIsNone(
+            response.data["recipient_matches_current_user"],
+        )
+
+    def test_authenticated_preview_reports_recipient_match_without_exposing_email(
+        self,
+    ):
+        _invitation, raw_token = self.create_invitation()
+
+        url = reverse(
+            "organization_invitation_detail",
+            kwargs={
+                "token": raw_token,
+            },
+        )
+
+        matching_response = self.client_for(
+            self.recipient,
+        ).get(
+            url,
+        )
+
+        wrong_response = self.client_for(
+            self.wrong_user,
+        ).get(
+            url,
+        )
+
+        self.assertEqual(
+            matching_response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertIs(
+            matching_response.data["recipient_matches_current_user"],
+            True,
+        )
+        self.assertIs(
+            wrong_response.data["recipient_matches_current_user"],
+            False,
+        )
+        self.assertNotIn(
+            "email",
+            matching_response.data,
+        )
+        self.assertNotIn(
+            "email",
+            wrong_response.data,
+        )
+
     def test_public_preview_does_not_expose_private_invitation_data(
         self,
     ):

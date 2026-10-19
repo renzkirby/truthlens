@@ -3,30 +3,93 @@ import { state } from "./state.js";
 export const AUTH_STORAGE_KEYS = {
    ACCESS_TOKEN: "truthlens_access_token",
    REFRESH_TOKEN: "truthlens_refresh_token",
+   PERSISTENCE: "truthlens_auth_persistence",
+   SESSION_ID: "truthlens_auth_session_id",
+   SESSION_STARTED_AT: "truthlens_auth_session_started_at",
    LAST_SYNC_ORIGIN: "truthlens_last_sync_origin",
    LAST_SYNC_AT: "truthlens_last_sync_at",
 };
 
+const SESSION_PERSISTENCE = "session";
+const LOCAL_PERSISTENCE = "local";
+const AUTH_STORAGE_KEY_LIST = Object.values(AUTH_STORAGE_KEYS);
+
 let refreshInFlight = null;
 
-function storageGet(keys) {
+const createIdentifier = () => {
+   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+   }
+
+   return `truthlens-extension-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+};
+
+const normalizePersistence = (value) =>
+   value === LOCAL_PERSISTENCE ? LOCAL_PERSISTENCE : SESSION_PERSISTENCE;
+
+const getSessionStorageArea = () => chrome.storage.session || null;
+
+function storageGet(area, keys) {
+   if (!area) {
+      return Promise.resolve({});
+   }
+
    return new Promise((resolve) => {
-      chrome.storage.local.get(keys, (result) => {
+      area.get(keys, (result) => {
          resolve(result || {});
       });
    });
 }
 
-function storageSet(payload) {
+function storageSet(area, payload) {
+   if (!area) {
+      return Promise.resolve();
+   }
+
    return new Promise((resolve) => {
-      chrome.storage.local.set(payload, () => resolve());
+      area.set(payload, () => resolve());
    });
 }
 
-function storageRemove(keys) {
+function storageRemove(area, keys) {
+   if (!area) {
+      return Promise.resolve();
+   }
+
    return new Promise((resolve) => {
-      chrome.storage.local.remove(keys, () => resolve());
+      area.remove(keys, () => resolve());
    });
+}
+
+function hasAuthMaterial(stored) {
+   return Boolean(
+      stored?.[AUTH_STORAGE_KEYS.ACCESS_TOKEN] ||
+      stored?.[AUTH_STORAGE_KEYS.REFRESH_TOKEN],
+   );
+}
+
+function normalizeStoredSession(stored, fallbackPersistence) {
+   const persistence = normalizePersistence(
+      stored?.[AUTH_STORAGE_KEYS.PERSISTENCE] || fallbackPersistence,
+   );
+
+   return {
+      accessToken: stored?.[AUTH_STORAGE_KEYS.ACCESS_TOKEN] || null,
+      refreshToken: stored?.[AUTH_STORAGE_KEYS.REFRESH_TOKEN] || null,
+      persistence,
+      sessionId: stored?.[AUTH_STORAGE_KEYS.SESSION_ID] || null,
+      sessionStartedAt: stored?.[AUTH_STORAGE_KEYS.SESSION_STARTED_AT] || null,
+      lastSyncOrigin: stored?.[AUTH_STORAGE_KEYS.LAST_SYNC_ORIGIN] || null,
+      lastSyncAt: stored?.[AUTH_STORAGE_KEYS.LAST_SYNC_AT] || null,
+   };
+}
+
+function storageAreaForPersistence(persistence) {
+   if (normalizePersistence(persistence) === LOCAL_PERSISTENCE) {
+      return chrome.storage.local;
+   }
+
+   return getSessionStorageArea() || chrome.storage.local;
 }
 
 export function isTrustedWebOrigin(origin) {
@@ -35,28 +98,47 @@ export function isTrustedWebOrigin(origin) {
 }
 
 export async function getAuthSession() {
-   const stored = await storageGet([
-      AUTH_STORAGE_KEYS.ACCESS_TOKEN,
-      AUTH_STORAGE_KEYS.REFRESH_TOKEN,
-      AUTH_STORAGE_KEYS.LAST_SYNC_ORIGIN,
-      AUTH_STORAGE_KEYS.LAST_SYNC_AT,
+   const sessionArea = getSessionStorageArea();
+   const [localStored, sessionStored] = await Promise.all([
+      storageGet(chrome.storage.local, AUTH_STORAGE_KEY_LIST),
+      storageGet(sessionArea, AUTH_STORAGE_KEY_LIST),
    ]);
 
+   if (hasAuthMaterial(localStored)) {
+      return normalizeStoredSession(localStored, LOCAL_PERSISTENCE);
+   }
+
+   if (hasAuthMaterial(sessionStored)) {
+      return normalizeStoredSession(sessionStored, SESSION_PERSISTENCE);
+   }
+
    return {
-      accessToken: stored[AUTH_STORAGE_KEYS.ACCESS_TOKEN] || null,
-      refreshToken: stored[AUTH_STORAGE_KEYS.REFRESH_TOKEN] || null,
-      lastSyncOrigin: stored[AUTH_STORAGE_KEYS.LAST_SYNC_ORIGIN] || null,
-      lastSyncAt: stored[AUTH_STORAGE_KEYS.LAST_SYNC_AT] || null,
+      accessToken: null,
+      refreshToken: null,
+      persistence: null,
+      sessionId: null,
+      sessionStartedAt: null,
+      lastSyncOrigin: null,
+      lastSyncAt: null,
    };
 }
 
-export async function saveAuthSession({ accessToken = null, refreshToken = null, origin = null }) {
+export async function saveAuthSession({
+   accessToken = null,
+   refreshToken = null,
+   origin = null,
+}) {
+   const current = await getAuthSession();
+   const persistence = normalizePersistence(current.persistence);
+   const area = storageAreaForPersistence(persistence);
+
    const updates = {
+      [AUTH_STORAGE_KEYS.PERSISTENCE]: persistence,
       [AUTH_STORAGE_KEYS.LAST_SYNC_AT]: new Date().toISOString(),
    };
 
-   if (origin) {
-      updates[AUTH_STORAGE_KEYS.LAST_SYNC_ORIGIN] = origin;
+   if (origin || current.lastSyncOrigin) {
+      updates[AUTH_STORAGE_KEYS.LAST_SYNC_ORIGIN] = origin || current.lastSyncOrigin;
    }
 
    if (accessToken) {
@@ -67,24 +149,54 @@ export async function saveAuthSession({ accessToken = null, refreshToken = null,
       updates[AUTH_STORAGE_KEYS.REFRESH_TOKEN] = refreshToken;
    }
 
-   await storageSet(updates);
+   if (current.sessionId) {
+      updates[AUTH_STORAGE_KEYS.SESSION_ID] = current.sessionId;
+   }
+
+   if (current.sessionStartedAt) {
+      updates[AUTH_STORAGE_KEYS.SESSION_STARTED_AT] = current.sessionStartedAt;
+   }
+
+   await storageSet(area, updates);
 }
 
-export async function replaceAuthSession({ accessToken = null, refreshToken = null, origin = null }) {
-   await storageSet({
+export async function replaceAuthSession({
+   accessToken = null,
+   refreshToken = null,
+   origin = null,
+   persistence = SESSION_PERSISTENCE,
+   sessionId = null,
+   sessionStartedAt = null,
+   updatedAt = null,
+}) {
+   await clearAuthSession();
+
+   if (!accessToken && !refreshToken) {
+      return;
+   }
+
+   const normalizedPersistence = normalizePersistence(persistence);
+   const area = storageAreaForPersistence(normalizedPersistence);
+   const startedAt = Number(sessionStartedAt) || Date.now();
+
+   await storageSet(area, {
       [AUTH_STORAGE_KEYS.ACCESS_TOKEN]: accessToken || null,
       [AUTH_STORAGE_KEYS.REFRESH_TOKEN]: refreshToken || null,
+      [AUTH_STORAGE_KEYS.PERSISTENCE]: normalizedPersistence,
+      [AUTH_STORAGE_KEYS.SESSION_ID]: sessionId || createIdentifier(),
+      [AUTH_STORAGE_KEYS.SESSION_STARTED_AT]: startedAt,
       [AUTH_STORAGE_KEYS.LAST_SYNC_ORIGIN]: origin || null,
-      [AUTH_STORAGE_KEYS.LAST_SYNC_AT]: new Date().toISOString(),
+      [AUTH_STORAGE_KEYS.LAST_SYNC_AT]:
+         Number(updatedAt) > 0
+            ? new Date(Number(updatedAt)).toISOString()
+            : new Date().toISOString(),
    });
 }
 
 export async function clearAuthSession() {
-   await storageRemove([
-      AUTH_STORAGE_KEYS.ACCESS_TOKEN,
-      AUTH_STORAGE_KEYS.REFRESH_TOKEN,
-      AUTH_STORAGE_KEYS.LAST_SYNC_ORIGIN,
-      AUTH_STORAGE_KEYS.LAST_SYNC_AT,
+   await Promise.all([
+      storageRemove(chrome.storage.local, AUTH_STORAGE_KEY_LIST),
+      storageRemove(getSessionStorageArea(), AUTH_STORAGE_KEY_LIST),
    ]);
 }
 
@@ -99,7 +211,7 @@ function headersWithAccessToken(baseHeaders, accessToken) {
    return headers;
 }
 
-async function performTokenRefresh(refreshToken) {
+async function performTokenRefresh(refreshToken, expectedSessionId) {
    try {
       const response = await fetch(`${state.API_BASE_URL}/token/refresh/`, {
          method: "POST",
@@ -112,16 +224,43 @@ async function performTokenRefresh(refreshToken) {
       });
 
       const payload = await response.json().catch(() => null);
+      const accessToken =
+         typeof payload?.access === "string" && payload.access.trim()
+            ? payload.access.trim()
+            : null;
 
-      const accessToken = typeof payload?.access === "string" && payload.access.trim() ? payload.access.trim() : null;
+      if (response.status === 400 || response.status === 401) {
+         const current = await getAuthSession();
 
-      if (!response.ok || !accessToken) {
-         await clearAuthSession();
+         if (!expectedSessionId || current.sessionId === expectedSessionId) {
+            await clearAuthSession();
+         }
+
          return null;
       }
 
+      if (!response.ok || !accessToken) {
+         return null;
+      }
+
+      const current = await getAuthSession();
+
+      if (
+         expectedSessionId &&
+         current.sessionId &&
+         current.sessionId !== expectedSessionId
+      ) {
+         return current.accessToken || null;
+      }
+
+      if (current.refreshToken && current.refreshToken !== refreshToken) {
+         return current.accessToken || null;
+      }
+
       const rotatedRefreshToken =
-         typeof payload?.refresh === "string" && payload.refresh.trim() ? payload.refresh.trim() : refreshToken;
+         typeof payload?.refresh === "string" && payload.refresh.trim()
+            ? payload.refresh.trim()
+            : refreshToken;
 
       await saveAuthSession({
          accessToken,
@@ -130,7 +269,8 @@ async function performTokenRefresh(refreshToken) {
 
       return accessToken;
    } catch {
-      await clearAuthSession();
+      // Network/provider outages must not silently destroy an otherwise
+      // recoverable browser identity. The next authenticated request can retry.
       return null;
    }
 }
@@ -138,7 +278,11 @@ async function performTokenRefresh(refreshToken) {
 async function refreshAccessToken(failedAccessToken) {
    const currentSession = await getAuthSession();
 
-   if (failedAccessToken && currentSession.accessToken && currentSession.accessToken !== failedAccessToken) {
+   if (
+      failedAccessToken &&
+      currentSession.accessToken &&
+      currentSession.accessToken !== failedAccessToken
+   ) {
       return currentSession.accessToken;
    }
 
@@ -148,7 +292,10 @@ async function refreshAccessToken(failedAccessToken) {
    }
 
    if (!refreshInFlight) {
-      refreshInFlight = performTokenRefresh(currentSession.refreshToken).finally(() => {
+      refreshInFlight = performTokenRefresh(
+         currentSession.refreshToken,
+         currentSession.sessionId,
+      ).finally(() => {
          refreshInFlight = null;
       });
    }
@@ -193,7 +340,11 @@ export async function authenticatedFetch(
       });
 
       if (retryResponse.status === 401) {
-         await clearAuthSession();
+         const current = await getAuthSession();
+
+         if (!session.sessionId || current.sessionId === session.sessionId) {
+            await clearAuthSession();
+         }
       }
 
       return retryResponse;
