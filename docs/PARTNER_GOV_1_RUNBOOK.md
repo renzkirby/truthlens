@@ -1,6 +1,6 @@
 # PARTNER-GOV-1 — owner-managed specializations and subject-only classification
 
-Status: **implementation checkpoint, not accepted or deployed**.
+Status: **development rollout and classifier shadow evaluation pending**.
 Branch: `feat/partner-governance-eligibility`.
 
 ## Approved governance boundaries
@@ -48,12 +48,64 @@ check `showmigrations api`, and inspect `migrate --plan` and
 The classification pipeline is distinct from factual-verdict generation and
 does not modify factual confidence, evidence, adjudication, publication, or
 provenance. Classifier `v2-subject-only` requires exact supporting quotations,
-abstains on uncertain/unsupported subjects, and currently processes sufficiently
-detailed TEXT context only. Other claim types are not yet eligible for automated
-classification. Geographic evidence is neither required nor inferred.
-The latest assessment record is retained for internal diagnostics; the platform
-does not review or retry individual classifications. A future automated retry
-policy for material claim-context changes must be separately tested.
+abstains on uncertain/unsupported subjects, and reads persisted `Claim.context_text`
+from TEXT, URL, IMAGE, and FILE claims. URL/IMAGE/FILE inputs are eligible only
+after the existing verification/extraction pipeline stores usable claim text:
+URLs, image links, bare filenames, AI verdicts, and arbitrary article content
+are NOT treated as classification evidence. Input outside 20–2400 characters
+abstains. Geographic evidence is neither required nor inferred.
+
+A new community thread queues classification **after transaction commit**.
+When factual analysis later persists extracted/cleaned claim text, it schedules
+another asynchronous check, avoiding a thread-creation race with OCR/URL
+extraction. Only claims with community threads enter the queue. Repeated
+assessment of identical claim text/version is idempotent and will not consume
+extra provider tokens. A shadow candidate is **never automatically promoted**
+to authoritative status merely by switching to enforce. Changed claim text
+can be assessed anew, subject to claim/assignment locks; existing
+authoritative classification is preserved rather than silently overwritten.
+No manual platform-level classification/retry workflow has been reintroduced.
+
+For existing claims, `queue_investigation_classifications` is a bounded,
+operator-triggered batch queue command. It is dry-run by default, skips claims
+without community threads or AVAILABLE assignments and refuses enqueueing if
+the mode is `off`. It does not itself assign subjects.
+
+### Shadow evaluation before enforcement
+
+1. Set `INVESTIGATION_CLASSIFICATION_MODE=shadow` in the isolated development
+   environment (web server **and** Celery worker), and restart both. Keep
+   production `off`. Ensure Redis/Celery and existing Gemini/Groq API keys
+   are configured; classification is a separate provider operation.
+2. Create a fresh TEXT claim, publish its community thread, and inspect its
+   `InvestigationClassificationAssessment`. For supported claims, expect
+   `SUGGESTED` with candidate subject codes and `candidate_jurisdiction=""`;
+   for insufficient/ambiguous claims expect `ABSTAINED` or `FAILED`.
+   There must be **no** `ClaimInvestigationClassification` row in shadow and
+   no new eligibility in partner intake.
+3. Test URL, IMAGE, and FILE community discussions after their extraction
+   pipeline stores claim text. Missing extraction should safely abstain.
+   Confirm claim verdict and publishing state remain unchanged.
+4. Preview old intake with `python manage.py queue_investigation_classifications
+   --limit 10`. To enqueue a SMALL development sample in shadow mode only,
+   use `python manage.py queue_investigation_classifications --enqueue --limit 10`.
+   A running worker is required; this may invoke paid LLM APIs.
+5. Independently label a representative held-out sample of factual claims
+   across all 12 subjects, multi-subject claims, ambiguous/nonfactual inputs,
+   adversarial prompt-injection content, Philippine and international
+   examples, and all persisted input types. Compare exact subject-set match,
+   per-subject precision/recall, unsupported quote rate, and abstention and
+   provider-failure rates. Record disagreements and model version. **Do not
+   infer classifier accuracy from mocked unit tests or a few demos.**
+6. Require a separate explicit accuracy-review and rollout decision before
+   switching any environment to `enforce`. Enforcement creates system-audited
+   authoritative subject classifications only on successful quoted-evidence
+   validation, and still checks partner specialization authorization.
+
+The latest assessment record is retained for internal diagnostics. A
+separate policy is needed before automatically reclassifying authoritative
+records on material claim-context changes; this rollout does not silently
+rewrite historical classifications or adjudications.
 
 ## Required local test gates (Windows)
 
@@ -62,7 +114,7 @@ From `backend\truthlens_backend`:
 ```powershell
 ..\.venv\Scripts\python.exe .\manage.py makemigrations --check --dry-run --settings=truthlens_backend.test_settings
 ..\.venv\Scripts\python.exe .\manage.py check --settings=truthlens_backend.test_settings
-..\.venv\Scripts\python.exe .\manage.py test api.tests.organization.test_verification_scope api.tests.organization.test_verification_scope_migration api.tests.verification.test_investigation_classifier api.tests.workspace.test_assignment_service --settings=truthlens_backend.test_settings --keepdb
+..\.venv\Scripts\python.exe .\manage.py test api.tests.organization.test_verification_scope api.tests.organization.test_verification_scope_migration api.tests.verification.test_investigation_classifier api.tests.verification.test_classification_backlog_command api.tests.workspace.test_assignment_service --settings=truthlens_backend.test_settings --keepdb
 ..\.venv\Scripts\python.exe .\manage.py test api.tests.management api.tests.workspace api.tests.accountability api.tests.organization --settings=truthlens_backend.test_settings --keepdb
 ```
 
