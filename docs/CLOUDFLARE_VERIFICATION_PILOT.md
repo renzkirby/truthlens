@@ -105,14 +105,21 @@ Then from `backend/truthlens_backend`:
   api.tests.verification.test_realworld_verification_benchmark `
   api.tests.verification.test_run_text_runtime `
   api.tests.verification.test_run_url_runtime `
-  --settings=truthlens_backend.settings_test `
+  --settings=truthlens_backend.test_settings `
   --keepdb
 
 ..\.venv\Scripts\python.exe .\manage.py check
 ..\.venv\Scripts\python.exe .\manage.py makemigrations --check --dry-run
 ```
 
-These are mock/offline tests, not live provider calls. Add focused
+Verified by the user's local environment on 20 October 2026:
+171/171 targeted tests passed (10.744s) using
+`--settings=truthlens_backend.test_settings`; `manage.py check` reported
+no issues and `makemigrations --check --dry-run` reported no changes.
+The repository also tracks an alternative `settings_test.py` module, but
+the command above reflects the **user-verified local configuration**.
+Mock-based verification-provider tests do not make live provider requests,
+although other test setup may load cached Hugging Face model assets. Add focused
 end-to-end text and URL live verification tests under explicit human
 supervision later, only after regression checks succeed. Image pipeline
 parity is **not** demonstrated by these persisted-evidence cases.
