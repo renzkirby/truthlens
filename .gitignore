@@ -5,3 +5,6 @@
 !README.md
 !DESIGN.md
 graphify-out/
+
+# Development-only model-audit reports (public dossiers + unreviewed explanations)
+backend/truthlens_backend/.provider_audit_reports/
