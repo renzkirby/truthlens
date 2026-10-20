@@ -36,6 +36,7 @@ class CloudflareEvaluationAdapterTests(SimpleTestCase):
         self.assertEqual(kwargs["timeout"], (5, 45))
         self.assertEqual(kwargs["json"]["response_format"], {"type": "json_object"})
         self.assertEqual(kwargs["json"]["model"], "@cf/google/gemma-4-26b-a4b-it")
+        self.assertEqual(kwargs["json"]["max_tokens"], 1024)
         self.assertEqual(kwargs["headers"]["Authorization"], f"Bearer {TOKEN}")
 
     def test_429_does_not_retry_and_does_not_expose_body(self):
@@ -68,6 +69,49 @@ class CloudflareEvaluationAdapterTests(SimpleTestCase):
                 "system", "user", account_id=ACCOUNT, api_token=TOKEN,
                 http_post=Mock(return_value=response),
             )
+
+    def test_empty_response_records_only_safe_finish_and_token_metadata(self):
+        provider_response = Mock(status_code=200)
+        provider_response.json.return_value = {
+            "choices": [{
+                "finish_reason": "length",
+                "message": {
+                    "content": "",
+                    "reasoning_content": "PRIVATE INTERNAL REASONING",
+                },
+            }],
+            "usage": {"completion_tokens": 1024},
+        }
+        with self.assertRaises(CloudflareEvaluationError) as caught:
+            generate_evaluation_json(
+                "system", "user", account_id=ACCOUNT, api_token=TOKEN,
+                http_post=Mock(return_value=provider_response),
+            )
+        self.assertIn("finish_reason=length", str(caught.exception))
+        self.assertIn("completion_tokens=1024", str(caught.exception))
+        self.assertIn("reasoning_present=true", str(caught.exception))
+        self.assertNotIn("PRIVATE INTERNAL", str(caught.exception))
+
+    def test_explicit_completion_budget_is_configurable_but_bounded(self):
+        provider_response = Mock(status_code=200)
+        provider_response.json.return_value = {
+            "choices": [{"message": {"content": '{"verdict":"FACT"}'}}]
+        }
+        post = Mock(return_value=provider_response)
+        generate_evaluation_json(
+            "system", "user", account_id=ACCOUNT, api_token=TOKEN,
+            max_completion_tokens=2048, http_post=post,
+        )
+        self.assertEqual(post.call_args.kwargs["json"]["max_tokens"], 2048)
+        for bad_budget in (0, 100, 4097, "2048", True):
+            with self.subTest(bad_budget=bad_budget), self.assertRaisesRegex(
+                CloudflareEvaluationError, "INVALID_COMPLETION_BUDGET"
+            ):
+                generate_evaluation_json(
+                    "system", "user", account_id=ACCOUNT, api_token=TOKEN,
+                    max_completion_tokens=bad_budget, http_post=post,
+                )
+        self.assertEqual(post.call_count, 1)
 
     def test_model_override_and_oversized_input_are_refused(self):
         post = Mock()
@@ -165,3 +209,43 @@ class OfflineProviderEvaluationCommandTests(SimpleTestCase):
         self.assertIn("error=HTTP_429", out.getvalue())
         self.assertIn("stopping", out.getvalue())
         self.assertNotIn("verdict=UNVERIFIED", out.getvalue())
+
+    @override_settings(DEBUG=True)
+    def test_targeted_case_selection_avoids_repeating_other_synthetic_cases(self):
+        out = io.StringIO()
+        valid = json.dumps({
+            "reasoning": "Evidence is insufficient.",
+            "verdict": "UNVERIFIED",
+            "summary": "Unverified from the provided evidence.",
+            "confidence_score": 0,
+            "score_context": "No independent corroboration.",
+        })
+        with (
+            patch.dict("os.environ", {
+                "ENABLE_CLOUDFLARE_EVALUATION": "1",
+                "CLOUDFLARE_ACCOUNT_ID": ACCOUNT,
+                "CLOUDFLARE_API_TOKEN": TOKEN,
+            }),
+            patch(
+                "api.management.commands.evaluate_verification_providers.generate_evaluation_json",
+                return_value=valid,
+            ) as generate,
+        ):
+            call_command(
+                "evaluate_verification_providers",
+                live=True, case=["duplicate_source_identity", "untrusted_instruction"],
+                max_completion_tokens=2048, stdout=out,
+            )
+        self.assertEqual(generate.call_count, 2)
+        self.assertEqual(generate.call_args.kwargs["max_completion_tokens"], 2048)
+        self.assertNotIn("explicit_support_en provider=", out.getvalue())
+        self.assertIn("duplicate_source_identity provider=", out.getvalue())
+        self.assertIn("untrusted_instruction provider=", out.getvalue())
+        self.assertIn("matching=2/2", out.getvalue())
+
+    def test_unknown_synthetic_case_is_rejected_without_provider_call(self):
+        with patch(
+            "api.management.commands.evaluate_verification_providers.generate_evaluation_json"
+        ) as generate, self.assertRaisesRegex(CommandError, "Unknown synthetic"):
+            call_command("evaluate_verification_providers", case=["not-a-case"], live=True)
+        generate.assert_not_called()

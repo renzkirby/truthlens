@@ -24,6 +24,7 @@ def generate_evaluation_json(
     account_id=None,
     api_token=None,
     model=DEFAULT_MODEL,
+    max_completion_tokens=1024,
     http_post=None,
 ):
     """Return raw model JSON text to the existing evaluator for validation.
@@ -47,6 +48,12 @@ def generate_evaluation_json(
         raise CloudflareEvaluationError("PROMPT_TOO_LONG")
     if model != DEFAULT_MODEL:
         raise CloudflareEvaluationError("UNAPPROVED_MODEL")
+    if (
+        isinstance(max_completion_tokens, bool)
+        or not isinstance(max_completion_tokens, int)
+        or not 256 <= max_completion_tokens <= 4096
+    ):
+        raise CloudflareEvaluationError("INVALID_COMPLETION_BUDGET")
 
     url = (
         f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/"
@@ -68,7 +75,7 @@ def generate_evaluation_json(
                 ],
                 "response_format": {"type": "json_object"},
                 "temperature": 0.1,
-                "max_tokens": 1024,
+                "max_tokens": max_completion_tokens,
                 "stream": False,
             },
             timeout=(5, 45),
@@ -84,9 +91,34 @@ def generate_evaluation_json(
         raise CloudflareEvaluationError(f"HTTP_{response.status_code}")
 
     try:
-        content = response.json()["choices"][0]["message"]["content"]
-    except (ValueError, TypeError, KeyError, IndexError):
+        result = response.json()
+        choice = result["choices"][0]
+        message = choice["message"]
+        content = message.get("content")
+        usage = result.get("usage") or {}
+    except (ValueError, TypeError, KeyError, IndexError, AttributeError):
         raise CloudflareEvaluationError("INVALID_PROVIDER_RESPONSE") from None
+    if not isinstance(message, dict) or not isinstance(usage, dict):
+        raise CloudflareEvaluationError("INVALID_PROVIDER_RESPONSE")
     if not isinstance(content, str) or not content.strip():
-        raise CloudflareEvaluationError("EMPTY_PROVIDER_RESPONSE")
+        # Only report bounded, non-sensitive metadata: never the model's
+        # reasoning text, raw response, credentials, or evidence input.
+        finish = choice.get("finish_reason")
+        if finish not in {"stop", "length", "tool_calls", "content_filter"}:
+            finish = "other"
+        completion_tokens = usage.get("completion_tokens")
+        if (
+            isinstance(completion_tokens, bool)
+            or not isinstance(completion_tokens, int)
+            or not 0 <= completion_tokens <= 1000000
+        ):
+            completion_tokens = "unknown"
+        reasoning_present = bool(
+            message.get("reasoning_content") or message.get("reasoning")
+        )
+        raise CloudflareEvaluationError(
+            f"EMPTY_PROVIDER_RESPONSE finish_reason={finish} "
+            f"completion_tokens={completion_tokens} "
+            f"reasoning_present={str(reasoning_present).lower()}"
+        )
     return content

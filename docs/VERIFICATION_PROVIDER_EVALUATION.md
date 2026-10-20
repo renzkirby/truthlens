@@ -77,3 +77,37 @@ To test code offline:
 ```powershell
 ..\.venv\Scripts\python.exe .\manage.py test api.tests.verification.test_cloudflare_provider_evaluation --settings=truthlens_backend.test_settings --keepdb
 ```
+
+## Targeted follow-up for partial or empty output
+
+The October 20 eight-case first run returned 5 expected verdicts, 1 disputable
+`FAKE` versus `MISLEADING` gold-label disagreement, and 2 HTTP-success
+empty responses. The previous `max_tokens=1024` budget may have been exhausted
+by built-in reasoning, but this is **not established** until the API finish
+reason/token counts are inspected. The intentionally synthetic "entire year"
+bus claim also strongly supports `FAKE` from explicit contradiction; **review
+and adjudicate** the `MISLEADING` reference label before interpreting it as
+a quality failure. Do not silently relabel to inflate accuracy.
+
+The upgraded adapter safely reports only `finish_reason`, numeric
+`completion_tokens`, and whether reasoning was present for empty HTTP-200
+messages; never model reasoning text or the provider body. Inspect the two
+problematic cases first at the **same** 1,024-token budget, not the full eight:
+
+```powershell
+..\\.venv\\Scripts\\python.exe .\\manage.py evaluate_verification_providers --live `
+  --case duplicate_source_identity --case untrusted_instruction
+```
+
+Then, **only if desired** after observing the finish reason and remaining free
+capacity, compare a 2,048-token budget, changing only this one parameter:
+
+```powershell
+..\\.venv\\Scripts\\python.exe .\\manage.py evaluate_verification_providers --live `
+  --case duplicate_source_identity --case untrusted_instruction `
+  --max-completion-tokens 2048
+```
+
+The change affects only this isolated evaluation command, never live
+verification. More tokens may increase usage, duration and cost and cannot
+guarantee JSON output. At most two calls execute in each command above.

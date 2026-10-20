@@ -52,6 +52,14 @@ class Command(BaseCommand):
             "--limit", type=int, default=4,
             help="Number of fixture cases per provider (1-8, default 4).",
         )
+        parser.add_argument(
+            "--case", action="append", default=[],
+            help="Evaluate only this synthetic fixture ID; repeat to choose several.",
+        )
+        parser.add_argument(
+            "--max-completion-tokens", type=int, default=1024,
+            help="Cloudflare output budget (256-4096; default 1024).",
+        )
 
     def handle(self, *args, **options):
         count = options["limit"]
@@ -60,17 +68,30 @@ class Command(BaseCommand):
         cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))
         if not isinstance(cases, list) or len(cases) != 8:
             raise CommandError("Synthetic fixture set is missing or invalid.")
+        budget = options["max_completion_tokens"]
+        if not 256 <= budget <= 4096:
+            raise CommandError("--max-completion-tokens must be 256-4096.")
+        selected_ids = options["case"] or []
+        if len(selected_ids) != len(set(selected_ids)):
+            raise CommandError("Repeated --case values must be distinct.")
+        valid_ids = {case["id"] for case in cases}
+        if not set(selected_ids).issubset(valid_ids):
+            raise CommandError("Unknown synthetic --case ID.")
+        selected_cases = (
+            [case for case in cases if case["id"] in selected_ids]
+            if selected_ids else cases[:count]
+        )
         providers = (
             ("cloudflare", "current")
             if options["provider"] == "both"
             else (options["provider"],)
         )
-        planned_calls = len(providers) * count
+        planned_calls = len(providers) * len(selected_cases)
 
         if not options["live"]:
             self.stdout.write(
                 "DRY RUN: development-only persisted-evidence benchmark; "
-                f"{count} synthetic cases, providers={','.join(providers)}, "
+                f"{len(selected_cases)} synthetic cases, providers={','.join(providers)}, "
                 f"up to {planned_calls} provider calls. No network or DB writes. "
                 "Add --live to execute explicitly."
             )
@@ -98,7 +119,7 @@ class Command(BaseCommand):
         )
 
         scores = {name: {"matched": 0, "completed": 0, "failed": 0} for name in providers}
-        for case in cases[:count]:
+        for case in selected_cases:
             if not isinstance(case, dict) or not {
                 "id", "claim", "evidence", "expected_verdict"
             }.issubset(case):
@@ -113,7 +134,8 @@ class Command(BaseCommand):
                     if provider == "cloudflare":
                         try:
                             raw = generate_evaluation_json(
-                                system_instructions, user_prompt
+                                system_instructions, user_prompt,
+                                max_completion_tokens=budget,
                             )
                         except CloudflareEvaluationError as exc:
                             raw_contract["provider_error"] = str(exc)
