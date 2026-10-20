@@ -15,7 +15,7 @@ from api.verification.realworld_benchmark import load_corpus, reviewed_gold_verd
 
 
 class RealWorldCorpusReviewTests(SimpleTestCase):
-    def test_curated_source_linked_corpus_contains_only_four_reviewed_labels(self):
+    def test_curated_source_linked_corpus_contains_ten_reviewed_labels(self):
         cases = load_corpus()
         self.assertEqual(len(cases), 30)
         self.assertEqual(
@@ -35,9 +35,15 @@ class RealWorldCorpusReviewTests(SimpleTestCase):
             "civics__contradict": "FAKE",
             "law_death_penalty_support": "FACT",
             "law_death_penalty_contradict": "FAKE",
+            "elections_2022_support": "FACT",
+            "elections_2022_contradict": "FAKE",
+            "health_source_insufficient": "UNVERIFIED",
+            "ph_disaster_source_insufficient": "UNVERIFIED",
+            "technology_iphone_contradict": "MISLEADING",
+            "environment_coral_contradict": "MISLEADING",
         })
         self.assertEqual(
-            sum(c["review"]["status"] == "PENDING" for c in cases), 26,
+            sum(c["review"]["status"] == "PENDING" for c in cases), 20,
         )
         self.assertTrue(all(
             reviewed_gold_verdict(c) is None
@@ -48,7 +54,7 @@ class RealWorldCorpusReviewTests(SimpleTestCase):
             for c in cases for src in c["sources"]
         ))
 
-    def test_second_review_batch_remains_pending_and_insufficient_cases_are_claims(self):
+    def test_second_review_batch_has_reviewed_verdicts_and_clarified_claims(self):
         by_id = {c["id"]: c for c in load_corpus()}
         expected_ids = {
             "elections_2022_support",
@@ -59,7 +65,7 @@ class RealWorldCorpusReviewTests(SimpleTestCase):
             "environment_coral_contradict",
         }
         self.assertEqual(
-            {x for x in expected_ids if by_id[x]["review"]["status"] == "PENDING"},
+            {x for x in expected_ids if by_id[x]["review"]["status"] == "APPROVED"},
             expected_ids,
         )
         self.assertIn(
@@ -113,8 +119,8 @@ class RealWorldBenchmarkCommandTests(SimpleTestCase):
         ) as cloudflare:
             call_command("evaluate_realworld_verification_providers", stdout=out)
         self.assertIn("30 candidates", out.getvalue())
-        self.assertIn("approved=4", out.getvalue())
-        self.assertIn("pending=26", out.getvalue())
+        self.assertIn("approved=10", out.getvalue())
+        self.assertIn("pending=20", out.getvalue())
         self.assertIn("DRY RUN ONLY", out.getvalue())
         cloudflare.assert_not_called()
 
