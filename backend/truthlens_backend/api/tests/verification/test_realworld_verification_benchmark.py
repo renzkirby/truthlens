@@ -23,7 +23,9 @@ class RealWorldCorpusReviewTests(SimpleTestCase):
             Counter({"FACT": 14, "FAKE": 14, "UNVERIFIED": 2}),
         )
         self.assertEqual(len({c["domain"] for c in cases}), 12)
-        self.assertTrue(any(c["language"] == "fil" for c in cases))
+        self.assertGreaterEqual(
+            sum(c["language"] == "fil" for c in cases), 5
+        )
         self.assertTrue(all(c["review"]["status"] == "PENDING" for c in cases))
         self.assertTrue(all(reviewed_gold_verdict(c) is None for c in cases))
         self.assertTrue(all(

@@ -194,8 +194,8 @@
   {
     "id": "elections_2022_support",
     "domain": "ELECTIONS",
-    "language": "en",
-    "claim": "The Philippines scheduled its 2022 national and local elections for May 9.",
+    "language": "fil",
+    "claim": "Itinakda ng COMELEC ang pambansa at lokal na halalan sa Pilipinas sa Mayo 9, 2022.",
     "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: COMELEC 2022 National and Local Elections.\nEvidence: COMELEC's 2022 National and Local Elections page identifies May 9, 2022, as the election day and reports the fully automated election system.",
     "sources": [
       {
@@ -218,8 +218,8 @@
   {
     "id": "elections_2022_contradict",
     "domain": "ELECTIONS",
-    "language": "en",
-    "claim": "COMELEC scheduled the Philippines' 2022 national and local elections for May 19.",
+    "language": "fil",
+    "claim": "Itinakda ng COMELEC ang pambansa at lokal na halalan sa Pilipinas sa Mayo 19, 2022.",
     "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: COMELEC 2022 National and Local Elections.\nEvidence: COMELEC's 2022 National and Local Elections page identifies May 9, 2022, as the election day and reports the fully automated election system.",
     "sources": [
       {
@@ -267,7 +267,7 @@
     "id": "health_pandemic_contradict",
     "domain": "HEALTH",
     "language": "en",
-    "claim": "WHO characterized COVID-19 as a pandemic for the first time on January 11, 2020.",
+    "claim": "WHO's March 11, 2020 briefing did not characterize COVID-19 as a pandemic.",
     "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: WHO Director-General media briefing.\nEvidence: WHO Director-General's March 11, 2020 media briefing states that WHO made the assessment that COVID-19 could be characterized as a pandemic.",
     "sources": [
       {
@@ -290,8 +290,8 @@
   {
     "id": "science_planets_support",
     "domain": "SCIENCE",
-    "language": "en",
-    "claim": "Venus is the hottest planet in the solar system by average temperature.",
+    "language": "fil",
+    "claim": "Ang Venus ang planetang may pinakamataas na karaniwang temperatura sa ating solar system.",
     "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: NASA Solar System Temperatures.\nEvidence: NASA's planetary temperature resource reports average temperatures of Mercury at about 167 C and Venus at about 464 C; dense Venusian atmosphere retains heat.",
     "sources": [
       {
@@ -314,8 +314,8 @@
   {
     "id": "science_planets_contradict",
     "domain": "SCIENCE",
-    "language": "en",
-    "claim": "Mercury has a higher average planetary temperature than Venus.",
+    "language": "fil",
+    "claim": "Mas mataas ang karaniwang temperatura ng Mercury kaysa sa Venus.",
     "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: NASA Solar System Temperatures.\nEvidence: NASA's planetary temperature resource reports average temperatures of Mercury at about 167 C and Venus at about 464 C; dense Venusian atmosphere retains heat.",
     "sources": [
       {
