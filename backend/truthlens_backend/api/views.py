@@ -565,6 +565,34 @@ def _record_authenticated_claim_check(user, claim):
         profile.save(update_fields=["fact_check_points"])
 
 
+def _should_retry_unresolved_cached_claim(matched_claim):
+    """A terminal run with no usable result must not trap future submissions.
+
+    Preserve successful AI or institutional outcomes and prevent duplicate
+    dispatch while an earlier verification is pending/running. A retry creates
+    a new Claim, preserving the failed attempt and its audit/telemetry history.
+    """
+    if matched_claim.ai_verdict in {"FACT", "FAKE", "MISLEADING", "SATIRE"}:
+        return False
+
+    latest_run = matched_claim.verification_runs.only("status").first()
+    if latest_run is None or latest_run.status in {
+        VerificationRun.Status.PENDING,
+        VerificationRun.Status.RUNNING,
+    }:
+        return False
+
+    # Institutional conclusions override absent/abstaining AI results. Do not
+    # bypass an authoritative published or attributable adjudicated verdict.
+    result = get_match_result(matched_claim)
+    if result.get("resolution_source") in {
+        "OFFICIAL_FACT_CHECK", "ADJUDICATION",
+    } and result.get("verdict"):
+        return False
+
+    return True
+
+
 # Create your views here.
 @csrf_exempt
 @api_view(["POST"])
@@ -590,9 +618,10 @@ def receive_snippet(request):
 
     if fingerprint:
         matched_claim = find_matching_claim(fingerprint, "IMAGE")
-        if matched_claim:
+        if matched_claim and not _should_retry_unresolved_cached_claim(matched_claim):
             _record_authenticated_claim_check(authenticated_user, matched_claim)
-            # A moderator has already resolved this claim — return cached verdict
+            # Reuse a result or an in-progress verification; never replay a
+            # failed/no-verdict terminal run as if it were a cache hit.
             match_result = get_match_result(
                 matched_claim,
                 triggered_by=(authenticated_user),
@@ -759,7 +788,7 @@ def verify_url(request):
 
     if fingerprint:
         matched_claim = find_matching_claim(fingerprint, "URL")
-        if matched_claim:
+        if matched_claim and not _should_retry_unresolved_cached_claim(matched_claim):
             _record_authenticated_claim_check(authenticated_user, matched_claim)
             match_result = get_match_result(
                 matched_claim,
@@ -3490,7 +3519,7 @@ def verify_text(request):
     )
     authenticated_user = _authenticated_user_or_none(request)
 
-    if matched_claim:
+    if matched_claim and not _should_retry_unresolved_cached_claim(matched_claim):
         _record_authenticated_claim_check(authenticated_user, matched_claim)
         match_result = get_match_result(
             matched_claim,
