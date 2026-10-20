@@ -5035,6 +5035,7 @@ class ClaimInvestigationClassification(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
+        blank=True,
         related_name="investigation_classifications",
     )
     classified_at = models.DateTimeField(default=timezone.now)
