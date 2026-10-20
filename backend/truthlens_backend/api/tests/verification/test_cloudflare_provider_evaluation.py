@@ -142,3 +142,26 @@ class OfflineProviderEvaluationCommandTests(SimpleTestCase):
         self.assertIn("<persisted_evidence>", generate.call_args.args[1])
         self.assertIn("match=True", out.getvalue())
         self.assertNotIn(TOKEN, out.getvalue())
+
+    @override_settings(DEBUG=True)
+    def test_cloudflare_quota_error_stops_after_one_case_not_unverified(self):
+        out = io.StringIO()
+        with (
+            patch.dict("os.environ", {
+                "ENABLE_CLOUDFLARE_EVALUATION": "1",
+                "CLOUDFLARE_ACCOUNT_ID": ACCOUNT,
+                "CLOUDFLARE_API_TOKEN": TOKEN,
+            }),
+            patch(
+                "api.management.commands.evaluate_verification_providers.generate_evaluation_json",
+                side_effect=CloudflareEvaluationError("HTTP_429"),
+            ) as generate,
+        ):
+            call_command(
+                "evaluate_verification_providers", live=True, limit=4,
+                stdout=out,
+            )
+        self.assertEqual(generate.call_count, 1)
+        self.assertIn("error=HTTP_429", out.getvalue())
+        self.assertIn("stopping", out.getvalue())
+        self.assertNotIn("verdict=UNVERIFIED", out.getvalue())

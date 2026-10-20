@@ -111,7 +111,17 @@ class Command(BaseCommand):
 
                 def invoke_existing_prompt(system_instructions, user_prompt, **kwargs):
                     if provider == "cloudflare":
-                        raw = generate_evaluation_json(system_instructions, user_prompt)
+                        try:
+                            raw = generate_evaluation_json(
+                                system_instructions, user_prompt
+                            )
+                        except CloudflareEvaluationError as exc:
+                            raw_contract["provider_error"] = str(exc)
+                            # The production evaluator propagates this typed
+                            # exception instead of converting it to UNVERIFIED.
+                            raise services.LLMProviderUnavailableError(
+                                "Evaluation provider is unavailable."
+                            ) from None
                     else:
                         raw = services_original_call(
                             system_instructions, user_prompt, **kwargs
@@ -155,10 +165,11 @@ class Command(BaseCommand):
                         f"verdict={verdict} expected={case['expected_verdict']} "
                         f"contract_ok={contract_ok} match={good}"
                     )
-                except (CloudflareEvaluationError, services.LLMProviderUnavailableError) as exc:
+                except services.LLMProviderUnavailableError:
                     scores[provider]["failed"] += 1
                     verdict = None
-                    outcome = f"error={str(exc) if isinstance(exc, CloudflareEvaluationError) else 'LLM_UNAVAILABLE'}"
+                    error_label = raw_contract.get("provider_error", "LLM_UNAVAILABLE")
+                    outcome = f"error={error_label}"
                 elapsed_ms = int((time.perf_counter() - started) * 1000)
                 self.stdout.write(
                     f"{case['id']} provider={provider} {outcome} "
