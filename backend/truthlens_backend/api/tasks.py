@@ -1060,13 +1060,13 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
             allow_semantic_fallback=False,
         )
 
-        # A fingerprint/semantic match is not proof of usable analysis.
-        # Pending or unrecognized AI verdicts must never short-circuit the
-        # current run; otherwise we copy None, bypass all evidence retrieval,
-        # and silently mark the new run ABSTAINED with no explanation.
+        # A matching claim is not proof of a reusable factual conclusion.
+        # Pending, UNVERIFIED, OUT_OF_SCOPE, and unrecognized AI verdicts
+        # must not short-circuit this run. A previous unresolved result
+        # cannot replace fresh evidence retrieval or a fresh ClaimGate.
+        # The explicit current-input OUT_OF_SCOPE gate stays authoritative.
         reusable_ai_verdicts = {
             "FACT", "FAKE", "MISLEADING", "SATIRE",
-            "UNVERIFIED", "OUT_OF_SCOPE",
         }
         has_second_chance_match = (
             matched_claim is not None

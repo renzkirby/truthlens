@@ -308,18 +308,9 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.save_claim.assert_not_called()
         self.assess_evidence.assert_not_called()
 
-    def test_cached_abstaining_verdicts_abstain(self):
-        for verdict in ("OUT_OF_SCOPE", "UNVERIFIED"):
-            with self.subTest(verdict=verdict):
-                self._cached_claim(verdict)
-                self._assert_terminal(self._execute(), VerificationRun.Status.ABSTAINED)
-        self.clean.assert_not_called()
-        self.retrieve_tavily.assert_not_called()
-        self.assess_evidence.assert_not_called()
-
     def test_unresolved_ai_match_continues_to_fresh_verification_for_text_and_image(self):
         for claim_type in (Claim.ClaimType.TEXT, Claim.ClaimType.IMAGE):
-            for cached_verdict in (None, "", "UNKNOWN"):
+            for cached_verdict in (None, "", "UNKNOWN", "UNVERIFIED", "OUT_OF_SCOPE"):
                 with self.subTest(claim_type=claim_type, cached_verdict=cached_verdict):
                     self.claim = Claim.objects.create(
                         claim_type=claim_type,
@@ -344,15 +335,15 @@ class VerificationRunTextRuntimeTests(TestCase):
                     self.assertEqual(cached.ai_verdict, cached_verdict)
 
     def test_cached_human_verdict_is_not_copied_or_used_as_run_outcome(self):
-        for ai_verdict, final_verdict, status in (
-            ("UNVERIFIED", "FACT", VerificationRun.Status.ABSTAINED),
-            ("FACT", "UNVERIFIED", VerificationRun.Status.COMPLETED),
+        for ai_verdict, final_verdict, status, expected_ai_verdict in (
+            ("UNVERIFIED", "FACT", VerificationRun.Status.COMPLETED, "FAKE"),
+            ("FACT", "UNVERIFIED", VerificationRun.Status.COMPLETED, "FACT"),
         ):
             with self.subTest(final_verdict=final_verdict):
                 self._cached_claim(ai_verdict, final_verdict)
                 self._assert_terminal(self._execute(), status)
                 self.claim.refresh_from_db()
-                self.assertEqual(self.claim.ai_verdict, ai_verdict)
+                self.assertEqual(self.claim.ai_verdict, expected_ai_verdict)
                 self.assertIsNone(self.claim.final_verdict)
         self.assess_evidence.assert_not_called()
 
