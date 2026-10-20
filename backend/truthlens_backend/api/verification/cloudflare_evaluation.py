@@ -26,6 +26,7 @@ def generate_evaluation_json(
     model=DEFAULT_MODEL,
     max_completion_tokens=1024,
     http_post=None,
+    audit_metadata=None,
 ):
     """Return raw model JSON text to the existing evaluator for validation.
 
@@ -100,6 +101,11 @@ def generate_evaluation_json(
         raise CloudflareEvaluationError("INVALID_PROVIDER_RESPONSE") from None
     if not isinstance(message, dict) or not isinstance(usage, dict):
         raise CloudflareEvaluationError("INVALID_PROVIDER_RESPONSE")
+    if audit_metadata is not None:
+        if not isinstance(audit_metadata, dict):
+            raise CloudflareEvaluationError("INVALID_AUDIT_METADATA")
+        from .provider_audit_metrics import safe_completion_metadata
+        audit_metadata.update(safe_completion_metadata(choice, usage))
     if not isinstance(content, str) or not content.strip():
         # Only report bounded, non-sensitive metadata: never the model's
         # reasoning text, raw response, credentials, or evidence input.
