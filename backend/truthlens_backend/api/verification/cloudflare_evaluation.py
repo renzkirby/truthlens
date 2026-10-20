@@ -17,6 +17,43 @@ class CloudflareEvaluationError(RuntimeError):
     """Sanitized provider failure during a development-only comparison."""
 
 
+# Only known adapter-generated codes may appear in logs or run telemetry.
+# Never forward exception bodies, raw HTTP responses or credential-bearing URLs.
+_SAFE_CLOUDFLARE_ERROR_CODES = frozenset({
+    "MISSING_OR_INVALID_ACCOUNT_ID",
+    "MISSING_API_TOKEN",
+    "INVALID_PROMPT",
+    "PROMPT_TOO_LONG",
+    "UNAPPROVED_MODEL",
+    "INVALID_COMPLETION_BUDGET",
+    "INVALID_AUDIT_METADATA",
+    "INVALID_PROVIDER_RESPONSE",
+    "INVALID_EVALUATION_JSON",
+    "EMPTY_PROVIDER_RESPONSE",
+})
+_SAFE_TRANSPORT_ERROR_TYPES = frozenset({
+    "ReadTimeout", "ConnectTimeout", "Timeout", "ConnectionError",
+    "SSLError", "ProxyError", "TooManyRedirects", "HTTPError",
+    "RequestException", "ChunkedEncodingError",
+})
+
+
+def sanitized_cloudflare_error_code(error):
+    """Return a strict, bounded error category; never leak vendor error text."""
+    if not isinstance(error, CloudflareEvaluationError):
+        return "OTHER_CLOUDFLARE_ERROR"
+    candidate = str(error).split(" ", 1)[0]
+    if candidate in _SAFE_CLOUDFLARE_ERROR_CODES:
+        return candidate
+    if re.fullmatch(r"HTTP_[1-5][0-9]{2}", candidate):
+        return candidate
+    if candidate.startswith("TRANSPORT_"):
+        transport_type = candidate[len("TRANSPORT_"):]
+        if transport_type in _SAFE_TRANSPORT_ERROR_TYPES:
+            return candidate
+    return "OTHER_CLOUDFLARE_ERROR"
+
+
 def generate_evaluation_json(
     system_instructions,
     user_prompt,

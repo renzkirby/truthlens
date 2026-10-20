@@ -34,7 +34,7 @@ class VerificationRunTelemetryInspectorTests(TestCase):
             provider="cloudflare",
             duration_ms=12000,
             outcome="failed",
-            error_label="PRIVATE MODEL MESSAGE NEVER PRINT",
+            error_label="CloudflareEvaluationError code=HTTP_429",
             metadata={"private_claim": "SECRET CLAIM TEXT NEVER PRINT"},
             occurred_at=timezone.now(),
         )
@@ -59,10 +59,36 @@ class VerificationRunTelemetryInspectorTests(TestCase):
         self.assertIn("status=FAILED", value)
         self.assertIn("failure_code=LLM_UNAVAILABLE", value)
         self.assertIn("provider=cloudflare", value)
+        self.assertIn("reason=HTTP_429", value)
         self.assertIn("duration_ms=12000", value)
         self.assertIn("STAGE name=core_text_pipeline_total", value)
         for secret in ("SECRET CLAIM", "PRIVATE ERROR", "PRIVATE MODEL"):
             self.assertNotIn(secret, value)
+
+    @override_settings(APP_ENV="development", DEBUG=True)
+    def test_legacy_and_untrusted_failure_labels_are_not_disclosed(self):
+        claim = Claim.objects.create(context_text="Private user context")
+        run = VerificationRun.objects.create(claim=claim)
+        event = VerificationTelemetryEvent.objects.create(
+            verification_run=run,
+            sequence=1,
+            event_type=VerificationTelemetryEvent.EventType.LLM_PROVIDER_CALL,
+            name="persisted_evidence_evaluation",
+            provider="cloudflare",
+            duration_ms=0,
+            outcome="failed",
+            error_label="CloudflareEvaluationError",
+            occurred_at=timezone.now(),
+        )
+        out = io.StringIO()
+        call_command("inspect_verification_run_telemetry", run_id=str(run.pk), stdout=out)
+        self.assertIn("reason=not_recorded", out.getvalue())
+        event.error_label = "CloudflareEvaluationError code=HTTP_403 Bearer PRIVATE_TOKEN"
+        event.save(update_fields=["error_label"])
+        out = io.StringIO()
+        call_command("inspect_verification_run_telemetry", run_id=str(run.pk), stdout=out)
+        self.assertIn("reason=HTTP_403", out.getvalue())
+        self.assertNotIn("PRIVATE_TOKEN", out.getvalue())
 
     @override_settings(APP_ENV="production", DEBUG=False)
     def test_rejects_non_development(self):

@@ -10,6 +10,7 @@ from django.test import SimpleTestCase, override_settings
 from api.verification.cloudflare_evaluation import (
     CloudflareEvaluationError,
     generate_evaluation_json,
+    sanitized_cloudflare_error_code,
 )
 
 
@@ -18,6 +19,26 @@ TOKEN = "test-secret-never-log"
 
 
 class CloudflareEvaluationAdapterTests(SimpleTestCase):
+    def test_sanitized_error_code_never_exposes_unknown_payload(self):
+        for code in (
+            "MISSING_OR_INVALID_ACCOUNT_ID", "MISSING_API_TOKEN",
+            "PROMPT_TOO_LONG", "INVALID_EVALUATION_JSON", "HTTP_402",
+            "HTTP_429", "TRANSPORT_ReadTimeout",
+            "EMPTY_PROVIDER_RESPONSE finish_reason=length completion_tokens=2048",
+        ):
+            with self.subTest(code=code):
+                expected = code.split(" ", 1)[0]
+                self.assertEqual(
+                    sanitized_cloudflare_error_code(CloudflareEvaluationError(code)),
+                    expected,
+                )
+        self.assertEqual(
+            sanitized_cloudflare_error_code(
+                CloudflareEvaluationError("secret-key=PRIVATE_AND_SENSITIVE")
+            ),
+            "OTHER_CLOUDFLARE_ERROR",
+        )
+
     def test_json_chat_request_is_bounded_and_uses_expected_endpoint(self):
         response = Mock(status_code=200)
         response.json.return_value = {

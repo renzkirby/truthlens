@@ -26,6 +26,10 @@ from .verification.cloudflare_pilot import (
     call_validated_cloudflare_pilot,
 )
 from .verification.provider_audit_metrics import validate_user_facing_evaluation
+from .verification.cloudflare_evaluation import (
+    CloudflareEvaluationError,
+    sanitized_cloudflare_error_code,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +187,11 @@ def _model_from_env(name, default):
 
 def _provider_error_label(error):
     """Return useful error metadata without including provider secrets."""
+    if isinstance(error, CloudflareEvaluationError):
+        return (
+            "CloudflareEvaluationError code="
+            f"{sanitized_cloudflare_error_code(error)}"
+        )
     if isinstance(error, errors.APIError) and type(error.code) is int:
         return f"{type(error).__name__} code={error.code}"
     return type(error).__name__

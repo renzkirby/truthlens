@@ -6,6 +6,10 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from api.models import VerificationRun, VerificationTelemetryEvent
+from api.verification.cloudflare_evaluation import (
+    CloudflareEvaluationError,
+    sanitized_cloudflare_error_code,
+)
 
 SAFE_LABEL = re.compile(r"^[a-zA-Z0-9_]{1,80}$")
 
@@ -52,11 +56,23 @@ class Command(BaseCommand):
         )
         for event in events:
             if event.event_type == VerificationTelemetryEvent.EventType.LLM_PROVIDER_CALL:
+                reason = ""
+                if event.provider == "cloudflare" and event.outcome == "failed":
+                    prefix = "CloudflareEvaluationError code="
+                    if isinstance(event.error_label, str) and event.error_label.startswith(prefix):
+                        candidate = event.error_label[len(prefix):]
+                        safe_code = sanitized_cloudflare_error_code(
+                            CloudflareEvaluationError(candidate)
+                        )
+                        reason = f" reason={safe_code}"
+                    else:
+                        # Historical events have only an exception type.
+                        reason = " reason=not_recorded"
                 self.stdout.write(
                     f"PROVIDER name={_safe(event.name)} "
                     f"provider={_safe(event.provider)} "
                     f"outcome={_safe(event.outcome)} "
-                    f"duration_ms={event.duration_ms}"
+                    f"duration_ms={event.duration_ms}{reason}"
                 )
             elif event.event_type == VerificationTelemetryEvent.EventType.PIPELINE_STAGE:
                 self.stdout.write(

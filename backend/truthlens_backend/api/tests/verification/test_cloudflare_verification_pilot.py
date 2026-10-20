@@ -246,6 +246,26 @@ class CloudflarePilotRoutingTests(SimpleTestCase):
         self.assertEqual(args[4], "success")
         self.assertEqual(args[5], "")
 
+    def test_failed_cloudflare_records_only_whitelisted_reason(self):
+        self._enable()
+        self._valid_legacy_responses()
+        secret = "Bearer user-private-secret"
+        self.cloud.side_effect = CloudflareEvaluationError(
+            f"MISSING_API_TOKEN {secret}"
+        )
+        with (
+            patch("api.services.record_llm_provider_call") as record,
+            self.assertLogs("api.services", level="WARNING") as logs,
+        ):
+            self.assertEqual(self._call(), VALID_EVALUATION)
+        first = record.call_args_list[0].args
+        self.assertEqual(first[1], "cloudflare")
+        self.assertEqual(
+            first[5], "CloudflareEvaluationError code=MISSING_API_TOKEN"
+        )
+        self.assertNotIn(secret, "\n".join(logs.output))
+        self.assertNotIn(secret, str(record.call_args_list))
+
     def test_telemetry_provider_allowlist_includes_cloudflare(self):
         self.assertIn("cloudflare", SAFE_LLM_PROVIDERS)
 
