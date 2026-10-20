@@ -55,21 +55,27 @@ URLs, image links, bare filenames, AI verdicts, and arbitrary article content
 are NOT treated as classification evidence. Input outside 20–2400 characters
 abstains. Geographic evidence is neither required nor inferred.
 
-A new community thread queues classification **after transaction commit**.
-When factual analysis later persists extracted/cleaned claim text, it schedules
-another asynchronous check, avoiding a thread-creation race with OCR/URL
-extraction. Only claims with community threads enter the queue. Repeated
-assessment of identical claim text/version is idempotent and will not consume
-extra provider tokens. A shadow candidate is **never automatically promoted**
+Classification is **claim-level**, not dependent on a community thread. Once
+the factual-verification pipeline persists claim text/results, it queues the
+separate subject-classification Celery task **after database commit**. This
+includes ordinary saved factual analysis and early authoritative publication
+resolutions that persist claim text. Verification, caching, and publication
+never wait for the classifier. A community thread can additionally trigger
+an idempotent fallback for a previously analyzed claim, but is not required.
+For URL/IMAGE/FILE claims, wait until usable extraction/OCR text is persisted.
+Repeated assessment of identical claim text/version is idempotent and will
+not consume extra provider tokens. A shadow candidate is **never automatically promoted**
 to authoritative status merely by switching to enforce. Changed claim text
 can be assessed anew, subject to claim/assignment locks; existing
 authoritative classification is preserved rather than silently overwritten.
 No manual platform-level classification/retry workflow has been reintroduced.
 
 For existing claims, `queue_investigation_classifications` is a bounded,
-operator-triggered batch queue command. It is dry-run by default, skips claims
-without community threads or AVAILABLE assignments and refuses enqueueing if
-the mode is `off`. It does not itself assign subjects.
+operator-triggered batch queue command. It is dry-run by default and includes
+claims with stored text **even when they have no thread or assignment**. It
+skips already classified and ACTIVE/COMPLETED assigned claims. Bulk enqueue
+is intentionally permitted only in `shadow` mode to prevent unreviewed
+retroactive authority. It does not itself assign subjects.
 
 ### Shadow evaluation before enforcement
 
@@ -77,16 +83,16 @@ the mode is `off`. It does not itself assign subjects.
    environment (web server **and** Celery worker), and restart both. Keep
    production `off`. Ensure Redis/Celery and existing Gemini/Groq API keys
    are configured; classification is a separate provider operation.
-2. Create a fresh TEXT claim, publish its community thread, and inspect its
+2. Analyze a fresh TEXT claim **without creating a thread** and inspect its
    `InvestigationClassificationAssessment`. For supported claims, expect
    `SUGGESTED` with candidate subject codes and `candidate_jurisdiction=""`;
    for insufficient/ambiguous claims expect `ABSTAINED` or `FAILED`.
    There must be **no** `ClaimInvestigationClassification` row in shadow and
    no new eligibility in partner intake.
-3. Test URL, IMAGE, and FILE community discussions after their extraction
-   pipeline stores claim text. Missing extraction should safely abstain.
+3. Test URL, IMAGE, and FILE claims without community discussions after their
+   extraction pipeline stores claim text. Missing extraction should safely abstain.
    Confirm claim verdict and publishing state remain unchanged.
-4. Preview old intake with `python manage.py queue_investigation_classifications
+4. Preview historical claims with `python manage.py queue_investigation_classifications
    --limit 10`. To enqueue a SMALL development sample in shadow mode only,
    use `python manage.py queue_investigation_classifications --enqueue --limit 10`.
    A running worker is required; this may invoke paid LLM APIs.

@@ -85,6 +85,18 @@ class ClaimPersistenceError(RuntimeError):
     """Raised when automated analysis cannot be persisted to a Claim."""
 
 
+def _schedule_subject_classification(claim_id):
+    """Best effort: never turn a classification outage into a fact-check failure."""
+    try:
+        from .investigation_classifier import dispatch_classification_after_text_save
+        dispatch_classification_after_text_save(claim_id)
+    except Exception:
+        logger.exception(
+            "Could not schedule optional subject classification for claim %s",
+            claim_id,
+        )
+
+
 def _resolve_exact_published_claim(claim, cleaned_claim):
     """Resolve cleaned factual text without storing AI/human verdict copies."""
     if claim is None:
@@ -103,10 +115,8 @@ def _resolve_exact_published_claim(claim, cleaned_claim):
                 return False
             claim.context_text = cleaned_claim
             claim.save(update_fields=["context_text", "last_updated"])
-            # Classification is claim-scoped and independent of whether a
-            # community discussion already exists.
-            from .investigation_classifier import dispatch_classification_after_text_save
-            dispatch_classification_after_text_save(claim.pk)
+            # Do not couple publication authority to classifier availability.
+            _schedule_subject_classification(claim.pk)
     except Exception as exc:
         raise ClaimPersistenceError(
             f"Published resolution persistence failed for claim {claim.pk}."
@@ -130,10 +140,8 @@ def _resolve_equivalent_published_claim(claim, cleaned_claim, vault_match):
                 return False
             claim.context_text = cleaned_claim
             claim.save(update_fields=["context_text", "last_updated"])
-            # Classification is claim-scoped and independent of whether a
-            # community discussion already exists.
-            from .investigation_classifier import dispatch_classification_after_text_save
-            dispatch_classification_after_text_save(claim.pk)
+            # Do not couple publication authority to classifier availability.
+            _schedule_subject_classification(claim.pk)
     except LLMProviderUnavailableError:
         raise
     except Exception as exc:
@@ -2272,14 +2280,7 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
         # Separate, asynchronous subject classification for every analyzed
         # claim, whether or not a community thread exists. The hook never
         # queries an LLM or changes the factual-verification result.
-        try:
-            from .investigation_classifier import dispatch_classification_after_text_save
-            dispatch_classification_after_text_save(claim.pk)
-        except Exception:
-            logger.exception(
-                "Could not schedule optional subject classification for claim %s",
-                claim_id,
-            )
+        _schedule_subject_classification(claim.pk)
         return claim
     except ClaimPersistenceError:
         raise
