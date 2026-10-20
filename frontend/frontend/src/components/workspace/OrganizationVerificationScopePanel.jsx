@@ -25,7 +25,9 @@ function ScopeEditor({ mode, scope, onClose, onSaved }) {
    useEffect(() => {
       const dialog = dialogRef.current;
       dialog?.showModal();
-      return () => dialog?.close();
+      return () => {
+         if (dialog?.open) dialog.close();
+      };
    }, []);
 
    const submit = async (event) => {
@@ -56,8 +58,10 @@ function ScopeEditor({ mode, scope, onClose, onSaved }) {
    return (
       <dialog ref={dialogRef} className="org-scope-dialog" aria-labelledby="org-scope-dialog-title"
          aria-describedby="org-scope-dialog-description"
-         onCancel={(event) => { if (saving) event.preventDefault(); else onClose(); }}
-         onClose={onClose}>
+         onCancel={(event) => {
+            event.preventDefault();
+            if (!saving) onClose();
+         }}>
          <div className="org-scope-dialog__heading">
             <div>
                <h3 id="org-scope-dialog-title">
