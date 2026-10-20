@@ -1,11 +1,13 @@
+import json
+import os
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import requests
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from api import services, tasks
-from api.models import Claim, EvidenceSource, VerificationEvidence, VerificationRun
+from api.models import Claim, EvidenceSource, VerificationEvidence, VerificationRun, VerificationTelemetryEvent
 from api.verification import runs
 from api.verification.contracts import RawEvidence
 from api.verification.evidence_assessment import EvidenceAssessment
@@ -754,6 +756,78 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assertEqual(self._terminal_count(), 0)
         self.vault.assert_not_called()
         self.bridge.assert_not_called()
+
+
+    @override_settings(APP_ENV="development", DEBUG=True)
+    def test_enabled_cloudflare_pilot_flows_through_real_evaluator_and_lifecycle(self):
+        self.evaluate_persisted.side_effect = services.evaluate_claim_with_persisted_evidence
+        cloud_output = json.dumps({
+            "reasoning": "The supplied source explicitly contradicts the claim.",
+            "verdict": "FAKE",
+            "summary": "The source contradicts the stated claim.",
+            "confidence_score": 92,
+            "score_context": "Direct contradiction in persisted evidence.",
+        })
+        with (
+            patch.dict(os.environ, {"ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1"}),
+            patch(
+                "api.services.call_validated_cloudflare_pilot",
+                return_value=cloud_output,
+            ) as cloudflare,
+            patch("api.services.gemini_client") as gemini,
+            patch("api.services.groq_client") as groq,
+        ):
+            run = self._execute()
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        cloudflare.assert_called_once()
+        gemini.models.generate_content.assert_not_called()
+        groq.chat.completions.create.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "FAKE")
+        self.assertEqual(self.claim.consensus_score, 92)
+        self.assertIsNone(self.claim.final_verdict)
+        events = list(run.telemetry_events.filter(
+            event_type=VerificationTelemetryEvent.EventType.LLM_PROVIDER_CALL
+        ))
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].provider, "cloudflare")
+        self.assertEqual(events[0].name, "persisted_evidence_evaluation")
+        self.assertEqual(events[0].outcome, "success")
+
+    @override_settings(APP_ENV="development", DEBUG=True)
+    def test_all_providers_unavailable_fails_run_without_fabricated_verdict(self):
+        self.evaluate_persisted.side_effect = services.evaluate_claim_with_persisted_evidence
+        with (
+            patch.dict(os.environ, {"ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1"}),
+            patch(
+                "api.services.call_validated_cloudflare_pilot",
+                side_effect=RuntimeError("Cloudflare unavailable"),
+            ) as cloudflare,
+            patch("api.services.gemini_client") as gemini,
+            patch("api.services.groq_client") as groq,
+        ):
+            gemini.models.generate_content.side_effect = RuntimeError("Gemini unavailable")
+            groq.chat.completions.create.side_effect = RuntimeError("Groq unavailable")
+            with self.assertRaises(LLMProviderUnavailableError):
+                self._execute()
+        cloudflare.assert_called_once()
+        self.assertEqual(self.claim.verification_runs.count(), 1)
+        run = self.claim.verification_runs.get()
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "final_evaluator")
+        self.assertEqual(run.failure_code, "LLM_UNAVAILABLE")
+        self.claim.refresh_from_db()
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.final_verdict)
+        self.retrieve_tavily.assert_not_called()
+        providers = list(run.telemetry_events.filter(
+            event_type=VerificationTelemetryEvent.EventType.LLM_PROVIDER_CALL
+        ).order_by("sequence").values_list("provider", "outcome"))
+        self.assertEqual(providers, [
+            ("cloudflare", "failed"),
+            ("gemini", "failed"),
+            ("groq", "failed"),
+        ])
 
 
 class VerificationEvidenceURLRuntimeTests(TestCase):
