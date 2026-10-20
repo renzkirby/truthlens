@@ -81,6 +81,39 @@ from .verification.telemetry import (
 logger = logging.getLogger(__name__)
 
 
+@shared_task(name="api.tasks.inspect_cloudflare_pilot_worker_environment")
+def inspect_cloudflare_pilot_worker_environment():
+    """Return safe *actual worker* runtime flags without provider calls.
+
+    Development-only, read-only Celery diagnostic. No secrets, HTTP requests,
+    claims, evidence, database changes or customer data in its result.
+    """
+    from django.conf import settings
+
+    if not (
+        getattr(settings, "APP_ENV", None) == "development"
+        and getattr(settings, "DEBUG", False) is True
+    ):
+        return {"diagnostics_available": False}
+
+    from .verification.cloudflare_evaluation import ACCOUNT_ID_PATTERN
+    from .verification.cloudflare_pilot import cloudflare_pilot_enabled
+
+    return {
+        "diagnostics_available": True,
+        "worker_pid": os.getpid(),
+        "pilot_enabled": cloudflare_pilot_enabled(
+            "persisted_evidence_evaluation"
+        ),
+        "account_id_valid": bool(ACCOUNT_ID_PATTERN.fullmatch(
+            os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
+        )),
+        "api_token_present": bool(
+            os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
+        ),
+    }
+
+
 class ClaimPersistenceError(RuntimeError):
     """Raised when automated analysis cannot be persisted to a Claim."""
 
