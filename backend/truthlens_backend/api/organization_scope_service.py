@@ -24,7 +24,8 @@ class OrganizationScopeInvalid(OrganizationScopeError):
 
 def can_view_specializations(*, organization, actor):
     return bool(
-        actor and actor.is_authenticated and OrganizationMembership.objects.filter(
+        actor and actor.is_authenticated and actor.is_active
+        and OrganizationMembership.objects.filter(
             organization=organization,
             user=actor,
             status=OrganizationMembership.Status.ACTIVE,
@@ -37,7 +38,8 @@ def can_manage_specializations(*, organization, actor):
     # The Primary Admin alone controls institutional specialization; an Admin
     # does not inherit this authority merely through MANAGE_ORGANIZATION.
     return bool(
-        actor and actor.is_authenticated and OrganizationMembership.objects.filter(
+        actor and actor.is_authenticated and actor.is_active
+        and OrganizationMembership.objects.filter(
             organization=organization,
             user=actor,
             status=OrganizationMembership.Status.ACTIVE,

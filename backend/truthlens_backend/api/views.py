@@ -2795,9 +2795,9 @@ def verification_intake(request):
     queryset = get_available_verification_assignments()
     from .verification_domain_policy import (
         eligibility_reason,
-        effective_organization_scope,
+        organization_specializations,
     )
-    active_domains, _legacy_geography = effective_organization_scope(organization)
+    specializations = organization_specializations(organization)
 
     # Partner intake lists only eligible, already classified claims. The
     # claim-time service independently enforces the same rule under a lock.
@@ -2810,7 +2810,7 @@ def verification_intake(request):
         )
         if eligibility_reason(
             classification=classification,
-            specializations=active_domains,
+            specializations=specializations,
         ) is None:
             eligible.append(assignment)
 

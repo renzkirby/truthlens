@@ -54,24 +54,6 @@ class ManagementPlatformTrustUpdateSerializer(StrictFieldsSerializer):
         return attrs
 
 
-class ManagementApprovedVerificationScopeSerializer(StrictFieldsSerializer):
-    domains = serializers.ListField(
-        child=serializers.CharField(), allow_empty=True, max_length=12
-    )
-    jurisdictions = serializers.ListField(
-        child=serializers.CharField(), allow_empty=True, max_length=50
-    )
-    rationale = serializers.CharField(min_length=12, max_length=2000)
-
-
-class ManagementClaimClassificationSerializer(StrictFieldsSerializer):
-    domains = serializers.ListField(
-        child=serializers.CharField(), allow_empty=False, max_length=12
-    )
-    jurisdiction = serializers.CharField(max_length=32)
-    rationale = serializers.CharField(min_length=12, max_length=2000)
-
-
 class ManagementPrimaryAdminProvisionSerializer(StrictFieldsSerializer):
     email = serializers.EmailField()
 

@@ -73,16 +73,13 @@ def effective_organization_scope(organization):
     return organization_specializations(organization), []
 
 
-def eligibility_reason(*, classification, specializations=None, approved_domains=None,
-                       approved_jurisdictions=None):
-    """Classifications must be validated and entirely within declared subjects.
+def eligibility_reason(*, classification, specializations):
+    """An authoritative subject classification must fit every selected domain.
 
-    Legacy call-argument names are accepted temporarily while old callers are
-    migrated; geographic arguments never authorize or restrict assignment.
+    Geographic data and historical approvals have no authorization effect.
     """
     if classification is None or not classification.domains:
         return "NEEDS_CLASSIFICATION"
-    authorized = specializations if specializations is not None else approved_domains
-    if not set(classification.domains).issubset(set(authorized or [])):
+    if not set(classification.domains).issubset(set(specializations or [])):
         return "OUTSIDE_SPECIALIZATIONS"
     return None

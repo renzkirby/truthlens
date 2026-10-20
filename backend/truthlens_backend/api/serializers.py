@@ -804,9 +804,9 @@ class PublicPartnerSummarySerializer(serializers.ModelSerializer):
     authorized_verification_domains = serializers.SerializerMethodField()
 
     def get_authorized_verification_domains(self, obj):
-        from .verification_domain_policy import effective_organization_scope
-        domains, _jurisdictions = effective_organization_scope(obj)
-        return domains
+        # Compatibility response field; now organization-declared, not approved.
+        from .verification_domain_policy import organization_specializations
+        return organization_specializations(obj)
 
     organization_type_label = serializers.CharField(
         source="get_organization_type_display",
