@@ -32,7 +32,7 @@ from .accountability_service import record_accountability_event
 from .verification_domain_policy import DOMAIN_CODES
 
 logger = logging.getLogger(__name__)
-CLASSIFIER_VERSION = "v2-subject-only"
+CLASSIFIER_VERSION = "v3-persisted-subject"
 MAX_CLAIM_LENGTH = 2400
 MAX_DOMAINS = 3
 MIN_CLAIM_LENGTH = 20

@@ -47,7 +47,7 @@ check `showmigrations api`, and inspect `migrate --plan` and
 
 The classification pipeline is distinct from factual-verdict generation and
 does not modify factual confidence, evidence, adjudication, publication, or
-provenance. Classifier `v2-subject-only` requires exact supporting quotations,
+provenance. Classifier `v3-persisted-subject` requires exact supporting quotations,
 abstains on uncertain/unsupported subjects, and reads persisted `Claim.context_text`
 from TEXT, URL, IMAGE, and FILE claims. URL/IMAGE/FILE inputs are eligible only
 after the existing verification/extraction pipeline stores usable claim text:
