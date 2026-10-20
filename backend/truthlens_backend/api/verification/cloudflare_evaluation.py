@@ -31,8 +31,10 @@ def generate_evaluation_json(
     Single attempt, bounded timeout, no retries. The caller owns the strict
     evaluation rubric. Account/token may be passed explicitly in unit tests.
     """
-    account_id = account_id or os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
-    api_token = api_token or os.getenv("CLOUDFLARE_API_TOKEN", "")
+    if account_id is None:
+        account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
+    if api_token is None:
+        api_token = os.getenv("CLOUDFLARE_API_TOKEN", "")
     if not ACCOUNT_ID_PATTERN.fullmatch(account_id):
         raise CloudflareEvaluationError("MISSING_OR_INVALID_ACCOUNT_ID")
     if not api_token.strip():
