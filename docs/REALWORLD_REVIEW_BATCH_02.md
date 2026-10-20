@@ -3,10 +3,7 @@
 **Status:** Source-assessed by assistant, **APPROVED by project reviewer on 2026-10-20**.
 Date of preliminary checks: 20 October 2026.
 
-This batch selects **six of the 26 currently PENDING cases** after the first
-four Constitution / RA 9346 reference verdicts were independently confirmed
-by the TruthLens project reviewer. No new cases are approved here, no inference
-requests are executed, and no claim records or databases are modified.
+This batch contains six newly approved case-level labels following four earlier approvals. The project reviewer approved FACT, FAKE, both evidence-limited UNVERIFIED decisions, and both mixed-context MISLEADING decisions. Approval did not execute inference or modify databases.
 
 The six are intentionally more challenging than the first four. Three are
 written in Filipino; two examine whether supplied evidence is **insufficient**
@@ -26,14 +23,14 @@ The voter education document specifically addresses the May 9 election.
 
 1. `elections_2022_support` — "Itinakda ng COMELEC ang pambansa at lokal
    na halalan sa Pilipinas sa Mayo 9, 2022."
-   - **Provisional FACT**: the official election date was May 9, 2022.
+   - **Approved FACT**: the official election date was May 9, 2022.
    - *Nuance*: election timing was legislated; the claim's "itinakda ng
      COMELEC" might imply COMELEC selected the date autonomously. Review
      wording against the legal and administrative distinction.
 
 2. `elections_2022_contradict` — "Itinakda ng COMELEC ang pambansa at lokal
    na halalan sa Pilipinas sa Mayo 19, 2022."
-   - **Provisional FAKE**: the official date was May 9, not May 19.
+   - **Approved FAKE**: the official date was May 9, not May 19.
    - Apply the same "itinakda" wording caveat as in the support case.
 
 Both are linked to **one underlying COMELEC election timetable**. They are
@@ -45,7 +42,7 @@ Primary source: [WHO Director-General opening remarks — March 11, 2020](https:
 
 3. `health_source_insufficient` — "On March 11, 2020, every patient with
    COVID-19 worldwide received the same antiviral medication."
-   - **Provisional UNVERIFIED from this dossier**: WHO's contemporaneous
+   - **Approved UNVERIFIED from this dossier**: WHO's contemporaneous
      briefing discusses case counts, spread, the pandemic assessment and
      public-health response. It does **not** provide patient-level
      antiviral-treatment records.
@@ -66,7 +63,7 @@ Yolanda/Haiyan on November 6–9, 2013, and slide/page 7 (zero-indexed page 6).
 4. `ph_disaster_source_insufficient` — "Lahat ng pamilyang naapektuhan ng
    Yolanda ay nakatanggap ng eksaktong 20,000 piso sa loob ng 24 oras matapos
    ang bagyo."
-   - **Provisional UNVERIFIED from this dossier**: the PAGASA source
+   - **Approved UNVERIFIED from this dossier**: the PAGASA source
      documents the storm but provides no household-level disbursement or aid
      data. Neither payment nor nonpayment to all households follows.
    - *Corpus correction*: "within 24 hours" now explicitly means after the
@@ -83,12 +80,12 @@ especially "Pricing & Availability".
    2007 and it became available in US stores that same day."
    - Source agrees the iPhone was introduced January 9, 2007, **but**
      specified US availability starting **June 2007**.
-   - **Provisional MISLEADING (DISPUTED)** because a genuine announcement
+   - **Approved MISLEADING (reviewer decision)** because a genuine announcement
      is combined with a false same-day-sale claim.
    - **FAKE is also defensible** if TruthLens evaluates the compound claim
      as an explicit factual contradiction. Require deliberate reviewer
      adjudication, including explanation of our exact verdict taxonomy.
-   - Do not automatically approve the draft MISLEADING label.
+   - The project reviewer expressly approved MISLEADING for this case; this does not change production verdict rules.
 
 ### E. ENVIRONMENT — mixed true/false context (1 case)
 
@@ -98,32 +95,25 @@ Primary source: [NOAA, *What is coral bleaching?*](https://oceanservice.noaa.gov
    bleaching, so every coral that bleaches is already dead."
    - NOAA confirms warm water **can** trigger bleaching, but bleached
      corals are not necessarily dead and can sometimes recover.
-   - **Provisional MISLEADING (DISPUTED)** because the cause is correct
+   - **Approved MISLEADING (reviewer decision)** because the cause is correct
      but the claimed invariable consequence is wrong.
    - **FAKE is also defensible** based on direct contradiction of the
      "every bleached coral is dead" assertion. Review taxonomy explicitly;
      consider a second reviewer if the boundary remains disputed.
 
-## Approval boundaries
+## Approval record and next gate
 
-**No six-case labels are automatically approved.** A reviewer should inspect
-the primary source, confirm the dossier fairly captures it, then approve,
-revise, or reject EACH case's label. In particular, a missing statement is
-not evidence that the underlying universal fact is false; a source about
-weather is not an aid distribution register; and compound statements need
-a consistent TruthLens rubric.
+All six Batch 02 case verdicts were approved by the project reviewer on
+20 October 2026. The corpus stores pseudonymous reviewer attribution and
+assistant-drafted source explanations, not verbatim reviewer rationales.
+The two MISLEADING decisions are case-specific adjudications; global verdict
+policy remains unchanged. The two UNVERIFIED verdicts concern only the
+supplied dossier's insufficient evidence. The other 20 cases remain PENDING.
 
-After approval, the JSON case `review` entries in
-`api/tests/fixtures/realworld_verification_cases.json` can receive status
-APPROVED, `approved_verdict`, `reviewer`, `reviewed_at`, a rationale
-of at least 20 characters, and `source_checked: true`. The benchmark runner
-must remain blind to both proposed and approved labels when constructing
-the model prompt. Any still-unapproved cases are excluded from scored runs.
-
-Suggested next gate: get independent approval for the two elections cases and
-the two dossier-insufficiency cases first, and resolve the two ambiguous
-MISLEADING/FAKE labels explicitly before including them in scoring. A 4-case
-selection can be scored without approving the other two.
+After tests pass, the next comparison should select only the six approved
+Batch 02 cases using the command's existing --case flags with --limit 6 and
+the default 2048-token budget. This costs up to six sequential Cloudflare
+requests and does not change the live verification pipeline.
 
 ## Local verification after pulling this review packet
 
