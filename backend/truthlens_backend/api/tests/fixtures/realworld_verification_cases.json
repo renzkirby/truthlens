@@ -683,8 +683,8 @@
     "id": "health_source_insufficient",
     "domain": "HEALTH",
     "language": "en",
-    "claim": "The WHO's March 11, 2020 COVID-19 briefing reported that every patient received the same antiviral medicine.",
-    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: WHO Director-General opening remarks, March 11, 2020.\nEvidence: The briefing describes global infection figures, international spread, and the pandemic assessment. The excerpt contains no evidence about medicine used for every patient.",
+    "claim": "On March 11, 2020, every patient with COVID-19 worldwide received the same antiviral medication.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: WHO Director-General opening remarks, March 11, 2020.\nEvidence: The briefing discusses global spread, deaths, WHO's pandemic assessment, and responses to COVID-19. It provides no patient-level evidence about antiviral medications or whether treatment was uniform worldwide.",
     "sources": [
       {
         "title": "WHO Director-General media briefing",
@@ -694,7 +694,7 @@
     ],
     "as_of": "2026-10-20",
     "proposed_verdict": "UNVERIFIED",
-    "label_reason": "Evidence dossier is silent on the asserted universal treatment; verdict means insufficient evidence from supplied dossier, not a global truth claim.",
+    "label_reason": "Draft dossier-sufficiency label only: the WHO briefing offers no patient-level treatment records to establish or refute the claim. This is NOT a verified global clinical finding. Independent review required.",
     "review": {
       "status": "PENDING",
       "reviewer": "",
@@ -707,8 +707,8 @@
     "id": "ph_disaster_source_insufficient",
     "domain": "DISASTERS",
     "language": "fil",
-    "claim": "Lahat ng pamilyang naapektuhan ng Yolanda ay nakatanggap ng eksaktong 20,000 piso sa loob ng 24 oras.",
-    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: PAGASA retrospective presentation on Super Typhoon Haiyan/Yolanda.\nEvidence: Describes Yolanda occurring on November 6-9, 2013, and its track and weather warnings. It supplies no record of payments to every affected family.",
+    "claim": "Lahat ng pamilyang naapektuhan ng Yolanda ay nakatanggap ng eksaktong 20,000 piso sa loob ng 24 oras matapos ang bagyo.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: PAGASA retrospective weather presentation on Super Typhoon Haiyan/Yolanda.\nEvidence: PAGASA records Yolanda occurring November 6-9, 2013, including meteorological track and impacts; the presented material provides no household-level aid or payment distribution records.",
     "sources": [
       {
         "title": "PAGASA extreme weather seminar",
@@ -718,7 +718,7 @@
     ],
     "as_of": "2026-10-20",
     "proposed_verdict": "UNVERIFIED",
-    "label_reason": "Dossier lacks household aid payments; evaluate evidence sufficiency, not actual total relief paid.",
+    "label_reason": "Draft dossier-sufficiency label only: meteorological event records cannot establish or refute the universal relief-payment claim. Independent source and verdict review required.",
     "review": {
       "status": "PENDING",
       "reviewer": "",

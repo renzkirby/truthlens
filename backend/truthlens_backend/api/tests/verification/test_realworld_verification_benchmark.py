@@ -48,6 +48,32 @@ class RealWorldCorpusReviewTests(SimpleTestCase):
             for c in cases for src in c["sources"]
         ))
 
+    def test_second_review_batch_remains_pending_and_insufficient_cases_are_claims(self):
+        by_id = {c["id"]: c for c in load_corpus()}
+        expected_ids = {
+            "elections_2022_support",
+            "elections_2022_contradict",
+            "health_source_insufficient",
+            "ph_disaster_source_insufficient",
+            "technology_iphone_contradict",
+            "environment_coral_contradict",
+        }
+        self.assertEqual(
+            {x for x in expected_ids if by_id[x]["review"]["status"] == "PENDING"},
+            expected_ids,
+        )
+        self.assertIn(
+            "every patient with COVID-19 worldwide",
+            by_id["health_source_insufficient"]["claim"],
+        )
+        self.assertNotIn(
+            "briefing reported", by_id["health_source_insufficient"]["claim"],
+        )
+        self.assertIn(
+            "matapos ang bagyo",
+            by_id["ph_disaster_source_insufficient"]["claim"],
+        )
+
     def test_approval_needs_independent_reviewer_and_confirmed_provenance(self):
         case = copy.deepcopy(load_corpus()[0])
         case["review"] = {"status": "APPROVED"}
