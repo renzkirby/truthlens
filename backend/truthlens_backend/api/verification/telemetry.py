@@ -44,7 +44,7 @@ SAFE_LLM_OPERATION_LABELS = frozenset(
         "evidence_assessment",
     }
 )
-SAFE_LLM_PROVIDERS = frozenset({"gemini", "groq"})
+SAFE_LLM_PROVIDERS = frozenset({"gemini", "groq", "cloudflare"})
 
 
 @dataclass
