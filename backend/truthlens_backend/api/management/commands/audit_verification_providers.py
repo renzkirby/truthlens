@@ -215,6 +215,10 @@ class Command(BaseCommand):
                     metric["matched"] += int(valid and prediction == expected)
                     if valid:
                         user_explanation = captured["validated"]
+                    else:
+                        metric["failures"] += 1
+                        error = "INVALID_JSON_CONTRACT"
+                        prediction = None
                 except services.LLMProviderUnavailableError:
                     metric["failures"] += 1
                     error = captured.get("error", "LLM_UNAVAILABLE")
