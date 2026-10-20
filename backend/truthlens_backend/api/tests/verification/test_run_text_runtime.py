@@ -309,13 +309,39 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.assess_evidence.assert_not_called()
 
     def test_cached_abstaining_verdicts_abstain(self):
-        for verdict in ("OUT_OF_SCOPE", "UNVERIFIED", None, "", "UNKNOWN"):
+        for verdict in ("OUT_OF_SCOPE", "UNVERIFIED"):
             with self.subTest(verdict=verdict):
                 self._cached_claim(verdict)
                 self._assert_terminal(self._execute(), VerificationRun.Status.ABSTAINED)
         self.clean.assert_not_called()
         self.retrieve_tavily.assert_not_called()
         self.assess_evidence.assert_not_called()
+
+    def test_unresolved_ai_match_continues_to_fresh_verification_for_text_and_image(self):
+        for claim_type in (Claim.ClaimType.TEXT, Claim.ClaimType.IMAGE):
+            for cached_verdict in (None, "", "UNKNOWN"):
+                with self.subTest(claim_type=claim_type, cached_verdict=cached_verdict):
+                    self.claim = Claim.objects.create(
+                        claim_type=claim_type,
+                        context_text="Fresh submitted public factual claim.",
+                    )
+                    cached = self._cached_claim(cached_verdict)
+                    clean_before = self.clean.call_count
+                    save_before = self.save_claim.call_count
+
+                    run = self._execute()
+
+                    self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+                    self.assertEqual(self.clean.call_count, clean_before + 1)
+                    self.assertEqual(self.save_claim.call_count, save_before + 1)
+                    self.claim.refresh_from_db()
+                    self.assertEqual(self.claim.ai_verdict, "FAKE")
+                    self.assertEqual(self.claim.ai_summary, self.verdict["summary"])
+                    self.assertNotEqual(
+                        self.claim.score_context,
+                        "This result was matched from a prior analysis of the same claim.",
+                    )
+                    self.assertEqual(cached.ai_verdict, cached_verdict)
 
     def test_cached_human_verdict_is_not_copied_or_used_as_run_outcome(self):
         for ai_verdict, final_verdict, status in (

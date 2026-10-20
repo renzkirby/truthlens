@@ -1060,9 +1060,19 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
             allow_semantic_fallback=False,
         )
 
-        has_second_chance_match = matched_claim is not None and str(
-            matched_claim.id
-        ) != str(claim_id)
+        # A fingerprint/semantic match is not proof of usable analysis.
+        # Pending or unrecognized AI verdicts must never short-circuit the
+        # current run; otherwise we copy None, bypass all evidence retrieval,
+        # and silently mark the new run ABSTAINED with no explanation.
+        reusable_ai_verdicts = {
+            "FACT", "FAKE", "MISLEADING", "SATIRE",
+            "UNVERIFIED", "OUT_OF_SCOPE",
+        }
+        has_second_chance_match = (
+            matched_claim is not None
+            and str(matched_claim.id) != str(claim_id)
+            and matched_claim.ai_verdict in reusable_ai_verdicts
+        )
         is_image_claim = (
             run_claim is not None and run_claim.claim_type == Claim.ClaimType.IMAGE
         )
