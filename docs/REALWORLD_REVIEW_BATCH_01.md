@@ -54,8 +54,10 @@ no claim records or databases were modified.
 
 The reviewer confirmed all four labels after reviewing the cited sources.
 The four examples are derived from just **two** primary authorities, so they
-should not be treated as four independent information sources. The remaining
-26 cases are PENDING, and no model accuracy score has been calculated yet.
+should not be treated as four independent information sources. At the time of Batch 01, the remaining 26 cases were PENDING. Batch 02
+has since approved six additional cases, leaving 10 APPROVED and 20 PENDING.
+The four Batch 01 results matched in the first source-dossier Cloudflare run;
+this does not establish population accuracy.
 
 ## Reviewer checklist for additional cases
 
