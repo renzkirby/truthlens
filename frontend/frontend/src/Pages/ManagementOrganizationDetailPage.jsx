@@ -5,7 +5,6 @@ import {
    DetailList,
    ManagementConfirmDialog,
    ManagementFeedback,
-   ManagementFormDialog,
    ManagementPageHeader,
    ManagementRequestState,
    ManagementStatus,
@@ -20,7 +19,6 @@ import {
    formatManagementDate,
    MANAGEMENT_PARTNER_STATUSES,
    MANAGEMENT_VERIFICATION_STATUSES,
-   MANAGEMENT_VERIFICATION_DOMAINS,
    formatVerificationDomain,
 } from "../utils/management";
 
@@ -195,111 +193,21 @@ function PlatformTrustSection({
 }
 
 
-function VerificationScopeSection({ organization, onRefresh, onFeedback }) {
-   const [editing, setEditing] = useState(false);
-   const editButtonRef = useRef(null);
-   const [domains, setDomains] = useState([]);
-   const [jurisdictions, setJurisdictions] = useState("");
-   const [rationale, setRationale] = useState("");
-   const { mutate, pending, error, reset } = useManagementMutation();
-
-   const startEditing = () => {
-      setDomains(organization.approved_verification_domains || []);
-      setJurisdictions((organization.approved_verification_jurisdictions || []).join(", "));
-      setRationale("");
-      reset();
-      setEditing(true);
-   };
-   const close = () => { if (!pending) { reset(); setEditing(false); } };
-   const save = async (event) => {
-      event.preventDefault();
-      const list = [...new Set(jurisdictions.split(",").map((value) => value.trim().toUpperCase()).filter(Boolean))];
-      const result = await mutate(
-         resolveApiEndpoint("MANAGEMENT_ORGANIZATION_VERIFICATION_SCOPE", organization.id),
-         { method: "PATCH", body: {
-            domains, jurisdictions: list, rationale: rationale.trim(),
-         } },
-      );
-      if (!result.ok) return;
-      setEditing(false);
-      onFeedback("Authorized investigation scope reviewed and saved.");
-      onRefresh();
-   };
-   const approved = organization.approved_verification_domains || [];
-   const requested = organization.requested_verification_domains || [];
-   const requestedLocations = organization.requested_verification_jurisdictions || [];
-   const active = organization.active_verification_domains || [];
-   const activeLocations = organization.active_verification_jurisdictions || [];
+function VerificationScopeSection({ organization }) {
+   const specializations = organization.verification_specializations || [];
    return (
       <section className="management-detail-section">
-         <div className="management-trust-heading">
-            <h2>Authorized Investigation Specializations</h2>
-            <Button ref={editButtonRef} variant="secondary" density="compact" onClick={startEditing}>
-               Review platform approval
-            </Button>
-         </div>
+         <h2>Organization verification specializations</h2>
          <p className="management-section__description">
-            Organization leadership requests and activates specializations;
-            the platform independently approves the maximum investigation scope.
+            The Primary Admin manages these investigation subjects in the partner workspace.
+            Platform administration oversees partnership status and onboarding, not the
+            organization's subject choices.
          </p>
          <DetailList items={[
-            { label: "Platform-approved subjects", value: approved.length ? approved.map(formatVerificationDomain).join(", ") : "None approved" },
-            { label: "Approved geographic coverage", value: (organization.approved_verification_jurisdictions || []).join(", ") || "None approved" },
-            { label: "Requested subjects", value: requested.length ? requested.map(formatVerificationDomain).join(", ") : "No request" },
-            { label: "Requested geographic coverage", value: requestedLocations.join(", ") || "No request" },
-            { label: "Currently active subjects", value: (organization.active_scope_configured ? active : approved).map(formatVerificationDomain).join(", ") || "None active" },
-            { label: "Currently active geographic coverage", value: (organization.active_scope_configured ? activeLocations : (organization.approved_verification_jurisdictions || [])).join(", ") || "None active" },
+            { label: "Selected subjects", value: specializations.length
+               ? specializations.map(formatVerificationDomain).join(", ") : "Not configured" },
+            { label: "Managed by", value: "Organization Primary Admin" },
          ]} />
-         <ManagementFormDialog open={editing} title="Review platform-approved investigation scope"
-            description="Grant only specializations and geographic coverage supported by the organization's qualifications. New approvals do not override an explicit active selection."
-            onClose={close} processing={pending} returnFocusRef={editButtonRef}>
-            <form className="management-modal-form" onSubmit={save}>
-               {requested.length ? (
-                  <p className="management-scope-request-summary">
-                     Organization request: {requested.map(formatVerificationDomain).join(", ")}
-                     {requestedLocations.length ? ` · ${requestedLocations.join(", ")}` : ""}
-                  </p>
-               ) : <p className="management-scope-request-summary">
-                  No new request from the organization is recorded. Review institutional qualifications before granting authority.
-               </p>}
-               <fieldset className="management-modal-fieldset" disabled={pending}>
-                  <legend>Platform-approved subject matter</legend>
-                  <p>Select all subject areas the institution is authorized to investigate.</p>
-                  <div className="management-scope-options">
-                     {MANAGEMENT_VERIFICATION_DOMAINS.map(([code, label]) => (
-                        <label key={code} className={`management-scope-option ${domains.includes(code) ? "is-selected" : ""}`}>
-                           <input type="checkbox" checked={domains.includes(code)}
-                              onChange={(event) => {
-                                 reset();
-                                 setDomains((current) => event.target.checked
-                                    ? [...current, code] : current.filter((entry) => entry !== code));
-                              }} />
-                           <span>{label}</span>
-                        </label>
-                     ))}
-                  </div>
-               </fieldset>
-               <label className="management-form-field">
-                  <strong>Approved geographic coverage</strong>
-                  <Input value={jurisdictions} placeholder="PH, PH-NCR or GLOBAL"
-                     disabled={pending} onChange={(event) => { reset(); setJurisdictions(event.target.value); }} />
-                  <small>Comma-separated codes. GLOBAL grants worldwide authority.</small>
-               </label>
-               <label className="management-form-field">
-                  <strong>Reason for platform decision</strong>
-                  <textarea rows={3} maxLength={2000} minLength={12}
-                     disabled={pending} value={rationale}
-                     onChange={(event) => { reset(); setRationale(event.target.value); }}
-                     required placeholder="Document evidence of qualifications or reason for revocation" />
-               </label>
-               {error ? <ManagementFeedback tone="error">{error.message}</ManagementFeedback> : null}
-               <div className="management-dialog__actions">
-                  <Button variant="secondary" type="button" disabled={pending} onClick={close}>Cancel</Button>
-                  <Button type="submit" disabled={pending || rationale.trim().length < 12 || Boolean(domains.length) !== Boolean(jurisdictions.trim())}
-                     loading={pending} loadingLabel="Saving…">Save platform approval</Button>
-               </div>
-            </form>
-         </ManagementFormDialog>
       </section>
    );
 }
@@ -562,11 +470,7 @@ function ManagementOrganizationDetailPage() {
                      onFeedback={showFeedback}
                      returnFocusAfterRefreshRef={returnFocusAfterTrustRefreshRef}
                   />
-                  <VerificationScopeSection
-                     organization={data}
-                     onRefresh={retry}
-                     onFeedback={showFeedback}
-                  />
+                  <VerificationScopeSection organization={data} />
                   <section className="management-detail-section">
                      <PrimaryAdminState
                         organizationId={data.id}

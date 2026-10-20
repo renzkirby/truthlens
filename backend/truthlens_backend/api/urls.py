@@ -37,26 +37,6 @@ urlpatterns = [
         name="management_organization_detail",
     ),
     path(
-        "management/organizations/<uuid:organization_id>/verification-scope/",
-        management_views.ManagementVerificationScopeView.as_view(),
-        name="management_organization_verification_scope",
-    ),
-    path(
-        "management/verification-intake/unclassified/",
-        management_views.ManagementUnclassifiedIntakeView.as_view(),
-        name="management_unclassified_intake",
-    ),
-    path(
-        "management/claims/<uuid:claim_id>/classification-retry/",
-        management_views.ManagementClassificationRetryView.as_view(),
-        name="management_classification_retry",
-    ),
-    path(
-        "management/claims/<uuid:claim_id>/investigation-classification/",
-        management_views.ManagementInvestigationClassificationView.as_view(),
-        name="management_investigation_classification",
-    ),
-    path(
         "management/organizations/<uuid:organization_id>/platform-trust/",
         management_views.ManagementOrganizationPlatformTrustView.as_view(),
         name="management_organization_platform_trust",

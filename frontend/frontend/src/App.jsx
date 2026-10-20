@@ -43,7 +43,6 @@ import ManagementGovernanceAuditPage from "./Pages/ManagementGovernanceAuditPage
 import ManagementGovernanceAuditDetailPage from "./Pages/ManagementGovernanceAuditDetailPage.jsx";
 import ManagementPipelineHealthPage from "./Pages/ManagementPipelineHealthPage.jsx";
 import ManagementPipelineRunDetailPage from "./Pages/ManagementPipelineRunDetailPage.jsx";
-import ManagementClaimClassificationPage from "./Pages/ManagementClaimClassificationPage.jsx";
 
 
 function CommunityFactCheckPage() {
@@ -89,7 +88,6 @@ function App() {
                         <Route path="/management" element={<ManagementOverviewPage />} />
                         <Route path="/management/organizations" element={<ManagementOrganizationsPage />} />
                         <Route path="/management/organizations/new" element={<ManagementOrganizationCreatePage />} />
-                        <Route path="/management/classification" element={<ManagementClaimClassificationPage />} />
                         <Route
                            path="/management/organizations/:organizationId"
                            element={<ManagementOrganizationDetailPage />}
