@@ -105,7 +105,7 @@ Then from `backend/truthlens_backend`:
   api.tests.verification.test_realworld_verification_benchmark `
   api.tests.verification.test_run_text_runtime `
   api.tests.verification.test_run_url_runtime `
-  --settings=truthlens_backend.test_settings `
+  --settings=truthlens_backend.settings_test `
   --keepdb
 
 ..\.venv\Scripts\python.exe .\manage.py check
