@@ -85,8 +85,7 @@ class AccountabilityInstrumentationTests(TestCase):
             slug="accountability-partner",
             verification_status=Organization.VerificationStatus.VERIFIED,
             partner_status=Organization.PartnerStatus.ACTIVE,
-            approved_verification_domains=["SCIENCE"],
-            approved_verification_jurisdictions=["PH"],
+            verification_specializations=["SCIENCE"],
         )
         OrganizationMembership.objects.create(
             organization=self.organization,
