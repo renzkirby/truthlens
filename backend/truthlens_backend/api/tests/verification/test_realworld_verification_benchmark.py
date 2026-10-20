@@ -158,7 +158,8 @@ class RealWorldBenchmarkCommandTests(SimpleTestCase):
                 live=True, limit=2, stdout=out,
             )
         llm.assert_called_once()
-        self.assertIn("Quota/auth barrier", out.getvalue())
+        self.assertIn("error=HTTP_429", out.getvalue())
+        self.assertIn("no further requests to that provider", out.getvalue())
         self.assertIn("matched=0/1 valid=0 errors=1", out.getvalue())
         self.assertNotIn("verdict=UNVERIFIED", out.getvalue())
 
