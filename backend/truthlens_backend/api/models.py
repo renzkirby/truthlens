@@ -335,6 +335,12 @@ class Organization(models.Model):
     active_verification_jurisdictions = models.JSONField(default=list, blank=True)
     active_scope_configured = models.BooleanField(default=False)
 
+    verification_specializations = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Primary Admin-managed subject specializations for new partner intake.",
+    )
+
     expertise_areas = models.JSONField(
         default=list,
         blank=True,
@@ -2007,6 +2013,10 @@ class AccountabilityEvent(models.Model):
         ORGANIZATION_VERIFICATION_SCOPE_ACTIVATED = (
             "ORGANIZATION_VERIFICATION_SCOPE_ACTIVATED",
             "Organization Verification Scope Activated",
+        )
+        ORGANIZATION_VERIFICATION_SPECIALIZATIONS_UPDATED = (
+            "ORGANIZATION_VERIFICATION_SPECIALIZATIONS_UPDATED",
+            "Organization Verification Specializations Updated",
         )
         CLAIM_INVESTIGATION_CLASSIFIED = (
             "CLAIM_INVESTIGATION_CLASSIFIED",
@@ -5026,7 +5036,9 @@ class ClaimInvestigationClassification(models.Model):
         related_name="investigation_classification",
     )
     domains = models.JSONField(default=list)
-    jurisdiction = models.CharField(max_length=32)
+    # Historical geographic context is retained; new subject classifications
+    # do not require or infer geographic authorization.
+    jurisdiction = models.CharField(max_length=32, blank=True, default="")
     rationale = models.TextField(max_length=2000)
     source = models.CharField(
         max_length=16, choices=Source.choices, default=Source.MANUAL
