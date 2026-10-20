@@ -21,6 +21,10 @@ from PIL import Image
 from supabase import create_client
 
 from .verification.telemetry import record_llm_provider_call
+from .verification.cloudflare_pilot import (
+    cloudflare_pilot_enabled,
+    call_validated_cloudflare_pilot,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,15 +54,18 @@ DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
 
 
 _gemini_degraded = ContextVar("gemini_degraded", default=None)
+_cloudflare_pilot_degraded = ContextVar("cloudflare_pilot_degraded", default=None)
 
 
 @contextmanager
 def llm_provider_scope():
     """Give one synchronous verification execution fresh provider state."""
     token = _gemini_degraded.set(False)
+    cloudflare_token = _cloudflare_pilot_degraded.set(False)
     try:
         yield
     finally:
+        _cloudflare_pilot_degraded.reset(cloudflare_token)
         _gemini_degraded.reset(token)
 
 
@@ -226,8 +233,39 @@ def call_llm_with_fallback(
     operation=None,
     gemini_timeout_ms=None,
 ):
-    """Use Gemini first unless Groq has already taken over in this job."""
+    """Preserve Gemini/Groq; opt-in Cloudflare only at persisted verdict stage."""
     provider_call_id = uuid.uuid4()
+    if (
+        cloudflare_pilot_enabled(operation)
+        and _cloudflare_pilot_degraded.get() is not True
+    ):
+        cloudflare_started_at = time.perf_counter()
+        try:
+            cloudflare_text = call_validated_cloudflare_pilot(
+                system_instructions,
+                user_prompt,
+            )
+        except Exception as cloudflare_err:
+            _log_llm_provider_call(
+                operation, "cloudflare", provider_call_id,
+                cloudflare_started_at, "failed", cloudflare_err,
+            )
+            logger.warning(
+                "Cloudflare verification pilot failed (%s); trying "
+                "existing Gemini/Groq routing.",
+                _provider_error_label(cloudflare_err),
+            )
+            # A provider failure should not trigger repeated quota-consuming
+            # Cloudflare requests during the same scoped verification job.
+            if _cloudflare_pilot_degraded.get() is not None:
+                _cloudflare_pilot_degraded.set(True)
+        else:
+            _log_llm_provider_call(
+                operation, "cloudflare", provider_call_id,
+                cloudflare_started_at, "success",
+            )
+            return cloudflare_text
+
     if not _gemini_degraded.get():
         gemini_config = {
             "system_instruction": system_instructions,
