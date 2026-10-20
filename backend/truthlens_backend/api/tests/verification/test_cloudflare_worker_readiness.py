@@ -5,6 +5,7 @@ from unittest.mock import patch
 from django.test import SimpleTestCase, override_settings
 
 from truthlens_backend.celery import report_cloudflare_pilot_worker_readiness
+from api.tasks import inspect_cloudflare_pilot_worker_environment
 
 
 class CloudflarePilotWorkerReadinessTests(SimpleTestCase):
@@ -44,3 +45,58 @@ class CloudflarePilotWorkerReadinessTests(SimpleTestCase):
         with patch("truthlens_backend.celery.logger.info") as logger:
             report_cloudflare_pilot_worker_readiness()
         logger.assert_not_called()
+
+
+class CloudflareWorkerRuntimeProbeTests(SimpleTestCase):
+    @override_settings(APP_ENV="development", DEBUG=True)
+    def test_worker_executed_probe_never_exposes_credentials(self):
+        secret = "PRIVATE_TOKEN_MUST_NOT_LEAK"
+        account_id = "a" * 32
+        with (
+            patch.dict(os.environ, {
+                "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
+                "CLOUDFLARE_ACCOUNT_ID": account_id,
+                "CLOUDFLARE_API_TOKEN": secret,
+            }),
+            patch("api.verification.cloudflare_evaluation.requests.post") as http,
+        ):
+            value = inspect_cloudflare_pilot_worker_environment.run()
+        self.assertTrue(value["diagnostics_available"])
+        self.assertTrue(value["pilot_enabled"])
+        self.assertTrue(value["account_id_valid"])
+        self.assertTrue(value["api_token_present"])
+        self.assertIsInstance(value["worker_pid"], int)
+        http.assert_not_called()
+        self.assertNotIn(account_id, str(value))
+        self.assertNotIn(secret, str(value))
+        self.assertEqual(
+            set(value),
+            {
+                "diagnostics_available", "worker_pid", "pilot_enabled",
+                "account_id_valid", "api_token_present",
+            },
+        )
+
+    @override_settings(APP_ENV="development", DEBUG=True)
+    def test_worker_probe_reports_missing_account_without_provider_call(self):
+        with patch.dict(os.environ, {
+            "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
+            "CLOUDFLARE_ACCOUNT_ID": "",
+            "CLOUDFLARE_API_TOKEN": "a-nonempty-token",
+        }):
+            value = inspect_cloudflare_pilot_worker_environment.run()
+        self.assertTrue(value["pilot_enabled"])
+        self.assertFalse(value["account_id_valid"])
+        self.assertTrue(value["api_token_present"])
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_worker_probe_denied_outside_development(self):
+        with patch.dict(os.environ, {
+            "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
+            "CLOUDFLARE_ACCOUNT_ID": "a" * 32,
+            "CLOUDFLARE_API_TOKEN": "present",
+        }):
+            self.assertEqual(
+                inspect_cloudflare_pilot_worker_environment.run(),
+                {"diagnostics_available": False},
+            )
