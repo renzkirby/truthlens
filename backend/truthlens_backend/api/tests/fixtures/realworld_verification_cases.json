@@ -1,0 +1,722 @@
+[
+  {
+    "id": "civics__support",
+    "domain": "CIVICS",
+    "language": "en",
+    "claim": "Under the 1987 Philippine Constitution, the Senate is composed of 24 senators.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: 1987 Philippine Constitution Article VI.\nEvidence: Article VI, Section 2 sets the Senate at 24 senators. Section 4 provides a six-year term.",
+    "sources": [
+      {
+        "title": "1987 Philippine Constitution Article VI",
+        "url": "https://officialgazette.gov.ph/constitutions/1987-constitution/",
+        "source_date": "1987-02-02"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FACT",
+    "label_reason": "Draft label inferred from the cited primary source; explicit support expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "civics__contradict",
+    "domain": "CIVICS",
+    "language": "en",
+    "claim": "The 1987 Philippine Constitution requires 48 senators in the Senate.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: 1987 Philippine Constitution Article VI.\nEvidence: Article VI, Section 2 sets the Senate at 24 senators. Section 4 provides a six-year term.",
+    "sources": [
+      {
+        "title": "1987 Philippine Constitution Article VI",
+        "url": "https://officialgazette.gov.ph/constitutions/1987-constitution/",
+        "source_date": "1987-02-02"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FAKE",
+    "label_reason": "Draft label inferred from the cited primary source; direct contradiction expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "law_death_penalty_support",
+    "domain": "LAW",
+    "language": "en",
+    "claim": "Republic Act No. 9346 prohibits imposing the death penalty in the Philippines.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: Republic Act 9346.\nEvidence: Republic Act No. 9346 prohibits imposition of the death penalty and provides substitute custodial penalties.",
+    "sources": [
+      {
+        "title": "Republic Act 9346",
+        "url": "https://lawphil.net/statutes/repacts/ra2006/ra_9346_2006.html",
+        "source_date": "2006-06-24"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FACT",
+    "label_reason": "Draft label inferred from the cited primary source; explicit support expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "law_death_penalty_contradict",
+    "domain": "LAW",
+    "language": "en",
+    "claim": "Republic Act No. 9346 reinstated the death penalty in the Philippines.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: Republic Act 9346.\nEvidence: Republic Act No. 9346 prohibits imposition of the death penalty and provides substitute custodial penalties.",
+    "sources": [
+      {
+        "title": "Republic Act 9346",
+        "url": "https://lawphil.net/statutes/repacts/ra2006/ra_9346_2006.html",
+        "source_date": "2006-06-24"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FAKE",
+    "label_reason": "Draft label inferred from the cited primary source; direct contradiction expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "law_sim_registration_support",
+    "domain": "LAW",
+    "language": "en",
+    "claim": "Republic Act No. 11934 requires end-users in the Philippines to register SIM cards with telecommunications entities.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: Republic Act 11934, SIM Registration Act.\nEvidence: Section 4 requires registration of SIMs with public telecommunications entities before activation; newly sold SIMs remain deactivated until registration is completed.",
+    "sources": [
+      {
+        "title": "Republic Act 11934, SIM Registration Act",
+        "url": "https://lawphil.net/statutes/repacts/ra2022/ra_11934_2022.html",
+        "source_date": "2022-10-10"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FACT",
+    "label_reason": "Draft label inferred from the cited primary source; explicit support expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "law_sim_registration_contradict",
+    "domain": "LAW",
+    "language": "en",
+    "claim": "Republic Act No. 11934 says new SIM cards must be activated without registration.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: Republic Act 11934, SIM Registration Act.\nEvidence: Section 4 requires registration of SIMs with public telecommunications entities before activation; newly sold SIMs remain deactivated until registration is completed.",
+    "sources": [
+      {
+        "title": "Republic Act 11934, SIM Registration Act",
+        "url": "https://lawphil.net/statutes/repacts/ra2022/ra_11934_2022.html",
+        "source_date": "2022-10-10"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FAKE",
+    "label_reason": "Draft label inferred from the cited primary source; direct contradiction expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "elections_2010_support",
+    "domain": "ELECTIONS",
+    "language": "en",
+    "claim": "The first nationwide automated Philippine national and local elections took place on May 10, 2010.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: COMELEC NBC Resolution 10-003.\nEvidence: COMELEC NBC Resolution 10-003 describes the May 10, 2010 polls as the first nationwide automated national and local elections.",
+    "sources": [
+      {
+        "title": "COMELEC NBC Resolution 10-003",
+        "url": "https://www.comelec.gov.ph/?r=References%2FComelecResolutions%2FNLE%2F2010NLE%2Fnbcres10003",
+        "source_date": "2010-05-15"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FACT",
+    "label_reason": "Draft label inferred from the cited primary source; explicit support expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "elections_2010_contradict",
+    "domain": "ELECTIONS",
+    "language": "en",
+    "claim": "The first nationwide automated Philippine national and local elections took place on May 10, 2016.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: COMELEC NBC Resolution 10-003.\nEvidence: COMELEC NBC Resolution 10-003 describes the May 10, 2010 polls as the first nationwide automated national and local elections.",
+    "sources": [
+      {
+        "title": "COMELEC NBC Resolution 10-003",
+        "url": "https://www.comelec.gov.ph/?r=References%2FComelecResolutions%2FNLE%2F2010NLE%2Fnbcres10003",
+        "source_date": "2010-05-15"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FAKE",
+    "label_reason": "Draft label inferred from the cited primary source; direct contradiction expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "elections_2022_support",
+    "domain": "ELECTIONS",
+    "language": "en",
+    "claim": "The Philippines scheduled its 2022 national and local elections for May 9.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: COMELEC 2022 National and Local Elections.\nEvidence: COMELEC's 2022 National and Local Elections page identifies May 9, 2022, as the election day and reports the fully automated election system.",
+    "sources": [
+      {
+        "title": "COMELEC 2022 National and Local Elections",
+        "url": "https://www.comelec.gov.ph/?r=2022NLE",
+        "source_date": "2022-05-09"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FACT",
+    "label_reason": "Draft label inferred from the cited primary source; explicit support expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "elections_2022_contradict",
+    "domain": "ELECTIONS",
+    "language": "en",
+    "claim": "COMELEC scheduled the Philippines' 2022 national and local elections for May 19.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: COMELEC 2022 National and Local Elections.\nEvidence: COMELEC's 2022 National and Local Elections page identifies May 9, 2022, as the election day and reports the fully automated election system.",
+    "sources": [
+      {
+        "title": "COMELEC 2022 National and Local Elections",
+        "url": "https://www.comelec.gov.ph/?r=2022NLE",
+        "source_date": "2022-05-09"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FAKE",
+    "label_reason": "Draft label inferred from the cited primary source; direct contradiction expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "health_pandemic_support",
+    "domain": "HEALTH",
+    "language": "en",
+    "claim": "On March 11, 2020, WHO characterized COVID-19 as a pandemic.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: WHO Director-General media briefing.\nEvidence: WHO Director-General's March 11, 2020 media briefing states that WHO made the assessment that COVID-19 could be characterized as a pandemic.",
+    "sources": [
+      {
+        "title": "WHO Director-General media briefing",
+        "url": "https://www.who.int/news-room/speeches/item/who-director-general-s-opening-remarks-at-the-media-briefing-on-covid-19---11-march-2020",
+        "source_date": "2020-03-11"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FACT",
+    "label_reason": "Draft label inferred from the cited primary source; explicit support expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "health_pandemic_contradict",
+    "domain": "HEALTH",
+    "language": "en",
+    "claim": "WHO characterized COVID-19 as a pandemic for the first time on January 11, 2020.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: WHO Director-General media briefing.\nEvidence: WHO Director-General's March 11, 2020 media briefing states that WHO made the assessment that COVID-19 could be characterized as a pandemic.",
+    "sources": [
+      {
+        "title": "WHO Director-General media briefing",
+        "url": "https://www.who.int/news-room/speeches/item/who-director-general-s-opening-remarks-at-the-media-briefing-on-covid-19---11-march-2020",
+        "source_date": "2020-03-11"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FAKE",
+    "label_reason": "Draft label inferred from the cited primary source; direct contradiction expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "science_planets_support",
+    "domain": "SCIENCE",
+    "language": "en",
+    "claim": "Venus is the hottest planet in the solar system by average temperature.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: NASA Solar System Temperatures.\nEvidence: NASA's planetary temperature resource reports average temperatures of Mercury at about 167 C and Venus at about 464 C; dense Venusian atmosphere retains heat.",
+    "sources": [
+      {
+        "title": "NASA Solar System Temperatures",
+        "url": "https://science.nasa.gov/resource/solar-system-temperatures/",
+        "source_date": "2022-02-15"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FACT",
+    "label_reason": "Draft label inferred from the cited primary source; explicit support expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "science_planets_contradict",
+    "domain": "SCIENCE",
+    "language": "en",
+    "claim": "Mercury has a higher average planetary temperature than Venus.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: NASA Solar System Temperatures.\nEvidence: NASA's planetary temperature resource reports average temperatures of Mercury at about 167 C and Venus at about 464 C; dense Venusian atmosphere retains heat.",
+    "sources": [
+      {
+        "title": "NASA Solar System Temperatures",
+        "url": "https://science.nasa.gov/resource/solar-system-temperatures/",
+        "source_date": "2022-02-15"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FAKE",
+    "label_reason": "Draft label inferred from the cited primary source; direct contradiction expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "economy_bsp_support",
+    "domain": "ECONOMY",
+    "language": "en",
+    "claim": "The Bangko Sentral ng Pilipinas began under a new central bank law that took effect in July 1993.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: Bangko Sentral ng Pilipinas history.\nEvidence: BSP history says RA 7653 was signed June 14, 1993 and took effect July 3, 1993 to create the independent central bank.",
+    "sources": [
+      {
+        "title": "Bangko Sentral ng Pilipinas history",
+        "url": "https://www.bsp.gov.ph/Pages/AboutTheBank/SealCharterAndHistory/HistoryOfTheBank.aspx",
+        "source_date": "1993-07-03"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FACT",
+    "label_reason": "Draft label inferred from the cited primary source; explicit support expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "economy_bsp_contradict",
+    "domain": "ECONOMY",
+    "language": "en",
+    "claim": "The New Central Bank Act creating the BSP came into effect in July 2003.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: Bangko Sentral ng Pilipinas history.\nEvidence: BSP history says RA 7653 was signed June 14, 1993 and took effect July 3, 1993 to create the independent central bank.",
+    "sources": [
+      {
+        "title": "Bangko Sentral ng Pilipinas history",
+        "url": "https://www.bsp.gov.ph/Pages/AboutTheBank/SealCharterAndHistory/HistoryOfTheBank.aspx",
+        "source_date": "1993-07-03"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FAKE",
+    "label_reason": "Draft label inferred from the cited primary source; direct contradiction expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "education_shs_support",
+    "domain": "EDUCATION",
+    "language": "en",
+    "claim": "Senior high school in the Philippines includes Grades 11 and 12.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: DepEd K to 12 implementation announcement.\nEvidence: DepEd's 2015 K to 12 announcement identifies Grades 11 and 12 as the grades offered in senior high school.",
+    "sources": [
+      {
+        "title": "DepEd K to 12 implementation announcement",
+        "url": "https://www.deped.gov.ph/2015/09/02/all-set-for-k-to-12-implementation/",
+        "source_date": "2015-09-02"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FACT",
+    "label_reason": "Draft label inferred from the cited primary source; explicit support expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "education_shs_contradict",
+    "domain": "EDUCATION",
+    "language": "en",
+    "claim": "In the Philippine K to 12 system, senior high school covers Grades 9 and 10.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: DepEd K to 12 implementation announcement.\nEvidence: DepEd's 2015 K to 12 announcement identifies Grades 11 and 12 as the grades offered in senior high school.",
+    "sources": [
+      {
+        "title": "DepEd K to 12 implementation announcement",
+        "url": "https://www.deped.gov.ph/2015/09/02/all-set-for-k-to-12-implementation/",
+        "source_date": "2015-09-02"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FAKE",
+    "label_reason": "Draft label inferred from the cited primary source; direct contradiction expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "technology_iphone_support",
+    "domain": "TECHNOLOGY",
+    "language": "en",
+    "claim": "Apple introduced the first iPhone on January 9, 2007.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: Apple January 2007 original iPhone press release.\nEvidence: Apple's contemporaneous January 9, 2007 press release announces introduction of the original iPhone. It said US availability would begin June 2007.",
+    "sources": [
+      {
+        "title": "Apple January 2007 original iPhone press release",
+        "url": "https://www.apple.com/uk/newsroom/2007/01/09Apple-Reinvents-the-Phone-with-iPhone/",
+        "source_date": "2007-01-09"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FACT",
+    "label_reason": "Draft label inferred from the cited primary source; explicit support expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "technology_iphone_contradict",
+    "domain": "TECHNOLOGY",
+    "language": "en",
+    "claim": "Apple first introduced the iPhone in January 2009.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: Apple January 2007 original iPhone press release.\nEvidence: Apple's contemporaneous January 9, 2007 press release announces introduction of the original iPhone. It said US availability would begin June 2007.",
+    "sources": [
+      {
+        "title": "Apple January 2007 original iPhone press release",
+        "url": "https://www.apple.com/uk/newsroom/2007/01/09Apple-Reinvents-the-Phone-with-iPhone/",
+        "source_date": "2007-01-09"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FAKE",
+    "label_reason": "Draft label inferred from the cited primary source; direct contradiction expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "environment_coral_support",
+    "domain": "ENVIRONMENT",
+    "language": "en",
+    "claim": "Warmer-than-normal ocean water can trigger coral bleaching.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: NOAA What Is Coral Bleaching?.\nEvidence: NOAA explains that when water becomes too warm, corals expel symbiotic algae and appear white. Bleaching does not automatically mean the coral has already died.",
+    "sources": [
+      {
+        "title": "NOAA What Is Coral Bleaching?",
+        "url": "https://oceanservice.noaa.gov/facts/coral_bleach.html",
+        "source_date": "2026-10-20"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FACT",
+    "label_reason": "Draft label inferred from the cited primary source; explicit support expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "environment_coral_contradict",
+    "domain": "ENVIRONMENT",
+    "language": "en",
+    "claim": "Coral bleaching can never be triggered by warm water.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: NOAA What Is Coral Bleaching?.\nEvidence: NOAA explains that when water becomes too warm, corals expel symbiotic algae and appear white. Bleaching does not automatically mean the coral has already died.",
+    "sources": [
+      {
+        "title": "NOAA What Is Coral Bleaching?",
+        "url": "https://oceanservice.noaa.gov/facts/coral_bleach.html",
+        "source_date": "2026-10-20"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FAKE",
+    "label_reason": "Draft label inferred from the cited primary source; direct contradiction expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "sports_diaz_support",
+    "domain": "SPORTS",
+    "language": "en",
+    "claim": "Hidilyn Diaz won the Philippines' first Olympic gold medal in 2021.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: Philippine Olympic Committee announcement of Hidilyn Diaz gold.\nEvidence: The Philippine Olympic Committee's July 2021 account identifies Hidilyn Diaz's women's 55kg weightlifting victory at the Tokyo Games as the Philippines' first Olympic gold.",
+    "sources": [
+      {
+        "title": "Philippine Olympic Committee announcement of Hidilyn Diaz gold",
+        "url": "https://www.olympic.ph/diaz-lifts-philippines-to-glory-bags-first-gold-medal-for-the-country",
+        "source_date": "2021-07-27"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FACT",
+    "label_reason": "Draft label inferred from the cited primary source; explicit support expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "sports_diaz_contradict",
+    "domain": "SPORTS",
+    "language": "en",
+    "claim": "Hidilyn Diaz won the Philippines' first Olympic gold medal in 2016.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: Philippine Olympic Committee announcement of Hidilyn Diaz gold.\nEvidence: The Philippine Olympic Committee's July 2021 account identifies Hidilyn Diaz's women's 55kg weightlifting victory at the Tokyo Games as the Philippines' first Olympic gold.",
+    "sources": [
+      {
+        "title": "Philippine Olympic Committee announcement of Hidilyn Diaz gold",
+        "url": "https://www.olympic.ph/diaz-lifts-philippines-to-glory-bags-first-gold-medal-for-the-country",
+        "source_date": "2021-07-27"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FAKE",
+    "label_reason": "Draft label inferred from the cited primary source; direct contradiction expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "culture_sinulog_support",
+    "domain": "CULTURE",
+    "language": "en",
+    "claim": "The Sinulog grand parade in January 2026 in Cebu honored Santo Niño.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: Cebu Province Sinulog 2026 coverage.\nEvidence: Cebu Province reports that its January 18, 2026 grand parade at Cebu City Sports Center showcased dances and devotion honoring Sr. Sto. Niño de Cebu.",
+    "sources": [
+      {
+        "title": "Cebu Province Sinulog 2026 coverage",
+        "url": "https://www.cebu.gov.ph/9118/cebu-officials-open-grand-sinulog-parade-2026-at-cebu-city-sports-center/",
+        "source_date": "2026-01-18"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FACT",
+    "label_reason": "Draft label inferred from the cited primary source; explicit support expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "culture_sinulog_contradict",
+    "domain": "CULTURE",
+    "language": "en",
+    "claim": "Cebu Province described Sinulog 2026 as a grand parade honoring Saint Patrick.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: Cebu Province Sinulog 2026 coverage.\nEvidence: Cebu Province reports that its January 18, 2026 grand parade at Cebu City Sports Center showcased dances and devotion honoring Sr. Sto. Niño de Cebu.",
+    "sources": [
+      {
+        "title": "Cebu Province Sinulog 2026 coverage",
+        "url": "https://www.cebu.gov.ph/9118/cebu-officials-open-grand-sinulog-parade-2026-at-cebu-city-sports-center/",
+        "source_date": "2026-01-18"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FAKE",
+    "label_reason": "Draft label inferred from the cited primary source; direct contradiction expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "disasters_yolanda_support",
+    "domain": "DISASTERS",
+    "language": "en",
+    "claim": "Super Typhoon Yolanda affected the Philippines in November 2013.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: PAGASA extreme weather seminar presentation, Yolanda.\nEvidence: PAGASA's retrospective briefing labels Super Typhoon Haiyan/Yolanda as an event from November 6 through 9, 2013.",
+    "sources": [
+      {
+        "title": "PAGASA extreme weather seminar presentation, Yolanda",
+        "url": "https://pubfiles.pagasa.dost.gov.ph/pressrelease/JPOW_Seminar_2016-Extreme_Wx_Events.pdf",
+        "source_date": "2016-01-01"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FACT",
+    "label_reason": "Draft label inferred from the cited primary source; explicit support expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "disasters_yolanda_contradict",
+    "domain": "DISASTERS",
+    "language": "en",
+    "claim": "Super Typhoon Yolanda affected the Philippines in November 2015.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: PAGASA extreme weather seminar presentation, Yolanda.\nEvidence: PAGASA's retrospective briefing labels Super Typhoon Haiyan/Yolanda as an event from November 6 through 9, 2013.",
+    "sources": [
+      {
+        "title": "PAGASA extreme weather seminar presentation, Yolanda",
+        "url": "https://pubfiles.pagasa.dost.gov.ph/pressrelease/JPOW_Seminar_2016-Extreme_Wx_Events.pdf",
+        "source_date": "2016-01-01"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "FAKE",
+    "label_reason": "Draft label inferred from the cited primary source; direct contradiction expected. Independent human review required.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "health_source_insufficient",
+    "domain": "HEALTH",
+    "language": "en",
+    "claim": "The WHO's March 11, 2020 COVID-19 briefing reported that every patient received the same antiviral medicine.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: WHO Director-General opening remarks, March 11, 2020.\nEvidence: The briefing describes global infection figures, international spread, and the pandemic assessment. The excerpt contains no evidence about medicine used for every patient.",
+    "sources": [
+      {
+        "title": "WHO Director-General media briefing",
+        "url": "https://www.who.int/news-room/speeches/item/who-director-general-s-opening-remarks-at-the-media-briefing-on-covid-19---11-march-2020",
+        "source_date": "2020-03-11"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "UNVERIFIED",
+    "label_reason": "Evidence dossier is silent on the asserted universal treatment; verdict means insufficient evidence from supplied dossier, not a global truth claim.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  },
+  {
+    "id": "ph_disaster_source_insufficient",
+    "domain": "DISASTERS",
+    "language": "fil",
+    "claim": "Lahat ng pamilyang naapektuhan ng Yolanda ay nakatanggap ng eksaktong 20,000 piso sa loob ng 24 oras.",
+    "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: PAGASA retrospective presentation on Super Typhoon Haiyan/Yolanda.\nEvidence: Describes Yolanda occurring on November 6-9, 2013, and its track and weather warnings. It supplies no record of payments to every affected family.",
+    "sources": [
+      {
+        "title": "PAGASA extreme weather seminar",
+        "url": "https://pubfiles.pagasa.dost.gov.ph/pressrelease/JPOW_Seminar_2016-Extreme_Wx_Events.pdf",
+        "source_date": "2016-01-01"
+      }
+    ],
+    "as_of": "2026-10-20",
+    "proposed_verdict": "UNVERIFIED",
+    "label_reason": "Dossier lacks household aid payments; evaluate evidence sufficiency, not actual total relief paid.",
+    "review": {
+      "status": "PENDING",
+      "reviewer": "",
+      "reviewed_at": "",
+      "rationale": ""
+    },
+    "public_only": true
+  }
+]
