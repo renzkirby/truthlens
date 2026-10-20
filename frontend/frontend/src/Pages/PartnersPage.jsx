@@ -45,7 +45,7 @@ function PartnerCard({ partner, directorySearch }) {
          </div>
 
          {visibleExpertise.length > 0 && (
-            <ul className="partner-directory-card__expertise" aria-label="Authorized investigation specializations">
+            <ul className="partner-directory-card__expertise" aria-label="Organization-declared investigation specializations">
                {visibleExpertise.map((area, index) => (
                   <li key={`${area}-${index}`}>{formatVerificationDomain(area)}</li>
                ))}

@@ -7,6 +7,9 @@ from .models import AccountabilityEvent, Organization, OrganizationMembership
 from .verification_domain_policy import validate_domains, organization_specializations
 
 
+MANAGE_VERIFICATION_SPECIALIZATIONS = "MANAGE_VERIFICATION_SPECIALIZATIONS"
+
+
 class OrganizationScopeError(ValueError):
     pass
 
@@ -72,7 +75,7 @@ def update_organization_specializations(*, organization, actor, domains, rationa
         authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
         actor=actor,
         authority_organization=locked,
-        capability="MANAGE_VERIFICATION_SPECIALIZATIONS",
+        capability=MANAGE_VERIFICATION_SPECIALIZATIONS,
         previous_state={"domains": previous},
         new_state={"domains": selected},
         notes=rationale.strip(),

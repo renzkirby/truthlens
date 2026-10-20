@@ -1,88 +1,84 @@
-# PARTNER-GOV-1 — scope and automatic classification rollout
+# PARTNER-GOV-1 — owner-managed specializations and subject-only classification
 
-Status: implementation checkpoint, **not production approved**. Branch:
-`feat/partner-governance-eligibility`.
+Status: **implementation checkpoint, not accepted or deployed**.
+Branch: `feat/partner-governance-eligibility`.
 
-## Role boundaries
+## Approved governance boundaries
 
-- A Partner Organization **Primary Admin** or **Admin** submits requested
-  subject specializations/jurisdictions and chooses active subsets.
-- A platform superuser separately approves or revokes maximum jurisdiction
-  and subject authority; the organization's request never self-approves.
-- Active scope is always constrained to platform approval. New approvals
-  require organization activation; revocations take effect immediately for
-  new work. Previously ACTIVE investigations are not reassigned.
-- A Lead Verifier with `CLAIM_VERIFICATION_WORK` may accept only AVAILABLE
-  work that has an authoritative classification matching the active scope.
-- Legacy `expertise_areas` remain stored for backward compatibility but no
-  longer appear as a separate editable profile field in the Partner Workspace.
-  They are **not** authorization data.
+- Platform Admin: creates organizations, manages verification/partner lifecycle,
+  invites the Primary Admin, and oversees partner status. No authority to set
+  an organization's investigation subjects or retry/classify individual claims.
+- Primary Admin (OWNER internally): selects any supported investigation subject,
+  updates the list immediately, and provides an audited rationale.
+- Admin: may view specializations and retains existing organization management
+  capabilities but **cannot** edit specializations without a future explicit
+  delegation mechanism. Lead Verifier and lower roles cannot change subjects.
+- Organization type and descriptive `expertise_areas` never grant work authority.
+- Eligible partner intake requires partner status, verifier membership capability,
+  authoritative subject classification, and subject coverage. Geographic coverage
+  **does not** gate assignments. Existing ACTIVE and COMPLETED ownership is unchanged.
+- Management Console displays selected specializations read-only; no approval
+  modal, classification exception queue, manual classification, or retry endpoint.
 
-## Automatic claim classification rollout
+## Forward-only migration and data preservation
 
-Set in backend environment (used by Django **and Celery workers**):
+Migrations `0081`–`0084` may already be applied on the development database.
+**Do not edit, roll back, fake, or remove those applied migrations.**
+New `0085_organization_specializations` adds one authoritative JSONB field,
+marks `ClaimInvestigationClassification.jurisdiction` optional for new
+subject-only classifications, and introduces an organization-scope audit action.
+A reversible-schema / no-op-data-reverse `RunPython` copies old effective
+domains only where historical active/approved jurisdiction was also nonempty.
+It does not alter old requested, approved, active, geographic, publication,
+adjudication, or assignment records.
 
-`INVESTIGATION_CLASSIFICATION_MODE=off` (default). No classifier calls are
-made. Existing unclassified claims remain unclaimable.
+Before running migrations on the remote development Supabase database, verify
+that it is the intended isolated development project, confirm a recent backup,
+check `showmigrations api`, and inspect `migrate --plan` and
+`sqlmigrate api 0085`. Do not migrate production without separate approval.
 
-`INVESTIGATION_CLASSIFICATION_MODE=shadow`. Asynchronously call Gemini-first
-with Groq fallback when a new community thread is created, record classification
-candidates and abstentions, but **do not authorize partner intake**.
+## Automatic classifier rollout
 
-`INVESTIGATION_CLASSIFICATION_MODE=enforce`. Explicit opt-in only **after**
-an independent accuracy review of representative shadow-mode results, including
-correct domain coverage, exact geographic scope, false-positive cases,
-ambiguous claims, different media types, and unknown jurisdiction. Structural
-quote matching alone is *not* accuracy validation. Successful classifier
-results are recorded separately from factual verdicts and become eligible
-for matching active partner scope; ambiguous results remain unclassified.
+`INVESTIGATION_CLASSIFICATION_MODE` remains `off` by default.
+- `off`: no model calls; unclassified claims remain unclaimable.
+- `shadow`: records subject suggestions without creating claim authority.
+- `enforce`: applies validated subject classifications; **only** enable after
+  independent accuracy evaluation, representative real examples, and approval.
 
-Do not switch straight to enforce merely because unit tests pass.
-Provider calls are not part of the existing verification pipeline and should
-not delay factual verdicts. Unexpected queue/provider failure leaves the
-claim unclassified. The exception queue supports retrying only when the
-classifier mode is not off. The old manual classification service remains
-for legacy migration compatibility; routine per-claim reviewer approval is
-not part of this rollout.
+The classification pipeline is distinct from factual-verdict generation and
+does not modify factual confidence, evidence, adjudication, publication, or
+provenance. Classifier `v2-subject-only` requires exact supporting quotations,
+abstains on uncertain/unsupported subjects, and currently processes sufficiently
+detailed TEXT context only. Other claim types are not yet eligible for automated
+classification. Geographic evidence is neither required nor inferred.
+The latest assessment record is retained for internal diagnostics; the platform
+does not review or retry individual classifications. A future automated retry
+policy for material claim-context changes must be separately tested.
 
-The first classifier version intentionally abstains on unsupported
-jurisdictions and image-only content. Its initial country mapping is limited;
-geographic and multi-jurisdiction classification require further evaluation.
-Never infer `GLOBAL` merely because no location was stated.
+## Required local test gates (Windows)
 
-## Local acceptance
-
-From `backend/truthlens_backend` using the project venv:
+From `backend\truthlens_backend`:
 
 ```powershell
 ..\.venv\Scripts\python.exe .\manage.py makemigrations --check --dry-run --settings=truthlens_backend.test_settings
 ..\.venv\Scripts\python.exe .\manage.py check --settings=truthlens_backend.test_settings
-..\.venv\Scripts\python.exe .\manage.py test api.tests.organization.test_verification_scope api.tests.verification.test_investigation_classifier api.tests.workspace.test_assignment_service --settings=truthlens_backend.test_settings --keepdb
+..\.venv\Scripts\python.exe .\manage.py test api.tests.organization.test_verification_scope api.tests.organization.test_verification_scope_migration api.tests.verification.test_investigation_classifier api.tests.workspace.test_assignment_service --settings=truthlens_backend.test_settings --keepdb
 ..\.venv\Scripts\python.exe .\manage.py test api.tests.management api.tests.workspace api.tests.accountability api.tests.organization --settings=truthlens_backend.test_settings --keepdb
 ```
 
-Frontend (from `frontend/frontend`):
+From `frontend\frontend`:
 
 ```powershell
 npm run lint
 npm run build
 ```
 
-Before applying migrations to a **local development** database, verify
-`DATABASE_URL` and `APP_ENV`, take a backup, and inspect migration plans:
+Manual acceptance: platform superuser cannot mutate subjects or retry claim
+classification; active Primary Admin can set and clear subjects; Admin reads
+but cannot update; Lead Verifier cannot modify; same-domain subject outside
+previous country authorization is claimable; out-of-domain or unclassified
+claim remains unclaimable even by direct API; narrowing affects only NEW work;
+historical assignments, verdicts, and publication provenance are preserved.
 
-```powershell
-..\.venv\Scripts\python.exe .\manage.py showmigrations api
-..\.venv\Scripts\python.exe .\manage.py migrate --plan
-```
-
-New migrations: `0082_organization_scope_requests`,
-`0083_investigation_classification_assessment`. Do not apply to production
-until this branch passes acceptance.
-
-Manually verify: superuser approval modal; organization OWNERS/ADMINS request
-and activate; non-management roles denied; unapproved and inactive work
-cannot be claimed through POST even if intake UI is bypassed; classification
-exception queue; a later revocation does not alter existing ACTIVE assignments;
-legacy published fact checks preserve provenance. Confirm no new factual
-verdicts or evidence writes are performed by the classifier.
+Do not merge until all automated, migration, role-boundary, and manual
+acceptance gates pass.

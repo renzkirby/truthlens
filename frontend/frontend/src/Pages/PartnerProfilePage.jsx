@@ -632,7 +632,7 @@ function PartnerProfileContent({ slug, isCommunity }) {
 
                      <section className="user-profile__activity-item partner-profile__about-section">
                         <div className="user-profile__activity-copy">
-                           <h3>Authorized investigation specializations</h3>
+                           <h3>Verification specializations</h3>
                            {expertiseAreas.length > 0 ? (
                               <ul className="partner-profile-expertise">
                                  {expertiseAreas.map((area, index) => (
@@ -640,7 +640,7 @@ function PartnerProfileContent({ slug, isCommunity }) {
                                  ))}
                               </ul>
                            ) : (
-                              <p>No specializations are currently authorized and active.</p>
+                              <p>This organization has not selected investigation specializations yet.</p>
                            )}
                         </div>
                      </section>
