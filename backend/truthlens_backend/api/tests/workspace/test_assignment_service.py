@@ -65,8 +65,7 @@ class VerificationAssignmentServiceTests(TestCase):
             organization_type=(Organization.OrganizationType.FACT_CHECKING),
             verification_status=(Organization.VerificationStatus.VERIFIED),
             partner_status=(Organization.PartnerStatus.ACTIVE),
-            approved_verification_domains=["SCIENCE"],
-            approved_verification_jurisdictions=["PH"],
+            verification_specializations=["SCIENCE"],
         )
 
         self.organization_b = Organization.objects.create(
@@ -75,8 +74,7 @@ class VerificationAssignmentServiceTests(TestCase):
             organization_type=(Organization.OrganizationType.FACT_CHECKING),
             verification_status=(Organization.VerificationStatus.VERIFIED),
             partner_status=(Organization.PartnerStatus.ACTIVE),
-            approved_verification_domains=["SCIENCE"],
-            approved_verification_jurisdictions=["PH"],
+            verification_specializations=["SCIENCE"],
         )
 
         OrganizationMembership.objects.create(
@@ -279,59 +277,46 @@ class VerificationAssignmentServiceTests(TestCase):
         assignment.refresh_from_db()
         self.assertEqual(assignment.status, VerificationAssignment.Status.AVAILABLE)
 
-    def test_unapproved_self_declared_expertise_cannot_authorize_claim(self):
+    def test_legacy_approved_and_public_expertise_do_not_authorize(self):
         assignment = self._create_assignment()
-        self.organization_a.approved_verification_domains = []
+        self.organization_a.verification_specializations = []
+        self.organization_a.approved_verification_domains = ["SCIENCE"]
         self.organization_a.expertise_areas = ["science"]
-        self.organization_a.save(update_fields=["approved_verification_domains", "expertise_areas"])
+        self.organization_a.save(update_fields=[
+            "verification_specializations", "approved_verification_domains", "expertise_areas",
+        ])
         with self.assertRaises(VerificationAssignmentAuthorizationError):
             claim_verification_assignment(
                 assignment=assignment, organization=self.organization_a, actor=self.lead_a,
             )
 
-    def test_outside_approved_domain_cannot_claim(self):
+    def test_outside_selected_specialization_cannot_claim(self):
         assignment = self._create_assignment()
-        self.organization_a.approved_verification_domains = ["SPORTS"]
-        self.organization_a.save(update_fields=["approved_verification_domains"])
+        self.organization_a.verification_specializations = ["SPORTS"]
+        self.organization_a.save(update_fields=["verification_specializations"])
         with self.assertRaises(VerificationAssignmentAuthorizationError):
             claim_verification_assignment(
                 assignment=assignment, organization=self.organization_a, actor=self.lead_a,
             )
 
-    def test_platform_approval_without_active_selection_cannot_claim(self):
+    def test_downscope_blocks_new_claims_but_preserves_active_ownership(self):
         assignment = self._create_assignment()
-        self.organization_a.active_scope_configured = True
-        self.organization_a.active_verification_domains = []
-        self.organization_a.active_verification_jurisdictions = []
-        self.organization_a.save(update_fields=[
-            "active_scope_configured",
-            "active_verification_domains",
-            "active_verification_jurisdictions",
-        ])
+        self.organization_a.verification_specializations = []
+        self.organization_a.save(update_fields=["verification_specializations"])
         with self.assertRaises(VerificationAssignmentAuthorizationError):
             claim_verification_assignment(
-                assignment=assignment,
-                organization=self.organization_a,
-                actor=self.lead_a,
+                assignment=assignment, organization=self.organization_a, actor=self.lead_a,
             )
-        self.organization_a.active_verification_domains = ["SCIENCE"]
-        self.organization_a.active_verification_jurisdictions = ["PH"]
-        self.organization_a.save(update_fields=[
-            "active_verification_domains", "active_verification_jurisdictions",
-        ])
+        self.organization_a.verification_specializations = ["SCIENCE"]
+        self.organization_a.save(update_fields=["verification_specializations"])
         claimed = claim_verification_assignment(
-            assignment=assignment,
-            organization=self.organization_a,
-            actor=self.lead_a,
+            assignment=assignment, organization=self.organization_a, actor=self.lead_a,
         )
         self.assertEqual(claimed.status, VerificationAssignment.Status.ACTIVE)
 
-        # Later deactivation does not rewrite existing ownership.
-        self.organization_a.active_verification_domains = []
-        self.organization_a.active_verification_jurisdictions = []
-        self.organization_a.save(update_fields=[
-            "active_verification_domains", "active_verification_jurisdictions",
-        ])
+        # Later narrowing never reassigns institutional work already accepted.
+        self.organization_a.verification_specializations = []
+        self.organization_a.save(update_fields=["verification_specializations"])
         claimed.refresh_from_db()
         self.assertEqual(claimed.status, VerificationAssignment.Status.ACTIVE)
         self.assertEqual(claimed.organization_id, self.organization_a.pk)

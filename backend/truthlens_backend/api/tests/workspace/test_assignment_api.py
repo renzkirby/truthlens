@@ -78,8 +78,7 @@ class VerificationAssignmentApiTests(APITestCase):
             organization_type=(Organization.OrganizationType.FACT_CHECKING),
             verification_status=(Organization.VerificationStatus.VERIFIED),
             partner_status=(Organization.PartnerStatus.ACTIVE),
-            approved_verification_domains=["SCIENCE"],
-            approved_verification_jurisdictions=["PH"],
+            verification_specializations=["SCIENCE"],
         )
 
         self.organization_b = Organization.objects.create(
@@ -88,8 +87,7 @@ class VerificationAssignmentApiTests(APITestCase):
             organization_type=(Organization.OrganizationType.FACT_CHECKING),
             verification_status=(Organization.VerificationStatus.VERIFIED),
             partner_status=(Organization.PartnerStatus.ACTIVE),
-            approved_verification_domains=["SCIENCE"],
-            approved_verification_jurisdictions=["PH"],
+            verification_specializations=["SCIENCE"],
         )
 
         # ---------------------------------

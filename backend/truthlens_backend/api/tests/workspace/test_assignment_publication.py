@@ -47,8 +47,7 @@ class VerificationAssignmentPublicationTests(TestCase):
             organization_type=(Organization.OrganizationType.FACT_CHECKING),
             verification_status=(Organization.VerificationStatus.VERIFIED),
             partner_status=(Organization.PartnerStatus.ACTIVE),
-            approved_verification_domains=["SCIENCE"],
-            approved_verification_jurisdictions=["PH"],
+            verification_specializations=["SCIENCE"],
         )
 
         OrganizationMembership.objects.create(
