@@ -163,9 +163,14 @@ class AutomaticInvestigationClassificationTests(TestCase):
 
     @override_settings(INVESTIGATION_CLASSIFICATION_MODE="shadow")
     @patch("api.tasks.classify_investigation_claim_task.delay")
-    def test_dispatch_only_queues_community_claims(self, delay):
-        self.assertFalse(dispatch_classification_task(self.claim.pk))
-        delay.assert_not_called()
+    def test_dispatch_queues_claim_without_community_thread(self, delay):
+        self.assertFalse(Thread.objects.filter(claim=self.claim).exists())
+        self.assertTrue(dispatch_classification_task(self.claim.pk))
+        delay.assert_called_once_with(str(self.claim.pk))
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="shadow")
+    @patch("api.tasks.classify_investigation_claim_task.delay")
+    def test_existing_thread_is_still_a_valid_fallback_trigger(self, delay):
         author = User.objects.create_user(username="classifier-thread-author")
         Thread.objects.create(
             claim=self.claim,
@@ -208,11 +213,10 @@ class AutomaticInvestigationClassificationTests(TestCase):
     ):
         from api.tasks import _save_claim
 
-        author = User.objects.create_user(username="classifier-late-text")
         image = Claim.objects.create(
             claim_type=Claim.ClaimType.IMAGE, context_text=None,
         )
-        Thread.objects.create(claim=image, author=author)
+        self.assertFalse(Thread.objects.filter(claim=image).exists())
         with self.captureOnCommitCallbacks(execute=True):
             saved = _save_claim(
                 image.pk,
@@ -226,3 +230,27 @@ class AutomaticInvestigationClassificationTests(TestCase):
             ClaimInvestigationClassification.objects.filter(claim=image).exists()
         )
         delay.assert_called_once_with(str(image.pk))
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="shadow")
+    @patch("api.tasks.classify_investigation_claim_task.delay")
+    @patch("api.tasks.record_authoritative_claim_fact_check_reference")
+    @patch("api.tasks.find_exact_canonical_published_fact_check")
+    def test_exact_published_resolution_queues_without_thread(
+        self, find_match, record_reference, delay,
+    ):
+        from types import SimpleNamespace
+        from api.tasks import _resolve_exact_published_claim
+
+        find_match.return_value = SimpleNamespace(fact_check=object())
+        record_reference.return_value = object()
+        with self.captureOnCommitCallbacks(execute=True):
+            result = _resolve_exact_published_claim(
+                self.claim, "A newly saved scientific finding is being examined."
+            )
+        self.assertTrue(result)
+        self.claim.refresh_from_db()
+        self.assertEqual(
+            self.claim.context_text,
+            "A newly saved scientific finding is being examined.",
+        )
+        delay.assert_called_once_with(str(self.claim.pk))
