@@ -35,6 +35,41 @@ previous shell test that called the final evaluator alone.
 - No source-grounding or provider promotion decision follows from two
   tests alone; preserve the documented 10 reviewed source-dossier cases.
 
+## Cloudflare 0 ms failure diagnostics (Oct 21, 2026)
+
+The first live TEXT canary after duplicate-worker cleanup recorded an
+immediate Cloudflare failure (duration 0 ms), then a successful Groq
+fallback; the workflow itself completed. The developer shell subsequently
+showed development mode and pilot enabled, a valid-format account ID and a
+present token; a read-only reconstruction of the stored evidence was
+10,456 characters versus the 28,000-character adapter limit. Those shell
+observations **do not prove the effective worker environment**.
+
+From this branch onward, the development Celery worker logs a safe startup
+line (no network calls or key values), for example:
+
+```text
+CLOUDFLARE_PILOT_WORKER_READY pid=12345 enabled=True account_id_valid=True api_token_present=True
+```
+
+Check the **actual worker's INFO log** after restarting it with the pilot
+flag; if any status is false, resolve worker launch configuration before
+spending any API quota. The flags show presence/format only, not token
+authorization or quota availability.
+
+New Cloudflare failures are categorized through a finite safe-code
+allowlist: e.g. `MISSING_API_TOKEN`, `PROMPT_TOO_LONG`, `HTTP_429`,
+`TRANSPORT_ReadTimeout`, `INVALID_EVALUATION_JSON`. The run inspector
+prints `reason=<code>` on a failed Cloudflare event. Exception bodies,
+provider response text, claim content, credentials and raw error details
+are **never forwarded**. Previous telemetry cannot be retroactively
+decoded: those runs will show `reason=not_recorded`.
+
+The worker startup status confirms flags/credentials in the effective
+worker process, and the next **separately approved, single** live canary
+can reveal the sanitized failure reason if Cloudflare fails again. Do
+not run repeated claim attempts merely to fill telemetry.
+
 ## 1. Offline test gate — flag OFF
 
 In PowerShell from repository root, on a clean branch:
