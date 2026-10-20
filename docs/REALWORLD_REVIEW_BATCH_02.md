@@ -1,6 +1,6 @@
 # TruthLens — Real-world provider benchmark, review batch 02
 
-**Status:** Source-assessed by assistant, **PENDING independent reviewer approval**.
+**Status:** Source-assessed by assistant, **APPROVED by project reviewer on 2026-10-20**.
 Date of preliminary checks: 20 October 2026.
 
 This batch selects **six of the 26 currently PENDING cases** after the first
@@ -139,5 +139,5 @@ From `backend/truthlens_backend`:
 ..\.venv\Scripts\python.exe .\manage.py evaluate_realworld_verification_providers
 ```
 
-The dry-run approval counts should remain **4 approved, 26 pending**.
+The dry-run approval counts should remain **10 approved, 20 pending**.
 No network/inference calls are needed for this stage.
