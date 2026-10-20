@@ -2261,6 +2261,17 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
             claim.ai_verdict,
             claim.claim_fingerprint,
         )
+        # Separate, asynchronous subject classification for claims that entered
+        # the community before usable OCR/URL/document text was persisted.
+        # The hook never queries an LLM or modifies the fact-check result.
+        try:
+            from .investigation_classifier import dispatch_classification_after_text_save
+            dispatch_classification_after_text_save(claim.pk)
+        except Exception:
+            logger.exception(
+                "Could not schedule optional subject classification for claim %s",
+                claim_id,
+            )
         return claim
     except ClaimPersistenceError:
         raise
