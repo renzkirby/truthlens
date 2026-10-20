@@ -105,3 +105,14 @@ Approval to switch *live* provider routing would require a separate
 production design review: rate/credit limits, bounded retry/circuit breaker,
 fail-safe verdict handling, performance budget, and quality parity on
 real-world and adversarial cases. No live model promotion is authorized.
+
+## Special label adjudication
+
+Two provisional mixed-context cases (`technology_iphone_contradict` and
+`environment_coral_contradict`) intentionally test disputed `MISLEADING`
+versus `FAKE` boundaries. They are **not settled reference labels**: the
+reviewer should inspect the Apple and NOAA sources, explicitly decide whether
+a partly correct but materially false compound statement is MISLEADING or
+FAKE under TruthLens's actual rubric, and document that reasoning. Consider
+separate second-review adjudication before including these cases in accuracy
+statistics. The corpus does not yet contain independently verified SATIRE cases.

@@ -459,7 +459,7 @@
     "id": "technology_iphone_contradict",
     "domain": "TECHNOLOGY",
     "language": "en",
-    "claim": "Apple first introduced the iPhone in January 2009.",
+    "claim": "Apple unveiled the iPhone in January 2007 and it became available in US stores that same day.",
     "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: Apple January 2007 original iPhone press release.\nEvidence: Apple's contemporaneous January 9, 2007 press release announces introduction of the original iPhone. It said US availability would begin June 2007.",
     "sources": [
       {
@@ -469,8 +469,8 @@
       }
     ],
     "as_of": "2026-10-20",
-    "proposed_verdict": "FAKE",
-    "label_reason": "Draft label inferred from the cited primary source; direct contradiction expected. Independent human review required.",
+    "proposed_verdict": "MISLEADING",
+    "label_reason": "Provisional mixed-context label: one clause is directly supported, another incorrectly generalizes timing/outcome. Independent reviewer must adjudicate FAKE versus MISLEADING; do not score until approval.",
     "review": {
       "status": "PENDING",
       "reviewer": "",
@@ -507,7 +507,7 @@
     "id": "environment_coral_contradict",
     "domain": "ENVIRONMENT",
     "language": "en",
-    "claim": "Coral bleaching can never be triggered by warm water.",
+    "claim": "Warm ocean water can cause coral bleaching, so every coral that bleaches is already dead.",
     "evidence_snapshot": "=== SOURCE IDENTITY GROUP 1 ===\nSource: NOAA What Is Coral Bleaching?.\nEvidence: NOAA explains that when water becomes too warm, corals expel symbiotic algae and appear white. Bleaching does not automatically mean the coral has already died.",
     "sources": [
       {
@@ -517,8 +517,8 @@
       }
     ],
     "as_of": "2026-10-20",
-    "proposed_verdict": "FAKE",
-    "label_reason": "Draft label inferred from the cited primary source; direct contradiction expected. Independent human review required.",
+    "proposed_verdict": "MISLEADING",
+    "label_reason": "Provisional mixed-context label: one clause is directly supported, another incorrectly generalizes timing/outcome. Independent reviewer must adjudicate FAKE versus MISLEADING; do not score until approval.",
     "review": {
       "status": "PENDING",
       "reviewer": "",

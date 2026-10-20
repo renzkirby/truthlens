@@ -20,7 +20,7 @@ class RealWorldCorpusReviewTests(SimpleTestCase):
         self.assertEqual(len(cases), 30)
         self.assertEqual(
             Counter(c["proposed_verdict"] for c in cases),
-            Counter({"FACT": 14, "FAKE": 14, "UNVERIFIED": 2}),
+            Counter({"FACT": 14, "FAKE": 12, "MISLEADING": 2, "UNVERIFIED": 2}),
         )
         self.assertEqual(len({c["domain"] for c in cases}), 12)
         self.assertGreaterEqual(

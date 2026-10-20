@@ -190,10 +190,12 @@ class Command(BaseCommand):
                     measure["errors"] += 1
                     reason = details["provider_error"] or "LLM_UNAVAILABLE"
                     outcome = f"error={reason}"
-                    if reason.startswith(("HTTP_429", "HTTP_403", "HTTP_402")):
+                    if reason.startswith(("HTTP_429", "HTTP_403", "HTTP_402")) or (
+                        provider == "current" and reason == "LLM_UNAVAILABLE"
+                    ):
                         blocked.add(provider)
                         self.stdout.write(
-                            f"Quota/auth barrier for {provider}; "
+                            f"Quota/auth or provider outage for {provider}; "
                             "no further requests to that provider in this run."
                         )
                 elapsed_ms = int((time.perf_counter() - started) * 1000)
