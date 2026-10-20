@@ -1,7 +1,8 @@
-"""Safely seed existing available community claims into the classifier queue.
+"""Dry-run-first command to shadow-evaluate previously verified claim text.
 
-Dry-run by default. Never retroactively authorizes claims: shadow mode only
-records suggestions; enforce requires separate accuracy/rollout approval.
+Classification belongs to the Claim and is independent of Community threads
+or VerificationAssignments. This bulk command may only queue in shadow mode,
+so it cannot retroactively grant partner intake authorization.
 """
 from django.core.management.base import BaseCommand, CommandError
 
@@ -14,8 +15,8 @@ from api.models import Claim, VerificationAssignment
 
 class Command(BaseCommand):
     help = (
-        "Preview or enqueue a bounded batch of existing unclassified community "
-        "investigations for asynchronous subject classification."
+        "Preview or queue a bounded batch of claims with stored text, independent "
+        "of community threads, for shadow-mode subject classification."
     )
 
     def add_arguments(self, parser):
@@ -30,29 +31,30 @@ class Command(BaseCommand):
         if not 1 <= limit <= 1000:
             raise CommandError("--limit must be between 1 and 1000.")
         mode = classification_mode()
-        if options["enqueue"] and mode == "off":
+        if options["enqueue"] and mode != "shadow":
             raise CommandError(
-                "Classifier mode is off. Configure shadow first; do not enable "
-                "enforce without a separate accuracy review."
+                "Bulk classification is allowed in shadow mode only. This "
+                "command must never grant authoritative classification."
             )
 
         candidates = list(
-            Claim.objects.filter(
-                verification_assignments__status=VerificationAssignment.Status.AVAILABLE,
-                threads__isnull=False,
-                investigation_classification__isnull=True,
-            )
+            Claim.objects.filter(investigation_classification__isnull=True)
             .exclude(context_text__isnull=True)
             .exclude(context_text="")
-            .distinct()
+            .exclude(
+                verification_assignments__status__in=[
+                    VerificationAssignment.Status.ACTIVE,
+                    VerificationAssignment.Status.COMPLETED,
+                ],
+            )
             .order_by("pk")
             .values_list("pk", flat=True)[:limit]
         )
 
         if not options["enqueue"]:
             self.stdout.write(
-                f"DRY RUN: {len(candidates)} eligible unclassified community "
-                f"claims in this batch (limit={limit}); mode={mode}. "
+                f"DRY RUN: {len(candidates)} unclassified claims with stored text "
+                f"in this batch (limit={limit}); mode={mode}. "
                 "No tasks dispatched."
             )
             return

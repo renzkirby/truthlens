@@ -103,6 +103,10 @@ def _resolve_exact_published_claim(claim, cleaned_claim):
                 return False
             claim.context_text = cleaned_claim
             claim.save(update_fields=["context_text", "last_updated"])
+            # Classification is claim-scoped and independent of whether a
+            # community discussion already exists.
+            from .investigation_classifier import dispatch_classification_after_text_save
+            dispatch_classification_after_text_save(claim.pk)
     except Exception as exc:
         raise ClaimPersistenceError(
             f"Published resolution persistence failed for claim {claim.pk}."
@@ -126,6 +130,10 @@ def _resolve_equivalent_published_claim(claim, cleaned_claim, vault_match):
                 return False
             claim.context_text = cleaned_claim
             claim.save(update_fields=["context_text", "last_updated"])
+            # Classification is claim-scoped and independent of whether a
+            # community discussion already exists.
+            from .investigation_classifier import dispatch_classification_after_text_save
+            dispatch_classification_after_text_save(claim.pk)
     except LLMProviderUnavailableError:
         raise
     except Exception as exc:
@@ -2261,9 +2269,9 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
             claim.ai_verdict,
             claim.claim_fingerprint,
         )
-        # Separate, asynchronous subject classification for claims that entered
-        # the community before usable OCR/URL/document text was persisted.
-        # The hook never queries an LLM or modifies the fact-check result.
+        # Separate, asynchronous subject classification for every analyzed
+        # claim, whether or not a community thread exists. The hook never
+        # queries an LLM or changes the factual-verification result.
         try:
             from .investigation_classifier import dispatch_classification_after_text_save
             dispatch_classification_after_text_save(claim.pk)

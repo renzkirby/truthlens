@@ -8,9 +8,11 @@ Modes:
   shadow — proposals are stored but never made claimable.
   enforce — store eligible classification only after independent accuracy validation.
 
-Uses stored claim text, not the separate factual-verification verdict. For URL,
-image and file claims, it waits until the extraction pipeline persists usable
-claim text. Claim and thread creation never wait for a provider.
+Uses stored claim text, not the separate factual-verification verdict. The
+verification pipeline queues it after persisting claim text regardless of
+community threads; thread creation still provides an idempotent fallback for
+older analyzed claims. URL, image, and file claims wait for extracted text.
+Claim creation, verification, and threads never wait for a provider.
 """
 import hashlib
 import json
@@ -26,7 +28,6 @@ from .models import (
     ClaimInvestigationClassification,
     InvestigationClassificationAssessment,
     VerificationAssignment,
-    Thread,
 )
 from .accountability_service import record_accountability_event
 from .verification_domain_policy import DOMAIN_CODES
@@ -237,12 +238,15 @@ def classify_investigation_claim(claim_id):
         return "APPLIED"
 
 def dispatch_classification_task(claim_id):
-    """Queue only community investigations; never block their creation or analysis."""
+    """Queue classification independently of community thread creation.
+
+    The factual-verification pipeline persists the input; this only queues a
+    separate task. No verdict is read or written, and broker failures are
+    nonfatal for verification.
+    """
     if classification_mode() == "off":
         return False
     try:
-        if not Thread.objects.filter(claim_id=claim_id).exists():
-            return False
         if ClaimInvestigationClassification.objects.filter(claim_id=claim_id).exists():
             return False
         from .tasks import classify_investigation_claim_task
@@ -255,7 +259,7 @@ def dispatch_classification_task(claim_id):
 
 
 def dispatch_classification_after_text_save(claim_id):
-    """Late OCR/URL/document extraction may supply text after thread creation."""
+    """Queue after factual analysis saves durable claim text, with no thread gate."""
     if classification_mode() == "off":
         return
     transaction.on_commit(
