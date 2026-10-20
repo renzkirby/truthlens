@@ -63,6 +63,16 @@ class CloudflarePilotRoutingTests(SimpleTestCase):
     def _enable(self):
         os.environ["ENABLE_CLOUDFLARE_VERIFICATION_PILOT"] = "1"
 
+    def _valid_legacy_responses(self):
+        self.gemini.models.generate_content.return_value = SimpleNamespace(
+            text=VALID_EVALUATION,
+        )
+        self.groq.chat.completions.create.return_value = SimpleNamespace(
+            choices=[SimpleNamespace(
+                message=SimpleNamespace(content=VALID_EVALUATION),
+            )],
+        )
+
     def test_feature_is_off_by_default_and_old_evaluation_flag_is_not_enough(self):
         os.environ["ENABLE_CLOUDFLARE_EVALUATION"] = "1"
         self.assertFalse(cloudflare_pilot_enabled(PILOT_OPERATION))
@@ -110,21 +120,23 @@ class CloudflarePilotRoutingTests(SimpleTestCase):
 
     def test_cloudflare_outage_falls_back_to_gemini_and_does_not_fabricate_verdict(self):
         self._enable()
+        self._valid_legacy_responses()
         self.cloud.side_effect = CloudflareEvaluationError("HTTP_429")
         with self.assertLogs("api.services", level="WARNING") as events:
             result = self._call()
-        self.assertEqual(result, '{"provider":"gemini"}')
+        self.assertEqual(result, VALID_EVALUATION)
         self.assertIn("CloudflareEvaluationError", "\n".join(events.output))
         self.assertNotIn("UNVERIFIED", "\n".join(events.output))
         self.gemini.models.generate_content.assert_called_once()
 
     def test_failed_cloudflare_and_gemini_reach_original_groq(self):
         self._enable()
+        self._valid_legacy_responses()
         self.cloud.side_effect = CloudflareEvaluationError("TRANSPORT_ReadTimeout")
         self.gemini.models.generate_content.side_effect = RuntimeError(
             "Gemini outage",
         )
-        self.assertEqual(self._call(), '{"provider":"groq"}')
+        self.assertEqual(self._call(), VALID_EVALUATION)
         self.cloud.assert_called_once()
         self.gemini.models.generate_content.assert_called_once()
         self.groq.chat.completions.create.assert_called_once()
@@ -144,15 +156,46 @@ class CloudflarePilotRoutingTests(SimpleTestCase):
             )
         self.assertEqual(self.cloud.call_count, 1)
 
+    def test_malformed_gemini_fallback_continues_to_groq(self):
+        self._enable()
+        self._valid_legacy_responses()
+        self.cloud.side_effect = CloudflareEvaluationError("HTTP_429")
+        self.gemini.models.generate_content.return_value = SimpleNamespace(
+            text='{"verdict":"UNVERIFIED"}',
+        )
+        self.assertEqual(self._call(), VALID_EVALUATION)
+        self.cloud.assert_called_once()
+        self.gemini.models.generate_content.assert_called_once()
+        self.groq.chat.completions.create.assert_called_once()
+
+    def test_all_malformed_fallbacks_raise_provider_unavailable(self):
+        self._enable()
+        self.cloud.side_effect = CloudflareEvaluationError(
+            "INVALID_EVALUATION_JSON"
+        )
+        self.gemini.models.generate_content.return_value = SimpleNamespace(
+            text='{"verdict":"UNVERIFIED"}',
+        )
+        self.groq.chat.completions.create.return_value = SimpleNamespace(
+            choices=[SimpleNamespace(
+                message=SimpleNamespace(content='{"verdict":"UNVERIFIED"}'),
+            )],
+        )
+        with self.assertRaises(LLMProviderUnavailableError):
+            evaluate_claim_with_persisted_evidence(
+                "The Senate has 24 senators.", "Article VI sets 24.",
+            )
+
     def test_cloudflare_circuit_break_is_scoped_to_one_job(self):
         self._enable()
+        self._valid_legacy_responses()
         self.cloud.side_effect = [
             CloudflareEvaluationError("HTTP_429"),
             VALID_EVALUATION,
         ]
         with llm_provider_scope():
-            self.assertEqual(self._call(), '{"provider":"gemini"}')
-            self.assertEqual(self._call(), '{"provider":"gemini"}')
+            self.assertEqual(self._call(), VALID_EVALUATION)
+            self.assertEqual(self._call(), VALID_EVALUATION)
         self.assertEqual(self.cloud.call_count, 1)
         with llm_provider_scope():
             self.assertEqual(self._call(), VALID_EVALUATION)
@@ -160,13 +203,14 @@ class CloudflarePilotRoutingTests(SimpleTestCase):
 
     def test_cloudflare_scope_is_reset_after_exception(self):
         self._enable()
+        self._valid_legacy_responses()
         self.cloud.side_effect = [
             CloudflareEvaluationError("HTTP_429"),
             VALID_EVALUATION,
         ]
         with self.assertRaises(RuntimeError):
             with llm_provider_scope():
-                self.assertEqual(self._call(), '{"provider":"gemini"}')
+                self.assertEqual(self._call(), VALID_EVALUATION)
                 raise RuntimeError("verification interrupted")
         with llm_provider_scope():
             self.assertEqual(self._call(), VALID_EVALUATION)
