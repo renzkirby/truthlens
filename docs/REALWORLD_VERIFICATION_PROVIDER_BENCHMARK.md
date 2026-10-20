@@ -12,12 +12,12 @@ the 30 observations are **not independent** and no population accuracy
 confidence intervals are justified.
 
 The proposed labels were created by an assistant based on identified primary
-public sources. Four labels (two 1987 Constitution and two RA 9346 variants)
-were subsequently **explicitly approved by the TruthLens project reviewer
-after reviewing source materials on 20 October 2026**; the other 26 remain
-PENDING. Approved-label rationales are assistant-drafted source explanations,
-not quotations from the reviewer. See `docs/REALWORLD_REVIEW_BATCH_01.md`
-for the approval record. An approved reviewed label is a reference for this
+public sources. Ten labels (four Constitution/RA 9346 cases from Batch 01 and six
+elections/health/disasters/technology/environment cases from Batch 02) were
+explicitly approved by the TruthLens project reviewer on 20 October 2026;
+the other 20 remain PENDING. Approved-label rationales are assistant-drafted source explanations,
+not quotations from the reviewer. See `docs/REALWORLD_REVIEW_BATCH_01.md` and
+`docs/REALWORLD_REVIEW_BATCH_02.md` for the approval records. An approved reviewed label is a reference for this
 bounded case, not proof of model correctness. In particular,
 `UNVERIFIED` describes lack of support **in the supplied dossier**, not a
 claim that no answer exists in the world.
@@ -49,9 +49,9 @@ Open `api/tests/fixtures/realworld_verification_cases.json`. For each case:
 ```
 
    Otherwise leave PENDING or set REJECTED with rationale. Do not simply
-   bulk-copy `proposed_verdict` into the review decision. The first four
-   have already received explicit reviewer approval; only those four
-   reference labels are currently eligible for scored comparisons. Review changes
+   bulk-copy `proposed_verdict` into the review decision. The first ten
+   have received explicit reviewer approval; only those ten reference labels
+   are currently eligible for scored comparisons. Review changes
    should be submitted as a separate traceable Git commit. Do not embed user
    identifiers, sensitive evidence, credentials, or nonpublic claims.
 4. Keep evaluation models blind to the proposed/approved labels. The command
@@ -78,6 +78,10 @@ From `backend/truthlens_backend`:
 ..\\.venv\\Scripts\\python.exe .\\manage.py evaluate_realworld_verification_providers `
   --live --case civics__support --limit 1
 ```
+
+The two Batch 02 MISLEADING approvals are case-specific reviewer decisions,
+not a production-wide change to TruthLens's verdict taxonomy. For the
+six-case scored benchmark, use the case IDs from Batch 02 review packet.
 
 The illustrated case flag above must exactly match a case ID in the JSON file;
 inspect the file before selecting it.
