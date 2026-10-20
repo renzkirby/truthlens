@@ -70,6 +70,59 @@ worker process, and the next **separately approved, single** live canary
 can reveal the sanitized failure reason if Cloudflare fails again. Do
 not run repeated claim attempts merely to fill telemetry.
 
+## Offline Celery runtime probe — for startup/runtime configuration disagreement
+
+A subsequent live TEXT task (2026-10-21 01:57–01:58 local) showed a
+startup worker log with account ID valid and API token present, but the
+Cloudflare adapter rejected the account ID locally about 37 seconds
+after the task started. Groq then returned a rate-limit response and
+the final evaluator raised `LLMProviderUnavailableError`.
+
+**Do not retry claims or spend provider quota to investigate this.**
+The original adapter validates `os.getenv("CLOUDFLARE_ACCOUNT_ID", "")`
+at request time, and a startup status does not guarantee its value
+remains unchanged. The reason for this mismatch is not yet known.
+
+An explicit, development-only Celery task now captures the **actual
+worker process's current configuration status**, independent of any
+verification claim and with no AI-provider HTTP calls, DB writes, or
+sensitive environment values. After pulling the latest pilot branch
+and running the new offline tests, stop the idle worker and restart
+exactly one `start_celery` worker. With that worker running, in a
+**separate PowerShell window** under the normal development settings:
+
+```powershell
+..\.venv\Scripts\python.exe .\manage.py shell
+```
+
+```python
+from api.tasks import inspect_cloudflare_pilot_worker_environment
+
+task = inspect_cloudflare_pilot_worker_environment.delay()
+print(task.get(timeout=15))
+```
+
+The `.delay()` is essential: calling `.run()` directly would inspect
+the Django shell process instead of the Celery worker. Results show
+only `diagnostics_available`, `worker_pid`, `pilot_enabled`,
+`account_id_valid`, `api_token_present` booleans/IDs. Example:
+
+```text
+{'diagnostics_available': True, 'worker_pid': 57800,
+ 'pilot_enabled': True, 'account_id_valid': False, 'api_token_present': True}
+```
+
+Compare `worker_pid` against the startup readiness PID, and interpret
+a false account-ID result as evidence of changed/missing runtime
+credentials in *that* process. If the runtime values are still true,
+the earlier failure was transient or from another context; investigate
+before submitting another claim. No evidence of Cloudflare billing
+can be inferred from rejected local preflight.
+
+Then exit the shell. Use `inspect_verification_run_telemetry` for the
+failed run ID to verify terminal `FAILED` and
+`failure_code=LLM_UNAVAILABLE`, not a user-facing fabricated verdict.
+
 ## 1. Offline test gate — flag OFF
 
 In PowerShell from repository root, on a clean branch:
