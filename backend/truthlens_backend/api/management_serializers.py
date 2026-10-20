@@ -253,6 +253,9 @@ class ManagementPrimaryAdminInvitationSerializer(serializers.ModelSerializer):
 
 
 class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerializer):
+    verification_specializations = serializers.ListField(
+        child=serializers.CharField(), read_only=True
+    )
     approved_verification_domains = serializers.ListField(
         child=serializers.CharField(), read_only=True
     )
@@ -306,6 +309,7 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
             "website",
             "logo_url",
             "expertise_areas",
+            "verification_specializations",
             "approved_verification_domains",
             "approved_verification_jurisdictions",
             "requested_verification_domains",

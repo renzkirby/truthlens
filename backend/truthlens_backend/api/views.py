@@ -2729,36 +2729,35 @@ def organization_verification_metrics(request, organization_id):
 @api_view(["GET", "PATCH"])
 @permission_classes([IsAuthenticated])
 def organization_verification_scope(request, organization_id):
-    """Organization leadership can request or activate; cannot self-approve."""
+    """Read specializations as a manager; only Primary Admin can modify them."""
     from .organization_scope_service import (
         OrganizationScopeForbidden,
         OrganizationScopeInvalid,
-        ensure_scope_manager,
-        submit_scope_request,
-        configure_active_scope,
+        can_view_specializations,
+        update_organization_specializations,
         serialize_organization_scope,
     )
     from .organization_scope_serializers import OrganizationScopeMutationSerializer
 
     organization = get_object_or_404(Organization, pk=organization_id)
+    if not can_view_specializations(organization=organization, actor=request.user):
+        return Response(
+            {"detail": "An active Primary Admin or Admin membership is required."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     try:
-        ensure_scope_manager(organization=organization, actor=request.user)
         if request.method == "PATCH":
             serializer = OrganizationScopeMutationSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
-            payload = dict(serializer.validated_data)
-            action = payload.pop("action")
-            mutation = (
-                submit_scope_request if action == "REQUEST" else configure_active_scope
-            )
-            organization = mutation(
-                organization=organization, actor=request.user, **payload
+            organization = update_organization_specializations(
+                organization=organization, actor=request.user,
+                **serializer.validated_data,
             )
     except OrganizationScopeForbidden as error:
         return Response({"detail": str(error)}, status=status.HTTP_403_FORBIDDEN)
     except OrganizationScopeInvalid as error:
         return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
-    return Response(serialize_organization_scope(organization))
+    return Response(serialize_organization_scope(organization, actor=request.user))
 
 
 @api_view(["GET"])
@@ -2798,7 +2797,7 @@ def verification_intake(request):
         eligibility_reason,
         effective_organization_scope,
     )
-    active_domains, active_jurisdictions = effective_organization_scope(organization)
+    active_domains, _legacy_geography = effective_organization_scope(organization)
 
     # Partner intake lists only eligible, already classified claims. The
     # claim-time service independently enforces the same rule under a lock.
@@ -2811,8 +2810,7 @@ def verification_intake(request):
         )
         if eligibility_reason(
             classification=classification,
-            approved_domains=active_domains,
-            approved_jurisdictions=active_jurisdictions,
+            specializations=active_domains,
         ) is None:
             eligible.append(assignment)
 

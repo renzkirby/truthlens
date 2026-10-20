@@ -11,7 +11,6 @@ Modes:
 import hashlib
 import json
 import logging
-import re
 
 from django.conf import settings
 from django.db import transaction
@@ -25,22 +24,12 @@ from .models import (
     VerificationAssignment,
 )
 from .accountability_service import record_accountability_event
-from .verification_domain_policy import DOMAIN_CODES, validate_jurisdiction
+from .verification_domain_policy import DOMAIN_CODES
 
 logger = logging.getLogger(__name__)
-CLASSIFIER_VERSION = "v1"
+CLASSIFIER_VERSION = "v2-subject-only"
 MAX_CLAIM_LENGTH = 2400
 MAX_DOMAINS = 3
-
-# Only explicitly named localities are automatically geocoded at this stage.
-# Unrecognized, conflicting, or ambiguous references must abstain.
-JURISDICTION_TERMS = {
-    "PH": ("philippines", "philippine", "luzon", "visayas", "mindanao"),
-    "PH-NCR": ("metro manila", "national capital region", "taguig", "makati"),
-    "US": ("united states", "u.s.", "usa"),
-    "GLOBAL": ("worldwide", "globally", "every country", "across the world"),
-}
-
 
 def classification_mode():
     mode = str(getattr(settings, "INVESTIGATION_CLASSIFICATION_MODE", "off")).lower()
@@ -76,44 +65,22 @@ def validate_model_suggestion(text, payload):
         codes.append(tag["code"])
     if len(set(codes)) != len(codes):
         return None
-    jurisdiction = payload.get("jurisdiction")
-    if not isinstance(jurisdiction, str):
-        return None
-    try:
-        validate_jurisdiction(jurisdiction)
-    except Exception:
-        return None
-    geo_evidence = payload.get("jurisdiction_evidence")
-    if not _evidence_in_text(text, geo_evidence):
-        return None
-    # Extra guard against a model mapping geographic evidence to an
-    # unrelated jurisdiction. Unknown countries/subdivisions abstain.
-    terms = JURISDICTION_TERMS.get(jurisdiction)
-    if not terms or not any(
-        re.search(
-            r"(?<![a-z])" + re.escape(term) + r"(?![a-z])",
-            str(geo_evidence).casefold(),
-        )
-        for term in terms
-    ):
-        return None
-    return sorted(codes), jurisdiction
+    return sorted(codes)
 
 
 def _query_classifier(text):
     from .services import call_llm_with_fallback
 
     system = (
-        "You classify the subjects and explicitly stated geographic scope of "
-        "a factual claim. You DO NOT determine truthfulness. Return only JSON: "
-        "{decision: CLASSIFY or ABSTAIN, domains: [{code, evidence}], "
-        "jurisdiction: an ISO-style code or GLOBAL, jurisdiction_evidence: "
-        "exact quotation from claim}. Use only these subject codes: "
+        "Classify the subject matter of the user's factual claim, NOT its "
+        "truthfulness, credibility, location, or jurisdiction. Return only "
+        "JSON with decision CLASSIFY or ABSTAIN and domains as a list of "
+        "{code, evidence} objects. Use only these subject codes: "
         + ", ".join(sorted(DOMAIN_CODES))
-        + ". Each domain evidence and jurisdiction evidence MUST quote exact "
-        "words from the claim; never infer the user's location or assume GLOBAL. "
-        "If uncertain, context insufficient, mixed jurisdictions, image-only "
-        "content, or scope ambiguous, return ABSTAIN."
+        + ". Evidence MUST quote exact words from the supplied claim text. "
+        "Never infer subjects, add geographic authority, invent context, "
+        "or classify without enough explicit subject evidence. "
+        "When unsupported or ambiguous, return ABSTAIN."
     )
     return json.loads(call_llm_with_fallback(
         system, text, operation="investigation_classification"
@@ -177,8 +144,8 @@ def classify_investigation_claim(claim_id):
             claim=locked,
             defaults={
                 "status": status,
-                "candidate_domains": accepted[0] if accepted else [],
-                "candidate_jurisdiction": accepted[1] if accepted else "",
+                "candidate_domains": accepted if accepted else [],
+                "candidate_jurisdiction": "",
                 "reason_code": reason,
                 "classifier_version": CLASSIFIER_VERSION,
                 "input_fingerprint": fingerprint,
@@ -190,7 +157,7 @@ def classify_investigation_claim(claim_id):
         # Only enable 'enforce' after validating actual classification
         # reliability against an independently labeled evaluation dataset.
         classification = ClaimInvestigationClassification(
-            claim=locked, domains=accepted[0], jurisdiction=accepted[1],
+            claim=locked, domains=accepted, jurisdiction="",
             rationale="Automated classification from explicit claim quotation.",
             source=ClaimInvestigationClassification.Source.AUTOMATIC,
         )
@@ -203,7 +170,7 @@ def classify_investigation_claim(claim_id):
             authority_scope=AccountabilityEvent.AuthorityScope.SYSTEM,
             previous_state={},
             new_state={
-                "domains": accepted[0], "jurisdiction": accepted[1],
+                "domains": accepted,
                 "source": "AUTOMATIC", "classifier_version": CLASSIFIER_VERSION,
             },
         )

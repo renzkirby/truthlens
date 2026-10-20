@@ -22,7 +22,7 @@ from .organization_service import (
     PartnerCapability,
     has_capability,
 )
-from .verification_domain_policy import eligibility_reason, effective_organization_scope
+from .verification_domain_policy import eligibility_reason, organization_specializations
 
 OPEN_ASSIGNMENT_STATUSES = {
     VerificationAssignment.Status.AVAILABLE,
@@ -398,8 +398,8 @@ def claim_verification_assignment(
                 "already belong to an organization."
             )
 
-        # Enforce approved expertise and location while holding the Claim
-        # lock; the policy is not dependent on what an intake UI displays.
+        # Enforce Primary Admin-managed specializations under the Claim and
+        # Organization locks; intake UI filtering is never authorization.
         classification = (
             locked_claim.investigation_classification
             if hasattr(locked_claim, "investigation_classification")
@@ -408,20 +408,16 @@ def claim_verification_assignment(
         locked_organization = type(organization).objects.select_for_update().get(
             pk=organization.pk,
         )
-        active_domains, active_jurisdictions = effective_organization_scope(
-            locked_organization,
-        )
+        specializations = organization_specializations(locked_organization)
         refusal = eligibility_reason(
             classification=classification,
-            approved_domains=active_domains,
-            approved_jurisdictions=active_jurisdictions,
+            specializations=specializations,
         )
         if refusal:
             raise VerificationAssignmentAuthorizationError(
                 {
-                    "NEEDS_CLASSIFICATION": "This claim must be classified by a platform reviewer before assignment.",
-                    "OUTSIDE_APPROVED_DOMAINS": "The claim is outside this organization's approved verification domains.",
-                    "OUTSIDE_APPROVED_JURISDICTION": "The claim is outside this organization's approved verification jurisdiction.",
+                    "NEEDS_CLASSIFICATION": "This claim does not yet have a validated investigation subject classification.",
+                    "OUTSIDE_SPECIALIZATIONS": "The claim is outside this organization's selected verification specializations.",
                 }[refusal]
             )
 
