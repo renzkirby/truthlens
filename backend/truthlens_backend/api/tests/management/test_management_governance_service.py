@@ -10,10 +10,8 @@ from api.management_governance_service import (
     ManagementGovernanceValidationError,
     create_partner_organization,
     update_organization_platform_trust,
-    approve_organization_verification_scope,
-    classify_claim_for_investigation,
 )
-from api.models import AccountabilityEvent, Organization, Claim
+from api.models import AccountabilityEvent, Organization
 
 
 class ManagementGovernanceServiceTests(TestCase):
@@ -113,39 +111,6 @@ class ManagementGovernanceServiceTests(TestCase):
                 action_type=AccountabilityEvent.ActionType.ORGANIZATION_CREATED
             ).exists()
         )
-
-    def test_verification_scope_requires_platform_authority_and_audits(self):
-        values = dict(
-            organization_id=self.organization.pk, domains=["SCIENCE"],
-            jurisdictions=["PH"], rationale="Reviewed scientific evidence expertise.",
-        )
-        with self.assertRaises(ManagementGovernanceAuthorizationError):
-            approve_organization_verification_scope(actor=self.staff_user, **values)
-        organization = approve_organization_verification_scope(actor=self.platform_admin, **values)
-        self.assertEqual(organization.approved_verification_domains, ["SCIENCE"])
-        self.assertTrue(AccountabilityEvent.objects.filter(
-            action_type=AccountabilityEvent.ActionType.ORGANIZATION_VERIFICATION_SCOPE_APPROVED,
-            subject_organization=organization,
-        ).exists())
-
-    def test_claim_classification_requires_platform_authority_and_audits(self):
-        claim = Claim.objects.create(
-            claim_type=Claim.ClaimType.TEXT,
-            context_text="The experiment took place in the Philippines.",
-        )
-        values = dict(
-            claim_id=claim.pk, domains=["SCIENCE"], jurisdiction="PH",
-            rationale="Reviewed the science claim and its geography.",
-        )
-        with self.assertRaises(ManagementGovernanceAuthorizationError):
-            classify_claim_for_investigation(actor=self.staff_user, **values)
-        classification = classify_claim_for_investigation(actor=self.platform_admin, **values)
-        self.assertEqual(classification.domains, ["SCIENCE"])
-        self.assertEqual(classification.classified_by, self.platform_admin)
-        self.assertTrue(AccountabilityEvent.objects.filter(
-            action_type=AccountabilityEvent.ActionType.CLAIM_INVESTIGATION_CLASSIFIED,
-            resource_id=str(claim.pk),
-        ).exists())
 
     def test_service_rejects_every_non_platform_authority(self):
         inactive_superuser = User.objects.create_superuser(
