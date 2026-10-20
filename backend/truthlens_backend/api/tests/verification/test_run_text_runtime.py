@@ -341,11 +341,19 @@ class VerificationRunTextRuntimeTests(TestCase):
         ):
             with self.subTest(final_verdict=final_verdict):
                 self._cached_claim(ai_verdict, final_verdict)
+                evidence_calls_before = self.assess_evidence.call_count
                 self._assert_terminal(self._execute(), status)
                 self.claim.refresh_from_db()
                 self.assertEqual(self.claim.ai_verdict, expected_ai_verdict)
                 self.assertIsNone(self.claim.final_verdict)
-        self.assess_evidence.assert_not_called()
+                if ai_verdict == "UNVERIFIED":
+                    self.assertGreater(
+                        self.assess_evidence.call_count, evidence_calls_before
+                    )
+                else:
+                    self.assertEqual(
+                        self.assess_evidence.call_count, evidence_calls_before
+                    )
 
     def test_self_match_continues_verification_with_one_run(self):
         self.match.return_value = self.claim
