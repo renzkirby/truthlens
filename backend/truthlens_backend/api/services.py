@@ -21,6 +21,10 @@ from PIL import Image
 from supabase import create_client
 
 from .verification.telemetry import record_llm_provider_call
+from .verification.evidence_budget import (
+    FINAL_EVALUATION_OUTPUT_TOKENS,
+    LLMRequestBudgetExceededError, USAGE_WINDOW_SECONDS, validate_request_budget,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,16 +54,50 @@ DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
 
 
 _gemini_degraded = ContextVar("gemini_degraded", default=None)
+_groq_usage = ContextVar("groq_usage", default=None)
+
+
+def get_recent_groq_usage():
+    """Successful calls in this execution only; never an account-wide limiter."""
+    cutoff = time.monotonic() - USAGE_WINDOW_SECONDS
+    return tuple(row.copy() for row in (_groq_usage.get() or ())
+                 if row["timestamp"] >= cutoff)
+
+
+def recent_groq_tokens():
+    return sum(row["total_tokens"] for row in get_recent_groq_usage())
+
+
+def _record_groq_usage(response):
+    if _groq_usage.get() is None:
+        return
+    try:
+        usage = response.usage
+        def count(name):
+            value = usage.get(name) if isinstance(usage, dict) else getattr(usage, name, None)
+            return value if type(value) is int and value >= 0 else 0
+        prompt, completion = count("prompt_tokens"), count("completion_tokens")
+        total = max(count("total_tokens"), prompt + completion)
+        _groq_usage.set((*get_recent_groq_usage(), {
+            "timestamp": time.monotonic(), "prompt_tokens": prompt,
+            "completion_tokens": completion, "total_tokens": total,
+        }))
+    except Exception:
+        # Optional SDK metadata must never turn a successful call into failure.
+        logger.warning("Groq usage metadata unavailable; local usage tracking skipped.")
+        return
 
 
 @contextmanager
 def llm_provider_scope():
     """Give one synchronous verification execution fresh provider state."""
     token = _gemini_degraded.set(False)
+    usage_token = _groq_usage.set(())
     try:
         yield
     finally:
         _gemini_degraded.reset(token)
+        _groq_usage.reset(usage_token)
 
 
 class LLMProviderUnavailableError(RuntimeError):
@@ -225,8 +263,11 @@ def call_llm_with_fallback(
     *,
     operation=None,
     gemini_timeout_ms=None,
+    max_output_tokens=None,
 ):
     """Use Gemini first unless Groq has already taken over in this job."""
+    if operation in {"evidence_assessment", "persisted_evidence_evaluation"}:
+        validate_request_budget(system_instructions, user_prompt)
     provider_call_id = uuid.uuid4()
     if not _gemini_degraded.get():
         gemini_config = {
@@ -234,6 +275,8 @@ def call_llm_with_fallback(
             "response_mime_type": "application/json",
             "temperature": 0.1,
         }
+        if max_output_tokens is not None:
+            gemini_config["max_output_tokens"] = max_output_tokens
         try:
             if (
                 isinstance(gemini_timeout_ms, int)
@@ -291,6 +334,8 @@ def call_llm_with_fallback(
             model=_model_from_env("GROQ_MODEL", DEFAULT_GROQ_MODEL),
             response_format={"type": "json_object"},
             temperature=0.1,
+            **({"max_completion_tokens": max_output_tokens}
+               if max_output_tokens is not None else {}),
         )
         content = chat_completion.choices[0].message.content
     except Exception as groq_err:
@@ -317,6 +362,7 @@ def call_llm_with_fallback(
         groq_started_at,
         "success",
     )
+    _record_groq_usage(chat_completion)
     # Outside an explicit job scope, retain independent Gemini-first calls.
     if _gemini_degraded.get() is not None:
         _gemini_degraded.set(True)
@@ -857,22 +903,8 @@ def evaluate_image_claim_with_tavily(
         }
 
 
-def evaluate_claim_with_persisted_evidence(
-    original_claim,
-    evidence_context,
-    article_stance="NEUTRAL",
-):
-    """Evaluate a claim using only the rendered persisted-evidence dossier."""
-    unavailable_result = {
-        "reasoning": "No usable persisted evidence was available for evaluation.",
-        "verdict": "UNVERIFIED",
-        "summary": "TruthLens could not verify this claim from persisted evidence.",
-        "confidence_score": 0,
-        "score_context": "No persisted evidence was available to support a verdict.",
-    }
-    if not isinstance(evidence_context, str) or not evidence_context.strip():
-        return unavailable_result
-
+def build_persisted_evidence_prompt(original_claim, evidence_context, article_stance="NEUTRAL"):
+    """Shared complete prompt for deterministic budgeting and final evaluation."""
     system_instructions = """
     Role: You are the TruthLens evidence reasoning engine.
 
@@ -915,11 +947,36 @@ def evaluate_claim_with_persisted_evidence(
         f"<persisted_evidence>{evidence_context}</persisted_evidence>"
     )
 
+    return system_instructions, user_data
+
+
+def evaluate_claim_with_persisted_evidence(
+    original_claim,
+    evidence_context,
+    article_stance="NEUTRAL",
+):
+    """Evaluate a claim using only the rendered persisted-evidence dossier."""
+    unavailable_result = {
+        "reasoning": "No usable persisted evidence was available for evaluation.",
+        "verdict": "UNVERIFIED",
+        "summary": "TruthLens could not verify this claim from persisted evidence.",
+        "confidence_score": 0,
+        "score_context": "No persisted evidence was available to support a verdict.",
+    }
+    if not isinstance(evidence_context, str) or not evidence_context.strip():
+        return unavailable_result
+
+    system_instructions, user_data = build_persisted_evidence_prompt(
+        original_claim, evidence_context, article_stance,
+    )
+    validate_request_budget(system_instructions, user_data)
+
     try:
         response_text = call_llm_with_fallback(
             system_instructions,
             user_data,
             operation="persisted_evidence_evaluation",
+            max_output_tokens=FINAL_EVALUATION_OUTPUT_TOKENS,
         )
         parsed_result = _parse_llm_json(response_text)
         required_fields = {
@@ -940,7 +997,7 @@ def evaluate_claim_with_persisted_evidence(
             parsed_result["confidence_score"]
         )
         return parsed_result
-    except LLMProviderUnavailableError:
+    except (LLMProviderUnavailableError, LLMRequestBudgetExceededError):
         raise
     except Exception as exc:
         logger.error("Persisted Evidence Evaluator AI Error: %s", exc)

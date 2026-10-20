@@ -16,6 +16,16 @@ logger = logging.getLogger(__name__)
 
 SAFE_STAGE_METADATA_KEYS = frozenset(
     {
+        "assessment_candidates",
+        "assessment_calls",
+        "assessment_scored",
+        "assessment_prompt_tokens_est",
+        "recent_groq_tokens",
+        "reasoning_candidates",
+        "reasoning_selected",
+        "reasoning_groups",
+        "final_prompt_tokens_est",
+        "final_prompt_budget",
         "status_code",
         "has_results",
         "bytes",

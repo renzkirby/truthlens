@@ -187,7 +187,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             return_value=["persisted fact-check group"],
         ))
         render_dossier = stack.enter_context(patch(
-            "api.tasks.render_reasoning_evidence_dossier",
+            "api.tasks.render_bounded_reasoning_dossier",
             return_value="Persisted GFC content. Rating: False",
         ))
         evaluate_persisted = stack.enter_context(patch(
@@ -280,7 +280,10 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             claim_id,
             stage_prefix="gfc",
         )
-        render_dossier.assert_called_once_with(["persisted fact-check group"])
+        render_dossier.assert_called_once_with(
+            ["persisted fact-check group"], original_claim=cleaned_claim,
+            article_stance="NEUTRAL",
+        )
         evaluate_persisted.assert_called_once_with(
             cleaned_claim,
             "Persisted GFC content. Rating: False",
@@ -340,7 +343,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             return_value=["persisted secondary group"],
         ))
         render_dossier = stack.enter_context(patch(
-            "api.tasks.render_reasoning_evidence_dossier",
+            "api.tasks.render_bounded_reasoning_dossier",
             return_value="Persisted Tavily evidence.",
         ))
         evaluate_persisted = stack.enter_context(patch(
@@ -432,7 +435,10 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             claim_id,
             stage_prefix="tavily",
         )
-        render_dossier.assert_called_once_with(["persisted secondary group"])
+        render_dossier.assert_called_once_with(
+            ["persisted secondary group"], original_claim=cleaned_claim,
+            article_stance="NEUTRAL",
+        )
         evaluate_persisted.assert_called_once_with(
             cleaned_claim,
             "Persisted Tavily evidence.",
@@ -504,7 +510,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             return_value=["persisted fact-check group"],
         ))
         render_dossier = stack.enter_context(patch(
-            "api.tasks.render_reasoning_evidence_dossier",
+            "api.tasks.render_bounded_reasoning_dossier",
             return_value="Persisted URL GFC content. Rating: False",
         ))
         evaluate_persisted = stack.enter_context(patch(
@@ -605,7 +611,10 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             claim_id,
             stage_prefix="url_gfc",
         )
-        render_dossier.assert_called_once_with(["persisted fact-check group"])
+        render_dossier.assert_called_once_with(
+            ["persisted fact-check group"], original_claim=cleaned_claim,
+            article_stance="NEUTRAL",
+        )
         evaluate_persisted.assert_called_once_with(
             cleaned_claim,
             "Persisted URL GFC content. Rating: False",
@@ -676,7 +685,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             return_value=["persisted secondary group"],
         ))
         render_dossier = stack.enter_context(patch(
-            "api.tasks.render_reasoning_evidence_dossier",
+            "api.tasks.render_bounded_reasoning_dossier",
             return_value="Persisted URL Tavily evidence.",
         ))
         evaluate_persisted = stack.enter_context(patch(
@@ -777,7 +786,10 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             claim_id,
             stage_prefix="url_tavily",
         )
-        render_dossier.assert_called_once_with(["persisted secondary group"])
+        render_dossier.assert_called_once_with(
+            ["persisted secondary group"], original_claim=cleaned_claim,
+            article_stance="NEUTRAL",
+        )
         evaluate_persisted.assert_called_once_with(
             cleaned_claim,
             "Persisted URL Tavily evidence.",

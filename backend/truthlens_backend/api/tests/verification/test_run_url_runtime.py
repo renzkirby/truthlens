@@ -8,6 +8,7 @@ from api import services, tasks
 from api.models import Claim, EvidenceSource, VerificationEvidence, VerificationRun
 from api.verification import runs
 from api.verification.contracts import RawEvidence
+from api.verification.evidence_budget import LLMRequestBudgetExceededError
 from api.verification.evidence_assessment import EvidenceAssessment
 from api.verification.evidence_dossier import ReasoningEvidenceItem
 from api.services import ClaimGateError, LLMProviderUnavailableError
@@ -77,7 +78,7 @@ class VerificationRunURLRuntimeTests(TestCase):
         )
         self.real_load_dossier = tasks.load_reasoning_evidence_dossier_for_run
         self.real_filter_dossier = tasks.filter_reasoning_evidence_dossier_by_role
-        self.real_render_dossier = tasks.render_reasoning_evidence_dossier
+        self.real_render_dossier = tasks.render_bounded_reasoning_dossier
         self.evaluate_persisted = self._patch(
             "api.tasks.evaluate_claim_with_persisted_evidence",
             return_value=self.verdict,
@@ -91,7 +92,7 @@ class VerificationRunURLRuntimeTests(TestCase):
             return_value=["selected evidence"],
         )
         self.render_dossier = self._patch(
-            "api.tasks.render_reasoning_evidence_dossier",
+            "api.tasks.render_bounded_reasoning_dossier",
             return_value="Persisted evidence context.",
         )
         self.assess_evidence = self._patch(
@@ -1320,3 +1321,52 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
         self.assertEqual(run.failure_stage, "final_evaluator")
         self.assertEqual(run.failure_code, "LLM_UNAVAILABLE")
         self.save_claim.assert_not_called()
+
+
+    def test_reasoning_capacity_failure_preserves_exception_and_fails_run(self):
+        original_verdict = self.claim.ai_verdict
+        error = LLMRequestBudgetExceededError("Minimum request does not fit.")
+        with patch("api.tasks.render_bounded_reasoning_dossier", side_effect=error), patch("api.tasks._save_claim") as save_claim:
+            with self.assertRaises(LLMRequestBudgetExceededError) as raised:
+                tasks.url_fact_check_process.run(self.url, self.claim.pk)
+        self.assertIs(raised.exception, error)
+        run = self.claim.verification_runs.latest("created_at")
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "evidence_budget")
+        self.assertEqual(run.failure_code, "LLM_REQUEST_BUDGET_EXCEEDED")
+        self.retrieve_tavily.assert_not_called()
+        save_claim.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, original_verdict)
+
+
+    def test_assessment_capacity_failure_preserves_exception_and_fails_run(self):
+        original_verdict = self.claim.ai_verdict
+        error = LLMRequestBudgetExceededError("Minimum request does not fit.")
+        with patch("api.tasks.assess_reasoning_evidence_batch_against_claim", side_effect=error), patch("api.tasks._save_claim") as save_claim:
+            with self.assertRaises(LLMRequestBudgetExceededError) as raised:
+                tasks.url_fact_check_process.run(self.url, self.claim.pk)
+        self.assertIs(raised.exception, error)
+        run = self.claim.verification_runs.latest("created_at")
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "evidence_budget")
+        self.assertEqual(run.failure_code, "LLM_REQUEST_BUDGET_EXCEEDED")
+        self.retrieve_tavily.assert_not_called()
+        save_claim.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, original_verdict)
+
+
+    def test_tavily_capacity_failure_fails_without_saving_unverified(self):
+        self.gfc_provider.search_with_payload.return_value = ({"claims": []}, [])
+        self.retrieve_tavily.side_effect = self._record_tavily_link
+        error = LLMRequestBudgetExceededError("Minimum request does not fit.")
+        with patch("api.tasks.render_bounded_reasoning_dossier", side_effect=error), patch("api.tasks._save_claim") as save_claim:
+            with self.assertRaises(LLMRequestBudgetExceededError) as raised:
+                tasks.url_fact_check_process.run(self.url, self.claim.pk)
+        self.assertIs(raised.exception, error)
+        run = self.claim.verification_runs.latest("created_at")
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "evidence_budget")
+        self.assertEqual(run.failure_code, "LLM_REQUEST_BUDGET_EXCEEDED")
+        save_claim.assert_not_called()

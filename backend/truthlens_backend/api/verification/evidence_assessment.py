@@ -8,6 +8,11 @@ from numbers import Real
 from ..models import VerificationEvidence
 from ..services import _parse_llm_json, call_llm_with_fallback
 from .evidence_dossier import ReasoningEvidenceItem
+from .evidence_budget import (
+    LLMRequestBudgetExceededError, assessment_prompt, assessment_output_limit,
+    pack_assessment_requests, validate_request_budget,
+)
+from .telemetry import record_pipeline_stage
 
 
 logger = logging.getLogger(__name__)
@@ -151,7 +156,7 @@ def assess_reasoning_evidence_batch_against_claim(
     claim_text: str,
     evidence_items,
 ) -> list[EvidenceAssessment]:
-    """Assess persisted evidence in one request with positional results."""
+    """Assess compact persisted passages in adaptive packs with positional results."""
     evidence_items = list(evidence_items)
     unavailable_results = [_UNAVAILABLE_ASSESSMENT for _ in evidence_items]
     if not evidence_items:
@@ -175,54 +180,53 @@ def assess_reasoning_evidence_batch_against_claim(
     if not assessment_items:
         return unavailable_results
 
-    assessment_data = json.dumps(
-        {
-            "claim_text": claim_text,
-            "evidence_items": assessment_items,
-        },
-        ensure_ascii=False,
-    )
-    user_prompt = f"UNTRUSTED ASSESSMENT DATA:\n{assessment_data}"
-
-    try:
-        provider_options = {"operation": "evidence_assessment"}
-        gemini_timeout_ms = _gemini_timeout_ms_from_env()
-        if gemini_timeout_ms is not None:
-            provider_options["gemini_timeout_ms"] = gemini_timeout_ms
-        response_text = call_llm_with_fallback(
-            _SYSTEM_INSTRUCTIONS,
-            user_prompt,
-            **provider_options,
-        )
-        parsed_result = _parse_llm_json(response_text)
-        if not isinstance(parsed_result, dict) or set(parsed_result) != {
-            "assessments"
-        }:
-            return unavailable_results
-        returned_assessments = parsed_result["assessments"]
-        if not isinstance(returned_assessments, list):
-            return unavailable_results
-
-        results_by_key = {}
-        for result in returned_assessments:
-            if not isinstance(result, dict):
+    assessments = list(unavailable_results)
+    packs = pack_assessment_requests(_SYSTEM_INSTRUCTIONS, claim_text, assessment_items)
+    prompt_estimates = []
+    for packed_items in packs:
+        expected_keys = {item["key"] for item in packed_items}
+        user_prompt = assessment_prompt(claim_text, packed_items)
+        prompt_estimates.append(validate_request_budget(_SYSTEM_INSTRUCTIONS, user_prompt))
+        try:
+            provider_options = {
+                "operation": "evidence_assessment",
+                "max_output_tokens": assessment_output_limit(len(packed_items)),
+            }
+            gemini_timeout_ms = _gemini_timeout_ms_from_env()
+            if gemini_timeout_ms is not None:
+                provider_options["gemini_timeout_ms"] = gemini_timeout_ms
+            response_text = call_llm_with_fallback(
+                _SYSTEM_INSTRUCTIONS, user_prompt, **provider_options,
+            )
+            parsed_result = _parse_llm_json(response_text)
+            if not isinstance(parsed_result, dict) or set(parsed_result) != {"assessments"}:
                 continue
-            key = result.get("key")
-            if key in expected_keys:
-                results_by_key.setdefault(key, []).append(result)
-
-        assessments = list(unavailable_results)
-        for index in range(len(evidence_items)):
-            key = f"item_{index}"
-            matching_results = results_by_key.get(key, [])
-            if len(matching_results) == 1:
-                assessments[index] = _assessment_from_result(
-                    matching_results[0]
-                )
-        return assessments
-    except Exception as exc:
-        logger.error("Evidence assessment batch AI error: %s", exc)
-        return unavailable_results
+            returned_assessments = parsed_result["assessments"]
+            if not isinstance(returned_assessments, list):
+                continue
+            results_by_key = {}
+            for result in returned_assessments:
+                if not isinstance(result, dict):
+                    continue
+                key = result.get("key")
+                if isinstance(key, str) and key in expected_keys:
+                    results_by_key.setdefault(key, []).append(result)
+            for item in packed_items:
+                key = item["key"]
+                matching = results_by_key.get(key, [])
+                if len(matching) == 1:
+                    assessments[int(key.removeprefix("item_"))] = _assessment_from_result(matching[0])
+        except LLMRequestBudgetExceededError:
+            raise
+        except Exception as exc:
+            logger.error("Evidence assessment batch AI error: %s", exc)
+    record_pipeline_stage(
+        "evidence_assessment_budget", 0,
+        assessment_candidates=len(assessment_items), assessment_calls=len(packs),
+        assessment_scored=sum(item.relevance_score is not None for item in assessments),
+        assessment_prompt_tokens_est=max(prompt_estimates, default=0),
+    )
+    return assessments
 
 
 def assess_reasoning_evidence_against_claim(

@@ -14,6 +14,7 @@ from api.verification.evidence_assessment import (
     assess_reasoning_evidence_against_claim,
     assess_reasoning_evidence_batch_against_claim,
 )
+from api.verification.evidence_budget import assessment_output_limit
 from api.verification.evidence_dossier import ReasoningEvidenceItem
 
 
@@ -97,7 +98,7 @@ class EvidenceAssessmentTests(SimpleTestCase):
 
         self.assertEqual(
             call_llm.call_args.kwargs,
-            {"operation": "evidence_assessment"},
+            {"operation": "evidence_assessment", "max_output_tokens": assessment_output_limit(1)},
         )
 
     def test_blank_and_zero_timeout_env_are_disabled(self):
@@ -110,7 +111,7 @@ class EvidenceAssessmentTests(SimpleTestCase):
 
             self.assertEqual(
                 call_llm.call_args.kwargs,
-                {"operation": "evidence_assessment"},
+                {"operation": "evidence_assessment", "max_output_tokens": assessment_output_limit(1)},
             )
 
     def test_positive_timeout_env_is_forwarded_in_milliseconds(self):
@@ -125,6 +126,7 @@ class EvidenceAssessmentTests(SimpleTestCase):
             {
                 "operation": "evidence_assessment",
                 "gemini_timeout_ms": 2750,
+                "max_output_tokens": assessment_output_limit(1),
             },
         )
 
@@ -141,7 +143,7 @@ class EvidenceAssessmentTests(SimpleTestCase):
 
             self.assertEqual(
                 call_llm.call_args.kwargs,
-                {"operation": "evidence_assessment"},
+                {"operation": "evidence_assessment", "max_output_tokens": assessment_output_limit(1)},
             )
             self.assertIn(
                 "evidence-assessment timeout is disabled",

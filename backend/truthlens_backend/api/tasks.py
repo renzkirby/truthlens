@@ -20,6 +20,8 @@ from .services import (
     ClaimGateError,
     LLMProviderUnavailableError,
     llm_provider_scope,
+    build_persisted_evidence_prompt,
+    recent_groq_tokens,
     process_image,
     clean_ocr_text,
     clean_extracted_text,
@@ -49,7 +51,9 @@ from .verification.evidence_assessment import (
 from .verification.evidence_dossier import (
     filter_reasoning_evidence_dossier_by_role,
     load_reasoning_evidence_dossier_for_run,
-    render_reasoning_evidence_dossier,
+)
+from .verification.evidence_budget import (
+    LLMRequestBudgetExceededError, bounded_reasoning_dossier,
 )
 from .verification.evidence_enrichment import persist_evidence_assessments_batch
 from .verification.ingestion import ingest_raw_evidence
@@ -126,7 +130,7 @@ def _resolve_equivalent_published_claim(claim, cleaned_claim, vault_match):
                 return False
             claim.context_text = cleaned_claim
             claim.save(update_fields=["context_text", "last_updated"])
-    except LLMProviderUnavailableError:
+    except (LLMProviderUnavailableError, LLMRequestBudgetExceededError):
         raise
     except Exception as exc:
         raise ClaimPersistenceError(
@@ -706,6 +710,18 @@ def _log_stage(claim_id, stage, started_at, **metadata):
     record_pipeline_stage(stage, duration_ms, **metadata)
 
 
+def render_bounded_reasoning_dossier(groups, *, original_claim, article_stance):
+    dossier, metadata = bounded_reasoning_dossier(
+        groups,
+        lambda context: build_persisted_evidence_prompt(
+            original_claim, context, article_stance,
+        ),
+        recent_groq_tokens=recent_groq_tokens(),
+    )
+    record_pipeline_stage("reasoning_evidence_budget", 0, **metadata)
+    return dossier
+
+
 def _assess_and_persist_reasoning_evidence(
     claim_text,
     evidence_groups,
@@ -734,6 +750,8 @@ def _assess_and_persist_reasoning_evidence(
             claim_text,
             eligible_items,
         )
+    except LLMRequestBudgetExceededError:
+        raise
     except Exception as exc:
         _log_stage(
             claim_id,
@@ -1233,8 +1251,9 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             evidence_dossier,
                             VerificationEvidence.EvidenceRole.FACT_CHECK,
                         )
-                    evidence_context = render_reasoning_evidence_dossier(
-                        fact_check_groups
+                    evidence_context = render_bounded_reasoning_dossier(
+                        fact_check_groups, original_claim=cleaned_claim,
+                        article_stance=article_stance,
                     )
                     has_persisted_evidence = bool(evidence_context)
                     if has_persisted_evidence:
@@ -1244,7 +1263,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                                 evidence_context,
                                 article_stance,
                             )
-                        except LLMProviderUnavailableError:
+                        except (LLMProviderUnavailableError, LLMRequestBudgetExceededError):
                             raise
                         except Exception as exc:
                             has_persisted_evidence = False
@@ -1397,8 +1416,9 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             evidence_dossier,
                             VerificationEvidence.EvidenceRole.SECONDARY,
                         )
-                    evidence_context = render_reasoning_evidence_dossier(
-                        secondary_groups
+                    evidence_context = render_bounded_reasoning_dossier(
+                        secondary_groups, original_claim=cleaned_claim,
+                        article_stance=article_stance,
                     )
                     if evidence_context:
                         evaluator_invoked = True
@@ -1466,6 +1486,11 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
             logger.error("Claim persistence failed for claim %s.", claim_id)
             raise
 
+        except LLMRequestBudgetExceededError as e:
+            pipeline_error = e
+            outcome = "evidence_budget_failed"
+            raise
+
         except LLMProviderUnavailableError as e:
             pipeline_error = e
             outcome = "final_evaluator_unavailable"
@@ -1512,7 +1537,14 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
         if run is not None:
             try:
                 if pipeline_error is not None:
-                    if isinstance(pipeline_error, ClaimGateError):
+                    if isinstance(pipeline_error, LLMRequestBudgetExceededError):
+                        fail_verification_run(
+                            run,
+                            failure_stage="evidence_budget",
+                            failure_code="LLM_REQUEST_BUDGET_EXCEEDED",
+                            failure_message=str(pipeline_error),
+                        )
+                    elif isinstance(pipeline_error, ClaimGateError):
                         fail_verification_run(
                             run,
                             failure_stage="claim_gate",
@@ -1799,7 +1831,10 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         evidence_dossier,
                         VerificationEvidence.EvidenceRole.FACT_CHECK,
                     )
-                evidence_context = render_reasoning_evidence_dossier(fact_check_groups)
+                evidence_context = render_bounded_reasoning_dossier(
+                    fact_check_groups, original_claim=cleaned_claim,
+                    article_stance=article_stance,
+                )
                 if evidence_context:
                     try:
                         ai_verdict = evaluate_claim_with_persisted_evidence(
@@ -1807,7 +1842,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                             evidence_context,
                             article_stance,
                         )
-                    except LLMProviderUnavailableError:
+                    except (LLMProviderUnavailableError, LLMRequestBudgetExceededError):
                         raise
                     except Exception as e:
                         _log_stage(
@@ -1988,7 +2023,10 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         evidence_dossier,
                         VerificationEvidence.EvidenceRole.SECONDARY,
                     )
-                evidence_context = render_reasoning_evidence_dossier(secondary_groups)
+                evidence_context = render_bounded_reasoning_dossier(
+                    secondary_groups, original_claim=cleaned_claim,
+                    article_stance=article_stance,
+                )
                 if evidence_context:
                     evaluator_invoked = True
                     ai_verdict = evaluate_claim_with_persisted_evidence(
@@ -2054,7 +2092,14 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
         if run is not None:
             try:
                 if pipeline_error is not None:
-                    if isinstance(pipeline_error, ClaimGateError):
+                    if isinstance(pipeline_error, LLMRequestBudgetExceededError):
+                        fail_verification_run(
+                            run,
+                            failure_stage="evidence_budget",
+                            failure_code="LLM_REQUEST_BUDGET_EXCEEDED",
+                            failure_message=str(pipeline_error),
+                        )
+                    elif isinstance(pipeline_error, ClaimGateError):
                         fail_verification_run(
                             run,
                             failure_stage="claim_gate",

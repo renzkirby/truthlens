@@ -7,9 +7,38 @@ from api.services import (
     LLMProviderUnavailableError,
     evaluate_claim_with_persisted_evidence,
 )
+from api.verification.evidence_budget import (
+    FINAL_EVALUATION_OUTPUT_TOKENS, HARD_PROMPT_TOKENS,
+    LLMRequestBudgetExceededError,
+)
 
 
 class PersistedEvidenceEvaluatorTests(SimpleTestCase):
+    def test_final_evaluation_passes_centralized_output_allowance(self):
+        with patch("api.services.call_llm_with_fallback",
+                   return_value=json.dumps(self.result)) as call_llm:
+            evaluate_claim_with_persisted_evidence("Claim", "Evidence")
+        self.assertEqual(call_llm.call_args.kwargs, {
+            "operation": "persisted_evidence_evaluation",
+            "max_output_tokens": FINAL_EVALUATION_OUTPUT_TOKENS,
+        })
+
+    def test_typed_budget_failure_still_propagates(self):
+        error = LLMRequestBudgetExceededError("Request exceeds safe capacity.")
+        with patch("api.services.call_llm_with_fallback", side_effect=error):
+            with self.assertRaises(LLMRequestBudgetExceededError) as raised:
+                evaluate_claim_with_persisted_evidence("Claim", "Evidence")
+        self.assertIs(raised.exception, error)
+
+    def test_hard_prompt_guard_still_prevents_provider_call(self):
+        with patch("api.services.call_llm_with_fallback") as call_llm, patch(
+            "api.verification.evidence_budget.estimate_prompt_tokens",
+            return_value=HARD_PROMPT_TOKENS + 1,
+        ):
+            with self.assertRaises(LLMRequestBudgetExceededError):
+                evaluate_claim_with_persisted_evidence("Claim", "Evidence")
+        call_llm.assert_not_called()
+
     def setUp(self):
         self.result = {
             "reasoning": "The persisted evidence explicitly contradicts the claim.",

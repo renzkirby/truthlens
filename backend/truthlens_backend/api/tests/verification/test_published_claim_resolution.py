@@ -485,7 +485,7 @@ class EquivalentReferencePersistenceTests(PublicationResolutionFixture):
                     canonical_claim=self.canonical, publication_status="PUBLISHED"
                 )
 
-                def change_during_request(*args):
+                def change_during_request(*args, **kwargs):
                     OfficialFactCheck.objects.filter(pk=self.publication.pk).update(
                         **changes
                     )
@@ -578,7 +578,7 @@ class EquivalentReferencePersistenceTests(PublicationResolutionFixture):
         )
         self.set_equivalence_candidates(self.publication, competing)
 
-        def classify(_instructions, user_prompt):
+        def classify(_instructions, user_prompt, **kwargs):
             canonical = json.loads(user_prompt)["published_canonical_claim"]
             equivalent = canonical == self.canonical
             return json.dumps(
@@ -1686,7 +1686,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             return_value=["Selected evidence"],
         )
         self._patch(
-            "api.tasks.render_reasoning_evidence_dossier",
+            "api.tasks.render_bounded_reasoning_dossier",
             return_value="Persisted evidence context",
         )
         self._patch("api.tasks._assess_and_persist_reasoning_evidence")
