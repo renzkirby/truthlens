@@ -1,6 +1,6 @@
 from django.contrib.auth.models import User
 from django.test import TestCase
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from rest_framework.test import APIClient
 
 from api.models import AccountabilityEvent, Organization, OrganizationMembership
@@ -149,6 +149,16 @@ class OrganizationVerificationScopeTests(TestCase):
         }, format="json").status_code, 403)
         client.force_authenticate(user=self.lead)
         self.assertEqual(client.get(self.url).status_code, 403)
+
+    def test_platform_governance_and_retry_urls_are_removed(self):
+        for legacy_name, args in (
+            ("management_organization_verification_scope", [self.organization.pk]),
+            ("management_unclassified_intake", []),
+            ("management_classification_retry", [self.organization.pk]),
+            ("management_investigation_classification", [self.organization.pk]),
+        ):
+            with self.subTest(legacy_name=legacy_name), self.assertRaises(NoReverseMatch):
+                reverse(legacy_name, args=args)
 
     def test_legacy_request_and_geographic_payload_is_rejected(self):
         client = APIClient()

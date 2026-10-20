@@ -267,6 +267,18 @@ class VerificationAssignmentServiceTests(TestCase):
             [],
         )
 
+    def test_geography_does_not_block_matching_subject(self):
+        assignment = self._create_assignment()
+        ClaimInvestigationClassification.objects.filter(claim=self.claim).update(
+            jurisdiction="US",
+        )
+        claimed = claim_verification_assignment(
+            assignment=assignment,
+            organization=self.organization_a,
+            actor=self.lead_a,
+        )
+        self.assertEqual(claimed.status, VerificationAssignment.Status.ACTIVE)
+
     def test_unclassified_work_cannot_be_claimed(self):
         assignment = self._create_assignment()
         ClaimInvestigationClassification.objects.filter(claim=self.claim).delete()
