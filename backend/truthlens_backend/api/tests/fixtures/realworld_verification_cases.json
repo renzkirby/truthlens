@@ -216,10 +216,12 @@
     "proposed_verdict": "FACT",
     "label_reason": "Draft label inferred from the cited primary source; explicit support expected. Independent human review required.",
     "review": {
-      "status": "PENDING",
-      "reviewer": "",
-      "reviewed_at": "",
-      "rationale": ""
+      "status": "APPROVED",
+      "reviewer": "truthlens-project-reviewer-user-confirmed",
+      "reviewed_at": "2026-10-20",
+      "approved_verdict": "FACT",
+      "rationale": "COMELEC materials identify May 9, 2022 as election day, supporting the date in the Filipino claim. Election scheduling is also governed by law. The project reviewer approved FACT.",
+      "source_checked": true
     },
     "public_only": true
   },
@@ -240,10 +242,12 @@
     "proposed_verdict": "FAKE",
     "label_reason": "Draft label inferred from the cited primary source; direct contradiction expected. Independent human review required.",
     "review": {
-      "status": "PENDING",
-      "reviewer": "",
-      "reviewed_at": "",
-      "rationale": ""
+      "status": "APPROVED",
+      "reviewer": "truthlens-project-reviewer-user-confirmed",
+      "reviewed_at": "2026-10-20",
+      "approved_verdict": "FAKE",
+      "rationale": "COMELEC records the 2022 elections on May 9, not May 19. The incorrect election date is contradicted by the public record. The project reviewer approved FAKE.",
+      "source_checked": true
     },
     "public_only": true
   },
@@ -480,10 +484,12 @@
     "proposed_verdict": "MISLEADING",
     "label_reason": "Provisional mixed-context label: one clause is directly supported, another incorrectly generalizes timing/outcome. Independent reviewer must adjudicate FAKE versus MISLEADING; do not score until approval.",
     "review": {
-      "status": "PENDING",
-      "reviewer": "",
-      "reviewed_at": "",
-      "rationale": ""
+      "status": "APPROVED",
+      "reviewer": "truthlens-project-reviewer-user-confirmed",
+      "reviewed_at": "2026-10-20",
+      "approved_verdict": "MISLEADING",
+      "rationale": "Apple announced iPhone in January 2007 but said US retail availability would begin June 2007. The statement mixes a true announcement with incorrect same-day availability; the project reviewer explicitly chose MISLEADING.",
+      "source_checked": true
     },
     "public_only": true
   },
@@ -528,10 +534,12 @@
     "proposed_verdict": "MISLEADING",
     "label_reason": "Provisional mixed-context label: one clause is directly supported, another incorrectly generalizes timing/outcome. Independent reviewer must adjudicate FAKE versus MISLEADING; do not score until approval.",
     "review": {
-      "status": "PENDING",
-      "reviewer": "",
-      "reviewed_at": "",
-      "rationale": ""
+      "status": "APPROVED",
+      "reviewer": "truthlens-project-reviewer-user-confirmed",
+      "reviewed_at": "2026-10-20",
+      "approved_verdict": "MISLEADING",
+      "rationale": "NOAA supports the warm-water cause of bleaching but explains that bleached coral is not necessarily dead. The compound statement mixes a true cause with a false universal conclusion; the project reviewer explicitly chose MISLEADING.",
+      "source_checked": true
     },
     "public_only": true
   },
@@ -696,10 +704,12 @@
     "proposed_verdict": "UNVERIFIED",
     "label_reason": "Draft dossier-sufficiency label only: the WHO briefing offers no patient-level treatment records to establish or refute the claim. This is NOT a verified global clinical finding. Independent review required.",
     "review": {
-      "status": "PENDING",
-      "reviewer": "",
-      "reviewed_at": "",
-      "rationale": ""
+      "status": "APPROVED",
+      "reviewer": "truthlens-project-reviewer-user-confirmed",
+      "reviewed_at": "2026-10-20",
+      "approved_verdict": "UNVERIFIED",
+      "rationale": "The WHO March 11 briefing does not provide patient-level treatment records. The supplied evidence cannot establish or disprove worldwide uniform antiviral treatment. The project reviewer approved dossier-based UNVERIFIED.",
+      "source_checked": true
     },
     "public_only": true
   },
@@ -720,10 +730,12 @@
     "proposed_verdict": "UNVERIFIED",
     "label_reason": "Draft dossier-sufficiency label only: meteorological event records cannot establish or refute the universal relief-payment claim. Independent source and verdict review required.",
     "review": {
-      "status": "PENDING",
-      "reviewer": "",
-      "reviewed_at": "",
-      "rationale": ""
+      "status": "APPROVED",
+      "reviewer": "truthlens-project-reviewer-user-confirmed",
+      "reviewed_at": "2026-10-20",
+      "approved_verdict": "UNVERIFIED",
+      "rationale": "The PAGASA Yolanda source describes weather events but supplies no household aid-disbursement records. Its evidence cannot establish or disprove universal payment details. The project reviewer approved dossier-based UNVERIFIED.",
+      "source_checked": true
     },
     "public_only": true
   }
