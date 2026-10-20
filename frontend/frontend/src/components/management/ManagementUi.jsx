@@ -74,6 +74,7 @@ export function ManagementFormDialog({
    useEffect(() => {
       if (!open) return undefined;
       const previousFocus = document.activeElement;
+      const explicitReturnTarget = returnFocusRef?.current;
       const previousOverflow = document.body.style.overflow;
       document.body.style.overflow = "hidden";
       const initialFocus = dialogRef.current?.querySelector(FOCUSABLE_SELECTOR);
@@ -107,8 +108,8 @@ export function ManagementFormDialog({
       return () => {
          document.removeEventListener("keydown", handleKeyDown);
          document.body.style.overflow = previousOverflow;
-         const target = returnFocusRef?.current?.isConnected
-            ? returnFocusRef.current : previousFocus;
+         const target = explicitReturnTarget?.isConnected
+            ? explicitReturnTarget : previousFocus;
          if (target?.isConnected) target.focus();
       };
    }, [open, returnFocusRef]);

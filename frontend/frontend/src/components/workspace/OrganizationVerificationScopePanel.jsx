@@ -130,20 +130,40 @@ function ScopeEditor({ mode, scope, onClose, onSaved }) {
 
 export default function OrganizationVerificationScopePanel({ organizationId }) {
    const { authFetch } = useAuth();
-   const [scope, setScope] = useState(null);
-   const [loading, setLoading] = useState(true);
-   const [error, setError] = useState("");
+   const [requestState, setRequestState] = useState({
+      key: null,
+      scope: null,
+      error: "",
+   });
    const [version, setVersion] = useState(0);
    const [editorMode, setEditorMode] = useState(null);
+   const requestKey = `${organizationId}:${version}`;
+   const loading = requestState.key !== requestKey;
+   const scope = loading ? null : requestState.scope;
+   const error = loading ? "" : requestState.error;
 
    useEffect(() => {
       let active = true;
-      setLoading(true);
-      setError("");
+      const currentRequestKey = `${organizationId}:${version}`;
       authFetch(resolveApiEndpoint("ORGANIZATION_VERIFICATION_SCOPE", organizationId))
-         .then((payload) => { if (active) setScope(payload); })
-         .catch((err) => { if (active) setError(err?.message || "Unable to load verification scope."); })
-         .finally(() => { if (active) setLoading(false); });
+         .then((payload) => {
+            if (active) {
+               setRequestState({
+                  key: currentRequestKey,
+                  scope: payload,
+                  error: "",
+               });
+            }
+         })
+         .catch((err) => {
+            if (active) {
+               setRequestState({
+                  key: currentRequestKey,
+                  scope: null,
+                  error: err?.message || "Unable to load verification scope.",
+               });
+            }
+         });
       return () => { active = false; };
    }, [authFetch, organizationId, version]);
 
