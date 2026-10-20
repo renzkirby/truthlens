@@ -235,6 +235,17 @@ class CloudflarePilotRoutingTests(SimpleTestCase):
         )
         self.cloud.assert_not_called()
 
+    def test_telemetry_records_actual_cloudflare_without_credential_exposure(self):
+        self._enable()
+        with patch("api.services.record_llm_provider_call") as record:
+            self.assertEqual(self._call(), VALID_EVALUATION)
+        record.assert_called_once()
+        args = record.call_args.args
+        self.assertEqual(args[0], PILOT_OPERATION)
+        self.assertEqual(args[1], "cloudflare")
+        self.assertEqual(args[4], "success")
+        self.assertEqual(args[5], "")
+
     def test_telemetry_provider_allowlist_includes_cloudflare(self):
         self.assertIn("cloudflare", SAFE_LLM_PROVIDERS)
 
