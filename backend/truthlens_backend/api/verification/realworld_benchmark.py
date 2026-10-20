@@ -52,7 +52,15 @@ def load_corpus(path=CORPUS_PATH):
             parsed = urlparse(source["url"])
             if parsed.scheme != "https" or not parsed.hostname:
                 raise ValidationError("Provenance must use HTTPS sources.")
-            date.fromisoformat(source["source_date"])
+            source_date = source["source_date"]
+            if source_date != "undated":
+                if not isinstance(source_date, str):
+                    raise ValidationError("Invalid source date.")
+                if len(source_date) == 4 and source_date.isdigit():
+                    if not 1900 <= int(source_date) <= 2100:
+                        raise ValidationError("Invalid source year.")
+                else:
+                    date.fromisoformat(source_date)
         review = case["review"]
         if not isinstance(review, dict) or review.get("status") not in {
             "PENDING", "APPROVED", "REJECTED",
