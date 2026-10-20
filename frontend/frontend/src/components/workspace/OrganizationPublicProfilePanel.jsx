@@ -872,12 +872,12 @@ function OrganizationPublicProfilePanel({ organizationId }) {
                      </div>
 
                      <div className="org-public-profile-field org-public-profile-field-wide">
-                        <strong>Verified investigation specializations</strong>
+                        <strong>Verification specializations</strong>
                         <p className="org-public-profile-help">
-                           Manage requested and active subjects under the organization's
-                           Verification scope tab. Only platform-approved specializations
-                           authorize verification work. Free-form expertise tags are no
-                           longer edited here.
+                           Your organization's Primary Admin selects investigation subjects
+                           in the Verification scope tab. These organization-declared
+                           specializations govern new verification intake. Descriptive
+                           profile interests are not investigation authorization.
                         </p>
                      </div>
                   </div>
