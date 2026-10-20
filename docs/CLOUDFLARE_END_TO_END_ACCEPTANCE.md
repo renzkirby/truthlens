@@ -90,6 +90,9 @@ Remove-Item Env:ENABLE_CLOUDFLARE_VERIFICATION_PILOT -ErrorAction SilentlyContin
   api.tests.verification.test_run_text_runtime `
   api.tests.verification.test_run_url_runtime `
   api.tests.verification.test_verification_run_telemetry_inspection `
+  api.tests.verification.test_cloudflare_provider_evaluation `
+  api.tests.verification.test_cloudflare_worker_readiness `
+  api.tests.verification.test_llm_reliability `
   --settings=truthlens_backend.test_settings `
   --keepdb
 
