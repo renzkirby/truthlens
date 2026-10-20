@@ -68,8 +68,8 @@ Yolanda/Haiyan on November 6–9, 2013, and slide/page 7 (zero-indexed page 6).
      data. Neither payment nor nonpayment to all households follows.
    - *Corpus correction*: "within 24 hours" now explicitly means after the
      typhoon, eliminating an unclear timeframe.
-   - Reviewer should assess whether this deliberately irrelevant dossier
-     is a fair test of appropriate abstention versus a weak retrieval result.
+   - This case deliberately tests whether the model appropriately abstains
+     when the supplied dossier has no household-payment evidence.
 
 ### D. TECHNOLOGY — mixed true/false context (1 case)
 
@@ -82,9 +82,8 @@ especially "Pricing & Availability".
      specified US availability starting **June 2007**.
    - **Approved MISLEADING (reviewer decision)** because a genuine announcement
      is combined with a false same-day-sale claim.
-   - **FAKE is also defensible** if TruthLens evaluates the compound claim
-     as an explicit factual contradiction. Require deliberate reviewer
-     adjudication, including explanation of our exact verdict taxonomy.
+   - This case had a possible FAKE/MISLEADING boundary; the reviewer
+     resolved its benchmark reference verdict as MISLEADING.
    - The project reviewer expressly approved MISLEADING for this case; this does not change production verdict rules.
 
 ### E. ENVIRONMENT — mixed true/false context (1 case)
@@ -97,9 +96,8 @@ Primary source: [NOAA, *What is coral bleaching?*](https://oceanservice.noaa.gov
      corals are not necessarily dead and can sometimes recover.
    - **Approved MISLEADING (reviewer decision)** because the cause is correct
      but the claimed invariable consequence is wrong.
-   - **FAKE is also defensible** based on direct contradiction of the
-     "every bleached coral is dead" assertion. Review taxonomy explicitly;
-     consider a second reviewer if the boundary remains disputed.
+   - The project reviewer resolved this case's reference verdict as
+     MISLEADING, without changing the general production verdict taxonomy.
 
 ## Approval record and next gate
 
