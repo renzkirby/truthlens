@@ -15,7 +15,7 @@ from api.verification.realworld_benchmark import load_corpus, reviewed_gold_verd
 
 
 class RealWorldCorpusReviewTests(SimpleTestCase):
-    def test_curated_source_linked_corpus_is_unapproved(self):
+    def test_curated_source_linked_corpus_contains_only_four_reviewed_labels(self):
         cases = load_corpus()
         self.assertEqual(len(cases), 30)
         self.assertEqual(
@@ -26,8 +26,23 @@ class RealWorldCorpusReviewTests(SimpleTestCase):
         self.assertGreaterEqual(
             sum(c["language"] == "fil" for c in cases), 5
         )
-        self.assertTrue(all(c["review"]["status"] == "PENDING" for c in cases))
-        self.assertTrue(all(reviewed_gold_verdict(c) is None for c in cases))
+        approved = {
+            c["id"]: reviewed_gold_verdict(c)
+            for c in cases if c["review"]["status"] == "APPROVED"
+        }
+        self.assertEqual(approved, {
+            "civics__support": "FACT",
+            "civics__contradict": "FAKE",
+            "law_death_penalty_support": "FACT",
+            "law_death_penalty_contradict": "FAKE",
+        })
+        self.assertEqual(
+            sum(c["review"]["status"] == "PENDING" for c in cases), 26,
+        )
+        self.assertTrue(all(
+            reviewed_gold_verdict(c) is None
+            for c in cases if c["review"]["status"] == "PENDING"
+        ))
         self.assertTrue(all(
             src["url"].startswith("https://")
             for c in cases for src in c["sources"]
@@ -72,8 +87,8 @@ class RealWorldBenchmarkCommandTests(SimpleTestCase):
         ) as cloudflare:
             call_command("evaluate_realworld_verification_providers", stdout=out)
         self.assertIn("30 candidates", out.getvalue())
-        self.assertIn("approved=0", out.getvalue())
-        self.assertIn("pending=30", out.getvalue())
+        self.assertIn("approved=4", out.getvalue())
+        self.assertIn("pending=26", out.getvalue())
         self.assertIn("DRY RUN ONLY", out.getvalue())
         cloudflare.assert_not_called()
 
@@ -83,7 +98,30 @@ class RealWorldBenchmarkCommandTests(SimpleTestCase):
             with patch(
                 "api.management.commands.evaluate_realworld_verification_providers.generate_evaluation_json"
             ) as cloudflare, self.assertRaisesRegex(CommandError, "No independently APPROVED"):
-                call_command("evaluate_realworld_verification_providers", live=True)
+                call_command(
+                    "evaluate_realworld_verification_providers", live=True,
+                    case=["law_sim_registration_support"],
+                )
+        cloudflare.assert_not_called()
+
+    @override_settings(DEBUG=True)
+    def test_live_rejects_mixed_reviewed_and_unreviewed_selection(self):
+        with patch.dict("os.environ", {
+            "ENABLE_CLOUDFLARE_EVALUATION": "1",
+        }):
+            with (
+                patch(
+                    "api.management.commands.evaluate_realworld_verification_providers.generate_evaluation_json"
+                ) as cloudflare,
+                self.assertRaisesRegex(
+                    CommandError, "All selected cases must be independently approved"
+                ),
+            ):
+                call_command(
+                    "evaluate_realworld_verification_providers",
+                    live=True,
+                    case=["civics__support", "law_sim_registration_support"],
+                )
         cloudflare.assert_not_called()
 
     @override_settings(DEBUG=False)

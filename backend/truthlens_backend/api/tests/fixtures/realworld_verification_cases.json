@@ -16,10 +16,12 @@
     "proposed_verdict": "FACT",
     "label_reason": "Draft label inferred from the cited primary source; explicit support expected. Independent human review required.",
     "review": {
-      "status": "PENDING",
-      "reviewer": "",
-      "reviewed_at": "",
-      "rationale": ""
+      "status": "APPROVED",
+      "reviewer": "truthlens-project-reviewer-user-confirmed",
+      "reviewed_at": "2026-10-20",
+      "approved_verdict": "FACT",
+      "rationale": "Article VI, Section 2 of the 1987 Philippine Constitution specifies that the Senate is composed of twenty-four senators, directly supporting the claim. Rationale drafted from source material; project reviewer approved the proposed verdict after source review.",
+      "source_checked": true
     },
     "public_only": true
   },
@@ -40,10 +42,12 @@
     "proposed_verdict": "FAKE",
     "label_reason": "Draft label inferred from the cited primary source; direct contradiction expected. Independent human review required.",
     "review": {
-      "status": "PENDING",
-      "reviewer": "",
-      "reviewed_at": "",
-      "rationale": ""
+      "status": "APPROVED",
+      "reviewer": "truthlens-project-reviewer-user-confirmed",
+      "reviewed_at": "2026-10-20",
+      "approved_verdict": "FAKE",
+      "rationale": "Article VI, Section 2 of the 1987 Philippine Constitution specifies twenty-four senators, directly contradicting the claim that the Constitution requires forty-eight. Rationale drafted from source material; project reviewer approved the proposed verdict after source review.",
+      "source_checked": true
     },
     "public_only": true
   },
@@ -64,10 +68,12 @@
     "proposed_verdict": "FACT",
     "label_reason": "Draft label inferred from the cited primary source; explicit support expected. Independent human review required.",
     "review": {
-      "status": "PENDING",
-      "reviewer": "",
-      "reviewed_at": "",
-      "rationale": ""
+      "status": "APPROVED",
+      "reviewer": "truthlens-project-reviewer-user-confirmed",
+      "reviewed_at": "2026-10-20",
+      "approved_verdict": "FACT",
+      "rationale": "Section 1 of Republic Act No. 9346 prohibits imposing the death penalty in the Philippines, directly supporting the claim. Rationale drafted from source material; project reviewer approved the proposed verdict after source review.",
+      "source_checked": true
     },
     "public_only": true
   },
@@ -88,10 +94,12 @@
     "proposed_verdict": "FAKE",
     "label_reason": "Draft label inferred from the cited primary source; direct contradiction expected. Independent human review required.",
     "review": {
-      "status": "PENDING",
-      "reviewer": "",
-      "reviewed_at": "",
-      "rationale": ""
+      "status": "APPROVED",
+      "reviewer": "truthlens-project-reviewer-user-confirmed",
+      "reviewed_at": "2026-10-20",
+      "approved_verdict": "FAKE",
+      "rationale": "Section 1 of Republic Act No. 9346 prohibits imposing the death penalty rather than reinstating it, directly contradicting the claim. Rationale drafted from source material; project reviewer approved the proposed verdict after source review.",
+      "source_checked": true
     },
     "public_only": true
   },

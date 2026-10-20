@@ -12,8 +12,13 @@ the 30 observations are **not independent** and no population accuracy
 confidence intervals are justified.
 
 The proposed labels were created by an assistant based on identified primary
-public sources. They are NOT independently human-labeled gold truth.
-`review.status` is deliberately `PENDING` for every case. In particular,
+public sources. Four labels (two 1987 Constitution and two RA 9346 variants)
+were subsequently **explicitly approved by the TruthLens project reviewer
+after reviewing source materials on 20 October 2026**; the other 26 remain
+PENDING. Approved-label rationales are assistant-drafted source explanations,
+not quotations from the reviewer. See `docs/REALWORLD_REVIEW_BATCH_01.md`
+for the approval record. An approved reviewed label is a reference for this
+bounded case, not proof of model correctness. In particular,
 `UNVERIFIED` describes lack of support **in the supplied dossier**, not a
 claim that no answer exists in the world.
 
@@ -44,7 +49,9 @@ Open `api/tests/fixtures/realworld_verification_cases.json`. For each case:
 ```
 
    Otherwise leave PENDING or set REJECTED with rationale. Do not simply
-   bulk-copy `proposed_verdict` into the review decision. Review changes
+   bulk-copy `proposed_verdict` into the review decision. The first four
+   have already received explicit reviewer approval; only those four
+   reference labels are currently eligible for scored comparisons. Review changes
    should be submitted as a separate traceable Git commit. Do not embed user
    identifiers, sensitive evidence, credentials, or nonpublic claims.
 4. Keep evaluation models blind to the proposed/approved labels. The command
