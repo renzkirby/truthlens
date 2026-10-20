@@ -25,6 +25,7 @@ from .verification.cloudflare_pilot import (
     cloudflare_pilot_enabled,
     call_validated_cloudflare_pilot,
 )
+from .verification.provider_audit_metrics import validate_user_facing_evaluation
 
 logger = logging.getLogger(__name__)
 
@@ -235,8 +236,9 @@ def call_llm_with_fallback(
 ):
     """Preserve Gemini/Groq; opt-in Cloudflare only at persisted verdict stage."""
     provider_call_id = uuid.uuid4()
+    pilot_active = cloudflare_pilot_enabled(operation)
     if (
-        cloudflare_pilot_enabled(operation)
+        pilot_active
         and _cloudflare_pilot_degraded.get() is not True
     ):
         cloudflare_started_at = time.perf_counter()
@@ -296,6 +298,11 @@ def call_llm_with_fallback(
                     config=request_config,
                 )
                 content = response.text
+                if (
+                    pilot_active
+                    and validate_user_facing_evaluation(content) is None
+                ):
+                    raise ValueError("INVALID_PILOT_FALLBACK_JSON")
             except Exception as gemini_err:
                 _log_llm_provider_call(
                     operation,
@@ -331,6 +338,11 @@ def call_llm_with_fallback(
             temperature=0.1,
         )
         content = chat_completion.choices[0].message.content
+        if (
+            pilot_active
+            and validate_user_facing_evaluation(content) is None
+        ):
+            raise ValueError("INVALID_PILOT_FALLBACK_JSON")
     except Exception as groq_err:
         _log_llm_provider_call(
             operation,
