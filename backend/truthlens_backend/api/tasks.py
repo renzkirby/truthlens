@@ -126,6 +126,9 @@ def inspect_cloudflare_pilot_worker_environment():
         "pilot_enabled": cloudflare_pilot_enabled(
             "persisted_evidence_evaluation"
         ),
+        "evidence_assessment_pilot_enabled": cloudflare_pilot_enabled(
+            "evidence_assessment"
+        ),
         "account_id_valid": bool(ACCOUNT_ID_PATTERN.fullmatch(
             os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
         )),
