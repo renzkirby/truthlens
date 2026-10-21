@@ -1,53 +1,154 @@
-"""Fail-closed enablement for an optional, development-only Cloudflare verdict pilot.
+"""Dev-only, stage-gated Cloudflare provider pilot.
 
-This module does not modify existing production Gemini/Groq routing. The
-pilot is limited to the persisted-evidence evaluation stage, with the same
-production prompt and evidence dossier.
+The original verdict pilot is unchanged unless explicitly opted in. Evidence
+assessment has a separate flag and strict per-item JSON validation.
 """
+import json
+import math
 import os
+from numbers import Real
 
 from django.conf import settings
 
 from .cloudflare_evaluation import (
-    CloudflareEvaluationError,
-    MAX_INPUT_CHARS,
-    generate_evaluation_json,
+    CloudflareEvaluationError, MAX_INPUT_CHARS, generate_evaluation_json,
 )
 from .provider_audit_metrics import validate_user_facing_evaluation
 
-
 PILOT_FLAG = "ENABLE_CLOUDFLARE_VERIFICATION_PILOT"
+ASSESSMENT_PILOT_FLAG = "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT"
 PILOT_OPERATION = "persisted_evidence_evaluation"
+ASSESSMENT_OPERATION = "evidence_assessment"
 PILOT_COMPLETION_TOKENS = 2048
-# Exact adapter preflight maximum, not an advertised Cloudflare model limit.
+ASSESSMENT_COMPLETION_TOKENS = 2048
 PILOT_MAX_INPUT_CHARS = MAX_INPUT_CHARS
+_ASSESSMENT_PREFIX = "UNTRUSTED ASSESSMENT DATA:\n"
+_ASSESSMENT_FIELDS = frozenset({
+    "key", "stance", "relevance_score", "directness_score",
+})
+_ASSESSMENT_STANCES = frozenset({"SUPPORTS", "REFUTES", "CONTEXT", "UNKNOWN"})
 
 
 def cloudflare_pilot_enabled(operation):
-    """A feature flag alone never enables the live verification pilot.
-
-    An explicit development environment with DEBUG on is also required.
-    No staging/production overrides are supported in this phase.
-    """
-    return (
-        operation == PILOT_OPERATION
-        and getattr(settings, "APP_ENV", None) == "development"
+    """Staging/production cannot be enabled via environment flags."""
+    if not (
+        getattr(settings, "APP_ENV", None) == "development"
         and getattr(settings, "DEBUG", False) is True
         and os.getenv(PILOT_FLAG, "") == "1"
+    ):
+        return False
+    if operation == PILOT_OPERATION:
+        return True
+    return (
+        operation == ASSESSMENT_OPERATION
+        and os.getenv(ASSESSMENT_PILOT_FLAG, "") == "1"
     )
 
 
-def call_validated_cloudflare_pilot(system_instructions, user_prompt):
-    """Return raw JSON only when it passes the *final* evaluation contract.
+def _expected_assessment_keys(user_prompt):
+    """Extract only opaque item IDs from the trusted evidence prompt envelope."""
+    if not isinstance(user_prompt, str) or not user_prompt.startswith(
+        _ASSESSMENT_PREFIX
+    ):
+        raise CloudflareEvaluationError("INVALID_ASSESSMENT_INPUT")
+    try:
+        payload = json.loads(user_prompt[len(_ASSESSMENT_PREFIX):])
+    except (ValueError, TypeError):
+        raise CloudflareEvaluationError("INVALID_ASSESSMENT_INPUT") from None
+    if not isinstance(payload, dict) or set(payload) != {
+        "claim_text", "evidence_items",
+    }:
+        raise CloudflareEvaluationError("INVALID_ASSESSMENT_INPUT")
+    items = payload["evidence_items"]
+    if (
+        not isinstance(payload["claim_text"], str)
+        or not payload["claim_text"].strip()
+        or not isinstance(items, list) or not items
+    ):
+        raise CloudflareEvaluationError("INVALID_ASSESSMENT_INPUT")
+    keys = []
+    for item in items:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"key", "evidence_content"}
+            or not isinstance(item["key"], str)
+            or not item["key"].startswith("item_")
+            or not item["key"][5:].isdigit()
+            or not isinstance(item["evidence_content"], str)
+            or not item["evidence_content"].strip()
+        ):
+            raise CloudflareEvaluationError("INVALID_ASSESSMENT_INPUT")
+        keys.append(item["key"])
+    if len(keys) != len(set(keys)):
+        raise CloudflareEvaluationError("INVALID_ASSESSMENT_INPUT")
+    return set(keys)
 
-    The production evaluator remains responsible for canonical verdict and
-    confidence normalization. Never return malformed provider content.
-    """
+
+def _valid_assessment_batch(raw, user_prompt):
+    try:
+        expected = _expected_assessment_keys(user_prompt)
+        parsed = json.loads(raw)
+    except (ValueError, TypeError, CloudflareEvaluationError):
+        return False
+    if not isinstance(parsed, dict) or set(parsed) != {"assessments"}:
+        return False
+    rows = parsed["assessments"]
+    if not isinstance(rows, list) or len(rows) != len(expected):
+        return False
+    seen = set()
+    for item in rows:
+        if not isinstance(item, dict) or set(item) != _ASSESSMENT_FIELDS:
+            return False
+        key = item["key"]
+        if not isinstance(key, str) or key not in expected or key in seen:
+            return False
+        seen.add(key)
+        stance = item["stance"]
+        if not isinstance(stance, str) or stance not in _ASSESSMENT_STANCES:
+            return False
+        for field in ("relevance_score", "directness_score"):
+            value = item[field]
+            if (
+                not isinstance(value, Real)
+                or isinstance(value, bool)
+                or not math.isfinite(value)
+                or not 0 <= value <= 1
+            ):
+                return False
+    return seen == expected
+
+
+def validate_pilot_response(operation, raw, user_prompt):
+    """A valid response must satisfy the exact operation-specific contract."""
+    if operation == PILOT_OPERATION:
+        return validate_user_facing_evaluation(raw) is not None
+    if operation == ASSESSMENT_OPERATION:
+        return _valid_assessment_batch(raw, user_prompt)
+    return False
+
+
+def call_validated_cloudflare_pilot(
+    system_instructions, user_prompt, *,
+    operation=PILOT_OPERATION, audit_metadata=None,
+):
+    """Only return a fully validated JSON response; one provider attempt."""
+    if operation not in {PILOT_OPERATION, ASSESSMENT_OPERATION}:
+        raise CloudflareEvaluationError("INVALID_PILOT_OPERATION")
+    if operation == ASSESSMENT_OPERATION:
+        _expected_assessment_keys(user_prompt)
     raw = generate_evaluation_json(
-        system_instructions,
-        user_prompt,
-        max_completion_tokens=PILOT_COMPLETION_TOKENS,
+        system_instructions, user_prompt,
+        max_completion_tokens=(
+            ASSESSMENT_COMPLETION_TOKENS
+            if operation == ASSESSMENT_OPERATION
+            else PILOT_COMPLETION_TOKENS
+        ),
+        audit_metadata=audit_metadata,
     )
-    if validate_user_facing_evaluation(raw) is None:
-        raise CloudflareEvaluationError("INVALID_EVALUATION_JSON")
+    if not validate_pilot_response(operation, raw, user_prompt):
+        raise CloudflareEvaluationError(
+            "INVALID_ASSESSMENT_JSON"
+            if operation == ASSESSMENT_OPERATION
+            else "INVALID_EVALUATION_JSON"
+        )
     return raw
