@@ -1,6 +1,7 @@
 """Offline, lossless pilot-only prompt budgeting with provenance preservation."""
 import json
 import os
+import re
 from dataclasses import replace
 from datetime import datetime, timezone
 from unittest.mock import patch
@@ -90,14 +91,16 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
         self.assertEqual(compact.count("--- EVIDENCE ITEM "), 3)
         self.assertIn("must not be counted as multiple independent confirmations", compact)
         self.assertIn("not guaranteed to be editorially independent", compact)
+        records = re.findall(
+            r"--- EVIDENCE ITEM [0-9]+ ---\\n([^\\n]+)\\nContent:",
+            compact,
+        )
+        self.assertEqual(len(records), 3)
         for idx, item in enumerate((a, b, c)):
             self.assertEqual(compact.count(item.content), 1)
             self.assertIn(item.content, compact)
             # Every metadata field is present in positional JSON, even nulls.
-            index = compact.index(f"--- EVIDENCE ITEM {1 if idx != 1 else 2} ---")
-            # Repeated item index is scoped by SOURCE IDENTITY GROUP.
-            sub = compact[index + len(f"--- EVIDENCE ITEM {1 if idx != 1 else 2} ---"):].split("\n", 2)[1]
-            obj = json.loads(sub)
+            obj = json.loads(records[idx])
             self.assertEqual(len(obj), 13)
             self.assertEqual(obj[0], item.provider)
             self.assertEqual(obj[1], item.evidence_role)
@@ -154,6 +157,8 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
             chosen, "The claim is precisely described here.", "NEUTRAL",
         )
         self.assertLessEqual(self._length(got), PILOT_MAX_INPUT_CHARS)
+        self.assertEqual(got.count("=== SOURCE IDENTITY GROUP "), 7)
+        self.assertEqual(got.count("--- EVIDENCE ITEM "), 12)
         for item in (x for g in chosen for x in g.evidence):
             self.assertIn(item.content, got)
         self.assertIn("REFUTES", got)
