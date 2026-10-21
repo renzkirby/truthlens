@@ -26,6 +26,9 @@ from .verification.cloudflare_pilot import (
     call_validated_cloudflare_pilot,
     validate_pilot_response,
     cloudflare_assessment_bypass_reason,
+    cloudflare_assessment_chunking_enabled,
+    cloudflare_assessment_chunking_bypass_reason,
+    call_validated_cloudflare_assessment_chunks,
     ASSESSMENT_OPERATION,
 )
 from .verification.provider_audit_metrics import validate_user_facing_evaluation
@@ -349,10 +352,21 @@ def call_llm_with_fallback(
 
     cloudflare_degraded = _cloudflare_pilot_degraded.get() is True
     assessment_bypass_reason = None
+    use_assessment_chunks = False
     if pilot_active and not cloudflare_degraded and operation == ASSESSMENT_OPERATION:
         assessment_bypass_reason = cloudflare_assessment_bypass_reason(
             system_instructions, user_prompt,
         )
+        if (
+            assessment_bypass_reason in {"ASSESSMENT_BATCH_TOO_LARGE", "PROMPT_TOO_LONG"}
+            and cloudflare_assessment_chunking_enabled()
+        ):
+            # An entire bounded lossless plan must fit before Cloudflare can
+            # be called. Nothing is silently dropped to fit a token budget.
+            assessment_bypass_reason = cloudflare_assessment_chunking_bypass_reason(
+                system_instructions, user_prompt,
+            )
+            use_assessment_chunks = assessment_bypass_reason is None
         if assessment_bypass_reason is not None:
             # This is a local eligibility decision, not a vendor outage.
             # Do not poison the shared job circuit breaker; the unchanged
@@ -370,7 +384,12 @@ def call_llm_with_fallback(
         cloudflare_started_at = time.perf_counter()
         cloudflare_metrics = {}
         try:
-            if operation == ASSESSMENT_OPERATION:
+            if use_assessment_chunks:
+                cloudflare_text = call_validated_cloudflare_assessment_chunks(
+                    system_instructions, user_prompt,
+                    audit_metadata=cloudflare_metrics,
+                )
+            elif operation == ASSESSMENT_OPERATION:
                 cloudflare_text = call_validated_cloudflare_pilot(
                     system_instructions, user_prompt,
                     operation=operation, audit_metadata=cloudflare_metrics,
