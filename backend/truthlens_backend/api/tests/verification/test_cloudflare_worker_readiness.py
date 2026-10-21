@@ -73,9 +73,27 @@ class CloudflareWorkerRuntimeProbeTests(SimpleTestCase):
             set(value),
             {
                 "diagnostics_available", "worker_pid", "pilot_enabled",
+                "evidence_assessment_pilot_enabled",
                 "account_id_valid", "api_token_present",
             },
         )
+
+    @override_settings(APP_ENV="development", DEBUG=True)
+    def test_worker_probe_reports_independent_assessment_flag(self):
+        with patch.dict(os.environ, {
+            "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
+            "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT": "1",
+        }):
+            result = inspect_cloudflare_pilot_worker_environment.run()
+        self.assertTrue(result["pilot_enabled"])
+        self.assertTrue(result["evidence_assessment_pilot_enabled"])
+        with patch.dict(os.environ, {
+            "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
+            "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT": "0",
+        }):
+            result = inspect_cloudflare_pilot_worker_environment.run()
+        self.assertTrue(result["pilot_enabled"])
+        self.assertFalse(result["evidence_assessment_pilot_enabled"])
 
     @override_settings(APP_ENV="development", DEBUG=True)
     def test_worker_probe_reports_missing_account_without_provider_call(self):
