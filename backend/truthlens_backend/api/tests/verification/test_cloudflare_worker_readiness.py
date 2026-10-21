@@ -75,6 +75,8 @@ class CloudflareWorkerRuntimeProbeTests(SimpleTestCase):
                 "diagnostics_available", "worker_pid", "pilot_enabled",
                 "ai_rq2_hierarchy_enabled",
                 "evidence_assessment_pilot_enabled",
+                "classification_pilot_enabled",
+                "investigation_classification_mode",
                 "account_id_valid", "api_token_present",
             },
         )
@@ -91,6 +93,28 @@ class CloudflareWorkerRuntimeProbeTests(SimpleTestCase):
         }):
             result = inspect_cloudflare_pilot_worker_environment.run()
         self.assertFalse(result["ai_rq2_hierarchy_enabled"])
+
+    @override_settings(
+        APP_ENV="development", DEBUG=True,
+        INVESTIGATION_CLASSIFICATION_MODE="shadow",
+    )
+    def test_worker_probe_reports_classification_routing_and_mode(self):
+        with patch.dict(os.environ, {
+            "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "1",
+            "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
+            "ENABLE_CLOUDFLARE_CLASSIFICATION_PILOT": "1",
+        }):
+            value = inspect_cloudflare_pilot_worker_environment.run()
+        self.assertTrue(value["classification_pilot_enabled"])
+        self.assertEqual(value["investigation_classification_mode"], "shadow")
+        with patch.dict(os.environ, {
+            "ENABLE_CLOUDFLARE_CLASSIFICATION_PILOT": "0",
+        }):
+            self.assertFalse(
+                inspect_cloudflare_pilot_worker_environment.run()[
+                    "classification_pilot_enabled"
+                ],
+            )
 
     @override_settings(APP_ENV="development", DEBUG=True)
     def test_worker_probe_reports_independent_assessment_flag(self):
