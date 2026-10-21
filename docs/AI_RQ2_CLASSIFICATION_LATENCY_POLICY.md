@@ -168,3 +168,43 @@ previous 224/224 offline suite and Django checks passed before this
 checkpoint. No new live AI call, branch, PR, merge, model switch,
 database migration, partner scope authorization change or production
 activation was performed during this policy review.
+
+
+## Regression-suite environment isolation (2026-10-22 follow-up)
+
+The user's first run of the extended matrix reported **232 tests, four
+failures**. All four were **legacy TEXT and URL runtime Cloudflare-pilot
+tests** expecting Cloudflare → Gemini → Groq ordering when
+`ENABLE_AI_RQ2_PROVIDER_HIERARCHY` is off. The previous live diagnostic
+instructions had explicitly set this flag to `1` in the local
+PowerShell session, and clearing only the classification timeout and
+capacity flags **did not clear the hierarchy flag**. The actual observed
+Gemini → Cloudflare → Groq ordering is the correct opt-in hierarchy.
+No failure pointed to the new Cloudflare 30-second adapter integration
+tests.
+
+Rather than change production routing or make legacy tests depend on
+the invoking shell, the two relevant cases in *each* of
+`test_run_text_runtime.py` and `test_run_url_runtime.py` now explicitly
+use `@patch.dict(os.environ, {"ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0"})`
+while their original `@override_settings(APP_ENV="development", DEBUG=True)`
+remains. This pins the expected **legacy** route for the test duration
+and restores the caller's environment automatically. Separate
+hierarchy-specific tests continue to assert Gemini → Cloudflare → Groq
+when explicitly enabled. No runtime implementation changed.
+
+Local follow-up rerun is **pending**. To avoid leaking an opt-in
+development setting into unrelated manual commands, after diagnostics
+users may additionally clear the environment flag in their current
+PowerShell session:
+
+```powershell
+Remove-Item Env:ENABLE_AI_RQ2_PROVIDER_HIERARCHY -ErrorAction SilentlyContinue
+Remove-Item Env:ENABLE_CLOUDFLARE_CLASSIFICATION_PILOT -ErrorAction SilentlyContinue
+Remove-Item Env:ENABLE_CLOUDFLARE_VERIFICATION_PILOT -ErrorAction SilentlyContinue
+```
+
+This cleanup is operational hygiene, **not required for the repaired
+tests to pass**. Environment variables set persistently or in
+`.env` require separate user review. Do not change app settings or
+worker flags during a live test without an explicit authorization.
