@@ -119,10 +119,12 @@ def inspect_cloudflare_pilot_worker_environment():
 
     from .verification.cloudflare_evaluation import ACCOUNT_ID_PATTERN
     from .verification.cloudflare_pilot import cloudflare_pilot_enabled
+    from .verification.provider_hierarchy import hierarchy_enabled
 
     return {
         "diagnostics_available": True,
         "worker_pid": os.getpid(),
+        "ai_rq2_hierarchy_enabled": hierarchy_enabled(),
         "pilot_enabled": cloudflare_pilot_enabled(
             "persisted_evidence_evaluation"
         ),
