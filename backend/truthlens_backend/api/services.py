@@ -384,6 +384,10 @@ def call_llm_with_fallback(
             _log_llm_provider_call(
                 operation, "cloudflare", provider_call_id,
                 cloudflare_started_at, "failed", cloudflare_err,
+                # Even a failed JSON/empty response may expose safe usage and
+                # finish-status counters. Telemetry sanitizes all fields and
+                # never persists hidden reasoning, prompts, or raw evidence.
+                metadata=cloudflare_metrics,
             )
             logger.warning(
                 "Cloudflare verification pilot failed (%s); continuing "
