@@ -118,7 +118,11 @@ def inspect_cloudflare_pilot_worker_environment():
         return {"diagnostics_available": False}
 
     from .verification.cloudflare_evaluation import ACCOUNT_ID_PATTERN
-    from .verification.cloudflare_pilot import cloudflare_pilot_enabled
+    from .verification.cloudflare_pilot import (
+        cloudflare_pilot_enabled,
+        cloudflare_classification_reject_if_busy_enabled,
+        cloudflare_classification_http_timeout,
+    )
     from .verification.provider_hierarchy import hierarchy_enabled
     from .verification.classification_contract import CLASSIFICATION_OPERATION
     from .investigation_classifier import classification_mode
@@ -135,6 +139,12 @@ def inspect_cloudflare_pilot_worker_environment():
         ),
         "classification_pilot_enabled": cloudflare_pilot_enabled(
             CLASSIFICATION_OPERATION
+        ),
+        "classification_reject_if_busy_enabled": (
+            cloudflare_classification_reject_if_busy_enabled()
+        ),
+        "classification_read_timeout_seconds": (
+            cloudflare_classification_http_timeout()[1]
         ),
         "investigation_classification_mode": classification_mode(),
         "account_id_valid": bool(ACCOUNT_ID_PATTERN.fullmatch(
