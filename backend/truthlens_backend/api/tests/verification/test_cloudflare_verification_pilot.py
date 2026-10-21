@@ -36,7 +36,10 @@ class CloudflarePilotRoutingTests(SimpleTestCase):
         # Independently control all opt-in flags regardless of the machine's env.
         self.flags = self.enterContext(patch.dict(
             os.environ,
-            {"ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "0"},
+            {
+                "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "0",
+                "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0",
+            },
         ))
         self.cloud = self.enterContext(patch(
             "api.services.call_validated_cloudflare_pilot",
