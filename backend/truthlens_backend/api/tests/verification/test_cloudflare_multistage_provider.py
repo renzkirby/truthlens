@@ -53,6 +53,7 @@ class CloudflareAssessmentRoutingTests(SimpleTestCase):
             "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "0",
             "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT": "0",
             "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0",
+            "CLOUDFLARE_PILOT_ASSESSMENT_CHUNKING": "0",
         }))
         self.prompt = assessment_prompt("item_0", "item_2")
         self.good = result_for("item_0", "item_2")
