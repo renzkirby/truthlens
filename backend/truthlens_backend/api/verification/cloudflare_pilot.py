@@ -10,6 +10,7 @@ from django.conf import settings
 
 from .cloudflare_evaluation import (
     CloudflareEvaluationError,
+    MAX_INPUT_CHARS,
     generate_evaluation_json,
 )
 from .provider_audit_metrics import validate_user_facing_evaluation
@@ -19,7 +20,7 @@ PILOT_FLAG = "ENABLE_CLOUDFLARE_VERIFICATION_PILOT"
 PILOT_OPERATION = "persisted_evidence_evaluation"
 PILOT_COMPLETION_TOKENS = 2048
 # Exact adapter preflight maximum, not an advertised Cloudflare model limit.
-PILOT_MAX_INPUT_CHARS = 28000
+PILOT_MAX_INPUT_CHARS = MAX_INPUT_CHARS
 
 
 def cloudflare_pilot_enabled(operation):

@@ -10,6 +10,7 @@ import requests
 
 
 DEFAULT_MODEL = "@cf/google/gemma-4-26b-a4b-it"
+MAX_INPUT_CHARS = 28000
 ACCOUNT_ID_PATTERN = re.compile(r"^[a-fA-F0-9]{32}$")
 
 
@@ -82,7 +83,7 @@ def generate_evaluation_json(
         raise CloudflareEvaluationError("INVALID_PROMPT")
     if not isinstance(user_prompt, str) or not user_prompt.strip():
         raise CloudflareEvaluationError("INVALID_PROMPT")
-    if len(system_instructions) + len(user_prompt) > 28000:
+    if len(system_instructions) + len(user_prompt) > MAX_INPUT_CHARS:
         raise CloudflareEvaluationError("PROMPT_TOO_LONG")
     if model != DEFAULT_MODEL:
         raise CloudflareEvaluationError("UNAPPROVED_MODEL")
