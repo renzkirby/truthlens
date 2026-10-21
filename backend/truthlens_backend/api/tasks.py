@@ -51,6 +51,7 @@ from .verification.evidence_dossier import (
     load_reasoning_evidence_dossier_for_run,
     render_reasoning_evidence_dossier,
     render_compact_reasoning_evidence_dossier,
+    render_shared_metadata_reasoning_evidence_dossier,
 )
 from .verification.cloudflare_pilot import (
     PILOT_MAX_INPUT_CHARS,
@@ -152,7 +153,7 @@ def _schedule_subject_classification(claim_id):
 def _render_bounded_persisted_evidence_context(groups, claim_text, stance):
     """Use original dossier unchanged unless dev pilot exceeds its input cap.
 
-    A compact metadata-only representation retains each original evidence
+    Compact and shared-metadata representations retain every original evidence
     content byte-for-byte, without dropping sources or contradictory items.
     If even the compact presentation does not fit, fail closed and never
     send a selectively truncated dossier to Gemini, Groq or Cloudflare.
@@ -193,11 +194,32 @@ def _render_bounded_persisted_evidence_context(groups, claim_text, stance):
         )
         return compact_context
 
+    try:
+        shared_context = render_shared_metadata_reasoning_evidence_dossier(groups)
+    except (TypeError, ValueError):
+        logger.warning("PERSISTED_EVIDENCE_SHARED_METADATA_UNAVAILABLE")
+        raise LLMProviderUnavailableError(
+            "The persisted evidence dossier cannot be safely represented "
+            "within the development evaluator budget."
+        ) from None
+    shared_chars = prompt_size(shared_context)
+    if shared_chars <= PILOT_MAX_INPUT_CHARS:
+        logger.info(
+            "PERSISTED_EVIDENCE_SHARED_METADATA original_chars=%s "
+            "compact_chars=%s shared_chars=%s group_count=%s",
+            original_chars,
+            compact_chars,
+            shared_chars,
+            len(groups),
+        )
+        return shared_context
+
     logger.warning(
         "PERSISTED_EVIDENCE_OVERSIZE original_chars=%s compact_chars=%s "
-        "limit_chars=%s",
+        "shared_chars=%s limit_chars=%s",
         original_chars,
         compact_chars,
+        shared_chars,
         PILOT_MAX_INPUT_CHARS,
     )
     raise LLMProviderUnavailableError(

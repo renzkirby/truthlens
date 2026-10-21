@@ -19,6 +19,7 @@ from api.verification.evidence_dossier import (
     ReasoningEvidenceGroup,
     ReasoningEvidenceItem,
     render_compact_reasoning_evidence_dossier,
+    render_shared_metadata_reasoning_evidence_dossier,
     render_reasoning_evidence_dossier,
 )
 
@@ -115,6 +116,93 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
             self.assertEqual(obj[11], item.directness_score)
             self.assertEqual(obj[12], item.recency_score)
         self.assertNotIn("raw_reference", compact)
+
+    def test_shared_metadata_round_trip_preserves_all_fields_and_stances(self):
+        groups = _groups(content_length=600)
+        groups[0] = replace(groups[0], evidence=tuple(
+            replace(item, stance="REFUTES") if i == 0 else item
+            for i, item in enumerate(groups[0].evidence)
+        ))
+        groups[1] = replace(groups[1], evidence=tuple(
+            replace(item, stance="UNKNOWN", publisher=None, published_at=None,
+                    relevance_score=None) if i == 0 else item
+            for i, item in enumerate(groups[1].evidence)
+        ))
+        groups = [
+            replace(group, evidence=tuple(
+                replace(item, canonical_url=item.url)
+                for item in group.evidence
+            ))
+            for group in groups
+        ]
+        rendered = render_shared_metadata_reasoning_evidence_dossier(groups)
+        self.assertEqual(
+            rendered, render_shared_metadata_reasoning_evidence_dossier(
+                iter(groups)
+            ),
+        )
+        self.assertLess(
+            len(rendered), len(render_compact_reasoning_evidence_dossier(groups)),
+        )
+        self.assertEqual(rendered.count("=== SOURCE IDENTITY GROUP "), 7)
+        self.assertEqual(rendered.count("--- EVIDENCE ITEM "), 12)
+        defaults = json.loads(re.search(r"^DEFAULTS:(\{.*\})$",
+                                        rendered, re.MULTILINE).group(1))
+        raw_rows = re.findall(
+            r"--- EVIDENCE ITEM [0-9]+ ---\n([^\n]+)\nContent:", rendered,
+        )
+        items = [item for group in groups for item in group.evidence]
+        self.assertEqual(len(raw_rows), len(items))
+        for raw, item in zip(raw_rows, items):
+            values = json.loads(raw)
+            self.assertEqual(len(values), 13)
+            for column in range(10):
+                if type(values[column]) is int and values[column] == 1:
+                    values[column] = defaults[str(column)]
+                if column == 7 and type(values[column]) is int and values[column] == 0:
+                    values[column] = values[6]
+            expected = [
+                item.provider, item.evidence_role, item.stance,
+                item.publisher, item.source_type, item.title, item.url,
+                item.canonical_url,
+                item.published_at.isoformat() if item.published_at else None,
+                item.retrieved_at.isoformat() if item.retrieved_at else None,
+                item.relevance_score, item.directness_score, item.recency_score,
+            ]
+            self.assertEqual(values, expected)
+            self.assertIn(item.content, rendered)
+
+    def test_shared_metadata_fallback_runs_only_when_first_compact_still_oversize(self):
+        chosen = None
+        for content_size in range(1500, 2600, 10):
+            groups = _groups(content_length=content_size)
+            groups = [
+                replace(group, evidence=tuple(
+                    replace(item, canonical_url=item.url)
+                    for item in group.evidence
+                ))
+                for group in groups
+            ]
+            legacy = render_reasoning_evidence_dossier(groups)
+            first = render_compact_reasoning_evidence_dossier(groups)
+            second = render_shared_metadata_reasoning_evidence_dossier(groups)
+            if (
+                self._length(first) > PILOT_MAX_INPUT_CHARS
+                >= self._length(second)
+                and self._length(legacy) > PILOT_MAX_INPUT_CHARS
+            ):
+                chosen = groups
+                break
+        self.assertIsNotNone(chosen, "Expected a second-stage lossless fit")
+        result = _render_bounded_persisted_evidence_context(
+            chosen, "The claim is precisely described here.", "NEUTRAL",
+        )
+        self.assertEqual(
+            result, render_shared_metadata_reasoning_evidence_dossier(chosen),
+        )
+        self.assertEqual(result.count("=== SOURCE IDENTITY GROUP "), 7)
+        self.assertEqual(result.count("--- EVIDENCE ITEM "), 12)
+        self.assertLessEqual(self._length(result), PILOT_MAX_INPUT_CHARS)
 
     def test_empty_unchanged_and_normal_size_uses_exact_legacy_prompt(self):
         self.assertEqual(render_compact_reasoning_evidence_dossier([]), "")

@@ -145,10 +145,19 @@ source URL/canonical URL, title, provider, publisher, source type,
 stance, evidence role, dates, and scores. Only the repeated metadata
 field labels become a once-only positional JSON-array schema.
 There is no source deletion, summarization, source reordering, or
-source-stored-record mutation. If even the compact dossier does not
-fit, it **fails closed** with `LLMProviderUnavailableError` before
+source-stored-record mutation. If neither the positional compact dossier nor the second lossless
+shared-metadata rendering fits, it **fails closed** with `LLMProviderUnavailableError` before
 attempting any over-budget final provider request. Keep the pilot
 disabled in staging/production.
+
+The second-stage format retains all original source text and metadata. It
+references repeated string/date values through explicit numbered DEFAULTS,
+and represents a canonical URL equal to its own URL with an unambiguous
+numeric reference. Scores remain literal. Its source-group and evidence-item
+markers are identical to the first compact format. This format is only
+attempted if the positional compact format still exceeds the pilot budget.
+Reference decoding and mixed-stance preservation have focused offline tests.
+This is not evidence of model-level interpretation accuracy.
 
 Before another live TEXT/URL canary, first run offline regression tests
 and a read-only check using this exact existing failed run. From
