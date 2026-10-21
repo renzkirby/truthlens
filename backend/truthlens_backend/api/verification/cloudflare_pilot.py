@@ -19,6 +19,7 @@ PILOT_FLAG = "ENABLE_CLOUDFLARE_VERIFICATION_PILOT"
 ASSESSMENT_PILOT_FLAG = "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT"
 # Explicit opt-in only for capacity-queue diagnosis, never final verdicts.
 ASSESSMENT_REJECT_BUSY_FLAG = "CLOUDFLARE_PILOT_ASSESSMENT_REJECT_IF_BUSY"
+ASSESSMENT_CHUNKING_FLAG = "CLOUDFLARE_PILOT_ASSESSMENT_CHUNKING"
 PILOT_OPERATION = "persisted_evidence_evaluation"
 ASSESSMENT_OPERATION = "evidence_assessment"
 PILOT_COMPLETION_TOKENS = 2048
@@ -27,6 +28,7 @@ ASSESSMENT_COMPLETION_TOKENS = 2048
 # original batches go intact to the existing providers, not to truncated
 # or sliced Cloudflare requests.
 ASSESSMENT_MAX_ITEMS = 4
+ASSESSMENT_MAX_CHUNKS = 3
 ASSESSMENT_HTTP_TIMEOUT = (3, 15)
 FINAL_BUDGET_ENV = "CLOUDFLARE_PILOT_FINAL_MAX_TOKENS"
 PILOT_MAX_INPUT_CHARS = MAX_INPUT_CHARS
@@ -66,6 +68,139 @@ def cloudflare_assessment_reject_if_busy_enabled():
         and cloudflare_pilot_enabled(ASSESSMENT_OPERATION)
         and os.getenv(ASSESSMENT_REJECT_BUSY_FLAG, "") == "1"
     )
+
+
+def cloudflare_assessment_chunking_enabled():
+    """Opt-in bounded assessment chunks, never a production routing change."""
+    from .provider_hierarchy import hierarchy_enabled
+
+    return (
+        hierarchy_enabled()
+        and cloudflare_pilot_enabled(ASSESSMENT_OPERATION)
+        and os.getenv(ASSESSMENT_CHUNKING_FLAG, "") == "1"
+    )
+
+
+def _assessment_chunk_plan(system_instructions, user_prompt):
+    """Plan all chunks before any network request; preserve every item byte.
+
+    Fails locally instead of silently truncating, omitting, or reordering
+    original evidence. A single oversized item cannot be safely split.
+    """
+    if (
+        not isinstance(system_instructions, str)
+        or not system_instructions.strip()
+        or not isinstance(user_prompt, str)
+        or not user_prompt.strip()
+    ):
+        raise CloudflareEvaluationError("INVALID_ASSESSMENT_INPUT")
+    _expected_assessment_keys(user_prompt)
+    payload = json.loads(user_prompt[len(_ASSESSMENT_PREFIX):])
+    items = payload["evidence_items"]
+    if len(items) > ASSESSMENT_MAX_ITEMS * ASSESSMENT_MAX_CHUNKS:
+        raise CloudflareEvaluationError("ASSESSMENT_BATCH_TOO_LARGE")
+
+    def prompt_for(chunk_items):
+        return _ASSESSMENT_PREFIX + json.dumps(
+            {"claim_text": payload["claim_text"], "evidence_items": chunk_items},
+            ensure_ascii=False,
+        )
+
+    chunks = []
+    current = []
+    for item in items:
+        candidate = current + [item]
+        candidate_prompt = prompt_for(candidate)
+        if (
+            len(candidate) > ASSESSMENT_MAX_ITEMS
+            or len(system_instructions) + len(candidate_prompt) > PILOT_MAX_INPUT_CHARS
+        ):
+            if not current:
+                raise CloudflareEvaluationError("PROMPT_TOO_LONG")
+            chunks.append(prompt_for(current))
+            current = [item]
+            if len(system_instructions) + len(prompt_for(current)) > PILOT_MAX_INPUT_CHARS:
+                raise CloudflareEvaluationError("PROMPT_TOO_LONG")
+        else:
+            current = candidate
+    if current:
+        chunks.append(prompt_for(current))
+    if len(chunks) > ASSESSMENT_MAX_CHUNKS:
+        raise CloudflareEvaluationError("ASSESSMENT_BATCH_TOO_LARGE")
+    return chunks, [item["key"] for item in items]
+
+
+def cloudflare_assessment_chunking_bypass_reason(system_instructions, user_prompt):
+    """Allow Cloudflare only when the complete lossless plan fits its limits."""
+    try:
+        _assessment_chunk_plan(system_instructions, user_prompt)
+    except CloudflareEvaluationError as exc:
+        return str(exc)
+    return None
+
+
+def _aggregate_chunk_metadata(metadata, chunks):
+    """Whitelist counters, and distinguish partial attempts from success."""
+    if metadata is None:
+        return
+    if not isinstance(metadata, dict):
+        raise CloudflareEvaluationError("INVALID_AUDIT_METADATA")
+    metadata["assessment_chunks_attempted"] = len(chunks)
+    for key in ("prompt_tokens", "completion_tokens", "total_tokens",
+                "reasoning_tokens"):
+        values = [chunk.get(key) for chunk in chunks]
+        if values and all(type(value) is int and 0 <= value <= 10000000
+                          for value in values):
+            metadata[key] = sum(values)
+    if chunks:
+        metadata["reasoning_present"] = any(
+            chunk.get("reasoning_present") is True for chunk in chunks
+        )
+        # Only a complete multi-chunk response can claim finish_reason=stop.
+        if all(chunk.get("finish_reason") == "stop" for chunk in chunks):
+            metadata["finish_reason"] = "stop"
+
+
+def call_validated_cloudflare_assessment_chunks(
+    system_instructions, user_prompt, *, audit_metadata=None,
+):
+    """Bounded lossless sequential assessment; all-or-nothing JSON output.
+
+    No silent partial acceptance and no retry within a chunk. The caller
+    owns failover to the full original Gemini/Groq assessment request.
+    """
+    if audit_metadata is not None and not isinstance(audit_metadata, dict):
+        raise CloudflareEvaluationError("INVALID_AUDIT_METADATA")
+    prompts, ordered_keys = _assessment_chunk_plan(
+        system_instructions, user_prompt,
+    )
+    completed = {}
+    attempted_metadata = []
+    try:
+        for chunk_prompt in prompts:
+            chunk_metadata = {}
+            attempted_metadata.append(chunk_metadata)
+            raw = call_validated_cloudflare_pilot(
+                system_instructions, chunk_prompt,
+                operation=ASSESSMENT_OPERATION,
+                audit_metadata=chunk_metadata,
+            )
+            for result in json.loads(raw)["assessments"]:
+                key = result["key"]
+                if key in completed:
+                    raise CloudflareEvaluationError("INVALID_ASSESSMENT_JSON")
+                completed[key] = result
+        if set(completed) != set(ordered_keys):
+            raise CloudflareEvaluationError("INVALID_ASSESSMENT_JSON")
+        full_response = json.dumps(
+            {"assessments": [completed[key] for key in ordered_keys]},
+            ensure_ascii=False,
+        )
+        if not validate_pilot_response(ASSESSMENT_OPERATION, full_response, user_prompt):
+            raise CloudflareEvaluationError("INVALID_ASSESSMENT_JSON")
+        return full_response
+    finally:
+        _aggregate_chunk_metadata(audit_metadata, attempted_metadata)
 
 
 def _final_completion_budget():
