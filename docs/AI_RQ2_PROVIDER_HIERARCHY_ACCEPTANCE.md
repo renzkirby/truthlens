@@ -410,3 +410,120 @@ routing tests explicitly keep chunking disabled.
 **Status:** implementation committed to the existing branch;
 **new offline suite not yet run**. No second live request,
 PR, merge, or additional working branch.
+
+
+## AI-RQ-2 follow-up — subject classification provider fallback (offline checkpoint)
+
+The completed Europa Clipper verification was **not classified**:
+`INVESTIGATION_CLASSIFICATION_MODE=off`, with neither an assessment
+nor an authoritative classification row. Verification completion alone
+does not validate PARTNER-GOV-1 (#128). Additionally, when Gemini
+returns 402 and Groq is 429-limited, subject classification had no
+third provider, because the earlier Cloudflare pilot only covered
+evidence assessment and final verdict. That **separate** missing
+operation is now addressed behind an independent, default-OFF
+development flag.
+
+### Strict contract, minimal permitted authority
+
+`ENABLE_CLOUDFLARE_CLASSIFICATION_PILOT=1` has effect only when
+**all** conditions are true:
+
+- `APP_ENV=development`, `DEBUG=True`;
+- `ENABLE_AI_RQ2_PROVIDER_HIERARCHY=1`;
+- `ENABLE_CLOUDFLARE_VERIFICATION_PILOT=1`;
+- `ENABLE_CLOUDFLARE_CLASSIFICATION_PILOT=1`.
+
+Cloudflare classification does **not** require the assessment pilot,
+chunking, or `rejectIfBusy` flags. The approved model stays
+`@cf/google/gemma-4-26b-a4b-it`, with a new classification-specific
+1,024-token maximum and `(3,15)` connection/read-inactivity timeout.
+The original final verdict stays at 2,048 tokens with unchanged
+thinking/evidence inputs and original timeout. The classification
+input must be 20–2,400 characters, matching the existing local
+classifier's text-input range.
+
+In the opt-in routing path, **Gemini → classification-eligible
+Cloudflare → Groq** must all satisfy the same strict JSON contract
+before any response is accepted. The only permitted shapes are:
+
+```json
+{"decision":"ABSTAIN","domains":[]}
+```
+
+or:
+
+```json
+{"decision":"CLASSIFY","domains":[{"code":"SCIENCE","evidence":"science experiment"}]}
+```
+
+The example evidence text must be an exact substring of the original
+persisted claim. A valid `CLASSIFY` contains 1–3 **distinct**
+recognized subject domain codes, with each `evidence` a real
+quoted claim substring of at least four characters. No unknown
+domains, verdict, confidence, geographic authorization, extra
+fields, fabricated quotes or duplicate domains are allowed.
+A valid `ABSTAIN` remains an accepted answer and creates **no**
+classification. Invalid output causes fallback, never unreviewed
+permission; exhausting all configured providers raises the existing
+provider-unavailable error.
+
+The existing `classify_investigation_claim` continues to check the
+persisted claim fingerprint, active/completed assignments, domain
+quote integrity, transactional locking, provenance and authority.
+This work makes **no changes** to organization verification scope,
+partner eligibility, adjudication, GFC/Tavily ingestion, or stored
+evidence. It does not turn a fact-checking AI verdict into a subject
+classification.
+
+Crucially, `INVESTIGATION_CLASSIFICATION_MODE` remains independently
+`off` by default. **Do not** enable `enforce` simply because these
+offline contract tests pass. `shadow` first records proposals without
+making them claimable; only separately approved accuracy and
+authorization acceptance can justify an `enforce` trial.
+
+The sanitized read-only Celery readiness probe now reports
+`classification_pilot_enabled` and
+`investigation_classification_mode` alongside the worker PID
+and provider routing flags. The earlier canary's mismatched worker
+PID and older readiness payload mean we must confirm **one
+up-to-date worker** and consistent Django/worker settings before
+any further approved live requests.
+
+### Required offline test gate
+
+From `backend/truthlens_backend` after pulling the **existing**
+`feat/ai-rq2-provider-hierarchy` branch:
+
+```powershell
+..\\.venv\\Scripts\\python.exe .\\manage.py test `
+  api.tests.verification.test_ai_rq2_classification_fallback `
+  api.tests.verification.test_investigation_classifier `
+  api.tests.verification.test_ai_rq2_provider_hierarchy `
+  api.tests.verification.test_cloudflare_verification_pilot `
+  api.tests.verification.test_cloudflare_multistage_provider `
+  api.tests.verification.test_cloudflare_worker_readiness `
+  api.tests.verification.test_cloudflare_provider_evaluation `
+  api.tests.verification.test_cloudflare_assessment_latency_guardrails `
+  api.tests.verification.test_cloudflare_assessment_chunking `
+  api.tests.verification.test_evidence_assessment `
+  api.tests.verification.test_pipeline_telemetry `
+  api.tests.verification.test_run_text_runtime `
+  api.tests.verification.test_run_url_runtime `
+  --settings=truthlens_backend.test_settings --keepdb
+
+..\\.venv\\Scripts\\python.exe .\\manage.py check
+..\\.venv\\Scripts\\python.exe .\\manage.py makemigrations --check --dry-run
+```
+
+All new tests use mocked providers. They include accepted domain
+quotations, valid abstentions, malformed/surplus JSON and geographic
+field rejection; Gemini 402; Cloudflare 429/timeout; Groq 429 with
+no SDK retries/model carousel; development-only stage gates; no
+raw claim in telemetry; unchanged actual application classifier
+modes; and sanitized worker-readiness disclosure. These tests do
+**not** prove model-generated domain accuracy or guarantee a
+cloud inference completes within the timeout.
+
+No new branch, PR, merge, paid call, worker setting change, schema
+migration or live claim submission is part of this checkpoint.
