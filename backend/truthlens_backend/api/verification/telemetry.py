@@ -10,6 +10,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from ..models import VerificationTelemetryEvent
+from .provider_audit_metrics import KNOWN_FINISH, safe_int
 
 
 logger = logging.getLogger(__name__)
@@ -104,9 +105,25 @@ def record_llm_provider_call(
     duration_ms,
     outcome,
     error_label="",
+    *,
+    metadata=None,
 ):
     operation_label = operation if operation in SAFE_LLM_OPERATION_LABELS else "unspecified"
     provider_label = provider if provider in SAFE_LLM_PROVIDERS else ""
+    safe_metadata = {}
+    if provider_label == "cloudflare" and isinstance(metadata, dict):
+        for key in (
+            "prompt_tokens", "completion_tokens", "total_tokens",
+            "reasoning_tokens",
+        ):
+            count = safe_int(metadata.get(key))
+            if count is not None:
+                safe_metadata[key] = count
+        finish = metadata.get("finish_reason")
+        if isinstance(finish, str) and finish in KNOWN_FINISH:
+            safe_metadata["finish_reason"] = finish
+        if isinstance(metadata.get("reasoning_present"), bool):
+            safe_metadata["reasoning_present"] = metadata["reasoning_present"]
     _append_event(
         event_type=VerificationTelemetryEvent.EventType.LLM_PROVIDER_CALL,
         name=operation_label,
@@ -115,7 +132,7 @@ def record_llm_provider_call(
         duration_ms=max(0, int(duration_ms)),
         outcome=outcome,
         error_label=error_label,
-        metadata={},
+        metadata=safe_metadata,
     )
 
 
