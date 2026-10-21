@@ -132,6 +132,21 @@ class CloudflareAssessmentLatencyRoutingTests(SimpleTestCase):
         )
         self.assertNotIn("http_timeout", self.cloud.call_args.kwargs)
 
+    def test_large_batch_with_gemini_unavailable_still_allows_final_cloudflare(self):
+        self.gemini.models.generate_content.side_effect = RuntimeError(
+            "Provider payment unavailable",
+        )
+        self.cloud.return_value = _VALID_VERDICT
+        with llm_provider_scope():
+            self.assertEqual(self._assessment(9), _batch_response(9))
+            self.assertEqual(self._verdict(), _VALID_VERDICT)
+        self.cloud.assert_called_once()
+        self.groq.chat.completions.create.assert_called_once()
+        self.assertIn(
+            _batch_prompt(9),
+            str(self.groq.chat.completions.create.call_args.kwargs["messages"]),
+        )
+
     def test_four_item_batch_uses_cloudflare_and_full_2048_budget(self):
         self.cloud.return_value = _batch_response(4)
         with patch("api.services.record_llm_provider_call") as record:
