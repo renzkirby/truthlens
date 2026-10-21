@@ -854,6 +854,7 @@ class VerificationRunURLRuntimeTests(TestCase):
 
 
     @override_settings(APP_ENV="development", DEBUG=True)
+    @patch.dict(os.environ, {"ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0"})
     def test_enabled_cloudflare_pilot_flows_through_real_evaluator_and_lifecycle(self):
         self.evaluate_persisted.side_effect = services.evaluate_claim_with_persisted_evidence
         cloud_output = json.dumps({
@@ -890,6 +891,7 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assertEqual(events[0].outcome, "success")
 
     @override_settings(APP_ENV="development", DEBUG=True)
+    @patch.dict(os.environ, {"ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0"})
     def test_all_providers_unavailable_fails_run_without_fabricated_verdict(self):
         self.evaluate_persisted.side_effect = services.evaluate_claim_with_persisted_evidence
         with (
