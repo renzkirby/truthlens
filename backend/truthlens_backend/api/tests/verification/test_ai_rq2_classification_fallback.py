@@ -23,6 +23,8 @@ from api.verification.classification_contract import (
 from api.verification.cloudflare_evaluation import CloudflareEvaluationError
 from api.verification.cloudflare_pilot import (
     CLASSIFICATION_COMPLETION_TOKENS, CLASSIFICATION_HTTP_TIMEOUT,
+    cloudflare_classification_http_timeout,
+    cloudflare_classification_reject_if_busy_enabled,
     call_validated_cloudflare_pilot, cloudflare_pilot_enabled,
 )
 from api.verification.telemetry import (
@@ -102,6 +104,8 @@ class ClassificationProviderHierarchyTests(SimpleTestCase):
             "ENABLE_CLOUDFLARE_CLASSIFICATION_PILOT": "1",
             "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT": "0",
             "CLOUDFLARE_PILOT_ASSESSMENT_CHUNKING": "0",
+            "CLOUDFLARE_PILOT_CLASSIFICATION_REJECT_IF_BUSY": "0",
+            "CLOUDFLARE_PILOT_CLASSIFICATION_READ_TIMEOUT_SEC": "",
         }))
         gemini = Mock()
         gemini.models.generate_content.return_value = SimpleNamespace(text=VALID)
@@ -267,6 +271,8 @@ class CloudflareClassificationAdapterTests(SimpleTestCase):
             "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
             "ENABLE_CLOUDFLARE_CLASSIFICATION_PILOT": "1",
             "CLOUDFLARE_PILOT_ASSESSMENT_REJECT_IF_BUSY": "0",
+            "CLOUDFLARE_PILOT_CLASSIFICATION_REJECT_IF_BUSY": "0",
+            "CLOUDFLARE_PILOT_CLASSIFICATION_READ_TIMEOUT_SEC": "",
         }))
         self.generate = self.enterContext(patch(
             "api.verification.cloudflare_pilot.generate_evaluation_json",
@@ -290,6 +296,136 @@ class CloudflareClassificationAdapterTests(SimpleTestCase):
         self.assertEqual(self.generate.call_args.kwargs["http_timeout"],
                          CLASSIFICATION_HTTP_TIMEOUT)
         self.assertNotIn("reject_if_busy", self.generate.call_args.kwargs)
+
+
+    def test_default_classification_policy_is_unchanged(self):
+        self.assertFalse(cloudflare_classification_reject_if_busy_enabled())
+        self.assertEqual(
+            cloudflare_classification_http_timeout(),
+            CLASSIFICATION_HTTP_TIMEOUT,
+        )
+        call_validated_cloudflare_pilot(
+            "Classify subjects", CLAIM, operation=CLASSIFICATION_OPERATION,
+        )
+        self.assertNotIn("reject_if_busy", self.generate.call_args.kwargs)
+        self.assertEqual(
+            self.generate.call_args.kwargs["http_timeout"],
+            (3, 15),
+        )
+
+    def test_explicit_classification_capacity_fast_fail_only_in_classification(self):
+        with patch.dict(os.environ, {
+            "CLOUDFLARE_PILOT_CLASSIFICATION_REJECT_IF_BUSY": "1",
+        }):
+            self.assertTrue(cloudflare_classification_reject_if_busy_enabled())
+            call_validated_cloudflare_pilot(
+                "Classify subjects", CLAIM, operation=CLASSIFICATION_OPERATION,
+            )
+            self.assertIs(self.generate.call_args.kwargs["reject_if_busy"], True)
+            self.assertEqual(
+                self.generate.call_args.kwargs["max_completion_tokens"],
+                CLASSIFICATION_COMPLETION_TOKENS,
+            )
+            # No opt-in was given to the separate factual-verdict stage.
+            self.generate.reset_mock()
+            self.generate.return_value = json.dumps({
+                "reasoning": "The supplied source corroborates the statement.",
+                "verdict": "FACT",
+                "summary": "Supported by the supplied evidence.",
+                "confidence_score": 85,
+                "score_context": "The evidence directly supports the claim.",
+            })
+            call_validated_cloudflare_pilot(
+                "Evaluate evidence", "Grounded evidence context.",
+            )
+            self.assertNotIn("reject_if_busy", self.generate.call_args.kwargs)
+
+    def test_bounded_30_second_diagnostic_is_off_by_default(self):
+        for invalid in ("", "0", "15", "29", "31", "60", "30.0", " 30 "):
+            with self.subTest(value=invalid), patch.dict(os.environ, {
+                "CLOUDFLARE_PILOT_CLASSIFICATION_READ_TIMEOUT_SEC": invalid,
+            }):
+                self.assertEqual(
+                    cloudflare_classification_http_timeout(), (3, 15),
+                )
+        with patch.dict(os.environ, {
+            "CLOUDFLARE_PILOT_CLASSIFICATION_READ_TIMEOUT_SEC": "30",
+        }):
+            self.assertEqual(
+                cloudflare_classification_http_timeout(), (3, 30),
+            )
+            call_validated_cloudflare_pilot(
+                "Classify subjects", CLAIM, operation=CLASSIFICATION_OPERATION,
+            )
+        self.assertEqual(
+            self.generate.call_args.kwargs["http_timeout"], (3, 30),
+        )
+        self.assertEqual(
+            self.generate.call_args.kwargs["max_completion_tokens"], 1024,
+        )
+
+    def test_capacity_fast_fail_and_timeout_profile_require_dev_gates(self):
+        for key in (
+            "ENABLE_AI_RQ2_PROVIDER_HIERARCHY",
+            "ENABLE_CLOUDFLARE_VERIFICATION_PILOT",
+            "ENABLE_CLOUDFLARE_CLASSIFICATION_PILOT",
+        ):
+            with self.subTest(flag=key), patch.dict(os.environ, {
+                key: "0",
+                "CLOUDFLARE_PILOT_CLASSIFICATION_REJECT_IF_BUSY": "1",
+                "CLOUDFLARE_PILOT_CLASSIFICATION_READ_TIMEOUT_SEC": "30",
+            }):
+                self.assertFalse(
+                    cloudflare_classification_reject_if_busy_enabled(),
+                )
+                self.assertEqual(cloudflare_classification_http_timeout(), (3, 15))
+        with patch.dict(os.environ, {
+            "CLOUDFLARE_PILOT_CLASSIFICATION_REJECT_IF_BUSY": "1",
+            "CLOUDFLARE_PILOT_CLASSIFICATION_READ_TIMEOUT_SEC": "30",
+        }):
+            with override_settings(APP_ENV="production", DEBUG=False):
+                self.assertFalse(
+                    cloudflare_classification_reject_if_busy_enabled(),
+                )
+                self.assertEqual(cloudflare_classification_http_timeout(), (3, 15))
+            with override_settings(APP_ENV="staging", DEBUG=True):
+                self.assertFalse(
+                    cloudflare_classification_reject_if_busy_enabled(),
+                )
+                self.assertEqual(cloudflare_classification_http_timeout(), (3, 15))
+            with override_settings(DEBUG=False):
+                self.assertFalse(
+                    cloudflare_classification_reject_if_busy_enabled(),
+                )
+                self.assertEqual(cloudflare_classification_http_timeout(), (3, 15))
+
+    def test_short_assessment_and_final_timeout_are_not_changed(self):
+        with patch.dict(os.environ, {
+            "CLOUDFLARE_PILOT_CLASSIFICATION_REJECT_IF_BUSY": "1",
+            "CLOUDFLARE_PILOT_CLASSIFICATION_READ_TIMEOUT_SEC": "30",
+            "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT": "1",
+        }):
+            self.generate.return_value = json.dumps({
+                "assessments": [{
+                    "key": "item_0", "stance": "SUPPORTS",
+                    "relevance_score": 0.9, "directness_score": 0.8,
+                }],
+            })
+            call_validated_cloudflare_pilot(
+                "Assess evidence",
+                "UNTRUSTED ASSESSMENT DATA:\\n" + json.dumps({
+                    "claim_text": CLAIM,
+                    "evidence_items": [{
+                        "key": "item_0",
+                        "evidence_content": "The original evidence passage.",
+                    }],
+                }),
+                operation="evidence_assessment",
+            )
+            self.assertEqual(
+                self.generate.call_args.kwargs["http_timeout"], (3, 15),
+            )
+            self.assertNotIn("reject_if_busy", self.generate.call_args.kwargs)
 
     def test_invalid_classification_adaptor_json_rejected(self):
         self.generate.return_value = '{"decision":"CLASSIFY","domains":[]}'
