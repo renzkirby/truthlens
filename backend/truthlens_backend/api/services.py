@@ -25,6 +25,7 @@ from .verification.cloudflare_pilot import (
     cloudflare_pilot_enabled,
     call_validated_cloudflare_pilot,
     validate_pilot_response,
+    cloudflare_assessment_bypass_reason,
     ASSESSMENT_OPERATION,
 )
 from .verification.provider_audit_metrics import validate_user_facing_evaluation
@@ -252,9 +253,25 @@ def call_llm_with_fallback(
     """Preserve legacy routing; per-operation Cloudflare opt-in for development."""
     provider_call_id = uuid.uuid4()
     pilot_active = cloudflare_pilot_enabled(operation)
+    cloudflare_degraded = _cloudflare_pilot_degraded.get() is True
+    assessment_bypass_reason = None
+    if pilot_active and not cloudflare_degraded and operation == ASSESSMENT_OPERATION:
+        assessment_bypass_reason = cloudflare_assessment_bypass_reason(
+            system_instructions, user_prompt,
+        )
+        if assessment_bypass_reason is not None:
+            # This is a local eligibility decision, not a vendor outage.
+            # Do not poison the shared job circuit breaker; the unchanged
+            # final-evaluation pilot may still call Cloudflare.
+            _log_llm_provider_call(
+                operation, "cloudflare", provider_call_id,
+                time.perf_counter(), "skipped",
+                CloudflareEvaluationError(assessment_bypass_reason),
+            )
     if (
         pilot_active
-        and _cloudflare_pilot_degraded.get() is not True
+        and not cloudflare_degraded
+        and assessment_bypass_reason is None
     ):
         cloudflare_started_at = time.perf_counter()
         cloudflare_metrics = {}
