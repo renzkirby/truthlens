@@ -79,3 +79,8 @@ class Command(BaseCommand):
                 "Cloudflare smoke did not succeed; inspect sanitized status "
                 "and reason above before any new attempt."
             )
+        if result.get("matches_approved_label") is False:
+            raise CommandError(
+                "Cloudflare response passed JSON validation but disagreed "
+                "with the approved label. Review quality before proceeding."
+            )

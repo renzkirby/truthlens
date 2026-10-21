@@ -70,7 +70,7 @@ def run_cloudflare_worker_smoke():
         )
         if len(system_prompt) + len(user_prompt) > 28000:
             return {**base, "status": "blocked", "reason": "PROMPT_TOO_LONG"}
-    except (ValidationError, ValueError, TypeError, LookupError, KeyError):
+    except (ValidationError, ValueError, TypeError, LookupError, StopIteration):
         return {**base, "status": "blocked", "reason": "INVALID_REVIEWED_CASE"}
 
     started = time.perf_counter()

@@ -223,6 +223,27 @@ class CloudflareSingleRequestSmokeCommandTests(SimpleTestCase):
         self.assertIn("actual_verdict=FACT", out.getvalue())
         self.assertNotIn("PRIVATE_RATIONALE_DO_NOT_LOG", out.getvalue())
 
+    def test_valid_json_with_wrong_verdict_requires_quality_review(self):
+        out = io.StringIO()
+        result = Mock(id="mock-task-id")
+        result.get.return_value = {
+            "status": "success", "case_id": FIXED_CASE_ID,
+            "actual_verdict": "FAKE", "expected_verdict": "FACT",
+            "matches_approved_label": False,
+            "requests_attempted": 1,
+        }
+        with (
+            patch("api.management.commands.cloudflare_worker_smoke.cloudflare_single_request_smoke") as task,
+            self.assertRaisesRegex(CommandError, "disagreed"),
+        ):
+            task.delay.return_value = result
+            call_command(
+                "cloudflare_worker_smoke",
+                live=True, confirm_one_request=True, stdout=out,
+            )
+        task.delay.assert_called_once()
+        self.assertIn("matches_approved_label=False", out.getvalue())
+
     def test_provider_failure_reports_code_and_does_not_requeue(self):
         out = io.StringIO()
         result = Mock(id="mock-task-id")
