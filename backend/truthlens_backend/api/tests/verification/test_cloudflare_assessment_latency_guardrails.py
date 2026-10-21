@@ -68,6 +68,7 @@ class CloudflareAssessmentLatencyRoutingTests(SimpleTestCase):
         self.enterContext(patch.dict(os.environ, {
             "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
             "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT": "1",
+            "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0",
         }))
         self.cloud = self.enterContext(patch(
             "api.verification.cloudflare_pilot.generate_evaluation_json",
