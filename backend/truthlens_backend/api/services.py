@@ -300,6 +300,10 @@ def call_llm_with_fallback(
                         config=request_config,
                     )
                     content = response.text
+                    if hierarchy_active and (
+                        not isinstance(content, str) or not content.strip()
+                    ):
+                        raise ValueError("EMPTY_PROVIDER_RESPONSE")
                     if (
                         stage_contract_active
                         and not validate_pilot_response(operation, content, user_prompt)
@@ -421,6 +425,10 @@ def call_llm_with_fallback(
             temperature=0.1,
         )
         content = chat_completion.choices[0].message.content
+        if hierarchy_active and (
+            not isinstance(content, str) or not content.strip()
+        ):
+            raise ValueError("EMPTY_PROVIDER_RESPONSE")
         if (
             stage_contract_active
             and not validate_pilot_response(operation, content, user_prompt)
