@@ -162,11 +162,12 @@ def score_classification_predictions(cases, predictions):
         "safe_abstentions": 0, "wrong_domains": 0,
         "overclassified_abstentions": 0, "missed_classifications": 0,
         "potential_scope_leaks": 0,
+        "potential_scope_exclusions": 0,
     }
     ids_by_problem = {key: [] for key in (
         "missing", "invalid_json_or_quotes", "wrong_domains",
         "overclassified_abstentions", "missed_classifications",
-        "potential_scope_leaks",
+        "potential_scope_leaks", "potential_scope_exclusions",
     )}
     for item in approved:
         cid = item["id"]
@@ -193,6 +194,9 @@ def score_classification_predictions(cases, predictions):
         if parsed["decision"] == "ABSTAIN":
             counts["missed_classifications"] += 1
             ids_by_problem["missed_classifications"].append(cid)
+            if reference["decision"] == "CLASSIFY":
+                counts["potential_scope_exclusions"] += 1
+                ids_by_problem["potential_scope_exclusions"].append(cid)
             continue
         if reference["decision"] == "ABSTAIN":
             counts["overclassified_abstentions"] += 1
@@ -218,6 +222,14 @@ def score_classification_predictions(cases, predictions):
         if candidate_allowed and not reviewer_allows:
             counts["potential_scope_leaks"] += 1
             ids_by_problem["potential_scope_leaks"].append(cid)
+        if (
+            reference["decision"] == "CLASSIFY"
+            and not set(predicted).issubset(set(expected))
+        ):
+            # A partner covering exactly the reviewed subjects could be
+            # incorrectly excluded by an unsupported extra model domain.
+            counts["potential_scope_exclusions"] += 1
+            ids_by_problem["potential_scope_exclusions"].append(cid)
     counts["coverage_complete"] = counts["missing"] == 0 and bool(approved)
     counts["exact_match_rate"] = (
         round(counts["exact_matches"] / counts["approved"], 4)
