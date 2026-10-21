@@ -92,7 +92,7 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
         self.assertIn("must not be counted as multiple independent confirmations", compact)
         self.assertIn("not guaranteed to be editorially independent", compact)
         records = re.findall(
-            r"--- EVIDENCE ITEM [0-9]+ ---\\n([^\\n]+)\\nContent:",
+            r"--- EVIDENCE ITEM [0-9]+ ---\n([^\n]+)\nContent:",
             compact,
         )
         self.assertEqual(len(records), 3)
