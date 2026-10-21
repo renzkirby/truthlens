@@ -25,7 +25,8 @@ def context(*, vendor="postgresql", modeled=False, column=(True, None)):
     )
     apps = Mock()
     apps.get_model.return_value = claim
-    connection = Mock(vendor=vendor)
+    # Django cursors are context managers; plain Mock cannot provide __enter__.
+    connection = MagicMock(vendor=vendor)
     cursor = MagicMock()
     cursor.fetchone.return_value = column
     connection.cursor.return_value.__enter__.return_value = cursor
