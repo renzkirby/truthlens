@@ -80,6 +80,8 @@ Read these via:
 ```
 
 Default inspector output remains unchanged without `--show-usage`.
+The safe worker probe also reports `evidence_assessment_pilot_enabled` as
+one boolean, so the running worker's stage opt-in can be checked.
 Existing older runs have no usage metadata and should not be backfilled
 by guessing.
 
@@ -111,6 +113,7 @@ and `git pull --ff-only origin feat/cloudflare-multistage-provider`.
   api.tests.verification.test_cloudflare_multistage_provider `
   api.tests.verification.test_cloudflare_verification_pilot `
   api.tests.verification.test_cloudflare_provider_evaluation `
+  api.tests.verification.test_cloudflare_worker_readiness `
   api.tests.verification.test_evidence_assessment `
   api.tests.verification.test_verification_run_telemetry_inspection `
   api.tests.verification.test_pipeline_telemetry `
