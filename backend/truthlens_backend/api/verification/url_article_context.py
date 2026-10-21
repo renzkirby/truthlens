@@ -18,6 +18,11 @@ _NAV_SECTIONS = frozenset({
     "related links", "privacy", "legal", "cookie preferences",
     "newsletter", "subscribe", "explore", "search",
 })
+_PREFIXED_NAV_SECTIONS = frozenset({
+    "press contacts", "shop and learn", "apple store", "for business",
+    "for education", "for healthcare", "for government", "apple values",
+    "about apple", "quick links", "site navigation", "related links",
+})
 _HEADER = re.compile(r"^\s{0,3}(#{1,6})[ \t]+(.+?)\s*$")
 _INLINE_HEADER = re.compile(r"[ \t]+(?=#{1,6}[ \t]+\S)")
 _IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
@@ -41,9 +46,16 @@ def _readable_line(line):
 
 def _prose_candidate(text):
     return (
-        len(text) >= 20
-        and len(text.split()) >= 4
+        len(text) >= 10
+        and len(text.split()) >= 3
         and bool(_SENTENCE_END.search(text))
+    )
+
+
+def _navigation_heading(heading):
+    value = heading.casefold().strip(" :—-")
+    return value in _NAV_SECTIONS or any(
+        value.startswith(prefix + " ") for prefix in _PREFIXED_NAV_SECTIONS
     )
 
 
@@ -83,11 +95,21 @@ def clean_url_article_context(raw_content: str | None) -> str:
     passages = []
     in_navigation = False
     navigation_seen = False
+    pending = []
+
+    def flush_paragraph():
+        if pending:
+            passage = " ".join(pending)
+            if _prose_candidate(passage):
+                passages.append(passage)
+            pending.clear()
+
     for line in raw.split("\n"):
         heading_match = _HEADER.match(line)
         if heading_match:
+            flush_paragraph()
             heading = _readable_line(heading_match.group(2))
-            in_navigation = heading.casefold().strip(" :—-") in _NAV_SECTIONS
+            in_navigation = _navigation_heading(heading)
             if in_navigation:
                 navigation_seen = True
                 continue
@@ -104,17 +126,22 @@ def clean_url_article_context(raw_content: str | None) -> str:
             continue
         readable = _readable_line(line)
         if not readable:
+            flush_paragraph()
             continue
         if _DATE.match(readable) and published_date is None:
+            flush_paragraph()
             published_date = readable
             continue
         # A group of links is often a navigation list. One in-prose
         # citation link is retained with its visible words unchanged.
         if len(_LINK.findall(line)) >= 3:
+            flush_paragraph()
             navigation_seen = True
             continue
+        pending.append(readable)
         if _prose_candidate(readable):
-            passages.append(readable)
+            flush_paragraph()
+    flush_paragraph()
 
     if not passages:
         # Standalone brief URL posts can contain only one headline.
