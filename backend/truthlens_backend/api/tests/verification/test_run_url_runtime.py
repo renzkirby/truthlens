@@ -408,8 +408,8 @@ class VerificationRunURLRuntimeTests(TestCase):
             self.claim.pk,
             self.verdict,
             "Official Fact Check",
-            self.cleaned_text,
-            ["https://example.com/fact-check"],
+            self.cleaned["cleaned_claim"],
+            [],
         )
         self.bridge.assert_called_once()
         self.evaluate_persisted.assert_called_once()
@@ -452,11 +452,33 @@ class VerificationRunURLRuntimeTests(TestCase):
             self.claim.pk,
             self.verdict,
             "Official Fact Check",
-            self.cleaned_text,
-            ["https://example.com/fact-check"],
+            self.cleaned["cleaned_claim"],
+            [],
         )
         self.retrieve_tavily.assert_not_called()
         self.assertEqual(VerificationEvidence.objects.count(), 0)
+
+    def test_gfc_report_shows_evaluated_claim_not_extracted_page_navigation(self):
+        self.cleaned_text = (
+            "Apple Media Helpline Shop Learn Wallet Education "
+            "Navigation Contacts Company"
+        )
+        run = self._execute()
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.context_text, self.cleaned["cleaned_claim"])
+        self.assertNotIn("Media Helpline", self.claim.context_text)
+        self.assertEqual(self.claim.url_link or self.url, self.url)
+
+    def test_missing_cleaned_claim_abstains_before_retrieval(self):
+        self.cleaned["cleaned_claim"] = "  "
+        run = self._execute()
+        self.assertEqual(run.status, VerificationRun.Status.ABSTAINED)
+        self.vault.assert_not_called()
+        self.bridge.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
+        self.evaluate_persisted.assert_not_called()
+        self.save_claim.assert_not_called()
 
     def test_gfc_persisted_evidence_links_through_existing_bridge(self):
         self.bridge.side_effect = self.real_bridge
@@ -495,6 +517,16 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assertIn(persisted_source.content, evidence_context)
         self.assertNotIn("claimReview", evidence_context)
         self.evaluate_gfc.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.context_text, self.cleaned["cleaned_claim"])
+        self.assertEqual(
+            [source["url"] for source in self.claim.ai_sources],
+            ["https://example.com/fact-check"],
+        )
+        self.assertTrue(all(
+            source["provenance"] == "PERSISTED_EVIDENCE"
+            for source in self.claim.ai_sources
+        ))
 
     def test_persisted_gfc_unverified_result_abstains_without_tavily_fallback(self):
         self.verdict["verdict"] = "UNVERIFIED"
@@ -1082,6 +1114,26 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
             "url_gfc_evidence_assessment",
             [call.args[1] for call in self.log_stage.call_args_list],
         )
+
+    def test_url_tavily_report_sources_come_from_persisted_evidence(self):
+        self.relevance.return_value = False
+        self.retrieve_tavily.side_effect = self._record_tavily_link
+        self.tavily_response["results"] = [
+            {"url": "https://not-persisted.example/first-hit",
+             "title": "Unlinked result", "content": "Unlinked preview"}
+        ]
+        run = self._execute()
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.context_text, self.cleaned["cleaned_claim"])
+        self.assertEqual(
+            [source["url"] for source in self.claim.ai_sources],
+            ["https://example.com/web"],
+        )
+        self.assertTrue(all(
+            source["provenance"] == "PERSISTED_EVIDENCE"
+            for source in self.claim.ai_sources
+        ))
 
     def test_irrelevant_gfc_is_not_assessed_and_tavily_is_role_isolated(self):
         self.relevance.return_value = False

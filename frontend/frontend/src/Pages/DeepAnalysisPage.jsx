@@ -73,7 +73,9 @@ const normalizeSources = (sources) => {
       if (seen.has(dedupeKey)) return normalizedSources;
       seen.add(dedupeKey);
 
-      normalizedSources.push({ url, title: displayTitle, snippet, domain });
+      const provenance = !isLegacySource && source?.provenance === "PERSISTED_EVIDENCE"
+         ? "PERSISTED_EVIDENCE" : null;
+      normalizedSources.push({ url, title: displayTitle, snippet, domain, provenance });
       return normalizedSources;
    }, []);
 };
@@ -527,6 +529,7 @@ function DeepAnalysisPage() {
    }
 
    const aiSources = normalizeSources(claimData.ai_sources);
+   const hasPersistedAISources = aiSources.some((source) => source.provenance === "PERSISTED_EVIDENCE");
    const confidence = getConfidence(claimData.consensus_score);
    const claimType = formatClaimType(claimData.claim_type);
    const rawClaimType = typeof claimData.claim_type === "string" ? claimData.claim_type.trim().toUpperCase() : "";
@@ -657,10 +660,13 @@ function DeepAnalysisPage() {
                <section className="deep-analysis-section" aria-labelledby="ai-sources-heading">
                   <div className="deep-analysis-section-heading">
                      <div>
-                        <h2 id="ai-sources-heading">Sources considered by AI</h2>
+                        <h2 id="ai-sources-heading">
+                           {hasPersistedAISources ? "Sources linked to evaluated evidence" : "Sources displayed with AI report"}
+                        </h2>
                         <p>
-                           These sources informed the automated assessment. Their inclusion does not independently
-                           guarantee the verdict.
+                           {hasPersistedAISources
+                              ? "These links are drawn from persisted evidence used for this assessment. A source link does not prove support, accuracy, or editorial independence."
+                              : "These are report source links; older reports may not display every evaluated evidence record. Inclusion does not establish the verdict."}
                         </p>
                      </div>
                      <span className="deep-analysis-source-count">

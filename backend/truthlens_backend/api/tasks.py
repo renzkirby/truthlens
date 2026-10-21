@@ -57,6 +57,7 @@ from .verification.cloudflare_pilot import (
     PILOT_MAX_INPUT_CHARS,
     cloudflare_pilot_enabled,
 )
+from .verification.evidence_presentation import persisted_evidence_source_previews
 from .verification.evidence_enrichment import persist_evidence_assessments_batch
 from .verification.ingestion import ingest_raw_evidence
 from .verification.linking import (
@@ -1849,7 +1850,11 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
         article_stance = result.get("article_stance", "NEUTRAL")
 
         # Step 2 — OUT_OF_SCOPE check
-        if cleaned_claim == "OUT_OF_SCOPE":
+        if (
+            not isinstance(cleaned_claim, str)
+            or not cleaned_claim.strip()
+            or cleaned_claim == "OUT_OF_SCOPE"
+        ):
             logger.info("Claim %s was gated as out of scope.", claim_id)
             outcome = "abstained_out_of_scope"
             selected_verdict = "OUT_OF_SCOPE"
@@ -2027,13 +2032,20 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     if review_url:
                         source_urls.append(review_url)
 
+                # The URL report must show the proposition and persisted
+                # FACT_CHECK evidence actually used by final evaluation.
+                report_sources = (
+                    persisted_evidence_source_previews(
+                        run, VerificationEvidence.EvidenceRole.FACT_CHECK,
+                    ) if run is not None else source_urls
+                )
                 save_started_at = time.perf_counter()
                 _save_claim(
                     claim_id,
                     ai_verdict,
                     "Official Fact Check",
-                    cleaned_text,
-                    source_urls,
+                    cleaned_claim,
+                    report_sources,
                 )
                 _log_stage(
                     claim_id,
@@ -2075,7 +2087,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     "confidence_score": 0,
                 },
                 "Live Web Search",
-                cleaned_text,
+                cleaned_claim,
                 [],
             )
             outcome = "completed_tavily_fallback_unverified"
@@ -2207,9 +2219,17 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     tavily_eval_started_at,
                     verdict=ai_verdict.get("verdict"),
                 )
+            # A report source card must reference persisted SECONDARY
+            # evidence; the first three Tavily hits are not the dossier.
+            report_sources = (
+                persisted_evidence_source_previews(
+                    run, VerificationEvidence.EvidenceRole.SECONDARY,
+                ) if run is not None else source_urls
+            )
             save_started_at = time.perf_counter()
             _save_claim(
-                claim_id, ai_verdict, "Live Web Search", cleaned_text, source_urls
+                claim_id, ai_verdict, "Live Web Search", cleaned_claim,
+                report_sources,
             )
             _log_stage(
                 claim_id, "save_claim", save_started_at, source_type="Live Web Search"
