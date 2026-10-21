@@ -35,6 +35,9 @@ _SAFE_CLOUDFLARE_ERROR_CODES = frozenset({
     "INVALID_ASSESSMENT_JSON",
     "ASSESSMENT_BATCH_TOO_LARGE",
     "INVALID_HTTP_TIMEOUT",
+    "INVALID_REJECT_IF_BUSY",
+    "HTTP_429_CAPACITY",
+    "HTTP_429_ALLOCATION",
     "INVALID_PILOT_OPERATION",
     "EMPTY_PROVIDER_RESPONSE",
 })
@@ -72,6 +75,7 @@ def generate_evaluation_json(
     http_post=None,
     audit_metadata=None,
     http_timeout=None,
+    reject_if_busy=False,
 ):
     """Return raw model JSON text to the existing evaluator for validation.
 
@@ -110,12 +114,29 @@ def generate_evaluation_json(
         or not (1 <= http_timeout[1] <= 45)
     ):
         raise CloudflareEvaluationError("INVALID_HTTP_TIMEOUT")
+    if type(reject_if_busy) is not bool:
+        raise CloudflareEvaluationError("INVALID_REJECT_IF_BUSY")
 
     url = (
         f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/"
         "chat/completions"
     )
     post = http_post or requests.post
+    request_body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_instructions},
+            {"role": "user", "content": user_prompt},
+        ],
+        "response_format": {"type": "json_object"},
+        "temperature": 0.1,
+        "max_tokens": max_completion_tokens,
+        "stream": False,
+    }
+    if reject_if_busy:
+        # Cloudflare's OpenAI-compatible /ai/v1/chat/completions supports
+        # options.rejectIfBusy. Only opt-in assessment requests add it.
+        request_body["options"] = {"rejectIfBusy": True}
     try:
         response = post(
             url,
@@ -123,17 +144,7 @@ def generate_evaluation_json(
                 "Authorization": f"Bearer {api_token}",
                 "Content-Type": "application/json",
             },
-            json={
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": system_instructions},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "response_format": {"type": "json_object"},
-                "temperature": 0.1,
-                "max_tokens": max_completion_tokens,
-                "stream": False,
-            },
+            json=request_body,
             timeout=http_timeout,
         )
     except requests.RequestException as exc:
@@ -142,9 +153,30 @@ def generate_evaluation_json(
         ) from None
 
     if response.status_code != 200:
-        # Cloudflare 429 includes both temporary capacity and exhausted
-        # daily Neurons; do not retry blindly or expose account details.
-        raise CloudflareEvaluationError(f"HTTP_{response.status_code}")
+        # Distinguish two documented Cloudflare 429 subcodes *only* when
+        # returned as trusted numeric fields. Never log vendor messages,
+        # request data or arbitrary HTTP response content.
+        safe_code = f"HTTP_{response.status_code}"
+        if response.status_code == 429:
+            try:
+                body = response.json()
+            except (ValueError, TypeError, AttributeError):
+                body = None
+            if isinstance(body, dict):
+                candidates = []
+                error = body.get("error")
+                if isinstance(error, dict):
+                    candidates.append(error.get("code"))
+                errors = body.get("errors")
+                if isinstance(errors, list):
+                    for item in errors[:4]:
+                        if isinstance(item, dict):
+                            candidates.append(item.get("code"))
+                if 3040 in candidates:
+                    safe_code = "HTTP_429_CAPACITY"
+                elif 3036 in candidates:
+                    safe_code = "HTTP_429_ALLOCATION"
+        raise CloudflareEvaluationError(safe_code)
 
     try:
         result = response.json()
