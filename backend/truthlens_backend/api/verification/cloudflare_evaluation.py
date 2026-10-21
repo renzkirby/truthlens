@@ -11,6 +11,7 @@ import requests
 
 DEFAULT_MODEL = "@cf/google/gemma-4-26b-a4b-it"
 MAX_INPUT_CHARS = 28000
+DEFAULT_HTTP_TIMEOUT = (5, 45)
 ACCOUNT_ID_PATTERN = re.compile(r"^[a-fA-F0-9]{32}$")
 
 
@@ -32,6 +33,8 @@ _SAFE_CLOUDFLARE_ERROR_CODES = frozenset({
     "INVALID_EVALUATION_JSON",
     "INVALID_ASSESSMENT_INPUT",
     "INVALID_ASSESSMENT_JSON",
+    "ASSESSMENT_BATCH_TOO_LARGE",
+    "INVALID_HTTP_TIMEOUT",
     "INVALID_PILOT_OPERATION",
     "EMPTY_PROVIDER_RESPONSE",
 })
@@ -68,6 +71,7 @@ def generate_evaluation_json(
     max_completion_tokens=1024,
     http_post=None,
     audit_metadata=None,
+    http_timeout=None,
 ):
     """Return raw model JSON text to the existing evaluator for validation.
 
@@ -96,6 +100,16 @@ def generate_evaluation_json(
         or not 256 <= max_completion_tokens <= 4096
     ):
         raise CloudflareEvaluationError("INVALID_COMPLETION_BUDGET")
+    if http_timeout is None:
+        http_timeout = DEFAULT_HTTP_TIMEOUT
+    elif (
+        not isinstance(http_timeout, tuple)
+        or len(http_timeout) != 2
+        or any(type(part) is not int for part in http_timeout)
+        or not (1 <= http_timeout[0] <= 5)
+        or not (1 <= http_timeout[1] <= 45)
+    ):
+        raise CloudflareEvaluationError("INVALID_HTTP_TIMEOUT")
 
     url = (
         f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/"
@@ -120,7 +134,7 @@ def generate_evaluation_json(
                 "max_tokens": max_completion_tokens,
                 "stream": False,
             },
-            timeout=(5, 45),
+            timeout=http_timeout,
         )
     except requests.RequestException as exc:
         raise CloudflareEvaluationError(
