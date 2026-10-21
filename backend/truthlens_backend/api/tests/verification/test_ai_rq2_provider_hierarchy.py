@@ -69,6 +69,7 @@ class AIRQ2ProviderHierarchyTests(SimpleTestCase):
             "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "1",
             "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
             "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT": "0",
+            "CLOUDFLARE_PILOT_ASSESSMENT_CHUNKING": "0",
             "CLOUDFLARE_PILOT_FINAL_MAX_TOKENS": "",
             "GROQ_MODEL": "openai/gpt-oss-120b",
         }))
