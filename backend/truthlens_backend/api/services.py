@@ -32,6 +32,7 @@ from .verification.cloudflare_pilot import (
     ASSESSMENT_OPERATION,
 )
 from .verification.provider_audit_metrics import validate_user_facing_evaluation
+from .verification.classification_contract import CLASSIFICATION_OPERATION
 from .verification.provider_hierarchy import (
     hierarchy_enabled,
     requires_strict_stage_contract,
@@ -389,7 +390,7 @@ def call_llm_with_fallback(
                     system_instructions, user_prompt,
                     audit_metadata=cloudflare_metrics,
                 )
-            elif operation in {ASSESSMENT_OPERATION, "investigation_classification"}:
+            elif operation in {ASSESSMENT_OPERATION, CLASSIFICATION_OPERATION}:
                 cloudflare_text = call_validated_cloudflare_pilot(
                     system_instructions, user_prompt,
                     operation=operation, audit_metadata=cloudflare_metrics,
