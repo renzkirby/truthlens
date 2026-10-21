@@ -84,8 +84,12 @@ class CloudflarePilotRoutingTests(SimpleTestCase):
         self._enable()
         self.assertTrue(cloudflare_pilot_enabled(PILOT_OPERATION))
         self.assertEqual(self._call(), VALID_EVALUATION)
-        self.cloud.assert_called_once_with(
-            "System instructions", "User dossier",
+        self.cloud.assert_called_once()
+        self.assertEqual(
+            self.cloud.call_args.args, ("System instructions", "User dossier"),
+        )
+        self.assertEqual(
+            self.cloud.call_args.kwargs, {"audit_metadata": {}},
         )
         self.gemini.models.generate_content.assert_not_called()
         self.groq.chat.completions.create.assert_not_called()
