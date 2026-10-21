@@ -73,10 +73,24 @@ class CloudflareWorkerRuntimeProbeTests(SimpleTestCase):
             set(value),
             {
                 "diagnostics_available", "worker_pid", "pilot_enabled",
+                "ai_rq2_hierarchy_enabled",
                 "evidence_assessment_pilot_enabled",
                 "account_id_valid", "api_token_present",
             },
         )
+
+    @override_settings(APP_ENV="development", DEBUG=True)
+    def test_worker_reports_ai_rq2_hierarchy_without_provider_call(self):
+        with patch.dict(os.environ, {
+            "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "1",
+        }):
+            result = inspect_cloudflare_pilot_worker_environment.run()
+        self.assertTrue(result["ai_rq2_hierarchy_enabled"])
+        with patch.dict(os.environ, {
+            "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0",
+        }):
+            result = inspect_cloudflare_pilot_worker_environment.run()
+        self.assertFalse(result["ai_rq2_hierarchy_enabled"])
 
     @override_settings(APP_ENV="development", DEBUG=True)
     def test_worker_probe_reports_independent_assessment_flag(self):
