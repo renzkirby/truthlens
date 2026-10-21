@@ -97,7 +97,9 @@ class Command(BaseCommand):
             self.stdout.write(
                 "DESCRIPTIVE_AUDIT approved={approved} predicted={predicted} "
                 "missing={missing} invalid={invalid_json_or_quotes} "
-                "exact_matches={exact_matches} scope_risks={potential_scope_leaks} "
+                "exact_matches={exact_matches} "
+                "potential_scope_leaks={potential_scope_leaks} "
+                "potential_scope_exclusions={potential_scope_exclusions} "
                 "complete={coverage_complete} rate={exact_match_rate}".format(**report)
             )
             for problem, ids in report["problems_by_case_id"].items():
