@@ -123,6 +123,95 @@ Then exit the shell. Use `inspect_verification_run_telemetry` for the
 failed run ID to verify terminal `FAILED` and
 `failure_code=LLM_UNAVAILABLE`, not a user-facing fabricated verdict.
 
+## Controlled Cloudflare-only single-request worker smoke
+
+**Purpose:** Establish whether the actual current Celery worker can perform
+one Workers AI inference and return the reviewed verdict. Do this **before**
+another complete text or URL verification while Gemini 402 and Groq 429
+remain unresolved. This is not evidence of production accuracy.
+
+The test uses the exact persisted-evidence production prompt from a
+side-effect-free `build_persisted_evidence_prompt` constructor and the
+fixed, reviewed **public** `civics__support` case from the existing
+`realworld_verification_cases.json` corpus. Expected label: `FACT`.
+It performs no claim/evidence DB queries or writes, web searches,
+Gemini/Groq fallback or other provider calls. Raw prompt, evidence,
+reasoning, HTTP errors and credentials are not returned or logged.
+The task is configured with no automatic retries and `acks_late=False`.
+An explicit command launches **exactly one** Celery task and a task
+attempts zero or one Cloudflare HTTP request (5s connect/45s read timeout).
+
+### Prepare
+
+1. On the pilot branch, wait for existing tasks to complete; stop the
+   old development Celery worker so it reloads the latest code.
+2. Pull/fast-forward the branch. In `backend/truthlens_backend`, run:
+
+```powershell
+..\.venv\Scripts\python.exe .\manage.py test `
+  api.tests.verification.test_cloudflare_worker_smoke `
+  api.tests.verification.test_cloudflare_worker_readiness `
+  api.tests.verification.test_cloudflare_verification_pilot `
+  --settings=truthlens_backend.test_settings --keepdb
+
+..\.venv\Scripts\python.exe .\manage.py check
+..\.venv\Scripts\python.exe .\manage.py makemigrations --check --dry-run
+```
+
+3. Make sure local `.env` contains Cloudflare account ID and token,
+   **never paste or commit their values**. Keep the existing
+   pilot flag temporary. In the shell starting **one** Celery worker:
+
+```powershell
+$env:APP_ENV = "development"
+$env:DEBUG = "True"
+$env:ENABLE_CLOUDFLARE_VERIFICATION_PILOT = "1"
+..\.venv\Scripts\python.exe .\manage.py start_celery
+```
+
+Verify startup shows `enabled=True account_id_valid=True
+api_token_present=True` (only presence/format, not authorization),
+and check the registered task list includes
+`api.tasks.cloudflare_single_request_smoke`. No duplicate workers.
+
+### Dry run then one authorized request
+
+In a separate PowerShell session, from `backend/truthlens_backend`:
+
+```powershell
+$env:APP_ENV = "development"
+$env:DEBUG = "True"
+$env:ENABLE_CLOUDFLARE_VERIFICATION_PILOT = "1"
+
+..\.venv\Scripts\python.exe .\manage.py cloudflare_worker_smoke
+```
+
+Dry run returns `DRY RUN` without enqueuing anything or using quota.
+
+Only after the new offline tests pass and Celery readiness is confirmed,
+run **once**:
+
+```powershell
+..\.venv\Scripts\python.exe .\manage.py cloudflare_worker_smoke `
+  --live --confirm-one-request
+```
+
+This sends exactly one Celery job (one or zero provider requests)
+and waits up to 70s for a result. The output is limited to
+worker PID, boolean account/token readiness, pilot status, fixed
+case ID, attempt count, latency, status, safe error code or validated
+verdict/confidence and whether it matches the preapproved label.
+
+If the command waits 70s and times out, do **not** requeue it:
+inspect the task ID and current worker output; the original task
+may still be running. If `account_id_valid=False` at request time,
+Cloudflare HTTP is never sent; investigate environment drift across
+processes. If `HTTP_402`, `HTTP_403` or `HTTP_429`, stop and
+resolve quota/authorization; no blind retries. If the model emits
+invalid JSON, record the sanitised failure and review locally.
+A single matching verdict is a smoke-test result, **not a production
+quality conclusion**. Do not enable staging/production.
+
 ## 1. Offline test gate — flag OFF
 
 In PowerShell from repository root, on a clean branch:
