@@ -527,3 +527,143 @@ cloud inference completes within the timeout.
 
 No new branch, PR, merge, paid call, worker setting change, schema
 migration or live claim submission is part of this checkpoint.
+
+
+## Phase 2 latency follow-up — classification short-timeout investigation (offline checkpoint)
+
+### Evidence and diagnosis boundaries
+
+The last real, approved `shadow` classification used a **clean dedicated
+worker** (same startup and readiness PID **70360**, queue
+`tl_shadow_canary`), returned `SUGGESTED` with the candidate domains
+`SCIENCE`, `TECHNOLOGY`, and created **no authoritative classification**.
+
+Observed provider sequence on that one task:
+- Gemini claim subject classifier: HTTP **402**, **744ms**.
+- Cloudflare Gemma 4 subject classifier: `TRANSPORT_ReadTimeout`, **15,337ms**.
+- Groq subject classifier: HTTP **200**, **1,351ms**.
+- Celery task: **20.704s**.
+
+Previously, Cloudflare **one-item evidence assessment** timed out after
+**15.256s**, and an older **9-item assessment** timed out after
+**46.924s**. A **final verdict**, a different prompt and operation,
+succeeded in **22.313s** with the original **45-second** read timeout.
+
+All timeouts are HTTP **read-inactivity**, not hard wall-clock budgets.
+We **cannot tell** whether these read timeouts resulted from Workers AI
+capacity queuing, slow model generation, network latency, or some other
+cause. The final success at 22 seconds does **not** prove that a
+15-second classification response would succeed if extended. The prior
+one-item assessment timeout cautions against assuming smaller input
+alone guarantees a response.
+
+Cloudflare officially supports top-level
+`{"options":{"rejectIfBusy":true}}` on
+`/ai/v1/chat/completions`, with a capacity reject surfaced as
+HTTP 429 / internal code 3040:
+https://developers.cloudflare.com/workers-ai/features/reject-if-busy/
+The existing adapter already recognizes capacity versus allocation
+429 subcodes without exposing response bodies.
+Cloudflare also documents Gemma 4 thinking; the existing OpenAI-compatible
+route does not have a validated stage-specific thinking toggle in our
+code. **Do not disable thinking, trim classification input/evidence,
+change the model, or reduce the validated final-verdict budget in this
+diagnosis.**
+
+### Two independent, disabled-by-default classification-only diagnostic flags
+
+1. `CLOUDFLARE_PILOT_CLASSIFICATION_REJECT_IF_BUSY=1`: adds
+   `options.rejectIfBusy=true` **only** to the classification-stage
+   Cloudflare request. The original evidence-assessment capacity flag
+   and the final-verdict request are unaffected.
+2. `CLOUDFLARE_PILOT_CLASSIFICATION_READ_TIMEOUT_SEC=30`: changes
+   the classification **read-inactivity** timeout from 15 to **30**
+   seconds, retaining the 3-second connection limit. Only the exact
+   string `30` opts in. Invalid or absent values retain 15s. The
+   assessment per-chunk 15s and final evaluator 45s remain unchanged.
+
+Both have **no effect** unless the established classification pilot is
+enabled: `APP_ENV=development`, `DEBUG=True`,
+`ENABLE_AI_RQ2_PROVIDER_HIERARCHY=1`,
+`ENABLE_CLOUDFLARE_VERIFICATION_PILOT=1`, and
+`ENABLE_CLOUDFLARE_CLASSIFICATION_PILOT=1`. Other stages are unchanged;
+classification's 1,024-token budget, strict domain quote contract,
+Gemma 4 model, provider order, disabled SDK retry, and fallback safety
+are preserved. These are **diagnostic controls**, not fixes or
+production-ready defaults. With `rejectIfBusy` enabled, the fast-fail
+429 can identify capacity rejection but the absence of such a 429
+does **not** prove that queueing was impossible.
+
+The safe development Celery probe additionally exposes:
+`classification_reject_if_busy_enabled` and
+`classification_read_timeout_seconds`, alongside the already existing
+classification pilot flag, mode, credentials-present booleans and PID.
+It emits no tokens, prompts, raw provider bodies or private claim text.
+
+**No live inference is approved by this offline checkpoint.** A later
+*separately approved* controlled comparison could use the existing
+dedicated-worker procedure, but only if it is needed and all security,
+cost and output-quality gates are reviewed. Never automatically retry
+a previous classification or override an already persisted suggestion.
+These flags are not sufficient evidence to enable `enforce`.
+
+### Domain eligibility decision — deliberate non-change
+
+The current authoritative
+`api.verification_domain_policy.eligibility_reason` requires **every**
+classified subject to be covered by a partner's declared
+specializations:
+
+- `SCIENCE` + `TECHNOLOGY` claim vs `SCIENCE`-only partner:
+  `OUTSIDE_SPECIALIZATIONS`.
+- Same claim vs `TECHNOLOGY`-only partner:
+  `OUTSIDE_SPECIALIZATIONS`.
+- Same claim vs `SCIENCE`+`TECHNOLOGY` partner: eligible *only if*
+  a separate **authoritative** classification exists and all other
+  assignment gates pass.
+- A shadow `SUGGESTED` domain proposal is not an authoritative
+  classification and must not grant eligibility regardless of overlap.
+
+This is conservative and may over-exclude experts who can assess a
+cross-domain claim. A simple ANY-domain rule may over-authorize an
+organization without expertise in a material area. Do not replace ALL
+with ANY without determining whether a separate **primary domain**,
+multi-expert review, or narrowly scoped per-claim review is needed;
+those are distinct domain-policy changes requiring user and
+co-developer review. This checkpoint adds only regression coverage
+asserting the existing all-domains behavior.
+
+### Offline test instructions
+
+From `backend/truthlens_backend` after pulling the same working
+branch:
+
+```powershell
+..\\.venv\\Scripts\\python.exe .\\manage.py test `
+  api.tests.verification.test_ai_rq2_classification_fallback `
+  api.tests.verification.test_cloudflare_provider_evaluation `
+  api.tests.verification.test_cloudflare_worker_readiness `
+  api.tests.verification.test_ai_rq2_provider_hierarchy `
+  api.tests.verification.test_cloudflare_assessment_latency_guardrails `
+  api.tests.verification.test_cloudflare_assessment_chunking `
+  api.tests.verification.test_investigation_classifier `
+  api.tests.organization.test_verification_scope `
+  api.tests.verification.test_run_text_runtime `
+  api.tests.verification.test_run_url_runtime `
+  --settings=truthlens_backend.test_settings --keepdb
+
+..\\.venv\\Scripts\\python.exe .\\manage.py check
+..\\.venv\\Scripts\\python.exe .\\manage.py makemigrations --check --dry-run
+```
+
+New tests exercise default unchanged behavior; 15/30 timeout choice;
+capacity-option pass-through only in classification; unchanged
+assessment/final call settings; ignored malformed flags; disabled
+production/staging flags; safe no-network worker probe; and explicit
+all-domain authorization protection. Existing negative-path provider
+tests cover Cloudflare 429 error classification, fake JSON, stage
+fallbacks and no unsafe verdicts.
+
+**Status: changes committed; local offline checks have NOT been run;
+no live calls, PR, merge, branch creation, schema migration, or
+authority policy change.**
