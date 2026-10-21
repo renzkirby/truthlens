@@ -73,8 +73,8 @@ def load_classification_corpus(path):
                 or cid in seen or type(claim) is not str
                 or not 20 <= len(claim.strip()) <= 2400
                 or type(tags) is not list or not tags
-                or len(tags) != len(set(tags))
-                or any(type(t) is not str or t not in TAGS for t in tags)):
+                or any(type(t) is not str or t not in TAGS for t in tags)
+                or len(tags) != len(set(tags))):
             raise ClassificationAuditError("Invalid or duplicate corpus case.")
         seen.add(cid)
         expected = item["draft_expected"]
