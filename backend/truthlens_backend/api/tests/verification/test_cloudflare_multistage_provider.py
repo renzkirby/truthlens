@@ -52,6 +52,7 @@ class CloudflareAssessmentRoutingTests(SimpleTestCase):
         self.enterContext(patch.dict(os.environ, {
             "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "0",
             "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT": "0",
+            "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0",
         }))
         self.prompt = assessment_prompt("item_0", "item_2")
         self.good = result_for("item_0", "item_2")
