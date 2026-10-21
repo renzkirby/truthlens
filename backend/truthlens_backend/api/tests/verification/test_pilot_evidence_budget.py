@@ -181,6 +181,23 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
             )
         provider.assert_not_called()
 
+    def test_invalid_metadata_refuses_compaction_without_provider_request(self):
+        item = replace(
+            _item(content="OVERSIZE CONTENT " * 1800),
+            relevance_score=float("nan"),
+        )
+        groups = [
+            ReasoningEvidenceGroup("EVIDENCE_SOURCE", uuid4(), (item,))
+        ]
+        with (
+            patch("api.services.call_llm_with_fallback") as provider,
+            self.assertRaises(LLMProviderUnavailableError),
+        ):
+            _render_bounded_persisted_evidence_context(
+                groups, "The claim is precisely described here.", "NEUTRAL",
+            )
+        provider.assert_not_called()
+
     def test_pilot_flag_off_keeps_existing_renderer(self):
         groups = _groups(content_length=2900)
         expected = render_reasoning_evidence_dossier(groups)

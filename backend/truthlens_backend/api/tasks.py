@@ -174,7 +174,14 @@ def _render_bounded_persisted_evidence_context(groups, claim_text, stance):
     original_chars = prompt_size(evidence_context)
     if original_chars <= PILOT_MAX_INPUT_CHARS:
         return evidence_context
-    compact_context = render_compact_reasoning_evidence_dossier(groups)
+    try:
+        compact_context = render_compact_reasoning_evidence_dossier(groups)
+    except (TypeError, ValueError):
+        logger.warning("PERSISTED_EVIDENCE_COMPACT_UNAVAILABLE")
+        raise LLMProviderUnavailableError(
+            "The persisted evidence dossier cannot be safely represented "
+            "within the development evaluator budget."
+        ) from None
     compact_chars = prompt_size(compact_context)
     if compact_chars <= PILOT_MAX_INPUT_CHARS:
         logger.info(
