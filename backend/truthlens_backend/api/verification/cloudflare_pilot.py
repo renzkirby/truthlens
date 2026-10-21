@@ -14,12 +14,16 @@ from .cloudflare_evaluation import (
     CloudflareEvaluationError, MAX_INPUT_CHARS, generate_evaluation_json,
 )
 from .provider_audit_metrics import validate_user_facing_evaluation
+from .classification_contract import (
+    CLASSIFICATION_OPERATION, validate_classification_response,
+)
 
 PILOT_FLAG = "ENABLE_CLOUDFLARE_VERIFICATION_PILOT"
 ASSESSMENT_PILOT_FLAG = "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT"
 # Explicit opt-in only for capacity-queue diagnosis, never final verdicts.
 ASSESSMENT_REJECT_BUSY_FLAG = "CLOUDFLARE_PILOT_ASSESSMENT_REJECT_IF_BUSY"
 ASSESSMENT_CHUNKING_FLAG = "CLOUDFLARE_PILOT_ASSESSMENT_CHUNKING"
+CLASSIFICATION_PILOT_FLAG = "ENABLE_CLOUDFLARE_CLASSIFICATION_PILOT"
 PILOT_OPERATION = "persisted_evidence_evaluation"
 ASSESSMENT_OPERATION = "evidence_assessment"
 PILOT_COMPLETION_TOKENS = 2048
@@ -30,6 +34,10 @@ ASSESSMENT_COMPLETION_TOKENS = 2048
 ASSESSMENT_MAX_ITEMS = 4
 ASSESSMENT_MAX_CHUNKS = 3
 ASSESSMENT_HTTP_TIMEOUT = (3, 15)
+CLASSIFICATION_HTTP_TIMEOUT = (3, 15)
+CLASSIFICATION_COMPLETION_TOKENS = 1024
+CLASSIFICATION_MAX_INPUT_CHARS = 2400
+CLASSIFICATION_MIN_INPUT_CHARS = 20
 FINAL_BUDGET_ENV = "CLOUDFLARE_PILOT_FINAL_MAX_TOKENS"
 PILOT_MAX_INPUT_CHARS = MAX_INPUT_CHARS
 _ASSESSMENT_PREFIX = "UNTRUSTED ASSESSMENT DATA:\n"
@@ -49,6 +57,13 @@ def cloudflare_pilot_enabled(operation):
         return False
     if operation == PILOT_OPERATION:
         return True
+    if operation == CLASSIFICATION_OPERATION:
+        # This new operation is not activated by the legacy pilot flag.
+        from .provider_hierarchy import hierarchy_enabled
+        return (
+            hierarchy_enabled()
+            and os.getenv(CLASSIFICATION_PILOT_FLAG, "") == "1"
+        )
     return (
         operation == ASSESSMENT_OPERATION
         and os.getenv(ASSESSMENT_PILOT_FLAG, "") == "1"
@@ -325,6 +340,8 @@ def validate_pilot_response(operation, raw, user_prompt):
         return validate_user_facing_evaluation(raw) is not None
     if operation == ASSESSMENT_OPERATION:
         return _valid_assessment_batch(raw, user_prompt)
+    if operation == CLASSIFICATION_OPERATION:
+        return validate_classification_response(raw, user_prompt)
     return False
 
 
@@ -333,18 +350,31 @@ def call_validated_cloudflare_pilot(
     operation=PILOT_OPERATION, audit_metadata=None,
 ):
     """Only return a fully validated JSON response; one provider attempt."""
-    if operation not in {PILOT_OPERATION, ASSESSMENT_OPERATION}:
+    if operation not in {
+        PILOT_OPERATION, ASSESSMENT_OPERATION, CLASSIFICATION_OPERATION,
+    }:
         raise CloudflareEvaluationError("INVALID_PILOT_OPERATION")
     if operation == ASSESSMENT_OPERATION:
         _expected_assessment_keys(user_prompt)
+    if operation == CLASSIFICATION_OPERATION and (
+        not isinstance(user_prompt, str)
+        or not CLASSIFICATION_MIN_INPUT_CHARS <= len(user_prompt.strip()) <= CLASSIFICATION_MAX_INPUT_CHARS
+    ):
+        raise CloudflareEvaluationError("INVALID_CLASSIFICATION_INPUT")
     options = {
         "max_completion_tokens": (
             ASSESSMENT_COMPLETION_TOKENS
             if operation == ASSESSMENT_OPERATION
-            else _final_completion_budget()
+            else (
+                CLASSIFICATION_COMPLETION_TOKENS
+                if operation == CLASSIFICATION_OPERATION
+                else _final_completion_budget()
+            )
         ),
         "audit_metadata": audit_metadata,
     }
+    if operation == CLASSIFICATION_OPERATION:
+        options["http_timeout"] = CLASSIFICATION_HTTP_TIMEOUT
     if operation == ASSESSMENT_OPERATION:
         # Requests timeouts are not a total wall-clock budget. They bound
         # connection/read inactivity, reducing the prior 45s stall.
@@ -358,6 +388,10 @@ def call_validated_cloudflare_pilot(
         raise CloudflareEvaluationError(
             "INVALID_ASSESSMENT_JSON"
             if operation == ASSESSMENT_OPERATION
-            else "INVALID_EVALUATION_JSON"
+            else (
+                "INVALID_CLASSIFICATION_JSON"
+                if operation == CLASSIFICATION_OPERATION
+                else "INVALID_EVALUATION_JSON"
+            )
         )
     return raw
