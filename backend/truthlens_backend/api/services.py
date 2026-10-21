@@ -29,6 +29,11 @@ from .verification.cloudflare_pilot import (
     ASSESSMENT_OPERATION,
 )
 from .verification.provider_audit_metrics import validate_user_facing_evaluation
+from .verification.provider_hierarchy import (
+    hierarchy_enabled,
+    requires_strict_stage_contract,
+    gemini_job_blocking_error,
+)
 from .verification.cloudflare_evaluation import (
     CloudflareEvaluationError,
     sanitized_cloudflare_error_code,
@@ -197,6 +202,11 @@ def _provider_error_label(error):
         )
     if isinstance(error, errors.APIError) and type(error.code) is int:
         return f"{type(error).__name__} code={error.code}"
+    # Groq SDK (and other HTTP clients) may expose status_code. Only the
+    # integer status is safe; do not serialize provider exception bodies.
+    status = getattr(error, "status_code", None)
+    if type(status) is int and 400 <= status <= 599:
+        return f"{type(error).__name__} code={status}"
     return type(error).__name__
 
 
@@ -250,9 +260,89 @@ def call_llm_with_fallback(
     operation=None,
     gemini_timeout_ms=None,
 ):
-    """Preserve legacy routing; per-operation Cloudflare opt-in for development."""
+    """Opt-in Gemini -> Cloudflare -> Groq; legacy order otherwise preserved."""
     provider_call_id = uuid.uuid4()
     pilot_active = cloudflare_pilot_enabled(operation)
+    hierarchy_active = hierarchy_enabled()
+    stage_contract_active = requires_strict_stage_contract(
+        operation, pilot_active=pilot_active,
+        hierarchy_active=hierarchy_active,
+    )
+
+    def _try_gemini():
+        if not _gemini_degraded.get():
+            gemini_config = {
+                "system_instruction": system_instructions,
+                "response_mime_type": "application/json",
+                "temperature": 0.1,
+            }
+            try:
+                if (
+                    isinstance(gemini_timeout_ms, int)
+                    and not isinstance(gemini_timeout_ms, bool)
+                    and gemini_timeout_ms > 0
+                ):
+                    gemini_config["http_options"] = types.HttpOptions(
+                        timeout=gemini_timeout_ms
+                    )
+                request_config = types.GenerateContentConfig(**gemini_config)
+            except Exception as gemini_err:
+                logger.warning(
+                    "Gemini API failed (%s); trying Groq fallback.",
+                    _provider_error_label(gemini_err),
+                )
+            else:
+                gemini_started_at = time.perf_counter()
+                try:
+                    response = gemini_client.models.generate_content(
+                        model=_model_from_env("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
+                        contents=user_prompt,
+                        config=request_config,
+                    )
+                    content = response.text
+                    if (
+                        stage_contract_active
+                        and not validate_pilot_response(operation, content, user_prompt)
+                    ):
+                        raise ValueError("INVALID_PILOT_FALLBACK_JSON")
+                except Exception as gemini_err:
+                    # The 402/429 classification is job-scoped. No repeated
+                    # requests to an exhausted billing/quota provider this job.
+                    if (
+                        hierarchy_active
+                        and gemini_job_blocking_error(gemini_err)
+                        and _gemini_degraded.get() is not None
+                    ):
+                        _gemini_degraded.set(True)
+                    _log_llm_provider_call(
+                        operation,
+                        "gemini",
+                        provider_call_id,
+                        gemini_started_at,
+                        "failed",
+                        gemini_err,
+                    )
+                    logger.warning(
+                        "Gemini API failed (%s); trying Groq fallback.",
+                        _provider_error_label(gemini_err),
+                    )
+                else:
+                    _log_llm_provider_call(
+                        operation,
+                        "gemini",
+                        provider_call_id,
+                        gemini_started_at,
+                        "success",
+                    )
+                    return content
+
+        return None
+
+    if hierarchy_active:
+        primary_response = _try_gemini()
+        if primary_response is not None:
+            return primary_response
+
     cloudflare_degraded = _cloudflare_pilot_degraded.get() is True
     assessment_bypass_reason = None
     if pilot_active and not cloudflare_degraded and operation == ASSESSMENT_OPERATION:
@@ -308,67 +398,20 @@ def call_llm_with_fallback(
             )
             return cloudflare_text
 
-    if not _gemini_degraded.get():
-        gemini_config = {
-            "system_instruction": system_instructions,
-            "response_mime_type": "application/json",
-            "temperature": 0.1,
-        }
-        try:
-            if (
-                isinstance(gemini_timeout_ms, int)
-                and not isinstance(gemini_timeout_ms, bool)
-                and gemini_timeout_ms > 0
-            ):
-                gemini_config["http_options"] = types.HttpOptions(
-                    timeout=gemini_timeout_ms
-                )
-            request_config = types.GenerateContentConfig(**gemini_config)
-        except Exception as gemini_err:
-            logger.warning(
-                "Gemini API failed (%s); trying Groq fallback.",
-                _provider_error_label(gemini_err),
-            )
-        else:
-            gemini_started_at = time.perf_counter()
-            try:
-                response = gemini_client.models.generate_content(
-                    model=_model_from_env("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
-                    contents=user_prompt,
-                    config=request_config,
-                )
-                content = response.text
-                if (
-                    pilot_active
-                    and not validate_pilot_response(operation, content, user_prompt)
-                ):
-                    raise ValueError("INVALID_PILOT_FALLBACK_JSON")
-            except Exception as gemini_err:
-                _log_llm_provider_call(
-                    operation,
-                    "gemini",
-                    provider_call_id,
-                    gemini_started_at,
-                    "failed",
-                    gemini_err,
-                )
-                logger.warning(
-                    "Gemini API failed (%s); trying Groq fallback.",
-                    _provider_error_label(gemini_err),
-                )
-            else:
-                _log_llm_provider_call(
-                    operation,
-                    "gemini",
-                    provider_call_id,
-                    gemini_started_at,
-                    "success",
-                )
-                return content
+    if not hierarchy_active:
+        legacy_gemini_response = _try_gemini()
+        if legacy_gemini_response is not None:
+            return legacy_gemini_response
 
     groq_started_at = time.perf_counter()
     try:
-        chat_completion = groq_client.chat.completions.create(
+        # Disable the Groq SDK's automatic HTTP retries in the opt-in lane.
+        # A 429 on one Groq model must not trigger a blind model carousel.
+        selected_groq_client = (
+            groq_client.with_options(max_retries=0)
+            if hierarchy_active else groq_client
+        )
+        chat_completion = selected_groq_client.chat.completions.create(
             messages=[
                 {"role": "system", "content": system_instructions},
                 {"role": "user", "content": user_prompt},
@@ -379,7 +422,7 @@ def call_llm_with_fallback(
         )
         content = chat_completion.choices[0].message.content
         if (
-            pilot_active
+            stage_contract_active
             and not validate_pilot_response(operation, content, user_prompt)
         ):
             raise ValueError("INVALID_PILOT_FALLBACK_JSON")
