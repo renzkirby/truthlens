@@ -81,6 +81,7 @@ class Command(BaseCommand):
                     for key in (
                         "prompt_tokens", "completion_tokens",
                         "reasoning_tokens", "total_tokens",
+                        "assessment_chunks_attempted",
                     ):
                         count = metadata.get(key)
                         if type(count) is int and 0 <= count <= 10000000:
