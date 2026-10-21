@@ -76,6 +76,8 @@ class CloudflareWorkerRuntimeProbeTests(SimpleTestCase):
                 "ai_rq2_hierarchy_enabled",
                 "evidence_assessment_pilot_enabled",
                 "classification_pilot_enabled",
+                "classification_reject_if_busy_enabled",
+                "classification_read_timeout_seconds",
                 "investigation_classification_mode",
                 "account_id_valid", "api_token_present",
             },
@@ -115,6 +117,32 @@ class CloudflareWorkerRuntimeProbeTests(SimpleTestCase):
                     "classification_pilot_enabled"
                 ],
             )
+
+    @override_settings(APP_ENV="development", DEBUG=True)
+    def test_classification_latency_profile_probe_never_makes_network_calls(self):
+        with patch.dict(os.environ, {
+            "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "1",
+            "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
+            "ENABLE_CLOUDFLARE_CLASSIFICATION_PILOT": "1",
+            "CLOUDFLARE_PILOT_CLASSIFICATION_REJECT_IF_BUSY": "1",
+            "CLOUDFLARE_PILOT_CLASSIFICATION_READ_TIMEOUT_SEC": "30",
+        }), patch("api.verification.cloudflare_evaluation.requests.post") as post:
+            diagnostic = inspect_cloudflare_pilot_worker_environment.run()
+        self.assertTrue(diagnostic["classification_pilot_enabled"])
+        self.assertTrue(diagnostic["classification_reject_if_busy_enabled"])
+        self.assertEqual(diagnostic["classification_read_timeout_seconds"], 30)
+        post.assert_not_called()
+
+        with patch.dict(os.environ, {
+            "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0",
+            "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
+            "ENABLE_CLOUDFLARE_CLASSIFICATION_PILOT": "1",
+            "CLOUDFLARE_PILOT_CLASSIFICATION_REJECT_IF_BUSY": "1",
+            "CLOUDFLARE_PILOT_CLASSIFICATION_READ_TIMEOUT_SEC": "30",
+        }):
+            diagnostic = inspect_cloudflare_pilot_worker_environment.run()
+        self.assertFalse(diagnostic["classification_reject_if_busy_enabled"])
+        self.assertEqual(diagnostic["classification_read_timeout_seconds"], 15)
 
     @override_settings(APP_ENV="development", DEBUG=True)
     def test_worker_probe_reports_independent_assessment_flag(self):
