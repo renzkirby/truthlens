@@ -190,12 +190,35 @@ class SubjectCorpusQualityAuditTests(SimpleTestCase):
         self.assertEqual(report["wrong_domains"], 1)
         self.assertEqual(report["overclassified_abstentions"], 1)
         self.assertEqual(report["potential_scope_leaks"], 2)
+        self.assertEqual(report["potential_scope_exclusions"], 1)
         self.assertEqual(
             report["problems_by_case_id"]["potential_scope_leaks"],
             ["cross_spacecraft", "ambiguous_plan"],
         )
         self.assertFalse(report["coverage_complete"])
         self.assertIsNone(report["exact_match_rate"])
+        self.assertIs(report["eligible_for_automatic_enforcement"], False)
+
+    def test_extra_subject_or_abstention_could_exclude_qualified_partners(self):
+        approved = _approve(self.cases, "science_telescope", "cross_spacecraft")
+        predictions = {
+            "science_telescope": valid_response(
+                ("SCIENCE", "Astronomers published telescope observations"),
+                ("TECHNOLOGY", "telescope observations"),
+            ),
+            "cross_spacecraft": json.dumps({
+                "decision": "ABSTAIN", "domains": [],
+            }),
+        }
+        report = score_classification_predictions(approved, predictions)
+        self.assertEqual(report["wrong_domains"], 1)
+        self.assertEqual(report["missed_classifications"], 1)
+        self.assertEqual(report["potential_scope_exclusions"], 2)
+        self.assertEqual(report["potential_scope_leaks"], 0)
+        self.assertEqual(
+            report["problems_by_case_id"]["potential_scope_exclusions"],
+            ["science_telescope", "cross_spacecraft"],
+        )
         self.assertIs(report["eligible_for_automatic_enforcement"], False)
 
     def test_command_scores_only_human_approved_references(self):
