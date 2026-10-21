@@ -25,6 +25,10 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--run-id", required=True)
+        parser.add_argument(
+            "--show-usage", action="store_true",
+            help="Show sanitized Cloudflare completion metadata when present.",
+        )
 
     def handle(self, *args, **options):
         if not (
@@ -68,11 +72,27 @@ class Command(BaseCommand):
                     else:
                         # Historical events have only an exception type.
                         reason = " reason=not_recorded"
+                usage = ""
+                if options["show_usage"] and event.provider == "cloudflare":
+                    metadata = event.metadata if isinstance(event.metadata, dict) else {}
+                    for key in (
+                        "prompt_tokens", "completion_tokens",
+                        "reasoning_tokens", "total_tokens",
+                    ):
+                        count = metadata.get(key)
+                        if type(count) is int and 0 <= count <= 10000000:
+                            usage += f" {key}={count}"
+                    finish = metadata.get("finish_reason")
+                    if finish in {"stop", "length", "tool_calls", "content_filter"}:
+                        usage += f" finish_reason={finish}"
+                    reasoning = metadata.get("reasoning_present")
+                    if isinstance(reasoning, bool):
+                        usage += f" reasoning_present={str(reasoning).lower()}"
                 self.stdout.write(
                     f"PROVIDER name={_safe(event.name)} "
                     f"provider={_safe(event.provider)} "
                     f"outcome={_safe(event.outcome)} "
-                    f"duration_ms={event.duration_ms}{reason}"
+                    f"duration_ms={event.duration_ms}{reason}{usage}"
                 )
             elif event.event_type == VerificationTelemetryEvent.EventType.PIPELINE_STAGE:
                 self.stdout.write(
