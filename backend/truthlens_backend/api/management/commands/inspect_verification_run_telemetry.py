@@ -83,7 +83,9 @@ class Command(BaseCommand):
                         if type(count) is int and 0 <= count <= 10000000:
                             usage += f" {key}={count}"
                     finish = metadata.get("finish_reason")
-                    if finish in {"stop", "length", "tool_calls", "content_filter"}:
+                    if isinstance(finish, str) and finish in {
+                        "stop", "length", "tool_calls", "content_filter",
+                    }:
                         usage += f" finish_reason={finish}"
                     reasoning = metadata.get("reasoning_present")
                     if isinstance(reasoning, bool):
