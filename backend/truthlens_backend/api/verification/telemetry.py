@@ -114,7 +114,7 @@ def record_llm_provider_call(
     if provider_label == "cloudflare" and isinstance(metadata, dict):
         for key in (
             "prompt_tokens", "completion_tokens", "total_tokens",
-            "reasoning_tokens",
+            "reasoning_tokens", "assessment_chunks_attempted",
         ):
             count = safe_int(metadata.get(key))
             if count is not None:
