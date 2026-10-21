@@ -227,6 +227,14 @@ Before proposing a transition, require:
 - Stable worker/config hygiene and acceptable provider-outage and
   latency behavior. This audit does not address Cloudflare
   evidence-assessment reliability.
+- The strict JSON/schema contract must be applied consistently on **every**
+  permitted classification provider and runtime mode before production
+  enforce. The current `requires_strict_stage_contract` is tied to the
+  development-only AI-RQ-2 hierarchy/pilot, whereas the older
+  `validate_model_suggestion` path checks quoted codes but does not
+  reject every surplus response field. This is a separate contract
+  hardening decision and must not be silently introduced in a
+  co-developer's enforcement rollout.
 - No stacked-branch PR or merge until co-development dependencies
   are reviewed and accepted.
 
