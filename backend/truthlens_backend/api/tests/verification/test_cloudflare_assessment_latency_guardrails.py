@@ -228,6 +228,48 @@ class CloudflareAssessmentLatencyRoutingTests(SimpleTestCase):
                 "INVALID_ASSESSMENT_INPUT",
             )
 
+    def test_failed_cloudflare_records_only_safe_usage_and_finish_metadata(self):
+        self.gemini.models.generate_content.return_value = SimpleNamespace(
+            text=_batch_response(2),
+        )
+
+        def invalid_response(*args, **kwargs):
+            kwargs["audit_metadata"].update({
+                "prompt_tokens": 1500,
+                "completion_tokens": 2048,
+                "reasoning_tokens": 1800,
+                "finish_reason": "length",
+                "reasoning_present": True,
+                "raw_evidence": "PRIVATE CLAIM AND SOURCE TEXT",
+                "api_token": "PRIVATE_API_CREDENTIAL",
+            })
+            raise CloudflareEvaluationError("INVALID_ASSESSMENT_JSON")
+
+        self.cloud.side_effect = invalid_response
+
+        @verification_telemetry_scope()
+        def run(claim_id):
+            self.assertEqual(self._assessment(2), _batch_response(2))
+            return [event for event in get_current_collector().events
+                    if event["provider"] == "cloudflare"]
+
+        cloudflare_events = run(str(uuid4()))
+        self.assertEqual(len(cloudflare_events), 1)
+        event = cloudflare_events[0]
+        self.assertEqual(event["outcome"], "failed")
+        self.assertEqual(
+            event["error_label"],
+            "CloudflareEvaluationError code=INVALID_ASSESSMENT_JSON",
+        )
+        self.assertEqual(event["metadata"], {
+            "prompt_tokens": 1500,
+            "completion_tokens": 2048,
+            "reasoning_tokens": 1800,
+            "finish_reason": "length",
+            "reasoning_present": True,
+        })
+        self.assertNotIn("PRIVATE", str(event))
+
     def test_local_bypass_event_never_leaks_claims_or_evidence(self):
         @verification_telemetry_scope()
         def run(claim_id):
