@@ -120,6 +120,8 @@ def inspect_cloudflare_pilot_worker_environment():
     from .verification.cloudflare_evaluation import ACCOUNT_ID_PATTERN
     from .verification.cloudflare_pilot import cloudflare_pilot_enabled
     from .verification.provider_hierarchy import hierarchy_enabled
+    from .verification.classification_contract import CLASSIFICATION_OPERATION
+    from .investigation_classifier import classification_mode
 
     return {
         "diagnostics_available": True,
@@ -131,6 +133,10 @@ def inspect_cloudflare_pilot_worker_environment():
         "evidence_assessment_pilot_enabled": cloudflare_pilot_enabled(
             "evidence_assessment"
         ),
+        "classification_pilot_enabled": cloudflare_pilot_enabled(
+            CLASSIFICATION_OPERATION
+        ),
+        "investigation_classification_mode": classification_mode(),
         "account_id_valid": bool(ACCOUNT_ID_PATTERN.fullmatch(
             os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
         )),
