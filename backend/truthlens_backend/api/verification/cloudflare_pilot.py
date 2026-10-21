@@ -24,6 +24,8 @@ ASSESSMENT_PILOT_FLAG = "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT"
 ASSESSMENT_REJECT_BUSY_FLAG = "CLOUDFLARE_PILOT_ASSESSMENT_REJECT_IF_BUSY"
 ASSESSMENT_CHUNKING_FLAG = "CLOUDFLARE_PILOT_ASSESSMENT_CHUNKING"
 CLASSIFICATION_PILOT_FLAG = "ENABLE_CLOUDFLARE_CLASSIFICATION_PILOT"
+CLASSIFICATION_REJECT_BUSY_FLAG = "CLOUDFLARE_PILOT_CLASSIFICATION_REJECT_IF_BUSY"
+CLASSIFICATION_READ_TIMEOUT_FLAG = "CLOUDFLARE_PILOT_CLASSIFICATION_READ_TIMEOUT_SEC"
 PILOT_OPERATION = "persisted_evidence_evaluation"
 ASSESSMENT_OPERATION = "evidence_assessment"
 PILOT_COMPLETION_TOKENS = 2048
@@ -83,6 +85,32 @@ def cloudflare_assessment_reject_if_busy_enabled():
         and cloudflare_pilot_enabled(ASSESSMENT_OPERATION)
         and os.getenv(ASSESSMENT_REJECT_BUSY_FLAG, "") == "1"
     )
+
+
+def cloudflare_classification_reject_if_busy_enabled():
+    """Opt-in to documented queue fast-fail for classification only.
+
+    The existing assessment fast-fail flag is separate. Final evaluation
+    deliberately retains its original request body.
+    """
+    return (
+        cloudflare_pilot_enabled(CLASSIFICATION_OPERATION)
+        and os.getenv(CLASSIFICATION_REJECT_BUSY_FLAG, "") == "1"
+    )
+
+
+def cloudflare_classification_http_timeout():
+    """Allow a *single* dev-only diagnostic timeout arm (15s vs 30s read).
+
+    The requests read timeout bounds socket inactivity, not total duration.
+    Changing the classification stage cannot modify final verdict settings.
+    """
+    if (
+        cloudflare_pilot_enabled(CLASSIFICATION_OPERATION)
+        and os.getenv(CLASSIFICATION_READ_TIMEOUT_FLAG, "") == "30"
+    ):
+        return (CLASSIFICATION_HTTP_TIMEOUT[0], 30)
+    return CLASSIFICATION_HTTP_TIMEOUT
 
 
 def cloudflare_assessment_chunking_enabled():
@@ -374,7 +402,9 @@ def call_validated_cloudflare_pilot(
         "audit_metadata": audit_metadata,
     }
     if operation == CLASSIFICATION_OPERATION:
-        options["http_timeout"] = CLASSIFICATION_HTTP_TIMEOUT
+        options["http_timeout"] = cloudflare_classification_http_timeout()
+        if cloudflare_classification_reject_if_busy_enabled():
+            options["reject_if_busy"] = True
     if operation == ASSESSMENT_OPERATION:
         # Requests timeouts are not a total wall-clock budget. They bound
         # connection/read inactivity, reducing the prior 45s stall.
