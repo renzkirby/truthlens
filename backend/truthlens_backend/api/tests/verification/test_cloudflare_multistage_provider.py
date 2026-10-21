@@ -269,6 +269,49 @@ class CloudflareAssessmentContractTests(SimpleTestCase):
             ASSESSMENT_COMPLETION_TOKENS,
         )
 
+    @override_settings(APP_ENV="development", DEBUG=True)
+    def test_final_budget_default_and_opt_in_development_only(self):
+        from api.verification.cloudflare_pilot import PILOT_COMPLETION_TOKENS
+        evaluation = json.dumps({
+            "reasoning": "Documented support.",
+            "verdict": "FACT",
+            "summary": "The claim is supported.",
+            "confidence_score": 91,
+            "score_context": "One direct public source.",
+        })
+        with patch(
+            "api.verification.cloudflare_pilot.generate_evaluation_json",
+            return_value=evaluation,
+        ) as provider:
+            call_validated_cloudflare_pilot("System", "Dossier")
+            self.assertEqual(
+                provider.call_args.kwargs["max_completion_tokens"],
+                PILOT_COMPLETION_TOKENS,
+            )
+            with patch.dict(os.environ, {
+                "CLOUDFLARE_PILOT_FINAL_MAX_TOKENS": "1536",
+            }):
+                call_validated_cloudflare_pilot("System", "Dossier")
+                self.assertEqual(
+                    provider.call_args.kwargs["max_completion_tokens"], 1536,
+                )
+            with patch.dict(os.environ, {
+                "CLOUDFLARE_PILOT_FINAL_MAX_TOKENS": "20",
+            }):
+                call_validated_cloudflare_pilot("System", "Dossier")
+                self.assertEqual(
+                    provider.call_args.kwargs["max_completion_tokens"],
+                    PILOT_COMPLETION_TOKENS,
+                )
+            with patch.dict(os.environ, {
+                "CLOUDFLARE_PILOT_FINAL_MAX_TOKENS": "1536",
+            }), override_settings(APP_ENV="production", DEBUG=False):
+                call_validated_cloudflare_pilot("System", "Dossier")
+                self.assertEqual(
+                    provider.call_args.kwargs["max_completion_tokens"],
+                    PILOT_COMPLETION_TOKENS,
+                )
+
     def test_operation_whitelist_blocks_unknown_stage(self):
         with patch(
             "api.verification.cloudflare_pilot.generate_evaluation_json"
