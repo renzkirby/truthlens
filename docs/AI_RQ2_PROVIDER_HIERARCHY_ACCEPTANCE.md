@@ -171,3 +171,118 @@ new hierarchy flag to test legacy behavior independently.
    remain in #126 and are not changed here.
 6. Any actual live canary, staging/production activation, PR, merge,
    or promotion requires a separate decision.
+
+
+## Phase 2 checkpoint — assessment-only capacity queue experiment
+
+This phase is deliberately implemented on the **same** active AI-RQ-2
+branch, not a ninth stacked branch. Changes have **not been locally
+tested yet**. Do not merge the inherited 154-commit history directly
+into main. The outstanding PARTNER-GOV-1 #128 manual verification
+gate is blocked by provider reliability; no automatic governance
+acceptance is implied by any new AI tests. Continue isolated review
+until the dependencies are ready for appropriately scoped PRs.
+
+Cloudflare documents `options.rejectIfBusy: true` in the **OpenAI
+compatible Chat Completions** request body:
+https://developers.cloudflare.com/workers-ai/features/reject-if-busy/
+
+Cloudflare also documents numeric 429 error codes:
+`3040` out of capacity and `3036` exhausted daily allowance:
+https://developers.cloudflare.com/workers-ai/platform/errors/
+
+**Important:** capacity queueing is only a *hypothesis* for the
+observed 46.9s and 15.3s evidence assessment read timeouts. Faster
+refusal is **not** successful reasoning, and this experimental option
+does not guarantee reduced end-to-end latency. The smaller second
+canary had only one fact-check evidence item and still timed out.
+Existing final evaluations on different runs succeeded, but their
+quality remains independently subject to evidence-source review.
+
+### Phase 2 opt-in — not for production
+
+Leave Cloudflare evidence assessment **off by default**. To later run
+a separately approved **development-only** assessment experiment
+requires *all* of these flags, and Django
+`APP_ENV=development` + `DEBUG=True`:
+
+```powershell
+$env:ENABLE_AI_RQ2_PROVIDER_HIERARCHY = "1"
+$env:ENABLE_CLOUDFLARE_VERIFICATION_PILOT = "1"
+$env:ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT = "1"
+$env:CLOUDFLARE_PILOT_ASSESSMENT_REJECT_IF_BUSY = "1"
+```
+
+The experiment is not enabled by merely reading this document or
+having these variables stored in a different, non-worker terminal.
+Restart and inspect the worker flags if a live run is **separately
+authorized**. Never auto-run a provider canary or rotate credentials.
+
+With these flags on, *only eligible Cloudflare evidence assessment*
+requests add the documented JSON field
+`"options":{"rejectIfBusy":true}`. Other request JSON and the
+`(3,15)` connect/read inactivity timeout are unchanged. Gemini remains
+first; Cloudflare is attempted only if Gemini is unavailable or its
+stage response violates the strict schema. Existing complete-batch
+preflight and one-job Cloudflare breaker remain unchanged.
+
+The **final verdict stage never** adds `options.rejectIfBusy`, never
+alters Gemma 4 thinking mode, still uses its existing 2048-token
+default and `(5,45)` timeout, and still validates exactly the
+persisted-evidence JSON contract. This phase does not silently
+disable thinking or shorten evidence to accelerate a model.
+
+A response with Cloudflare 429/internal `3040` now produces the
+sanitized error label `HTTP_429_CAPACITY`; internal `3036` produces
+`HTTP_429_ALLOCATION`. A malformed, missing or unknown internal
+code stays `HTTP_429`. No body, account details, raw prompts or
+request ID are logged. **No retry** is added for either 429 case.
+
+When a failed validated Cloudflare response has already supplied
+safe `prompt_tokens`, `completion_tokens`, `total_tokens`,
+`reasoning_tokens`, `finish_reason` or `reasoning_present`,
+the telemetry records only those allowlisted counts/flags.
+Transport timeouts may not provide any usage metadata: do not
+invent numbers or infer why a timeout occurred from their absence.
+The `inspect_verification_run_telemetry --show-usage` command can
+display sanitized persisted usage, if actually supplied. No hidden
+thinking content is ever copied into a verdict, event or diagnostic.
+
+### Offline acceptance for Phase 2
+
+From `backend/truthlens_backend`, after pulling the active
+`feat/ai-rq2-provider-hierarchy` branch:
+
+```powershell
+..\\.venv\\Scripts\\python.exe .\\manage.py test `
+  api.tests.verification.test_ai_rq2_provider_hierarchy `
+  api.tests.verification.test_cloudflare_assessment_latency_guardrails `
+  api.tests.verification.test_cloudflare_provider_evaluation `
+  api.tests.verification.test_cloudflare_multistage_provider `
+  api.tests.verification.test_cloudflare_verification_pilot `
+  api.tests.verification.test_cloudflare_worker_readiness `
+  api.tests.verification.test_evidence_assessment `
+  api.tests.verification.test_persisted_evidence_reasoning `
+  api.tests.verification.test_verification_run_telemetry_inspection `
+  api.tests.verification.test_pipeline_telemetry `
+  api.tests.verification.test_run_text_runtime `
+  api.tests.verification.test_run_url_runtime `
+  api.tests.verification.test_pilot_evidence_budget `
+  api.tests.verification.test_claim_legacy_schema_repair `
+  --settings=truthlens_backend.test_settings --keepdb
+
+..\\.venv\\Scripts\\python.exe .\\manage.py check
+..\\.venv\\Scripts\\python.exe .\\manage.py makemigrations --check --dry-run
+```
+
+Mocked coverage verifies no network, strict flag/scope validation,
+unchanged full evidence and final budget, documented request shape,
+structured numeric 429 distinctions, unknown-error fallback,
+reasoning-text privacy, and allowlisted failure telemetry.
+
+**Not yet demonstrated:** that real Gemma 4 respects fast-fail on
+the currently configured Cloudflare account; live latency improvement;
+whether any thinking/output tuning is quality-neutral; or a resolved
+real TEXT/URL claim-verification workflow that will unblock #128.
+Require explicit new approval for a live model call and inspect both
+quality and provider timing before further adjustments.
