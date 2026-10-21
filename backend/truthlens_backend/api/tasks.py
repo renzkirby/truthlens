@@ -2157,7 +2157,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                             "confidence_score": 0,
                         },
                         "Live Web Search",
-                        cleaned_text,
+                        cleaned_claim,
                         [],
                     )
                     outcome = "completed_tavily_fallback_unverified"
