@@ -288,7 +288,7 @@ def call_llm_with_fallback(
                 request_config = types.GenerateContentConfig(**gemini_config)
             except Exception as gemini_err:
                 logger.warning(
-                    "Gemini API failed (%s); trying Groq fallback.",
+                    "Gemini API failed (%s); continuing fallback routing.",
                     _provider_error_label(gemini_err),
                 )
             else:
@@ -323,7 +323,7 @@ def call_llm_with_fallback(
                         gemini_err,
                     )
                     logger.warning(
-                        "Gemini API failed (%s); trying Groq fallback.",
+                        "Gemini API failed (%s); continuing fallback routing.",
                         _provider_error_label(gemini_err),
                     )
                 else:
@@ -382,8 +382,8 @@ def call_llm_with_fallback(
                 cloudflare_started_at, "failed", cloudflare_err,
             )
             logger.warning(
-                "Cloudflare verification pilot failed (%s); trying "
-                "existing Gemini/Groq routing.",
+                "Cloudflare verification pilot failed (%s); continuing "
+                "fallback routing.",
                 _provider_error_label(cloudflare_err),
             )
             # A provider failure should not trigger repeated quota-consuming
