@@ -139,7 +139,7 @@ def cloudflare_assessment_chunking_bypass_reason(system_instructions, user_promp
     return None
 
 
-def _aggregate_chunk_metadata(metadata, chunks):
+def _aggregate_chunk_metadata(metadata, chunks, *, complete=False):
     """Whitelist counters, and distinguish partial attempts from success."""
     if metadata is None:
         return
@@ -157,7 +157,7 @@ def _aggregate_chunk_metadata(metadata, chunks):
             chunk.get("reasoning_present") is True for chunk in chunks
         )
         # Only a complete multi-chunk response can claim finish_reason=stop.
-        if all(chunk.get("finish_reason") == "stop" for chunk in chunks):
+        if complete and all(chunk.get("finish_reason") == "stop" for chunk in chunks):
             metadata["finish_reason"] = "stop"
 
 
@@ -176,6 +176,7 @@ def call_validated_cloudflare_assessment_chunks(
     )
     completed = {}
     attempted_metadata = []
+    complete = False
     try:
         for chunk_prompt in prompts:
             chunk_metadata = {}
@@ -198,9 +199,12 @@ def call_validated_cloudflare_assessment_chunks(
         )
         if not validate_pilot_response(ASSESSMENT_OPERATION, full_response, user_prompt):
             raise CloudflareEvaluationError("INVALID_ASSESSMENT_JSON")
+        complete = True
         return full_response
     finally:
-        _aggregate_chunk_metadata(audit_metadata, attempted_metadata)
+        _aggregate_chunk_metadata(
+            audit_metadata, attempted_metadata, complete=complete,
+        )
 
 
 def _final_completion_budget():
