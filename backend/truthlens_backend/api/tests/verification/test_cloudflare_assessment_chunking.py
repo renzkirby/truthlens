@@ -6,7 +6,9 @@ from unittest.mock import Mock, patch
 
 from django.test import SimpleTestCase, override_settings
 
-from api.services import call_llm_with_fallback, llm_provider_scope
+from api.services import (
+    LLMProviderUnavailableError, call_llm_with_fallback, llm_provider_scope,
+)
 from api.verification.cloudflare_evaluation import CloudflareEvaluationError
 from api.verification.cloudflare_pilot import (
     ASSESSMENT_MAX_CHUNKS,
@@ -231,6 +233,29 @@ class CloudflareAssessmentChunkingTests(SimpleTestCase):
             events[0]["metadata"]["assessment_chunks_attempted"], 2,
         )
         self.assertNotIn("private_token", str(events[0]))
+
+    def test_all_providers_unavailable_never_returns_partial_cloudflare_json(self):
+        original = make_prompt(12)
+        attempts = 0
+
+        def fail_second(system, prompt, **kwargs):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 2:
+                raise CloudflareEvaluationError("TRANSPORT_ReadTimeout")
+            return self._generate_chunk(system, prompt, **kwargs)
+
+        self.generate.side_effect = fail_second
+        self.groq_fallback.side_effect = RuntimeError("Synthetic 429 quota")
+        with self.assertRaises(LLMProviderUnavailableError):
+            with llm_provider_scope():
+                self._call(original)
+        self.assertEqual(attempts, 2)
+        self.groq_fallback.assert_called_once()
+        self.assertEqual(
+            self.groq_fallback.call_args.kwargs["messages"][1]["content"],
+            original,
+        )
 
     def test_a_malformed_single_chunk_never_gets_partially_accepted(self):
         original = make_prompt(12)
