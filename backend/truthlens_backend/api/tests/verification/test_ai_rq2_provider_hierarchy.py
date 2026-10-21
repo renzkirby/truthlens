@@ -351,6 +351,10 @@ class AIRQ2ProviderPolicyTests(SimpleTestCase):
             hierarchy_active=True,
         ))
         self.assertTrue(requires_strict_stage_contract(
+            "investigation_classification", pilot_active=False,
+            hierarchy_active=True,
+        ))
+        self.assertTrue(requires_strict_stage_contract(
             "evidence_assessment", pilot_active=True,
             hierarchy_active=False,
         ))
