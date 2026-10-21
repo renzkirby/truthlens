@@ -1,5 +1,6 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
+import json
 from datetime import datetime
 from uuid import UUID
 
@@ -155,4 +156,58 @@ def render_reasoning_evidence_dossier(
             if evidence_item.content is not None:
                 lines.extend(["Content:", evidence_item.content])
 
+    return "\n".join(lines)
+
+
+def render_compact_reasoning_evidence_dossier(
+    evidence_groups: Iterable[ReasoningEvidenceGroup],
+) -> str:
+    """Lossless, shorter presentation of the *same* persisted evidence.
+
+    All original content, metadata fields, ordering and identity groups are
+    retained. A once-only positional schema replaces repeated field labels.
+    This is an optional presentation for oversize dev-pilot prompts only;
+    the existing production renderer remains unchanged.
+    """
+    groups = tuple(evidence_groups)
+    if not groups:
+        return ""
+
+    lines = [
+        "PERSISTED EVIDENCE DOSSIER",
+        (
+            "Items within one SOURCE IDENTITY GROUP share normalized source "
+            "identity and must not be counted as multiple independent confirmations."
+        ),
+        (
+            "Different SOURCE IDENTITY GROUPS are not guaranteed to be "
+            "editorially independent."
+        ),
+        (
+            "EVIDENCE ITEM metadata field order (JSON array): "
+            "provider, evidence_role, stance, publisher, source_type, title, "
+            "url, canonical_url, published_at, retrieved_at, relevance_score, "
+            "directness_score, recency_score. null means not recorded."
+        ),
+    ]
+    for group_index, group in enumerate(groups, start=1):
+        lines.extend([
+            f"=== SOURCE IDENTITY GROUP {group_index} ===",
+            f"Identity kind: {group.identity_kind}",
+        ])
+        for item_index, item in enumerate(group.evidence, start=1):
+            values = (
+                item.provider, item.evidence_role, item.stance,
+                item.publisher, item.source_type, item.title,
+                item.url, item.canonical_url,
+                item.published_at.isoformat() if item.published_at is not None else None,
+                item.retrieved_at.isoformat() if item.retrieved_at is not None else None,
+                item.relevance_score, item.directness_score, item.recency_score,
+            )
+            lines.extend([
+                f"--- EVIDENCE ITEM {item_index} ---",
+                json.dumps(values, ensure_ascii=False, allow_nan=False),
+            ])
+            if item.content is not None:
+                lines.extend(["Content:", item.content])
     return "\n".join(lines)

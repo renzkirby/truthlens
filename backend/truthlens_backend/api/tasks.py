@@ -50,6 +50,11 @@ from .verification.evidence_dossier import (
     filter_reasoning_evidence_dossier_by_role,
     load_reasoning_evidence_dossier_for_run,
     render_reasoning_evidence_dossier,
+    render_compact_reasoning_evidence_dossier,
+)
+from .verification.cloudflare_pilot import (
+    PILOT_MAX_INPUT_CHARS,
+    cloudflare_pilot_enabled,
 )
 from .verification.evidence_enrichment import persist_evidence_assessments_batch
 from .verification.ingestion import ingest_raw_evidence
@@ -142,6 +147,56 @@ def _schedule_subject_classification(claim_id):
             "Could not schedule optional subject classification for claim %s",
             claim_id,
         )
+
+
+def _render_bounded_persisted_evidence_context(groups, claim_text, stance):
+    """Use original dossier unchanged unless dev pilot exceeds its input cap.
+
+    A compact metadata-only representation retains each original evidence
+    content byte-for-byte, without dropping sources or contradictory items.
+    If even the compact presentation does not fit, fail closed and never
+    send a selectively truncated dossier to Gemini, Groq or Cloudflare.
+    """
+    evidence_context = render_reasoning_evidence_dossier(groups)
+    if not evidence_context or not cloudflare_pilot_enabled(
+        "persisted_evidence_evaluation"
+    ):
+        return evidence_context
+
+    from .services import build_persisted_evidence_prompt
+
+    def prompt_size(context):
+        system, user = build_persisted_evidence_prompt(
+            claim_text, context, stance,
+        )
+        return len(system) + len(user)
+
+    original_chars = prompt_size(evidence_context)
+    if original_chars <= PILOT_MAX_INPUT_CHARS:
+        return evidence_context
+    compact_context = render_compact_reasoning_evidence_dossier(groups)
+    compact_chars = prompt_size(compact_context)
+    if compact_chars <= PILOT_MAX_INPUT_CHARS:
+        logger.info(
+            "PERSISTED_EVIDENCE_COMPACT original_chars=%s compact_chars=%s "
+            "group_count=%s",
+            original_chars,
+            compact_chars,
+            len(groups),
+        )
+        return compact_context
+
+    logger.warning(
+        "PERSISTED_EVIDENCE_OVERSIZE original_chars=%s compact_chars=%s "
+        "limit_chars=%s",
+        original_chars,
+        compact_chars,
+        PILOT_MAX_INPUT_CHARS,
+    )
+    raise LLMProviderUnavailableError(
+        "The persisted evidence dossier exceeds the development evaluator "
+        "input budget without dropping source material."
+    )
 
 
 def _resolve_exact_published_claim(claim, cleaned_claim):
@@ -1357,8 +1412,8 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             evidence_dossier,
                             VerificationEvidence.EvidenceRole.FACT_CHECK,
                         )
-                    evidence_context = render_reasoning_evidence_dossier(
-                        fact_check_groups
+                    evidence_context = _render_bounded_persisted_evidence_context(
+                        fact_check_groups, cleaned_claim, article_stance
                     )
                     has_persisted_evidence = bool(evidence_context)
                     if has_persisted_evidence:
@@ -1521,8 +1576,8 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             evidence_dossier,
                             VerificationEvidence.EvidenceRole.SECONDARY,
                         )
-                    evidence_context = render_reasoning_evidence_dossier(
-                        secondary_groups
+                    evidence_context = _render_bounded_persisted_evidence_context(
+                        secondary_groups, cleaned_claim, article_stance
                     )
                     if evidence_context:
                         evaluator_invoked = True
@@ -1894,7 +1949,9 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         evidence_dossier,
                         VerificationEvidence.EvidenceRole.FACT_CHECK,
                     )
-                evidence_context = render_reasoning_evidence_dossier(fact_check_groups)
+                evidence_context = _render_bounded_persisted_evidence_context(
+                    fact_check_groups, cleaned_claim, article_stance
+                )
                 if evidence_context:
                     try:
                         ai_verdict = evaluate_claim_with_persisted_evidence(
@@ -2083,7 +2140,9 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         evidence_dossier,
                         VerificationEvidence.EvidenceRole.SECONDARY,
                     )
-                evidence_context = render_reasoning_evidence_dossier(secondary_groups)
+                evidence_context = _render_bounded_persisted_evidence_context(
+                    secondary_groups, cleaned_claim, article_stance
+                )
                 if evidence_context:
                     evaluator_invoked = True
                     ai_verdict = evaluate_claim_with_persisted_evidence(
