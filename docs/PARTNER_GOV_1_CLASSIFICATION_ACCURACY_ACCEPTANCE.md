@@ -52,6 +52,12 @@ supported each assigned subject.
 
 These are **audit tooling tests**, not model-accuracy test results.
 
+## Blind human review materials (draft-only)
+
+- `docs/PARTNER_GOV_1_BLIND_REVIEW_SHEET.md`: all 32 case texts and IDs **without any reference labels**, for genuinely independent reviewer passes.
+- `docs/PARTNER_GOV_1_SUBJECT_DOMAIN_REVIEW_WORKSHEET.md`: AI-assisted editorial rubric and 32 proposed case outcomes, including five contested multi-domain cases and one suggested reconsideration of the SPORTS tag. **Do not use this for the first blind pass**.
+- The canonical JSON's `draft_expected` values and every `review.status="PENDING"` are deliberately unchanged; review material is not ground truth or `enforce` approval.
+
 ## Review protocol before producing a score
 
 1. Have qualified reviewers inspect and, where needed, correct the
@@ -201,7 +207,7 @@ separate user authorization before any further provider requests.
 
 ## Acceptance decision and blockers
 
-**Offline auditing infrastructure:** pending user-local test output.
+**Offline auditing infrastructure:** **PASSED** user-local focused suite (75 tests, 0 failures, 3.489 seconds), Django system check clean, migration check reported no changes; user also confirmed audit baseline `cases=32 approved=0 pending=32 domains=12 categories=8 NOT SCORED`. This pass validates audit tooling only, not model quality.
 
 **Actual automatic classification accuracy:** **NOT MEASURED**.
 The included 32 synthetic draft cases have zero reviewer-approved
