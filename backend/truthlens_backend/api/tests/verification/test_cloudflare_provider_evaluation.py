@@ -60,6 +60,85 @@ class CloudflareEvaluationAdapterTests(SimpleTestCase):
         self.assertEqual(kwargs["json"]["max_tokens"], 1024)
         self.assertEqual(kwargs["headers"]["Authorization"], f"Bearer {TOKEN}")
 
+    def test_reject_if_busy_only_adds_documented_openai_options_when_opted_in(self):
+        response = Mock(status_code=200)
+        response.json.return_value = {
+            "choices": [{"message": {"content": '{"verdict":"FACT"}'}}],
+        }
+        post = Mock(return_value=response)
+        generate_evaluation_json(
+            "system", "all evidence", account_id=ACCOUNT, api_token=TOKEN,
+            http_post=post, reject_if_busy=True,
+        )
+        payload = post.call_args.kwargs["json"]
+        self.assertEqual(payload["options"], {"rejectIfBusy": True})
+        self.assertEqual(payload["max_tokens"], 1024)
+        self.assertEqual(payload["response_format"], {"type": "json_object"})
+        self.assertEqual(payload["messages"][1]["content"], "all evidence")
+        self.assertFalse(payload["stream"])
+        self.assertEqual(post.call_args.kwargs["timeout"], (5, 45))
+        post.reset_mock()
+
+        generate_evaluation_json(
+            "system", "all evidence", account_id=ACCOUNT, api_token=TOKEN,
+            http_post=post,
+        )
+        self.assertNotIn("options", post.call_args.kwargs["json"])
+        post.assert_called_once()
+
+    def test_invalid_capacity_option_is_rejected_before_network(self):
+        post = Mock()
+        for value in (None, 1, 0, "yes", "false", [], {}):
+            with self.subTest(value=value), self.assertRaisesRegex(
+                CloudflareEvaluationError, "^INVALID_REJECT_IF_BUSY$"
+            ):
+                generate_evaluation_json(
+                    "system", "evidence", account_id=ACCOUNT, api_token=TOKEN,
+                    http_post=post, reject_if_busy=value,
+                )
+        post.assert_not_called()
+
+    def test_cloudflare_429_internal_codes_are_sanitized_without_vendor_message(self):
+        for error_body, expected in (
+            ({"errors": [{"code": 3040, "message": "SECRET CAPACITY DETAILS"}]},
+             "HTTP_429_CAPACITY"),
+            ({"error": {"code": 3036, "message": "SECRET ACCOUNT INFO"}},
+             "HTTP_429_ALLOCATION"),
+            ({"errors": [{"code": 9999, "message": "SECRET UNKNOWN ERROR"}]},
+             "HTTP_429"),
+            ({"errors": [{"code": "3040", "message": "STRING CODE"}]},
+             "HTTP_429"),
+            ({"errors": [{"code": 3040, "message": "SECRET"}],
+              "error": {"code": 3036}}, "HTTP_429_CAPACITY"),
+        ):
+            with self.subTest(expected=expected, error_body=error_body):
+                response = Mock(status_code=429)
+                response.json.return_value = error_body
+                post = Mock(return_value=response)
+                with self.assertRaises(CloudflareEvaluationError) as raised:
+                    generate_evaluation_json(
+                        "system", "evidence", account_id=ACCOUNT,
+                        api_token=TOKEN, http_post=post,
+                        reject_if_busy=True,
+                    )
+                self.assertEqual(str(raised.exception), expected)
+                self.assertEqual(
+                    sanitized_cloudflare_error_code(raised.exception), expected,
+                )
+                self.assertNotIn("SECRET", str(raised.exception))
+                post.assert_called_once()
+
+    def test_unparseable_429_body_keeps_generic_status_and_no_retry(self):
+        response = Mock(status_code=429)
+        response.json.side_effect = ValueError("SENSITIVE ERROR MESSAGE")
+        post = Mock(return_value=response)
+        with self.assertRaisesRegex(CloudflareEvaluationError, "^HTTP_429$"):
+            generate_evaluation_json(
+                "system", "evidence", account_id=ACCOUNT,
+                api_token=TOKEN, http_post=post,
+            )
+        post.assert_called_once()
+
     def test_429_does_not_retry_and_does_not_expose_body(self):
         post = Mock(return_value=Mock(status_code=429, text="secret-error-body"))
         with self.assertRaisesRegex(CloudflareEvaluationError, "^HTTP_429$"):
