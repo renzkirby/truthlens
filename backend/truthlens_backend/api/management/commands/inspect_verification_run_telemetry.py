@@ -61,7 +61,10 @@ class Command(BaseCommand):
         for event in events:
             if event.event_type == VerificationTelemetryEvent.EventType.LLM_PROVIDER_CALL:
                 reason = ""
-                if event.provider == "cloudflare" and event.outcome == "failed":
+                if (
+                    event.provider == "cloudflare"
+                    and event.outcome in {"failed", "skipped"}
+                ):
                     prefix = "CloudflareEvaluationError code="
                     if isinstance(event.error_label, str) and event.error_label.startswith(prefix):
                         candidate = event.error_label[len(prefix):]
