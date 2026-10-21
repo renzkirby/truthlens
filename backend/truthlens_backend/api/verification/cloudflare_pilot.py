@@ -21,6 +21,11 @@ PILOT_OPERATION = "persisted_evidence_evaluation"
 ASSESSMENT_OPERATION = "evidence_assessment"
 PILOT_COMPLETION_TOKENS = 2048
 ASSESSMENT_COMPLETION_TOKENS = 2048
+# Keep the initial Workers AI assessment pilot to small batches. Larger
+# original batches go intact to the existing providers, not to truncated
+# or sliced Cloudflare requests.
+ASSESSMENT_MAX_ITEMS = 4
+ASSESSMENT_HTTP_TIMEOUT = (3, 15)
 FINAL_BUDGET_ENV = "CLOUDFLARE_PILOT_FINAL_MAX_TOKENS"
 PILOT_MAX_INPUT_CHARS = MAX_INPUT_CHARS
 _ASSESSMENT_PREFIX = "UNTRUSTED ASSESSMENT DATA:\n"
@@ -100,6 +105,30 @@ def _expected_assessment_keys(user_prompt):
     return set(keys)
 
 
+def cloudflare_assessment_bypass_reason(system_instructions, user_prompt):
+    """Return a safe reason to use legacy assessment without calling Cloudflare.
+
+    Bypassing locally must not trip the job-scoped Cloudflare breaker: the
+    final evaluator is independently eligible for the original pilot.
+    """
+    if (
+        not isinstance(system_instructions, str)
+        or not system_instructions.strip()
+        or not isinstance(user_prompt, str)
+        or not user_prompt.strip()
+    ):
+        return "INVALID_ASSESSMENT_INPUT"
+    if len(system_instructions) + len(user_prompt) > PILOT_MAX_INPUT_CHARS:
+        return "PROMPT_TOO_LONG"
+    try:
+        expected = _expected_assessment_keys(user_prompt)
+    except CloudflareEvaluationError:
+        return "INVALID_ASSESSMENT_INPUT"
+    if len(expected) > ASSESSMENT_MAX_ITEMS:
+        return "ASSESSMENT_BATCH_TOO_LARGE"
+    return None
+
+
 def _valid_assessment_batch(raw, user_prompt):
     try:
         expected = _expected_assessment_keys(user_prompt)
@@ -152,14 +181,20 @@ def call_validated_cloudflare_pilot(
         raise CloudflareEvaluationError("INVALID_PILOT_OPERATION")
     if operation == ASSESSMENT_OPERATION:
         _expected_assessment_keys(user_prompt)
-    raw = generate_evaluation_json(
-        system_instructions, user_prompt,
-        max_completion_tokens=(
+    options = {
+        "max_completion_tokens": (
             ASSESSMENT_COMPLETION_TOKENS
             if operation == ASSESSMENT_OPERATION
             else _final_completion_budget()
         ),
-        audit_metadata=audit_metadata,
+        "audit_metadata": audit_metadata,
+    }
+    if operation == ASSESSMENT_OPERATION:
+        # Requests timeouts are not a total wall-clock budget. They bound
+        # connection/read inactivity, reducing the prior 45s stall.
+        options["http_timeout"] = ASSESSMENT_HTTP_TIMEOUT
+    raw = generate_evaluation_json(
+        system_instructions, user_prompt, **options,
     )
     if not validate_pilot_response(operation, raw, user_prompt):
         raise CloudflareEvaluationError(
