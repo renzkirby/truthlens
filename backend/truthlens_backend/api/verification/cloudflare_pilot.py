@@ -21,6 +21,7 @@ PILOT_OPERATION = "persisted_evidence_evaluation"
 ASSESSMENT_OPERATION = "evidence_assessment"
 PILOT_COMPLETION_TOKENS = 2048
 ASSESSMENT_COMPLETION_TOKENS = 2048
+FINAL_BUDGET_ENV = "CLOUDFLARE_PILOT_FINAL_MAX_TOKENS"
 PILOT_MAX_INPUT_CHARS = MAX_INPUT_CHARS
 _ASSESSMENT_PREFIX = "UNTRUSTED ASSESSMENT DATA:\n"
 _ASSESSMENT_FIELDS = frozenset({
@@ -42,6 +43,21 @@ def cloudflare_pilot_enabled(operation):
     return (
         operation == ASSESSMENT_OPERATION
         and os.getenv(ASSESSMENT_PILOT_FLAG, "") == "1"
+    )
+
+
+def _final_completion_budget():
+    """Optional controlled dev-only latency experiment; default unchanged."""
+    if not (
+        getattr(settings, "APP_ENV", None) == "development"
+        and getattr(settings, "DEBUG", False) is True
+    ):
+        return PILOT_COMPLETION_TOKENS
+    # Keep a limited two-arm experiment; never silently accept arbitrary
+    # low budgets or trim the final JSON.
+    return (
+        1536 if os.getenv(FINAL_BUDGET_ENV, "").strip() == "1536"
+        else PILOT_COMPLETION_TOKENS
     )
 
 
@@ -141,7 +157,7 @@ def call_validated_cloudflare_pilot(
         max_completion_tokens=(
             ASSESSMENT_COMPLETION_TOKENS
             if operation == ASSESSMENT_OPERATION
-            else PILOT_COMPLETION_TOKENS
+            else _final_completion_budget()
         ),
         audit_metadata=audit_metadata,
     )
