@@ -24,9 +24,9 @@ PILOT_OPERATION = "persisted_evidence_evaluation"
 ASSESSMENT_OPERATION = "evidence_assessment"
 PILOT_COMPLETION_TOKENS = 2048
 ASSESSMENT_COMPLETION_TOKENS = 2048
-# Keep the initial Workers AI assessment pilot to small batches. Larger
-# original batches go intact to the existing providers, not to truncated
-# or sliced Cloudflare requests.
+# Each Workers AI assessment request remains limited to four items.
+# Larger batches go to original providers unless the separate dev-only
+# all-or-nothing, lossless chunking experiment is explicitly enabled.
 ASSESSMENT_MAX_ITEMS = 4
 ASSESSMENT_MAX_CHUNKS = 3
 ASSESSMENT_HTTP_TIMEOUT = (3, 15)
