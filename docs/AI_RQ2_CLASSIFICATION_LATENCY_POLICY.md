@@ -91,8 +91,8 @@ That is a separate design/acceptance task.
 - With hierarchy enabled, Groq SDK retries remain disabled. If every
   provider fails, the classifier records an appropriate failure status
   rather than creating an authoritative subject classification.
-- `shadow` only records `SUGGESTED` or `ABSTAINED` candidates,
-  never a `ClaimInvestigationClassification`. A persisted shadow
+- `shadow` may record `SUGGESTED`, `ABSTAINED`, or `FAILED` assessments,
+  but never a `ClaimInvestigationClassification`. A persisted shadow
   suggestion is idempotent and is **not** auto-promoted on mode change.
 - `enforce` is explicitly **not authorized** by this timeout policy.
   Empirical model accuracy, classification rationale/quotes, partner
@@ -114,7 +114,12 @@ live requests or infer a percentile from these two samples. Agree on:
 3. Tail behavior for a Cloudflare 30-second read timeout followed by
    Groq retry-free fallback, and for all-provider exhaustion.
 4. A minimum accuracy/abstention threshold and manual adjudication
-   comparing quoted evidence with each subject domain.
+   comparing quoted evidence with each subject domain. The current
+   persisted assessment stores domain codes, not per-domain model
+   quotations, so quote review requires a **separately approved offline
+   evaluation harness** with controlled access to synthetic or approved
+   test inputs. Do not claim that the stored candidate_domains list
+   independently proves the model's rationale.
 5. Consistent worker version and flags, using the existing read-only
    worker readiness probe; no duplicate workers with stale identities.
 6. Explicit written rollout/rollback approval before changing defaults
