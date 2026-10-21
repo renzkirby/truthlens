@@ -413,7 +413,7 @@ class CloudflareClassificationAdapterTests(SimpleTestCase):
             })
             call_validated_cloudflare_pilot(
                 "Assess evidence",
-                "UNTRUSTED ASSESSMENT DATA:\\n" + json.dumps({
+                "UNTRUSTED ASSESSMENT DATA:\n" + json.dumps({
                     "claim_text": CLAIM,
                     "evidence_items": [{
                         "key": "item_0",
