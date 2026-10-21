@@ -22,6 +22,7 @@ from api.verification.cloudflare_pilot import (
     PILOT_OPERATION,
     call_validated_cloudflare_pilot,
     cloudflare_assessment_bypass_reason,
+    cloudflare_assessment_reject_if_busy_enabled,
 )
 from api.verification.telemetry import (
     get_current_collector,
@@ -328,3 +329,124 @@ class CloudflareAssessmentTransportTimeoutTests(SimpleTestCase):
             ),
             "ASSESSMENT_BATCH_TOO_LARGE",
         )
+
+
+@override_settings(APP_ENV="development", DEBUG=True)
+class CloudflareAssessmentCapacityFastFailTests(SimpleTestCase):
+    def setUp(self):
+        self.enterContext(patch.dict(os.environ, {
+            "CLOUDFLARE_ACCOUNT_ID": "a" * 32,
+            "CLOUDFLARE_API_TOKEN": "secret-never-output",
+            "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "1",
+            "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
+            "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT": "1",
+            "CLOUDFLARE_PILOT_ASSESSMENT_REJECT_IF_BUSY": "1",
+        }))
+
+    def _post(self, raw):
+        response = Mock(status_code=200)
+        response.json.return_value = {
+            "choices": [{"message": {"content": raw}}],
+            "usage": {
+                "prompt_tokens": 900,
+                "completion_tokens": 350,
+                "completion_tokens_details": {"reasoning_tokens": 125},
+            },
+        }
+        return Mock(return_value=response)
+
+    def test_explicit_dev_opt_in_passes_flag_to_assessment_only(self):
+        self.assertTrue(cloudflare_assessment_reject_if_busy_enabled())
+        prompt = _batch_prompt(1)
+        original_response = _batch_response(1)
+        assessment_post = self._post(original_response)
+        audit = {}
+        with patch(
+            "api.verification.cloudflare_evaluation.requests.post",
+            assessment_post,
+        ):
+            result = call_validated_cloudflare_pilot(
+                "Instructions", prompt,
+                operation=ASSESSMENT_OPERATION, audit_metadata=audit,
+            )
+        self.assertEqual(result, original_response)
+        sent = assessment_post.call_args.kwargs
+        self.assertEqual(sent["json"]["options"], {"rejectIfBusy": True})
+        self.assertEqual(sent["json"]["messages"][1]["content"], prompt)
+        self.assertEqual(sent["json"]["max_tokens"], 2048)
+        self.assertEqual(sent["timeout"], (3, 15))
+        self.assertEqual(audit["prompt_tokens"], 900)
+        self.assertEqual(audit["reasoning_tokens"], 125)
+
+        final_post = self._post(_VALID_VERDICT)
+        with patch(
+            "api.verification.cloudflare_evaluation.requests.post",
+            final_post,
+        ):
+            self.assertEqual(
+                call_validated_cloudflare_pilot("Instructions", "full dossier"),
+                _VALID_VERDICT,
+            )
+        final_json = final_post.call_args.kwargs["json"]
+        self.assertNotIn("options", final_json)
+        self.assertEqual(final_json["max_tokens"], 2048)
+        self.assertEqual(final_post.call_args.kwargs["timeout"], (5, 45))
+
+    def test_all_flags_required_and_production_blocked(self):
+        for flag in (
+            "ENABLE_AI_RQ2_PROVIDER_HIERARCHY",
+            "ENABLE_CLOUDFLARE_VERIFICATION_PILOT",
+            "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT",
+            "CLOUDFLARE_PILOT_ASSESSMENT_REJECT_IF_BUSY",
+        ):
+            with self.subTest(flag=flag), patch.dict(os.environ, {flag: "0"}):
+                self.assertFalse(cloudflare_assessment_reject_if_busy_enabled())
+
+        with override_settings(APP_ENV="staging"):
+            self.assertFalse(cloudflare_assessment_reject_if_busy_enabled())
+        with override_settings(DEBUG=False):
+            self.assertFalse(cloudflare_assessment_reject_if_busy_enabled())
+        with override_settings(APP_ENV="production", DEBUG=False):
+            self.assertFalse(cloudflare_assessment_reject_if_busy_enabled())
+
+    def test_invalid_or_non_exact_opt_in_does_not_inject_options(self):
+        for value in ("", "false", "true", "True", "2", " 1"):
+            with self.subTest(value=value), patch.dict(
+                os.environ, {"CLOUDFLARE_PILOT_ASSESSMENT_REJECT_IF_BUSY": value},
+            ):
+                self.assertFalse(cloudflare_assessment_reject_if_busy_enabled())
+                post = self._post(_batch_response(1))
+                with patch(
+                    "api.verification.cloudflare_evaluation.requests.post", post,
+                ):
+                    self.assertEqual(
+                        call_validated_cloudflare_pilot(
+                            "Instructions", _batch_prompt(1),
+                            operation=ASSESSMENT_OPERATION,
+                        ),
+                        _batch_response(1),
+                    )
+                self.assertNotIn("options", post.call_args.kwargs["json"])
+
+    def test_reasoning_content_never_enters_returned_assessment_text(self):
+        raw = _batch_response(1)
+        response = Mock(status_code=200)
+        response.json.return_value = {
+            "choices": [{
+                "finish_reason": "stop",
+                "message": {
+                    "content": raw,
+                    "reasoning_content": "PRIVATE THINKING DO NOT STORE",
+                },
+            }],
+        }
+        post = Mock(return_value=response)
+        metadata = {}
+        with patch("api.verification.cloudflare_evaluation.requests.post", post):
+            result = call_validated_cloudflare_pilot(
+                "Instructions", _batch_prompt(1),
+                operation=ASSESSMENT_OPERATION, audit_metadata=metadata,
+            )
+        self.assertEqual(result, raw)
+        self.assertNotIn("PRIVATE THINKING", str(metadata))
+        self.assertTrue(metadata["reasoning_present"])
