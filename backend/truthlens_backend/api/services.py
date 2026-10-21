@@ -916,22 +916,11 @@ def evaluate_image_claim_with_tavily(
         }
 
 
-def evaluate_claim_with_persisted_evidence(
-    original_claim,
-    evidence_context,
-    article_stance="NEUTRAL",
-):
-    """Evaluate a claim using only the rendered persisted-evidence dossier."""
-    unavailable_result = {
-        "reasoning": "No usable persisted evidence was available for evaluation.",
-        "verdict": "UNVERIFIED",
-        "summary": "TruthLens could not verify this claim from persisted evidence.",
-        "confidence_score": 0,
-        "score_context": "No persisted evidence was available to support a verdict.",
-    }
-    if not isinstance(evidence_context, str) or not evidence_context.strip():
-        return unavailable_result
+def build_persisted_evidence_prompt(original_claim, evidence_context, article_stance="NEUTRAL"):
+    """Pure prompt constructor shared by live evaluation and dev-only smoke.
 
+    Same production prompt/evidence boundary; no database or provider calls.
+    """
     system_instructions = """
     Role: You are the TruthLens evidence reasoning engine.
 
@@ -972,6 +961,29 @@ def evaluate_claim_with_persisted_evidence(
         f"<claim>{original_claim}</claim>\n\n"
         f"<stance>{article_stance}</stance>\n\n"
         f"<persisted_evidence>{evidence_context}</persisted_evidence>"
+    )
+
+    return system_instructions, user_data
+
+
+def evaluate_claim_with_persisted_evidence(
+    original_claim,
+    evidence_context,
+    article_stance="NEUTRAL",
+):
+    """Evaluate a claim using only the rendered persisted-evidence dossier."""
+    unavailable_result = {
+        "reasoning": "No usable persisted evidence was available for evaluation.",
+        "verdict": "UNVERIFIED",
+        "summary": "TruthLens could not verify this claim from persisted evidence.",
+        "confidence_score": 0,
+        "score_context": "No persisted evidence was available to support a verdict.",
+    }
+    if not isinstance(evidence_context, str) or not evidence_context.strip():
+        return unavailable_result
+
+    system_instructions, user_data = build_persisted_evidence_prompt(
+        original_claim, evidence_context, article_stance,
     )
 
     try:
