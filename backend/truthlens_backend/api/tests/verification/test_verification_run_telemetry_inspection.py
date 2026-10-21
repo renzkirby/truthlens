@@ -162,6 +162,48 @@ class VerificationRunTelemetryInspectorTests(TestCase):
         self.assertNotIn("reasoning_present=", text)
         self.assertNotIn("finish_reason=", text)
 
+    @override_settings(APP_ENV="development", DEBUG=True)
+    def test_skipped_assessment_displays_only_safe_bypass_reason(self):
+        claim = Claim.objects.create(context_text="Private claim cannot leak")
+        run = VerificationRun.objects.create(claim=claim)
+        event = VerificationTelemetryEvent.objects.create(
+            verification_run=run,
+            sequence=1,
+            event_type=VerificationTelemetryEvent.EventType.LLM_PROVIDER_CALL,
+            name="evidence_assessment",
+            provider="cloudflare",
+            duration_ms=0,
+            outcome="skipped",
+            error_label=(
+                "CloudflareEvaluationError code=ASSESSMENT_BATCH_TOO_LARGE"
+            ),
+            metadata={"evidence_text": "PRIVATE EVIDENCE DO NOT OUTPUT"},
+            occurred_at=timezone.now(),
+        )
+        out = io.StringIO()
+        call_command(
+            "inspect_verification_run_telemetry", run_id=str(run.pk),
+            show_usage=True, stdout=out,
+        )
+        value = out.getvalue()
+        self.assertIn("outcome=skipped", value)
+        self.assertIn("reason=ASSESSMENT_BATCH_TOO_LARGE", value)
+        self.assertNotIn("PRIVATE EVIDENCE", value)
+        self.assertNotIn("Private claim", value)
+
+        event.error_label = (
+            "CloudflareEvaluationError code=ASSESSMENT_BATCH_TOO_LARGE "
+            "Bearer SECRET"
+        )
+        event.save(update_fields=["error_label"])
+        out = io.StringIO()
+        call_command(
+            "inspect_verification_run_telemetry",
+            run_id=str(run.pk), stdout=out,
+        )
+        self.assertIn("reason=ASSESSMENT_BATCH_TOO_LARGE", out.getvalue())
+        self.assertNotIn("SECRET", out.getvalue())
+
     @override_settings(APP_ENV="production", DEBUG=False)
     def test_rejects_non_development(self):
         with self.assertRaisesRegex(CommandError, "Only local development"):
