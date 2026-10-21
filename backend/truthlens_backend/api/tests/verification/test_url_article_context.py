@@ -33,6 +33,33 @@ class URLArticleContextTests(SimpleTestCase):
         )
         self.assertEqual(clean_extracted_text(raw), "")
 
+    def test_short_public_claim_survives(self):
+        self.assertEqual(clean_extracted_text("Earth is flat."), "Earth is flat.")
+
+    def test_mixed_heading_and_navigation_on_one_line(self):
+        raw = (
+            "# Public Update ## Press Contacts Apple Media Helpline "
+            "media.help@apple.com The latest updates, direct from Apple. "
+            "## Shop and Learn Account iPhone iPad "
+            "## Story The council confirmed on October 19, 2026 "
+            "that planned road closures would not proceed."
+        )
+        result = clean_extracted_text(raw)
+        self.assertIn("planned road closures would not proceed", result)
+        self.assertNotIn("media.help@", result)
+        self.assertNotIn("Shop and Learn", result)
+
+    def test_multiline_article_paragraph_is_joined_without_losing_modality(self):
+        raw = (
+            "# Council Update\n"
+            "The council announced that road works\n"
+            "were only planned, not approved,\n"
+            "for October 19, 2026.\n"
+        )
+        clean = clean_extracted_text(raw)
+        self.assertIn("were only planned, not approved", clean)
+        self.assertIn("for October 19, 2026.", clean)
+
     def test_short_full_sentence_is_preserved(self):
         self.assertEqual(clean_extracted_text("The plan was cancelled."),
                          "The plan was cancelled.")
