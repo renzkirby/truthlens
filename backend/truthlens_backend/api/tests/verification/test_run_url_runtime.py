@@ -468,7 +468,7 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.context_text, self.cleaned["cleaned_claim"])
         self.assertNotIn("Media Helpline", self.claim.context_text)
-        self.assertEqual(self.claim.url_link or self.url, self.url)
+        self.assertEqual(self.claim.claim_type, Claim.ClaimType.URL)
 
     def test_missing_cleaned_claim_abstains_before_retrieval(self):
         self.cleaned["cleaned_claim"] = "  "
@@ -478,6 +478,15 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.bridge.assert_not_called()
         self.retrieve_tavily.assert_not_called()
         self.evaluate_persisted.assert_not_called()
+        self.save_claim.assert_not_called()
+
+    def test_blank_gated_claim_has_no_saved_verdict(self):
+        self.cleaned["cleaned_claim"] = ""
+        run = self._execute()
+        self.assertEqual(run.status, VerificationRun.Status.ABSTAINED)
+        self.claim.refresh_from_db()
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.final_verdict)
         self.save_claim.assert_not_called()
 
     def test_gfc_persisted_evidence_links_through_existing_bridge(self):
@@ -701,6 +710,15 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assertIn("Relevant web evidence.", combined_context)
         self.evaluate_persisted.assert_not_called()
         self.load_dossier.assert_not_called()
+
+    def test_tavily_retrieval_failure_displays_the_evaluated_claim(self):
+        self.bridge.return_value = {"claims": []}
+        self.retrieve_tavily.side_effect = requests.Timeout("Retrieval unavailable")
+        run = self._execute()
+        self.assertEqual(run.status, VerificationRun.Status.ABSTAINED)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.context_text, self.cleaned["cleaned_claim"])
+        self.assertNotEqual(self.claim.context_text, self.cleaned_text)
 
     def test_handled_tavily_failure_abstains(self):
         self.bridge.return_value = {"claims": []}
