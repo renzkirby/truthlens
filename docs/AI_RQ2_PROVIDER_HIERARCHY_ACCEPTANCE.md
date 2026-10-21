@@ -286,3 +286,127 @@ whether any thinking/output tuning is quality-neutral; or a resolved
 real TEXT/URL claim-verification workflow that will unblock #128.
 Require explicit new approval for a live model call and inspect both
 quality and provider timing before further adjustments.
+
+
+## Phase 2 follow-up — lossless Cloudflare evidence assessment over four items
+
+The October 22 authorized live TEXT canary `6ab50cb5-0fdf-478a-bb83-d32fa85785f2`
+completed in 74,035 ms with Cloudflare final evaluator success (22,313 ms,
+1,115 output tokens, `finish_reason=stop`). But **Cloudflare
+assessment was skipped** for 12 eligible items
+(`ASSESSMENT_BATCH_TOO_LARGE`), leaving Groq to assess them.
+The independent `rejectIfBusy` experiment **was not exercised**.
+Gemini still returned HTTP 402. This exposes a real failover gap if
+Groq becomes rate-limited.
+
+### Opt-in, bounded, lossless assessment chunking
+
+The additional `CLOUDFLARE_PILOT_ASSESSMENT_CHUNKING=1` flag
+defaults OFF and is effective only when **all** of these are true:
+- `APP_ENV=development` and `DEBUG=True`;
+- `ENABLE_AI_RQ2_PROVIDER_HIERARCHY=1`;
+- `ENABLE_CLOUDFLARE_VERIFICATION_PILOT=1`;
+- `ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT=1`.
+
+**Do not enable it for another live call without separate approval.**
+On the existing single AI working branch, the implementation retains
+the four-item **per-request** limit and independently gates a maximum
+of **three** sequential Cloudflare assessment chunks (at most 12
+original evidence items). Chunks are built **before** network access
+from the original structured assessment envelope, in original order,
+with all original item keys and unmodified evidence passage contents.
+The planner accounts for the existing 28,000-character envelope cap;
+if any evidence item cannot fit on its own or needs more than three
+chunks, **all** Cloudflare assessment is skipped locally and the
+unchanged original full batch is offered to Groq. There is no
+selection, re-ranking, clipping or truncation.
+
+Each chunk must independently satisfy the *existing* exact keyed
+assessment schema, independent-isolation rubric and 2,048-output-token
+ceiling. Once **every chunk** succeeds, the exact original keys are
+reassembled and the full combined response is validated again. A
+timeout, 429, malformed chunk, duplicate key or missing result stops
+the sequence immediately, discards any partial Cloudflare assessment,
+and falls back to Groq with the **original complete** user prompt.
+No retry or alternate model carousel is introduced.
+
+The provider telemetry records the bounded
+`assessment_chunks_attempted` count, including incomplete sequences,
+along with sanitized aggregate token usage when actually reported.
+A `finish_reason=stop` for the combined response is allowed **only**
+when all chunks have validated. There are no prompt/evidence passages,
+hidden thinking text, raw provider bodies or credentials in events.
+
+**This is resilience coverage, not proof of lower latency or solved
+timeouts.** A previous **one-item** Cloudflare evidence assessment
+timed out after 15.256 seconds. Three sequential chunks may be more
+expensive and slower. The existing `(3,15)` inactivity timeout
+applies **per chunk**, not as a total wall-clock SLA. A genuine
+Cloudflare assessment failure still trips the existing job-wide
+Cloudflare breaker, so a subsequent Cloudflare final verdict may be
+unavailable within the same job. That larger breaker redesign is
+**outside** this guarded checkpoint. No provider can truthfully
+guarantee completion when all configured services are unavailable.
+
+### PARTNER-GOV-1 manual acceptance is a separate gate
+
+The same canary's classification inspection returned:
+`Mode: off`, `Assessment: None`, `Classification: None`.
+This is consistent with the default
+`INVESTIGATION_CLASSIFICATION_MODE=off`, not a demonstrated
+classifier failure. A safe manual progression is `shadow`
+(proposal-only, not eligible for partner claiming), followed by
+`enforce` **only after** automatic domain accuracy and authority
+boundaries have passed manual review. Restart and align Django and
+the **single intended Celery worker** when changing these settings;
+the earlier canary startup/probe PIDs differed, and the queued probe
+omitted the current hierarchy field.
+
+**Additional uncovered dependency:** The separate
+`investigation_classification` provider operation is not currently
+Cloudflare-approved. It still uses Gemini → Groq. With Gemini 402 and
+Groq quota exhaustion, classification could still fail even if
+Cloudflare final verdict and evidence assessment succeed. Do not
+silently authorize a new model operation without a strict schema
+and classification QA suite.
+
+### Offline tests (no provider network)
+
+Pull the existing branch, then from
+`backend/truthlens_backend`:
+
+```powershell
+..\\.venv\\Scripts\\python.exe .\\manage.py test `
+  api.tests.verification.test_cloudflare_assessment_chunking `
+  api.tests.verification.test_cloudflare_assessment_latency_guardrails `
+  api.tests.verification.test_ai_rq2_provider_hierarchy `
+  api.tests.verification.test_cloudflare_multistage_provider `
+  api.tests.verification.test_cloudflare_verification_pilot `
+  api.tests.verification.test_cloudflare_provider_evaluation `
+  api.tests.verification.test_cloudflare_worker_readiness `
+  api.tests.verification.test_evidence_assessment `
+  api.tests.verification.test_persisted_evidence_reasoning `
+  api.tests.verification.test_verification_run_telemetry_inspection `
+  api.tests.verification.test_pipeline_telemetry `
+  api.tests.verification.test_run_text_runtime `
+  api.tests.verification.test_run_url_runtime `
+  api.tests.verification.test_pilot_evidence_budget `
+  api.tests.verification.test_claim_legacy_schema_repair `
+  --settings=truthlens_backend.test_settings --keepdb
+
+..\\.venv\\Scripts\\python.exe .\\manage.py check
+..\\.venv\\Scripts\\python.exe .\\manage.py makemigrations --check --dry-run
+```
+
+Expected behavior in the new tests: 12 items → three validated
+Cloudflare assessment chunks (no Groq), 13 items → zero Cloudflare
+chunks + full Groq fallback, oversized individual passage →
+Cloudflare local bypass without data loss, second-chunk
+timeout/invalid JSON → no partial Cloudflare verdict and full
+Groq fallback, all providers exhausted → explicit provider-unavailable
+error rather than fabricated successful assessment. Existing legacy
+routing tests explicitly keep chunking disabled.
+
+**Status:** implementation committed to the existing branch;
+**new offline suite not yet run**. No second live request,
+PR, merge, or additional working branch.
