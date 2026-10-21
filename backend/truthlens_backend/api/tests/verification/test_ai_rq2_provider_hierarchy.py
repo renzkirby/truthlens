@@ -166,6 +166,9 @@ class AIRQ2ProviderHierarchyTests(SimpleTestCase):
         self.assertEqual(self.groq_lane.chat.completions.create.call_count, 2)
 
     def test_large_assessment_bypass_preserves_full_input_and_final_cloudflare(self):
+        # A local Cloudflare "skipped" event is only emitted when the
+        # assessment pilot is enabled but the batch exceeds its limit.
+        os.environ["ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT"] = "1"
         self.gemini.models.generate_content.side_effect = ExampleGeminiError(402)
         original = evidence_prompt(9)
         self.groq_lane.chat.completions.create.return_value = SimpleNamespace(
@@ -199,6 +202,53 @@ class AIRQ2ProviderHierarchyTests(SimpleTestCase):
             [
                 ("gemini", "failed"),
                 ("cloudflare", "skipped"),
+                ("groq", "success"),
+                ("cloudflare", "success"),
+            ],
+        )
+
+    def test_disabled_assessment_does_not_record_cloudflare_skipped(self):
+        # With assessment off (the recommended initial live setup), no
+        # Cloudflare assessment preflight or skip event should be logged.
+        # A later final evaluation remains independently eligible.
+        self.assertEqual(
+            os.environ["ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT"], "0",
+        )
+        self.gemini.models.generate_content.side_effect = ExampleGeminiError(402)
+        original = evidence_prompt(9)
+        self.groq_lane.chat.completions.create.return_value = SimpleNamespace(
+            choices=[SimpleNamespace(
+                message=SimpleNamespace(content=evidence_response(9)),
+            )],
+        )
+        with llm_provider_scope(), patch(
+            "api.services.record_llm_provider_call",
+        ) as record:
+            self.assertEqual(
+                call_llm_with_fallback(
+                    "Assess every original item independently.", original,
+                    operation="evidence_assessment",
+                ),
+                evidence_response(9),
+            )
+            self.groq_lane.chat.completions.create.return_value = SimpleNamespace(
+                choices=[SimpleNamespace(
+                    message=SimpleNamespace(content=VALID_VERDICT),
+                )],
+            )
+            self.assertEqual(self._verdict(), VALID_VERDICT)
+
+        self.assertEqual(
+            self.groq_lane.chat.completions.create.call_args_list[0].kwargs[
+                "messages"
+            ][1]["content"],
+            original,
+        )
+        self.cloudflare.assert_called_once()
+        self.assertEqual(
+            [(call.args[1], call.args[4]) for call in record.call_args_list],
+            [
+                ("gemini", "failed"),
                 ("groq", "success"),
                 ("cloudflare", "success"),
             ],
