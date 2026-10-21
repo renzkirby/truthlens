@@ -123,6 +123,103 @@ Then exit the shell. Use `inspect_verification_run_telemetry` for the
 failed run ID to verify terminal `FAILED` and
 `failure_code=LLM_UNAVAILABLE`, not a user-facing fabricated verdict.
 
+## Dev-pilot only: oversized persisted evidence without source loss
+
+Live TEXT canary run `9c4d0ad2-ebbc-47b6-8e45-cd7043f7fc5e` failed at
+the final evaluator: persisted SECONDARY dossier **7 identity groups /
+12 evidence items**, all stances tagged SUPPORTS (not independently
+confirmed); original dossier **27,732 chars** and reconstructed prompt
+**29,606 chars**, exceeding Cloudflare's **self-imposed 28,000-char
+adapter preflight** by **1,606 chars**. Cloudflare did not send HTTP,
+and Groq then hit 429 and 413 limits. The original SOURCE IDENTITY
+GROUP renderer deliberately preserves all source evidence, so **do not**
+simply truncate or omit a contradictory/independent source.
+
+An optional dev-pilot-only formatting path in `api/tasks.py` now
+checks the full system+user prompt size **before** provider routing.
+If under the limit, it returns the byte-identical original dossier,
+so unaffected runs and production behave exactly as before. If over,
+it uses `render_compact_reasoning_evidence_dossier`, which retains
+every evidence item and each `content` string, source-group boundary,
+source URL/canonical URL, title, provider, publisher, source type,
+stance, evidence role, dates, and scores. Only the repeated metadata
+field labels become a once-only positional JSON-array schema.
+There is no source deletion, summarization, source reordering, or
+source-stored-record mutation. If even the compact dossier does not
+fit, it **fails closed** with `LLMProviderUnavailableError` before
+attempting any over-budget final provider request. Keep the pilot
+disabled in staging/production.
+
+Before another live TEXT/URL canary, first run offline regression tests
+and a read-only check using this exact existing failed run. From
+`backend/truthlens_backend` after pulling, run:
+
+```powershell
+..\.venv\Scripts\python.exe .\manage.py test `
+  api.tests.verification.test_pilot_evidence_budget `
+  api.tests.verification.test_evidence_dossier `
+  api.tests.verification.test_persisted_evidence_reasoning `
+  api.tests.verification.test_cloudflare_verification_pilot `
+  api.tests.verification.test_run_text_runtime `
+  api.tests.verification.test_run_url_runtime `
+  --settings=truthlens_backend.test_settings --keepdb
+```
+
+For the read-only probe (no model calls, no claim/evidence writes),
+open Django shell, then:
+
+```python
+from unittest.mock import patch
+from django.test import override_settings
+from api.models import VerificationRun, VerificationEvidence
+from api.services import build_persisted_evidence_prompt, LLMProviderUnavailableError
+from api.verification.evidence_dossier import (
+    load_reasoning_evidence_dossier_for_run,
+    filter_reasoning_evidence_dossier_by_role,
+    render_reasoning_evidence_dossier,
+)
+from api.tasks import _render_bounded_persisted_evidence_context
+
+run = VerificationRun.objects.get(pk="9c4d0ad2-ebbc-47b6-8e45-cd7043f7fc5e")
+groups = filter_reasoning_evidence_dossier_by_role(
+    load_reasoning_evidence_dossier_for_run(run),
+    VerificationEvidence.EvidenceRole.SECONDARY,
+)
+original = render_reasoning_evidence_dossier(groups)
+claim_text = run.claim.context_text or ""
+system, user = build_persisted_evidence_prompt(claim_text, original, "NEUTRAL")
+print("original_full_prompt_chars", len(system) + len(user))
+try:
+    with (
+        patch.dict("os.environ", {"ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1"}),
+        override_settings(APP_ENV="development", DEBUG=True),
+    ):
+        compact = _render_bounded_persisted_evidence_context(
+            groups, claim_text, "NEUTRAL",
+        )
+    system, user = build_persisted_evidence_prompt(claim_text, compact, "NEUTRAL")
+    print("budgeted_full_prompt_chars", len(system) + len(user))
+    print("all_item_contents_present", all(
+        compact.count(item.content) >= 1
+        for group in groups for item in group.evidence
+        if item.content is not None
+    ))
+    print("source_group_markers", compact.count("=== SOURCE IDENTITY GROUP "))
+    print("item_markers", compact.count("--- EVIDENCE ITEM "))
+except LLMProviderUnavailableError:
+    print("NO_LOSSLESS_FIT: fail closed; do not retry live verification")
+```
+
+The original cleaned text/stance from the live run may differ
+slightly from the persisted claim context/NEUTRAL used above.
+**Acceptance:** budgeted prompt at most 28,000 chars, all group/item
+markers present (7/12), every original source content present,
+and relevant unchanged/compacted runtime tests green. The probe
+does NOT measure model accuracy or imply that all SUPPORTS
+classifications are correct. If budget still fails, do not adjust
+provider routing or hide contrary evidence; evaluate further
+lossless transport/metadata options with human review first.
+
 ## Controlled Cloudflare-only single-request worker smoke
 
 **Purpose:** Establish whether the actual current Celery worker can perform
