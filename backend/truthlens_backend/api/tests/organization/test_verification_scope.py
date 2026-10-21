@@ -122,6 +122,41 @@ class OrganizationVerificationScopeTests(TestCase):
             classification=Subject(), specializations=organization_specializations(self.organization)
         ), "OUTSIDE_SPECIALIZATIONS")
 
+    def test_multidomain_authority_requires_all_classified_subjects(self):
+        """Review checkpoint: preserve conservative partner intake policy."""
+        class Subject:
+            domains = ["SCIENCE", "TECHNOLOGY"]
+
+        self.assertEqual(
+            eligibility_reason(
+                classification=Subject(), specializations=["SCIENCE"],
+            ),
+            "OUTSIDE_SPECIALIZATIONS",
+        )
+        self.assertEqual(
+            eligibility_reason(
+                classification=Subject(), specializations=["TECHNOLOGY"],
+            ),
+            "OUTSIDE_SPECIALIZATIONS",
+        )
+        self.assertIsNone(eligibility_reason(
+            classification=Subject(),
+            specializations=["SCIENCE", "TECHNOLOGY"],
+        ))
+        self.assertEqual(
+            eligibility_reason(
+                classification=None,
+                specializations=["SCIENCE", "TECHNOLOGY"],
+            ),
+            "NEEDS_CLASSIFICATION",
+        )
+        # Shadow suggestions are not ClaimInvestigationClassification records
+        # and must never be passed as authoritative classification.
+        self.assertEqual(
+            eligibility_reason(classification=None, specializations=["SCIENCE"]),
+            "NEEDS_CLASSIFICATION",
+        )
+
     def test_endpoint_primary_admin_updates_admin_reads_others_denied(self):
         client = APIClient()
         client.force_authenticate(user=self.owner)
