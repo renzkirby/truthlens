@@ -11,12 +11,14 @@ from .cloudflare_pilot import (
     ASSESSMENT_OPERATION,
     PILOT_OPERATION,
 )
+from .classification_contract import CLASSIFICATION_OPERATION
 
 
 HIERARCHY_FLAG = "ENABLE_AI_RQ2_PROVIDER_HIERARCHY"
 STAGE_CONTRACT_OPERATIONS = frozenset({
     ASSESSMENT_OPERATION,
     PILOT_OPERATION,
+    CLASSIFICATION_OPERATION,
 })
 # These indicate the user's account cannot currently accept this request.
 # Do not repeatedly retry them within a single verification job.
