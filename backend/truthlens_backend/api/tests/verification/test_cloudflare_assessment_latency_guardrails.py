@@ -142,9 +142,9 @@ class CloudflareAssessmentLatencyRoutingTests(SimpleTestCase):
             self.assertEqual(self._verdict(), _VALID_VERDICT)
         self.cloud.assert_called_once()
         self.groq.chat.completions.create.assert_called_once()
-        self.assertIn(
+        self.assertEqual(
+            self.groq.chat.completions.create.call_args.kwargs["messages"][1]["content"],
             _batch_prompt(9),
-            str(self.groq.chat.completions.create.call_args.kwargs["messages"]),
         )
 
     def test_four_item_batch_uses_cloudflare_and_full_2048_budget(self):
