@@ -1020,15 +1020,9 @@ def evaluate_claim_with_persisted_evidence(
 
 # URL PIPELINE
 def clean_extracted_text(text):
-    """Strip markdown, links, and short lines from URL-extracted text."""
-    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
-    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
-    text = re.sub(r"http\S+", "", text)
-
-    # FIX: Lowered the threshold from 40 to 15 to prevent destroying valid sentences
-    lines = [line.strip() for line in text.split("\n") if len(line.strip()) > 15]
-
-    return "\n".join(lines)[:3000]
+    """Prepare URL ClaimGate text without assuming the first 3000 bytes are article body."""
+    from .verification.url_article_context import clean_url_article_context
+    return clean_url_article_context(text)
 
 
 def extract_search_query(text, source_url=""):

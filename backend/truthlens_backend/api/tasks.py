@@ -1840,6 +1840,13 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
     pipeline_error = None
     runtime_error_propagating = False
     try:
+        # Navigation-only/empty extractions cannot support a factual verdict.
+        # Preserve the URL and abstain without spending claim-gate or search quota.
+        if not cleaned_text or not cleaned_text.strip():
+            outcome = "url_content_insufficient"
+            _log_stage(claim_id, "url_content_insufficient", pipeline_started_at)
+            return
+
         query_extract_started_at = time.perf_counter()
         result = extract_search_query(cleaned_text, url)
         _log_stage(claim_id, "extract_search_query", query_extract_started_at)

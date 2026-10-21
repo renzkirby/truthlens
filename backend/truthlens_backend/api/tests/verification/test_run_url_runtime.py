@@ -271,6 +271,51 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assertFalse(Claim.objects.filter(pk=self.claim.pk).exists())
         self._assert_no_run_or_verification()
 
+    def test_navigation_only_extract_abstains_before_claim_gate_or_search(self):
+        raw = (
+            "# Apple Reinvents the Phone with iPhone "
+            "## Press Contacts Apple Media Helpline "
+            "## Shop and Learn Wallet Account Education "
+            "## About Apple Media Helpline"
+        )
+        self.response.json.return_value = {"results": [{"raw_content": raw}]}
+        self.clean.side_effect = services.clean_extracted_text
+
+        run = self._execute()
+        self._assert_terminal(run, VerificationRun.Status.ABSTAINED)
+        self.assertIsNone(run.abstention_reason)
+        self.query.assert_not_called()
+        self.vault.assert_not_called()
+        self.bridge.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
+        self.evaluate_persisted.assert_not_called()
+        self.save_claim.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIn(
+            "url_content_insufficient",
+            [call.args[1] for call in self.log_stage.call_args_list],
+        )
+
+    def test_body_after_long_navigation_reaches_claim_gate(self):
+        raw = (
+            "# Apple Reinvents the Phone with iPhone\n"
+            "## Press Contacts\n" + ("Apple Media Helpline " * 180)
+            + "\n## Article\n"
+            "Apple announced on January 9, 2007 that the iPhone was "
+            "planned to become available in the United States in June 2007."
+        )
+        self.response.json.return_value = {"results": [{"raw_content": raw}]}
+        self.clean.side_effect = services.clean_extracted_text
+
+        run = self._execute()
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.query.assert_called_once()
+        clean, original_url = self.query.call_args.args
+        self.assertEqual(original_url, self.url)
+        self.assertIn("planned to become available", clean)
+        self.assertNotIn("Media Helpline", clean)
+
     def test_claim_gate_failure_preserves_claim_and_marks_run_failed(self):
         self.query.side_effect = ClaimGateError("ClaimGate analysis failed.")
 
