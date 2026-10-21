@@ -24,6 +24,8 @@ from .verification.telemetry import record_llm_provider_call
 from .verification.cloudflare_pilot import (
     cloudflare_pilot_enabled,
     call_validated_cloudflare_pilot,
+    validate_pilot_response,
+    ASSESSMENT_OPERATION,
 )
 from .verification.provider_audit_metrics import validate_user_facing_evaluation
 from .verification.cloudflare_evaluation import (
@@ -204,18 +206,22 @@ def _log_llm_provider_call(
     started_at,
     outcome,
     error=None,
+    *,
+    metadata=None,
 ):
     operation_label = operation or "unspecified"
     duration_ms = int((time.perf_counter() - started_at) * 1000)
     error_label = _provider_error_label(error) if error is not None else ""
-    record_llm_provider_call(
-        operation_label,
-        provider,
-        provider_call_id,
-        duration_ms,
-        outcome,
-        error_label,
-    )
+    if metadata is not None:
+        record_llm_provider_call(
+            operation_label, provider, provider_call_id,
+            duration_ms, outcome, error_label, metadata=metadata,
+        )
+    else:
+        record_llm_provider_call(
+            operation_label, provider, provider_call_id,
+            duration_ms, outcome, error_label,
+        )
     if error is None:
         logger.info(
             "LLM_PROVIDER_CALL operation=%s provider=%s duration_ms=%s outcome=%s",
@@ -243,7 +249,7 @@ def call_llm_with_fallback(
     operation=None,
     gemini_timeout_ms=None,
 ):
-    """Preserve Gemini/Groq; opt-in Cloudflare only at persisted verdict stage."""
+    """Preserve legacy routing; per-operation Cloudflare opt-in for development."""
     provider_call_id = uuid.uuid4()
     pilot_active = cloudflare_pilot_enabled(operation)
     if (
@@ -251,11 +257,18 @@ def call_llm_with_fallback(
         and _cloudflare_pilot_degraded.get() is not True
     ):
         cloudflare_started_at = time.perf_counter()
+        cloudflare_metrics = {}
         try:
-            cloudflare_text = call_validated_cloudflare_pilot(
-                system_instructions,
-                user_prompt,
-            )
+            if operation == ASSESSMENT_OPERATION:
+                cloudflare_text = call_validated_cloudflare_pilot(
+                    system_instructions, user_prompt,
+                    operation=operation, audit_metadata=cloudflare_metrics,
+                )
+            else:
+                cloudflare_text = call_validated_cloudflare_pilot(
+                    system_instructions, user_prompt,
+                    audit_metadata=cloudflare_metrics,
+                )
         except Exception as cloudflare_err:
             _log_llm_provider_call(
                 operation, "cloudflare", provider_call_id,
@@ -274,6 +287,7 @@ def call_llm_with_fallback(
             _log_llm_provider_call(
                 operation, "cloudflare", provider_call_id,
                 cloudflare_started_at, "success",
+                metadata=cloudflare_metrics,
             )
             return cloudflare_text
 
@@ -309,7 +323,7 @@ def call_llm_with_fallback(
                 content = response.text
                 if (
                     pilot_active
-                    and validate_user_facing_evaluation(content) is None
+                    and not validate_pilot_response(operation, content, user_prompt)
                 ):
                     raise ValueError("INVALID_PILOT_FALLBACK_JSON")
             except Exception as gemini_err:
@@ -349,7 +363,7 @@ def call_llm_with_fallback(
         content = chat_completion.choices[0].message.content
         if (
             pilot_active
-            and validate_user_facing_evaluation(content) is None
+            and not validate_pilot_response(operation, content, user_prompt)
         ):
             raise ValueError("INVALID_PILOT_FALLBACK_JSON")
     except Exception as groq_err:
