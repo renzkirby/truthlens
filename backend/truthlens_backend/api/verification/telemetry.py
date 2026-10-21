@@ -43,6 +43,7 @@ SAFE_LLM_OPERATION_LABELS = frozenset(
         "tavily_evaluation",
         "persisted_evidence_evaluation",
         "evidence_assessment",
+        "investigation_classification",
     }
 )
 SAFE_LLM_PROVIDERS = frozenset({"gemini", "groq", "cloudflare"})
