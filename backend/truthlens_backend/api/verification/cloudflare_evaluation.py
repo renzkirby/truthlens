@@ -137,7 +137,7 @@ def generate_evaluation_json(
     }
     if reject_if_busy:
         # Cloudflare's OpenAI-compatible /ai/v1/chat/completions supports
-        # options.rejectIfBusy. Only opt-in assessment requests add it.
+        # options.rejectIfBusy. Only explicitly opted-in assessment or classification requests add it.
         request_body["options"] = {"rejectIfBusy": True}
     try:
         response = post(
