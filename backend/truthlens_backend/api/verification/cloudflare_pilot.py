@@ -17,6 +17,8 @@ from .provider_audit_metrics import validate_user_facing_evaluation
 
 PILOT_FLAG = "ENABLE_CLOUDFLARE_VERIFICATION_PILOT"
 ASSESSMENT_PILOT_FLAG = "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT"
+# Explicit opt-in only for capacity-queue diagnosis, never final verdicts.
+ASSESSMENT_REJECT_BUSY_FLAG = "CLOUDFLARE_PILOT_ASSESSMENT_REJECT_IF_BUSY"
 PILOT_OPERATION = "persisted_evidence_evaluation"
 ASSESSMENT_OPERATION = "evidence_assessment"
 PILOT_COMPLETION_TOKENS = 2048
@@ -48,6 +50,21 @@ def cloudflare_pilot_enabled(operation):
     return (
         operation == ASSESSMENT_OPERATION
         and os.getenv(ASSESSMENT_PILOT_FLAG, "") == "1"
+    )
+
+
+def cloudflare_assessment_reject_if_busy_enabled():
+    """Dev-only experiment: bypass Workers AI capacity queue for assessment.
+
+    Requires the independent AI-RQ-2 routing and assessment-stage pilot
+    flags. Never changes final-evaluation inference or legacy routing.
+    """
+    from .provider_hierarchy import hierarchy_enabled
+
+    return (
+        hierarchy_enabled()
+        and cloudflare_pilot_enabled(ASSESSMENT_OPERATION)
+        and os.getenv(ASSESSMENT_REJECT_BUSY_FLAG, "") == "1"
     )
 
 
@@ -193,6 +210,8 @@ def call_validated_cloudflare_pilot(
         # Requests timeouts are not a total wall-clock budget. They bound
         # connection/read inactivity, reducing the prior 45s stall.
         options["http_timeout"] = ASSESSMENT_HTTP_TIMEOUT
+        if cloudflare_assessment_reject_if_busy_enabled():
+            options["reject_if_busy"] = True
     raw = generate_evaluation_json(
         system_instructions, user_prompt, **options,
     )
