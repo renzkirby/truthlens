@@ -90,6 +90,7 @@ function InvestigationWorkspacePage() {
    );
 
    const [requestVersion, setRequestVersion] = useState(0);
+   const [contextOpen, setContextOpen] = useState(false);
    const [result, setResult] = useState({
       loading: Boolean(organizationId && membership),
       data: null,
@@ -250,10 +251,22 @@ function InvestigationWorkspacePage() {
                   </p>
                   <h1>{claim.context_text || "Investigation"}</h1>
                </div>
-               <span className="investigation-workspace-active-status">
-                  <Icons name="activity" size={14} />
-                  Active investigation
-               </span>
+               <div className="investigation-workspace-heading-actions">
+                  <span className="investigation-workspace-active-status">
+                     <Icons name="activity" size={14} />
+                     Active investigation
+                  </span>
+                  <Button
+                     variant="secondary"
+                     density="compact"
+                     leadingIcon={<Icons name="paperclip" size={14} />}
+                     aria-expanded={contextOpen}
+                     aria-controls="investigation-workspace-context"
+                     onClick={() => setContextOpen((open) => !open)}
+                  >
+                     {contextOpen ? "Hide context" : "Show context"}
+                  </Button>
+               </div>
             </div>
 
             <div className="investigation-workspace-meta" aria-label="Investigation identity">
@@ -269,7 +282,7 @@ function InvestigationWorkspacePage() {
             <InvestigationContextLinks claim={claim} />
          </header>
 
-         <div className="investigation-workspace-layout">
+         <div className={`investigation-workspace-layout ${contextOpen ? "has-context" : ""}`}>
             <main className="investigation-workspace-main">
                <section className="investigation-stage" aria-labelledby="investigation-stage-heading">
                   <div className="investigation-stage-heading">
@@ -397,18 +410,24 @@ function InvestigationWorkspacePage() {
                ) : null}
             </main>
 
-            <aside className="investigation-workspace-context" aria-label="Investigation context">
-               <div className="investigation-context-summary">
-                  <span className="investigation-section-label">Context</span>
-                  <h2>Evidence & provenance</h2>
-                  <p>
-                     Review supporting context without losing the investigation you are working on. Automated analysis
-                     remains non-authoritative.
-                  </p>
-               </div>
+            {contextOpen ? (
+               <aside
+                  id="investigation-workspace-context"
+                  className="investigation-workspace-context"
+                  aria-label="Investigation context"
+               >
+                  <div className="investigation-context-summary">
+                     <span className="investigation-section-label">Context</span>
+                     <h2>Evidence & provenance</h2>
+                     <p>
+                        Review supporting context without losing the investigation you are working on. Automated
+                        analysis remains non-authoritative.
+                     </p>
+                  </div>
 
-               <VerificationIntelligencePanel organizationId={organizationId} claimId={claim.id} />
-            </aside>
+                  <VerificationIntelligencePanel organizationId={organizationId} claimId={claim.id} />
+               </aside>
+            ) : null}
          </div>
       </div>
    );
