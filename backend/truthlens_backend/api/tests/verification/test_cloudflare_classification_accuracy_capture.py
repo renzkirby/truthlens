@@ -241,7 +241,9 @@ class Cloudflare32AccuracyTests(SimpleTestCase):
             first,
             requests.exceptions.ReadTimeout("vendor secret string"),
         ]
-        self._mock_response(CROSS_VALID)
+        # The first canonical case is CIVICS, so use a structurally
+        # valid abstention (not an invented SCIENCE quotation).
+        self._mock_response(ABSTAIN)
         with patch("api.services.call_llm_with_fallback") as routing:
             done = self._live()
         self.assertEqual(done["attempted_requests"], 2)
@@ -345,14 +347,8 @@ class Cloudflare32AccuracyTests(SimpleTestCase):
         self.post.assert_not_called()
 
     def test_packet_inside_checkout_is_rejected(self):
-        with patch(
-            "api.verification.cloudflare_classification_accuracy_capture.Path",
-            wraps=Path,
-        ):
-            # Verify the actual helper's path containment condition using a
-            # checkout directory that already exists, with no file writes.
-            from api.verification import cloudflare_classification_accuracy_capture as accuracy
-            repo_path = Path(accuracy.__file__).resolve().parents[4]
-            with self.assertRaises(ClassificationAuditError):
-                validate_accuracy_packet(self.corpus, repo_path)
+        from api.verification import cloudflare_classification_accuracy_capture as accuracy
+        repo_path = Path(accuracy.__file__).resolve().parents[4]
+        with self.assertRaises(ClassificationAuditError):
+            validate_accuracy_packet(self.corpus, repo_path)
         self.post.assert_not_called()
