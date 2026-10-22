@@ -200,6 +200,7 @@ function WorkspacePage() {
    const routeResourceId = routeQuery.get("resource_id");
    const routeFactCheckId = routeQuery.get("fact_check_id");
    const routePublicationId = routeQuery.get("publication_id");
+   const routeFromAssignment = routeQuery.get("from_assignment");
    const routeStatus = ["ACTIVE", "COMPLETED", "CANCELLED", "ALL"].includes(routeQuery.get("status"))
       ? routeQuery.get("status")
       : "ACTIVE";
@@ -901,6 +902,11 @@ function WorkspacePage() {
                            organizationName={selectedOrganization?.name}
                            canReviewEvidence
                            initialCaseId={routeCaseId}
+                           returnToInvestigationPath={
+                              routeFromAssignment && selectedOrganizationId
+                                 ? `/workspace/investigations/${encodeURIComponent(routeFromAssignment)}?organization_id=${encodeURIComponent(selectedOrganizationId)}`
+                                 : null
+                           }
                         />
                      ) : activeSection.id === "adjudication" &&
                        organizationCapabilities.includes(WorkspaceCapability.ADJUDICATE) ? (
@@ -910,6 +916,11 @@ function WorkspacePage() {
                            organizationName={selectedOrganization?.name}
                            canAdjudicate
                            initialCaseId={routeCaseId}
+                           returnToInvestigationPath={
+                              routeFromAssignment && selectedOrganizationId
+                                 ? `/workspace/investigations/${encodeURIComponent(routeFromAssignment)}?organization_id=${encodeURIComponent(selectedOrganizationId)}`
+                                 : null
+                           }
                         />
                      ) : activeSection.id === "drafting" &&
                        organizationCapabilities.includes(WorkspaceCapability.CREATE_FACT_CHECK_DRAFT) ? (
