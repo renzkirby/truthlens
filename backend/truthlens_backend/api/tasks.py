@@ -88,20 +88,6 @@ from .verification.telemetry import (
 logger = logging.getLogger(__name__)
 
 
-@shared_task(
-    name="api.tasks.cloudflare_single_request_smoke",
-    max_retries=0,
-    acks_late=False,
-)
-def cloudflare_single_request_smoke():
-    """One dev-only Cloudflare request on a fixed, reviewer-approved dossier.
-
-    Never routes to Gemini/Groq or invokes user claim/verification persistence.
-    """
-    from .verification.cloudflare_worker_smoke import run_cloudflare_worker_smoke
-    return run_cloudflare_worker_smoke()
-
-
 @shared_task(name="api.tasks.inspect_cloudflare_pilot_worker_environment")
 def inspect_cloudflare_pilot_worker_environment():
     """Return safe *actual worker* runtime flags without provider calls.
