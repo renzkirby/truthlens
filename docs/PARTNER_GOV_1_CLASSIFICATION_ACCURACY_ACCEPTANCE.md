@@ -58,6 +58,25 @@ These are **audit tooling tests**, not model-accuracy test results.
 - `docs/PARTNER_GOV_1_SUBJECT_DOMAIN_REVIEW_WORKSHEET.md`: AI-assisted editorial rubric and 32 proposed case outcomes, including five contested multi-domain cases and one suggested reconsideration of the SPORTS tag. **Do not use this for the first blind pass**.
 - The canonical JSON's `draft_expected` values and every `review.status="PENDING"` are deliberately unchanged; review material is not ground truth or `enforce` approval.
 
+## 2026-10-22 two-reviewer reconciliation checkpoint (consensus, not formal approval)
+
+The first reviewer and co-developer have reported substantive agreement on
+all 32 draft subject classifications, including **EDUCATION only** for
+`cross_school_sport`. The canonical fixture's *draft* label for that case
+has been updated without changing its `review.status="PENDING"`.
+Twenty-seven cases are directly aligned or explicitly clarified; **five**
+reviewer-2 entries still require confirmation of ID aliases, typographical
+code corrections, or an omitted `CLASSIFY` decision. Reviewer identities,
+approval notes and final human attestation are not yet supplied.
+
+The exact five outstanding interpretations and two-reviewer sign-off protocol
+are documented in
+`docs/PARTNER_GOV_1_HUMAN_REVIEW_SIGNOFF_2026_10_22.md`.
+Private reviewer workbooks and the proposed pending corpus are **not**
+committed as reviewer attestations. **Still 0 APPROVED; accuracy NOT SCORED;
+enforce NOT AUTHORIZED.** Do not confuse consensus on draft subjects with
+model agreement against independent ground truth.
+
 ## Review protocol before producing a score
 
 1. Have qualified reviewers inspect and, where needed, correct the
