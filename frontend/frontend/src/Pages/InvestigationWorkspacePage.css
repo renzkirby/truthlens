@@ -6,16 +6,28 @@
 }
 
 .investigation-workspace-header {
+   position: relative;
    min-width: 0;
-   padding-bottom: 22px;
-   border-bottom: 1px solid var(--border-default);
+   overflow: hidden;
+   padding: 20px 22px 22px;
+   border: 1px solid var(--border-default);
+   border-radius: 16px;
+   background: var(--bg-surface);
+}
+
+.investigation-workspace-header::before {
+   content: "";
+   position: absolute;
+   inset: 0 0 auto;
+   height: 4px;
+   background: var(--brand-primary);
 }
 
 .investigation-workspace-back {
    display: inline-flex;
    align-items: center;
    gap: 7px;
-   margin: 0 0 18px;
+   margin: 0 0 16px;
    padding: 7px 0;
    border: 0;
    background: transparent;
@@ -87,14 +99,26 @@
 .investigation-workspace-meta {
    display: flex;
    flex-wrap: wrap;
-   gap: 8px 18px;
-   margin-top: 14px;
+   gap: 8px;
+   margin-top: 16px;
    color: var(--text-muted);
-   font-size: 0.78rem;
+   font-size: 0.76rem;
+}
+
+.investigation-workspace-meta span {
+   display: inline-flex;
+   align-items: center;
+   min-height: 30px;
+   padding: 0 10px;
+   border: 1px solid var(--border-light);
+   border-radius: 999px;
+   background: var(--bg-subtle);
 }
 
 .investigation-workspace-header .investigation-context-links {
-   margin-top: 14px;
+   margin-top: 16px;
+   padding-top: 14px;
+   border-top: 1px solid var(--border-light);
 }
 
 .investigation-workspace-layout {
