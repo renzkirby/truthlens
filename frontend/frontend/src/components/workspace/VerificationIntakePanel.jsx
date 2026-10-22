@@ -334,6 +334,8 @@ function VerificationIntakePanel({ organizationId, organizationName, onInvestiga
                <ul className="intake-list">
                   {intake.results.map((assignment) => {
                      const claim = assignment?.claim ?? {};
+                     const claimText = claim.context_text || "Claim text unavailable";
+                     const hasLongClaimText = claimText.length > 360;
 
                      const verdictMeta = getVerdictMeta(claim.ai_verdict);
 
@@ -354,7 +356,16 @@ function VerificationIntakePanel({ organizationId, organizationName, onInvestiga
                                  <span className="intake-updated">Updated {formatDateTime(claim.last_updated)}</span>
                               </div>
 
-                              <h3 className="intake-claim-text">{claim.context_text || "Claim text unavailable"}</h3>
+                              <h3 className={`intake-claim-text ${hasLongClaimText ? "is-truncated" : ""}`}>
+                                 {claimText}
+                              </h3>
+
+                              {hasLongClaimText && (
+                                 <details className="intake-claim-details">
+                                    <summary>Show full claim text</summary>
+                                    <p>{claimText}</p>
+                                 </details>
+                              )}
 
                               {claim.ai_summary && <p className="intake-ai-summary">{claim.ai_summary}</p>}
 
