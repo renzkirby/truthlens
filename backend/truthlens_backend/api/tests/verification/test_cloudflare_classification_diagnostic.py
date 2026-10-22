@@ -28,6 +28,8 @@ from api.verification.cloudflare_classification_diagnostic import (
     execute_diagnostic, prepare_private_diagnostic, validate_diagnostic_packet,
 )
 from api.verification.cloudflare_evaluation import DEFAULT_MODEL
+from api.verification.cloudflare_classification_capture import MAX_LIVE_CALLS
+from api.verification.cloudflare_pilot import CLASSIFICATION_COMPLETION_TOKENS
 
 
 VALID_CLASSIFICATION = json.dumps({
@@ -265,6 +267,7 @@ class Cloudflare4096DiagnosticTests(SimpleTestCase):
         self.assertEqual(result["approved"], 32)
         self.assertEqual(result["predicted"], 1)
         self.assertEqual(result["missing"], 31)
+        self.assertEqual(result["exact_matches"], 1)
         self.assertFalse(result["coverage_complete"])
         self.assertIsNone(result["exact_match_rate"])
         self.assertFalse(result["eligible_for_automatic_enforcement"])
@@ -318,6 +321,23 @@ class Cloudflare4096DiagnosticTests(SimpleTestCase):
         self.assertEqual(self._read(PREDICTIONS_FILE)["predictions"], [])
         self.assertEqual(self._read(JOURNAL_FILE)["attempts"][0]["status"],
                          "CAPTURED_TOO_LARGE_TO_SCORE")
+
+    def test_legacy_four_case_and_dev_pilot_limits_remain_unchanged(self):
+        # This is a diagnostic-only budget; do not globally raise stages.
+        self.assertEqual(CLASSIFICATION_COMPLETION_TOKENS, 1024)
+        self.assertEqual(MAX_LIVE_CALLS, 4)
+        self.assertEqual(MAX_COMPLETION_TOKENS, 4096)
+        self.post.assert_not_called()
+
+    def test_changed_review_metadata_fails_manifest_fingerprint(self):
+        changed = copy.deepcopy(self.cases)
+        changed[0]["review"]["notes"] = "Altered approval provenance"
+        self.corpus.write_text(json.dumps({
+            "schema_version": 1, "cases": changed,
+        }), encoding="utf-8")
+        with self.assertRaises(ClassificationAuditError):
+            self._live()
+        self.post.assert_not_called()
 
     def test_stale_writing_file_prevents_replaying_packet(self):
         (self.packet / (JOURNAL_FILE + ".writing")).write_text("interrupted")
