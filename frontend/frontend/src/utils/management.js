@@ -60,6 +60,27 @@ export const MANAGEMENT_ORGANIZATION_TYPES = [
    ["OTHER", "Other"],
 ];
 
+export const MANAGEMENT_VERIFICATION_DOMAINS = [
+   ["CIVICS", "Civics & Governance"],
+   ["ELECTIONS", "Elections"],
+   ["LAW", "Law & Justice"],
+   ["HEALTH", "Health & Medicine"],
+   ["SCIENCE", "Science"],
+   ["TECHNOLOGY", "Technology"],
+   ["EDUCATION", "Education"],
+   ["ECONOMY", "Economy & Business"],
+   ["ENVIRONMENT", "Environment"],
+   ["DISASTERS", "Disasters & Public Safety"],
+   ["SPORTS", "Sports"],
+   ["CULTURE", "Culture & Entertainment"],
+];
+
+const VERIFICATION_DOMAIN_LABELS = new Map(MANAGEMENT_VERIFICATION_DOMAINS);
+
+export function formatVerificationDomain(code) {
+   return VERIFICATION_DOMAIN_LABELS.get(code) || code;
+}
+
 export const MANAGEMENT_VERIFICATION_STATUSES = [
    ["UNVERIFIED", "Unverified"],
    ["PENDING", "Pending Verification"],
@@ -77,6 +98,9 @@ export const MANAGEMENT_PARTNER_STATUSES = [
 export const MANAGEMENT_GOVERNANCE_ACTIONS = [
    ["ORGANIZATION_CREATED", "Organization Created"],
    ["ORGANIZATION_PLATFORM_TRUST_UPDATED", "Organization Platform Trust Updated"],
+   ["ORGANIZATION_VERIFICATION_SCOPE_APPROVED", "Organization Verification Scope Approved (legacy)"],
+   ["ORGANIZATION_VERIFICATION_SPECIALIZATIONS_UPDATED", "Organization Verification Specializations Updated"],
+   ["CLAIM_INVESTIGATION_CLASSIFIED", "Claim Investigation Classified"],
    ["ORGANIZATION_INVITATION_CREATED", "Primary Admin Invitation Created"],
    ["ORGANIZATION_INVITATION_RESENT", "Primary Admin Invitation Resent"],
    ["ORGANIZATION_INVITATION_CANCELLED", "Primary Admin Invitation Cancelled"],
@@ -122,6 +146,7 @@ export function formatManagementAuditValue(value) {
 
 export function formatManagementCapability(value) {
    if (value === "MANAGE_PARTNER_ORGANIZATION") return "Manage Partner Organization";
+   if (value === "MANAGE_VERIFICATION_SPECIALIZATIONS") return "Manage Verification Specializations";
    if (value === "PROVISION_PARTNER_ORGANIZATION") return "Provision Partner Organization";
    return value || "Not recorded";
 }

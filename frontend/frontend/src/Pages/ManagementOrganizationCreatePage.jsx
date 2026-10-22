@@ -12,16 +12,12 @@ import { useManagementMutation } from "../hooks/useManagementMutation";
 import { resolveApiEndpoint } from "../utils/api";
 import {
    MANAGEMENT_ORGANIZATION_TYPES,
-   MANAGEMENT_PARTNER_STATUSES,
-   MANAGEMENT_VERIFICATION_STATUSES,
 } from "../utils/management";
 
 const INITIAL_FORM = {
    name: "",
    slug: "",
    organization_type: "",
-   verification_status: "UNVERIFIED",
-   partner_status: "NONE",
 };
 
 function FieldError({ id, children }) {
@@ -114,39 +110,7 @@ function ManagementOrganizationCreatePage() {
             <section className="management-form-section" aria-labelledby="trust-section-title">
                <div className="management-form-section__heading">
                   <h2 id="trust-section-title">Initial Platform Trust</h2>
-                  <p>These platform-governed values are independent. Creating the organization does not invite or assign a Primary Admin.</p>
-               </div>
-               <div className="management-form-grid">
-                  <label className="management-form-field">
-                     <span>Verification status</span>
-                     <Select
-                        value={form.verification_status}
-                        onChange={(event) => updateField("verification_status", event.target.value)}
-                        invalid={Boolean(error?.fields.verification_status)}
-                        aria-describedby={error?.fields.verification_status ? "verification-status-error" : undefined}
-                        disabled={pending}
-                     >
-                        {MANAGEMENT_VERIFICATION_STATUSES.map(([value, label]) => (
-                           <option key={value} value={value}>{label}</option>
-                        ))}
-                     </Select>
-                     <FieldError id="verification-status-error">{error?.fields.verification_status}</FieldError>
-                  </label>
-                  <label className="management-form-field">
-                     <span>Partner status</span>
-                     <Select
-                        value={form.partner_status}
-                        onChange={(event) => updateField("partner_status", event.target.value)}
-                        invalid={Boolean(error?.fields.partner_status)}
-                        aria-describedby={error?.fields.partner_status ? "partner-status-error" : undefined}
-                        disabled={pending}
-                     >
-                        {MANAGEMENT_PARTNER_STATUSES.map(([value, label]) => (
-                           <option key={value} value={value}>{label}</option>
-                        ))}
-                     </Select>
-                     <FieldError id="partner-status-error">{error?.fields.partner_status}</FieldError>
-                  </label>
+                  <p>New organizations always begin Unverified and Not a Partner. After creation, authorized platform administrators can review and update their statuses through the separate, audited governance workflow.</p>
                </div>
             </section>
 

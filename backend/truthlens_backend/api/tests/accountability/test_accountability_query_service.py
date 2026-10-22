@@ -68,6 +68,22 @@ class AccountabilityQueryServiceTests(TestCase):
             status=OrganizationMembership.Status.ACTIVE,
         )
 
+    def test_primary_admin_specialization_change_is_visible_in_org_accountability(self):
+        from api.organization_scope_service import update_organization_specializations
+
+        update_organization_specializations(
+            organization=self.organization, actor=self.owner,
+            domains=["TECHNOLOGY"],
+            rationale="Our organization can verify technological claims.",
+        )
+        payload = list_organization_accountability_events(
+            actor=self.owner, organization=self.organization,
+            domain=AccountabilityDomain.ORGANIZATION_ADMIN,
+            action_type=AccountabilityEvent.ActionType.ORGANIZATION_VERIFICATION_SPECIALIZATIONS_UPDATED,
+        )
+        self.assertEqual(payload["count"], 1)
+        self.assertEqual(payload["results"][0]["authority"]["scope"], "ORGANIZATION")
+
     def make_event(
         self,
         *,

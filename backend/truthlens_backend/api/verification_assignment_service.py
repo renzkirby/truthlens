@@ -22,6 +22,11 @@ from .organization_service import (
     PartnerCapability,
     has_capability,
 )
+from .verification_domain_policy import (
+    eligibility_reason,
+    organization_specializations,
+    subject_eligibility_enforced,
+)
 
 OPEN_ASSIGNMENT_STATUSES = {
     VerificationAssignment.Status.AVAILABLE,
@@ -167,6 +172,7 @@ def get_available_verification_assignments():
         )
         .select_related(
             "claim",
+            "claim__investigation_classification",
             "organization",
             "claimed_by",
         )
@@ -395,6 +401,31 @@ def claim_verification_assignment(
                 "Available verification work must not "
                 "already belong to an organization."
             )
+
+        # Subject-based intake authorization is a separately gated rollout.
+        # Off/shadow must preserve the pre-classification production workflow;
+        # shadow suggestions are diagnostic and cannot grant or deny work.
+        if subject_eligibility_enforced():
+            classification = (
+                locked_claim.investigation_classification
+                if hasattr(locked_claim, "investigation_classification")
+                else None
+            )
+            locked_organization = type(organization).objects.select_for_update().get(
+                pk=organization.pk,
+            )
+            specializations = organization_specializations(locked_organization)
+            refusal = eligibility_reason(
+                classification=classification,
+                specializations=specializations,
+            )
+            if refusal:
+                raise VerificationAssignmentAuthorizationError(
+                    {
+                        "NEEDS_CLASSIFICATION": "This claim does not yet have a validated investigation subject classification.",
+                        "OUTSIDE_SPECIALIZATIONS": "The claim is outside this organization's selected verification specializations.",
+                    }[refusal]
+                )
 
         locked_assignment.organization = organization
         locked_assignment.claimed_by = actor

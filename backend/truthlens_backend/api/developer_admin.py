@@ -180,6 +180,15 @@ class DeveloperOrganizationAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     )
+    def get_fields(self, request, obj=None):
+        fields = super().get_fields(request, obj)
+        if obj is None:
+            return tuple(
+                field for field in fields
+                if field not in {"verification_status", "partner_status"}
+            )
+        return fields
+
     readonly_fields = (
         "description",
         "website",

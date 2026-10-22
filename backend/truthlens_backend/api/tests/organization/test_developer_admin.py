@@ -191,6 +191,13 @@ class DeveloperConsoleTests(TestCase):
         self.assertNotIn("verification_status", readonly_fields)
         self.assertNotIn("partner_status", readonly_fields)
 
+    def test_organization_add_form_hides_platform_trust_selects(self):
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse("developer_admin:api_organization_add"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'name="verification_status"')
+        self.assertNotContains(response, 'name="partner_status"')
+
     def test_organization_without_owner_exposes_primary_admin_action(self):
         organization = self.create_unowned_organization()
         self.client.force_login(self.superuser)
@@ -596,8 +603,6 @@ class DeveloperConsoleTests(TestCase):
                 "name": "New Institutional Partner",
                 "slug": "new-institutional-partner",
                 "organization_type": Organization.OrganizationType.UNIVERSITY,
-                "verification_status": Organization.VerificationStatus.PENDING,
-                "partner_status": Organization.PartnerStatus.NONE,
                 "_save": "Save",
             },
         )
@@ -607,11 +612,11 @@ class DeveloperConsoleTests(TestCase):
             reverse("developer_admin:api_organization_changelist"),
         )
         organization = Organization.objects.get(
-                name="New Institutional Partner",
-                slug="new-institutional-partner",
-                organization_type=Organization.OrganizationType.UNIVERSITY,
-                verification_status=Organization.VerificationStatus.PENDING,
-                partner_status=Organization.PartnerStatus.NONE,
+            name="New Institutional Partner",
+            slug="new-institutional-partner",
+            organization_type=Organization.OrganizationType.UNIVERSITY,
+            verification_status=Organization.VerificationStatus.UNVERIFIED,
+            partner_status=Organization.PartnerStatus.NONE,
         )
         event = AccountabilityEvent.objects.get(
             action_type=AccountabilityEvent.ActionType.ORGANIZATION_CREATED,
@@ -629,9 +634,52 @@ class DeveloperConsoleTests(TestCase):
                 "name": "New Institutional Partner",
                 "slug": "new-institutional-partner",
                 "organization_type": Organization.OrganizationType.UNIVERSITY,
-                "verification_status": Organization.VerificationStatus.PENDING,
+                "verification_status": Organization.VerificationStatus.UNVERIFIED,
                 "partner_status": Organization.PartnerStatus.NONE,
             },
+        )
+
+    def test_developer_creation_cannot_override_initial_platform_trust(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("developer_admin:api_organization_add"),
+            {
+                "name": "Tamper Resistant Partner",
+                "slug": "tamper-resistant-partner",
+                "organization_type": Organization.OrganizationType.RESEARCH,
+                "verification_status": Organization.VerificationStatus.VERIFIED,
+                "partner_status": Organization.PartnerStatus.SUSPENDED,
+                "_save": "Save",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("developer_admin:api_organization_changelist"),
+        )
+        organization = Organization.objects.get(slug="tamper-resistant-partner")
+        self.assertEqual(
+            organization.verification_status,
+            Organization.VerificationStatus.UNVERIFIED,
+        )
+        self.assertEqual(
+            organization.partner_status,
+            Organization.PartnerStatus.NONE,
+        )
+
+        events = AccountabilityEvent.objects.filter(
+            action_type=AccountabilityEvent.ActionType.ORGANIZATION_CREATED,
+            subject_organization=organization,
+        )
+        self.assertEqual(events.count(), 1)
+        self.assertEqual(
+            events.get().new_state["verification_status"],
+            Organization.VerificationStatus.UNVERIFIED,
+        )
+        self.assertEqual(
+            events.get().new_state["partner_status"],
+            Organization.PartnerStatus.NONE,
         )
 
     def test_developer_creation_rejects_case_insensitive_name_and_duplicate_slug(self):

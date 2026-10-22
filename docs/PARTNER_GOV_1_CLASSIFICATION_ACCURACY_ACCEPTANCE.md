@@ -1,0 +1,303 @@
+# PARTNER-GOV-1 — Offline subject-classification accuracy and eligibility acceptance
+
+**Checkpoint:** implementation in `feat/ai-rq2-provider-hierarchy`; final
+manual acceptance is **PENDING**, not granted by synthetic tests.
+
+## Why this separate gate is required
+
+The previously approved live Europa Clipper `shadow` task completed
+`SUGGESTED`, with `candidate_domains=["SCIENCE","TECHNOLOGY"]` and **no**
+authoritative `ClaimInvestigationClassification` row. Gemini returned 402,
+Cloudflare timed out after ~15.337s, and Groq supplied the accepted
+suggestion. A separately approved direct Cloudflare-only inference, with
+classification read-inactivity timeout 30s and `rejectIfBusy=1`, returned
+the same domain codes in ~16.132s. This is evidence of fallback behavior
+and a plausible result on **one claim**, not evidence of model
+classification accuracy across the supported taxonomy.
+
+The persisted `InvestigationClassificationAssessment` stores approved
+**candidate domain codes**, reason/status, version and input fingerprint,
+but does **not** retain the model's per-domain quoted evidence or a
+reviewer-approved reference label. Do **not** reconstruct or invent those
+quotations. Without separately captured complete model responses, the
+existing database cannot answer whether the model's quotations
+supported each assigned subject.
+
+## What this offline-only checkpoint adds
+
+- `api/verification/fixtures/investigation_subject_review_v1.json`:
+  **32 synthetic illustrative cases** spanning the **12 actual domain
+  codes**, including explicit single subjects, cross-domain subjects,
+  ambiguous/weak-evidence claims, geography traps, contradictory
+  reports, prompt-injection strings and unsupported/out-of-scope cases.
+  Every label is explicitly `review.status="PENDING"` and every
+  classification is a **draft reference proposal**, not ground truth.
+- `api/verification/classification_quality_audit.py`: a pure parser
+  and descriptive scorer. It reuses the **existing strict provider
+  response contract** and the existing conservative all-subject
+  `eligibility_reason` check for a counterfactual eligibility risk
+  calculation. It does not modify either policy.
+- `python manage.py audit_investigation_classification`: a local
+  **read-only, no-network** management command that scans the corpus
+  or compares *already captured* raw JSON responses to individually
+  reviewed references. Never submits AI requests, reads claims from
+  the application database, schedules Celery, writes files, or
+  authorizes investigations. Output shows aggregate metrics and
+  non-sensitive case IDs only.
+- `api/tests/verification/test_classification_quality_audit.py`:
+  regression cases for 12-domain coverage, reviewer gating, malformed
+  inputs, missing predictions, hallucinated quotes, overclassification,
+  incorrect abstentions, and both potential overauthorization and
+  overexclusion under the all-domains-must-match rule.
+
+These are **audit tooling tests**, not model-accuracy test results.
+
+## Blind human review materials (draft-only)
+
+- `docs/PARTNER_GOV_1_BLIND_REVIEW_SHEET.md`: all 32 case texts and IDs **without any reference labels**, for genuinely independent reviewer passes.
+- `docs/PARTNER_GOV_1_SUBJECT_DOMAIN_REVIEW_WORKSHEET.md`: AI-assisted editorial rubric and 32 proposed case outcomes, including five contested multi-domain cases and one suggested reconsideration of the SPORTS tag. **Do not use this for the first blind pass**.
+- The canonical JSON's `draft_expected` values and every `review.status="PENDING"` are deliberately unchanged; review material is not ground truth or `enforce` approval.
+
+## 2026-10-22 two-reviewer consensus: local approved references, NOT model accuracy
+
+Both human reviewers reportedly agreed on the final subject classifications
+for all **32 synthetic cases**, including **EDUCATION only** for
+`cross_school_sport`. Reviewer 1 directly approved the full set in chat;
+Reviewer 1 then relayed Reviewer 2's affirmative confirmation of the
+**five minor ID/code/omitted-decision normalizations** and full-set
+approval. This is honest **user-relayed co-reviewer provenance**, not a
+verified personal identity or independently authenticated signature.
+
+A **separate local evaluation file** named
+`PARTNER_GOV1_Approved_Reference_Corpus_2026_10_22.json` carries
+`review.status="APPROVED"` with descriptive composite reviewer-role
+identifiers and case-specific confirmation notes. The supporting
+`PARTNER_GOV1_Approval_Provenance_2026_10_22.md` discloses these limits.
+Both are intentionally **not committed**: preserve the source workbooks and
+identity/approval evidence privately. Details appear in
+`docs/PARTNER_GOV_1_HUMAN_REVIEW_SIGNOFF_2026_10_22.md`.
+
+The **bundled canonical GitHub fixture remains 32 PENDING / 0 APPROVED**
+so the default command still reports NOT SCORED as a fail-closed baseline.
+The reviewed **local** corpus can now be used for **read-only descriptive
+model accuracy auditing**, once separately authorized, complete and
+unaltered model predictions are available. No measured model accuracy,
+independent identity attestation, real-world representativeness, or
+enforcement authorization is implied.
+
+## Offline provider capture preparation — added after reference approval
+
+The user has locally confirmed the separate, user-and-co-dev-consensus
+**APPROVED** private corpus loads as `cases=32 approved=32 pending=0`;
+the unchanged bundled fixture remains `32 PENDING`. This confirms review
+schema validation only; **no prediction responses have been supplied**.
+
+A separate **NO-NETWORK** preparatory command is now available:
+`prepare_investigation_classification_evaluation`. It accepts only a
+fully approved `--corpus`, requires one `--provider`, defaults to
+four safety-focused canaries, and caps planned IDs at 32 per provider.
+It has **no implementation that can call Gemini, Cloudflare or Groq**.
+Default output is a sanitized plan; optional explicit private export
+outside Git writes exact input texts and an **empty** prediction template
+without reference labels. The optional cost arithmetic requires
+operator-supplied rates and estimated token counts and **is not a
+spend cap or provider quote**.
+
+See `docs/PARTNER_GOV_1_CLASSIFICATION_CAPTURE_PREPARATION.md`
+for commands, security constraints, intended future capture provenance,
+and the nine **new unrun offline tests**. Any live evaluation still
+requires explicit authorization and model/prompt/config review;
+`enforce` remains unapproved. This planning artifact is not an
+accuracy result.
+
+## Review protocol before producing a score
+
+1. Have qualified reviewers inspect and, where needed, correct the
+   draft domain labels based on the **subject explicitly expressed**
+   in each claim; do not use truth status, geopolitical jurisdiction,
+   evidence source credibility, brand, or organization expertise as
+   a substitute for subject evidence.
+2. For every case, document whether it supports **1–3 distinct
+   subject domains** or genuinely requires `ABSTAIN`. Both a
+   multi-domain classification and a deliberate abstention are valid
+   when justified. Reviewers should discuss disagreements, especially
+   SCIENCE-vs-TECHNOLOGY overlap and geography-only cases.
+3. Only after a reference is actually reviewed, change
+   `review.status` from `PENDING` to `APPROVED`, providing nonempty
+   `review.reviewer` and `review.notes`. These fields are a local
+   provenance claim, **not cryptographic attestation**. For eventual
+   rollout, require a separately accepted independent-review protocol;
+   the script cannot validate reviewer qualifications or consensus.
+4. Evaluate only **previously captured**, approved provider responses
+   from a separately authorized process or an existing consented,
+   local archive. Do **not** call providers to populate predictions
+   under the guise of an offline audit.
+5. Review the scorer's case IDs for invalid quotes, missing outputs,
+   overclassification, incorrect labels, abstention behavior and
+   counterfactual organization eligibility. Compare quotations
+   manually with the original text, not just substring presence.
+
+### Corpus format (illustrative)
+
+```json
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "science_telescope",
+      "claim_text": "Astronomers published telescope observations describing water vapor in the atmosphere of a distant planet.",
+      "tags": ["single_domain"],
+      "draft_expected": {
+        "decision": "CLASSIFY",
+        "domains": ["SCIENCE"]
+      },
+      "review": {
+        "status": "PENDING",
+        "reviewer": "",
+        "notes": ""
+      }
+    }
+  ]
+}
+```
+
+Once genuinely reviewed, the `draft_expected` label should reflect
+what reviewers approved; it retains its field name because the
+bundled default corpus remains a draft.
+
+### Prediction format (local input only; never in Git)
+
+```json
+{
+  "schema_version": 1,
+  "predictions": [
+    {
+      "case_id": "science_telescope",
+      "raw_response": "{\"decision\":\"CLASSIFY\",\"domains\":[{\"code\":\"SCIENCE\",\"evidence\":\"telescope observations\"}]}"
+    }
+  ]
+}
+```
+
+`raw_response` must be the **unaltered complete JSON text** previously
+returned by a provider, including the per-domain quote evidence.
+No fallback reconstruction is permitted from persisted
+`candidate_domains`. Capture provider name/model, flags, input
+revision, time, selection method and reviewer provenance separately
+in secure experiment notes; do not commit credentials, personal
+claims or full production prompts to the repository.
+
+The scorer accepts up to 120 cases and rejects duplicate/unknown
+prediction IDs. Missing predictions for approved cases prevent a
+complete accuracy rate. Draft-only corpus **never reports accuracy**.
+
+## Eligibility and risk semantics
+
+True organization intake authorization remains governed by the
+authoritative `ClaimInvestigationClassification` and the existing
+all-subjects-subset specialization rule, alongside organization
+status, membership/capability and assignment conditions.
+
+The audit simulates *hypothetical* outcomes only:
+
+- **Potential scope leak:** a predicted CLASSIFY domain set could
+  qualify an organization that would not qualify for the reviewed
+  reference. Example: reference SCIENCE+TECHNOLOGY, model predicts
+  only SCIENCE; a SCIENCE-only partner would be incorrectly allowed.
+  A CLASSIFY output on a reviewer-ABSTAIN reference also counts.
+- **Potential scope exclusion:** a model adds unsupported domain(s),
+  excluding a partner covering all reviewer-reference subjects;
+  or ABSTAINS when the reviewed reference requires classification.
+- **Invalid JSON/quotation:** excluded from exact matches and reported
+  separately; deterministic validation must reject unsupported
+  codes, duplicated domains and claim-absent quotations.
+- **Exact match:** validated subject-domain set **or** approved
+  ABSTAIN exactly equals reviewed reference. This does not measure
+  human linguistic judgment beyond the approved rubric.
+
+No metric is a grant of permission. The report always contains
+`eligible_for_automatic_enforcement=false` and the CLI always
+prints `enforcement_approved=false`.
+
+## Commands (offline; zero provider requests)
+
+From `backend/truthlens_backend` after pulling the existing branch:
+
+```powershell
+# Safe baseline: coverage only. All built-in labels are pending review.
+..\\.venv\\Scripts\\python.exe .\\manage.py audit_investigation_classification
+
+# Optional sanitized machine-readable summary:
+..\\.venv\\Scripts\\python.exe .\\manage.py audit_investigation_classification --json-summary
+
+# Only AFTER qualified human approvals and capture of provider responses:
+# Use local untracked/private files, not database rows or invented responses.
+..\\.venv\\Scripts\\python.exe .\\manage.py audit_investigation_classification `
+  --corpus "C:\\private\\approved_subject_corpus.json" `
+  --predictions "C:\\private\\captured_classifications.json" `
+  --json-summary
+```
+
+## Test gate (no database writes by this command; tests use normal test DB)
+
+```powershell
+..\\.venv\\Scripts\\python.exe .\\manage.py test `
+  api.tests.verification.test_classification_quality_audit `
+  api.tests.verification.test_investigation_classifier `
+  api.tests.verification.test_ai_rq2_classification_fallback `
+  api.tests.verification.test_classification_latency_policy `
+  api.tests.organization.test_verification_scope `
+  --settings=truthlens_backend.test_settings --keepdb
+
+..\\.venv\\Scripts\\python.exe .\\manage.py check
+..\\.venv\\Scripts\\python.exe .\\manage.py makemigrations --check --dry-run
+```
+
+No live AI calls are authorized by these tests or documentation.
+All collected actual predictions require independent review and
+separate user authorization before any further provider requests.
+
+## Acceptance decision and blockers
+
+**Offline auditing infrastructure:** **PASSED** user-local focused suite (75 tests, 0 failures, 3.489 seconds), Django system check clean, migration check reported no changes; user also confirmed audit baseline `cases=32 approved=0 pending=32 domains=12 categories=8 NOT SCORED`. This pass validates audit tooling only, not model quality.
+
+**Actual automatic classification accuracy:** **NOT MEASURED**.
+The default GitHub fixture remains 32 PENDING; a separately prepared,
+user-and-co-dev-approved (co-dev signoff user-relayed) **local** corpus now
+has 32 APPROVED synthetic reference labels for offline evaluation.
+No complete, unaltered real model prediction set or representative
+held-out real-claim accuracy study has yet been supplied.
+
+**PARTNER-GOV-1 `enforce` authorization:** **NOT APPROVED**.
+Before proposing a transition, require:
+- Human-approved, representative references covering every supported
+  domain, cross-domain/ambiguous, hallucination/prompt-injection and
+  abstention cases. Review methodology, sample size and acceptable
+  error thresholds must be agreed with the team.
+- Full captured model responses and configuration provenance on those
+  references, evaluated without conflating one successful Groq and
+  Cloudflare canary with a benchmark.
+- **No unresolved cases of potential overauthorization**; discuss
+  any overexclusion under the conservative multi-domain policy.
+- Evidence that shadow-mode suggestions never create authoritative
+  classifications or partner intake rights, including claim
+  fingerprint/idempotency, assignment races, and membership
+  capability regressions.
+- A separate explicit governance/engineering decision on whether to
+  retain ALL-subjects matching for cross-disciplinary claims.
+- Stable worker/config hygiene and acceptable provider-outage and
+  latency behavior. This audit does not address Cloudflare
+  evidence-assessment reliability.
+- The strict JSON/schema contract must be applied consistently on **every**
+  permitted classification provider and runtime mode before production
+  enforce. The current `requires_strict_stage_contract` is tied to the
+  development-only AI-RQ-2 hierarchy/pilot, whereas the older
+  `validate_model_suggestion` path checks quoted codes but does not
+  reject every surplus response field. This is a separate contract
+  hardening decision and must not be silently introduced in a
+  co-developer's enforcement rollout.
+- No stacked-branch PR or merge until co-development dependencies
+  are reviewed and accepted.
+
+**Default policy stays** `INVESTIGATION_CLASSIFICATION_MODE=off`.
+No partner permissions or existing AI/RAG verdict logic changed.

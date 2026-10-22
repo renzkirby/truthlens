@@ -1,5 +1,7 @@
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
+import json
 from datetime import datetime
 from uuid import UUID
 
@@ -155,4 +157,162 @@ def render_reasoning_evidence_dossier(
             if evidence_item.content is not None:
                 lines.extend(["Content:", evidence_item.content])
 
+    return "\n".join(lines)
+
+
+def render_compact_reasoning_evidence_dossier(
+    evidence_groups: Iterable[ReasoningEvidenceGroup],
+) -> str:
+    """Lossless, shorter presentation of the *same* persisted evidence.
+
+    All original content, metadata fields, ordering and identity groups are
+    retained. A once-only positional schema replaces repeated field labels.
+    This is an optional presentation for oversize dev-pilot prompts only;
+    the existing production renderer remains unchanged.
+    """
+    groups = tuple(evidence_groups)
+    if not groups:
+        return ""
+
+    lines = [
+        "PERSISTED EVIDENCE DOSSIER",
+        (
+            "Items within one SOURCE IDENTITY GROUP share normalized source "
+            "identity and must not be counted as multiple independent confirmations."
+        ),
+        (
+            "Different SOURCE IDENTITY GROUPS are not guaranteed to be "
+            "editorially independent."
+        ),
+        (
+            "EVIDENCE ITEM metadata field order (JSON array): "
+            "provider, evidence_role, stance, publisher, source_type, title, "
+            "url, canonical_url, published_at, retrieved_at, relevance_score, "
+            "directness_score, recency_score. null means not recorded."
+        ),
+    ]
+    for group_index, group in enumerate(groups, start=1):
+        lines.extend([
+            f"=== SOURCE IDENTITY GROUP {group_index} ===",
+            f"Identity kind: {group.identity_kind}",
+        ])
+        for item_index, item in enumerate(group.evidence, start=1):
+            values = (
+                item.provider, item.evidence_role, item.stance,
+                item.publisher, item.source_type, item.title,
+                item.url, item.canonical_url,
+                item.published_at.isoformat() if item.published_at is not None else None,
+                item.retrieved_at.isoformat() if item.retrieved_at is not None else None,
+                item.relevance_score, item.directness_score, item.recency_score,
+            )
+            lines.extend([
+                f"--- EVIDENCE ITEM {item_index} ---",
+                json.dumps(values, ensure_ascii=False, allow_nan=False),
+            ])
+            if item.content is not None:
+                lines.extend(["Content:", item.content])
+    return "\n".join(lines)
+
+
+def render_shared_metadata_reasoning_evidence_dossier(
+    evidence_groups: Iterable[ReasoningEvidenceGroup],
+) -> str:
+    """Second-stage lossless pilot rendering for repeated metadata.
+
+    Source text is copied unchanged. Common string/date metadata is defined
+    once, and an identical canonical URL references its URL. Numeric reference
+    markers cannot collide with original string-valued metadata fields;
+    relevance/directness/recency scores remain literal numbers.
+    """
+    groups = tuple(evidence_groups)
+    if not groups:
+        return ""
+
+    rows_by_group = []
+    for group in groups:
+        rows = []
+        for item in group.evidence:
+            values = [
+                item.provider, item.evidence_role, item.stance,
+                item.publisher, item.source_type, item.title,
+                item.url, item.canonical_url,
+                item.published_at.isoformat() if item.published_at is not None else None,
+                item.retrieved_at.isoformat() if item.retrieved_at is not None else None,
+                item.relevance_score, item.directness_score, item.recency_score,
+            ]
+            rows.append((item, values))
+        rows_by_group.append(rows)
+
+    all_rows = [values for rows in rows_by_group for _, values in rows]
+    defaults = {}
+    for column in range(10):  # String/date slots only; scores stay numeric.
+        candidates = Counter(
+            values[column]
+            for values in all_rows
+            if isinstance(values[column], str)
+            and not (column == 7 and values[column] == values[6])
+        )
+        if not candidates:
+            continue
+
+        def savings(value, count):
+            literal_length = len(json.dumps(value, ensure_ascii=False))
+            dictionary_entry_length = len(json.dumps(
+                {str(column): value}, ensure_ascii=False, separators=(",", ":"),
+            )) - 2
+            return count * (literal_length - 1) - dictionary_entry_length
+
+        # Counter retains the first encountered value when savings tie.
+        value, count = max(
+            candidates.items(), key=lambda pair: savings(*pair),
+        )
+        if savings(value, count) > 0:
+            defaults[str(column)] = value
+
+    lines = [
+        "PERSISTED EVIDENCE DOSSIER",
+        (
+            "Same-group evidence is not independent corroboration; "
+            "different groups may share editorial origins."
+        ),
+        (
+            "JSON metadata columns: provider, evidence_role, stance, publisher, "
+            "source_type, title, url, canonical_url, published_at, retrieved_at, "
+            "relevance_score, directness_score, recency_score."
+        ),
+        (
+            "null = absent. In string/date columns 0-9, numeric 1 = "
+            "DEFAULTS[column]. In canonical_url only, numeric 0 = this "
+            "item's url (after resolving defaults). Score numbers are literal."
+        ),
+        "DEFAULTS:" + json.dumps(
+            defaults, ensure_ascii=False, separators=(",", ":"), allow_nan=False,
+        ),
+    ]
+    for group_index, (group, rows) in enumerate(
+        zip(groups, rows_by_group), start=1,
+    ):
+        lines.extend([
+            f"=== SOURCE IDENTITY GROUP {group_index} ===",
+            f"Identity kind: {group.identity_kind}",
+        ])
+        for item_index, (item, values) in enumerate(rows, start=1):
+            encoded = list(values)
+            if isinstance(encoded[7], str) and encoded[7] == encoded[6]:
+                encoded[7] = 0
+            for column in range(10):
+                if (
+                    isinstance(encoded[column], str)
+                    and encoded[column] == defaults.get(str(column))
+                ):
+                    encoded[column] = 1
+            lines.extend([
+                f"--- EVIDENCE ITEM {item_index} ---",
+                json.dumps(
+                    encoded, ensure_ascii=False, separators=(",", ":"),
+                    allow_nan=False,
+                ),
+            ])
+            if item.content is not None:
+                lines.extend(["Content:", item.content])
     return "\n".join(lines)

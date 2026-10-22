@@ -9,6 +9,7 @@ from api.adjudication_service import (
 from api.models import (
     AdjudicationDecision,
     Claim,
+    ClaimInvestigationClassification,
     EvidenceSubmission,
     OfficialFactCheck,
     Organization,
@@ -46,6 +47,7 @@ class VerificationAssignmentPublicationTests(TestCase):
             organization_type=(Organization.OrganizationType.FACT_CHECKING),
             verification_status=(Organization.VerificationStatus.VERIFIED),
             partner_status=(Organization.PartnerStatus.ACTIVE),
+            verification_specializations=["SCIENCE"],
         )
 
         OrganizationMembership.objects.create(
@@ -65,6 +67,13 @@ class VerificationAssignmentPublicationTests(TestCase):
             ai_verdict="FAKE",
             ai_summary=("Automated analysis suggests the " "claim is unsupported."),
             consensus_score=88.0,
+        )
+
+        ClaimInvestigationClassification.objects.create(
+            claim=self.claim,
+            domains=["SCIENCE"],
+            jurisdiction="PH",
+            rationale="Synthetic classification for publication lifecycle tests.",
         )
 
         self.thread = Thread.objects.create(

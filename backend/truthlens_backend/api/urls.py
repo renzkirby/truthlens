@@ -258,6 +258,11 @@ urlpatterns = [
         name="verification_workload",
     ),
     path(
+        "organizations/<uuid:organization_id>/verification-scope/",
+        views.organization_verification_scope,
+        name="organization_verification_scope",
+    ),
+    path(
         "organizations/<uuid:organization_id>/analytics/verification/",
         views.organization_verification_metrics,
         name="organization_verification_metrics",

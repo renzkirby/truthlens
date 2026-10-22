@@ -19,6 +19,7 @@ import {
    formatManagementDate,
    MANAGEMENT_PARTNER_STATUSES,
    MANAGEMENT_VERIFICATION_STATUSES,
+   formatVerificationDomain,
 } from "../utils/management";
 
 function FieldError({ id, children }) {
@@ -187,6 +188,26 @@ function PlatformTrustSection({
             onConfirm={saveChanges}
             onClose={() => setConfirmationOpen(false)}
          />
+      </section>
+   );
+}
+
+
+function VerificationScopeSection({ organization }) {
+   const specializations = organization.verification_specializations || [];
+   return (
+      <section className="management-detail-section">
+         <h2>Organization verification specializations</h2>
+         <p className="management-section__description">
+            The Primary Admin manages these investigation subjects in the partner workspace.
+            Platform administration oversees partnership status and onboarding, not the
+            organization's subject choices.
+         </p>
+         <DetailList items={[
+            { label: "Selected subjects", value: specializations.length
+               ? specializations.map(formatVerificationDomain).join(", ") : "Not configured" },
+            { label: "Managed by", value: "Organization Primary Admin" },
+         ]} />
       </section>
    );
 }
@@ -449,6 +470,7 @@ function ManagementOrganizationDetailPage() {
                      onFeedback={showFeedback}
                      returnFocusAfterRefreshRef={returnFocusAfterTrustRefreshRef}
                   />
+                  <VerificationScopeSection organization={data} />
                   <section className="management-detail-section">
                      <PrimaryAdminState
                         organizationId={data.id}
@@ -473,7 +495,7 @@ function ManagementOrganizationDetailPage() {
                         { label: "Description", value: data.description },
                         { label: "Website", node: data.website ? <a href={data.website} target="_blank" rel="noreferrer">{data.website}</a> : "Not provided" },
                         { label: "Logo URL", value: data.logo_url || "Not provided" },
-                        { label: "Expertise", value: data.expertise_areas?.length ? data.expertise_areas.join(", ") : "Not provided" },
+                        { label: "Legacy descriptive interests (not authorization)", value: data.expertise_areas?.length ? data.expertise_areas.join(", ") : "Not provided" },
                         { label: "Public profile", value: data.public_profile_enabled ? "Enabled" : "Disabled" },
                         { label: "Public logo", value: data.public_logo_enabled ? "Enabled" : "Disabled" },
                      ]} />

@@ -51,6 +51,9 @@ DOMAIN_ACTIONS = {
         AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_ACCEPTED,
         AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_EXPIRED,
         AccountabilityEvent.ActionType.ORGANIZATION_PUBLIC_PROFILE_UPDATED,
+        AccountabilityEvent.ActionType.ORGANIZATION_VERIFICATION_SCOPE_REQUESTED,
+        AccountabilityEvent.ActionType.ORGANIZATION_VERIFICATION_SCOPE_ACTIVATED,
+        AccountabilityEvent.ActionType.ORGANIZATION_VERIFICATION_SPECIALIZATIONS_UPDATED,
         AccountabilityEvent.ActionType.ORGANIZATION_LOGO_UPDATED,
         AccountabilityEvent.ActionType.ORGANIZATION_LOGO_REMOVED,
     ),
@@ -91,6 +94,8 @@ DOMAIN_ACTIONS = {
     AccountabilityDomain.PLATFORM_GOVERNANCE: (
         AccountabilityEvent.ActionType.ORGANIZATION_CREATED,
         AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED,
+        AccountabilityEvent.ActionType.ORGANIZATION_VERIFICATION_SCOPE_APPROVED,
+        AccountabilityEvent.ActionType.CLAIM_INVESTIGATION_CLASSIFIED,
         AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CREATED,
         AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_RESENT,
         AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED,
@@ -178,6 +183,7 @@ DOMAIN_RESOURCES = {
         AccountabilityEvent.ResourceType.OFFICIAL_FACT_CHECK,
     },
     AccountabilityDomain.PLATFORM_GOVERNANCE: {
+        AccountabilityEvent.ResourceType.CLAIM,
         AccountabilityEvent.ResourceType.ORGANIZATION,
         AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION,
     },
@@ -195,6 +201,12 @@ MANAGEMENT_GOVERNANCE_ACTION_CAPABILITIES = {
         MANAGE_PARTNER_ORGANIZATION
     ),
     AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED: (
+        MANAGE_PARTNER_ORGANIZATION
+    ),
+    AccountabilityEvent.ActionType.ORGANIZATION_VERIFICATION_SCOPE_APPROVED: (
+        MANAGE_PARTNER_ORGANIZATION
+    ),
+    AccountabilityEvent.ActionType.CLAIM_INVESTIGATION_CLASSIFIED: (
         MANAGE_PARTNER_ORGANIZATION
     ),
     AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CREATED: (

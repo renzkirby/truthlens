@@ -1,11 +1,13 @@
+import json
+import os
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import requests
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from api import services, tasks
-from api.models import Claim, EvidenceSource, VerificationEvidence, VerificationRun
+from api.models import Claim, EvidenceSource, VerificationEvidence, VerificationRun, VerificationTelemetryEvent
 from api.verification import runs
 from api.verification.contracts import RawEvidence
 from api.verification.evidence_assessment import EvidenceAssessment
@@ -269,6 +271,51 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assertFalse(Claim.objects.filter(pk=self.claim.pk).exists())
         self._assert_no_run_or_verification()
 
+    def test_navigation_only_extract_abstains_before_claim_gate_or_search(self):
+        raw = (
+            "# Apple Reinvents the Phone with iPhone "
+            "## Press Contacts Apple Media Helpline "
+            "## Shop and Learn Wallet Account Education "
+            "## About Apple Media Helpline"
+        )
+        self.response.json.return_value = {"results": [{"raw_content": raw}]}
+        self.clean.side_effect = services.clean_extracted_text
+
+        run = self._execute()
+        self._assert_terminal(run, VerificationRun.Status.ABSTAINED)
+        self.assertIsNone(run.abstention_reason)
+        self.query.assert_not_called()
+        self.vault.assert_not_called()
+        self.bridge.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
+        self.evaluate_persisted.assert_not_called()
+        self.save_claim.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIn(
+            "url_content_insufficient",
+            [call.args[1] for call in self.log_stage.call_args_list],
+        )
+
+    def test_body_after_long_navigation_reaches_claim_gate(self):
+        raw = (
+            "# Apple Reinvents the Phone with iPhone\n"
+            "## Press Contacts\n" + ("Apple Media Helpline " * 180)
+            + "\n## Article\n"
+            "Apple announced on January 9, 2007 that the iPhone was "
+            "planned to become available in the United States in June 2007."
+        )
+        self.response.json.return_value = {"results": [{"raw_content": raw}]}
+        self.clean.side_effect = services.clean_extracted_text
+
+        run = self._execute()
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.query.assert_called_once()
+        clean, original_url = self.query.call_args.args
+        self.assertEqual(original_url, self.url)
+        self.assertIn("planned to become available", clean)
+        self.assertNotIn("Media Helpline", clean)
+
     def test_claim_gate_failure_preserves_claim_and_marks_run_failed(self):
         self.query.side_effect = ClaimGateError("ClaimGate analysis failed.")
 
@@ -406,8 +453,8 @@ class VerificationRunURLRuntimeTests(TestCase):
             self.claim.pk,
             self.verdict,
             "Official Fact Check",
-            self.cleaned_text,
-            ["https://example.com/fact-check"],
+            self.cleaned["cleaned_claim"],
+            [],
         )
         self.bridge.assert_called_once()
         self.evaluate_persisted.assert_called_once()
@@ -450,11 +497,42 @@ class VerificationRunURLRuntimeTests(TestCase):
             self.claim.pk,
             self.verdict,
             "Official Fact Check",
-            self.cleaned_text,
-            ["https://example.com/fact-check"],
+            self.cleaned["cleaned_claim"],
+            [],
         )
         self.retrieve_tavily.assert_not_called()
         self.assertEqual(VerificationEvidence.objects.count(), 0)
+
+    def test_gfc_report_shows_evaluated_claim_not_extracted_page_navigation(self):
+        self.cleaned_text = (
+            "Apple Media Helpline Shop Learn Wallet Education "
+            "Navigation Contacts Company"
+        )
+        run = self._execute()
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.context_text, self.cleaned["cleaned_claim"])
+        self.assertNotIn("Media Helpline", self.claim.context_text)
+        self.assertEqual(self.claim.claim_type, Claim.ClaimType.URL)
+
+    def test_missing_cleaned_claim_abstains_before_retrieval(self):
+        self.cleaned["cleaned_claim"] = "  "
+        run = self._execute()
+        self.assertEqual(run.status, VerificationRun.Status.ABSTAINED)
+        self.vault.assert_not_called()
+        self.bridge.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
+        self.evaluate_persisted.assert_not_called()
+        self.save_claim.assert_not_called()
+
+    def test_blank_gated_claim_has_no_saved_verdict(self):
+        self.cleaned["cleaned_claim"] = ""
+        run = self._execute()
+        self.assertEqual(run.status, VerificationRun.Status.ABSTAINED)
+        self.claim.refresh_from_db()
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.final_verdict)
+        self.save_claim.assert_not_called()
 
     def test_gfc_persisted_evidence_links_through_existing_bridge(self):
         self.bridge.side_effect = self.real_bridge
@@ -493,6 +571,16 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assertIn(persisted_source.content, evidence_context)
         self.assertNotIn("claimReview", evidence_context)
         self.evaluate_gfc.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.context_text, self.cleaned["cleaned_claim"])
+        self.assertEqual(
+            [source["url"] for source in self.claim.ai_sources],
+            ["https://example.com/fact-check"],
+        )
+        self.assertTrue(all(
+            source["provenance"] == "PERSISTED_EVIDENCE"
+            for source in self.claim.ai_sources
+        ))
 
     def test_persisted_gfc_unverified_result_abstains_without_tavily_fallback(self):
         self.verdict["verdict"] = "UNVERIFIED"
@@ -668,6 +756,15 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.evaluate_persisted.assert_not_called()
         self.load_dossier.assert_not_called()
 
+    def test_tavily_retrieval_failure_displays_the_evaluated_claim(self):
+        self.bridge.return_value = {"claims": []}
+        self.retrieve_tavily.side_effect = requests.Timeout("Retrieval unavailable")
+        run = self._execute()
+        self.assertEqual(run.status, VerificationRun.Status.ABSTAINED)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.context_text, self.cleaned["cleaned_claim"])
+        self.assertNotEqual(self.claim.context_text, self.cleaned_text)
+
     def test_handled_tavily_failure_abstains(self):
         self.bridge.return_value = {"claims": []}
         self.retrieve_tavily.side_effect = requests.Timeout("Tavily timed out")
@@ -754,6 +851,80 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assertEqual(self._terminal_count(), 0)
         self.vault.assert_not_called()
         self.bridge.assert_not_called()
+
+
+    @override_settings(APP_ENV="development", DEBUG=True)
+    @patch.dict(os.environ, {"ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0"})
+    def test_enabled_cloudflare_pilot_flows_through_real_evaluator_and_lifecycle(self):
+        self.evaluate_persisted.side_effect = services.evaluate_claim_with_persisted_evidence
+        cloud_output = json.dumps({
+            "reasoning": "The supplied source explicitly contradicts the claim.",
+            "verdict": "FAKE",
+            "summary": "The source contradicts the stated claim.",
+            "confidence_score": 92,
+            "score_context": "Direct contradiction in persisted evidence.",
+        })
+        with (
+            patch.dict(os.environ, {"ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1"}),
+            patch(
+                "api.services.call_validated_cloudflare_pilot",
+                return_value=cloud_output,
+            ) as cloudflare,
+            patch("api.services.gemini_client") as gemini,
+            patch("api.services.groq_client") as groq,
+        ):
+            run = self._execute()
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        cloudflare.assert_called_once()
+        gemini.models.generate_content.assert_not_called()
+        groq.chat.completions.create.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "FAKE")
+        self.assertEqual(self.claim.consensus_score, 92)
+        self.assertIsNone(self.claim.final_verdict)
+        events = list(run.telemetry_events.filter(
+            event_type=VerificationTelemetryEvent.EventType.LLM_PROVIDER_CALL
+        ))
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].provider, "cloudflare")
+        self.assertEqual(events[0].name, "persisted_evidence_evaluation")
+        self.assertEqual(events[0].outcome, "success")
+
+    @override_settings(APP_ENV="development", DEBUG=True)
+    @patch.dict(os.environ, {"ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0"})
+    def test_all_providers_unavailable_fails_run_without_fabricated_verdict(self):
+        self.evaluate_persisted.side_effect = services.evaluate_claim_with_persisted_evidence
+        with (
+            patch.dict(os.environ, {"ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1"}),
+            patch(
+                "api.services.call_validated_cloudflare_pilot",
+                side_effect=RuntimeError("Cloudflare unavailable"),
+            ) as cloudflare,
+            patch("api.services.gemini_client") as gemini,
+            patch("api.services.groq_client") as groq,
+        ):
+            gemini.models.generate_content.side_effect = RuntimeError("Gemini unavailable")
+            groq.chat.completions.create.side_effect = RuntimeError("Groq unavailable")
+            with self.assertRaises(LLMProviderUnavailableError):
+                self._execute()
+        cloudflare.assert_called_once()
+        self.assertEqual(self.claim.verification_runs.count(), 1)
+        run = self.claim.verification_runs.get()
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "final_evaluator")
+        self.assertEqual(run.failure_code, "LLM_UNAVAILABLE")
+        self.claim.refresh_from_db()
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.final_verdict)
+        self.retrieve_tavily.assert_not_called()
+        providers = list(run.telemetry_events.filter(
+            event_type=VerificationTelemetryEvent.EventType.LLM_PROVIDER_CALL
+        ).order_by("sequence").values_list("provider", "outcome"))
+        self.assertEqual(providers, [
+            ("cloudflare", "failed"),
+            ("gemini", "failed"),
+            ("groq", "failed"),
+        ])
 
 
 class VerificationEvidenceURLRuntimeTests(TestCase):
@@ -1008,6 +1179,26 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
             "url_gfc_evidence_assessment",
             [call.args[1] for call in self.log_stage.call_args_list],
         )
+
+    def test_url_tavily_report_sources_come_from_persisted_evidence(self):
+        self.relevance.return_value = False
+        self.retrieve_tavily.side_effect = self._record_tavily_link
+        self.tavily_response["results"] = [
+            {"url": "https://not-persisted.example/first-hit",
+             "title": "Unlinked result", "content": "Unlinked preview"}
+        ]
+        run = self._execute()
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.context_text, self.cleaned["cleaned_claim"])
+        self.assertEqual(
+            [source["url"] for source in self.claim.ai_sources],
+            ["https://example.com/web"],
+        )
+        self.assertTrue(all(
+            source["provenance"] == "PERSISTED_EVIDENCE"
+            for source in self.claim.ai_sources
+        ))
 
     def test_irrelevant_gfc_is_not_assessed_and_tavily_is_role_isolated(self):
         self.relevance.return_value = False

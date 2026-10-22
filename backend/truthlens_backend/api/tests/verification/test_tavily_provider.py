@@ -267,7 +267,7 @@ class TavilyProviderTests(TestCase):
             query="claim", search_depth="advanced", topic="general",
             include_answer=True,
             include_domains=[
-                "gmanetwork.com", "rappler.com", "philstar.com", "inquirer.net",
+                "pressone.ph", "gmanetwork.com", "rappler.com", "philstar.com", "inquirer.net",
                 "news.abs-cbn.com", "manilabulletin.com", "bworldonline.com",
                 "pna.gov.ph", "verafiles.org", "reuters.com", "apnews.com",
                 "bbc.com", "cnn.com", "aljazeera.com", "nytimes.com",

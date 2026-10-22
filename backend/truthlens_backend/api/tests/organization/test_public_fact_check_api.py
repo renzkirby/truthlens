@@ -176,6 +176,7 @@ class PublicFactCheckApiTests(
                 "organization_type",
                 "organization_type_label",
                 "expertise_areas",
+                "verification_specializations",
                 "followers_count",
                 "is_following",
             },

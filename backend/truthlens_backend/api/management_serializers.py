@@ -32,6 +32,9 @@ class ManagementOrganizationCreateSerializer(StrictFieldsSerializer):
     organization_type = serializers.ChoiceField(
         choices=Organization.OrganizationType.choices
     )
+    # Backward-compatible rollout: the currently deployed frontend still sends
+    # these safe defaults. The governance service rejects any non-default trust
+    # value, so old clients remain compatible without regaining trust authority.
     verification_status = serializers.ChoiceField(
         choices=Organization.VerificationStatus.choices,
         default=Organization.VerificationStatus.UNVERIFIED,
@@ -241,6 +244,15 @@ class ManagementPrimaryAdminInvitationSerializer(serializers.ModelSerializer):
 
 
 class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerializer):
+    verification_specializations = serializers.ListField(
+        child=serializers.CharField(), read_only=True
+    )
+    approved_verification_domains = serializers.ListField(
+        child=serializers.CharField(), read_only=True
+    )
+    approved_verification_jurisdictions = serializers.ListField(
+        child=serializers.CharField(), read_only=True
+    )
     primary_admin = serializers.SerializerMethodField()
 
     def get_primary_admin(self, obj):
@@ -288,6 +300,14 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
             "website",
             "logo_url",
             "expertise_areas",
+            "verification_specializations",
+            "approved_verification_domains",
+            "approved_verification_jurisdictions",
+            "requested_verification_domains",
+            "requested_verification_jurisdictions",
+            "active_verification_domains",
+            "active_verification_jurisdictions",
+            "active_scope_configured",
             "public_logo_enabled",
             "primary_admin",
             "created_at",

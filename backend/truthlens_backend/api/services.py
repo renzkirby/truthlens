@@ -21,6 +21,27 @@ from PIL import Image
 from supabase import create_client
 
 from .verification.telemetry import record_llm_provider_call
+from .verification.cloudflare_pilot import (
+    cloudflare_pilot_enabled,
+    call_validated_cloudflare_pilot,
+    validate_pilot_response,
+    cloudflare_assessment_bypass_reason,
+    cloudflare_assessment_chunking_enabled,
+    cloudflare_assessment_chunking_bypass_reason,
+    call_validated_cloudflare_assessment_chunks,
+    ASSESSMENT_OPERATION,
+)
+from .verification.provider_audit_metrics import validate_user_facing_evaluation
+from .verification.classification_contract import CLASSIFICATION_OPERATION
+from .verification.provider_hierarchy import (
+    hierarchy_enabled,
+    requires_strict_stage_contract,
+    gemini_job_blocking_error,
+)
+from .verification.cloudflare_evaluation import (
+    CloudflareEvaluationError,
+    sanitized_cloudflare_error_code,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,15 +71,18 @@ DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
 
 
 _gemini_degraded = ContextVar("gemini_degraded", default=None)
+_cloudflare_pilot_degraded = ContextVar("cloudflare_pilot_degraded", default=None)
 
 
 @contextmanager
 def llm_provider_scope():
     """Give one synchronous verification execution fresh provider state."""
     token = _gemini_degraded.set(False)
+    cloudflare_token = _cloudflare_pilot_degraded.set(False)
     try:
         yield
     finally:
+        _cloudflare_pilot_degraded.reset(cloudflare_token)
         _gemini_degraded.reset(token)
 
 
@@ -175,8 +199,18 @@ def _model_from_env(name, default):
 
 def _provider_error_label(error):
     """Return useful error metadata without including provider secrets."""
+    if isinstance(error, CloudflareEvaluationError):
+        return (
+            "CloudflareEvaluationError code="
+            f"{sanitized_cloudflare_error_code(error)}"
+        )
     if isinstance(error, errors.APIError) and type(error.code) is int:
         return f"{type(error).__name__} code={error.code}"
+    # Groq SDK (and other HTTP clients) may expose status_code. Only the
+    # integer status is safe; do not serialize provider exception bodies.
+    status = getattr(error, "status_code", None)
+    if type(status) is int and 400 <= status <= 599:
+        return f"{type(error).__name__} code={status}"
     return type(error).__name__
 
 
@@ -187,18 +221,22 @@ def _log_llm_provider_call(
     started_at,
     outcome,
     error=None,
+    *,
+    metadata=None,
 ):
     operation_label = operation or "unspecified"
     duration_ms = int((time.perf_counter() - started_at) * 1000)
     error_label = _provider_error_label(error) if error is not None else ""
-    record_llm_provider_call(
-        operation_label,
-        provider,
-        provider_call_id,
-        duration_ms,
-        outcome,
-        error_label,
-    )
+    if metadata is not None:
+        record_llm_provider_call(
+            operation_label, provider, provider_call_id,
+            duration_ms, outcome, error_label, metadata=metadata,
+        )
+    else:
+        record_llm_provider_call(
+            operation_label, provider, provider_call_id,
+            duration_ms, outcome, error_label,
+        )
     if error is None:
         logger.info(
             "LLM_PROVIDER_CALL operation=%s provider=%s duration_ms=%s outcome=%s",
@@ -226,64 +264,182 @@ def call_llm_with_fallback(
     operation=None,
     gemini_timeout_ms=None,
 ):
-    """Use Gemini first unless Groq has already taken over in this job."""
+    """Opt-in Gemini -> Cloudflare -> Groq; legacy order otherwise preserved."""
     provider_call_id = uuid.uuid4()
-    if not _gemini_degraded.get():
-        gemini_config = {
-            "system_instruction": system_instructions,
-            "response_mime_type": "application/json",
-            "temperature": 0.1,
-        }
-        try:
-            if (
-                isinstance(gemini_timeout_ms, int)
-                and not isinstance(gemini_timeout_ms, bool)
-                and gemini_timeout_ms > 0
-            ):
-                gemini_config["http_options"] = types.HttpOptions(
-                    timeout=gemini_timeout_ms
-                )
-            request_config = types.GenerateContentConfig(**gemini_config)
-        except Exception as gemini_err:
-            logger.warning(
-                "Gemini API failed (%s); trying Groq fallback.",
-                _provider_error_label(gemini_err),
-            )
-        else:
-            gemini_started_at = time.perf_counter()
+    pilot_active = cloudflare_pilot_enabled(operation)
+    hierarchy_active = hierarchy_enabled()
+    stage_contract_active = requires_strict_stage_contract(
+        operation, pilot_active=pilot_active,
+        hierarchy_active=hierarchy_active,
+    )
+
+    def _try_gemini():
+        if not _gemini_degraded.get():
+            gemini_config = {
+                "system_instruction": system_instructions,
+                "response_mime_type": "application/json",
+                "temperature": 0.1,
+            }
             try:
-                response = gemini_client.models.generate_content(
-                    model=_model_from_env("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
-                    contents=user_prompt,
-                    config=request_config,
-                )
-                content = response.text
+                if (
+                    isinstance(gemini_timeout_ms, int)
+                    and not isinstance(gemini_timeout_ms, bool)
+                    and gemini_timeout_ms > 0
+                ):
+                    gemini_config["http_options"] = types.HttpOptions(
+                        timeout=gemini_timeout_ms
+                    )
+                request_config = types.GenerateContentConfig(**gemini_config)
             except Exception as gemini_err:
-                _log_llm_provider_call(
-                    operation,
-                    "gemini",
-                    provider_call_id,
-                    gemini_started_at,
-                    "failed",
-                    gemini_err,
-                )
                 logger.warning(
-                    "Gemini API failed (%s); trying Groq fallback.",
+                    "Gemini API failed (%s); continuing fallback routing.",
                     _provider_error_label(gemini_err),
                 )
             else:
-                _log_llm_provider_call(
-                    operation,
-                    "gemini",
-                    provider_call_id,
-                    gemini_started_at,
-                    "success",
+                gemini_started_at = time.perf_counter()
+                try:
+                    response = gemini_client.models.generate_content(
+                        model=_model_from_env("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
+                        contents=user_prompt,
+                        config=request_config,
+                    )
+                    content = response.text
+                    if hierarchy_active and (
+                        not isinstance(content, str) or not content.strip()
+                    ):
+                        raise ValueError("EMPTY_PROVIDER_RESPONSE")
+                    if (
+                        stage_contract_active
+                        and not validate_pilot_response(operation, content, user_prompt)
+                    ):
+                        raise ValueError("INVALID_PILOT_FALLBACK_JSON")
+                except Exception as gemini_err:
+                    # The 402/429 classification is job-scoped. No repeated
+                    # requests to an exhausted billing/quota provider this job.
+                    if (
+                        hierarchy_active
+                        and gemini_job_blocking_error(gemini_err)
+                        and _gemini_degraded.get() is not None
+                    ):
+                        _gemini_degraded.set(True)
+                    _log_llm_provider_call(
+                        operation,
+                        "gemini",
+                        provider_call_id,
+                        gemini_started_at,
+                        "failed",
+                        gemini_err,
+                    )
+                    logger.warning(
+                        "Gemini API failed (%s); continuing fallback routing.",
+                        _provider_error_label(gemini_err),
+                    )
+                else:
+                    _log_llm_provider_call(
+                        operation,
+                        "gemini",
+                        provider_call_id,
+                        gemini_started_at,
+                        "success",
+                    )
+                    return content
+
+        return None
+
+    if hierarchy_active:
+        primary_response = _try_gemini()
+        if primary_response is not None:
+            return primary_response
+
+    cloudflare_degraded = _cloudflare_pilot_degraded.get() is True
+    assessment_bypass_reason = None
+    use_assessment_chunks = False
+    if pilot_active and not cloudflare_degraded and operation == ASSESSMENT_OPERATION:
+        assessment_bypass_reason = cloudflare_assessment_bypass_reason(
+            system_instructions, user_prompt,
+        )
+        if (
+            assessment_bypass_reason in {"ASSESSMENT_BATCH_TOO_LARGE", "PROMPT_TOO_LONG"}
+            and cloudflare_assessment_chunking_enabled()
+        ):
+            # An entire bounded lossless plan must fit before Cloudflare can
+            # be called. Nothing is silently dropped to fit a token budget.
+            assessment_bypass_reason = cloudflare_assessment_chunking_bypass_reason(
+                system_instructions, user_prompt,
+            )
+            use_assessment_chunks = assessment_bypass_reason is None
+        if assessment_bypass_reason is not None:
+            # This is a local eligibility decision, not a vendor outage.
+            # Do not poison the shared job circuit breaker; the unchanged
+            # final-evaluation pilot may still call Cloudflare.
+            _log_llm_provider_call(
+                operation, "cloudflare", provider_call_id,
+                time.perf_counter(), "skipped",
+                CloudflareEvaluationError(assessment_bypass_reason),
+            )
+    if (
+        pilot_active
+        and not cloudflare_degraded
+        and assessment_bypass_reason is None
+    ):
+        cloudflare_started_at = time.perf_counter()
+        cloudflare_metrics = {}
+        try:
+            if use_assessment_chunks:
+                cloudflare_text = call_validated_cloudflare_assessment_chunks(
+                    system_instructions, user_prompt,
+                    audit_metadata=cloudflare_metrics,
                 )
-                return content
+            elif operation in {ASSESSMENT_OPERATION, CLASSIFICATION_OPERATION}:
+                cloudflare_text = call_validated_cloudflare_pilot(
+                    system_instructions, user_prompt,
+                    operation=operation, audit_metadata=cloudflare_metrics,
+                )
+            else:
+                cloudflare_text = call_validated_cloudflare_pilot(
+                    system_instructions, user_prompt,
+                    audit_metadata=cloudflare_metrics,
+                )
+        except Exception as cloudflare_err:
+            _log_llm_provider_call(
+                operation, "cloudflare", provider_call_id,
+                cloudflare_started_at, "failed", cloudflare_err,
+                # Even a failed JSON/empty response may expose safe usage and
+                # finish-status counters. Telemetry sanitizes all fields and
+                # never persists hidden reasoning, prompts, or raw evidence.
+                metadata=cloudflare_metrics,
+            )
+            logger.warning(
+                "Cloudflare verification pilot failed (%s); continuing "
+                "fallback routing.",
+                _provider_error_label(cloudflare_err),
+            )
+            # A provider failure should not trigger repeated quota-consuming
+            # Cloudflare requests during the same scoped verification job.
+            if _cloudflare_pilot_degraded.get() is not None:
+                _cloudflare_pilot_degraded.set(True)
+        else:
+            _log_llm_provider_call(
+                operation, "cloudflare", provider_call_id,
+                cloudflare_started_at, "success",
+                metadata=cloudflare_metrics,
+            )
+            return cloudflare_text
+
+    if not hierarchy_active:
+        legacy_gemini_response = _try_gemini()
+        if legacy_gemini_response is not None:
+            return legacy_gemini_response
 
     groq_started_at = time.perf_counter()
     try:
-        chat_completion = groq_client.chat.completions.create(
+        # Disable the Groq SDK's automatic HTTP retries in the opt-in lane.
+        # A 429 on one Groq model must not trigger a blind model carousel.
+        selected_groq_client = (
+            groq_client.with_options(max_retries=0)
+            if hierarchy_active else groq_client
+        )
+        chat_completion = selected_groq_client.chat.completions.create(
             messages=[
                 {"role": "system", "content": system_instructions},
                 {"role": "user", "content": user_prompt},
@@ -293,6 +449,15 @@ def call_llm_with_fallback(
             temperature=0.1,
         )
         content = chat_completion.choices[0].message.content
+        if hierarchy_active and (
+            not isinstance(content, str) or not content.strip()
+        ):
+            raise ValueError("EMPTY_PROVIDER_RESPONSE")
+        if (
+            stage_contract_active
+            and not validate_pilot_response(operation, content, user_prompt)
+        ):
+            raise ValueError("INVALID_PILOT_FALLBACK_JSON")
     except Exception as groq_err:
         _log_llm_provider_call(
             operation,
@@ -857,22 +1022,11 @@ def evaluate_image_claim_with_tavily(
         }
 
 
-def evaluate_claim_with_persisted_evidence(
-    original_claim,
-    evidence_context,
-    article_stance="NEUTRAL",
-):
-    """Evaluate a claim using only the rendered persisted-evidence dossier."""
-    unavailable_result = {
-        "reasoning": "No usable persisted evidence was available for evaluation.",
-        "verdict": "UNVERIFIED",
-        "summary": "TruthLens could not verify this claim from persisted evidence.",
-        "confidence_score": 0,
-        "score_context": "No persisted evidence was available to support a verdict.",
-    }
-    if not isinstance(evidence_context, str) or not evidence_context.strip():
-        return unavailable_result
+def build_persisted_evidence_prompt(original_claim, evidence_context, article_stance="NEUTRAL"):
+    """Pure prompt constructor shared by live evaluation and dev-only smoke.
 
+    Same production prompt/evidence boundary; no database or provider calls.
+    """
     system_instructions = """
     Role: You are the TruthLens evidence reasoning engine.
 
@@ -915,6 +1069,29 @@ def evaluate_claim_with_persisted_evidence(
         f"<persisted_evidence>{evidence_context}</persisted_evidence>"
     )
 
+    return system_instructions, user_data
+
+
+def evaluate_claim_with_persisted_evidence(
+    original_claim,
+    evidence_context,
+    article_stance="NEUTRAL",
+):
+    """Evaluate a claim using only the rendered persisted-evidence dossier."""
+    unavailable_result = {
+        "reasoning": "No usable persisted evidence was available for evaluation.",
+        "verdict": "UNVERIFIED",
+        "summary": "TruthLens could not verify this claim from persisted evidence.",
+        "confidence_score": 0,
+        "score_context": "No persisted evidence was available to support a verdict.",
+    }
+    if not isinstance(evidence_context, str) or not evidence_context.strip():
+        return unavailable_result
+
+    system_instructions, user_data = build_persisted_evidence_prompt(
+        original_claim, evidence_context, article_stance,
+    )
+
     try:
         response_text = call_llm_with_fallback(
             system_instructions,
@@ -949,15 +1126,9 @@ def evaluate_claim_with_persisted_evidence(
 
 # URL PIPELINE
 def clean_extracted_text(text):
-    """Strip markdown, links, and short lines from URL-extracted text."""
-    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
-    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
-    text = re.sub(r"http\S+", "", text)
-
-    # FIX: Lowered the threshold from 40 to 15 to prevent destroying valid sentences
-    lines = [line.strip() for line in text.split("\n") if len(line.strip()) > 15]
-
-    return "\n".join(lines)[:3000]
+    """Prepare URL ClaimGate text without assuming the first 3000 bytes are article body."""
+    from .verification.url_article_context import clean_url_article_context
+    return clean_url_article_context(text)
 
 
 def extract_search_query(text, source_url=""):

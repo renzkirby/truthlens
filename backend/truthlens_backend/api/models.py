@@ -317,6 +317,30 @@ class Organization(models.Model):
         db_index=True,
     )
 
+    approved_verification_domains = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Platform-approved investigation domains, distinct from public expertise_areas.",
+    )
+
+    approved_verification_jurisdictions = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Platform-approved ISO-style geographic scopes.",
+    )
+
+    requested_verification_domains = models.JSONField(default=list, blank=True)
+    requested_verification_jurisdictions = models.JSONField(default=list, blank=True)
+    active_verification_domains = models.JSONField(default=list, blank=True)
+    active_verification_jurisdictions = models.JSONField(default=list, blank=True)
+    active_scope_configured = models.BooleanField(default=False)
+
+    verification_specializations = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Primary Admin-managed subject specializations for new partner intake.",
+    )
+
     expertise_areas = models.JSONField(
         default=list,
         blank=True,
@@ -1978,6 +2002,26 @@ class AccountabilityEvent(models.Model):
             "ORGANIZATION_PLATFORM_TRUST_UPDATED",
             "Organization Platform Trust Updated",
         )
+        ORGANIZATION_VERIFICATION_SCOPE_APPROVED = (
+            "ORGANIZATION_VERIFICATION_SCOPE_APPROVED",
+            "Organization Verification Scope Approved",
+        )
+        ORGANIZATION_VERIFICATION_SCOPE_REQUESTED = (
+            "ORGANIZATION_VERIFICATION_SCOPE_REQUESTED",
+            "Organization Verification Scope Requested",
+        )
+        ORGANIZATION_VERIFICATION_SCOPE_ACTIVATED = (
+            "ORGANIZATION_VERIFICATION_SCOPE_ACTIVATED",
+            "Organization Verification Scope Activated",
+        )
+        ORGANIZATION_VERIFICATION_SPECIALIZATIONS_UPDATED = (
+            "ORGANIZATION_VERIFICATION_SPECIALIZATIONS_UPDATED",
+            "Organization Verification Specializations Updated",
+        )
+        CLAIM_INVESTIGATION_CLASSIFIED = (
+            "CLAIM_INVESTIGATION_CLASSIFIED",
+            "Claim Investigation Classified",
+        )
         VERIFICATION_ASSIGNMENT_CREATED = (
             "VERIFICATION_ASSIGNMENT_CREATED",
             "Verification Assignment Created",
@@ -2105,6 +2149,7 @@ class AccountabilityEvent(models.Model):
             "Organization Invitation",
         )
         ORGANIZATION = "ORGANIZATION", "Organization"
+        CLAIM = "CLAIM", "Claim"
         MODERATION_CASE = "MODERATION_CASE", "Moderation Case"
         THREAD = "THREAD", "Thread"
         EVIDENCE_SUBMISSION = "EVIDENCE_SUBMISSION", "Evidence Submission"
@@ -4975,3 +5020,65 @@ class KnowledgeReuseEvent(models.Model):
         raise ValidationError(
             "Knowledge reuse events are durable and cannot be deleted directly."
         )
+
+
+class ClaimInvestigationClassification(models.Model):
+    """Authoritative subject/scope classification, independent of claim verdict."""
+
+    class Source(models.TextChoices):
+        MANUAL = "MANUAL", "Manual legacy classification"
+        AUTOMATIC = "AUTOMATIC", "Validated automated classification"
+
+    claim = models.OneToOneField(
+        Claim,
+        primary_key=True,
+        on_delete=models.CASCADE,
+        related_name="investigation_classification",
+    )
+    domains = models.JSONField(default=list)
+    # Historical geographic context is retained; new subject classifications
+    # do not require or infer geographic authorization.
+    jurisdiction = models.CharField(max_length=32, blank=True, default="")
+    rationale = models.TextField(max_length=2000)
+    source = models.CharField(
+        max_length=16, choices=Source.choices, default=Source.MANUAL
+    )
+    classified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="investigation_classifications",
+    )
+    classified_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Investigation classification for {self.claim_id}"
+
+
+class InvestigationClassificationAssessment(models.Model):
+    """Operational history of the latest automatic classification attempt."""
+
+    class Status(models.TextChoices):
+        SUGGESTED = "SUGGESTED", "Shadow-mode suggestion only"
+        APPLIED = "APPLIED", "Validated automatic result applied"
+        ABSTAINED = "ABSTAINED", "Insufficient classification evidence"
+        FAILED = "FAILED", "Classification unavailable"
+
+    claim = models.OneToOneField(
+        Claim,
+        primary_key=True,
+        on_delete=models.CASCADE,
+        related_name="classification_assessment",
+    )
+    status = models.CharField(max_length=16, choices=Status.choices)
+    candidate_domains = models.JSONField(default=list, blank=True)
+    candidate_jurisdiction = models.CharField(max_length=32, blank=True)
+    reason_code = models.CharField(max_length=64, blank=True)
+    classifier_version = models.CharField(max_length=32, default="v1")
+    input_fingerprint = models.CharField(max_length=64, blank=True)
+    assessed_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"Automatic classification assessment for {self.claim_id}"

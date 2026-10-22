@@ -38,6 +38,7 @@ from api.models import (
     AdjudicationDecision,
     AdjudicationDecisionEvidenceSnapshot,
     VerificationAssignment,
+    ClaimInvestigationClassification,
     OfficialFactCheck,
     OfficialFactCheckSource,
     OfficialFactCheckSourceEvidenceLink,
@@ -119,6 +120,33 @@ def assign_claim_to_partner(
     organization,
     actor,
 ):
+    """Prepare valid legacy test eligibility, then exercise real claim authority.
+
+    Existing adjudication/publication/trust tests predate subject-only intake.
+    Build their institution + claim prerequisite in the isolated test database,
+    not by patching or weakening the production authorization service.
+    """
+    fixture_domain = "CIVICS"
+    if fixture_domain not in (organization.verification_specializations or []):
+        organization.verification_specializations = sorted({
+            *(organization.verification_specializations or []),
+            fixture_domain,
+        })
+        organization.save(update_fields=["verification_specializations"])
+
+    ClaimInvestigationClassification.objects.get_or_create(
+        claim=claim,
+        defaults={
+            "domains": [fixture_domain],
+            "rationale": (
+                "Historical test fixture: institution is qualified to investigate "
+                "the subject of this claim."
+            ),
+            "source": ClaimInvestigationClassification.Source.MANUAL,
+            "classified_by": actor,
+        },
+    )
+
     assignment = ensure_verification_assignment(
         claim=claim,
     )

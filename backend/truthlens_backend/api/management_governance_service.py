@@ -104,6 +104,19 @@ def _validate_creation_values(*, name, slug, organization_type, verification_sta
         "partner_status",
     )
 
+    # Creation establishes institutional identity; approval is a later,
+    # separately authorized and audited platform-governance transition.
+    if verification_status != Organization.VerificationStatus.UNVERIFIED:
+        raise ManagementGovernanceValidationError(
+            "New organizations must start Unverified. Update status after creation.",
+            field="verification_status",
+        )
+    if partner_status != Organization.PartnerStatus.NONE:
+        raise ManagementGovernanceValidationError(
+            "New organizations must start Not a Partner. Update status after creation.",
+            field="partner_status",
+        )
+
 
 def _ensure_unique_organization_identity(*, name, slug, exclude_id=None):
     organizations = Organization.objects.all()

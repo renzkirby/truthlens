@@ -7,6 +7,7 @@ from api.management_governance_service import (
     MANAGE_PARTNER_ORGANIZATION,
     ManagementGovernanceAuthorizationError,
     ManagementGovernanceConflict,
+    ManagementGovernanceValidationError,
     create_partner_organization,
     update_organization_platform_trust,
 )
@@ -80,6 +81,36 @@ class ManagementGovernanceServiceTests(TestCase):
             },
         )
         self.assertEqual(event.previous_state, {})
+
+    def test_creation_rejects_non_initial_lifecycle_states(self):
+        for value in (
+            Organization.VerificationStatus.PENDING,
+            Organization.VerificationStatus.VERIFIED,
+            Organization.VerificationStatus.REJECTED,
+        ):
+            with self.subTest(verification_status=value), self.assertRaises(
+                ManagementGovernanceValidationError
+            ) as context:
+                self.create_organization(verification_status=value)
+            self.assertEqual(context.exception.field, "verification_status")
+
+        for value in (
+            Organization.PartnerStatus.ACTIVE,
+            Organization.PartnerStatus.SUSPENDED,
+            Organization.PartnerStatus.FORMER,
+        ):
+            with self.subTest(partner_status=value), self.assertRaises(
+                ManagementGovernanceValidationError
+            ) as context:
+                self.create_organization(partner_status=value)
+            self.assertEqual(context.exception.field, "partner_status")
+
+        self.assertFalse(Organization.objects.filter(slug="new-governance-partner").exists())
+        self.assertFalse(
+            AccountabilityEvent.objects.filter(
+                action_type=AccountabilityEvent.ActionType.ORGANIZATION_CREATED
+            ).exists()
+        )
 
     def test_service_rejects_every_non_platform_authority(self):
         inactive_superuser = User.objects.create_superuser(

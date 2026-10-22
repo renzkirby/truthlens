@@ -1,5 +1,5 @@
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from api.adjudication_service import (
     ensure_adjudication_case,
@@ -12,6 +12,7 @@ from api.evidence_review_service import (
 from api.models import (
     AdjudicationDecision,
     Claim,
+    ClaimInvestigationClassification,
     EvidenceSubmission,
     ModerationCase,
     Organization,
@@ -64,6 +65,7 @@ class VerificationAssignmentServiceTests(TestCase):
             organization_type=(Organization.OrganizationType.FACT_CHECKING),
             verification_status=(Organization.VerificationStatus.VERIFIED),
             partner_status=(Organization.PartnerStatus.ACTIVE),
+            verification_specializations=["SCIENCE"],
         )
 
         self.organization_b = Organization.objects.create(
@@ -72,6 +74,7 @@ class VerificationAssignmentServiceTests(TestCase):
             organization_type=(Organization.OrganizationType.FACT_CHECKING),
             verification_status=(Organization.VerificationStatus.VERIFIED),
             partner_status=(Organization.PartnerStatus.ACTIVE),
+            verification_specializations=["SCIENCE"],
         )
 
         OrganizationMembership.objects.create(
@@ -91,6 +94,11 @@ class VerificationAssignmentServiceTests(TestCase):
         self.claim = Claim.objects.create(
             claim_type=Claim.ClaimType.TEXT,
             context_text=("A claim awaiting professional " "verification."),
+        )
+
+        ClaimInvestigationClassification.objects.create(
+            claim=self.claim, domains=["SCIENCE"], jurisdiction="PH",
+            rationale="Reviewed test fixture for science and geography.",
         )
 
         self.thread = Thread.objects.create(
@@ -258,6 +266,103 @@ class VerificationAssignmentServiceTests(TestCase):
             listed[0].claim._current_adjudication_decisions,
             [],
         )
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="enforce")
+    def test_geography_does_not_block_matching_subject(self):
+        assignment = self._create_assignment()
+        ClaimInvestigationClassification.objects.filter(claim=self.claim).update(
+            jurisdiction="US",
+        )
+        claimed = claim_verification_assignment(
+            assignment=assignment,
+            organization=self.organization_a,
+            actor=self.lead_a,
+        )
+        self.assertEqual(claimed.status, VerificationAssignment.Status.ACTIVE)
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="enforce")
+    def test_unclassified_work_cannot_be_claimed(self):
+        assignment = self._create_assignment()
+        ClaimInvestigationClassification.objects.filter(claim=self.claim).delete()
+        with self.assertRaises(VerificationAssignmentAuthorizationError):
+            claim_verification_assignment(
+                assignment=assignment, organization=self.organization_a, actor=self.lead_a,
+            )
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.status, VerificationAssignment.Status.AVAILABLE)
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="off")
+    def test_off_mode_preserves_legacy_claiming_without_subject_authority(self):
+        assignment = self._create_assignment()
+        ClaimInvestigationClassification.objects.filter(claim=self.claim).delete()
+        self.organization_a.verification_specializations = []
+        self.organization_a.save(update_fields=["verification_specializations"])
+        claimed = claim_verification_assignment(
+            assignment=assignment,
+            organization=self.organization_a,
+            actor=self.lead_a,
+        )
+        self.assertEqual(claimed.status, VerificationAssignment.Status.ACTIVE)
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="shadow")
+    def test_shadow_mode_suggestions_cannot_block_legacy_claiming(self):
+        assignment = self._create_assignment()
+        ClaimInvestigationClassification.objects.filter(claim=self.claim).delete()
+        self.organization_a.verification_specializations = ["SPORTS"]
+        self.organization_a.save(update_fields=["verification_specializations"])
+        claimed = claim_verification_assignment(
+            assignment=assignment,
+            organization=self.organization_a,
+            actor=self.lead_a,
+        )
+        self.assertEqual(claimed.status, VerificationAssignment.Status.ACTIVE)
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="enforce")
+    def test_legacy_approved_and_public_expertise_do_not_authorize(self):
+        assignment = self._create_assignment()
+        self.organization_a.verification_specializations = []
+        self.organization_a.approved_verification_domains = ["SCIENCE"]
+        self.organization_a.expertise_areas = ["science"]
+        self.organization_a.save(update_fields=[
+            "verification_specializations", "approved_verification_domains", "expertise_areas",
+        ])
+        with self.assertRaises(VerificationAssignmentAuthorizationError):
+            claim_verification_assignment(
+                assignment=assignment, organization=self.organization_a, actor=self.lead_a,
+            )
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="enforce")
+    def test_outside_selected_specialization_cannot_claim(self):
+        assignment = self._create_assignment()
+        self.organization_a.verification_specializations = ["SPORTS"]
+        self.organization_a.save(update_fields=["verification_specializations"])
+        with self.assertRaises(VerificationAssignmentAuthorizationError):
+            claim_verification_assignment(
+                assignment=assignment, organization=self.organization_a, actor=self.lead_a,
+            )
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="enforce")
+    def test_downscope_blocks_new_claims_but_preserves_active_ownership(self):
+        assignment = self._create_assignment()
+        self.organization_a.verification_specializations = []
+        self.organization_a.save(update_fields=["verification_specializations"])
+        with self.assertRaises(VerificationAssignmentAuthorizationError):
+            claim_verification_assignment(
+                assignment=assignment, organization=self.organization_a, actor=self.lead_a,
+            )
+        self.organization_a.verification_specializations = ["SCIENCE"]
+        self.organization_a.save(update_fields=["verification_specializations"])
+        claimed = claim_verification_assignment(
+            assignment=assignment, organization=self.organization_a, actor=self.lead_a,
+        )
+        self.assertEqual(claimed.status, VerificationAssignment.Status.ACTIVE)
+
+        # Later narrowing never reassigns institutional work already accepted.
+        self.organization_a.verification_specializations = []
+        self.organization_a.save(update_fields=["verification_specializations"])
+        claimed.refresh_from_db()
+        self.assertEqual(claimed.status, VerificationAssignment.Status.ACTIVE)
+        self.assertEqual(claimed.organization_id, self.organization_a.pk)
 
     def test_lead_verifier_can_claim_available_work(
         self,

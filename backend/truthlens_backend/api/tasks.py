@@ -50,7 +50,14 @@ from .verification.evidence_dossier import (
     filter_reasoning_evidence_dossier_by_role,
     load_reasoning_evidence_dossier_for_run,
     render_reasoning_evidence_dossier,
+    render_compact_reasoning_evidence_dossier,
+    render_shared_metadata_reasoning_evidence_dossier,
 )
+from .verification.cloudflare_pilot import (
+    PILOT_MAX_INPUT_CHARS,
+    cloudflare_pilot_enabled,
+)
+from .verification.evidence_presentation import persisted_evidence_source_previews
 from .verification.evidence_enrichment import persist_evidence_assessments_batch
 from .verification.ingestion import ingest_raw_evidence
 from .verification.linking import (
@@ -81,8 +88,99 @@ from .verification.telemetry import (
 logger = logging.getLogger(__name__)
 
 
+
 class ClaimPersistenceError(RuntimeError):
     """Raised when automated analysis cannot be persisted to a Claim."""
+
+
+def _schedule_subject_classification(claim_id):
+    """Best effort: never turn a classification outage into a fact-check failure."""
+    try:
+        from .investigation_classifier import dispatch_classification_after_text_save
+        dispatch_classification_after_text_save(claim_id)
+    except Exception:
+        logger.exception(
+            "Could not schedule optional subject classification for claim %s",
+            claim_id,
+        )
+
+
+def _render_bounded_persisted_evidence_context(groups, claim_text, stance):
+    """Use original dossier unchanged unless dev pilot exceeds its input cap.
+
+    Compact and shared-metadata representations retain every original evidence
+    content byte-for-byte, without dropping sources or contradictory items.
+    If even the compact presentation does not fit, fail closed and never
+    send a selectively truncated dossier to Gemini, Groq or Cloudflare.
+    """
+    evidence_context = render_reasoning_evidence_dossier(groups)
+    if not evidence_context or not cloudflare_pilot_enabled(
+        "persisted_evidence_evaluation"
+    ):
+        return evidence_context
+
+    from .services import build_persisted_evidence_prompt
+
+    def prompt_size(context):
+        system, user = build_persisted_evidence_prompt(
+            claim_text, context, stance,
+        )
+        return len(system) + len(user)
+
+    original_chars = prompt_size(evidence_context)
+    if original_chars <= PILOT_MAX_INPUT_CHARS:
+        return evidence_context
+    try:
+        compact_context = render_compact_reasoning_evidence_dossier(groups)
+    except (TypeError, ValueError):
+        logger.warning("PERSISTED_EVIDENCE_COMPACT_UNAVAILABLE")
+        raise LLMProviderUnavailableError(
+            "The persisted evidence dossier cannot be safely represented "
+            "within the development evaluator budget."
+        ) from None
+    compact_chars = prompt_size(compact_context)
+    if compact_chars <= PILOT_MAX_INPUT_CHARS:
+        logger.info(
+            "PERSISTED_EVIDENCE_COMPACT original_chars=%s compact_chars=%s "
+            "group_count=%s",
+            original_chars,
+            compact_chars,
+            len(groups),
+        )
+        return compact_context
+
+    try:
+        shared_context = render_shared_metadata_reasoning_evidence_dossier(groups)
+    except (TypeError, ValueError):
+        logger.warning("PERSISTED_EVIDENCE_SHARED_METADATA_UNAVAILABLE")
+        raise LLMProviderUnavailableError(
+            "The persisted evidence dossier cannot be safely represented "
+            "within the development evaluator budget."
+        ) from None
+    shared_chars = prompt_size(shared_context)
+    if shared_chars <= PILOT_MAX_INPUT_CHARS:
+        logger.info(
+            "PERSISTED_EVIDENCE_SHARED_METADATA original_chars=%s "
+            "compact_chars=%s shared_chars=%s group_count=%s",
+            original_chars,
+            compact_chars,
+            shared_chars,
+            len(groups),
+        )
+        return shared_context
+
+    logger.warning(
+        "PERSISTED_EVIDENCE_OVERSIZE original_chars=%s compact_chars=%s "
+        "shared_chars=%s limit_chars=%s",
+        original_chars,
+        compact_chars,
+        shared_chars,
+        PILOT_MAX_INPUT_CHARS,
+    )
+    raise LLMProviderUnavailableError(
+        "The persisted evidence dossier exceeds the development evaluator "
+        "input budget without dropping source material."
+    )
 
 
 def _resolve_exact_published_claim(claim, cleaned_claim):
@@ -103,6 +201,8 @@ def _resolve_exact_published_claim(claim, cleaned_claim):
                 return False
             claim.context_text = cleaned_claim
             claim.save(update_fields=["context_text", "last_updated"])
+            # Do not couple publication authority to classifier availability.
+            _schedule_subject_classification(claim.pk)
     except Exception as exc:
         raise ClaimPersistenceError(
             f"Published resolution persistence failed for claim {claim.pk}."
@@ -126,6 +226,8 @@ def _resolve_equivalent_published_claim(claim, cleaned_claim, vault_match):
                 return False
             claim.context_text = cleaned_claim
             claim.save(update_fields=["context_text", "last_updated"])
+            # Do not couple publication authority to classifier availability.
+            _schedule_subject_classification(claim.pk)
     except LLMProviderUnavailableError:
         raise
     except Exception as exc:
@@ -985,6 +1087,15 @@ def snippet_fact_check_process(
     _log_stage(claim_id, "snippet_task_total", task_started_at, outcome=outcome)
 
 
+@shared_task
+@verification_telemetry_scope()
+@llm_provider_scope()
+def classify_investigation_claim_task(claim_id):
+    """Run one classification job with the same provider job scope as verification."""
+    from .investigation_classifier import classify_investigation_claim
+    return classify_investigation_claim(claim_id)
+
+
 # TEXT PIPELINE
 @shared_task
 @verification_telemetry_scope()
@@ -1038,9 +1149,19 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
             allow_semantic_fallback=False,
         )
 
-        has_second_chance_match = matched_claim is not None and str(
-            matched_claim.id
-        ) != str(claim_id)
+        # A matching claim is not proof of a reusable factual conclusion.
+        # Pending, UNVERIFIED, OUT_OF_SCOPE, and unrecognized AI verdicts
+        # must not short-circuit this run. A previous unresolved result
+        # cannot replace fresh evidence retrieval or a fresh ClaimGate.
+        # The explicit current-input OUT_OF_SCOPE gate stays authoritative.
+        reusable_ai_verdicts = {
+            "FACT", "FAKE", "MISLEADING", "SATIRE",
+        }
+        has_second_chance_match = (
+            matched_claim is not None
+            and str(matched_claim.id) != str(claim_id)
+            and matched_claim.ai_verdict in reusable_ai_verdicts
+        )
         is_image_claim = (
             run_claim is not None and run_claim.claim_type == Claim.ClaimType.IMAGE
         )
@@ -1278,8 +1399,8 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             evidence_dossier,
                             VerificationEvidence.EvidenceRole.FACT_CHECK,
                         )
-                    evidence_context = render_reasoning_evidence_dossier(
-                        fact_check_groups
+                    evidence_context = _render_bounded_persisted_evidence_context(
+                        fact_check_groups, cleaned_claim, article_stance
                     )
                     has_persisted_evidence = bool(evidence_context)
                     if has_persisted_evidence:
@@ -1328,13 +1449,21 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         if review_url:
                             source_urls.append(review_url)
 
+                    # Report cards must project the FACT_CHECK evidence that
+                    # actually reached the persisted-evidence evaluator. Raw
+                    # provider top-N links are only a legacy no-run fallback.
+                    report_sources = (
+                        persisted_evidence_source_previews(
+                            run, VerificationEvidence.EvidenceRole.FACT_CHECK,
+                        ) if run is not None else source_urls
+                    )
                     save_started_at = time.perf_counter()
                     _save_claim(
                         claim_id,
                         ai_verdict,
                         "Official Fact Check",
                         cleaned_claim,
-                        source_urls,
+                        report_sources,
                     )
                     _log_stage(
                         claim_id,
@@ -1442,8 +1571,8 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             evidence_dossier,
                             VerificationEvidence.EvidenceRole.SECONDARY,
                         )
-                    evidence_context = render_reasoning_evidence_dossier(
-                        secondary_groups
+                    evidence_context = _render_bounded_persisted_evidence_context(
+                        secondary_groups, cleaned_claim, article_stance
                     )
                     if evidence_context:
                         evaluator_invoked = True
@@ -1480,13 +1609,22 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         tavily_eval_started_at,
                         verdict=ai_verdict.get("verdict"),
                     )
+                # Keep the visible source cards aligned with the persisted
+                # SECONDARY evidence used by the evaluator. This mirrors the
+                # URL pipeline and prevents top-three retrieval cards from
+                # masquerading as the complete evaluated provenance.
+                report_sources = (
+                    persisted_evidence_source_previews(
+                        run, VerificationEvidence.EvidenceRole.SECONDARY,
+                    ) if run is not None else source_urls
+                )
                 save_started_at = time.perf_counter()
                 _save_claim(
                     claim_id,
                     ai_verdict,
                     "Live Web Search",
                     cleaned_claim,
-                    source_urls,
+                    report_sources,
                 )
                 _log_stage(
                     claim_id,
@@ -1676,6 +1814,13 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
     pipeline_error = None
     runtime_error_propagating = False
     try:
+        # Navigation-only/empty extractions cannot support a factual verdict.
+        # Preserve the URL and abstain without spending claim-gate or search quota.
+        if not cleaned_text or not cleaned_text.strip():
+            outcome = "url_content_insufficient"
+            _log_stage(claim_id, "url_content_insufficient", pipeline_started_at)
+            return
+
         query_extract_started_at = time.perf_counter()
         result = extract_search_query(cleaned_text, url)
         _log_stage(claim_id, "extract_search_query", query_extract_started_at)
@@ -1686,7 +1831,11 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
         article_stance = result.get("article_stance", "NEUTRAL")
 
         # Step 2 — OUT_OF_SCOPE check
-        if cleaned_claim == "OUT_OF_SCOPE":
+        if (
+            not isinstance(cleaned_claim, str)
+            or not cleaned_claim.strip()
+            or cleaned_claim == "OUT_OF_SCOPE"
+        ):
             logger.info("Claim %s was gated as out of scope.", claim_id)
             outcome = "abstained_out_of_scope"
             selected_verdict = "OUT_OF_SCOPE"
@@ -1815,7 +1964,9 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         evidence_dossier,
                         VerificationEvidence.EvidenceRole.FACT_CHECK,
                     )
-                evidence_context = render_reasoning_evidence_dossier(fact_check_groups)
+                evidence_context = _render_bounded_persisted_evidence_context(
+                    fact_check_groups, cleaned_claim, article_stance
+                )
                 if evidence_context:
                     try:
                         ai_verdict = evaluate_claim_with_persisted_evidence(
@@ -1862,13 +2013,20 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     if review_url:
                         source_urls.append(review_url)
 
+                # The URL report must show the proposition and persisted
+                # FACT_CHECK evidence actually used by final evaluation.
+                report_sources = (
+                    persisted_evidence_source_previews(
+                        run, VerificationEvidence.EvidenceRole.FACT_CHECK,
+                    ) if run is not None else source_urls
+                )
                 save_started_at = time.perf_counter()
                 _save_claim(
                     claim_id,
                     ai_verdict,
                     "Official Fact Check",
-                    cleaned_text,
-                    source_urls,
+                    cleaned_claim,
+                    report_sources,
                 )
                 _log_stage(
                     claim_id,
@@ -1910,7 +2068,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     "confidence_score": 0,
                 },
                 "Live Web Search",
-                cleaned_text,
+                cleaned_claim,
                 [],
             )
             outcome = "completed_tavily_fallback_unverified"
@@ -1980,7 +2138,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                             "confidence_score": 0,
                         },
                         "Live Web Search",
-                        cleaned_text,
+                        cleaned_claim,
                         [],
                     )
                     outcome = "completed_tavily_fallback_unverified"
@@ -2004,7 +2162,9 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         evidence_dossier,
                         VerificationEvidence.EvidenceRole.SECONDARY,
                     )
-                evidence_context = render_reasoning_evidence_dossier(secondary_groups)
+                evidence_context = _render_bounded_persisted_evidence_context(
+                    secondary_groups, cleaned_claim, article_stance
+                )
                 if evidence_context:
                     evaluator_invoked = True
                     ai_verdict = evaluate_claim_with_persisted_evidence(
@@ -2040,9 +2200,17 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     tavily_eval_started_at,
                     verdict=ai_verdict.get("verdict"),
                 )
+            # A report source card must reference persisted SECONDARY
+            # evidence; the first three Tavily hits are not the dossier.
+            report_sources = (
+                persisted_evidence_source_previews(
+                    run, VerificationEvidence.EvidenceRole.SECONDARY,
+                ) if run is not None else source_urls
+            )
             save_started_at = time.perf_counter()
             _save_claim(
-                claim_id, ai_verdict, "Live Web Search", cleaned_text, source_urls
+                claim_id, ai_verdict, "Live Web Search", cleaned_claim,
+                report_sources,
             )
             _log_stage(
                 claim_id, "save_claim", save_started_at, source_type="Live Web Search"
@@ -2255,6 +2423,10 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
             claim.ai_verdict,
             claim.claim_fingerprint,
         )
+        # Separate, asynchronous subject classification for every analyzed
+        # claim, whether or not a community thread exists. The hook never
+        # queries an LLM or changes the factual-verification result.
+        _schedule_subject_classification(claim.pk)
         return claim
     except ClaimPersistenceError:
         raise

@@ -18,7 +18,7 @@ const EMPTY_DRAFT = {
    public_logo_enabled: false,
 };
 
-const EDITABLE_FIELDS = ["description", "website", "expertise_areas", "public_profile_enabled", "public_logo_enabled"];
+const EDITABLE_FIELDS = ["description", "website", "public_profile_enabled", "public_logo_enabled"];
 
 const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 const SUPPORTED_LOGO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -872,33 +872,13 @@ function OrganizationPublicProfilePanel({ organizationId }) {
                      </div>
 
                      <div className="org-public-profile-field org-public-profile-field-wide">
-                        <label htmlFor="org-public-profile-expertise">Expertise areas</label>
-                        <Textarea
-                           id="org-public-profile-expertise"
-                           density="standard"
-                           surface="surface"
-                           value={draft.expertise_areas}
-                           onChange={(event) => updateDraft("expertise_areas", event.target.value)}
-                           aria-describedby={`org-public-profile-expertise-help${fieldErrors.expertise_areas ? " org-public-profile-expertise-error" : ""}`}
-                           aria-invalid={fieldErrors.expertise_areas ? "true" : undefined}
-                           invalid={Boolean(fieldErrors.expertise_areas)}
-                           rows={5}
-                           placeholder={"Election verification\nMedia literacy\nPublic policy"}
-                           disabled={saving || Boolean(logoBusy)}
-                        />
-                        <span id="org-public-profile-expertise-help" className="org-public-profile-help">
-                           One area per line. Up to 20 areas and 100 characters per area; duplicates are removed when
-                           saved.
-                        </span>
-                        {fieldErrors.expertise_areas && (
-                           <span
-                              id="org-public-profile-expertise-error"
-                              className="org-public-profile-field-error"
-                              role="alert"
-                           >
-                              {fieldErrors.expertise_areas}
-                           </span>
-                        )}
+                        <strong>Verification specializations</strong>
+                        <p className="org-public-profile-help">
+                           Your organization's Primary Admin selects investigation subjects
+                           in the Verification scope tab. These organization-declared
+                           specializations are used when TruthLens enables subject-based intake
+                           matching. Descriptive profile interests do not grant investigation authority.
+                        </p>
                      </div>
                   </div>
 

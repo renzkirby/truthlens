@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User
 from django.urls import reverse
+from django.test import override_settings
 
 from rest_framework import status
 from rest_framework.test import (
@@ -9,6 +10,7 @@ from rest_framework.test import (
 
 from api.models import (
     Claim,
+    ClaimInvestigationClassification,
     EvidenceSubmission,
     Organization,
     OrganizationMembership,
@@ -77,6 +79,7 @@ class VerificationAssignmentApiTests(APITestCase):
             organization_type=(Organization.OrganizationType.FACT_CHECKING),
             verification_status=(Organization.VerificationStatus.VERIFIED),
             partner_status=(Organization.PartnerStatus.ACTIVE),
+            verification_specializations=["SCIENCE"],
         )
 
         self.organization_b = Organization.objects.create(
@@ -85,6 +88,7 @@ class VerificationAssignmentApiTests(APITestCase):
             organization_type=(Organization.OrganizationType.FACT_CHECKING),
             verification_status=(Organization.VerificationStatus.VERIFIED),
             partner_status=(Organization.PartnerStatus.ACTIVE),
+            verification_specializations=["SCIENCE"],
         )
 
         # ---------------------------------
@@ -153,6 +157,11 @@ class VerificationAssignmentApiTests(APITestCase):
             ai_verdict="UNVERIFIED",
             ai_summary=("This claim requires professional " "verification."),
             consensus_score=55.0,
+        )
+
+        ClaimInvestigationClassification.objects.create(
+            claim=claim, domains=["SCIENCE"], jurisdiction="PH",
+            rationale="Reviewed test fixture for science and geography.",
         )
 
         thread = Thread.objects.create(
@@ -269,6 +278,38 @@ class VerificationAssignmentApiTests(APITestCase):
     # =====================================
     # Available intake
     # =====================================
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="enforce")
+    def test_unclassified_intake_is_not_visible_to_partner(self):
+        fixture = self._create_available_assignment(suffix="needs-classification")
+        ClaimInvestigationClassification.objects.filter(claim=fixture["claim"]).delete()
+        response = self.lead_a_client.get(
+            reverse("verification_intake"), {"organization_id": str(self.organization_a.id)},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 0)
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="off")
+    def test_off_mode_keeps_unclassified_intake_visible(self):
+        fixture = self._create_available_assignment(suffix="legacy-off")
+        ClaimInvestigationClassification.objects.filter(claim=fixture["claim"]).delete()
+        response = self.lead_a_client.get(
+            reverse("verification_intake"), {"organization_id": str(self.organization_a.id)},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], str(fixture["assignment"].id))
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="shadow")
+    def test_shadow_mode_keeps_unclassified_intake_visible(self):
+        fixture = self._create_available_assignment(suffix="legacy-shadow")
+        ClaimInvestigationClassification.objects.filter(claim=fixture["claim"]).delete()
+        response = self.lead_a_client.get(
+            reverse("verification_intake"), {"organization_id": str(self.organization_a.id)},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], str(fixture["assignment"].id))
 
     def test_lead_verifier_can_view_available_intake(
         self,

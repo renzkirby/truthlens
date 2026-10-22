@@ -1,8 +1,10 @@
+import json
+import os
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import requests
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from api import services, tasks
 from api.models import (
@@ -93,6 +95,26 @@ class VerificationRunTextRuntimeTests(TestCase):
                 "content": "Relevant web evidence.",
             }],
         }
+        self.gfc_report_sources = [{
+            "url": "https://example.com/fact-check",
+            "title": "Persisted fact-check",
+            "snippet": "Persisted fact-check evidence.",
+            "provenance": "PERSISTED_EVIDENCE",
+        }]
+        self.tavily_report_sources = [{
+            "url": "https://example.com/web",
+            "title": "Persisted web source",
+            "snippet": "Persisted web evidence.",
+            "provenance": "PERSISTED_EVIDENCE",
+        }]
+        self.source_previews = self._patch(
+            "api.tasks.persisted_evidence_source_previews",
+            side_effect=lambda _run, role: (
+                self.gfc_report_sources
+                if role == VerificationEvidence.EvidenceRole.FACT_CHECK
+                else self.tavily_report_sources
+            ),
+        )
         self._patch("api.embedding_service.generate_embedding", return_value=None)
         self._patch("api.tasks._log_stage")
         self.save_claim = self._patch("api.tasks._save_claim", wraps=tasks._save_claim)
@@ -223,6 +245,7 @@ class VerificationRunTextRuntimeTests(TestCase):
             self.retrieve_gfc, self.evaluate_gfc, self.retrieve_tavily,
             self.evaluate_tavily, self.evaluate_persisted, self.load_dossier,
             self.filter_dossier, self.render_dossier, self.assess_evidence,
+            self.source_previews,
         ):
             mocked.assert_not_called()
 
@@ -308,27 +331,52 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.save_claim.assert_not_called()
         self.assess_evidence.assert_not_called()
 
-    def test_cached_abstaining_verdicts_abstain(self):
-        for verdict in ("OUT_OF_SCOPE", "UNVERIFIED", None, "", "UNKNOWN"):
-            with self.subTest(verdict=verdict):
-                self._cached_claim(verdict)
-                self._assert_terminal(self._execute(), VerificationRun.Status.ABSTAINED)
-        self.clean.assert_not_called()
-        self.retrieve_tavily.assert_not_called()
-        self.assess_evidence.assert_not_called()
+    def test_unresolved_ai_match_continues_to_fresh_verification_for_text_and_image(self):
+        for claim_type in (Claim.ClaimType.TEXT, Claim.ClaimType.IMAGE):
+            for cached_verdict in (None, "", "UNKNOWN", "UNVERIFIED", "OUT_OF_SCOPE"):
+                with self.subTest(claim_type=claim_type, cached_verdict=cached_verdict):
+                    self.claim = Claim.objects.create(
+                        claim_type=claim_type,
+                        context_text="Fresh submitted public factual claim.",
+                    )
+                    cached = self._cached_claim(cached_verdict)
+                    clean_before = self.clean.call_count
+                    save_before = self.save_claim.call_count
+
+                    run = self._execute()
+
+                    self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+                    self.assertEqual(self.clean.call_count, clean_before + 1)
+                    self.assertEqual(self.save_claim.call_count, save_before + 1)
+                    self.claim.refresh_from_db()
+                    self.assertEqual(self.claim.ai_verdict, "FAKE")
+                    self.assertEqual(self.claim.ai_summary, self.verdict["summary"])
+                    self.assertNotEqual(
+                        self.claim.score_context,
+                        "This result was matched from a prior analysis of the same claim.",
+                    )
+                    self.assertEqual(cached.ai_verdict, cached_verdict)
 
     def test_cached_human_verdict_is_not_copied_or_used_as_run_outcome(self):
-        for ai_verdict, final_verdict, status in (
-            ("UNVERIFIED", "FACT", VerificationRun.Status.ABSTAINED),
-            ("FACT", "UNVERIFIED", VerificationRun.Status.COMPLETED),
+        for ai_verdict, final_verdict, status, expected_ai_verdict in (
+            ("UNVERIFIED", "FACT", VerificationRun.Status.COMPLETED, "FAKE"),
+            ("FACT", "UNVERIFIED", VerificationRun.Status.COMPLETED, "FACT"),
         ):
             with self.subTest(final_verdict=final_verdict):
                 self._cached_claim(ai_verdict, final_verdict)
+                evidence_calls_before = self.assess_evidence.call_count
                 self._assert_terminal(self._execute(), status)
                 self.claim.refresh_from_db()
-                self.assertEqual(self.claim.ai_verdict, ai_verdict)
+                self.assertEqual(self.claim.ai_verdict, expected_ai_verdict)
                 self.assertIsNone(self.claim.final_verdict)
-        self.assess_evidence.assert_not_called()
+                if ai_verdict == "UNVERIFIED":
+                    self.assertGreater(
+                        self.assess_evidence.call_count, evidence_calls_before
+                    )
+                else:
+                    self.assertEqual(
+                        self.assess_evidence.call_count, evidence_calls_before
+                    )
 
     def test_self_match_continues_verification_with_one_run(self):
         self.match.return_value = self.claim
@@ -467,7 +515,7 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.evaluate_gfc.assert_not_called()
         self.save_claim.assert_called_once_with(
             self.claim.id, self.verdict, "Official Fact Check",
-            self.cleaned["cleaned_claim"], ["https://example.com/fact-check"],
+            self.cleaned["cleaned_claim"], self.gfc_report_sources,
         )
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "FAKE")
@@ -480,10 +528,9 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.retrieve_tavily.assert_called_once()
         self.evaluate_gfc.assert_not_called()
         self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
-        self.assertEqual(self.save_claim.call_args.args[4], [{
-            "url": "https://example.com/web", "title": "Web Result",
-            "snippet": "Relevant web evidence....",
-        }])
+        self.assertEqual(
+            self.save_claim.call_args.args[4], self.tavily_report_sources
+        )
 
     def test_provider_selected_abstaining_verdicts_abstain(self):
         for provider in ("vault", "gfc", "tavily"):
@@ -625,6 +672,80 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.assertIn("VerificationRun finalization failed", "\n".join(logs.output))
         self.assertIn(str(lifecycle_error), "\n".join(logs.output))
         self.assertEqual(self.fail_run.call_args.kwargs["failure_message"], str(original_error))
+
+
+    @override_settings(APP_ENV="development", DEBUG=True)
+    @patch.dict(os.environ, {"ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0"})
+    def test_enabled_cloudflare_pilot_flows_through_real_evaluator_and_lifecycle(self):
+        self.evaluate_persisted.side_effect = services.evaluate_claim_with_persisted_evidence
+        cloud_output = json.dumps({
+            "reasoning": "The supplied source explicitly contradicts the claim.",
+            "verdict": "FAKE",
+            "summary": "The source contradicts the stated claim.",
+            "confidence_score": 92,
+            "score_context": "Direct contradiction in persisted evidence.",
+        })
+        with (
+            patch.dict(os.environ, {"ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1"}),
+            patch(
+                "api.services.call_validated_cloudflare_pilot",
+                return_value=cloud_output,
+            ) as cloudflare,
+            patch("api.services.gemini_client") as gemini,
+            patch("api.services.groq_client") as groq,
+        ):
+            run = self._execute()
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        cloudflare.assert_called_once()
+        gemini.models.generate_content.assert_not_called()
+        groq.chat.completions.create.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "FAKE")
+        self.assertEqual(self.claim.consensus_score, 92)
+        self.assertIsNone(self.claim.final_verdict)
+        events = list(run.telemetry_events.filter(
+            event_type=VerificationTelemetryEvent.EventType.LLM_PROVIDER_CALL
+        ))
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].provider, "cloudflare")
+        self.assertEqual(events[0].name, "persisted_evidence_evaluation")
+        self.assertEqual(events[0].outcome, "success")
+
+    @override_settings(APP_ENV="development", DEBUG=True)
+    @patch.dict(os.environ, {"ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0"})
+    def test_all_providers_unavailable_fails_run_without_fabricated_verdict(self):
+        self.evaluate_persisted.side_effect = services.evaluate_claim_with_persisted_evidence
+        with (
+            patch.dict(os.environ, {"ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1"}),
+            patch(
+                "api.services.call_validated_cloudflare_pilot",
+                side_effect=RuntimeError("Cloudflare unavailable"),
+            ) as cloudflare,
+            patch("api.services.gemini_client") as gemini,
+            patch("api.services.groq_client") as groq,
+        ):
+            gemini.models.generate_content.side_effect = RuntimeError("Gemini unavailable")
+            groq.chat.completions.create.side_effect = RuntimeError("Groq unavailable")
+            with self.assertRaises(LLMProviderUnavailableError):
+                self._execute()
+        cloudflare.assert_called_once()
+        self.assertEqual(self.claim.verification_runs.count(), 1)
+        run = self.claim.verification_runs.get()
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "final_evaluator")
+        self.assertEqual(run.failure_code, "LLM_UNAVAILABLE")
+        self.claim.refresh_from_db()
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.final_verdict)
+        self.retrieve_tavily.assert_not_called()
+        providers = list(run.telemetry_events.filter(
+            event_type=VerificationTelemetryEvent.EventType.LLM_PROVIDER_CALL
+        ).order_by("sequence").values_list("provider", "outcome"))
+        self.assertEqual(providers, [
+            ("cloudflare", "failed"),
+            ("gemini", "failed"),
+            ("groq", "failed"),
+        ])
 
 
 class VerificationEvidenceTextRuntimeTests(TestCase):
@@ -780,7 +901,13 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         self.assertEqual(self.claim.ai_verdict, "FAKE")
         self.assertIsNone(self.claim.final_verdict)
         self.assertEqual(self.claim.source_type, "Official Fact Check")
-        self.assertEqual(self.claim.ai_sources, ["https://example.com/fact-check"])
+        self.assertEqual(len(self.claim.ai_sources), 1)
+        self.assertEqual(
+            self.claim.ai_sources[0]["url"], "https://example.com/fact-check"
+        )
+        self.assertEqual(
+            self.claim.ai_sources[0]["provenance"], "PERSISTED_EVIDENCE"
+        )
         self.evaluate_persisted.assert_called_once()
         persisted_context = self.evaluate_persisted.call_args.args[1]
         self.assertIn("Rating: False", persisted_context)

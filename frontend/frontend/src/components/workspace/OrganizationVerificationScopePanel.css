@@ -1,0 +1,44 @@
+.org-scope-panel {
+   padding: 24px;
+   background: var(--tl-color-bg-surface, #fff);
+   border: 1px solid var(--tl-color-border-default, #d0d7e2);
+   border-radius: 14px;
+}
+.org-scope-panel__header p { color: var(--tl-color-text-secondary, #475569); }
+.org-scope-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; }
+.org-scope-summary div { padding: 14px; border: 1px solid var(--tl-color-border-default, #d0d7e2); border-radius: 10px; }
+.org-scope-summary dt { font-size: .83rem; font-weight: 700; color: var(--tl-color-text-secondary, #475569); }
+.org-scope-summary dd { margin: 8px 0 0; overflow-wrap: anywhere; }
+.org-scope-panel__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.org-scope-dialog {
+   border: 1px solid var(--tl-color-border-default, #cbd5e1);
+   border-radius: 16px;
+   width: min(800px, calc(100vw - 30px));
+   max-height: 88vh;
+   padding: 0;
+   background: var(--tl-color-bg-surface, #fff);
+   color: var(--tl-color-text-primary, #0f172a);
+}
+.org-scope-dialog::backdrop { background: rgb(12 19 40 / 70%); }
+.org-scope-dialog__heading { display: flex; justify-content: space-between; gap: 20px; padding: 20px 24px; border-bottom: 1px solid #e2e8f0; }
+.org-scope-dialog__heading p { color: #475569; line-height: 1.5; }
+.org-scope-dialog__heading button { background: transparent; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px; cursor: pointer; align-self: flex-start; }
+.org-scope-dialog__form { padding: 24px; display: grid; gap: 18px; max-height: calc(88vh - 140px); overflow-y: auto; }
+.org-scope-dialog__form fieldset { border: 0; padding: 0; margin: 0; }
+.org-scope-dialog__form legend, .org-scope-input-label { font-weight: 700; color: #0f172a; }
+.org-scope-dialog__form fieldset > p, .org-scope-input-label small, .org-scope-note { display: block; color: #475569; font-weight: 450; line-height: 1.5; }
+.org-scope-domain-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.org-scope-domain { border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px; display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.org-scope-domain.selected { border-color: #4f46e5; background: #eef2ff; }
+.org-scope-domain input { accent-color: #4f46e5; width: 18px; height: 18px; }
+.org-scope-domain small { color: #64748b; margin-left: auto; }
+.org-scope-domain:focus-within { outline: 2px solid #4f46e5; outline-offset: 2px; }
+.org-scope-input-label { display: grid; gap: 8px; }
+.org-scope-input-label textarea { border: 1px solid #94a3b8; border-radius: 10px; padding: 12px; font: inherit; resize: vertical; }
+.org-scope-input-label textarea:focus-visible { outline: 2px solid #4f46e5; }
+.org-scope-dialog__actions { display: flex; justify-content: flex-end; gap: 10px; }
+.org-scope-error { color: #991b1b; padding: 12px; border: 1px solid #fecaca; border-radius: 8px; }
+@media (max-width: 640px) {
+   .org-scope-summary,.org-scope-domain-grid { grid-template-columns: 1fr; }
+   .org-scope-dialog__form,.org-scope-dialog__heading { padding: 16px; }
+}

@@ -565,6 +565,34 @@ def _record_authenticated_claim_check(user, claim):
         profile.save(update_fields=["fact_check_points"])
 
 
+def _should_retry_unresolved_cached_claim(matched_claim):
+    """A terminal run with no usable result must not trap future submissions.
+
+    Preserve successful AI or institutional outcomes and prevent duplicate
+    dispatch while an earlier verification is pending/running. A retry creates
+    a new Claim, preserving the failed attempt and its audit/telemetry history.
+    """
+    if matched_claim.ai_verdict in {"FACT", "FAKE", "MISLEADING", "SATIRE"}:
+        return False
+
+    latest_run = matched_claim.verification_runs.only("status").first()
+    if latest_run is None or latest_run.status in {
+        VerificationRun.Status.PENDING,
+        VerificationRun.Status.RUNNING,
+    }:
+        return False
+
+    # Institutional conclusions override absent/abstaining AI results. Do not
+    # bypass an authoritative published or attributable adjudicated verdict.
+    result = get_match_result(matched_claim)
+    if result.get("resolution_source") in {
+        "OFFICIAL_FACT_CHECK", "ADJUDICATION",
+    } and result.get("verdict"):
+        return False
+
+    return True
+
+
 # Create your views here.
 @csrf_exempt
 @api_view(["POST"])
@@ -590,9 +618,10 @@ def receive_snippet(request):
 
     if fingerprint:
         matched_claim = find_matching_claim(fingerprint, "IMAGE")
-        if matched_claim:
+        if matched_claim and not _should_retry_unresolved_cached_claim(matched_claim):
             _record_authenticated_claim_check(authenticated_user, matched_claim)
-            # A moderator has already resolved this claim — return cached verdict
+            # Reuse a result or an in-progress verification; never replay a
+            # failed/no-verdict terminal run as if it were a cache hit.
             match_result = get_match_result(
                 matched_claim,
                 triggered_by=(authenticated_user),
@@ -759,7 +788,7 @@ def verify_url(request):
 
     if fingerprint:
         matched_claim = find_matching_claim(fingerprint, "URL")
-        if matched_claim:
+        if matched_claim and not _should_retry_unresolved_cached_claim(matched_claim):
             _record_authenticated_claim_check(authenticated_user, matched_claim)
             match_result = get_match_result(
                 matched_claim,
@@ -2726,6 +2755,40 @@ def organization_verification_metrics(request, organization_id):
     return Response(metrics)
 
 
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAuthenticated])
+def organization_verification_scope(request, organization_id):
+    """Read specializations as a manager; only Primary Admin can modify them."""
+    from .organization_scope_service import (
+        OrganizationScopeForbidden,
+        OrganizationScopeInvalid,
+        can_view_specializations,
+        update_organization_specializations,
+        serialize_organization_scope,
+    )
+    from .organization_scope_serializers import OrganizationScopeMutationSerializer
+
+    organization = get_object_or_404(Organization, pk=organization_id)
+    if not can_view_specializations(organization=organization, actor=request.user):
+        return Response(
+            {"detail": "An active Primary Admin or Admin membership is required."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    try:
+        if request.method == "PATCH":
+            serializer = OrganizationScopeMutationSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            organization = update_organization_specializations(
+                organization=organization, actor=request.user,
+                **serializer.validated_data,
+            )
+    except OrganizationScopeForbidden as error:
+        return Response({"detail": str(error)}, status=status.HTTP_403_FORBIDDEN)
+    except OrganizationScopeInvalid as error:
+        return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(serialize_organization_scope(organization, actor=request.user))
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def verification_intake(request):
@@ -2759,10 +2822,34 @@ def verification_intake(request):
     limit, offset = _parse_verification_pagination(request)
 
     queryset = get_available_verification_assignments()
+    from .verification_domain_policy import (
+        eligibility_reason,
+        organization_specializations,
+        subject_eligibility_enforced,
+    )
 
-    total_count = queryset.count()
+    # Subject routing is only authoritative in the separately approved
+    # enforce rollout. Off/shadow preserve today's partner intake; shadow
+    # suggestions never silently remove claims from the shared pool.
+    if subject_eligibility_enforced():
+        specializations = organization_specializations(organization)
+        eligible = []
+        for assignment in queryset:
+            classification = getattr(
+                assignment.claim,
+                "investigation_classification",
+                None,
+            )
+            if eligibility_reason(
+                classification=classification,
+                specializations=specializations,
+            ) is None:
+                eligible.append(assignment)
+    else:
+        eligible = list(queryset)
 
-    assignments = queryset[offset : offset + limit]
+    total_count = len(eligible)
+    assignments = eligible[offset : offset + limit]
 
     serializer = VerificationAssignmentSerializer(
         assignments,
@@ -3107,6 +3194,10 @@ class ThreadViewSet(viewsets.ModelViewSet):
             ensure_verification_assignment(
                 claim=claim,
             )
+            from .investigation_classifier import dispatch_classification_task
+            transaction.on_commit(
+                lambda claim_id=claim.pk: dispatch_classification_task(claim_id)
+            )
 
     def _find_existing_thread(self, claim):
         """
@@ -3433,7 +3524,7 @@ def verify_text(request):
     )
     authenticated_user = _authenticated_user_or_none(request)
 
-    if matched_claim:
+    if matched_claim and not _should_retry_unresolved_cached_claim(matched_claim):
         _record_authenticated_claim_check(authenticated_user, matched_claim)
         match_result = get_match_result(
             matched_claim,
