@@ -195,6 +195,20 @@ then explicit user approval for **no more than four** Cloudflare
 requests on the four approved synthetic claims; only afterward may
 any actual provider request or token spend occur.
 
+## Direct Cloudflare capture runner — implementation staged, NOT authorized live
+
+A new, separately gated direct Cloudflare-only capture runner and mocked
+regressions are now staged on this branch. It **does not run automatically**;
+the CLI's **default invocation remains a NO-NETWORK DRY RUN**.
+
+See `docs/PARTNER_GOV_1_CLOUDFLARE_DIRECT_CAPTURE_RUNBOOK.md` for the
+exact private `Cloudflare-02` folder, default-only command, offline
+mock test suite, confirmed request config, complete raw-message storage,
+one-time packet lock, safe failure/partial-capture behavior and remaining
+explicit live authorization gate. **Do not execute the live gate yet.**
+The existing `prepare_investigation_classification_evaluation` command,
+its exported private packet, and the read-only audit are unchanged.
+
 ## Eventually scoring real, captured responses
 
 Only **after separate explicit authorization**, use a controlled capture
