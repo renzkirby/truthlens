@@ -170,6 +170,10 @@ Important integration notes:
 - its `Claim.relatedness_context` field explains the development-only schema
   drift that previously motivated a temporary repair migration; that repair was
   removed before PR preparation;
+- a developer database that previously applied the old co-developer `0081`
+  may still contain those physical columns/migration records; use a clean
+  development database or explicitly reconcile that local-only schema before
+  applying a future renumbered relatedness migration;
 - `services.py`, `tasks.py`, `telemetry.py` and verification tests overlap
   materially with the provider hierarchy;
 - preserve current Vault relevance gating when integrating asynchronous
