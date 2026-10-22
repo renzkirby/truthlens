@@ -148,12 +148,11 @@ def summarize_capture_plan(plan):
 
 def _private_output_directory(location):
     target = Path(location).expanduser().resolve()
-    # The command is in repository/backend/truthlens_backend/api/management/commands/.
-    # Never risk committing a packet containing claim texts, model responses or
-    # information copied from a private human-reviewed reference corpus.
-    repo_root = Path(__file__).resolve().parents[2]
-    # From api/verification, parents[2] is backend/truthlens_backend.
-    # Also protect the outer Git checkout, including linked worktrees.
+    # This module is in repository/backend/truthlens_backend/api/verification/.
+    # Protect the full checkout even if the .git marker is unavailable.
+    # Never risk committing claim texts, model responses or reviewed inputs.
+    repo_root = Path(__file__).resolve().parents[4]
+    # Also check discoverable Git ancestors, including linked worktrees.
     git_roots = [parent for parent in Path(__file__).resolve().parents
                  if (parent / ".git").exists()]
     if target.is_relative_to(repo_root) or any(
