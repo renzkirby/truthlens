@@ -276,6 +276,44 @@ class RelatednessDecisionTests(RelatednessFixtures, TestCase):
                                   related_proposition=self.proposition, related_candidate=self.candidate)
         schedule.assert_not_called()
 
+    def test_public_lineage_not_found_is_expected_and_never_enqueues(self):
+        from api.public_publication_query_service import PublicPublicationNotFound
+        private_detail = "PRIVATE-PUBLICATION-DETAIL"
+        with patch("api.public_publication_query_service.get_public_partner_fact_check_detail",
+                   side_effect=PublicPublicationNotFound(private_detail)) as lookup, \
+             patch("api.tasks.validate_related_fact_check.apply_async") as enqueue, \
+             self.assertLogs(related.logger, level="INFO") as logs:
+            related.schedule_relatedness(self.target.pk, self.proposition, self.candidate)
+        lookup.assert_called_once()
+        enqueue.assert_not_called()
+        self.target.refresh_from_db()
+        self.assertIsNone(self.target.relatedness_decision_id)
+        self.assertEqual(RelatedFactCheckDecision.objects.count(), 0)
+        self.assertEqual(self.target.ai_verdict, "FAKE")
+        log_text = "\n".join(logs.output)
+        self.assertIn("outcome=not_publicly_reachable", log_text)
+        self.assertNotIn("outcome=scheduling_unavailable", log_text)
+        self.assertNotIn(private_detail, log_text)
+
+    def test_unexpected_public_lineage_error_reports_stage_not_exception_text(self):
+        private_detail = "PRIVATE-SOURCE-DATA"
+        with patch("api.public_publication_query_service.get_public_partner_fact_check_detail",
+                   side_effect=RuntimeError(private_detail)) as lookup, \
+             patch("api.tasks.validate_related_fact_check.apply_async") as enqueue, \
+             self.assertLogs(related.logger, level="WARNING") as logs:
+            related.schedule_relatedness(self.target.pk, self.proposition, self.candidate)
+        lookup.assert_called_once()
+        enqueue.assert_not_called()
+        self.target.refresh_from_db()
+        self.assertIsNone(self.target.relatedness_decision_id)
+        self.assertEqual(RelatedFactCheckDecision.objects.count(), 0)
+        self.assertEqual(self.target.ai_verdict, "FAKE")
+        log_text = "\n".join(logs.output)
+        self.assertIn("outcome=scheduling_unavailable", log_text)
+        self.assertIn("stage=public_lineage", log_text)
+        self.assertIn("error_type=RuntimeError", log_text)
+        self.assertNotIn(private_detail, log_text)
+
     def test_stale_work_and_oversized_proposition_make_no_provider_call(self):
         decision, _ = self.schedule()
         Claim.objects.filter(pk=self.target.pk).update(context_text="New primary context")

@@ -243,27 +243,41 @@ def schedule_relatedness(claim_id, proposition, vault_match, *, expected_updated
     text = " ".join(proposition.split())
     if not text or len(text) > MAX_CLAIM_CHARS:
         return
+    stage = "claim_lookup"
     try:
         with transaction.atomic():
             claim = Claim.objects.select_for_update().get(pk=claim_id)
+            stage = "authority_check"
             if (claim.claim_type not in {"IMAGE", "URL"} or not claim.ai_verdict
                     or (expected_updated_at is not None and claim.last_updated != expected_updated_at)
                     or get_published_fact_check_resolution_for_claim(claim) is not None):
                 return
+            stage = "publication_lookup"
             publication = OfficialFactCheck.objects.select_related("publication_snapshot").get(
                 pk=vault_match.get("fact_check_id"),
             )
+            stage = "publication_identity"
             current = publication_identity(publication)
             if current is None:
                 return
             # Avoid spending provider calls on publications that cannot be shown.
+            stage = "public_eligibility"
             from ..organization_public_presence_service import is_public_partner_eligible
-            from ..public_publication_query_service import get_public_partner_fact_check_detail
+            from ..public_publication_query_service import (
+                PublicPublicationNotFound, get_public_partner_fact_check_detail,
+            )
             if publication.organization is None or not is_public_partner_eligible(publication.organization):
                 return
-            get_public_partner_fact_check_detail(
-                organization=publication.organization, publication_id=publication.pk,
-            )
+            stage = "public_lineage"
+            try:
+                get_public_partner_fact_check_detail(
+                    organization=publication.organization, publication_id=publication.pk,
+                )
+            except PublicPublicationNotFound:
+                # This publication cannot be publicly read; it is not a schedulable candidate.
+                logger.info("RELATED_CONTEXT outcome=not_publicly_reachable")
+                return
+            stage = "candidate_validation"
             fields, _representation = current
             fingerprint = proposition_fingerprint(text)
             method = vault_match.get("match_method")
@@ -272,12 +286,14 @@ def schedule_relatedness(claim_id, proposition, vault_match, *, expected_updated
                           else "EXACT_HEADLINE" if proposition_fingerprint(publication.headline) == fingerprint else None)
             if method not in {"SEMANTIC", "FULL_TEXT", "EXACT_CANONICAL", "EXACT_HEADLINE"}:
                 return
+            stage = "decision_create"
             decision, created = RelatedFactCheckDecision.objects.get_or_create(
                 identity=decision_identity(fingerprint, fields),
                 defaults={"proposition_fingerprint": fingerprint, **fields},
             )
             # Serialize binding with completion. A pair bound during processing
             # must either be seen by the worker or observe COMPLETED here.
+            stage = "decision_bind"
             decision = RelatedFactCheckDecision.objects.select_for_update().get(pk=decision.pk)
             claim.relatedness_context = {
                 "proposition_fingerprint": fingerprint,
@@ -289,11 +305,15 @@ def schedule_relatedness(claim_id, proposition, vault_match, *, expected_updated
             claim.relatedness_decision = decision
             claim.save(update_fields=["relatedness_context", "relatedness_decision"])
             if decision.state == "COMPLETED":
+                stage = "reference_write"
                 create_accepted_reference(claim, decision)
             elif created:
+                stage = "enqueue_registration"
                 transaction.on_commit(lambda: enqueue_decision(decision.pk), robust=True)
-    except Exception:
-        logger.warning("RELATED_CONTEXT outcome=scheduling_unavailable")
+    except Exception as exc:
+        # Log only bounded developer-defined metadata, never claim text or raw errors.
+        logger.warning("RELATED_CONTEXT outcome=scheduling_unavailable stage=%s error_type=%s",
+                       stage, type(exc).__name__)
 
 
 def enqueue_decision(decision_id):
