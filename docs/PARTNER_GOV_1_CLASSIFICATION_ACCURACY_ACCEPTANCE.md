@@ -58,24 +58,32 @@ These are **audit tooling tests**, not model-accuracy test results.
 - `docs/PARTNER_GOV_1_SUBJECT_DOMAIN_REVIEW_WORKSHEET.md`: AI-assisted editorial rubric and 32 proposed case outcomes, including five contested multi-domain cases and one suggested reconsideration of the SPORTS tag. **Do not use this for the first blind pass**.
 - The canonical JSON's `draft_expected` values and every `review.status="PENDING"` are deliberately unchanged; review material is not ground truth or `enforce` approval.
 
-## 2026-10-22 two-reviewer reconciliation checkpoint (consensus, not formal approval)
+## 2026-10-22 two-reviewer consensus: local approved references, NOT model accuracy
 
-The first reviewer and co-developer have reported substantive agreement on
-all 32 draft subject classifications, including **EDUCATION only** for
-`cross_school_sport`. The canonical fixture's *draft* label for that case
-has been updated without changing its `review.status="PENDING"`.
-Twenty-seven cases are directly aligned or explicitly clarified; **five**
-reviewer-2 entries still require confirmation of ID aliases, typographical
-code corrections, or an omitted `CLASSIFY` decision. Reviewer identities,
-approval notes and final human attestation are not yet supplied.
+Both human reviewers reportedly agreed on the final subject classifications
+for all **32 synthetic cases**, including **EDUCATION only** for
+`cross_school_sport`. Reviewer 1 directly approved the full set in chat;
+Reviewer 1 then relayed Reviewer 2's affirmative confirmation of the
+**five minor ID/code/omitted-decision normalizations** and full-set
+approval. This is honest **user-relayed co-reviewer provenance**, not a
+verified personal identity or independently authenticated signature.
 
-The exact five outstanding interpretations and two-reviewer sign-off protocol
-are documented in
+A **separate local evaluation file** named
+`PARTNER_GOV1_Approved_Reference_Corpus_2026_10_22.json` carries
+`review.status="APPROVED"` with descriptive composite reviewer-role
+identifiers and case-specific confirmation notes. The supporting
+`PARTNER_GOV1_Approval_Provenance_2026_10_22.md` discloses these limits.
+Both are intentionally **not committed**: preserve the source workbooks and
+identity/approval evidence privately. Details appear in
 `docs/PARTNER_GOV_1_HUMAN_REVIEW_SIGNOFF_2026_10_22.md`.
-Private reviewer workbooks and the proposed pending corpus are **not**
-committed as reviewer attestations. **Still 0 APPROVED; accuracy NOT SCORED;
-enforce NOT AUTHORIZED.** Do not confuse consensus on draft subjects with
-model agreement against independent ground truth.
+
+The **bundled canonical GitHub fixture remains 32 PENDING / 0 APPROVED**
+so the default command still reports NOT SCORED as a fail-closed baseline.
+The reviewed **local** corpus can now be used for **read-only descriptive
+model accuracy auditing**, once separately authorized, complete and
+unaltered model predictions are available. No measured model accuracy,
+independent identity attestation, real-world representativeness, or
+enforcement authorization is implied.
 
 ## Review protocol before producing a score
 
@@ -229,8 +237,11 @@ separate user authorization before any further provider requests.
 **Offline auditing infrastructure:** **PASSED** user-local focused suite (75 tests, 0 failures, 3.489 seconds), Django system check clean, migration check reported no changes; user also confirmed audit baseline `cases=32 approved=0 pending=32 domains=12 categories=8 NOT SCORED`. This pass validates audit tooling only, not model quality.
 
 **Actual automatic classification accuracy:** **NOT MEASURED**.
-The included 32 synthetic draft cases have zero reviewer-approved
-references, and no captured predictions have been provided.
+The default GitHub fixture remains 32 PENDING; a separately prepared,
+user-and-co-dev-approved (co-dev signoff user-relayed) **local** corpus now
+has 32 APPROVED synthetic reference labels for offline evaluation.
+No complete, unaltered real model prediction set or representative
+held-out real-claim accuracy study has yet been supplied.
 
 **PARTNER-GOV-1 `enforce` authorization:** **NOT APPROVED**.
 Before proposing a transition, require:
