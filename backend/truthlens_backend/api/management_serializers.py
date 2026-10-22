@@ -32,8 +32,17 @@ class ManagementOrganizationCreateSerializer(StrictFieldsSerializer):
     organization_type = serializers.ChoiceField(
         choices=Organization.OrganizationType.choices
     )
-    # Creation accepts institutional identity only. Trust defaults are set
-    # by the service and updated through a separate governed endpoint.
+    # Backward-compatible rollout: the currently deployed frontend still sends
+    # these safe defaults. The governance service rejects any non-default trust
+    # value, so old clients remain compatible without regaining trust authority.
+    verification_status = serializers.ChoiceField(
+        choices=Organization.VerificationStatus.choices,
+        default=Organization.VerificationStatus.UNVERIFIED,
+    )
+    partner_status = serializers.ChoiceField(
+        choices=Organization.PartnerStatus.choices,
+        default=Organization.PartnerStatus.NONE,
+    )
 
 
 class ManagementPlatformTrustUpdateSerializer(StrictFieldsSerializer):
