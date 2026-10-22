@@ -174,6 +174,7 @@ function EvidenceReviewContent({
    organizationName,
    canReviewEvidence,
    initialCaseId,
+   returnToInvestigationPath,
 }) {
    const initialCaseKey = initialCaseId ? String(initialCaseId) : null;
 
@@ -197,6 +198,7 @@ function EvidenceReviewContent({
    const [validationError, setValidationError] = useState("");
    const [mutation, setMutation] = useState(null);
    const [notice, setNotice] = useState("");
+   const [noticeCaseId, setNoticeCaseId] = useState(null);
    const [actionError, setActionError] = useState("");
    const [authorityError, setAuthorityError] = useState("");
 
@@ -209,6 +211,7 @@ function EvidenceReviewContent({
    const detailHeadingRef = useRef(null);
    const detailErrorRef = useRef(null);
    const actionErrorRef = useRef(null);
+   const localNoticeRef = useRef(null);
    const authorityErrorRef = useRef(null);
    const queueHeadingRef = useRef(null);
    const decisionTriggerRef = useRef(null);
@@ -487,6 +490,17 @@ function EvidenceReviewContent({
    }, [actionError, detail]);
 
    useEffect(() => {
+      if (
+         notice &&
+         noticeCaseId &&
+         detail?.id &&
+         String(noticeCaseId) === String(detail.id)
+      ) {
+         localNoticeRef.current?.focus();
+      }
+   }, [detail?.id, notice, noticeCaseId]);
+
+   useEffect(() => {
       if (!selectedCaseId && focusQueueAfterReturnRef.current) {
          focusQueueAfterReturnRef.current = false;
          queueHeadingRef.current?.focus();
@@ -636,6 +650,7 @@ function EvidenceReviewContent({
          requestDetailRefresh(caseId);
       } else {
          setNotice(`Case ${formatCaseReference(caseId)} changed before its decision completed.`);
+         setNoticeCaseId(caseId);
       }
    };
 
@@ -687,7 +702,7 @@ function EvidenceReviewContent({
          }
 
          if (selectedCaseIdRef.current === operation.caseId) {
-            focusDetailAfterMutationRef.current = true;
+            focusDetailAfterMutationRef.current = false;
             setDetail(updatedCase);
             setDetailError("");
             setDetailUnavailable(false);
@@ -701,6 +716,7 @@ function EvidenceReviewContent({
                operation.decision === "VERIFIED" ? "verified" : "rejected"
             }. Claim-level adjudication remains a separate decision.`,
          );
+         setNoticeCaseId(operation.caseId);
          requestQueueRefresh();
       } catch (error) {
          if (
@@ -847,7 +863,7 @@ function EvidenceReviewContent({
             </div>
          </div>
 
-         {notice && (
+         {notice && (!selectedCaseId || String(noticeCaseId) !== String(selectedCaseId)) && (
             <div className="evidence-notice" role="status" aria-live="polite">
                <Icons name="info" size={17} aria-hidden="true" />
                <span>{notice}</span>
@@ -1178,6 +1194,28 @@ function EvidenceReviewContent({
                               <p>Decide source suitability only. Adjudication determines the claim-level conclusion later.</p>
                            </div>
                         </div>
+
+                        {notice && String(noticeCaseId) === String(detail.id) && (
+                           <div
+                              className="evidence-local-outcome"
+                              ref={localNoticeRef}
+                              tabIndex="-1"
+                              role="status"
+                              aria-live="polite"
+                           >
+                              <Icons name="check-circle" size={18} aria-hidden="true" />
+                              <div>
+                                 <strong>Evidence review recorded</strong>
+                                 <span>{notice}</span>
+                                 {returnToInvestigationPath && (
+                                    <Link to={returnToInvestigationPath} className="evidence-return-investigation">
+                                       Return to investigation
+                                       <Icons name="arrow-right" size={13} aria-hidden="true" />
+                                    </Link>
+                                 )}
+                              </div>
+                           </div>
+                        )}
 
                         {!isActiveCase || evidence?.evidence_status !== "UNVERIFIED" ? (
                            <div className="evidence-readonly-state" role="status">
