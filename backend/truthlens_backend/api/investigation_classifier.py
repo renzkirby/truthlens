@@ -169,8 +169,27 @@ def classify_investigation_claim(claim_id):
     reason = "INSUFFICIENT_TEXT"
     if MIN_CLAIM_LENGTH <= len(text) <= MAX_CLAIM_LENGTH:
         try:
-            accepted = validate_model_suggestion(text, _query_classifier(text))
-            reason = "STRUCTURE_OR_EVIDENCE_UNSUPPORTED" if not accepted else ""
+            response = _query_classifier(text)
+            accepted = validate_model_suggestion(text, response)
+            if accepted:
+                reason = ""
+            elif (
+                isinstance(response, dict)
+                and response.get("decision") == "ABSTAIN"
+                and validate_classification_response(
+                    json.dumps(response, ensure_ascii=False), text,
+                )
+            ):
+                # A deliberate, valid abstention is not a provider outage or
+                # malformed response. Keep it separate for shadow analysis.
+                reason = "MODEL_ABSTAINED"
+            else:
+                reason = "STRUCTURE_OR_EVIDENCE_UNSUPPORTED"
+        except ValueError as exc:
+            if str(exc) == "INVALID_CLASSIFICATION_RESPONSE":
+                reason = "INVALID_CLASSIFICATION_RESPONSE"
+            else:
+                reason = "PROVIDER_UNAVAILABLE"
         except Exception:
             reason = "PROVIDER_UNAVAILABLE"
             logger.warning(
@@ -211,7 +230,7 @@ def classify_investigation_claim(claim_id):
 
         status = (
             InvestigationClassificationAssessment.Status.FAILED
-            if reason == "PROVIDER_UNAVAILABLE"
+            if reason in {"PROVIDER_UNAVAILABLE", "INVALID_CLASSIFICATION_RESPONSE"}
             else (
                 InvestigationClassificationAssessment.Status.ABSTAINED
                 if not accepted else (
