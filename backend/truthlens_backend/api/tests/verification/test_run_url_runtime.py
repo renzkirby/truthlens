@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -11,7 +12,7 @@ from api.verification.contracts import RawEvidence
 from api.verification.evidence_budget import LLMRequestBudgetExceededError
 from api.verification.evidence_assessment import EvidenceAssessment
 from api.verification.evidence_dossier import ReasoningEvidenceItem
-from api.services import ClaimGateError, LLMProviderUnavailableError
+from api.services import LLMInvalidFinalResponseError, ClaimGateError, LLMProviderUnavailableError
 
 
 class VerificationRunURLRuntimeTests(TestCase):
@@ -395,24 +396,31 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.bridge.assert_not_called()
         self.assess_evidence.assert_not_called()
 
-    def test_vault_substantive_verdict_completes_before_gfc(self):
+    def test_contextual_vault_candidate_continues_to_fresh_gfc(self):
         self.vault.return_value = {
-            "canonical_claim": "Verified claim.",
-            "verdict": "False",
-            "summary": "Verified summary.",
-            "sources": ["https://example.com/vault"],
+            "canonical_claim": "An unrelated earthquake claim.", "verdict": "UNVERIFIED",
+            "summary": "Unrelated Vault summary.", "sources": ["https://example.com/vault"],
         }
         self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
-        self.save_claim.assert_called_once_with(
-            self.claim.pk,
-            self.verdict,
-            "TruthLens Verified Vault",
-            "Verified summary.",
-            ["https://example.com/vault"],
+        self.bridge.assert_called_once()
+        self.evaluate_gfc.assert_not_called()
+        self.evaluate_persisted.assert_called_once_with(
+            self.cleaned["cleaned_claim"], "Persisted evidence context.", "NEUTRAL",
         )
-        self.bridge.assert_not_called()
+        self.save_claim.assert_called_once_with(
+            self.claim.pk, self.verdict, "Official Fact Check", self.cleaned_text,
+            ["https://example.com/fact-check"],
+            related_proposition=self.cleaned["cleaned_claim"],
+            related_candidate=self.vault.return_value,
+        )
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, self.verdict["verdict"])
+        self.assertEqual(self.claim.ai_sources, ["https://example.com/fact-check"])
+        self.assertEqual(self.claim.source_link, "https://example.com/fact-check")
+        self.assertEqual(self.claim.top_verdict_source, "https://example.com/fact-check")
+        self.assertIsNone(self.claim.final_verdict)
         self.retrieve_tavily.assert_not_called()
-        self.assess_evidence.assert_not_called()
+        self.assess_evidence.assert_called_once()
 
     def test_gfc_receives_active_running_run_and_completes(self):
         observed = []
@@ -449,6 +457,7 @@ class VerificationRunURLRuntimeTests(TestCase):
             "Official Fact Check",
             self.cleaned_text,
             ["https://example.com/fact-check"],
+            related_proposition=self.cleaned["cleaned_claim"], related_candidate=None,
         )
         self.retrieve_tavily.assert_not_called()
         self.assertEqual(VerificationEvidence.objects.count(), 0)
@@ -1370,3 +1379,60 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
         self.assertEqual(run.failure_stage, "evidence_budget")
         self.assertEqual(run.failure_code, "LLM_REQUEST_BUDGET_EXCEEDED")
         save_claim.assert_not_called()
+
+
+    def test_gfc_malformed_final_response_fails_without_overwriting_previous_result(self):
+        self.claim.ai_verdict = "FACT"
+        self.claim.consensus_score = 92
+        self.claim.final_verdict = "MISLEADING"
+        self.claim.save(update_fields=["ai_verdict", "consensus_score", "final_verdict"])
+        self.evaluate_persisted.side_effect = services.evaluate_claim_with_persisted_evidence
+        with patch("api.services.call_llm_with_fallback", return_value='{"partial":'), patch("api.tasks._save_claim") as save_claim:
+            with self.assertRaises(LLMInvalidFinalResponseError):
+                tasks.url_fact_check_process.run(self.url, self.claim.pk)
+        run = self.claim.verification_runs.latest("created_at")
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "final_evaluator")
+        self.assertEqual(run.failure_code, "LLM_INVALID_RESPONSE")
+        save_claim.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "FACT")
+        self.assertEqual(self.claim.consensus_score, 92)
+        self.assertEqual(self.claim.final_verdict, "MISLEADING")
+        self.assertTrue(VerificationEvidence.objects.filter(verification_run=run).exists())
+
+
+    def test_tavily_malformed_final_response_fails_without_overwriting_previous_result(self):
+        self.gfc_provider.search_with_payload.return_value = ({"claims": []}, [])
+        self.retrieve_tavily.side_effect = self._record_tavily_link
+        self.claim.ai_verdict = "FACT"
+        self.claim.consensus_score = 92
+        self.claim.final_verdict = "MISLEADING"
+        self.claim.save(update_fields=["ai_verdict", "consensus_score", "final_verdict"])
+        self.evaluate_persisted.side_effect = services.evaluate_claim_with_persisted_evidence
+        with patch("api.services.call_llm_with_fallback", return_value='{"partial":'), patch("api.tasks._save_claim") as save_claim:
+            with self.assertRaises(LLMInvalidFinalResponseError):
+                tasks.url_fact_check_process.run(self.url, self.claim.pk)
+        run = self.claim.verification_runs.latest("created_at")
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "final_evaluator")
+        self.assertEqual(run.failure_code, "LLM_INVALID_RESPONSE")
+        save_claim.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "FACT")
+        self.assertEqual(self.claim.consensus_score, 92)
+        self.assertEqual(self.claim.final_verdict, "MISLEADING")
+        self.assertTrue(VerificationEvidence.objects.filter(verification_run=run).exists())
+
+
+    def test_parsed_unverified_final_decision_remains_a_legitimate_abstention(self):
+        self.evaluate_persisted.side_effect = services.evaluate_claim_with_persisted_evidence
+        decision = dict(reasoning="Insufficient evidence", verdict="UNVERIFIED",
+                        summary="Unresolved", confidence_score=0, score_context="Insufficient")
+        with patch("api.services.call_llm_with_fallback", return_value=json.dumps(decision)):
+            tasks.url_fact_check_process.run(self.url, self.claim.pk)
+        run = self.claim.verification_runs.latest("created_at")
+        self.assertEqual(run.status, VerificationRun.Status.ABSTAINED)
+        self.assertIsNone(run.failure_code)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")

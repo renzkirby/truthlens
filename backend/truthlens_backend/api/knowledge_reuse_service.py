@@ -416,6 +416,10 @@ def record_related_claim_fact_check_reference(
             ):
                 return None
 
+        from .verification.relatedness import accepted_pair
+        if not accepted_pair(target_claim, publication, proposition=query_text):
+            return None
+
         reference, _created = ClaimFactCheckReference.objects.get_or_create(
             target_claim=target_claim,
             fact_check=publication,
@@ -504,6 +508,10 @@ def build_related_published_fact_check_payload(reference):
     ):
         return None
 
+    from .verification.relatedness import accepted_reference
+    if not accepted_reference(reference):
+        return None
+
     fact_check = reference.fact_check
     partner = fact_check.organization
     if (
@@ -542,6 +550,16 @@ def build_related_published_fact_check_payload(reference):
 
 
 def get_related_published_fact_check_payloads(claim, *, limit=3):
+    """Optional recommendations fail closed even when their store is unavailable."""
+    try:
+        with transaction.atomic():
+            return _get_related_published_fact_check_payloads(claim, limit=limit)
+    except Exception:
+        logger.warning("RELATED_CONTEXT outcome=serialization_unavailable")
+        return []
+
+
+def _get_related_published_fact_check_payloads(claim, *, limit=3):
     """Read durable IMAGE/URL provenance in chronology, without reuse or search."""
     if not isinstance(limit, int) or limit < 1:
         return []

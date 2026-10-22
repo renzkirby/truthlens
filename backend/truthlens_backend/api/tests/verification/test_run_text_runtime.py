@@ -1,8 +1,9 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import requests
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from api import services, tasks
 from api.models import (
@@ -17,7 +18,7 @@ from api.verification.evidence_assessment import EvidenceAssessment
 from api.verification.contracts import RawEvidence
 from api.verification.evidence_dossier import ReasoningEvidenceItem
 from api.verification import runs
-from api.services import LLMProviderUnavailableError
+from api.services import LLMInvalidFinalResponseError, LLMProviderUnavailableError
 from api.verification.telemetry import record_pipeline_stage
 
 
@@ -469,6 +470,7 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.save_claim.assert_called_once_with(
             self.claim.id, self.verdict, "Official Fact Check",
             self.cleaned["cleaned_claim"], ["https://example.com/fact-check"],
+            related_proposition=self.cleaned["cleaned_claim"], related_candidate=None,
         )
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "FAKE")
@@ -1205,3 +1207,88 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         self.assertEqual(run.failure_stage, "evidence_budget")
         self.assertEqual(run.failure_code, "LLM_REQUEST_BUDGET_EXCEEDED")
         save_claim.assert_not_called()
+
+
+    def test_gfc_malformed_final_response_fails_without_overwriting_previous_result(self):
+        self.claim.ai_verdict = "FACT"
+        self.claim.consensus_score = 92
+        self.claim.final_verdict = "MISLEADING"
+        self.claim.save(update_fields=["ai_verdict", "consensus_score", "final_verdict"])
+        self.evaluate_persisted.side_effect = services.evaluate_claim_with_persisted_evidence
+        with patch("api.services.call_llm_with_fallback", return_value='{"partial":'), patch("api.tasks._save_claim") as save_claim:
+            with self.assertRaises(LLMInvalidFinalResponseError):
+                tasks.execute_core_text_pipeline(self.claim.context_text, self.claim.pk)
+        run = self.claim.verification_runs.latest("created_at")
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "final_evaluator")
+        self.assertEqual(run.failure_code, "LLM_INVALID_RESPONSE")
+        save_claim.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "FACT")
+        self.assertEqual(self.claim.consensus_score, 92)
+        self.assertEqual(self.claim.final_verdict, "MISLEADING")
+        self.assertTrue(VerificationEvidence.objects.filter(verification_run=run).exists())
+
+
+    def test_tavily_malformed_final_response_fails_without_overwriting_previous_result(self):
+        self.provider.search_with_payload.return_value = ({"claims": []}, [])
+        self.retrieve_tavily.side_effect = self._record_links_at_fallback
+        self.claim.ai_verdict = "FACT"
+        self.claim.consensus_score = 92
+        self.claim.final_verdict = "MISLEADING"
+        self.claim.save(update_fields=["ai_verdict", "consensus_score", "final_verdict"])
+        self.evaluate_persisted.side_effect = services.evaluate_claim_with_persisted_evidence
+        with patch("api.services.call_llm_with_fallback", return_value='{"partial":'), patch("api.tasks._save_claim") as save_claim:
+            with self.assertRaises(LLMInvalidFinalResponseError):
+                tasks.execute_core_text_pipeline(self.claim.context_text, self.claim.pk)
+        run = self.claim.verification_runs.latest("created_at")
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "final_evaluator")
+        self.assertEqual(run.failure_code, "LLM_INVALID_RESPONSE")
+        save_claim.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "FACT")
+        self.assertEqual(self.claim.consensus_score, 92)
+        self.assertEqual(self.claim.final_verdict, "MISLEADING")
+        self.assertTrue(VerificationEvidence.objects.filter(verification_run=run).exists())
+
+
+    def test_image_core_invalid_final_response_preserves_previous_result(self):
+        self.claim.claim_type = Claim.ClaimType.IMAGE
+        self.claim.save(update_fields=["claim_type"])
+        self.test_gfc_malformed_final_response_fails_without_overwriting_previous_result()
+
+
+    def test_parsed_unverified_final_decision_remains_a_legitimate_abstention(self):
+        self.evaluate_persisted.side_effect = services.evaluate_claim_with_persisted_evidence
+        decision = dict(reasoning="Insufficient evidence", verdict="UNVERIFIED",
+                        summary="Unresolved", confidence_score=0, score_context="Insufficient")
+        with patch("api.services.call_llm_with_fallback", return_value=json.dumps(decision)):
+            tasks.execute_core_text_pipeline(self.claim.context_text, self.claim.pk)
+        run = self.claim.verification_runs.latest("created_at")
+        self.assertEqual(run.status, VerificationRun.Status.ABSTAINED)
+        self.assertIsNone(run.failure_code)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
+
+
+class AssessmentOutcomeDiagnosticTests(SimpleTestCase):
+    def test_outcomes_distinguish_unavailable_protected_and_error_without_extra_reads(self):
+        items = [SimpleNamespace(stance="UNKNOWN", relevance_score=None, directness_score=None,
+                                 evidence_link_id=i) for i in range(4)]
+        available = EvidenceAssessment("SUPPORTS", 0.9, 0.8)
+        unavailable = EvidenceAssessment("UNKNOWN", None, None)
+        outcomes = [SimpleNamespace(persisted=True, error=None),
+                    SimpleNamespace(persisted=False, error=None),
+                    SimpleNamespace(persisted=False, error=None),
+                    SimpleNamespace(persisted=False, error=ValueError("simulated storage error"))]
+        with patch("api.tasks.assess_reasoning_evidence_batch_against_claim",
+                   return_value=[available, unavailable, available, available]), patch(
+                       "api.tasks.persist_evidence_assessments_batch", return_value=outcomes,
+                   ), patch("api.tasks._log_stage"), self.assertLogs("api.tasks", level="INFO") as logs:
+            tasks._assess_and_persist_reasoning_evidence(
+                "PRIVATE CLAIM", [SimpleNamespace(evidence=items)], "run", stage_prefix="gfc",
+            )
+        diagnostic = next(line for line in logs.output if "EVIDENCE_ASSESSMENT_OUTCOMES" in line)
+        self.assertIn("persisted=1 unavailable=1 already_assessed=1 persistence_error=1", diagnostic)
+        self.assertNotIn("PRIVATE CLAIM", diagnostic)

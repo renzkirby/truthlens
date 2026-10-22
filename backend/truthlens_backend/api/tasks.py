@@ -19,6 +19,7 @@ from .ocr_service import OCRProviderUnavailableError, extract_text_from_image
 from .services import (
     ClaimGateError,
     LLMProviderUnavailableError,
+    LLMInvalidFinalResponseError,
     llm_provider_scope,
     build_persisted_evidence_prompt,
     recent_groq_tokens,
@@ -140,49 +141,15 @@ def _resolve_equivalent_published_claim(claim, cleaned_claim, vault_match):
 
 
 def _record_related_published_claim(claim, query_text, vault_match):
-    """Best-effort provenance after the authority gate has declined resolution."""
+    """Schedule optional validation only after a primary result has been saved."""
     if claim is None or not vault_match:
         return
     try:
-        # Isolate database failures with a savepoint, including failures before
-        # the service is entered, so the eventual AI result can still be saved.
+        from .verification.relatedness import schedule_relatedness
         with transaction.atomic():
-            publication = OfficialFactCheck.objects.filter(
-                pk=vault_match.get("fact_check_id"),
-                publication_status=OfficialFactCheck.PublicationStatus.PUBLISHED,
-            ).first()
-            if publication is None:
-                return
-            method = vault_match.get("match_method")
-            if method == KnowledgeReuseEvent.MatchMethod.EXACT_TEXT:
-                normalized_query = " ".join(query_text.split()).casefold()
-                canonical = " ".join((publication.canonical_claim or "").split()).casefold()
-                headline = " ".join((publication.headline or "").split()).casefold()
-                if normalized_query == canonical:
-                    method = ClaimFactCheckReference.MatchMethod.EXACT_CANONICAL
-                elif normalized_query == headline:
-                    method = ClaimFactCheckReference.MatchMethod.EXACT_HEADLINE
-                else:
-                    return
-            elif method == KnowledgeReuseEvent.MatchMethod.SEMANTIC:
-                method = ClaimFactCheckReference.MatchMethod.SEMANTIC
-            elif method == KnowledgeReuseEvent.MatchMethod.FULL_TEXT:
-                method = ClaimFactCheckReference.MatchMethod.FULL_TEXT
-            else:
-                return
-            record_related_claim_fact_check_reference(
-                target_claim=claim,
-                fact_check=publication,
-                query_text=query_text,
-                match_method=method,
-                similarity_score=vault_match.get("similarity_score"),
-            )
+            schedule_relatedness(claim.pk, query_text, vault_match, expected_updated_at=claim.last_updated)
     except Exception:
-        logger.warning(
-            "Failed to record related publication provenance for claim %s.",
-            claim.pk,
-            exc_info=True,
-        )
+        logger.warning("RELATED_CONTEXT outcome=scheduling_unavailable")
 
 
 def _reuse_second_chance_ai_analysis(matched_claim, claim_id):
@@ -799,6 +766,24 @@ def _assess_and_persist_reasoning_evidence(
             )
         return
 
+    # Classify the existing outcomes only; no extra reads or persistence changes.
+    counts = {"persisted": 0, "unavailable": 0, "already_assessed": 0, "persistence_error": 0}
+    for assessment, outcome in zip(assessments, persistence_outcomes):
+        if outcome.error is not None:
+            category = "persistence_error"
+        elif outcome.persisted:
+            category = "persisted"
+        elif (assessment.stance == VerificationEvidence.Stance.UNKNOWN
+              and assessment.relevance_score is None and assessment.directness_score is None):
+            category = "unavailable"
+        else:
+            category = "already_assessed"
+        counts[category] += 1
+    logger.info(
+        "EVIDENCE_ASSESSMENT_OUTCOMES persisted=%s unavailable=%s already_assessed=%s persistence_error=%s",
+        counts["persisted"], counts["unavailable"], counts["already_assessed"], counts["persistence_error"],
+    )
+
     for evidence_item, outcome in zip(eligible_items, persistence_outcomes):
         if outcome.error is not None:
             _log_stage(
@@ -1100,11 +1085,11 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     ):
                         published_resolution = True
                         return
-                    _record_related_published_claim(
-                        target_claim, cleaned_claim, vault_match
-                    )
+                    # Optional relatedness is scheduled after primary persistence.
 
-                if has_second_chance_match:
+                # A rejected Vault candidate must continue to fresh evidence,
+                # rather than resolve indirectly through a prior AI-only result.
+                if has_second_chance_match and not vault_match:
                     selected_verdict = _reuse_second_chance_ai_analysis(
                         matched_claim,
                         claim_id,
@@ -1133,8 +1118,8 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 )
                 return
 
-            # Preserve historical TEXT ordering. IMAGE already performed this
-            # Vault lookup above and reuses the same payload for AI context.
+            # Preserve historical TEXT behavior. IMAGE already tried publication
+            # authority; any remaining Vault match is related context only.
             if not is_image_claim:
                 vault_started_at = time.perf_counter()
                 vault_match = search_official_vault(
@@ -1142,7 +1127,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     target_claim=target_claim,
                 )
 
-            if vault_match:
+            if vault_match and not is_image_claim:
                 logger.info("Vault match found for claim %s!", claim_id)
 
                 # We found a highly similar past rumor. Now we ask Gemini to evaluate the NEW claim
@@ -1309,6 +1294,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         "Official Fact Check",
                         cleaned_claim,
                         source_urls,
+                        related_proposition=cleaned_claim, related_candidate=vault_match,
                     )
                     _log_stage(
                         claim_id,
@@ -1462,6 +1448,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     "Live Web Search",
                     cleaned_claim,
                     source_urls,
+                    related_proposition=cleaned_claim, related_candidate=vault_match,
                 )
                 _log_stage(
                     claim_id,
@@ -1561,6 +1548,13 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             failure_message=(
                                 f"Claim persistence failed for claim {claim_id}."
                             ),
+                        )
+                    elif isinstance(pipeline_error, LLMInvalidFinalResponseError):
+                        fail_verification_run(
+                            run,
+                            failure_stage="final_evaluator",
+                            failure_code="LLM_INVALID_RESPONSE",
+                            failure_message=str(pipeline_error),
                         )
                     elif isinstance(pipeline_error, LLMProviderUnavailableError):
                         fail_verification_run(
@@ -1699,7 +1693,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
             ):
                 published_resolution = True
                 return
-            _record_related_published_claim(target_claim, cleaned_claim, vault_match)
+            # Optional relatedness is scheduled after primary persistence.
 
         if article_stance == "SATIRE":
             _save_claim(
@@ -1718,42 +1712,9 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
             _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
             return
 
-        if vault_match:
-            # Reuse the already-retrieved Vault payload for AI evaluation.
-            vault_eval_started_at = time.perf_counter()
-            ai_verdict = evaluate_url_claim_with_gfc(
-                cleaned_claim,
-                {
-                    "claims": [
-                        {
-                            "text": vault_match["canonical_claim"],
-                            "claimReview": [
-                                {
-                                    "textualRating": vault_match["verdict"],
-                                    "publisher": {"name": "TruthLens Official Vault"},
-                                }
-                            ],
-                        }
-                    ]
-                },
-                article_stance,
-            )
-
-            _save_claim(
-                claim_id,
-                ai_verdict,
-                "TruthLens Verified Vault",
-                vault_match["summary"],
-                vault_match.get("sources", []),
-            )
-
-            _log_stage(claim_id, "url_vault_search_success", vault_started_at)
-            outcome = "completed_vault"
-            selected_verdict = (
-                ai_verdict.get("verdict") if isinstance(ai_verdict, dict) else None
-            )
-            _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
-            return
+        # Remaining Vault candidates have no authority over this proposition.
+        # Their related references survive, but only fresh provider evidence may
+        # enter automated evaluation or supply this attempt's primary AI sources.
 
         # Step 3 — Try GFC first, return early if relevant
         gfc_started_at = time.perf_counter()
@@ -1888,6 +1849,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     "Official Fact Check",
                     cleaned_text,
                     source_urls,
+                    related_proposition=cleaned_claim, related_candidate=vault_match,
                 )
                 _log_stage(
                     claim_id,
@@ -2064,7 +2026,8 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                 )
             save_started_at = time.perf_counter()
             _save_claim(
-                claim_id, ai_verdict, "Live Web Search", cleaned_text, source_urls
+                claim_id, ai_verdict, "Live Web Search", cleaned_text, source_urls,
+                related_proposition=cleaned_claim, related_candidate=vault_match,
             )
             _log_stage(
                 claim_id, "save_claim", save_started_at, source_type="Live Web Search"
@@ -2117,6 +2080,13 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                                 f"Claim persistence failed for claim {claim_id}."
                             ),
                         )
+                    elif isinstance(pipeline_error, LLMInvalidFinalResponseError):
+                        fail_verification_run(
+                            run,
+                            failure_stage="final_evaluator",
+                            failure_code="LLM_INVALID_RESPONSE",
+                            failure_message=str(pipeline_error),
+                        )
                     elif isinstance(pipeline_error, LLMProviderUnavailableError):
                         fail_verification_run(
                             run,
@@ -2157,7 +2127,8 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                 )
 
 
-def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
+def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None, *,
+                related_proposition=None, related_candidate=None):
     """Save AI analysis output to the Claim record without setting final moderator verdict."""
     from .claim_matching import compute_fingerprint
 
@@ -2231,6 +2202,10 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
         claim.consensus_score = confidence
         claim.source_type = source_type
         claim.context_text = context_text
+        # A fresh primary result invalidates any previous optional binding.
+        if claim.claim_type in {Claim.ClaimType.IMAGE, Claim.ClaimType.URL}:
+            claim.relatedness_context = {}
+            claim.relatedness_decision = None
         claim.source_link = top_url or None
         claim.top_verdict_source = top_url or None
         claim.ai_sources = source_urls
@@ -2276,6 +2251,8 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
                 "claim_fingerprint",
                 "claim_embedding",
                 "last_updated",
+                "relatedness_context",
+                "relatedness_decision",
             ]
         )
         logger.info(
@@ -2284,6 +2261,8 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
             claim.ai_verdict,
             claim.claim_fingerprint,
         )
+        if related_proposition is not None and claim.claim_type in {"IMAGE", "URL"}:
+            _record_related_published_claim(claim, related_proposition, related_candidate)
         return claim
     except ClaimPersistenceError:
         raise
@@ -2292,6 +2271,13 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
         raise ClaimPersistenceError(
             f"Claim persistence failed for claim {claim_id}."
         ) from exc
+
+
+@shared_task(soft_time_limit=30, time_limit=35, max_retries=0)
+def validate_related_fact_check(decision_id):
+    """Optional one-shot classification; never retries or alters a primary result."""
+    from .verification.relatedness import process_decision
+    process_decision(decision_id)
 
 
 @shared_task

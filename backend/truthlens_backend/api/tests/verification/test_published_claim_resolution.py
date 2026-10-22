@@ -705,6 +705,12 @@ class EquivalentReferencePersistenceTests(PublicationResolutionFixture):
 
 
 class RelatedReferencePersistenceTests(PublicationResolutionFixture):
+    def setUp(self):
+        super().setUp()
+        # These tests isolate first-reference persistence after eligibility.
+        # Real decision eligibility is exercised in test_related_fact_check_eligibility.
+        self.enterContext(patch("api.verification.relatedness.accepted_pair", return_value=True))
+
     def related_reference(self, **overrides):
         values = {
             "target_claim": self.target,
@@ -1303,6 +1309,8 @@ class PublishedReferenceResultTests(PublicationResolutionFixture):
 class RelatedPublicationSurfacingTests(PublicationResolutionFixture):
     def setUp(self):
         super().setUp()
+        # Preserve independent public-access/order tests with accepted eligibility.
+        self.enterContext(patch("api.verification.relatedness.accepted_reference", return_value=True))
         self.organization.public_profile_enabled = True
         self.organization.verification_status = Organization.VerificationStatus.VERIFIED
         self.organization.partner_status = Organization.PartnerStatus.ACTIVE
@@ -1614,6 +1622,10 @@ class RelatedPublicationSurfacingTests(PublicationResolutionFixture):
 class PublishedClaimPipelineTests(PublicationResolutionFixture):
     def setUp(self):
         super().setUp()
+        from api.verification.relatedness import schedule_relatedness
+        self.related_schedule = self._patch(
+            "api.verification.relatedness.schedule_relatedness", wraps=schedule_relatedness,
+        )
         self.cleaned = {
             "cleaned_claim": self.canonical,
             "search_query": "vaccines microchips",
@@ -1770,14 +1782,14 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         )
 
     def assert_related_context(self, method):
-        reference = self.target.fact_check_references.get()
-        self.assertEqual(reference.relationship_kind, "RELATED")
-        self.assertEqual(reference.match_method, method)
-        self.assertEqual(reference.fact_check_id, self.publication.pk)
-        self.assertEqual(
-            reference.query_fingerprint,
-            build_query_fingerprint(self.cleaned["cleaned_claim"]),
-        )
+        # Retrieval alone no longer creates a recommendation. The pipeline only
+        # hands the actual cleaned proposition to the optional post-save service.
+        self.related_schedule.assert_called_once()
+        self.assertEqual(self.related_schedule.call_args.args[:2],
+                         (self.target.pk, self.cleaned["cleaned_claim"]))
+        self.assertEqual(self.related_schedule.call_args.args[2]["fact_check_id"],
+                         str(self.publication.pk))
+        self.assertFalse(self.target.fact_check_references.filter(relationship_kind="RELATED").exists())
         self.assertFalse(
             self.target.fact_check_references.filter(
                 relationship_kind="AUTHORITATIVE"
@@ -1787,6 +1799,19 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
 
     def assert_ai_path(self, evaluator, *, related_method=None):
         evaluator.assert_called_once()
+        if evaluator is self.persisted_eval:
+            self.gfc_retrieval.assert_called_once()
+            self.image_gfc.assert_not_called()
+            self.url_gfc.assert_not_called()
+            self.persisted_eval.assert_called_once_with(
+                self.cleaned["cleaned_claim"], "Persisted evidence context",
+                self.cleaned["article_stance"],
+            )
+            self.assertNotEqual(self.save_claim.call_args.args[2], "TruthLens Verified Vault")
+            self.assertEqual(self.save_claim.call_args.args[3],
+                             "Clean article text" if self.target.claim_type == Claim.ClaimType.URL
+                             else self.cleaned["cleaned_claim"])
+            self.assertEqual(self.save_claim.call_args.args[4], ["https://external.example/fact-check"])
         self.vault.assert_called_once_with(
             self.cleaned["cleaned_claim"], target_claim=self.target
         )
@@ -1833,7 +1858,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.image()
 
         self.clean_ocr.assert_called_once_with(self.canonical)
-        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
+        self.assert_ai_path(self.persisted_eval, related_method="SEMANTIC")
 
     def test_image_exact_canonical_bypasses_evaluators_and_completes_run(self):
         self.image()
@@ -1913,19 +1938,19 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
 
         self.image()
 
-        self.assert_ai_path(self.image_gfc, related_method="EXACT_CANONICAL")
+        self.assert_ai_path(self.persisted_eval, related_method="EXACT_CANONICAL")
 
-    def test_image_semantic_match_retains_existing_ai_vault_path(self):
+    def test_image_semantic_match_continues_fresh_evidence(self):
         self.semantic_context()
         self.image()
-        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
+        self.assert_ai_path(self.persisted_eval, related_method="SEMANTIC")
 
-    def test_url_semantic_match_retains_existing_ai_vault_path(self):
+    def test_url_semantic_match_continues_fresh_evidence(self):
         self.semantic_context()
         self.url()
-        self.assert_ai_path(self.url_gfc, related_method="SEMANTIC")
+        self.assert_ai_path(self.persisted_eval, related_method="SEMANTIC")
 
-    def test_image_headline_exact_retains_ai_evaluation(self):
+    def test_image_headline_exact_continues_fresh_evidence(self):
         self.cleaned["cleaned_claim"] = self.publication.headline
         self.vault.return_value = build_published_fact_check_payload(
             PublishedFactCheckMatch(
@@ -1935,9 +1960,9 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             )
         )
         self.image()
-        self.assert_ai_path(self.image_gfc, related_method="EXACT_HEADLINE")
+        self.assert_ai_path(self.persisted_eval, related_method="EXACT_HEADLINE")
 
-    def test_image_full_text_match_retains_ai_evaluation(self):
+    def test_image_full_text_match_continues_fresh_evaluation(self):
         self.cleaned["cleaned_claim"] = "vaccines tracking microchips"
         self.vault.return_value = build_published_fact_check_payload(
             PublishedFactCheckMatch(
@@ -1947,7 +1972,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             )
         )
         self.image()
-        self.assert_ai_path(self.image_gfc, related_method="FULL_TEXT")
+        self.assert_ai_path(self.persisted_eval, related_method="FULL_TEXT")
 
     def test_url_nonexact_without_vault_retains_gfc_evidence_evaluator(self):
         self.cleaned["cleaned_claim"] = "An unrelated public factual claim."
@@ -1985,25 +2010,24 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.assertEqual(run.failure_message, str(error))
         self.assert_no_target_verdicts()
         self.assertIsNone(self.target.consensus_score)
-        if related_method is None:
-            self.assertFalse(self.target.fact_check_references.exists())
-        else:
-            self.assert_related_context(related_method)
+        self.assertFalse(self.target.fact_check_references.exists())
+        self.related_schedule.assert_not_called()
         self.save_claim.assert_not_called()
         self.tavily_retrieval.assert_not_called()
 
     def test_image_nonexact_provider_exhaustion_preserves_failure_integrity(self):
         self.semantic_context()
-        self.image_gfc.side_effect = services.evaluate_image_claim_with_gfc
         error = LLMProviderUnavailableError(
             "No configured LLM provider successfully completed this request."
         )
-        self.llm.side_effect = error
+        self.persisted_eval.side_effect = error
         with self.assertRaises(LLMProviderUnavailableError) as raised:
             self.image()
         self.assertIs(raised.exception, error)
-        # Context retrieval was already recorded before the final AI evaluator
-        # exhausted its providers; provenance remains without any verdict.
+        self.gfc_retrieval.assert_called_once()
+        self.image_gfc.assert_not_called()
+        # Retrieval may be recorded in analytics; recommendations wait for a
+        # successfully persisted primary result and separate validation.
         self.assert_provider_failure_integrity(error, related_method="SEMANTIC")
 
     def test_url_nonexact_provider_exhaustion_preserves_failure_integrity(self):
@@ -2203,26 +2227,17 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.assertIsNone(self.target.ai_summary)
         self.assertIsNone(self.target.score_context)
 
-    def test_image_non_equivalent_candidate_preserves_second_chance_ai_cache(self):
+    def test_image_non_equivalent_candidate_continues_fresh_before_ai_only_cache(self):
         self.equivalent_context(equivalent=False)
         cached = self.cached_ai_claim(verdict="MISLEADING")
         self.find_matching_claim.return_value = cached
 
         self.image()
 
-        self.target.refresh_from_db()
-        self.assertEqual(self.target.ai_verdict, cached.ai_verdict)
-        self.assertEqual(self.target.ai_summary, cached.ai_summary)
-        self.assertEqual(
-            self.target.score_context,
-            "This result was matched from a prior analysis of the same claim.",
-        )
-        self.assert_related_context("SEMANTIC")
-        self.vault.assert_called_once_with(
-            self.cleaned["cleaned_claim"], target_claim=self.target
-        )
+        self.assert_ai_path(self.persisted_eval, related_method="SEMANTIC")
+        self.assertNotEqual(self.target.ai_summary, cached.ai_summary)
+        self.assertNotEqual(self.target.ai_sources, cached.ai_sources)
         self.llm.assert_called_once()
-        self.image_gfc.assert_not_called()
 
     def test_image_equivalent_candidate_beats_satire_shortcut(self):
         self.equivalent_context()
@@ -2241,12 +2256,22 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.target.refresh_from_db()
         self.assertEqual(self.target.ai_verdict, "SATIRE")
         self.assertEqual(self.target.source_type, "Satire Detection")
-        self.assert_related_context("SEMANTIC")
+        # The satire shortcut saves its primary result without optional context work.
+        self.related_schedule.assert_not_called()
+        self.assertFalse(self.target.fact_check_references.exists())
+        self.assertEqual(self.target.consensus_score, 99)
+        self.assertIsNone(self.target.final_verdict)
+        self.assertEqual(self.target.context_text, self.cleaned["cleaned_claim"])
+        self.assertEqual(self.target.ai_sources, [])
+        self.assertEqual(self.target.verification_runs.get().status, VerificationRun.Status.COMPLETED)
         self.vault.assert_called_once_with(
             self.cleaned["cleaned_claim"], target_claim=self.target
         )
         self.llm.assert_called_once()
         self.image_gfc.assert_not_called()
+        self.persisted_eval.assert_not_called()
+        self.gfc_retrieval.assert_not_called()
+        self.tavily_retrieval.assert_not_called()
 
     def test_url_equivalent_candidate_beats_satire_shortcut(self):
         self.equivalent_context()
@@ -2265,12 +2290,21 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.target.refresh_from_db()
         self.assertEqual(self.target.ai_verdict, "SATIRE")
         self.assertEqual(self.target.source_type, "Satire Detection")
-        self.assert_related_context("SEMANTIC")
+        self.related_schedule.assert_not_called()
+        self.assertFalse(self.target.fact_check_references.exists())
+        self.assertEqual(self.target.consensus_score, 99)
+        self.assertIsNone(self.target.final_verdict)
+        self.assertEqual(self.target.context_text, self.cleaned["cleaned_claim"])
+        self.assertEqual(self.target.ai_sources, [self.target.url_link])
+        self.assertEqual(self.target.verification_runs.get().status, VerificationRun.Status.COMPLETED)
         self.vault.assert_called_once_with(
             self.cleaned["cleaned_claim"], target_claim=self.target
         )
         self.llm.assert_called_once()
         self.url_gfc.assert_not_called()
+        self.persisted_eval.assert_not_called()
+        self.gfc_retrieval.assert_not_called()
+        self.tavily_retrieval.assert_not_called()
 
     def test_multiple_equivalent_vault_candidates_fall_through_without_authority(self):
         self.equivalent_context()
@@ -2301,10 +2335,10 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
 
         self.image()
 
-        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
+        self.assert_ai_path(self.persisted_eval, related_method="SEMANTIC")
         self.assertEqual(self.llm.call_count, 2)
 
-    def test_image_complete_partial_conflict_keeps_vault_ai_evaluator(self):
+    def test_image_complete_partial_conflict_continues_fresh_evidence(self):
         canonical = "Hoshi suffered a complete ACL tear during rehearsal."
         OfficialFactCheck.objects.filter(pk=self.publication.pk).update(
             canonical_claim=canonical
@@ -2315,14 +2349,14 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             "Hoshi suffered a partial ACL tear during rehearsal."
         )
         self.image()
-        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
+        self.assert_ai_path(self.persisted_eval, related_method="SEMANTIC")
         self.llm.assert_called_once()
         self.assertEqual(
             json.loads(self.llm.call_args.args[1])["published_canonical_claim"],
             canonical,
         )
 
-    def test_image_underspecified_related_candidate_keeps_vault_ai_evaluator(self):
+    def test_image_underspecified_related_candidate_continues_fresh_evidence(self):
         canonical = "Hoshi suffered a complete ACL tear during rehearsal."
         OfficialFactCheck.objects.filter(pk=self.publication.pk).update(
             canonical_claim=canonical
@@ -2331,20 +2365,20 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.equivalent_context(equivalent=False)
         self.cleaned["cleaned_claim"] = "Hoshi injured his knee during rehearsal."
         self.image()
-        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
+        self.assert_ai_path(self.persisted_eval, related_method="SEMANTIC")
         self.llm.assert_called_once()
 
-    def test_url_non_equivalent_candidate_keeps_existing_vault_ai_path(self):
+    def test_url_non_equivalent_candidate_continues_fresh_evidence(self):
         self.equivalent_context(equivalent=False)
         self.url()
-        self.assert_ai_path(self.url_gfc, related_method="SEMANTIC")
+        self.assert_ai_path(self.persisted_eval, related_method="SEMANTIC")
         self.llm.assert_called_once()
 
-    def test_image_invalid_equivalence_output_keeps_existing_ai_path(self):
+    def test_image_invalid_equivalence_output_continues_fresh_evidence(self):
         self.equivalent_context()
         self.llm.return_value = '{"equivalent": true}'
         self.image()
-        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
+        self.assert_ai_path(self.persisted_eval, related_method="SEMANTIC")
 
     def test_image_equivalence_provider_exhaustion_has_no_authority_or_verdict_copy(
         self,
@@ -2392,24 +2426,25 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.vault.side_effect = services.search_official_vault
 
         def evaluate_after_provenance(*args):
-            # Both records must exist before AI evaluation, with no copied verdict.
+            # Retrieval analytics precede AI evaluation; optional recommendations do not.
             event = KnowledgeReuseEvent.objects.get(target_claim=self.target)
             self.assertEqual(event.fact_check_id, self.publication.pk)
             self.assertEqual(event.reuse_type, "VERIFICATION_CONTEXT")
             self.assertEqual(event.match_method, "SEMANTIC")
             self.assertEqual(event.metadata, {"source": "KNOWLEDGE_VAULT"})
-            self.assert_related_context("SEMANTIC")
+            self.assertFalse(self.target.fact_check_references.exists())
+            self.related_schedule.assert_not_called()
             self.assert_no_target_verdicts()
             self.llm.assert_called_once()
             return self.ai_result
 
-        self.image_gfc.side_effect = evaluate_after_provenance
+        self.persisted_eval.side_effect = evaluate_after_provenance
         with patch(
             "api.knowledge_reuse_service.find_published_fact_check_match",
             return_value=candidate,
         ):
             self.image()
-        self.assert_ai_path(self.image_gfc, related_method="SEMANTIC")
+        self.assert_ai_path(self.persisted_eval, related_method="SEMANTIC")
         self.assertEqual(
             KnowledgeReuseEvent.objects.filter(target_claim=self.target).count(), 1
         )
@@ -2417,9 +2452,9 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
     def test_non_equivalent_image_full_text_context_creates_related_full_text(self):
         self.equivalent_context(method="FULL_TEXT", equivalent=False)
         self.image()
-        self.assert_ai_path(self.image_gfc, related_method="FULL_TEXT")
+        self.assert_ai_path(self.persisted_eval, related_method="FULL_TEXT")
         self.llm.assert_called_once()
-        self.assertIsNone(self.target.fact_check_references.get().similarity_score)
+        self.assertIsNone(self.related_schedule.call_args.args[2]["similarity_score"])
 
     def test_non_equivalent_image_headline_context_creates_related_headline(self):
         self.equivalent_context(method="EXACT_TEXT", equivalent=False)
@@ -2428,27 +2463,27 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.vault.return_value["canonical_claim"] = self.cleaned["cleaned_claim"]
         self.vault.return_value["headline"] = "A stale unrelated headline."
         self.image()
-        self.assert_ai_path(self.image_gfc, related_method="EXACT_HEADLINE")
+        self.assert_ai_path(self.persisted_eval, related_method="EXACT_HEADLINE")
         self.llm.assert_called_once()
 
     def test_non_equivalent_url_full_text_context_creates_related_full_text(self):
         self.equivalent_context(method="FULL_TEXT", equivalent=False)
         self.url()
-        self.assert_ai_path(self.url_gfc, related_method="FULL_TEXT")
+        self.assert_ai_path(self.persisted_eval, related_method="FULL_TEXT")
         self.llm.assert_called_once()
 
     def test_non_equivalent_url_headline_context_creates_related_headline(self):
         self.equivalent_context(method="EXACT_TEXT", equivalent=False)
         self.cleaned["cleaned_claim"] = self.publication.headline
         self.url()
-        self.assert_ai_path(self.url_gfc, related_method="EXACT_HEADLINE")
+        self.assert_ai_path(self.persisted_eval, related_method="EXACT_HEADLINE")
         self.llm.assert_called_once()
 
     def test_stale_exact_text_candidate_fails_closed_without_affecting_ai(self):
         self.equivalent_context(method="EXACT_TEXT", equivalent=False)
         # Neither the current canonical claim nor current headline matches.
         self.image()
-        self.assert_ai_path(self.image_gfc)
+        self.assert_ai_path(self.persisted_eval)
         self.llm.assert_called_once()
 
     def test_archived_related_candidate_is_not_recorded(self):
@@ -2457,41 +2492,41 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             publication_status="ARCHIVED"
         )
         self.image()
-        self.assert_ai_path(self.image_gfc)
+        self.assert_ai_path(self.persisted_eval)
 
     def assert_related_operational_failure_continues(self, process, evaluator):
         self.equivalent_context(equivalent=False)
         with patch(
-            "api.tasks.record_related_claim_fact_check_reference",
+            "api.verification.relatedness.schedule_relatedness",
             side_effect=OperationalError("Provenance storage unavailable"),
         ) as recorder, self.assertLogs("api.tasks", level="WARNING") as logs:
             process()
         recorder.assert_called_once()
-        self.assertIn("related publication provenance", " ".join(logs.output))
+        self.assertIn("RELATED_CONTEXT outcome=scheduling_unavailable", " ".join(logs.output))
         self.assert_ai_path(evaluator)
         self.llm.assert_called_once()
 
     def test_image_related_operational_failure_preserves_ai_result(self):
-        self.assert_related_operational_failure_continues(self.image, self.image_gfc)
+        self.assert_related_operational_failure_continues(self.image, self.persisted_eval)
 
     def test_url_related_operational_failure_preserves_ai_result(self):
-        self.assert_related_operational_failure_continues(self.url, self.url_gfc)
+        self.assert_related_operational_failure_continues(self.url, self.persisted_eval)
 
     def test_related_database_failure_rolls_back_savepoint_and_preserves_ai_result(
         self,
     ):
         self.equivalent_context(equivalent=False)
 
-        def failing_related_storage(**kwargs):
+        def failing_related_storage(*args, **kwargs):
             self.raw_reference(relationship_kind="RELATED", query_fingerprint="invalid")
 
         with transaction.atomic():
             with patch(
-                "api.tasks.record_related_claim_fact_check_reference",
+                "api.verification.relatedness.schedule_relatedness",
                 side_effect=failing_related_storage,
             ), self.assertLogs("api.tasks", level="WARNING"):
                 self.image()
-            self.assert_ai_path(self.image_gfc)
+            self.assert_ai_path(self.persisted_eval)
 
     def test_provider_exhaustion_never_enters_related_persistence(self):
         self.equivalent_context()
@@ -2555,6 +2590,121 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.assertEqual(
             self.target.verification_runs.get().failure_stage, "claim_persistence"
         )
+
+
+    def unrelated_earthquake_context(self):
+        self.equivalent_context(equivalent=False)
+        vault_urls = ["https://verafiles.example/earthquake", "https://phivolcs.example/earthquake"]
+        OfficialFactCheck.objects.filter(pk=self.publication.pk).update(
+            canonical_claim="A major earthquake struck the Philippines in 2026.",
+            headline="An unrelated earthquake report", summary="Unrelated earthquake context.",
+            verdict="UNVERIFIED", sources=vault_urls,
+        )
+        self.publication.refresh_from_db()
+        self.vault.return_value = build_published_fact_check_payload(
+            PublishedFactCheckMatch(self.publication, "SEMANTIC", 0.91),
+        )
+        self.cleaned["cleaned_claim"] = (
+            "This photograph shows detained Tausug Filipinos in Sabah, Malaysia, in 2026."
+        )
+        self.cleaned["search_query"] = "Tausug Sabah Malaysia detention photograph 2026"
+        self.gfc_retrieval.return_value = {"claims": [{
+            "text": "The photograph originated from Quezon City Jail in July 2016.",
+            "claimReview": [{"url": "https://fresh.example/quezon-city-jail-2016"}],
+        }]}
+        return vault_urls
+
+    def assert_context_candidate_uses_fresh_evidence(self, process, *, tavily=False):
+        vault_urls = self.unrelated_earthquake_context()
+        if tavily:
+            self.gfc_retrieval.return_value = {"claims": []}
+            self.tavily_retrieval.return_value = {"results": [{
+                "url": "https://fresh.example/quezon-city-jail-2016", "title": "Original image",
+                "content": "The photograph originated from Quezon City Jail in July 2016.",
+            }]}
+            # A legitimate fresh-evidence abstention remains possible.
+            self.ai_result["verdict"] = "UNVERIFIED"
+        process()
+        self.assert_related_context("SEMANTIC")
+        self.gfc_retrieval.assert_called_once()
+        self.assertEqual(self.gfc_retrieval.call_args.args[0], self.cleaned["search_query"])
+        self.persisted_eval.assert_called_once_with(
+            self.cleaned["cleaned_claim"], "Persisted evidence context", "NEUTRAL",
+        )
+        self.image_gfc.assert_not_called()
+        self.url_gfc.assert_not_called()
+        self.image_tavily.assert_not_called()
+        self.url_tavily.assert_not_called()
+        if tavily:
+            self.tavily_retrieval.assert_called_once()
+            self.assertEqual(self.tavily_retrieval.call_args.args[0], self.cleaned["search_query"])
+        else:
+            self.tavily_retrieval.assert_not_called()
+        self.target.refresh_from_db()
+        primary_urls = [source if isinstance(source, str) else source["url"]
+                        for source in self.target.ai_sources]
+        self.assertEqual(primary_urls, ["https://fresh.example/quezon-city-jail-2016"])
+        self.assertTrue(set(vault_urls).isdisjoint(primary_urls))
+        self.assertNotIn(self.target.source_link, vault_urls)
+        self.assertNotIn(self.target.top_verdict_source, vault_urls)
+        self.assertNotEqual(self.target.context_text, self.publication.summary)
+        self.assertEqual(self.target.context_text,
+                         "Clean article text" if self.target.claim_type == Claim.ClaimType.URL
+                         else self.cleaned["cleaned_claim"])
+        self.assertIsNone(self.target.final_verdict)
+        result = get_match_result(self.target)
+        self.assertEqual(result["resolution_source"], "AI")
+        self.assertIsNone(result["official_fact_check"])
+        displayed_urls = [source if isinstance(source, str) else source["url"]
+                          for source in result["sources"]]
+        self.assertTrue(set(vault_urls).isdisjoint(displayed_urls))
+        self.assertEqual(self.target.verification_runs.get().status,
+                         VerificationRun.Status.ABSTAINED if tavily else VerificationRun.Status.COMPLETED)
+        self.assertEqual(OfficialFactCheck.objects.get(pk=self.publication.pk).sources, vault_urls)
+        self.assertEqual(self.source_claim.pk, self.publication.claim_id)
+        self.llm.assert_called_once()
+
+    def test_image_earthquake_context_cannot_terminate_sabah_photo_verification(self):
+        self.assert_context_candidate_uses_fresh_evidence(self.image)
+
+    def test_url_earthquake_context_cannot_terminate_sabah_photo_verification(self):
+        self.assert_context_candidate_uses_fresh_evidence(self.url)
+
+    def test_image_unverified_context_cannot_suppress_tavily_or_fresh_abstention(self):
+        self.assert_context_candidate_uses_fresh_evidence(self.image, tavily=True)
+
+    def test_url_unverified_context_cannot_suppress_tavily_or_fresh_abstention(self):
+        self.assert_context_candidate_uses_fresh_evidence(self.url, tavily=True)
+
+    def assert_rejected_context_preserves_final_failure(self, process):
+        self.unrelated_earthquake_context()
+        self.target.ai_verdict = "FACT"
+        self.target.consensus_score = 77
+        self.target.final_verdict = "MISLEADING"
+        self.target.save(update_fields=["ai_verdict", "consensus_score", "final_verdict"])
+        error = services.LLMInvalidFinalResponseError("No valid final decision.")
+        self.persisted_eval.side_effect = error
+        with self.assertRaises(services.LLMInvalidFinalResponseError) as raised:
+            process()
+        self.assertIs(raised.exception, error)
+        self.gfc_retrieval.assert_called_once()
+        self.image_gfc.assert_not_called()
+        self.url_gfc.assert_not_called()
+        self.save_claim.assert_not_called()
+        self.related_schedule.assert_not_called()
+        self.assertFalse(self.target.fact_check_references.filter(relationship_kind="RELATED").exists())
+        run = self.target.verification_runs.get()
+        self.assertEqual((run.status, run.failure_stage, run.failure_code),
+                         (VerificationRun.Status.FAILED, "final_evaluator", "LLM_INVALID_RESPONSE"))
+        self.target.refresh_from_db()
+        self.assertEqual((self.target.ai_verdict, self.target.consensus_score, self.target.final_verdict),
+                         ("FACT", 77, "MISLEADING"))
+
+    def test_image_rejected_context_preserves_invalid_final_response_failure(self):
+        self.assert_rejected_context_preserves_final_failure(self.image)
+
+    def test_url_rejected_context_preserves_invalid_final_response_failure(self):
+        self.assert_rejected_context_preserves_final_failure(self.url)
 
 
 class PublishedResolutionPollingTests(PublicationResolutionFixture):
@@ -2724,7 +2874,7 @@ class PublishedResolutionPollingTests(PublicationResolutionFixture):
         ):
             self.assertEqual(
                 len(get_related_published_fact_check_payloads(self.target)),
-                1,
+                0,
             )
             self.assertEqual(
                 self.poll(),
