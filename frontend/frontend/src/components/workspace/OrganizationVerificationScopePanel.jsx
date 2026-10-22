@@ -55,8 +55,9 @@ function SpecializationsEditor({ scope, onClose, onSaved }) {
             <div>
                <h3 id="org-scope-dialog-title">Manage verification specializations</h3>
                <p id="org-scope-dialog-description">
-                  Select the subjects your organization will investigate. Changes to new
-                  assignment eligibility take effect immediately. Existing assigned work is preserved.
+                  Select the subjects your organization is prepared to investigate. These
+                  selections affect new-assignment matching only when TruthLens enables
+                  subject-based intake. Existing assigned work is preserved.
                </p>
             </div>
             <button type="button" onClick={onClose} disabled={saving} aria-label="Close specialization editor">

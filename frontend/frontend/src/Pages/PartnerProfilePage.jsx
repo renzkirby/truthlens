@@ -473,8 +473,10 @@ function PartnerProfileContent({ slug, isCommunity }) {
    }
 
    const followerCount = Number(partner.followers_count || 0);
-   const expertiseAreas = Array.isArray(partner.authorized_verification_domains)
-      ? partner.authorized_verification_domains : [];
+   const hasVerificationSpecializations = Array.isArray(partner.verification_specializations);
+   const expertiseAreas = hasVerificationSpecializations
+      ? partner.verification_specializations
+      : Array.isArray(partner.expertise_areas) ? partner.expertise_areas : [];
    const currentTabDescription =
       activeTab === "published"
          ? `Institutionally published fact-checks from ${partner.name}.`
@@ -632,15 +634,19 @@ function PartnerProfileContent({ slug, isCommunity }) {
 
                      <section className="user-profile__activity-item partner-profile__about-section">
                         <div className="user-profile__activity-copy">
-                           <h3>Verification specializations</h3>
+                           <h3>{hasVerificationSpecializations ? "Verification specializations" : "Expertise"}</h3>
                            {expertiseAreas.length > 0 ? (
                               <ul className="partner-profile-expertise">
                                  {expertiseAreas.map((area, index) => (
-                                    <li key={`${area}-${index}`}>{formatVerificationDomain(area)}</li>
+                                    <li key={`${area}-${index}`}>
+                                       {hasVerificationSpecializations ? formatVerificationDomain(area) : area}
+                                    </li>
                                  ))}
                               </ul>
                            ) : (
-                              <p>This organization has not selected investigation specializations yet.</p>
+                              <p>{hasVerificationSpecializations
+                                 ? "This organization has not selected investigation specializations yet."
+                                 : "No public expertise areas have been listed."}</p>
                            )}
                         </div>
                      </section>

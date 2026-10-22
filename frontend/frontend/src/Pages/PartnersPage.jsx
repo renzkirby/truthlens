@@ -20,9 +20,10 @@ const ORGANIZATION_TYPES = [
 ];
 
 function PartnerCard({ partner, directorySearch }) {
-   const expertise = Array.isArray(partner.authorized_verification_domains)
-      ? partner.authorized_verification_domains
-      : [];
+   const hasVerificationSpecializations = Array.isArray(partner.verification_specializations);
+   const expertise = hasVerificationSpecializations
+      ? partner.verification_specializations
+      : Array.isArray(partner.expertise_areas) ? partner.expertise_areas : [];
    const visibleExpertise = expertise.slice(0, 3);
    const remainingExpertise = expertise.length - visibleExpertise.length;
 
@@ -45,9 +46,14 @@ function PartnerCard({ partner, directorySearch }) {
          </div>
 
          {visibleExpertise.length > 0 && (
-            <ul className="partner-directory-card__expertise" aria-label="Organization-declared investigation specializations">
+            <ul className="partner-directory-card__expertise"
+               aria-label={hasVerificationSpecializations
+                  ? "Organization-declared investigation specializations"
+                  : "Expertise areas"}>
                {visibleExpertise.map((area, index) => (
-                  <li key={`${area}-${index}`}>{formatVerificationDomain(area)}</li>
+                  <li key={`${area}-${index}`}>
+                     {hasVerificationSpecializations ? formatVerificationDomain(area) : area}
+                  </li>
                ))}
                {remainingExpertise > 0 && <li>+{remainingExpertise} more</li>}
             </ul>

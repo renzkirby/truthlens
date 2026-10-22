@@ -801,10 +801,9 @@ class PublicPartnerDirectoryQuerySerializer(serializers.Serializer):
 
 class PublicPartnerSummarySerializer(serializers.ModelSerializer):
     logo_url = serializers.SerializerMethodField()
-    authorized_verification_domains = serializers.SerializerMethodField()
+    verification_specializations = serializers.SerializerMethodField()
 
-    def get_authorized_verification_domains(self, obj):
-        # Compatibility response field; now organization-declared, not approved.
+    def get_verification_specializations(self, obj):
         from .verification_domain_policy import organization_specializations
         return organization_specializations(obj)
 
@@ -835,7 +834,7 @@ class PublicPartnerSummarySerializer(serializers.ModelSerializer):
             "organization_type",
             "organization_type_label",
             "expertise_areas",
-            "authorized_verification_domains",
+            "verification_specializations",
         ]
 
         read_only_fields = fields
