@@ -2,10 +2,16 @@
 
 **Date:** 2026-10-22 (Asia/Manila)
 **Branch:** `feat/ai-rq2-provider-hierarchy`
-**Status:** **32 aligned proposed references / 0 formally APPROVED**. Source
+**Status:** **32 aligned proposed references / 0 formally APPROVED**. Reviewer 1
+explicitly stated **“I approve”** in the project conversation on
+2026-10-22, in direct response to the final reference-label review gate;
+this is recorded as **reviewer-1 approval of the reconciled label set**,
+not as verification of reviewer identity or reviewer-2 sign-off. Reviewer 2
+(co-developer) has not yet explicitly confirmed the five normalization
+interpretations or approved the complete 32-case canonical set. Source
 reviews and follow-up answers were supplied conversationally and in two
-private Excel workbooks. Neither reviewer has been identified or
-independently attested in the repository.
+private Excel workbooks; reviewer identifiers/attestations have not been
+recorded in the canonical corpus.
 
 ## What was reported
 
@@ -31,6 +37,21 @@ The locally maintained comparison workbook records **27 directly aligned
 or explicitly clarified cases** and **5 provisionally aligned cases**.
 All 32 have a proposed reference. **Agreement is not the same as audit
 approval or empirical classifier accuracy.**
+
+## Reviewer-1 approval recorded; reviewer-2 confirmation remains pending
+
+The project user (Reviewer 1) explicitly replied **“I approve”** on
+2026-10-22 after the focused offline suite passed **12/12** and the
+audit command correctly showed **32 PENDING / 0 APPROVED**. This suffices
+to document their expressed approval of the *proposed reconciled labels*;
+it **does not** mean the user's account identity or a complete human
+review attestation was verified, does **not** confirm what the
+co-developer intended with shortened IDs and spelling differences,
+and does **not** authorize model-enforcement rollout, benchmarking
+provider spend, or dataset promotion. The five mappings below require
+confirmation **from Reviewer 2**, and both reviewers' traceable sign-off
+provenance should be retained before preparing an approved reference
+corpus. Do not invent reviewer identifiers in JSON.
 
 ## Five pending normalization confirmations (all should be confirmed by Reviewer 2)
 
@@ -94,8 +115,9 @@ rather than silently reinterpreting a source record.
 > **I approve the final set of 32 subject-domain reference labels:** yes/no.
 > **Review date:** ________.
 
-This is a **template, not a review response**. Reviewer 1 must also
-confirm final labels under the same sign-off protocol.
+This is a **template, not a review response**. Reviewer 1's conversational
+approval has now been recorded above; it does not substitute for reviewer 2's
+explicit approval or complete attestation metadata.
 
 ## Current branch contents and preserved invariants
 
