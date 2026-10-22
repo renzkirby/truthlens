@@ -365,8 +365,9 @@ class BatchEvidenceAssessmentPersistenceTests(TestCase):
         for link, assessment, original in zip(links, assessments, original_values):
             link.refresh_from_db()
             self.assertEqual(link.stance, assessment.stance)
-            self.assertEqual(link.relevance_score, assessment.relevance_score)
-            self.assertEqual(link.directness_score, assessment.directness_score)
+            # FloatField round-trips may differ at binary floating-point precision.
+            self.assertAlmostEqual(link.relevance_score, assessment.relevance_score, delta=1e-12)
+            self.assertAlmostEqual(link.directness_score, assessment.directness_score, delta=1e-12)
             for field_name, value in original.items():
                 self.assertEqual(getattr(link, field_name), value)
 

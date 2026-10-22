@@ -5,6 +5,7 @@ from django.test import SimpleTestCase
 
 from api.services import (
     LLMProviderUnavailableError,
+    LLMInvalidFinalResponseError,
     evaluate_claim_with_persisted_evidence,
 )
 from api.verification.evidence_budget import (
@@ -91,19 +92,12 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
             },
         )
 
-    def test_llm_exception_returns_safe_unverified_result(self):
-        with patch(
-            "api.services.call_llm_with_fallback",
-            side_effect=RuntimeError("LLM unavailable"),
-        ):
-            result = evaluate_claim_with_persisted_evidence(
-                "Example claim.",
-                "Persisted evidence.",
-            )
-
-        self.assertEqual(result["verdict"], "UNVERIFIED")
-        self.assertEqual(result["confidence_score"], 0)
-        self.assertIn("persisted evidence", result["reasoning"].lower())
+    def test_llm_exception_raises_typed_failure_without_substitute_verdict(self):
+        error = RuntimeError("LLM unavailable")
+        with patch("api.services.call_llm_with_fallback", side_effect=error):
+            with self.assertRaises(LLMInvalidFinalResponseError) as raised:
+                evaluate_claim_with_persisted_evidence("Example claim.", "Persisted evidence.")
+        self.assertIs(raised.exception.__cause__, error)
 
     def test_provider_unavailable_exception_propagates(self):
         with patch(
@@ -130,32 +124,22 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
 
         self.assertEqual(result, self.result)
 
-    def test_invalid_parsed_shape_returns_safe_unverified_result(self):
-        with patch(
-            "api.services.call_llm_with_fallback",
-            return_value=json.dumps(["not", "an", "evaluation"]),
-        ):
-            result = evaluate_claim_with_persisted_evidence(
-                "Example claim.",
-                "Persisted evidence.",
-            )
+    def test_invalid_final_responses_raise_instead_of_fabricating_unverified(self):
+        invalid_outputs = [
+            '{"reasoning": "unterminated', json.dumps(["not", "an", "evaluation"]),
+            json.dumps({**self.result, "verdict": "TRUE"}),
+            json.dumps({**self.result, "summary": 12}),
+            json.dumps({**self.result, "confidence_score": "high"}),
+        ]
+        for output in invalid_outputs:
+            with self.subTest(output=output), patch("api.services.call_llm_with_fallback", return_value=output):
+                with self.assertRaises(LLMInvalidFinalResponseError):
+                    evaluate_claim_with_persisted_evidence("Example claim.", "Persisted evidence.")
 
-        self.assertEqual(result["verdict"], "UNVERIFIED")
-        self.assertEqual(result["confidence_score"], 0)
-
-    def test_invalid_verdict_returns_safe_unverified_result(self):
-        invalid_result = {**self.result, "verdict": "TRUE"}
-        with patch(
-            "api.services.call_llm_with_fallback",
-            return_value=json.dumps(invalid_result),
-        ):
-            result = evaluate_claim_with_persisted_evidence(
-                "Example claim.",
-                "Persisted evidence.",
-            )
-
-        self.assertEqual(result["verdict"], "UNVERIFIED")
-        self.assertEqual(result["confidence_score"], 0)
+    def test_valid_unverified_remains_a_legitimate_decision(self):
+        result = {**self.result, "verdict": "UNVERIFIED", "confidence_score": 0}
+        with patch("api.services.call_llm_with_fallback", return_value=json.dumps(result)):
+            self.assertEqual(evaluate_claim_with_persisted_evidence("Claim", "Evidence"), result)
 
     def test_prompt_contains_source_identity_and_anti_double_counting_guidance(self):
         with patch(

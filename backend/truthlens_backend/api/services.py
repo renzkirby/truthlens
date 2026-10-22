@@ -9,6 +9,7 @@ import math
 import re
 import logging
 import time
+import warnings
 from numbers import Number
 from urllib.parse import urlparse
 import ipaddress
@@ -20,7 +21,7 @@ from io import BytesIO
 from PIL import Image
 from supabase import create_client
 
-from .verification.telemetry import record_llm_provider_call
+from .verification.telemetry import SAFE_LLM_OPERATION_LABELS, record_llm_provider_call
 from .verification.evidence_budget import (
     FINAL_EVALUATION_OUTPUT_TOKENS,
     LLMRequestBudgetExceededError, USAGE_WINDOW_SECONDS, validate_request_budget,
@@ -51,6 +52,13 @@ gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+
+# Exact model IDs only: never send 2.5-specific settings to arbitrary overrides.
+GEMINI_BOUNDED_THINKING_MODELS = frozenset({"gemini-2.5-flash"})
+GEMINI_EVIDENCE_THINKING_TOKENS = {
+    "evidence_assessment": 1536,
+    "persisted_evidence_evaluation": 2048,
+}
 
 
 _gemini_degraded = ContextVar("gemini_degraded", default=None)
@@ -102,6 +110,14 @@ def llm_provider_scope():
 
 class LLMProviderUnavailableError(RuntimeError):
     """No configured LLM provider successfully completed the request."""
+
+
+class LLMInvalidFinalResponseError(LLMProviderUnavailableError):
+    """Final evaluation did not produce a usable evidence-bound decision."""
+
+
+class _GeminiResponseTruncatedError(RuntimeError):
+    """Gemini exhausted its output capacity; partial text must not be used."""
 
 
 class ClaimGateError(RuntimeError):
@@ -257,6 +273,109 @@ def _log_llm_provider_call(
     )
 
 
+def _log_groq_failure_metadata(operation, error):
+    """Classify structured failures without rendering any provider payload."""
+    def optional_attribute(name):
+        try:
+            return getattr(error, name, None)
+        except Exception:
+            return None
+
+    body = optional_attribute("body")
+    # SDK versions may expose either the error object or its enclosing body.
+    # Read only actual dictionaries; never parse or print an arbitrary body.
+    structured = body if isinstance(body, dict) else {}
+    nested = dict.get(structured, "error")
+    if isinstance(nested, dict):
+        structured = nested
+    error_type = dict.get(structured, "type", optional_attribute("type"))
+    safe_types = {"invalid_request_error", "rate_limit_error", "server_error"}
+    metadata = {
+        "error_type": error_type if type(error_type) is str and error_type in safe_types else "unknown",
+    }
+    # A code is diagnostic only; never infer a cause from the provider message.
+    # Keep the vocabulary deliberately narrow and do not construct enum values.
+    error_code = dict.get(structured, "code", optional_attribute("code"))
+    safe_codes = {"json_validate_failed"}
+    metadata["error_code"] = (
+        error_code if type(error_code) is str and error_code in safe_codes else "unknown"
+    )
+    status = optional_attribute("status_code")
+    if type(status) is int:
+        metadata["status_code"] = status
+    param = dict.get(structured, "param", optional_attribute("param"))
+    if type(param) is str and param in {
+        "max_completion_tokens", "response_format", "reasoning_effort",
+        "reasoning_format", "temperature", "model",
+    }:
+        metadata["param"] = param
+    missing = object()
+    failed_generation = dict.get(structured, "failed_generation", missing)
+    if failed_generation is not missing:
+        # Presence only: never stringify the value or invoke its truthiness.
+        metadata["has_failed_generation"] = (
+            "true" if failed_generation is not None else "false"
+        )
+    operation_label = (operation if type(operation) is str
+                       and operation in SAFE_LLM_OPERATION_LABELS else "unspecified")
+    logger.info(
+        "LLM_GROQ_FAILURE_METADATA operation=%s%s", operation_label,
+        "".join(f" {name}={value}" for name, value in metadata.items()),
+    )
+
+
+def _log_gemini_response_metadata(operation, response):
+    """Log only recognized finish reasons and numeric SDK usage metadata.
+
+    Optional diagnostics must not affect a successful provider response. Never
+    stringify response objects, candidate content, or metadata access errors.
+    """
+    def optional_field(obj, name):
+        try:
+            return getattr(obj, name, None)
+        except Exception:
+            return None
+
+    metadata = {}
+    candidates = optional_field(response, "candidates")
+    if isinstance(candidates, (list, tuple)) and candidates:
+        reason = optional_field(candidates[0], "finish_reason")
+        # The SDK can manufacture enum members for unknown strings. Enum
+        # construction/isinstance alone therefore does not sanitize metadata.
+        safe_reasons = frozenset({
+            "FINISH_REASON_UNSPECIFIED", "STOP", "MAX_TOKENS", "SAFETY",
+            "RECITATION", "LANGUAGE", "OTHER", "BLOCKLIST",
+            "PROHIBITED_CONTENT", "SPII", "MALFORMED_FUNCTION_CALL",
+            "IMAGE_SAFETY", "UNEXPECTED_TOOL_CALL", "TOO_MANY_TOOL_CALLS",
+            "IMAGE_PROHIBITED_CONTENT", "IMAGE_OTHER", "NO_IMAGE",
+            "IMAGE_RECITATION", "MISSING_THOUGHT_SIGNATURE",
+        })
+        if isinstance(reason, types.FinishReason):
+            reason = optional_field(reason, "value")
+        if type(reason) is str:
+            # Match fixed labels without constructing permissive SDK enums or
+            # stringifying any unrecognized metadata object.
+            for label in safe_reasons:
+                if reason in (label, f"FinishReason.{label}"):
+                    metadata["finish_reason"] = label
+                    break
+    usage = optional_field(response, "usage_metadata")
+    for name in ("prompt_token_count", "candidates_token_count",
+                 "thoughts_token_count", "total_token_count"):
+        value = optional_field(usage, name)
+        if type(value) is int and value >= 0:
+            metadata[name] = value
+    operation_label = (operation if isinstance(operation, str)
+                       and operation in SAFE_LLM_OPERATION_LABELS else "unspecified")
+    logger.info(
+        "LLM_GEMINI_RESPONSE_METADATA operation=%s%s",
+        operation_label,
+        "".join(f" {name}={value}" for name, value in metadata.items()),
+    )
+
+    return metadata.get("finish_reason")
+
+
 def call_llm_with_fallback(
     system_instructions,
     user_prompt,
@@ -270,6 +389,7 @@ def call_llm_with_fallback(
         validate_request_budget(system_instructions, user_prompt)
     provider_call_id = uuid.uuid4()
     if not _gemini_degraded.get():
+        gemini_model = _model_from_env("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
         gemini_config = {
             "system_instruction": system_instructions,
             "response_mime_type": "application/json",
@@ -278,6 +398,14 @@ def call_llm_with_fallback(
         if max_output_tokens is not None:
             gemini_config["max_output_tokens"] = max_output_tokens
         try:
+            if (gemini_model in GEMINI_BOUNDED_THINKING_MODELS
+                    and operation in GEMINI_EVIDENCE_THINKING_TOKENS
+                    and type(max_output_tokens) is int and max_output_tokens > 0):
+                thinking_tokens = GEMINI_EVIDENCE_THINKING_TOKENS[operation]
+                gemini_config["thinking_config"] = types.ThinkingConfig(
+                    thinking_budget=thinking_tokens,
+                )
+                gemini_config["max_output_tokens"] = max_output_tokens + thinking_tokens
             if (
                 isinstance(gemini_timeout_ms, int)
                 and not isinstance(gemini_timeout_ms, bool)
@@ -295,12 +423,24 @@ def call_llm_with_fallback(
         else:
             gemini_started_at = time.perf_counter()
             try:
-                response = gemini_client.models.generate_content(
-                    model=_model_from_env("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
-                    contents=user_prompt,
-                    config=request_config,
-                )
+                # The SDK warns with arbitrary unknown enum values while parsing
+                # responses. Filter only that SDK warning during this request;
+                # unrelated warnings retain their normal behavior.
+                with warnings.catch_warnings():
+                    warnings.filterwarnings(
+                        "ignore", message=r"(?s).* is not a valid FinishReason$",
+                        category=UserWarning, module=r"google\.genai\._common",
+                    )
+                    response = gemini_client.models.generate_content(
+                        model=gemini_model, contents=user_prompt, config=request_config,
+                    )
+                finish_reason = _log_gemini_response_metadata(operation, response)
+                if (operation in GEMINI_EVIDENCE_THINKING_TOKENS
+                        and finish_reason == "MAX_TOKENS"):
+                    raise _GeminiResponseTruncatedError("Gemini response was truncated.")
                 content = response.text
+                if operation == "persisted_evidence_evaluation":
+                    _validated_final_evidence_response(content)
             except Exception as gemini_err:
                 _log_llm_provider_call(
                     operation,
@@ -338,7 +478,10 @@ def call_llm_with_fallback(
                if max_output_tokens is not None else {}),
         )
         content = chat_completion.choices[0].message.content
+        if operation == "persisted_evidence_evaluation":
+            _validated_final_evidence_response(content)
     except Exception as groq_err:
+        _log_groq_failure_metadata(operation, groq_err)
         _log_llm_provider_call(
             operation,
             "groq",
@@ -351,6 +494,8 @@ def call_llm_with_fallback(
             "Groq fallback failed (%s).",
             _provider_error_label(groq_err),
         )
+        if isinstance(groq_err, LLMInvalidFinalResponseError):
+            raise
         raise LLMProviderUnavailableError(
             "No configured LLM provider successfully completed this request."
         ) from groq_err
@@ -950,6 +1095,26 @@ def build_persisted_evidence_prompt(original_claim, evidence_context, article_st
     return system_instructions, user_data
 
 
+def _validated_final_evidence_response(response_text):
+    """Validate final output without turning operational failure into a verdict."""
+    try:
+        result = _parse_llm_json(response_text)
+        required = {"reasoning", "verdict", "summary", "confidence_score", "score_context"}
+        if not isinstance(result, dict) or not required.issubset(result):
+            raise ValueError("Invalid final response shape")
+        if any(not isinstance(result[field], str)
+               for field in ("reasoning", "verdict", "summary", "score_context")):
+            raise ValueError("Invalid final response field type")
+        if result["verdict"] not in {"FACT", "FAKE", "MISLEADING", "UNVERIFIED", "SATIRE"}:
+            raise ValueError("Invalid final verdict")
+        result["confidence_score"] = _normalize_verdict_confidence_score(result["confidence_score"])
+        return result
+    except Exception as exc:
+        raise LLMInvalidFinalResponseError(
+            "Final persisted-evidence evaluation did not produce a valid decision."
+        ) from exc
+
+
 def evaluate_claim_with_persisted_evidence(
     original_claim,
     evidence_context,
@@ -978,30 +1143,13 @@ def evaluate_claim_with_persisted_evidence(
             operation="persisted_evidence_evaluation",
             max_output_tokens=FINAL_EVALUATION_OUTPUT_TOKENS,
         )
-        parsed_result = _parse_llm_json(response_text)
-        required_fields = {
-            "reasoning",
-            "verdict",
-            "summary",
-            "confidence_score",
-            "score_context",
-        }
-        if not isinstance(parsed_result, dict) or not required_fields.issubset(
-            parsed_result
-        ):
-            raise ValueError("Persisted evidence evaluator returned an invalid result")
-        valid_verdicts = {"FACT", "FAKE", "MISLEADING", "UNVERIFIED", "SATIRE"}
-        if parsed_result["verdict"] not in valid_verdicts:
-            raise ValueError("Persisted evidence evaluator returned an invalid verdict")
-        parsed_result["confidence_score"] = _normalize_verdict_confidence_score(
-            parsed_result["confidence_score"]
-        )
-        return parsed_result
+        return _validated_final_evidence_response(response_text)
     except (LLMProviderUnavailableError, LLMRequestBudgetExceededError):
         raise
     except Exception as exc:
-        logger.error("Persisted Evidence Evaluator AI Error: %s", exc)
-        return unavailable_result
+        raise LLMInvalidFinalResponseError(
+            "Final persisted-evidence evaluation did not produce a valid decision."
+        ) from exc
 
 
 # URL PIPELINE

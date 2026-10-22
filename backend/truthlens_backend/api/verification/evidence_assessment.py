@@ -183,14 +183,17 @@ def assess_reasoning_evidence_batch_against_claim(
     assessments = list(unavailable_results)
     packs = pack_assessment_requests(_SYSTEM_INSTRUCTIONS, claim_text, assessment_items)
     prompt_estimates = []
-    for packed_items in packs:
+    for pack_index, packed_items in enumerate(packs, start=1):
         expected_keys = {item["key"] for item in packed_items}
         user_prompt = assessment_prompt(claim_text, packed_items)
         prompt_estimates.append(validate_request_budget(_SYSTEM_INSTRUCTIONS, user_prompt))
+        completion_tokens = assessment_output_limit(len(packed_items))
+        provider_outcome = "failure"
+        assessment_outcome = "provider_failure"
         try:
             provider_options = {
                 "operation": "evidence_assessment",
-                "max_output_tokens": assessment_output_limit(len(packed_items)),
+                "max_output_tokens": completion_tokens,
             }
             gemini_timeout_ms = _gemini_timeout_ms_from_env()
             if gemini_timeout_ms is not None:
@@ -198,6 +201,8 @@ def assess_reasoning_evidence_batch_against_claim(
             response_text = call_llm_with_fallback(
                 _SYSTEM_INSTRUCTIONS, user_prompt, **provider_options,
             )
+            provider_outcome = "success"
+            assessment_outcome = "invalid_response"
             parsed_result = _parse_llm_json(response_text)
             if not isinstance(parsed_result, dict) or set(parsed_result) != {"assessments"}:
                 continue
@@ -216,10 +221,28 @@ def assess_reasoning_evidence_batch_against_claim(
                 matching = results_by_key.get(key, [])
                 if len(matching) == 1:
                     assessments[int(key.removeprefix("item_"))] = _assessment_from_result(matching[0])
+            assessment_outcome = "validated"
         except LLMRequestBudgetExceededError:
+            assessment_outcome = "budget_exceeded"
             raise
-        except Exception as exc:
-            logger.error("Evidence assessment batch AI error: %s", exc)
+        except Exception:
+            # Parser/provider messages may contain quoted untrusted data.
+            logger.error("Evidence assessment batch AI error: %s", assessment_outcome)
+        finally:
+            validated_count = sum(
+                assessments[int(item["key"].removeprefix("item_"))].relevance_score
+                is not None for item in packed_items
+            )
+            if assessment_outcome == "validated" and validated_count < len(packed_items):
+                assessment_outcome = "partial_response" if validated_count else "invalid_response"
+            logger.info(
+                "EVIDENCE_ASSESSMENT_PACK pack_index=%s item_count=%s "
+                "prompt_tokens_est=%s completion_tokens=%s validated_count=%s "
+                "unavailable_count=%s provider_outcome=%s assessment_outcome=%s",
+                pack_index, len(packed_items), prompt_estimates[-1], completion_tokens,
+                validated_count, len(packed_items) - validated_count,
+                provider_outcome, assessment_outcome,
+            )
     record_pipeline_stage(
         "evidence_assessment_budget", 0,
         assessment_candidates=len(assessment_items), assessment_calls=len(packs),

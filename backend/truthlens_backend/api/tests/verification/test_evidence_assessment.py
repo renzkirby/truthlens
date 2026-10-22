@@ -6,15 +6,21 @@ from dataclasses import FrozenInstanceError, asdict
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import httpx
 from django.test import SimpleTestCase
+from groq import BadRequestError
 
 from api.models import VerificationEvidence
+from api.services import llm_provider_scope
 from api.verification.evidence_assessment import (
     EvidenceAssessment,
     assess_reasoning_evidence_against_claim,
     assess_reasoning_evidence_batch_against_claim,
 )
-from api.verification.evidence_budget import assessment_output_limit
+from api.verification.evidence_budget import (
+    LLMRequestBudgetExceededError,
+    assessment_output_limit,
+)
 from api.verification.evidence_dossier import ReasoningEvidenceItem
 
 
@@ -492,6 +498,115 @@ class EvidenceAssessmentBatchTests(SimpleTestCase):
 
     def _batch_result(self, key, **overrides):
         return {"key": key, **self._result(**overrides)}
+
+    def test_pack_diagnostics_success_then_groq_400_preserve_mapping_and_privacy(self):
+        secret = "PRIVATE-CLAIM-EVIDENCE-URL-SECRET"
+        items = [self._item(content=secret) for _ in range(5)]
+        response_text = json.dumps({"assessments": [
+            self._batch_result("item_1", stance="REFUTES", relevance_score=0.8),
+            self._batch_result("item_0", relevance_score=0.95),
+        ]})
+        request = httpx.Request("POST", "https://api.groq.com")
+        error = BadRequestError(
+            secret, response=httpx.Response(400, request=request),
+            body={"error": {"type": "invalid_request_error",
+                             "code": "json_validate_failed", "failed_generation": secret}},
+        )
+        # Control pack boundaries only; exercise the real provider wrapper with mocks.
+        def packs(_system, _claim, passages):
+            return [passages[:2], passages[2:]]
+
+        with patch("api.verification.evidence_assessment.pack_assessment_requests", side_effect=packs), \
+             patch("api.verification.evidence_assessment.validate_request_budget", return_value=1234), \
+             patch("api.services.gemini_client") as gemini, \
+             patch("api.services.groq_client") as groq, \
+             self.assertLogs("api", level="INFO") as logs:
+            gemini.models.generate_content.side_effect = RuntimeError(secret)
+            groq.chat.completions.create.side_effect = [
+                SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=response_text))]),
+                error,
+            ]
+            with llm_provider_scope():
+                assessments = assess_reasoning_evidence_batch_against_claim(secret, items)
+
+        self.assertEqual(assessments[0].relevance_score, 0.95)
+        self.assertEqual(assessments[1].relevance_score, 0.8)
+        self.assertEqual(assessments[1].stance, "REFUTES")
+        for assessment in assessments[2:]:
+            self._assert_unavailable(assessment)
+        self.assertEqual(groq.chat.completions.create.call_count, 2)
+        gemini.models.generate_content.assert_called_once()
+        for call, count in zip(groq.chat.completions.create.call_args_list, (2, 3)):
+            self.assertEqual(call.kwargs["max_completion_tokens"], assessment_output_limit(count))
+            self.assertEqual(call.kwargs["response_format"], {"type": "json_object"})
+            self.assertEqual(call.kwargs["temperature"], 0.1)
+            self.assertNotIn("reasoning_effort", call.kwargs)
+        lines = [line for line in logs.output if "EVIDENCE_ASSESSMENT_PACK " in line]
+        self.assertEqual(len(lines), 2)
+        for line, index, count, valid, outcome in zip(
+            lines, (1, 2), (2, 3), (2, 0), ("success", "failure"),
+        ):
+            for field in (
+                f"pack_index={index}", f"item_count={count}", "prompt_tokens_est=1234",
+                f"completion_tokens={assessment_output_limit(count)}",
+                f"validated_count={valid}", f"unavailable_count={count - valid}",
+                f"provider_outcome={outcome}",
+            ):
+                self.assertIn(field, line)
+        self.assertIn("assessment_outcome=validated", lines[0])
+        self.assertIn("assessment_outcome=provider_failure", lines[1])
+        output = "\n".join(logs.output)
+        self.assertIn("error_code=json_validate_failed", output)
+        for private in (secret, "item_0", "item_1", "https://api.groq.com"):
+            self.assertNotIn(private, output)
+
+    def test_pack_diagnostics_report_partial_invalid_and_malformed_success_responses(self):
+        items = [self._item() for _ in range(3)]
+        secret = "PRIVATE-RESPONSE-SECRET"
+        cases = (
+            (json.dumps({"assessments": [
+                self._batch_result("item_2", stance="REFUTES", relevance_score=0.8),
+                self._batch_result("item_0", relevance_score=secret),
+            ]}), 1, "partial_response"),
+            (json.dumps({"unexpected": secret}), 0, "invalid_response"),
+            (json.dumps({"assessments": secret}), 0, "invalid_response"),
+            (secret, 0, "invalid_response"),
+        )
+        for response, valid, outcome in cases:
+            with self.subTest(outcome=outcome, valid=valid), \
+                 patch("api.verification.evidence_assessment.call_llm_with_fallback", return_value=response), \
+                 self.assertLogs("api.verification.evidence_assessment", level="INFO") as logs:
+                assessments = assess_reasoning_evidence_batch_against_claim(self.claim_text, items)
+            self._assert_unavailable(assessments[0])
+            self._assert_unavailable(assessments[1])
+            if valid:
+                self.assertEqual(assessments[2].relevance_score, 0.8)
+                self.assertEqual(assessments[2].directness_score, 0.9)
+            else:
+                self._assert_unavailable(assessments[2])
+            lines = [line for line in logs.output if "EVIDENCE_ASSESSMENT_PACK " in line]
+            self.assertEqual(len(lines), 1)
+            self.assertIn("provider_outcome=success", lines[0])
+            self.assertIn(f"assessment_outcome={outcome}", lines[0])
+            self.assertIn(f"validated_count={valid}", lines[0])
+            self.assertIn(f"unavailable_count={3 - valid}", lines[0])
+            self.assertNotIn(secret, "\n".join(logs.output))
+
+    def test_pack_diagnostics_preserve_typed_budget_exception_without_logging_message(self):
+        error = LLMRequestBudgetExceededError("PRIVATE-BUDGET-DETAIL")
+        with patch(
+            "api.verification.evidence_assessment.call_llm_with_fallback", side_effect=error,
+        ) as call_llm, self.assertLogs(
+            "api.verification.evidence_assessment", level="INFO",
+        ) as logs:
+            with self.assertRaises(LLMRequestBudgetExceededError) as raised:
+                assess_reasoning_evidence_batch_against_claim(self.claim_text, [self._item()])
+        self.assertIs(raised.exception, error)
+        call_llm.assert_called_once()
+        output = "\n".join(logs.output)
+        self.assertIn("assessment_outcome=budget_exceeded", output)
+        self.assertIn("validated_count=0 unavailable_count=1", output)
+        self.assertNotIn("PRIVATE-BUDGET-DETAIL", output)
 
     def _assess_batch(self, items, returned_assessments):
         with patch(
