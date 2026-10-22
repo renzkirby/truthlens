@@ -85,6 +85,31 @@ unaltered model predictions are available. No measured model accuracy,
 independent identity attestation, real-world representativeness, or
 enforcement authorization is implied.
 
+## Offline provider capture preparation — added after reference approval
+
+The user has locally confirmed the separate, user-and-co-dev-consensus
+**APPROVED** private corpus loads as `cases=32 approved=32 pending=0`;
+the unchanged bundled fixture remains `32 PENDING`. This confirms review
+schema validation only; **no prediction responses have been supplied**.
+
+A separate **NO-NETWORK** preparatory command is now available:
+`prepare_investigation_classification_evaluation`. It accepts only a
+fully approved `--corpus`, requires one `--provider`, defaults to
+four safety-focused canaries, and caps planned IDs at 32 per provider.
+It has **no implementation that can call Gemini, Cloudflare or Groq**.
+Default output is a sanitized plan; optional explicit private export
+outside Git writes exact input texts and an **empty** prediction template
+without reference labels. The optional cost arithmetic requires
+operator-supplied rates and estimated token counts and **is not a
+spend cap or provider quote**.
+
+See `docs/PARTNER_GOV_1_CLASSIFICATION_CAPTURE_PREPARATION.md`
+for commands, security constraints, intended future capture provenance,
+and the nine **new unrun offline tests**. Any live evaluation still
+requires explicit authorization and model/prompt/config review;
+`enforce` remains unapproved. This planning artifact is not an
+accuracy result.
+
 ## Review protocol before producing a score
 
 1. Have qualified reviewers inspect and, where needed, correct the
