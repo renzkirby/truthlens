@@ -438,6 +438,7 @@ function AdjudicationReviewContent({
    organizationName,
    canAdjudicate,
    initialCaseId,
+   returnToInvestigationPath,
 }) {
    const initialCaseKey = initialCaseId ? String(initialCaseId) : null;
    const [statusFilter, setStatusFilter] = useState("");
@@ -1033,7 +1034,7 @@ function AdjudicationReviewContent({
                );
             }
          }
-         focusActionMessageRef.current = !selectedCaseIsSubmittedCase;
+         focusActionMessageRef.current = true;
       } catch (error) {
          if (
             reconciliationRequestIdRef.current !== reconciliationId ||
@@ -1381,6 +1382,10 @@ function AdjudicationReviewContent({
    const hasNextPage = offset + (queue.limit || PAGE_SIZE) < queue.count;
    const emptyCopy = EMPTY_QUEUE_COPY[statusFilter] || EMPTY_QUEUE_COPY.default;
    const activeStatusLabel = STATUS_OPTIONS.find((option) => option.value === statusFilter)?.label || "Active work";
+   const selectedActionNotice =
+      actionNotice && detail?.id && identifiersMatch(actionNotice.caseId, detail.id)
+         ? actionNotice
+         : null;
    const detailClaim = detail?.claim || {};
    const evidenceReview = detail?.evidence_review || {};
    const evidenceItems = Array.isArray(evidenceReview.items) ? evidenceReview.items : [];
@@ -1513,7 +1518,7 @@ function AdjudicationReviewContent({
                   </div>
                </div>
 
-               {actionNotice && (
+               {actionNotice && !selectedActionNotice && (
                   <div
                       className="adjudication-action-message success"
                       ref={actionMessageRef}
@@ -1830,6 +1835,31 @@ function AdjudicationReviewContent({
                                        <Button type="button" variant="secondary" density="compact" onClick={requestDetailRefresh}>
                                           Retry detail
                                        </Button>
+                                    </div>
+                                 )}
+
+                                 {selectedActionNotice && (
+                                    <div
+                                       className="adjudication-local-outcome"
+                                       ref={actionMessageRef}
+                                       tabIndex="-1"
+                                       role="status"
+                                       aria-live="polite"
+                                    >
+                                       <Icons name="check-circle" size={18} aria-hidden="true" />
+                                       <div>
+                                          <strong>Adjudication recorded</strong>
+                                          <span>{selectedActionNotice.message}</span>
+                                          {returnToInvestigationPath && (
+                                             <Link
+                                                to={returnToInvestigationPath}
+                                                className="adjudication-return-investigation"
+                                             >
+                                                Return to investigation
+                                                <Icons name="arrow-right" size={13} aria-hidden="true" />
+                                             </Link>
+                                          )}
+                                       </div>
                                     </div>
                                  )}
 
