@@ -243,6 +243,11 @@ urlpatterns = [
         name="verification_intake",
     ),
     path(
+        "verification/investigations/<uuid:assignment_id>/",
+        views.verification_investigation_detail,
+        name="verification_investigation_detail",
+    ),
+    path(
         ("verification/assignments/<uuid:assignment_id>/claim/"),
         views.verification_assignment_claim,
         name="verification_assignment_claim",

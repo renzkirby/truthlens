@@ -284,6 +284,11 @@ from .verification_intelligence_service import (
     VerificationIntelligenceNotFound,
     get_verification_intelligence_context,
 )
+from .investigation_workspace_service import (
+    InvestigationWorkspaceAuthorizationError,
+    InvestigationWorkspaceNotFound,
+    get_investigation_workspace_context,
+)
 from .organization_invitation_service import (
     OrganizationInvitationAuthorizationError,
     OrganizationInvitationConflict,
@@ -2973,6 +2978,37 @@ def verification_intelligence(request, claim_id):
             {"detail": "Verification intelligence is temporarily unavailable."},
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
+    return Response(projection, status=status.HTTP_200_OK)
+
+
+@never_cache
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def verification_investigation_detail(request, assignment_id):
+    query = AdjudicationOrganizationQuerySerializer(data=request.query_params)
+    query.is_valid(raise_exception=True)
+    organization = get_object_or_404(
+        Organization,
+        id=query.validated_data["organization_id"],
+    )
+
+    try:
+        projection = get_investigation_workspace_context(
+            actor=request.user,
+            organization=organization,
+            assignment_id=assignment_id,
+        )
+    except InvestigationWorkspaceAuthorizationError as error:
+        return Response({"detail": str(error)}, status=status.HTTP_403_FORBIDDEN)
+    except InvestigationWorkspaceNotFound as error:
+        return Response({"detail": str(error)}, status=status.HTTP_404_NOT_FOUND)
+    except Exception:
+        logger.exception("Investigation workspace projection failed.")
+        return Response(
+            {"detail": "Investigation workspace is temporarily unavailable."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
     return Response(projection, status=status.HTTP_200_OK)
 
 
