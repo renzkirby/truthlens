@@ -10,7 +10,7 @@ frontend while the production Django backend does not automatically update.
 
 At review start, the feature branch was ahead of `main` and not behind it.
 The branch changes 147 files, including 13 frontend files, 104 backend files,
-29 documentation files, and six sequential Django migrations (0081-0086).
+the finalized backend/frontend changes and five sequential Django migrations (0081-0085).
 There are no extension changes in this branch.
 
 A clean Git merge is not sufficient evidence of deployment safety. Frontend,
@@ -102,7 +102,7 @@ non-default trust states): the hardened backend rejects it. This is deliberate
 governance behavior. Avoid organization creation during the backend/frontend
 cutover window or deploy the frontend immediately after backend smoke checks.
 
-## Migrations 0081-0086
+## Migrations 0081-0085
 
 The migration chain is linear from main's existing migration history.
 
@@ -113,9 +113,12 @@ The migration chain is linear from main's existing migration history.
 - 0084 makes the classification actor optional for automatic results.
 - 0085 adds Primary-Admin-managed verification specializations and performs a
   forward-only backfill from historically effective governed scope.
-- 0086 conditionally relaxes a PostgreSQL-only NOT NULL constraint on an
-  unmodeled legacy `api_claim.relatedness_context` column. It never drops the
-  column and is a no-op if absent/already safe.
+
+The former development-only 0086 repair for an unmodeled
+`api_claim.relatedness_context` column was removed before PR preparation.
+That column belongs to the co-developer's unmerged bounded-evidence branch and
+was not part of current `main`; shipping a production repair for that
+branch-switch development schema state would have been incorrect.
 
 No migration removes a Django-managed production field in this chain.
 
@@ -169,7 +172,6 @@ Backend focused release tests:
   api.tests.management.test_management_governance_service `
   api.tests.organization.test_verification_scope `
   api.tests.organization.test_verification_scope_migration `
-  api.tests.verification.test_claim_legacy_schema_repair `
   api.tests.verification.test_investigation_shadow_canary `
   api.tests.verification.test_investigation_shadow_integration `
   api.tests.verification.test_investigation_classifier `
@@ -200,7 +202,7 @@ errors before approval.
 3. Confirm production environment keeps classification `off` and does not
    enable development Cloudflare flags.
 4. Deploy the feature-branch backend release first, including migrations
-   0081-0086, and restart the web backend + Celery workers on the same code.
+   0081-0085, and restart the web backend + Celery workers on the same code.
 5. Smoke-test old production frontend against the new backend: authentication,
    verification submission/status polling, community, partner intake/claim,
    public partner pages, organization public profile, and management read paths.
