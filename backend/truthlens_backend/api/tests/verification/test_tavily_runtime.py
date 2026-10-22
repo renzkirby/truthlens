@@ -639,6 +639,28 @@ class TavilyTextRuntimeIngestionTests(TestCase):
              "snippet": "Second source content...."},
         ]
 
+    def _expected_url_persisted_sources(self):
+        return [
+            {
+                "url": "https://example.com/first",
+                "title": "First result",
+                "snippet": self.payload_before["results"][0]["content"][:250] + "…",
+                "provenance": "PERSISTED_EVIDENCE",
+            },
+            {
+                "url": "https://example.com/second",
+                "title": "Evidence source",
+                "snippet": "Second source content.",
+                "provenance": "PERSISTED_EVIDENCE",
+            },
+            {
+                "url": "https://example.com/fourth",
+                "title": "Evidence source",
+                "snippet": "Fourth source content.",
+                "provenance": "PERSISTED_EVIDENCE",
+            },
+        ]
+
     def _assert_persisted_evaluation_and_sources(self):
         self.evaluate_persisted.assert_called_once()
         self.assertEqual(
@@ -903,25 +925,29 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         self.assertNotIn("Source 1:", evidence_context)
         self.assertNotIn("Fact-check evidence.", evidence_context)
         evaluate_url.assert_not_called()
-        expected_sources = self._expected_sources()
+        expected_sources = self._expected_url_persisted_sources()
         self.save_claim.assert_called_once_with(
             self.claim.pk, self.verdict, "Live Web Search",
-            self.url_cleaned_text, expected_sources,
+            self.cleaned["cleaned_claim"], expected_sources,
         )
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, self.verdict["verdict"])
         self.assertEqual(self.claim.ai_sources, expected_sources)
-        self.assertEqual(self.claim.context_text, self.url_cleaned_text)
+        self.assertEqual(self.claim.context_text, self.cleaned["cleaned_claim"])
         self.assertEqual(self.payload, self.payload_before)
 
     def _assert_unavailable_url_evidence_abstains(self, evaluate_url):
         self.evaluate_persisted.assert_not_called()
         evaluate_url.assert_not_called()
-        expected_sources = self._expected_sources()
+        # Persisted URL reports must not guess source cards when ingestion or
+        # linking produced no persisted SECONDARY evidence for this run.
+        expected_sources = []
         self.assertEqual(self.save_claim.call_args.args[1]["verdict"], "UNVERIFIED")
         self.assertEqual(self.save_claim.call_args.args[1]["confidence_score"], 0)
         self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
-        self.assertEqual(self.save_claim.call_args.args[3], self.url_cleaned_text)
+        self.assertEqual(
+            self.save_claim.call_args.args[3], self.cleaned["cleaned_claim"]
+        )
         self.assertEqual(self.save_claim.call_args.args[4], expected_sources)
         stages = [call.args[1] for call in self.log_stage.call_args_list]
         self.assertIn("url_tavily_persisted_evidence_unavailable", stages)
