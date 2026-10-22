@@ -12,10 +12,12 @@ import requests
 from django.test import SimpleTestCase, override_settings
 
 from api.services import LLMProviderUnavailableError, call_llm_with_fallback
+from api.investigation_classifier import _query_classifier, classification_system_prompt
 from api.verification.classification_contract import CLASSIFICATION_OPERATION
 from api.verification.cloudflare_evaluation import DEFAULT_MODEL
 from api.verification.cloudflare_pilot import (
     cloudflare_classification_http_timeout,
+    cloudflare_classification_completion_budget,
     cloudflare_classification_reject_if_busy_enabled,
 )
 
@@ -103,6 +105,98 @@ class ClassificationLatencyPolicyTests(SimpleTestCase):
         self.assertEqual(kwargs["json"]["options"], {"rejectIfBusy": True})
         self.assertEqual(kwargs["json"]["messages"][1]["content"], CLAIM)
         self.assertNotIn("retry", kwargs["json"])
+
+    def test_default_classification_budget_stays_1024(self):
+        self.assertEqual(cloudflare_classification_completion_budget(), 1024)
+        self.assertEqual(cloudflare_classification_http_timeout(), (3, 30))
+        self.assertEqual(self._classify(), VALID)
+        self.assertEqual(self.http.call_args.kwargs["json"]["max_tokens"], 1024)
+        self.http.assert_called_once()
+
+    def test_final_dev_profile_4096_with_exact_production_prompt(self):
+        # Only this test's explicit dev flags can enlarge classification.
+        # Use the actual _query_classifier entry point; no DB/Celery/HTTP.
+        with patch.dict(os.environ, {
+            "CLOUDFLARE_PILOT_CLASSIFICATION_MAX_TOKENS": "4096",
+            "CLOUDFLARE_PILOT_CLASSIFICATION_READ_TIMEOUT_SEC": "45",
+        }):
+            self.assertEqual(cloudflare_classification_completion_budget(), 4096)
+            self.assertEqual(cloudflare_classification_http_timeout(), (3, 45))
+            self.assertEqual(_query_classifier(CLAIM), json.loads(VALID))
+        self.http.assert_called_once()
+        self.gemini.models.generate_content.assert_called_once()
+        self.groq.with_options.assert_not_called()
+        request = self.http.call_args.kwargs
+        self.assertEqual(request["timeout"], (3, 45))
+        self.assertEqual(request["json"]["max_tokens"], 4096)
+        self.assertEqual(request["json"]["model"], DEFAULT_MODEL)
+        self.assertEqual(request["json"]["messages"][0]["content"],
+                         classification_system_prompt())
+        self.assertEqual(request["json"]["messages"][1]["content"], CLAIM)
+        self.assertFalse(request["json"]["stream"])
+        self.assertEqual(request["json"]["options"], {"rejectIfBusy": True})
+        self.assertNotIn("retry", request["json"])
+
+    def test_4096_profile_empty_reasoning_response_falls_back_to_groq(self):
+        # The Cloudflare-02 style failure remains fail-closed, never a
+        # fabricated subject verdict, and always uses no retry.
+        self.http.return_value.json.return_value = {
+            "choices": [{
+                "message": {
+                    "content": "",
+                    "reasoning_content": "mock reasoning never logged",
+                },
+                "finish_reason": "length",
+            }],
+            "usage": {
+                "prompt_tokens": 177,
+                "completion_tokens": 4096,
+                "total_tokens": 4273,
+            },
+        }
+        with patch.dict(os.environ, {
+            "CLOUDFLARE_PILOT_CLASSIFICATION_MAX_TOKENS": "4096",
+            "CLOUDFLARE_PILOT_CLASSIFICATION_READ_TIMEOUT_SEC": "45",
+        }), patch("api.services.record_llm_provider_call") as telemetry:
+            self.assertEqual(_query_classifier(CLAIM), json.loads(VALID))
+        self.http.assert_called_once()
+        self.groq.with_options.assert_called_once_with(max_retries=0)
+        self.groq_call.assert_called_once()
+        statuses = [(c.args[1], c.args[4]) for c in telemetry.call_args_list]
+        self.assertEqual(statuses, [
+            ("gemini", "failed"), ("cloudflare", "failed"), ("groq", "success"),
+        ])
+        cf_call = telemetry.call_args_list[1]
+        self.assertEqual(
+            cf_call.args[5],
+            "CloudflareEvaluationError code=EMPTY_PROVIDER_RESPONSE",
+        )
+        self.assertNotIn("mock reasoning never logged", str(telemetry.call_args_list))
+
+    def test_invalid_4096_budget_and_45s_timeout_fail_closed(self):
+        for invalid in ("4095", "8192", "true", "", " 4096"):
+            with self.subTest(value=invalid), patch.dict(os.environ, {
+                "CLOUDFLARE_PILOT_CLASSIFICATION_MAX_TOKENS": invalid,
+                "CLOUDFLARE_PILOT_CLASSIFICATION_READ_TIMEOUT_SEC": "45",
+            }):
+                self.assertEqual(cloudflare_classification_completion_budget(), 1024)
+                self.assertEqual(cloudflare_classification_http_timeout(), (3, 15))
+        self.http.assert_not_called()
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_4096_flags_cannot_activate_in_production(self):
+        with patch.dict(os.environ, {
+            "CLOUDFLARE_PILOT_CLASSIFICATION_MAX_TOKENS": "4096",
+            "CLOUDFLARE_PILOT_CLASSIFICATION_READ_TIMEOUT_SEC": "45",
+        }):
+            self.assertEqual(cloudflare_classification_completion_budget(), 1024)
+            self.assertEqual(cloudflare_classification_http_timeout(), (3, 15))
+            self.gemini.models.generate_content.side_effect = None
+            self.gemini.models.generate_content.return_value = SimpleNamespace(
+                text=VALID,
+            )
+            self.assertEqual(_query_classifier(CLAIM), json.loads(VALID))
+        self.http.assert_not_called()
 
     def test_candidate_accepts_strict_abstention_without_forced_groq(self):
         self._response(ABSTAIN)
