@@ -2825,23 +2825,28 @@ def verification_intake(request):
     from .verification_domain_policy import (
         eligibility_reason,
         organization_specializations,
+        subject_eligibility_enforced,
     )
-    specializations = organization_specializations(organization)
 
-    # Partner intake lists only eligible, already classified claims. The
-    # claim-time service independently enforces the same rule under a lock.
-    eligible = []
-    for assignment in queryset:
-        classification = getattr(
-            assignment.claim,
-            "investigation_classification",
-            None,
-        )
-        if eligibility_reason(
-            classification=classification,
-            specializations=specializations,
-        ) is None:
-            eligible.append(assignment)
+    # Subject routing is only authoritative in the separately approved
+    # enforce rollout. Off/shadow preserve today's partner intake; shadow
+    # suggestions never silently remove claims from the shared pool.
+    if subject_eligibility_enforced():
+        specializations = organization_specializations(organization)
+        eligible = []
+        for assignment in queryset:
+            classification = getattr(
+                assignment.claim,
+                "investigation_classification",
+                None,
+            )
+            if eligibility_reason(
+                classification=classification,
+                specializations=specializations,
+            ) is None:
+                eligible.append(assignment)
+    else:
+        eligible = list(queryset)
 
     total_count = len(eligible)
     assignments = eligible[offset : offset + limit]
