@@ -31,6 +31,7 @@ from .models import (
 )
 from .accountability_service import record_accountability_event
 from .verification_domain_policy import DOMAIN_CODES
+from .verification.classification_contract import validate_classification_response
 
 logger = logging.getLogger(__name__)
 CLASSIFIER_VERSION = "v3-persisted-subject"
@@ -64,11 +65,20 @@ def _evidence_in_text(text, evidence):
 
 
 def validate_model_suggestion(text, payload):
-    """Apply deterministic structural + quoted-source evidence checks.
+    """Reject loose AI payloads before any candidate can become authority.
 
-    This is not a substitute for empirical accuracy evaluation.
+    Reuse the same strict contract used by the offline reference scorer.
+    This is still NOT an empirical subject-accuracy guarantee.
     """
-    if not isinstance(payload, dict) or payload.get("decision") != "CLASSIFY":
+    if not isinstance(payload, dict):
+        return None
+    try:
+        raw = json.dumps(payload, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return None
+    if not validate_classification_response(raw, text):
+        return None
+    if payload["decision"] != "CLASSIFY":
         return None
     tags = payload.get("domains")
     if not isinstance(tags, list) or not (1 <= len(tags) <= MAX_DOMAINS):
@@ -107,10 +117,15 @@ def classification_system_prompt():
 def _query_classifier(text):
     from .services import call_llm_with_fallback
 
-    return json.loads(call_llm_with_fallback(
+    raw = call_llm_with_fallback(
         classification_system_prompt(), text,
         operation="investigation_classification",
-    ))
+    )
+    # Provider routing is dev-gated; this final boundary is NOT. Never let
+    # loose Gemini/Groq JSON bypass classification schema and quote checks.
+    if not validate_classification_response(raw, text):
+        raise ValueError("INVALID_CLASSIFICATION_RESPONSE")
+    return json.loads(raw)
 
 
 def classify_investigation_claim(claim_id):
