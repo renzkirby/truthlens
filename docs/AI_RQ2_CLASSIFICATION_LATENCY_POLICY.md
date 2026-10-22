@@ -120,8 +120,8 @@ live requests or infer a percentile from these two samples. Agree on:
    evaluation harness** with controlled access to synthetic or approved
    test inputs. Do not claim that the stored candidate_domains list
    independently proves the model's rationale.
-5. Consistent worker version and flags, using the existing read-only
-   worker readiness probe; no duplicate workers with stale identities.
+5. Consistent worker version and flags; restart development workers after
+   configuration changes and avoid duplicate workers with stale identities.
 6. Explicit written rollout/rollback approval before changing defaults
    or permitting enforce mode.
 
@@ -141,7 +141,6 @@ working branch:
   api.tests.verification.test_classification_latency_policy `
   api.tests.verification.test_ai_rq2_classification_fallback `
   api.tests.verification.test_cloudflare_provider_evaluation `
-  api.tests.verification.test_cloudflare_worker_readiness `
   api.tests.verification.test_ai_rq2_provider_hierarchy `
   api.tests.verification.test_cloudflare_assessment_latency_guardrails `
   api.tests.verification.test_cloudflare_assessment_chunking `
