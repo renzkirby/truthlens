@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User
 from django.urls import reverse
+from django.test import override_settings
 
 from rest_framework import status
 from rest_framework.test import (
@@ -278,6 +279,7 @@ class VerificationAssignmentApiTests(APITestCase):
     # Available intake
     # =====================================
 
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="enforce")
     def test_unclassified_intake_is_not_visible_to_partner(self):
         fixture = self._create_available_assignment(suffix="needs-classification")
         ClaimInvestigationClassification.objects.filter(claim=fixture["claim"]).delete()
@@ -286,6 +288,28 @@ class VerificationAssignmentApiTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 0)
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="off")
+    def test_off_mode_keeps_unclassified_intake_visible(self):
+        fixture = self._create_available_assignment(suffix="legacy-off")
+        ClaimInvestigationClassification.objects.filter(claim=fixture["claim"]).delete()
+        response = self.lead_a_client.get(
+            reverse("verification_intake"), {"organization_id": str(self.organization_a.id)},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], str(fixture["assignment"].id))
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="shadow")
+    def test_shadow_mode_keeps_unclassified_intake_visible(self):
+        fixture = self._create_available_assignment(suffix="legacy-shadow")
+        ClaimInvestigationClassification.objects.filter(claim=fixture["claim"]).delete()
+        response = self.lead_a_client.get(
+            reverse("verification_intake"), {"organization_id": str(self.organization_a.id)},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], str(fixture["assignment"].id))
 
     def test_lead_verifier_can_view_available_intake(
         self,
