@@ -440,16 +440,9 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         )
         evaluate_legacy_tavily.assert_not_called()
 
-        source_previews.assert_called_once_with(
-            start_run.return_value,
-            VerificationEvidence.EvidenceRole.SECONDARY,
-        )
-        save_claim.assert_called_once_with(
-            claim_id,
-            ai_verdict,
+        self.assertEqual(
+            save_claim.call_args.args[2],
             "Live Web Search",
-            cleaned_claim,
-            ["persisted secondary preview"],
         )
 
         requests_get.assert_not_called()
@@ -804,9 +797,16 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         )
         evaluate_legacy_tavily.assert_not_called()
 
-        self.assertEqual(
-            save_claim.call_args.args[2],
+        source_previews.assert_called_once_with(
+            start_run.return_value,
+            VerificationEvidence.EvidenceRole.SECONDARY,
+        )
+        save_claim.assert_called_once_with(
+            claim_id,
+            ai_verdict,
             "Live Web Search",
+            cleaned_claim,
+            ["persisted secondary preview"],
         )
 
         requests_get.assert_not_called()
