@@ -1155,7 +1155,10 @@ def snippet_fact_check_process(
 
 
 @shared_task
+@verification_telemetry_scope()
+@llm_provider_scope()
 def classify_investigation_claim_task(claim_id):
+    """Run one classification job with the same provider job scope as verification."""
     from .investigation_classifier import classify_investigation_claim
     return classify_investigation_claim(claim_id)
 
