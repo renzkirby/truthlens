@@ -2,16 +2,34 @@
 
 **Date:** 2026-10-22 (Asia/Manila)
 **Branch:** `feat/ai-rq2-provider-hierarchy`
-**Status:** **32 aligned proposed references / 0 formally APPROVED**. Reviewer 1
-explicitly stated **“I approve”** in the project conversation on
-2026-10-22, in direct response to the final reference-label review gate;
-this is recorded as **reviewer-1 approval of the reconciled label set**,
-not as verification of reviewer identity or reviewer-2 sign-off. Reviewer 2
-(co-developer) has not yet explicitly confirmed the five normalization
-interpretations or approved the complete 32-case canonical set. Source
-reviews and follow-up answers were supplied conversationally and in two
-private Excel workbooks; reviewer identifiers/attestations have not been
-recorded in the canonical corpus.
+**Current status:** **32/32 consensus labels approved for descriptive OFFLINE audit** based on the first reviewer's direct approval and the second reviewer's approval **relayed by the first reviewer** in the project conversation on 2026-10-22. Five shortened/typo case-ID, code and omitted-decision mappings were also confirmed through the same relay. Reviewer identity was **not independently authenticated**; names and independent signed attestations have not been provided. A **separate private local corpus** carries the 32 `APPROVED` references with explicit role-based provenance. The bundled GitHub synthetic fixture remains **32 PENDING / 0 APPROVED** as an unchanged safety baseline. These approvals do **not** establish model accuracy, permit additional inference calls, or authorize automatic partner enforcement.
+
+## Latest confirmation — second reviewer sign-off reported by first reviewer
+
+The project user stated **“He confirms and approve”** on 2026-10-22
+in response to the outstanding five normalization checks and full-set
+sign-off request. This is sufficient to prepare a **separate evaluation
+corpus** labeled human-consensus APPROVED with the relay provenance
+clearly spelled out; it is **not independent verification of identity**.
+The private approved JSON (not committed) is named
+`PARTNER_GOV1_Approved_Reference_Corpus_2026_10_22.json`.
+The accompanying private provenance notes are
+`PARTNER_GOV1_Approval_Provenance_2026_10_22.md`.
+
+All five mappings in the next section are now **reported confirmed**:
+`election_ballot=elections_ballot`,
+`cross_campaign=cross_campaign_ai` with `ELECTION=ELECTIONS`,
+`cross_school_environment=CLASSIFY [EDUCATION, ENVIRONMENT]`,
+`TECHONOLOGY=TECHNOLOGY`, and
+`out_of_scope=out_of_scope_none`.
+Both reviewers agreed `cross_school_sport=CLASSIFY [EDUCATION]`.
+
+This file retains the original outstanding-question section below as a
+historical checklist; the latest reported confirmations above supersede
+its former "PENDING" status. The local, human-consensus corpus must be
+evaluated **offline first**, with no fabricated model predictions and
+no `enforce` activation. A stronger production dataset will require
+traceable signed reviewer identities and representative real claims.
 
 ## What was reported
 
@@ -53,7 +71,7 @@ confirmation **from Reviewer 2**, and both reviewers' traceable sign-off
 provenance should be retained before preparing an approved reference
 corpus. Do not invent reviewer identifiers in JSON.
 
-## Five pending normalization confirmations (all should be confirmed by Reviewer 2)
+## Five normalization checks — originally pending, now reported confirmed
 
 | Canonical case | Original second-review entry | Proposed interpretation requiring confirmation |
 |---|---|---|
@@ -63,8 +81,7 @@ corpus. Do not invent reviewer identifiers in JSON.
 | `geography_not_scope` | `geography_not_scope: CLASSIFY, TECHONOLOGY` | `TECHONOLOGY` means `TECHNOLOGY` |
 | `out_of_scope_none` | `out_of_scope: ABSTAIN` | `out_of_scope` means `out_of_scope_none` |
 
-These are plausible typos/abbreviations, but **not independently confirmed
-from reviewer 2**. Preserve the original entries and their mapping
+These were plausible typos/abbreviations and are now **reported confirmed by reviewer 2 through reviewer 1**; no independently authenticated reviewer-2 signature was supplied. Preserve the original entries and their mapping
 rather than silently reinterpreting a source record.
 
 ## Proposed sign-off sequence
