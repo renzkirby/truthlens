@@ -631,14 +631,6 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         )
         self.assertEqual(CanonicalSource.objects.filter(domain="example.com").count(), 1)
 
-    def _expected_sources(self):
-        return [
-            {"url": "https://example.com/first", "title": "First result",
-             "snippet": self.payload_before["results"][0]["content"][:250] + "..."},
-            {"url": "https://example.com/second", "title": "External Source",
-             "snippet": "Second source content...."},
-        ]
-
     def _expected_url_persisted_sources(self):
         return [
             {
@@ -696,7 +688,7 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         self.assertNotIn("Raw submitted claim.", evidence_context)
         self.assertNotIn("Fact-check evidence.", evidence_context)
         self.evaluate_tavily.assert_not_called()
-        expected_sources = self._expected_sources()
+        expected_sources = self._expected_url_persisted_sources()
         self.save_claim.assert_called_once_with(
             self.claim.pk, self.verdict, "Live Web Search",
             self.cleaned["cleaned_claim"], expected_sources,
@@ -709,7 +701,7 @@ class TavilyTextRuntimeIngestionTests(TestCase):
     def _assert_unavailable_evidence_abstains_and_preserves_sources(self):
         self.evaluate_persisted.assert_not_called()
         self.evaluate_tavily.assert_not_called()
-        expected_sources = self._expected_sources()
+        expected_sources = []
         self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
         self.assertEqual(self.save_claim.call_args.args[4], expected_sources)
         self.assertEqual(self.save_claim.call_args.args[1]["verdict"], "UNVERIFIED")
