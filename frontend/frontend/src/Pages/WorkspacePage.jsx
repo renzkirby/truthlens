@@ -75,16 +75,16 @@ const WORKSPACE_SECTIONS = [
    },
    {
       id: "intake",
-      label: "Verification Intake",
-      description: "Claim available community investigations for your partner organization.",
+      label: "Intake",
+      description: "Choose new community investigations for your partner organization.",
       icon: "scan-line",
       scope: "organization",
       capability: WorkspaceCapability.CLAIM_VERIFICATION_WORK,
    },
    {
       id: "workload",
-      label: "Organization Workload",
-      description: "Track active investigations currently owned by your partner organization.",
+      label: "Investigations",
+      description: "Resume active investigations and see what your organization is working on.",
       icon: "inbox",
       scope: "organization",
       capabilities: WORKLOAD_CAPABILITIES,
@@ -189,6 +189,17 @@ function WorkspacePage() {
    const isCorrectionRoute = location.pathname.startsWith("/workspace/factual-corrections");
    const routeQuery = useMemo(() => new URLSearchParams(location.search), [location.search]);
    const routeOrganizationId = routeQuery.get("organization_id");
+   const routeSectionId =
+      location.pathname === "/workspace/intake"
+         ? "intake"
+         : location.pathname === "/workspace/investigations"
+           ? "workload"
+           : routeQuery.get("section");
+   const routeCaseId = routeQuery.get("case_id");
+   const routeResourceType = routeQuery.get("resource_type");
+   const routeResourceId = routeQuery.get("resource_id");
+   const routeFactCheckId = routeQuery.get("fact_check_id");
+   const routePublicationId = routeQuery.get("publication_id");
    const routeStatus = ["ACTIVE", "COMPLETED", "CANCELLED", "ALL"].includes(routeQuery.get("status"))
       ? routeQuery.get("status")
       : "ACTIVE";
@@ -275,7 +286,7 @@ function WorkspacePage() {
          return null;
       }
 
-      const requestedId = isCorrectionRoute ? routeOrganizationId : requestedOrganizationId;
+      const requestedId = routeOrganizationId || requestedOrganizationId;
       const requestedMembership = requestedId
          ? memberships.find((membership) => {
               const isRequested = String(membership?.organization?.id) === String(requestedId);
@@ -355,22 +366,24 @@ function WorkspacePage() {
       [platformCapabilities, organizationCapabilities],
    );
 
-   const visibleSectionGroups = useMemo(
-      () =>
-         [
-            {
-               scope: "platform",
-               label: "Platform Safety",
-               sections: visibleSections.filter((section) => section.scope === "platform"),
-            },
-            {
-               scope: "organization",
-               label: "Organization tools",
-               sections: visibleSections.filter((section) => section.scope === "organization"),
-            },
-         ].filter((group) => group.sections.length > 0),
-      [visibleSections],
-   );
+   const visibleSectionGroups = useMemo(() => {
+      const group = (id, label, sectionIds) => ({
+         id,
+         label,
+         sections: visibleSections.filter((section) => sectionIds.includes(section.id)),
+      });
+
+      return [
+         {
+            id: "platform",
+            label: "Platform Safety",
+            sections: visibleSections.filter((section) => section.scope === "platform"),
+         },
+         group("work", "Investigation work", ["workload", "intake", "evidence", "adjudication"]),
+         group("publication", "Publication", ["drafting", "publishing", "publications", "factual-corrections"]),
+         group("organization", "Organization & insights", ["organization", "analytics", "accountability"]),
+      ].filter((item) => item.sections.length > 0);
+   }, [visibleSections]);
 
    const activeSectionId = useMemo(() => {
       if (visibleSections.length === 0) {
@@ -381,12 +394,15 @@ function WorkspacePage() {
          return "factual-corrections";
       }
 
+      const routeSection = routeSectionId
+         ? visibleSections.find((section) => section.id === routeSectionId)
+         : null;
       const requestedSection = requestedSectionId
          ? visibleSections.find((section) => section.id === requestedSectionId)
          : null;
 
-      return requestedSection?.id ?? visibleSections[0].id;
-   }, [isCorrectionRoute, visibleSections, requestedSectionId]);
+      return routeSection?.id ?? requestedSection?.id ?? visibleSections[0].id;
+   }, [isCorrectionRoute, visibleSections, requestedSectionId, routeSectionId]);
 
    const activeSection = visibleSections.find((section) => section.id === activeSectionId) ?? null;
 
@@ -640,11 +656,20 @@ function WorkspacePage() {
          return;
       }
 
-      setDraftingHandoff({
+      const handoff = {
          resourceType: "FACT_CHECK",
          resourceId: String(revisionId),
-      });
+      };
+      setDraftingHandoff(handoff);
       setRequestedSectionId("drafting");
+
+      const query = new URLSearchParams({
+         organization_id: selectedOrganizationId,
+         section: "drafting",
+         resource_type: handoff.resourceType,
+         resource_id: handoff.resourceId,
+      });
+      navigateWithOneShotAllowance(`/workspace?${query.toString()}`);
    };
 
    const openCurrentPublication = (publication) => {
@@ -661,9 +686,12 @@ function WorkspacePage() {
       const openPublication = () => {
          setPublicationHandoff(String(publicationId));
          setRequestedSectionId("publications");
-         if (isCorrectionRoute) {
-            navigateWithOneShotAllowance("/workspace");
-         }
+         const query = new URLSearchParams({
+            organization_id: selectedOrganizationId,
+            section: "publications",
+            publication_id: String(publicationId),
+         });
+         navigateWithOneShotAllowance(`/workspace?${query.toString()}`);
       };
 
       if (isCorrectionRoute) {
@@ -673,13 +701,46 @@ function WorkspacePage() {
       openPublication();
    };
 
+   const buildSectionLocation = (sectionId) => {
+      const query = new URLSearchParams();
+      if (selectedOrganizationId) {
+         query.set("organization_id", selectedOrganizationId);
+      }
+
+      if (sectionId === "intake") {
+         return `/workspace/intake?${query.toString()}`;
+      }
+
+      if (sectionId === "workload") {
+         return `/workspace/investigations?${query.toString()}`;
+      }
+
+      query.set("section", sectionId);
+      return `/workspace?${query.toString()}`;
+   };
+
+   const openInvestigation = (assignment) => {
+      if (!assignment?.id || !selectedOrganizationId) {
+         return;
+      }
+      const query = new URLSearchParams({ organization_id: selectedOrganizationId });
+      navigateWithOneShotAllowance(
+         `/workspace/investigations/${encodeURIComponent(assignment.id)}?${query.toString()}`,
+      );
+   };
+
    const handleOrganizationChange = (nextOrganizationId) => {
       withCorrectionDirtyGuard(() => {
          setRequestedOrganizationId(nextOrganizationId);
          if (isCorrectionRoute) {
             const query = new URLSearchParams({ organization_id: nextOrganizationId, status: "ACTIVE", offset: "0" });
             navigateWithOneShotAllowance(`/workspace/factual-corrections?${query.toString()}`);
+            return;
          }
+
+         const nextQuery = new URLSearchParams(location.search);
+         nextQuery.set("organization_id", nextOrganizationId);
+         navigateWithOneShotAllowance(`${location.pathname}?${nextQuery.toString()}`, { replace: true });
       });
    };
 
@@ -693,9 +754,7 @@ function WorkspacePage() {
 
       withCorrectionDirtyGuard(() => {
          setRequestedSectionId(sectionId);
-         if (isCorrectionRoute) {
-            navigateWithOneShotAllowance("/workspace");
-         }
+         navigateWithOneShotAllowance(buildSectionLocation(sectionId));
       });
    };
 
@@ -758,11 +817,11 @@ function WorkspacePage() {
 
          <div className="workspace-body">
             <aside className="workspace-sidebar">
-               <div className="workspace-sidebar-heading">Available tools</div>
+               <div className="workspace-sidebar-heading">Workspace navigation</div>
 
                <nav className="workspace-navigation" aria-label="Workspace sections">
                   {visibleSectionGroups.map((group) => (
-                     <section key={group.scope} className="workspace-nav-group">
+                     <section key={group.id} className="workspace-nav-group">
                         <h2>{group.label}</h2>
 
                         <div className="workspace-nav-group-items">
@@ -817,6 +876,7 @@ function WorkspacePage() {
                            key={selectedOrganizationId ?? "no-organization"}
                            organizationId={selectedOrganizationId}
                            organizationName={selectedOrganization?.name}
+                           onInvestigationClaimed={openInvestigation}
                         />
                      ) : activeSection.id === "workload" ? (
                         <OrganizationWorkloadPanel
@@ -826,6 +886,7 @@ function WorkspacePage() {
                            canReleaseInvestigation={organizationCapabilities.includes(
                               WorkspaceCapability.CLAIM_VERIFICATION_WORK,
                            )}
+                           onOpenInvestigation={openInvestigation}
                         />
                      ) : activeSection.id === "evidence" &&
                        organizationCapabilities.includes(WorkspaceCapability.REVIEW_EVIDENCE) ? (
@@ -834,6 +895,7 @@ function WorkspacePage() {
                            organizationId={selectedOrganizationId}
                            organizationName={selectedOrganization?.name}
                            canReviewEvidence
+                           initialCaseId={routeCaseId}
                         />
                      ) : activeSection.id === "adjudication" &&
                        organizationCapabilities.includes(WorkspaceCapability.ADJUDICATE) ? (
@@ -842,6 +904,7 @@ function WorkspacePage() {
                            organizationId={selectedOrganizationId}
                            organizationName={selectedOrganization?.name}
                            canAdjudicate
+                           initialCaseId={routeCaseId}
                         />
                      ) : activeSection.id === "drafting" &&
                        organizationCapabilities.includes(WorkspaceCapability.CREATE_FACT_CHECK_DRAFT) ? (
@@ -849,7 +912,12 @@ function WorkspacePage() {
                            key={selectedOrganizationId ?? "no-organization"}
                            organizationId={selectedOrganizationId}
                            organizationName={selectedOrganization?.name}
-                           initialSelection={draftingHandoff}
+                           initialSelection={
+                              draftingHandoff ||
+                              (routeResourceType && routeResourceId
+                                 ? { resourceType: routeResourceType, resourceId: routeResourceId }
+                                 : null)
+                           }
                            onInitialSelectionConsumed={() => setDraftingHandoff(null)}
                         />
                      ) : activeSection.id === "publishing" &&
@@ -858,6 +926,7 @@ function WorkspacePage() {
                            key={selectedOrganizationId ?? "no-organization"}
                            organizationId={selectedOrganizationId}
                            organizationName={selectedOrganization?.name}
+                           initialFactCheckId={routeFactCheckId}
                            onPublicationPublished={openCurrentPublication}
                         />
                      ) : activeSection.id === "publications" ? (
@@ -865,7 +934,7 @@ function WorkspacePage() {
                            key={selectedOrganizationId ?? "no-organization"}
                            organizationId={selectedOrganizationId}
                            organizationName={selectedOrganization?.name}
-                           initialPublicationId={publicationHandoff}
+                           initialPublicationId={publicationHandoff || routePublicationId}
                            onInitialPublicationConsumed={() => setPublicationHandoff(null)}
                            onRevisionCreated={openRevisionInDrafting}
                            onCorrectionOpened={(correctionRequestId) =>
