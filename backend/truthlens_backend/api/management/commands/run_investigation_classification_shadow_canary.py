@@ -256,15 +256,24 @@ class Command(BaseCommand):
                 "authoritative_classification": None,
                 "provider_trace": provider_events,
             })
+            # A complete provider failure is likely environmental or quota-wide.
+            # Do not multiply calls against the remaining synthetic cases.
+            if outcome == "FAILED":
+                break
 
         summary = {
             "status": "SHADOW_CANARY_FINISHED",
             "source_marker": CANARY_SOURCE,
             "claims_created": len(results),
+            "planned_claims": len(CANARY_CASES),
+            "stopped_early": len(results) < len(CANARY_CASES),
             "provider_stage_attempts": total_provider_attempts,
             "max_provider_stage_attempts": 9,
             "exact_matches": sum(r["exact_match"] for r in results),
-            "all_exact": all(r["exact_match"] for r in results),
+            "all_exact": (
+                len(results) == len(CANARY_CASES)
+                and all(r["exact_match"] for r in results)
+            ),
             "authoritative_rows": 0,
             "factual_verdicts_changed": 0,
             "enforcement_enabled": False,
