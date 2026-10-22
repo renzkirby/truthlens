@@ -197,6 +197,10 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         assess_evidence = stack.enter_context(patch(
             "api.tasks._assess_and_persist_reasoning_evidence"
         ))
+        source_previews = stack.enter_context(patch(
+            "api.tasks.persisted_evidence_source_previews",
+            return_value=["persisted fact-check preview"],
+        ))
 
         with (
             patch("api.tasks.create_verification_run"),
@@ -288,12 +292,16 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         )
         evaluate_legacy_gfc.assert_not_called()
 
+        source_previews.assert_called_once_with(
+            start_run.return_value,
+            VerificationEvidence.EvidenceRole.FACT_CHECK,
+        )
         save_claim.assert_called_once_with(
             claim_id,
             ai_verdict,
             "Official Fact Check",
             cleaned_claim,
-            ["https://example.com/" "fact-check"],
+            ["persisted fact-check preview"],
         )
 
         retrieve_tavily.assert_not_called()
