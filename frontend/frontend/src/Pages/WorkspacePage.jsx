@@ -740,6 +740,9 @@ function WorkspacePage() {
 
          const nextQuery = new URLSearchParams(location.search);
          nextQuery.set("organization_id", nextOrganizationId);
+         ["case_id", "resource_type", "resource_id", "fact_check_id", "publication_id", "from_assignment"].forEach(
+            (key) => nextQuery.delete(key),
+         );
          navigateWithOneShotAllowance(`${location.pathname}?${nextQuery.toString()}`, { replace: true });
       });
    };
