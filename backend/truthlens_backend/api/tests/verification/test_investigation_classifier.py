@@ -1,3 +1,4 @@
+import json
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -6,11 +7,13 @@ from django.test import TestCase, override_settings
 from api.investigation_classifier import (
     classify_investigation_claim, validate_model_suggestion,
     dispatch_classification_task, dispatch_classification_after_text_save,
+    _query_classifier,
 )
 from api.models import (
     AccountabilityEvent, Claim, ClaimInvestigationClassification,
     InvestigationClassificationAssessment, Thread, VerificationAssignment,
 )
+from api.verification_domain_policy import eligibility_reason
 
 
 class AutomaticInvestigationClassificationTests(TestCase):
@@ -46,6 +49,69 @@ class AutomaticInvestigationClassificationTests(TestCase):
         invalid = self.suggestion()
         invalid["domains"] *= 2
         self.assertIsNone(validate_model_suggestion(self.claim.context_text, invalid))
+
+    def test_authority_gate_rejects_surplus_and_unquoted_json_fields(self):
+        valid = self.suggestion()
+        for invalid in (
+            {**valid, "verdict": "FACT"},
+            {**valid, "jurisdiction": "GLOBAL"},
+            {"decision": "CLASSIFY", "domains": [
+                {**valid["domains"][0], "confidence": 0.99},
+            ]},
+            {"decision": "ABSTAIN", "domains": [
+                {"code": "SCIENCE", "evidence": "science experiment"},
+            ]},
+            {"decision": "CLASSIFY", "domains": [
+                {"code": "SCIENCE", "evidence": "not in claim"},
+            ]},
+        ):
+            with self.subTest(invalid=invalid):
+                self.assertIsNone(validate_model_suggestion(
+                    self.claim.context_text, invalid,
+                ))
+
+    @patch("api.services.call_llm_with_fallback")
+    def test_provider_result_is_strictly_validated_even_without_hierarchy(self, llm):
+        # This final boundary applies even if a legacy route bypasses
+        # development-only provider-level JSON validation.
+        wrong = {**self.suggestion(), "verdict": "FACT"}
+        llm.return_value = json.dumps(wrong)
+        with self.assertRaisesRegex(ValueError, "INVALID_CLASSIFICATION_RESPONSE"):
+            _query_classifier(self.claim.context_text)
+        llm.assert_called_once()
+        self.assertEqual(llm.call_args.kwargs["operation"], "investigation_classification")
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="enforce")
+    @patch("api.investigation_classifier._query_classifier")
+    def test_enforce_cannot_authorize_loose_structured_payload(self, provider):
+        # Even if a future route returns a dict instead of the validated
+        # _query_classifier output, no surplus payload becomes authority.
+        provider.return_value = {**self.suggestion(), "confidence": 0.99}
+        self.assertEqual(classify_investigation_claim(self.claim.pk), "ABSTAINED")
+        self.assertFalse(ClaimInvestigationClassification.objects.exists())
+        self.assertFalse(AccountabilityEvent.objects.filter(
+            action_type=AccountabilityEvent.ActionType.CLAIM_INVESTIGATION_CLASSIFIED,
+        ).exists())
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="shadow")
+    @patch("api.investigation_classifier._query_classifier")
+    def test_shadow_suggestion_never_becomes_partner_claimability(self, provider):
+        provider.return_value = self.suggestion()
+        self.assertEqual(classify_investigation_claim(self.claim.pk), "SUGGESTED")
+        suggestion = InvestigationClassificationAssessment.objects.get(
+            claim=self.claim,
+        )
+        self.assertEqual(suggestion.candidate_domains, ["SCIENCE"])
+        self.assertEqual(
+            eligibility_reason(classification=None, specializations=["SCIENCE"]),
+            "NEEDS_CLASSIFICATION",
+        )
+        self.assertFalse(
+            ClaimInvestigationClassification.objects.filter(claim=self.claim).exists()
+        )
+        self.assertFalse(AccountabilityEvent.objects.filter(
+            action_type=AccountabilityEvent.ActionType.CLAIM_INVESTIGATION_CLASSIFIED,
+        ).exists())
 
     @override_settings(INVESTIGATION_CLASSIFICATION_MODE="off")
     @patch("api.investigation_classifier._query_classifier")
