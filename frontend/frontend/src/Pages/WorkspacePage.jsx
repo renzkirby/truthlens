@@ -401,7 +401,9 @@ function WorkspacePage() {
          ? visibleSections.find((section) => section.id === requestedSectionId)
          : null;
 
-      return routeSection?.id ?? requestedSection?.id ?? visibleSections[0].id;
+      const defaultSection = visibleSections.find((section) => section.id === "workload") ?? visibleSections[0];
+
+      return routeSection?.id ?? requestedSection?.id ?? defaultSection.id;
    }, [isCorrectionRoute, visibleSections, requestedSectionId, routeSectionId]);
 
    const activeSection = visibleSections.find((section) => section.id === activeSectionId) ?? null;
