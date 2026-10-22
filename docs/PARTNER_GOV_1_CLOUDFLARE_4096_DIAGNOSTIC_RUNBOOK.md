@@ -143,6 +143,26 @@ are created in a dry run.**
 If the folder name already exists, **do not overwrite it**: choose a
 fresh private path and update `$packet03`.
 
+## Cloudflare-03 completed; follow-on paired study is OFFLINE ONLY
+
+The user later authorized and executed the one permitted Cloudflare-03
+live request. `cross_spacecraft` returned `CAPTURED_VALID`,
+`finish_reason=stop`, 829 completion tokens,
+`reasoning_present=true`, and an exact SCIENCE + TECHNOLOGY
+human-review reference match in ~8.821 seconds. The private offline
+audit reported **1 scored, 1 exact match, 31 missing**; full-corpus
+accuracy is undefined. The prior Cloudflare-02 1024-cap failure and
+Cloudflare-03 4096-cap success are NOT proof of a causal budget effect,
+because the successful 4096 request consumed just 829 tokens.
+**Cloudflare-03 is permanently used and must never be unlocked.**
+
+The next step is a **separate, no-network, four-case paired 1024 vs
+4096 study with two repetitions per arm**. It plans 16 potential
+future trials, but creates no live executor or permission. See
+`docs/PARTNER_GOV_1_CLOUDFLARE_PAIRED_BUDGET_BENCHMARK.md`.
+All live requests require a new explicit authorization following
+mocked regression acceptance.
+
 ## Gate for an actual Cloudflare-03 request — NOT YET APPROVED
 
 After the 19 new mocked tests, the existing offline suites and the
