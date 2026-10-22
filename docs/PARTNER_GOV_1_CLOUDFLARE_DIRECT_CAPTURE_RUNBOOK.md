@@ -6,7 +6,7 @@ There is **NO** model accuracy result, `enforce` is **NOT** authorized,
 and the default bundled 32-case corpus remains **PENDING**.
 
 The user approved **32 local review references** and generated
-`Documents\\TL-Private-Classification-Cloudflare-02` with:
+`Documents\TL-Private-Classification-Cloudflare-02` with:
 - `provider=cloudflare`
 - `model_id=@cf/google/gemma-4-26b-a4b-it`
 - `case_ids=[cross_spacecraft,cross_school_sport,ambiguous_plan,injection_civic]`
@@ -96,27 +96,27 @@ use the existing offline scorer later after separate live authorization.
 
 ## First acceptance: Run ONLY the dry-run and mocked tests
 
-From `backend\\truthlens_backend` with your existing approved
+From `backend\truthlens_backend` with your existing approved
 reference corpus in Downloads and the existing Cloudflare-02 packet:
 
 ```powershell
-$corpus = "$env:USERPROFILE\\Downloads\\PARTNER_GOV1_Approved_Reference_Corpus_2026_10_22.json"
-$packet = "$env:USERPROFILE\\Documents\\TL-Private-Classification-Cloudflare-02"
+$corpus = "$env:USERPROFILE\Downloads\PARTNER_GOV1_Approved_Reference_Corpus_2026_10_22.json"
+$packet = "$env:USERPROFILE\Documents\TL-Private-Classification-Cloudflare-02"
 
-..\\.venv\\Scripts\\python.exe .\\manage.py test `
+..\.venv\Scripts\python.exe .\manage.py test `
   api.tests.verification.test_cloudflare_classification_capture `
   api.tests.verification.test_classification_capture_preparation `
   api.tests.verification.test_classification_quality_audit `
   api.tests.verification.test_classification_latency_policy `
   --settings=truthlens_backend.test_settings --keepdb
 
-..\\.venv\\Scripts\\python.exe .\\manage.py capture_investigation_classification_cloudflare `
+..\.venv\Scripts\python.exe .\manage.py capture_investigation_classification_cloudflare `
   --corpus "$corpus" `
   --packet-dir "$packet" `
   --json-summary
 
-..\\.venv\\Scripts\\python.exe .\\manage.py check
-..\\.venv\\Scripts\\python.exe .\\manage.py makemigrations --check --dry-run
+..\.venv\Scripts\python.exe .\manage.py check
+..\.venv\Scripts\python.exe .\manage.py makemigrations --check --dry-run
 ```
 
 Expected for the dry-run: `status=DRY_RUN_READY_NO_PROVIDER_CALLS`,
