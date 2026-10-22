@@ -283,8 +283,7 @@
       "draft_expected": {
         "decision": "CLASSIFY",
         "domains": [
-          "EDUCATION",
-          "SPORTS"
+          "EDUCATION"
         ]
       },
       "review": {
