@@ -74,7 +74,7 @@ References:
   defaults to OFFLINE dry run. All live-use switches are gated,
   independent of Cloudflare-02's. **Do not activate them yet.**
 - `api/tests/verification/test_cloudflare_classification_diagnostic.py`:
-  **17 new mocked, no-DB tests**, including output-budget exhaustion,
+  **19 new mocked, no-DB tests**, including output-budget exhaustion,
   identical prompt, one adapter request, no fallback, immutable private
   profile, sanitization, independent permission and one-use semantics.
 
@@ -145,7 +145,7 @@ fresh private path and update `$packet03`.
 
 ## Gate for an actual Cloudflare-03 request — NOT YET APPROVED
 
-After the 17 new mocked tests, the existing offline suites and the
+After the 19 new mocked tests, the existing offline suites and the
 exact package dry run pass, we must review these outputs and obtain
 **fresh, explicit user authorization** for this one 4096-token request.
 Only then may the distinct dev-only opt-in and live confirmation be
