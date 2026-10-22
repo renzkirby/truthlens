@@ -128,6 +128,22 @@ The `test_cloudflare_classification_capture` unit test module uses
 a **separate synthetic temporary approved corpus** and mocks the
 transport; tests do not invoke actual Cloudflare.
 
+## Later Cloudflare-03 output-budget diagnostic (separate authorization)
+
+The first authorized Cloudflare-02 attempt stopped on `cross_spacecraft`:
+`EMPTY_PROVIDER_RESPONSE`, `finish_reason=length`,
+`reasoning_present=true`, `completion_tokens=1024/1024`,
+`duration_ms=19465`. No subject classification was scored; the
+Cloudflare-02 packet is permanently locked.
+
+A **separate, one-case, 4096-token, 45-second read-inactivity** test
+profile and 19 offline mocked tests have been staged. This is NOT a
+global configuration change and NOT new live authorization. Before
+considering any more inference, follow
+`docs/PARTNER_GOV_1_CLOUDFLARE_4096_DIAGNOSTIC_RUNBOOK.md`
+for **Cloudflare-03 preparation and a no-network dry run**.
+The original Cloudflare-02 package must never be rerun.
+
 ## Future gate (NOT PART OF CURRENT USER APPROVAL)
 
 Only after the mocked suite and packet dry run pass should a reviewer
