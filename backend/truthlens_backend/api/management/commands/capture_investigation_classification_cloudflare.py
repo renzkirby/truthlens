@@ -58,6 +58,7 @@ class Command(BaseCommand):
             ) from None
         if opts["json_summary"]:
             self.stdout.write(json.dumps(summary, sort_keys=True))
+            return
         else:
             if summary["status"] == "DRY_RUN_READY_NO_PROVIDER_CALLS":
                 self.stdout.write(
