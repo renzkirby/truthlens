@@ -440,9 +440,16 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         )
         evaluate_legacy_tavily.assert_not_called()
 
-        self.assertEqual(
-            save_claim.call_args.args[2],
+        source_previews.assert_called_once_with(
+            start_run.return_value,
+            VerificationEvidence.EvidenceRole.SECONDARY,
+        )
+        save_claim.assert_called_once_with(
+            claim_id,
+            ai_verdict,
             "Live Web Search",
+            cleaned_claim,
+            ["persisted secondary preview"],
         )
 
         requests_get.assert_not_called()
@@ -561,6 +568,10 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             patch(
                 "api.tasks.evaluate_url_claim_with_gfc",
             ) as evaluate_legacy_gfc,
+            patch(
+                "api.tasks.persisted_evidence_source_previews",
+                return_value=["persisted fact-check preview"],
+            ) as source_previews,
             patch("api.tasks._save_claim") as save_claim,
             patch("api.tasks._retrieve_and_ingest_tavily") as retrieve_tavily,
             patch("api.tasks._log_stage"),
@@ -613,12 +624,16 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         )
         evaluate_legacy_gfc.assert_not_called()
 
+        source_previews.assert_called_once_with(
+            start_run.return_value,
+            VerificationEvidence.EvidenceRole.FACT_CHECK,
+        )
         save_claim.assert_called_once_with(
             claim_id,
             ai_verdict,
             "Official Fact Check",
-            cleaned_text,
-            ["https://example.com/" "fact-check"],
+            cleaned_claim,
+            ["persisted fact-check preview"],
         )
 
         requests_post.assert_called_once()
@@ -731,6 +746,10 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             patch(
                 "api.tasks.evaluate_url_claim_with_tavily",
             ) as evaluate_legacy_tavily,
+            patch(
+                "api.tasks.persisted_evidence_source_previews",
+                return_value=["persisted secondary preview"],
+            ) as source_previews,
             patch("api.tasks._save_claim") as save_claim,
             patch("api.tasks._retrieve_and_ingest_tavily") as retrieve_tavily,
             patch("api.tasks._log_stage"),
