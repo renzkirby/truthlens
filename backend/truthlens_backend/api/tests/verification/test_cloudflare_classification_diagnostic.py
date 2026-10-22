@@ -33,8 +33,8 @@ from api.verification.cloudflare_evaluation import DEFAULT_MODEL
 VALID_CLASSIFICATION = json.dumps({
     "decision": "CLASSIFY",
     "domains": [
-        {"code": "SCIENCE", "evidence": "NASA launched the Europa Clipper"},
-        {"code": "TECHNOLOGY", "evidence": "SpaceX Falcon Heavy rocket"},
+        {"code": "SCIENCE", "evidence": "scientists would analyze data"},
+        {"code": "TECHNOLOGY", "evidence": "Falcon Heavy rocket launch"},
     ],
 })
 
