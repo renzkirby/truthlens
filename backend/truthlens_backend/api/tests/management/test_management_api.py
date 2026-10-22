@@ -513,6 +513,29 @@ class ManagementApiTests(APITestCase):
         self.assertEqual(event.subject_organization, organization)
         self.assertEqual(event.capability, MANAGE_PARTNER_ORGANIZATION)
 
+    def test_organization_creation_accepts_legacy_client_safe_trust_defaults(self):
+        response = self.client_for(self.superuser).post(
+            reverse("management_organizations"),
+            {
+                "name": "Legacy Client Compatible Lab",
+                "slug": "legacy-client-compatible-lab",
+                "organization_type": Organization.OrganizationType.RESEARCH,
+                "verification_status": Organization.VerificationStatus.UNVERIFIED,
+                "partner_status": Organization.PartnerStatus.NONE,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        organization = Organization.objects.get(pk=response.data["id"])
+        self.assertEqual(
+            organization.verification_status,
+            Organization.VerificationStatus.UNVERIFIED,
+        )
+        self.assertEqual(
+            organization.partner_status,
+            Organization.PartnerStatus.NONE,
+        )
+
     def test_organization_creation_rejects_unknown_fields_and_invalid_choices(self):
         base_payload = {
             "name": "Strict Organization",
@@ -526,10 +549,8 @@ class ManagementApiTests(APITestCase):
             ({"organization_type": "INVALID"}, "organization_type"),
             ({"verification_status": "INVALID"}, "verification_status"),
             ({"partner_status": "INVALID"}, "partner_status"),
-            ({"verification_status": Organization.VerificationStatus.UNVERIFIED}, "verification_status"),
             ({"verification_status": Organization.VerificationStatus.PENDING}, "verification_status"),
             ({"verification_status": Organization.VerificationStatus.VERIFIED}, "verification_status"),
-            ({"partner_status": Organization.PartnerStatus.NONE}, "partner_status"),
             ({"partner_status": Organization.PartnerStatus.ACTIVE}, "partner_status"),
             ({"partner_status": Organization.PartnerStatus.SUSPENDED}, "partner_status"),
             ({"partner_status": Organization.PartnerStatus.FORMER}, "partner_status"),
