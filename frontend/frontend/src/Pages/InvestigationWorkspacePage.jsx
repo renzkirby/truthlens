@@ -91,20 +91,22 @@ function InvestigationWorkspacePage() {
 
    const [requestVersion, setRequestVersion] = useState(0);
    const [contextOpen, setContextOpen] = useState(false);
+   const requestKey =
+      assignmentId && organizationId && membership
+         ? `${assignmentId}:${organizationId}:${requestVersion}`
+         : null;
    const [result, setResult] = useState({
-      loading: Boolean(organizationId && membership),
+      requestKey: null,
       data: null,
       error: "",
    });
 
    useEffect(() => {
-      if (!assignmentId || !organizationId || !membership) {
-         setResult({ loading: false, data: null, error: "" });
+      if (!requestKey) {
          return undefined;
       }
 
       let cancelled = false;
-      setResult((current) => ({ ...current, loading: true, error: "" }));
 
       const query = new URLSearchParams({ organization_id: organizationId });
       const url =
@@ -123,7 +125,7 @@ function InvestigationWorkspacePage() {
 
             if (!identityMatches) {
                setResult({
-                  loading: false,
+                  requestKey,
                   data: null,
                   error:
                      "The investigation response did not match this workspace link. Return to Investigations and open it again.",
@@ -131,12 +133,12 @@ function InvestigationWorkspacePage() {
                return;
             }
 
-            setResult({ loading: false, data, error: "" });
+            setResult({ requestKey, data, error: "" });
          })
          .catch((error) => {
             if (cancelled) return;
             setResult({
-               loading: false,
+               requestKey,
                data: null,
                error:
                   error?.status === 404
@@ -148,9 +150,12 @@ function InvestigationWorkspacePage() {
       return () => {
          cancelled = true;
       };
-   }, [assignmentId, authFetch, membership, organizationId, requestVersion]);
+   }, [assignmentId, authFetch, membership, organizationId, requestKey]);
 
-   const data = result.data;
+   const resultIsCurrent = Boolean(requestKey && result.requestKey === requestKey);
+   const isLoading = Boolean(requestKey && !resultIsCurrent);
+   const data = resultIsCurrent ? result.data : null;
+   const resultError = resultIsCurrent ? result.error : "";
    const actions = Array.isArray(data?.allowed_actions) ? data.allowed_actions : [];
    const progressAction = actions.find((action) => action.code !== "RELEASE_INVESTIGATION") ?? null;
    const progressDestination = progressAction
@@ -198,7 +203,7 @@ function InvestigationWorkspacePage() {
       );
    }
 
-   if (result.loading) {
+   if (isLoading) {
       return (
          <div className="investigation-workspace-page">
             <div className="investigation-workspace-state" role="status" aria-live="polite">
@@ -210,13 +215,13 @@ function InvestigationWorkspacePage() {
       );
    }
 
-   if (result.error || !data) {
+   if (resultError || !data) {
       return (
          <div className="investigation-workspace-page">
             <div className="investigation-workspace-state" role="alert">
                <Icons name="alert-circle" size={26} />
                <h1>Investigation unavailable</h1>
-               <p>{result.error || "The investigation could not be loaded."}</p>
+               <p>{resultError || "The investigation could not be loaded."}</p>
                <div className="investigation-workspace-state-actions">
                   <Button variant="secondary" leadingIcon={<Icons name="arrow-left" />} onClick={backToInvestigations}>
                      Back to investigations
