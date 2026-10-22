@@ -139,7 +139,6 @@ From the backend Django root:
   api.tests.verification.test_run_text_runtime `
   api.tests.verification.test_run_url_runtime `
   api.tests.verification.test_pilot_evidence_budget `
-  api.tests.verification.test_claim_legacy_schema_repair `
   --settings=truthlens_backend.test_settings --keepdb
 
 ..\.venv\Scripts\python.exe .\manage.py check
@@ -268,7 +267,6 @@ From `backend/truthlens_backend`, after pulling the active
   api.tests.verification.test_run_text_runtime `
   api.tests.verification.test_run_url_runtime `
   api.tests.verification.test_pilot_evidence_budget `
-  api.tests.verification.test_claim_legacy_schema_repair `
   --settings=truthlens_backend.test_settings --keepdb
 
 ..\\.venv\\Scripts\\python.exe .\\manage.py check
@@ -391,7 +389,6 @@ Pull the existing branch, then from
   api.tests.verification.test_run_text_runtime `
   api.tests.verification.test_run_url_runtime `
   api.tests.verification.test_pilot_evidence_budget `
-  api.tests.verification.test_claim_legacy_schema_repair `
   --settings=truthlens_backend.test_settings --keepdb
 
 ..\\.venv\\Scripts\\python.exe .\\manage.py check
