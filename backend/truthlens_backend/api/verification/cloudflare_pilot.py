@@ -26,6 +26,7 @@ ASSESSMENT_CHUNKING_FLAG = "CLOUDFLARE_PILOT_ASSESSMENT_CHUNKING"
 CLASSIFICATION_PILOT_FLAG = "ENABLE_CLOUDFLARE_CLASSIFICATION_PILOT"
 CLASSIFICATION_REJECT_BUSY_FLAG = "CLOUDFLARE_PILOT_CLASSIFICATION_REJECT_IF_BUSY"
 CLASSIFICATION_READ_TIMEOUT_FLAG = "CLOUDFLARE_PILOT_CLASSIFICATION_READ_TIMEOUT_SEC"
+CLASSIFICATION_BUDGET_FLAG = "CLOUDFLARE_PILOT_CLASSIFICATION_MAX_TOKENS"
 PILOT_OPERATION = "persisted_evidence_evaluation"
 ASSESSMENT_OPERATION = "evidence_assessment"
 PILOT_COMPLETION_TOKENS = 2048
@@ -37,6 +38,7 @@ ASSESSMENT_MAX_ITEMS = 4
 ASSESSMENT_MAX_CHUNKS = 3
 ASSESSMENT_HTTP_TIMEOUT = (3, 15)
 CLASSIFICATION_HTTP_TIMEOUT = (3, 15)
+# Conservative baseline; 4096 requires a distinct, dev-only opt-in.
 CLASSIFICATION_COMPLETION_TOKENS = 1024
 CLASSIFICATION_MAX_INPUT_CHARS = 2400
 CLASSIFICATION_MIN_INPUT_CHARS = 20
@@ -99,17 +101,36 @@ def cloudflare_classification_reject_if_busy_enabled():
     )
 
 
-def cloudflare_classification_http_timeout():
-    """Allow a *single* dev-only diagnostic timeout arm (15s vs 30s read).
+def cloudflare_classification_completion_budget():
+    """4096 is opt-in for dev-only classification; legacy default is 1024.
 
-    The requests read timeout bounds socket inactivity, not total duration.
-    Changing the classification stage cannot modify final verdict settings.
+    Never let this setting affect evidence assessment or factual verdicts.
+    Only the exact string "4096" is accepted; all other inputs fail closed.
     """
     if (
         cloudflare_pilot_enabled(CLASSIFICATION_OPERATION)
-        and os.getenv(CLASSIFICATION_READ_TIMEOUT_FLAG, "") == "30"
+        and os.getenv(CLASSIFICATION_BUDGET_FLAG, "") == "4096"
     ):
-        return (CLASSIFICATION_HTTP_TIMEOUT[0], 30)
+        return 4096
+    return CLASSIFICATION_COMPLETION_TOKENS
+
+
+def cloudflare_classification_http_timeout():
+    """Bound classification socket inactivity, NOT total wall-clock time.
+
+    Default is 15s. The established dev-only flag supports 30s.
+    A 45s read limit is available ONLY with the explicit 4096-token arm.
+    Neither modifies final-evaluation or evidence-assessment timeouts.
+    """
+    if cloudflare_pilot_enabled(CLASSIFICATION_OPERATION):
+        requested = os.getenv(CLASSIFICATION_READ_TIMEOUT_FLAG, "")
+        if requested == "30":
+            return (CLASSIFICATION_HTTP_TIMEOUT[0], 30)
+        if (
+            requested == "45"
+            and cloudflare_classification_completion_budget() == 4096
+        ):
+            return (CLASSIFICATION_HTTP_TIMEOUT[0], 45)
     return CLASSIFICATION_HTTP_TIMEOUT
 
 
@@ -394,7 +415,7 @@ def call_validated_cloudflare_pilot(
             ASSESSMENT_COMPLETION_TOKENS
             if operation == ASSESSMENT_OPERATION
             else (
-                CLASSIFICATION_COMPLETION_TOKENS
+                cloudflare_classification_completion_budget()
                 if operation == CLASSIFICATION_OPERATION
                 else _final_completion_budget()
             )
