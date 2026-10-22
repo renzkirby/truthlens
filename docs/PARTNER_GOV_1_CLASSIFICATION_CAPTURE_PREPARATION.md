@@ -129,6 +129,72 @@ user content without consent.
 ..\.venv\Scripts\python.exe .\manage.py makemigrations --check --dry-run
 ```
 
+## Cloudflare-02 — model pinned, priced evaluation review (2026-10-22)
+
+The user created a fresh private package
+`Documents\\TL-Private-Classification-Cloudflare-02` successfully:
+`provider=cloudflare`,
+`model_id=@cf/google/gemma-4-26b-a4b-it`,
+`approved=32`, `planned_requests=4`, selected
+`[cross_spacecraft,cross_school_sport,ambiguous_plan,injection_civic]`,
+`corpus_sha256=40974b32aa0d7a32ec201f85bc703c14650c3c34d5bae9dbd01bb83ac53bb6af`.
+The command confirmed **no provider calls, no predictions and no DB writes**.
+The earlier private `Cloudflare-01` package still has
+`model_id=NOT_SELECTED`; retain it as history, do not overwrite it.
+
+Cloudflare's official **Workers AI pricing** documentation, checked on
+2026-10-22, currently lists **$0.10 per million input tokens and
+$0.30 per million output tokens** for Gemma 4 26B A4B. Workers AI
+provides a **10,000 Neurons/day** free allocation, with plan and
+capacity limits; billed usage depends on account and actual token
+accounting. Sources:
+- https://developers.cloudflare.com/workers-ai/platform/pricing/
+- https://developers.cloudflare.com/workers-ai/models/gemma-4-26b-a4b-it/
+- https://developers.cloudflare.com/changelog/post/2026-07-28-models-require-workers-paid/
+
+**Hypothetical planning math, not measured usage:** Four calls with
+**1,000 input tokens and 1,024 output tokens EACH** at those rates would
+have a **$0.0016288 nominal token value** before any free allocation
+or ancillary costs. This estimate has no enforcement power and is not
+a guarantee: actual output may include substantial model reasoning.
+The existing offline planning command may calculate this estimate
+using `--input-price-per-million 0.10 --output-price-per-million 0.30
+--assumed-input-tokens 1000 --assumed-output-tokens 1024` (without
+`--export-dir`, to leave existing private files untouched).
+
+**Adapter source review:** Current development Cloudflare adapter uses
+`model=@cf/google/gemma-4-26b-a4b-it`, `temperature=0.1`,
+`response_format={"type":"json_object"}`, `stream=false`,
+and `max_tokens=1024`, **single attempt and no retries**.
+The classification default HTTP timeouts are **(3s connect, 15s
+read-inactivity)**; optional explicit dev flag
+`CLOUDFLARE_PILOT_CLASSIFICATION_READ_TIMEOUT_SEC=30` yields
+**(3,30)** with the dev-only pilot gates enabled, and
+`CLOUDFLARE_PILOT_CLASSIFICATION_REJECT_IF_BUSY=1` optionally requests
+fast capacity rejection. Neither socket timeout is a hard total-runtime
+limit. Prior one-case 15s timeout / 30s success does not imply
+reliability or accuracy.
+
+**Important:** The offline plan's `--model-id` is **metadata only**.
+The actual classification system instruction must match
+`api/investigation_classifier.py::_query_classifier`, and the
+original user prompt must be exactly the selected persisted
+`claim_text`. No such live runner exists in this checkpoint:
+the production `call_llm_with_fallback` may use Gemini and Groq
+before/after Cloudflare and must **not** be used for isolated
+provider-accuracy measurements. A future separately approved capture
+implementation must be direct Cloudflare-only, reuse the exact
+classification instructions/strict validator, avoid Celery/DB,
+record original raw outputs and errors privately (including invalid
+JSON rather than rewriting), impose its own hard call budget
+and no retries, and never activate `enforce`.
+
+**Next authorization gate:** A future direct live evaluator should first
+receive a separate code/contract review and offline mocked tests,
+then explicit user approval for **no more than four** Cloudflare
+requests on the four approved synthetic claims; only afterward may
+any actual provider request or token spend occur.
+
 ## Eventually scoring real, captured responses
 
 Only **after separate explicit authorization**, use a controlled capture
