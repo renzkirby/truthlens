@@ -151,9 +151,9 @@ def _private_output_directory(location):
     # The command is in repository/backend/truthlens_backend/api/management/commands/.
     # Never risk committing a packet containing claim texts, model responses or
     # information copied from a private human-reviewed reference corpus.
-    repo_root = Path(__file__).resolve().parents[3]
-    # Walk outside api/verification: this resolves to backend/truthlens_backend,
-    # the minimum protected application tree. Also protect the outer git root.
+    repo_root = Path(__file__).resolve().parents[2]
+    # From api/verification, parents[2] is backend/truthlens_backend.
+    # Also protect the outer Git checkout, including linked worktrees.
     git_roots = [parent for parent in Path(__file__).resolve().parents
                  if (parent / ".git").exists()]
     if target.is_relative_to(repo_root) or any(
