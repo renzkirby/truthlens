@@ -112,11 +112,53 @@ class InvestigationWorkspaceApiTests(APITestCase):
             canonical_claim=self.claim.context_text,
             rationale="Reviewed evidence supports the claim.",
         )
+        evidence = (
+            EvidenceSubmission.objects.filter(
+                thread__claim=self.claim,
+                evidence_status__in={
+                    EvidenceSubmission.EvidenceStatus.VERIFIED,
+                    EvidenceSubmission.EvidenceStatus.REJECTED,
+                },
+            )
+            .select_related("thread", "contributor", "verified_by")
+            .order_by("submitted_at", "id")
+            .first()
+        )
+        if evidence is None:
+            evidence = self.evidence(EvidenceSubmission.EvidenceStatus.VERIFIED)
+
         AdjudicationDecisionEvidenceSnapshot.objects.create(
             decision=decision,
             claim_id=self.claim.pk,
-            schema_version="1.0",
-            evidence_records=[],
+            schema_version=1,
+            evidence_records=[
+                {
+                    "id": str(evidence.pk),
+                    "thread_id": str(evidence.thread_id),
+                    "evidence_status": evidence.evidence_status,
+                    "evidence_type": evidence.evidence_type,
+                    "evidence_caption": evidence.evidence_caption,
+                    "evidence_url": evidence.evidence_url,
+                    "contributor_id": str(evidence.contributor_id),
+                    "reviewer_id": (
+                        str(evidence.verified_by_id)
+                        if evidence.verified_by_id is not None
+                        else None
+                    ),
+                    "submitted_at": (
+                        evidence.submitted_at.isoformat()
+                        if evidence.submitted_at is not None
+                        else None
+                    ),
+                    "reviewed_at": (
+                        evidence.verified_at.isoformat()
+                        if evidence.verified_at is not None
+                        else None
+                    ),
+                    "moderator_notes": evidence.moderator_notes,
+                    "rejection_reason": evidence.rejection_reason,
+                }
+            ],
         )
         return decision
 
