@@ -388,7 +388,7 @@ def _derive_state(
                 _action(
                     "CREATE_DRAFT",
                     "Create fact-check draft",
-                    "CLAIM",
+                    "ELIGIBLE_CLAIM",
                     assignment.claim_id,
                 )
             )
