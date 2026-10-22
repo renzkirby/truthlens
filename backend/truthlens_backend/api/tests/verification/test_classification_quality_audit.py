@@ -63,6 +63,20 @@ class SubjectCorpusQualityAuditTests(SimpleTestCase):
             },
         )
 
+    def test_school_sports_scholarship_consensus_is_pending_education_only(self):
+        """A multi-subject-looking claim must not gain a SPORTS requirement by keyword."""
+        case = next(
+            item for item in self.cases if item["id"] == "cross_school_sport"
+        )
+        self.assertEqual(
+            case["draft_expected"],
+            {"decision": "CLASSIFY", "domains": ["EDUCATION"]},
+        )
+        self.assertEqual(case["review"], {
+            "status": "PENDING", "reviewer": "", "notes": "",
+        })
+        self.assertIn("cross_domain", case["tags"])
+
     def test_default_command_is_dry_read_and_does_not_claim_accuracy(self):
         buf = StringIO()
         call_command("audit_investigation_classification", stdout=buf)
