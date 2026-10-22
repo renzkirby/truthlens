@@ -95,6 +95,26 @@ class VerificationRunTextRuntimeTests(TestCase):
                 "content": "Relevant web evidence.",
             }],
         }
+        self.gfc_report_sources = [{
+            "url": "https://example.com/fact-check",
+            "title": "Persisted fact-check",
+            "snippet": "Persisted fact-check evidence.",
+            "provenance": "PERSISTED_EVIDENCE",
+        }]
+        self.tavily_report_sources = [{
+            "url": "https://example.com/web",
+            "title": "Persisted web source",
+            "snippet": "Persisted web evidence.",
+            "provenance": "PERSISTED_EVIDENCE",
+        }]
+        self.source_previews = self._patch(
+            "api.tasks.persisted_evidence_source_previews",
+            side_effect=lambda _run, role: (
+                self.gfc_report_sources
+                if role == VerificationEvidence.EvidenceRole.FACT_CHECK
+                else self.tavily_report_sources
+            ),
+        )
         self._patch("api.embedding_service.generate_embedding", return_value=None)
         self._patch("api.tasks._log_stage")
         self.save_claim = self._patch("api.tasks._save_claim", wraps=tasks._save_claim)
@@ -225,6 +245,7 @@ class VerificationRunTextRuntimeTests(TestCase):
             self.retrieve_gfc, self.evaluate_gfc, self.retrieve_tavily,
             self.evaluate_tavily, self.evaluate_persisted, self.load_dossier,
             self.filter_dossier, self.render_dossier, self.assess_evidence,
+            self.source_previews,
         ):
             mocked.assert_not_called()
 
@@ -494,7 +515,7 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.evaluate_gfc.assert_not_called()
         self.save_claim.assert_called_once_with(
             self.claim.id, self.verdict, "Official Fact Check",
-            self.cleaned["cleaned_claim"], ["https://example.com/fact-check"],
+            self.cleaned["cleaned_claim"], self.gfc_report_sources,
         )
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "FAKE")
@@ -507,10 +528,9 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.retrieve_tavily.assert_called_once()
         self.evaluate_gfc.assert_not_called()
         self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
-        self.assertEqual(self.save_claim.call_args.args[4], [{
-            "url": "https://example.com/web", "title": "Web Result",
-            "snippet": "Relevant web evidence....",
-        }])
+        self.assertEqual(
+            self.save_claim.call_args.args[4], self.tavily_report_sources
+        )
 
     def test_provider_selected_abstaining_verdicts_abstain(self):
         for provider in ("vault", "gfc", "tavily"):
@@ -881,7 +901,13 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         self.assertEqual(self.claim.ai_verdict, "FAKE")
         self.assertIsNone(self.claim.final_verdict)
         self.assertEqual(self.claim.source_type, "Official Fact Check")
-        self.assertEqual(self.claim.ai_sources, ["https://example.com/fact-check"])
+        self.assertEqual(len(self.claim.ai_sources), 1)
+        self.assertEqual(
+            self.claim.ai_sources[0]["url"], "https://example.com/fact-check"
+        )
+        self.assertEqual(
+            self.claim.ai_sources[0]["provenance"], "PERSISTED_EVIDENCE"
+        )
         self.evaluate_persisted.assert_called_once()
         persisted_context = self.evaluate_persisted.call_args.args[1]
         self.assertIn("Rating: False", persisted_context)
