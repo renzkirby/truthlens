@@ -372,7 +372,15 @@ function Readiness({ detail }) {
    );
 }
 
-function PublishingContent({ authFetch, authIdentity, organizationId, organizationName, onPublicationPublished }) {
+function PublishingContent({
+   authFetch,
+   authIdentity,
+   organizationId,
+   organizationName,
+   onPublicationPublished,
+   initialFactCheckId,
+}) {
+   const initialFactCheckKey = initialFactCheckId ? String(initialFactCheckId) : null;
    const [offset, setOffset] = useState(0);
    const [queue, setQueue] = useState({ count: 0, limit: PAGE_SIZE, offset: 0, results: [] });
    const [queueLoading, setQueueLoading] = useState(true);
@@ -380,9 +388,9 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
    const [queueError, setQueueError] = useState("");
    const [queueRequestVersion, setQueueRequestVersion] = useState(0);
 
-   const [selectedId, setSelectedId] = useState(null);
+   const [selectedId, setSelectedId] = useState(initialFactCheckKey);
    const [detail, setDetail] = useState(null);
-   const [detailLoading, setDetailLoading] = useState(false);
+   const [detailLoading, setDetailLoading] = useState(Boolean(initialFactCheckKey));
    const [detailError, setDetailError] = useState("");
    const [detailUnavailable, setDetailUnavailable] = useState(false);
    const [detailRequestVersion, setDetailRequestVersion] = useState(0);
@@ -401,14 +409,14 @@ function PublishingContent({ authFetch, authIdentity, organizationId, organizati
    const queueRequestIdRef = useRef(0);
    const detailRequestIdRef = useRef(0);
    const mutationRequestIdRef = useRef(0);
-   const selectedIdRef = useRef(null);
+   const selectedIdRef = useRef(initialFactCheckKey);
    const hasLoadedQueueRef = useRef(false);
    const detailHeadingRef = useRef(null);
    const detailErrorRef = useRef(null);
    const conflictRef = useRef(null);
    const queueHeadingRef = useRef(null);
    const actionMessageRef = useRef(null);
-   const focusDetailAfterLoadRef = useRef(false);
+   const focusDetailAfterLoadRef = useRef(Boolean(initialFactCheckKey));
    const focusQueueAfterMutationRef = useRef(false);
    const focusActionMessageRef = useRef(false);
 

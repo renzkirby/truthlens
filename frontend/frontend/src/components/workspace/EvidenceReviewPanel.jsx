@@ -173,7 +173,9 @@ function EvidenceReviewContent({
    organizationId,
    organizationName,
    canReviewEvidence,
+   initialCaseId,
 }) {
+   const initialCaseKey = initialCaseId ? String(initialCaseId) : null;
 
    const [disposition, setDisposition] = useState("UNVERIFIED");
    const [offset, setOffset] = useState(0);
@@ -182,9 +184,9 @@ function EvidenceReviewContent({
    const [queueError, setQueueError] = useState("");
    const [queueRequestVersion, setQueueRequestVersion] = useState(0);
 
-   const [selectedCaseId, setSelectedCaseId] = useState(null);
+   const [selectedCaseId, setSelectedCaseId] = useState(initialCaseKey);
    const [detail, setDetail] = useState(null);
-   const [detailLoading, setDetailLoading] = useState(false);
+   const [detailLoading, setDetailLoading] = useState(Boolean(initialCaseKey));
    const [detailError, setDetailError] = useState("");
    const [detailUnavailable, setDetailUnavailable] = useState(false);
    const [detailRequestVersion, setDetailRequestVersion] = useState(0);
@@ -203,7 +205,7 @@ function EvidenceReviewContent({
    const authorityRevokedRef = useRef(false);
    const queueRequestIdRef = useRef(0);
    const detailRequestIdRef = useRef(0);
-   const selectedCaseIdRef = useRef(null);
+   const selectedCaseIdRef = useRef(initialCaseKey);
    const detailHeadingRef = useRef(null);
    const detailErrorRef = useRef(null);
    const actionErrorRef = useRef(null);
@@ -212,7 +214,7 @@ function EvidenceReviewContent({
    const decisionTriggerRef = useRef(null);
    const decisionNotesRef = useRef(null);
    const rejectionReasonRef = useRef(null);
-   const focusDetailAfterLoadRef = useRef(false);
+   const focusDetailAfterLoadRef = useRef(Boolean(initialCaseKey));
    const focusDetailAfterRetryRef = useRef(false);
    const focusDetailAfterMutationRef = useRef(false);
    const focusDetailErrorRef = useRef(false);

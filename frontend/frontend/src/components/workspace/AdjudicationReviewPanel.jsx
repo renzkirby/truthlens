@@ -437,7 +437,9 @@ function AdjudicationReviewContent({
    organizationId,
    organizationName,
    canAdjudicate,
+   initialCaseId,
 }) {
+   const initialCaseKey = initialCaseId ? String(initialCaseId) : null;
    const [statusFilter, setStatusFilter] = useState("");
    const [priorityFilter, setPriorityFilter] = useState("");
    const [offset, setOffset] = useState(0);
@@ -450,9 +452,9 @@ function AdjudicationReviewContent({
    const [queueLoading, setQueueLoading] = useState(true);
    const [queueError, setQueueError] = useState("");
    const [queueRequestVersion, setQueueRequestVersion] = useState(0);
-   const [selectedCaseId, setSelectedCaseId] = useState(null);
+   const [selectedCaseId, setSelectedCaseId] = useState(initialCaseKey);
    const [detail, setDetail] = useState(null);
-   const [detailLoading, setDetailLoading] = useState(false);
+   const [detailLoading, setDetailLoading] = useState(Boolean(initialCaseKey));
    const [detailError, setDetailError] = useState("");
    const [detailUnavailable, setDetailUnavailable] = useState(false);
    const [detailRequestVersion, setDetailRequestVersion] = useState(0);
@@ -475,15 +477,15 @@ function AdjudicationReviewContent({
    const queueRequestIdRef = useRef(0);
    const detailRequestIdRef = useRef(0);
    const reconciliationRequestIdRef = useRef(0);
-   const selectedCaseIdRef = useRef(null);
-   const originatingQueueCaseIdRef = useRef(null);
+   const selectedCaseIdRef = useRef(initialCaseKey);
+   const originatingQueueCaseIdRef = useRef(initialCaseKey);
    const returnFocusCaseIdRef = useRef(null);
    const queueRowRefs = useRef(new Map());
    const queueHeadingRef = useRef(null);
    const selectedCaseHeadingRef = useRef(null);
    const authorityErrorRef = useRef(null);
    const detailErrorRef = useRef(null);
-   const focusSelectedCaseRef = useRef(false);
+   const focusSelectedCaseRef = useRef(Boolean(initialCaseKey));
    const focusDetailErrorRef = useRef(false);
    const focusQueueAfterReturnRef = useRef(false);
    const focusQueueAfterAuthorityRetryRef = useRef(false);

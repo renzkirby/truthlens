@@ -39,7 +39,12 @@ function formatLabel(value) {
       .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-function OrganizationWorkloadPanel({ organizationId, organizationName, canReleaseInvestigation = false }) {
+function OrganizationWorkloadPanel({
+   organizationId,
+   organizationName,
+   canReleaseInvestigation = false,
+   onOpenInvestigation,
+}) {
    const { authFetch } = useAuth();
 
    const [offset, setOffset] = useState(0);
@@ -374,59 +379,71 @@ function OrganizationWorkloadPanel({ organizationId, organizationName, canReleas
                                  <InvestigationContextLinks claim={claim} />
                               </div>
 
-                              {canReleaseInvestigation && (
-                                 <div className="workload-item-actions">
-                                    {isConfirmingRelease ? (
-                                       <div className="workload-release-confirm">
-                                          <div className="workload-release-warning">
-                                             <Icons name="alert-triangle" size={17} />
+                              <div className="workload-item-actions">
+                                 <Button
+                                    type="button"
+                                    variant="primary"
+                                    density="standard"
+                                    trailingIcon={<Icons name="arrow-right" size={15} />}
+                                    onClick={() => onOpenInvestigation?.(assignment)}
+                                 >
+                                    Open investigation
+                                 </Button>
 
-                                             <span>
-                                                Release this investigation back to shared intake? This is only permitted
-                                                before authoritative review work begins.
-                                             </span>
+                                 {canReleaseInvestigation && (
+                                    <div className="workload-release-region">
+                                       {isConfirmingRelease ? (
+                                          <div className="workload-release-confirm">
+                                             <div className="workload-release-warning">
+                                                <Icons name="alert-triangle" size={17} />
+
+                                                <span>
+                                                   Release this investigation back to shared intake? This is only permitted
+                                                   before authoritative review work begins.
+                                                </span>
+                                             </div>
+
+                                             <div className="workload-release-controls">
+                                                <Button
+                                                   type="button"
+                                                   variant="secondary"
+                                                   density="standard"
+                                                   disabled={isReleasing}
+                                                   onClick={() => setConfirmingReleaseId(null)}
+                                                >
+                                                   Cancel
+                                                </Button>
+
+                                                <Button
+                                                   type="button"
+                                                   variant="secondary"
+                                                   density="comfortable"
+                                                   className="workload-warning-action"
+                                                   loading={isReleasing}
+                                                   loadingLabel="Releasing..."
+                                                   disabled={isReleasing}
+                                                   onClick={() => handleRelease(assignment.id)}
+                                                >
+                                                   Confirm release
+                                                </Button>
+                                             </div>
                                           </div>
-
-                                          <div className="workload-release-controls">
-                                             <Button
-                                                type="button"
-                                                variant="secondary"
-                                                density="standard"
-                                                disabled={isReleasing}
-                                                onClick={() => setConfirmingReleaseId(null)}
-                                             >
-                                                Cancel
-                                             </Button>
-
-                                             <Button
-                                                type="button"
-                                                variant="secondary"
-                                                density="comfortable"
-                                                className="workload-warning-action"
-                                                loading={isReleasing}
-                                                loadingLabel="Releasing..."
-                                                disabled={isReleasing}
-                                                onClick={() => handleRelease(assignment.id)}
-                                             >
-                                                Confirm release
-                                             </Button>
-                                          </div>
-                                       </div>
-                                    ) : (
-                                       <Button
-                                          type="button"
-                                          variant="secondary"
-                                          density="standard"
-                                          className="workload-release-action"
-                                          leadingIcon={<Icons name="logout" size={15} />}
-                                          disabled={Boolean(releasingId)}
-                                          onClick={() => setConfirmingReleaseId(assignment.id)}
-                                       >
-                                          Release investigation
-                                       </Button>
-                                    )}
-                                 </div>
-                              )}
+                                       ) : (
+                                          <Button
+                                             type="button"
+                                             variant="secondary"
+                                             density="standard"
+                                             className="workload-release-action"
+                                             leadingIcon={<Icons name="logout" size={15} />}
+                                             disabled={Boolean(releasingId)}
+                                             onClick={() => setConfirmingReleaseId(assignment.id)}
+                                          >
+                                             Release investigation
+                                          </Button>
+                                       )}
+                                    </div>
+                                 )}
+                              </div>
                            </article>
                         </li>
                      );

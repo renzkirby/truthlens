@@ -57,7 +57,7 @@ function getVerdictMeta(verdict) {
    return VERDICT_CONFIG[normalizedVerdict] ?? VERDICT_CONFIG.UNVERIFIED;
 }
 
-function VerificationIntakePanel({ organizationId, organizationName }) {
+function VerificationIntakePanel({ organizationId, organizationName, onInvestigationClaimed }) {
    const { authFetch } = useAuth();
 
    const [offset, setOffset] = useState(0);
@@ -216,7 +216,7 @@ function VerificationIntakePanel({ organizationId, organizationName }) {
       setNotice("");
 
       try {
-         await authFetch(resolveApiEndpoint("VERIFICATION_ASSIGNMENT_CLAIM", assignmentId), {
+         const claimedAssignment = await authFetch(resolveApiEndpoint("VERIFICATION_ASSIGNMENT_CLAIM", assignmentId), {
             method: "POST",
             headers: {
                "Content-Type": "application/json",
@@ -233,8 +233,9 @@ function VerificationIntakePanel({ organizationId, organizationName }) {
          setNotice(
             `Investigation claimed for ${
                organizationName || "your organization"
-            }. It is now part of the organization workload.`,
+            }. Opening the investigation workspace.`,
          );
+         onInvestigationClaimed?.(claimedAssignment);
       } catch (error) {
          setConfirmingId(null);
 
