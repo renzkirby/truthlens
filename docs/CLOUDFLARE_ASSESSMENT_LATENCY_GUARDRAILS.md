@@ -83,7 +83,7 @@ If already tracking this branch locally, use `git switch` plus a
 Run this selected no-network/mock regression suite from the Django root:
 
 ```powershell
-..\.venv\Scripts\python.exe .\manage.py test api.tests.verification.test_cloudflare_assessment_latency_guardrails api.tests.verification.test_cloudflare_multistage_provider api.tests.verification.test_cloudflare_verification_pilot api.tests.verification.test_cloudflare_provider_evaluation api.tests.verification.test_evidence_assessment api.tests.verification.test_verification_run_telemetry_inspection api.tests.verification.test_pipeline_telemetry api.tests.verification.test_run_text_runtime api.tests.verification.test_pilot_evidence_budget api.tests.verification.test_claim_legacy_schema_repair --settings=truthlens_backend.test_settings --keepdb
+..\.venv\Scripts\python.exe .\manage.py test api.tests.verification.test_cloudflare_assessment_latency_guardrails api.tests.verification.test_cloudflare_multistage_provider api.tests.verification.test_cloudflare_verification_pilot api.tests.verification.test_cloudflare_provider_evaluation api.tests.verification.test_evidence_assessment api.tests.verification.test_verification_run_telemetry_inspection api.tests.verification.test_pipeline_telemetry api.tests.verification.test_run_text_runtime api.tests.verification.test_pilot_evidence_budget --settings=truthlens_backend.test_settings --keepdb
 ..\.venv\Scripts\python.exe .\manage.py check
 ..\.venv\Scripts\python.exe .\manage.py makemigrations --check --dry-run
 ..\.venv\Scripts\python.exe .\manage.py migrate --plan
