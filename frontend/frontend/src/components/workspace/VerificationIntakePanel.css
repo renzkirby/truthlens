@@ -188,12 +188,52 @@
    overflow-wrap: anywhere;
 }
 
-.intake-ai-summary {
+.intake-claim-text.is-truncated {
+   display: -webkit-box;
+   overflow: hidden;
+   -webkit-box-orient: vertical;
+   -webkit-line-clamp: 3;
+}
+
+.intake-claim-details {
+   margin-top: 8px;
+}
+
+.intake-claim-details summary {
+   display: inline-flex;
+   align-items: center;
+   color: var(--brand-primary);
+   font-size: 0.75rem;
+   font-weight: 700;
+   cursor: pointer;
+}
+
+.intake-claim-details summary:hover {
+   text-decoration: underline;
+}
+
+.intake-claim-details p {
    margin: 9px 0 0;
-   color: var(--text-muted);
-   font-size: 0.84rem;
+   padding: 12px 14px;
+   border: 1px solid var(--border-light);
+   border-radius: 9px;
+   background: var(--bg-subtle);
+   color: var(--text-body);
+   font-size: 0.82rem;
    line-height: 1.6;
    overflow-wrap: anywhere;
+}
+
+.intake-ai-summary {
+   display: -webkit-box;
+   margin: 9px 0 0;
+   overflow: hidden;
+   color: var(--text-muted);
+   font-size: 0.82rem;
+   line-height: 1.55;
+   overflow-wrap: anywhere;
+   -webkit-box-orient: vertical;
+   -webkit-line-clamp: 2;
 }
 
 .intake-signals {
