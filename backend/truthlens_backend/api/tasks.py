@@ -1502,13 +1502,21 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         if review_url:
                             source_urls.append(review_url)
 
+                    # Report cards must project the FACT_CHECK evidence that
+                    # actually reached the persisted-evidence evaluator. Raw
+                    # provider top-N links are only a legacy no-run fallback.
+                    report_sources = (
+                        persisted_evidence_source_previews(
+                            run, VerificationEvidence.EvidenceRole.FACT_CHECK,
+                        ) if run is not None else source_urls
+                    )
                     save_started_at = time.perf_counter()
                     _save_claim(
                         claim_id,
                         ai_verdict,
                         "Official Fact Check",
                         cleaned_claim,
-                        source_urls,
+                        report_sources,
                     )
                     _log_stage(
                         claim_id,
@@ -1654,13 +1662,22 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         tavily_eval_started_at,
                         verdict=ai_verdict.get("verdict"),
                     )
+                # Keep the visible source cards aligned with the persisted
+                # SECONDARY evidence used by the evaluator. This mirrors the
+                # URL pipeline and prevents top-three retrieval cards from
+                # masquerading as the complete evaluated provenance.
+                report_sources = (
+                    persisted_evidence_source_previews(
+                        run, VerificationEvidence.EvidenceRole.SECONDARY,
+                    ) if run is not None else source_urls
+                )
                 save_started_at = time.perf_counter()
                 _save_claim(
                     claim_id,
                     ai_verdict,
                     "Live Web Search",
                     cleaned_claim,
-                    source_urls,
+                    report_sources,
                 )
                 _log_stage(
                     claim_id,
