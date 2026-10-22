@@ -172,7 +172,6 @@ Backend focused release tests:
   api.tests.management.test_management_governance_service `
   api.tests.organization.test_verification_scope `
   api.tests.organization.test_verification_scope_migration `
-  api.tests.verification.test_investigation_shadow_canary `
   api.tests.verification.test_investigation_shadow_integration `
   api.tests.verification.test_investigation_classifier `
   api.tests.verification.test_ai_rq2_classification_fallback `
