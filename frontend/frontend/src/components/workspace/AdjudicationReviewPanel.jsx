@@ -473,6 +473,8 @@ function AdjudicationReviewContent({
    const [actionNotice, setActionNotice] = useState(null);
    const [actionError, setActionError] = useState("");
    const [reconciliationPending, setReconciliationPending] = useState(null);
+   const [guidedEvidenceOpen, setGuidedEvidenceOpen] = useState(false);
+   const [guidedSupportOpen, setGuidedSupportOpen] = useState(false);
 
    const mountedRef = useRef(true);
    const panelRef = useRef(null);
@@ -1467,7 +1469,7 @@ function AdjudicationReviewContent({
 
    return (
       <div className={`adjudication-review-panel ${guidedMode ? "is-guided" : ""}`} ref={panelRef}>
-         <div className="adjudication-panel-intro">
+         <div className={`adjudication-panel-intro ${guidedMode ? "is-guided-redundant" : ""}`}>
             <div>
                <h3>{guidedMode ? "Adjudicate this investigation" : "Adjudication review"}</h3>
                <p>
@@ -1481,7 +1483,7 @@ function AdjudicationReviewContent({
             </span>
          </div>
 
-         <div className="adjudication-boundary-note">
+         <div className={`adjudication-boundary-note ${guidedMode ? "is-guided-redundant" : ""}`}>
             <Icons name="info" size={17} aria-hidden="true" />
             <div className="adjudication-boundary-copy">
                <strong>Where Adjudication fits</strong>
@@ -2000,9 +2002,37 @@ function AdjudicationReviewContent({
                                     </div>
                                  )}
 
+                                 {guidedMode && (
+                                    <div className="adjudication-guided-controls">
+                                       <div>
+                                          <strong>Focused adjudication view</strong>
+                                          <span>Readiness and decision controls stay visible. Context and history are available on demand.</span>
+                                       </div>
+                                       <Button
+                                          type="button"
+                                          variant="secondary"
+                                          density="compact"
+                                          trailingIcon={
+                                             <Icons
+                                                name={guidedSupportOpen ? "chevron-up" : "chevron-down"}
+                                                size={13}
+                                                aria-hidden="true"
+                                             />
+                                          }
+                                          aria-expanded={guidedSupportOpen}
+                                          onClick={() => setGuidedSupportOpen((open) => !open)}
+                                       >
+                                          {guidedSupportOpen ? "Hide supporting details" : "Supporting details"}
+                                       </Button>
+                                    </div>
+                                 )}
+
                                  <div className="adjudication-detail-layout">
                                     <div className="adjudication-primary-surface">
-                                       <section className="adjudication-detail-section" aria-labelledby="adjudication-case-context-heading">
+                                       <section
+                                          className={`adjudication-detail-section ${guidedMode ? "adjudication-guided-secondary" : ""} ${guidedSupportOpen ? "is-visible" : ""}`}
+                                          aria-labelledby="adjudication-case-context-heading"
+                                       >
                                           <div className="adjudication-subheading-row">
                                              <div>
                                                 <h5 id="adjudication-case-context-heading">Case and claim context</h5>
@@ -2356,7 +2386,10 @@ function AdjudicationReviewContent({
 
                                  </section>
 
-                                 <section className="adjudication-detail-section" aria-labelledby="adjudication-decisions-heading">
+                                 <section
+                                    className={`adjudication-detail-section ${guidedMode ? "adjudication-guided-secondary" : ""} ${guidedSupportOpen ? "is-visible" : ""}`}
+                                    aria-labelledby="adjudication-decisions-heading"
+                                 >
                                     <div className="adjudication-subheading-row">
                                        <div>
                                           <h5 id="adjudication-decisions-heading">Decision record</h5>
@@ -2391,7 +2424,10 @@ function AdjudicationReviewContent({
                                     )}
                                  </section>
 
-                                       <section className="adjudication-detail-section" aria-labelledby="adjudication-resolution-heading">
+                                       <section
+                                          className={`adjudication-detail-section ${guidedMode ? "adjudication-guided-secondary" : ""} ${guidedSupportOpen ? "is-visible" : ""}`}
+                                          aria-labelledby="adjudication-resolution-heading"
+                                       >
                                     <div className="adjudication-subheading-row">
                                        <div>
                                           <h5 id="adjudication-resolution-heading">Resolution and case history</h5>
@@ -2439,7 +2475,7 @@ function AdjudicationReviewContent({
                                     </div>
 
                                     <aside
-                                       className="adjudication-context-rail"
+                                       className={`adjudication-context-rail ${guidedMode ? "adjudication-guided-secondary" : ""} ${guidedSupportOpen ? "is-visible" : ""}`}
                                        aria-label="Selected case context"
                                     >
                                        {detailClaim.id && organizationId && (
