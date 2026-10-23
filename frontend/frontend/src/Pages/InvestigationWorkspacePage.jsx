@@ -42,6 +42,66 @@ const STATE_ICON = {
    PUBLICATION_REVIEW: "check-circle",
 };
 
+const STAGE_ORDER = [
+   { id: "evidence", label: "Evidence review" },
+   { id: "adjudication", label: "Adjudication" },
+   { id: "drafting", label: "Drafting" },
+   { id: "publication", label: "Publication" },
+];
+
+function getCurrentStageIndex(stateCode) {
+   if (stateCode === "ACTIVE_NO_EVIDENCE" || stateCode === "EVIDENCE_REVIEW") return 0;
+   if (stateCode === "ADJUDICATION_READY" || stateCode === "ADJUDICATION") return 1;
+   if (stateCode === "DRAFTING_READY" || stateCode === "DRAFTING") return 2;
+   if (stateCode === "PUBLICATION_REVIEW") return 3;
+   return 0;
+}
+
+function buildStageRail(stateCode, evidence, adjudication, publication) {
+   const currentIndex = getCurrentStageIndex(stateCode);
+
+   return STAGE_ORDER.map((stage, index) => {
+      const status = index < currentIndex ? "complete" : index === currentIndex ? "current" : "upcoming";
+      let detail = status === "complete" ? "Complete" : status === "current" ? "Current" : "Not started";
+
+      if (stage.id === "evidence") {
+         if (stateCode === "ACTIVE_NO_EVIDENCE") {
+            detail = "Waiting for evidence";
+         } else if (stateCode === "EVIDENCE_REVIEW") {
+            const waiting = Number(evidence?.unreviewed || evidence?.active_case_count || 0);
+            detail = waiting > 0 ? `${waiting} awaiting review` : "Review in progress";
+         } else if (status === "complete") {
+            detail = `${Number(evidence?.verified || 0)} verified · ${Number(evidence?.rejected || 0)} rejected`;
+         }
+      }
+
+      if (stage.id === "adjudication") {
+         if (stateCode === "ADJUDICATION_READY") detail = "Ready to begin";
+         if (stateCode === "ADJUDICATION") detail = adjudication?.case?.status ? formatLabel(adjudication.case.status) : "In progress";
+         if (status === "complete" && adjudication?.current_decision) {
+            detail = `Decision revision ${adjudication.current_decision.revision_number}`;
+         }
+      }
+
+      if (stage.id === "drafting") {
+         if (stateCode === "DRAFTING_READY") detail = "Ready to begin";
+         if (stateCode === "DRAFTING") detail = "Draft in progress";
+         if (status === "complete") detail = "Draft submitted";
+      }
+
+      if (stage.id === "publication") {
+         if (stateCode === "PUBLICATION_REVIEW") detail = "Awaiting review";
+         if (publication?.publication_status === "PUBLISHED") detail = "Published";
+      }
+
+      return {
+         ...stage,
+         status,
+         detail,
+      };
+   });
+}
+
 function buildActionDestination(action, organizationId, assignmentId) {
    const targetId = action?.target?.id;
    if (!targetId || !organizationId) return null;
@@ -299,6 +359,11 @@ function InvestigationWorkspacePage() {
    const publication = data.publication;
    const state = data.state || {};
    const claim = data.claim || {};
+   const stages = buildStageRail(state.code, evidence, adjudication, publication);
+   const primaryBlocker =
+      Array.isArray(data.actor_blockers) && data.actor_blockers.length > 0
+         ? data.actor_blockers[0]
+         : pending[0] || null;
 
    return (
       <div className="investigation-workspace-page">
@@ -347,6 +412,42 @@ function InvestigationWorkspacePage() {
          </header>
 
          <div className={`investigation-workspace-layout ${contextOpen ? "has-context" : ""}`}>
+            <aside className="investigation-stage-rail" aria-label="Investigation stages">
+               <div className="investigation-stage-rail-heading">
+                  <span className="investigation-section-label">Investigation</span>
+                  <strong>Workflow</strong>
+               </div>
+
+               <ol className="investigation-stage-list">
+                  {stages.map((stage) => (
+                     <li key={stage.id} className={`is-${stage.status}`}>
+                        <span className="investigation-stage-marker" aria-hidden="true">
+                           {stage.status === "complete" ? <Icons name="check" size={13} /> : null}
+                        </span>
+                        <div>
+                           <strong>{stage.label}</strong>
+                           <span>{stage.detail}</span>
+                        </div>
+                     </li>
+                  ))}
+               </ol>
+
+               <div className="investigation-stage-attention">
+                  <span className="investigation-section-label">Needs attention</span>
+                  {primaryBlocker ? (
+                     <>
+                        <strong>{formatLabel(primaryBlocker.code || "Current requirement")}</strong>
+                        <p>{primaryBlocker.detail || primaryBlocker.message || "Review the current stage before continuing."}</p>
+                     </>
+                  ) : (
+                     <>
+                        <strong>No active blocker</strong>
+                        <p>The investigation is ready for the next authorized action.</p>
+                     </>
+                  )}
+               </div>
+            </aside>
+
             <main className="investigation-workspace-main">
                {isRefreshing ? (
                   <div className="investigation-refresh-status" role="status" aria-live="polite">
@@ -480,14 +581,14 @@ function InvestigationWorkspacePage() {
                   </section>
                ) : null}
 
-               <section className="investigation-progress" aria-labelledby="investigation-progress-heading">
-                  <div className="investigation-section-heading">
+               <details className="investigation-case-summary">
+                  <summary>
                      <div>
-                        <span className="investigation-section-label">Investigation status</span>
-                        <h2 id="investigation-progress-heading">What has happened so far</h2>
+                        <span className="investigation-section-label">Case summary</span>
+                        <strong>Evidence, decision, and publication status</strong>
                      </div>
-                     <span>High-level status · cases may return for additional review</span>
-                  </div>
+                     <span>Show details</span>
+                  </summary>
 
                   <div className="investigation-progress-grid">
                      <article>
@@ -531,21 +632,21 @@ function InvestigationWorkspacePage() {
                         </small>
                      </article>
                   </div>
-               </section>
 
-               {Array.isArray(data.actor_blockers) && data.actor_blockers.length > 0 ? (
-                  <section className="investigation-role-notes" aria-labelledby="investigation-role-notes-heading">
-                     <h2 id="investigation-role-notes-heading">Action requirements</h2>
-                     <ul>
-                        {data.actor_blockers.map((blocker, index) => (
-                           <li key={(blocker?.code || "blocker") + "-" + index}>
-                              <strong>{formatLabel(blocker?.code || "Requirement")}</strong>
-                              <span>{blocker?.detail || "This action is not currently available."}</span>
-                           </li>
-                        ))}
-                     </ul>
-                  </section>
-               ) : null}
+                  {Array.isArray(data.actor_blockers) && data.actor_blockers.length > 0 ? (
+                     <div className="investigation-case-summary-blockers">
+                        <h3>Action requirements</h3>
+                        <ul>
+                           {data.actor_blockers.map((blocker, index) => (
+                              <li key={(blocker?.code || "blocker") + "-" + index}>
+                                 <strong>{formatLabel(blocker?.code || "Requirement")}</strong>
+                                 <span>{blocker?.detail || "This action is not currently available."}</span>
+                              </li>
+                           ))}
+                        </ul>
+                     </div>
+                  ) : null}
+               </details>
             </main>
 
             {contextOpen ? (
