@@ -186,8 +186,8 @@ function DecisionRecord({ decision, current = false }) {
          )}
 
          <div className="adjudication-reading-block">
-            <strong>Canonical wording</strong>
-            <p>{decision?.canonical_claim || "Canonical wording unavailable."}</p>
+            <strong>Claim statement</strong>
+            <p>{decision?.canonical_claim || "Claim statement unavailable."}</p>
          </div>
          <div className="adjudication-reading-block">
             <strong>Rationale</strong>
@@ -1266,7 +1266,7 @@ function AdjudicationReviewContent({
          errors.verdict = "Choose one adjudication verdict.";
       }
       if (!canonicalClaim) {
-         errors.canonicalClaim = "Enter the canonical claim wording to record.";
+         errors.canonicalClaim = "Enter the claim statement for this decision.";
       }
       if (!rationale) {
          errors.rationale = "Enter a nonblank rationale for this adjudication.";
@@ -2631,7 +2631,7 @@ function AdjudicationReviewContent({
                                             ? "Recording adjudication"
                                             : "Prepare adjudication"
                                     }
-                                    description="Review the exact claim, evidence readiness, verdict, canonical wording, and rationale before recording an authoritative human decision."
+                                    description="Review the exact claim, evidence readiness, verdict, claim statement, and rationale before recording an authoritative human decision."
                                     onClose={handleCancelDecision}
                                     busy={confirmationChecking || Boolean(mutation && identifiersMatch(mutation.caseId, detail.id))}
                                     returnFocusRef={decisionTriggerRef}
@@ -2711,7 +2711,7 @@ function AdjudicationReviewContent({
                                           )}
 
                                           <label className="adjudication-decision-field" htmlFor="adjudication-canonical-claim">
-                                             <span>Canonical claim wording <span aria-hidden="true">*</span></span>
+                                             <span>Claim statement for decision <span aria-hidden="true">*</span></span>
                                              <Textarea
                                                 density="standard"
                                                 id="adjudication-canonical-claim"
@@ -2729,7 +2729,7 @@ function AdjudicationReviewContent({
                                                 required
                                              />
                                              <small id="adjudication-canonical-claim-help">
-                                                The precise, neutral statement this decision formally evaluates. It starts blank by design.
+                                                Write the precise, neutral statement this adjudication evaluates.
                                              </small>
                                           </label>
                                           {decisionErrors.canonicalClaim && (
@@ -2804,7 +2804,7 @@ function AdjudicationReviewContent({
                                                 </dd>
                                              </div>
                                              <div>
-                                                <dt>Canonical wording</dt>
+                                                <dt>Claim statement</dt>
                                                 <dd>{confirmation.payload.canonical_claim}</dd>
                                              </div>
                                              <div>
