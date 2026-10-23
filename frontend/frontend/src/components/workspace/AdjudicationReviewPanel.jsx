@@ -2028,7 +2028,9 @@ function AdjudicationReviewContent({
                                     </Button>
                                  </div>
 
-                                 <div className="adjudication-detail-layout">
+                                 <div
+                                    className={`adjudication-detail-layout ${guidedSupportOpen ? "has-support" : ""} ${guidedMode ? "is-guided" : ""}`}
+                                 >
                                     <div className="adjudication-primary-surface">
                                        <section
                                           className={`adjudication-detail-section adjudication-secondary-section ${guidedSupportOpen ? "is-visible" : ""}`}
