@@ -364,22 +364,23 @@ function InvestigationWorkspacePage() {
       Array.isArray(data.actor_blockers) && data.actor_blockers.length > 0
          ? data.actor_blockers[0]
          : pending[0] || null;
+   const evidenceTotal = Number(evidence.total || 0);
+   const evidenceReviewed = Number(evidence.verified || 0) + Number(evidence.rejected || 0);
+   const ownerLabel = data.assignment.claimed_by?.username
+      ? `@${data.assignment.claimed_by.username}`
+      : "Organization";
+   const humanDecisionLabel = adjudication.current_decision?.verdict\n      ? formatLabel(adjudication.current_decision.verdict)\n      : "Not recorded";
+   const publicationLabel = publication ? formatLabel(publication.publication_status) : "Not started";
 
    return (
       <div className="investigation-workspace-page">
          <header className="investigation-workspace-header">
-            <button type="button" className="investigation-workspace-back" onClick={backToInvestigations}>
-               <Icons name="arrow-left" size={16} />
-               <span>Investigations</span>
-            </button>
+            <div className="investigation-workspace-toolbar">
+               <button type="button" className="investigation-workspace-back" onClick={backToInvestigations}>
+                  <Icons name="arrow-left" size={16} />
+                  <span>Investigations</span>
+               </button>
 
-            <div className="investigation-workspace-heading">
-               <div>
-                  <p className="investigation-workspace-eyebrow">
-                     Verification Workspace · {data.organization.name}
-                  </p>
-                  <h1>{claim.context_text || "Investigation"}</h1>
-               </div>
                <div className="investigation-workspace-heading-actions">
                   <span className="investigation-workspace-active-status">
                      <Icons name="activity" size={14} />
@@ -398,15 +399,46 @@ function InvestigationWorkspacePage() {
                </div>
             </div>
 
-            <div className="investigation-workspace-meta" aria-label="Investigation identity">
-               <span>Claimed {formatDateTime(data.assignment.claimed_at)}</span>
-               <span>
-                  {data.assignment.claimed_by?.username
-                     ? "Claimed by @" + data.assignment.claimed_by.username
-                     : "Claimed by organization"}
-               </span>
-               <span>{formatLabel(claim.claim_type)}</span>
+            <div className="investigation-workspace-title">
+               <p className="investigation-workspace-eyebrow">
+                  Verification Workspace · {data.organization.name}
+               </p>
+               <h1>{claim.context_text || "Investigation"}</h1>
             </div>
+
+            <dl className="investigation-workspace-meta" aria-label="Investigation overview">
+               <div>
+                  <dt>Current stage</dt>
+                  <dd>{state.label || "Investigation"}</dd>
+               </div>
+               <div>
+                  <dt>Owner</dt>
+                  <dd>{ownerLabel}</dd>
+               </div>
+               <div>
+                  <dt>Claimed</dt>
+                  <dd>{formatDateTime(data.assignment.claimed_at)}</dd>
+               </div>
+               <div>
+                  <dt>Type</dt>
+                  <dd>{formatLabel(claim.claim_type)}</dd>
+               </div>
+               <div>
+                  <dt>Evidence</dt>
+                  <dd>
+                     {evidenceTotal} {evidenceTotal === 1 ? "item" : "items"}
+                     <small>{evidenceReviewed} reviewed</small>
+                  </dd>
+               </div>
+               <div>
+                  <dt>Human decision</dt>
+                  <dd>{humanDecisionLabel}</dd>
+               </div>
+               <div>
+                  <dt>Publication</dt>
+                  <dd>{publicationLabel}</dd>
+               </div>
+            </dl>
 
             <InvestigationContextLinks claim={claim} />
          </header>
@@ -414,8 +446,9 @@ function InvestigationWorkspacePage() {
          <div className={`investigation-workspace-layout ${contextOpen ? "has-context" : ""}`}>
             <aside className="investigation-stage-rail" aria-label="Investigation stages">
                <div className="investigation-stage-rail-heading">
-                  <span className="investigation-section-label">Investigation</span>
-                  <strong>Workflow</strong>
+                  <span className="investigation-section-label">Workflow</span>
+                  <strong>{state.label || "Investigation"}</strong>
+                  <span>Keep your place while the case moves through review and publication.</span>
                </div>
 
                <ol className="investigation-stage-list">
@@ -469,64 +502,6 @@ function InvestigationWorkspacePage() {
                   </div>
                ) : null}
 
-               <section ref={stageRef} className="investigation-stage" aria-labelledby="investigation-stage-heading">
-                  <div className="investigation-stage-heading">
-                     <span className="investigation-stage-icon" aria-hidden="true">
-                        <Icons name={STATE_ICON[state.code] || "activity"} size={20} />
-                     </span>
-                     <div>
-                        <span className="investigation-section-label">Current stage</span>
-                        <h2 id="investigation-stage-heading">{state.label || "Investigation"}</h2>
-                        <p>{state.detail}</p>
-                     </div>
-                  </div>
-
-                  {pending.length > 0 ? (
-                     <div className="investigation-pending">
-                        <h3>What still needs to happen</h3>
-                        <ul>
-                           {pending.map((item) => (
-                              <li key={item.code}>
-                                 <Icons name="clock" size={15} aria-hidden="true" />
-                                 <span>
-                                    {item.detail}
-                                    {Number.isInteger(item.count) && item.count > 0 ? " (" + item.count + ")" : ""}
-                                 </span>
-                              </li>
-                           ))}
-                        </ul>
-                     </div>
-                  ) : null}
-
-                  <div className="investigation-next-action">
-                     <div>
-                        <span className="investigation-section-label">Next action</span>
-                        <strong>
-                           {progressAction
-                              ? progressAction.label
-                              : state.code === "ACTIVE_NO_EVIDENCE"
-                                ? "Waiting for evidence"
-                                : "Waiting for the next authorized action"}
-                        </strong>
-                        <p>
-                           {progressAction
-                              ? "Continue this investigation without leaving its workflow context."
-                              : "TruthLens will keep this investigation active. Another authorized role or a new evidence submission may be required before it can progress."}
-                        </p>
-                     </div>
-                     {progressAction && (isInlineGuidedAction(progressAction) || progressDestination) ? (
-                        <Button
-                           variant="primary"
-                           density="comfortable"
-                           trailingIcon={<Icons name="arrow-right" size={15} />}
-                           onClick={() => handleProgressAction(progressAction)}
-                        >
-                           {progressAction.label}
-                        </Button>
-                     ) : null}
-                  </div>
-               </section>
-
                {guidedAction ? (
                   <section
                      ref={guidedWorkRef}
@@ -535,13 +510,13 @@ function InvestigationWorkspacePage() {
                   >
                      <div className="investigation-guided-work-heading">
                         <div>
-                           <span className="investigation-section-label">Working in this investigation</span>
+                           <span className="investigation-section-label">Current work</span>
                            <h2 id="investigation-guided-work-heading">
                               {guidedAction.code === "REVIEW_EVIDENCE" ? "Evidence review" : "Adjudication"}
                            </h2>
                            <p>
-                              The work item below belongs to this investigation. Completing it refreshes the persisted
-                              investigation state without sending you to a separate queue.
+                              This work item belongs to the current investigation. Completing it refreshes the persisted
+                              case state here, so you keep the investigation context.
                            </p>
                         </div>
                         <Button
@@ -579,13 +554,100 @@ function InvestigationWorkspacePage() {
                         />
                      )}
                   </section>
-               ) : null}
+               ) : (
+                  <section ref={stageRef} className="investigation-stage" aria-labelledby="investigation-stage-heading">
+                     <div className="investigation-stage-heading">
+                        <div className="investigation-stage-heading-copy">
+                           <span className="investigation-section-label">Current work</span>
+                           <div className="investigation-stage-title">
+                              <span className="investigation-stage-icon" aria-hidden="true">
+                                 <Icons name={STATE_ICON[state.code] || "activity"} size={18} />
+                              </span>
+                              <h2 id="investigation-stage-heading">{state.label || "Investigation"}</h2>
+                           </div>
+                           <p>{state.detail}</p>
+                        </div>
+                     </div>
+
+                     <div
+                        className={`investigation-stage-readiness ${primaryBlocker ? "has-blocker" : "is-ready"}`}
+                        aria-label={primaryBlocker ? "Current blocker" : "Current readiness"}
+                     >
+                        <Icons name={primaryBlocker ? "alert-circle" : "check-circle"} size={18} aria-hidden="true" />
+                        <div className="investigation-stage-readiness-copy">
+                           <span>{primaryBlocker ? "Current blocker" : "Ready"}</span>
+                           <strong>
+                              {primaryBlocker
+                                 ? formatLabel(primaryBlocker.code || "Current requirement")
+                                 : "No active workflow blocker"}
+                           </strong>
+                           <p>
+                              {primaryBlocker
+                                 ? primaryBlocker.detail ||
+                                   primaryBlocker.message ||
+                                   "Review the current requirement before continuing."
+                                 : "The investigation can proceed when an authorized next action is available."}
+                           </p>
+                        </div>
+                     </div>
+
+                     {pending.length > 0 ? (
+                        <details className="investigation-pending">
+                           <summary>
+                              <span>Workflow requirements</span>
+                              <strong>
+                                 {pending.length} {pending.length === 1 ? "item" : "items"}
+                              </strong>
+                           </summary>
+                           <ul>
+                              {pending.map((item) => (
+                                 <li key={item.code}>
+                                    <Icons name="clock" size={15} aria-hidden="true" />
+                                    <span>
+                                       {item.detail}
+                                       {Number.isInteger(item.count) && item.count > 0 ? " (" + item.count + ")" : ""}
+                                    </span>
+                                 </li>
+                              ))}
+                           </ul>
+                        </details>
+                     ) : null}
+
+                     <div className="investigation-next-action">
+                        <div>
+                           <span className="investigation-section-label">Next action</span>
+                           <strong>
+                              {progressAction
+                                 ? progressAction.label
+                                 : state.code === "ACTIVE_NO_EVIDENCE"
+                                   ? "Waiting for evidence"
+                                   : "Waiting for the next authorized action"}
+                           </strong>
+                           <p>
+                              {progressAction
+                                 ? "Continue the case from this workbench without losing investigation context."
+                                 : "TruthLens keeps this investigation active until the next required evidence or authorized action is available."}
+                           </p>
+                        </div>
+                        {progressAction && (isInlineGuidedAction(progressAction) || progressDestination) ? (
+                           <Button
+                              variant="primary"
+                              density="comfortable"
+                              trailingIcon={<Icons name="arrow-right" size={15} />}
+                              onClick={() => handleProgressAction(progressAction)}
+                           >
+                              {progressAction.label}
+                           </Button>
+                        ) : null}
+                     </div>
+                  </section>
+               )}
 
                <details className="investigation-case-summary">
                   <summary>
                      <div>
                         <span className="investigation-section-label">Case summary</span>
-                        <strong>Evidence, decision, and publication status</strong>
+                        <strong>Evidence, decision, and publication detail</strong>
                      </div>
                      <span>Show details</span>
                   </summary>
@@ -624,7 +686,7 @@ function InvestigationWorkspacePage() {
 
                      <article>
                         <span>Publication</span>
-                        <strong>{publication ? formatLabel(publication.publication_status) : "Not started"}</strong>
+                        <strong>{publicationLabel}</strong>
                         <small>
                            {publication
                               ? "Last updated " + formatDateTime(publication.updated_at)
@@ -656,11 +718,23 @@ function InvestigationWorkspacePage() {
                   aria-label="Investigation context"
                >
                   <div className="investigation-context-summary">
-                     <span className="investigation-section-label">Context</span>
-                     <h2>Evidence & provenance</h2>
+                     <div className="investigation-context-summary-heading">
+                        <div>
+                           <span className="investigation-section-label">Context</span>
+                           <h2>Evidence & provenance</h2>
+                        </div>
+                        <Button
+                           type="button"
+                           variant="ghost"
+                           density="compact"
+                           onClick={() => setContextOpen(false)}
+                        >
+                           Close
+                        </Button>
+                     </div>
                      <p>
-                        Review supporting context without losing the investigation you are working on. Automated
-                        analysis remains non-authoritative.
+                        Supporting analysis stays available without competing with the current task. Automated analysis
+                        remains non-authoritative.
                      </p>
                   </div>
 
