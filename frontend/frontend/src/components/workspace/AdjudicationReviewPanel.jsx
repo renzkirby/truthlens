@@ -1356,6 +1356,30 @@ function AdjudicationReviewContent({
    const handleAuthorityRetry = () => {
       authorityGenerationRef.current += 1;
       authorityRevokedRef.current = false;
+
+      if (guidedMode && initialCaseKey) {
+         queueRequestIdRef.current += 1;
+         detailRequestIdRef.current += 1;
+         reconciliationRequestIdRef.current += 1;
+         selectedCaseIdRef.current = initialCaseKey;
+         originatingQueueCaseIdRef.current = initialCaseKey;
+         returnFocusCaseIdRef.current = null;
+         focusSelectedCaseRef.current = true;
+         focusDetailErrorRef.current = false;
+         focusQueueAfterAuthorityRetryRef.current = false;
+         setAuthorityError("");
+         setQueueLoading(false);
+         setQueueError("");
+         setSelectedCaseId(initialCaseKey);
+         setDetail(null);
+         setDetailLoading(true);
+         setDetailError("");
+         setDetailUnavailable(false);
+         setDetailIdentity(null);
+         resetDecisionWorkflow();
+         setDetailRequestVersion((current) => current + 1);
+         return;
+      }
       queueRequestIdRef.current += 1;
       detailRequestIdRef.current += 1;
       reconciliationRequestIdRef.current += 1;
