@@ -142,13 +142,21 @@ function InvestigationWorkspacePage() {
          })
          .catch((error) => {
             if (cancelled) return;
-            setResult({
-               requestKey,
-               data: null,
-               error:
-                  error?.status === 404
-                     ? "This active investigation is no longer available for the selected organization."
-                     : error?.message || "Unable to load this investigation.",
+            const message =
+               error?.status === 404
+                  ? "This active investigation is no longer available for the selected organization."
+                  : error?.message || "Unable to load this investigation.";
+
+            setResult((current) => {
+               const currentDataMatchesRoute =
+                  String(current.data?.assignment?.id ?? "") === String(assignmentId) &&
+                  String(current.data?.organization?.id ?? "") === String(organizationId);
+
+               return {
+                  requestKey,
+                  data: currentDataMatchesRoute ? current.data : null,
+                  error: message,
+               };
             });
          });
 
@@ -158,9 +166,15 @@ function InvestigationWorkspacePage() {
    }, [assignmentId, authFetch, membership, organizationId, requestKey]);
 
    const resultIsCurrent = Boolean(requestKey && result.requestKey === requestKey);
-   const isLoading = Boolean(requestKey && !resultIsCurrent);
-   const data = resultIsCurrent ? result.data : null;
+   const resultDataMatchesRoute =
+      String(result.data?.assignment?.id ?? "") === String(assignmentId) &&
+      String(result.data?.organization?.id ?? "") === String(organizationId);
+   const isLoading = Boolean(requestKey && !resultIsCurrent && !resultDataMatchesRoute);
+   const isRefreshing = Boolean(requestKey && !resultIsCurrent && resultDataMatchesRoute);
+   const data = resultDataMatchesRoute ? result.data : resultIsCurrent ? result.data : null;
    const resultError = resultIsCurrent ? result.error : "";
+   const fatalError = Boolean(resultError && !data);
+   const refreshError = data && resultError ? resultError : "";
    const actions = Array.isArray(data?.allowed_actions) ? data.allowed_actions : [];
    const progressAction = actions.find((action) => action.code !== "RELEASE_INVESTIGATION") ?? null;
    const progressDestination = progressAction
@@ -260,13 +274,13 @@ function InvestigationWorkspacePage() {
       );
    }
 
-   if (resultError || !data) {
+   if (fatalError || !data) {
       return (
          <div className="investigation-workspace-page">
             <div className="investigation-workspace-state" role="alert">
                <Icons name="alert-circle" size={26} />
                <h1>Investigation unavailable</h1>
-               <p>{resultError || "The investigation could not be loaded."}</p>
+               <p>{fatalError ? resultError : "The investigation could not be loaded."}</p>
                <div className="investigation-workspace-state-actions">
                   <Button variant="secondary" leadingIcon={<Icons name="arrow-left" />} onClick={backToInvestigations}>
                      Back to investigations
@@ -334,6 +348,26 @@ function InvestigationWorkspacePage() {
 
          <div className={`investigation-workspace-layout ${contextOpen ? "has-context" : ""}`}>
             <main className="investigation-workspace-main">
+               {isRefreshing ? (
+                  <div className="investigation-refresh-status" role="status" aria-live="polite">
+                     <Icons name="loader" size={15} className="investigation-workspace-spinner" />
+                     Refreshing investigation state…
+                  </div>
+               ) : refreshError ? (
+                  <div className="investigation-refresh-error" role="alert">
+                     <Icons name="alert-circle" size={16} />
+                     <span>{refreshError}</span>
+                     <Button
+                        type="button"
+                        variant="secondary"
+                        density="compact"
+                        onClick={() => setRequestVersion((value) => value + 1)}
+                     >
+                        Retry
+                     </Button>
+                  </div>
+               ) : null}
+
                <section ref={stageRef} className="investigation-stage" aria-labelledby="investigation-stage-heading">
                   <div className="investigation-stage-heading">
                      <span className="investigation-stage-icon" aria-hidden="true">
