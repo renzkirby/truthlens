@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../../hooks/useAuth";
 import Icons from "../Icons.jsx";
@@ -42,19 +42,27 @@ function formatDateTime(value) {
 }
 
 function formatConfidence(value) {
+   if (value === null || value === undefined || value === "") {
+      return null;
+   }
+
    const number = Number(value);
 
    if (!Number.isFinite(number)) {
-      return "Not available";
+      return null;
    }
 
-   return `${number.toFixed(1)}%`;
+   return `${Math.round(number)}%`;
 }
 
 function getVerdictMeta(verdict) {
-   const normalizedVerdict = String(verdict || "UNVERIFIED").toUpperCase();
+   if (!verdict) {
+      return null;
+   }
 
-   return VERDICT_CONFIG[normalizedVerdict] ?? VERDICT_CONFIG.UNVERIFIED;
+   const normalizedVerdict = String(verdict).toUpperCase();
+
+   return VERDICT_CONFIG[normalizedVerdict] ?? null;
 }
 
 function VerificationIntakePanel({ organizationId, organizationName, onInvestigationClaimed }) {
@@ -80,6 +88,21 @@ function VerificationIntakePanel({ organizationId, organizationName, onInvestiga
    const [confirmingId, setConfirmingId] = useState(null);
 
    const [claimingId, setClaimingId] = useState(null);
+
+   const confirmCancelRef = useRef(null);
+   const claimTriggerRefs = useRef(new Map());
+
+   useEffect(() => {
+      if (!confirmingId) {
+         return undefined;
+      }
+
+      const frame = window.requestAnimationFrame(() => {
+         confirmCancelRef.current?.focus();
+      });
+
+      return () => window.cancelAnimationFrame(frame);
+   }, [confirmingId]);
 
    const intakeUrl = useMemo(() => {
       if (!organizationId) {
@@ -206,6 +229,14 @@ function VerificationIntakePanel({ organizationId, organizationName, onInvestiga
       }
    };
 
+   const closeClaimConfirmation = (assignmentId) => {
+      setConfirmingId(null);
+
+      window.requestAnimationFrame(() => {
+         claimTriggerRefs.current.get(assignmentId)?.focus();
+      });
+   };
+
    const handleClaim = async (assignmentId) => {
       if (!assignmentId || !organizationId) {
          return;
@@ -273,21 +304,23 @@ function VerificationIntakePanel({ organizationId, organizationName, onInvestiga
 
    const rangeEnd = Math.min(offset + intake.results.length, intake.count);
 
-   return (
-      <div className="verification-intake">
-         <div className="intake-toolbar">
-            <div>
-               <strong>Available investigations</strong>
+   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
+   const totalPages = Math.max(1, Math.ceil(intake.count / PAGE_SIZE));
 
-               <span>{intake.count} waiting for professional verification</span>
+   return (
+      <div className="verification-intake" aria-busy={loading ? "true" : undefined}>
+         <div className="intake-overview">
+            <div>
+               <strong>{intake.count} available investigations</strong>
+               <p>Choose new community investigations for {organizationName || "your organization"} to verify.</p>
             </div>
 
             <Button
                type="button"
                variant="secondary"
-               density="standard"
+               density="compact"
                className="intake-refresh-action"
-               leadingIcon={<Icons name="refresh-cw" size={15} />}
+               leadingIcon={<Icons name="refresh-cw" size={14} />}
                onClick={refreshCurrentPage}
                disabled={loading}
             >
@@ -295,10 +328,17 @@ function VerificationIntakePanel({ organizationId, organizationName, onInvestiga
             </Button>
          </div>
 
+         <div className="intake-guidance" role="note">
+            <Icons name="info" size={16} />
+            <span>
+               Claiming assigns the investigation to your organization. AI assessment is context only and does not
+               represent an institutional verdict.
+            </span>
+         </div>
+
          {notice && (
             <div className="intake-notice" role="status" aria-live="polite">
                <Icons name="info" size={17} />
-
                <span>{notice}</span>
             </div>
          )}
@@ -306,119 +346,172 @@ function VerificationIntakePanel({ organizationId, organizationName, onInvestiga
          {errorMessage && (
             <div className="intake-error" role="alert">
                <Icons name="alert-circle" size={17} />
-
                <div>
                   <strong>Intake unavailable</strong>
-
                   <span>{errorMessage}</span>
+                  <Button
+                     type="button"
+                     variant="secondary"
+                     density="compact"
+                     leadingIcon={<Icons name="refresh-cw" size={14} />}
+                     onClick={refreshCurrentPage}
+                     disabled={loading}
+                  >
+                     Try again
+                  </Button>
                </div>
             </div>
          )}
 
          {loading ? (
-            <div className="intake-loading" aria-live="polite">
+            <div className="intake-loading" role="status" aria-live="polite">
                <Icons name="loader" size={20} className="intake-spinner" />
-
-               <span>Loading available investigations...</span>
+               <span>Loading available investigations…</span>
             </div>
          ) : intake.results.length === 0 && !errorMessage ? (
             <div className="intake-empty-state">
                <Icons name="check-circle" size={26} />
-
                <h3>Intake is clear</h3>
-
                <p>There are currently no available investigations waiting to be claimed.</p>
             </div>
          ) : !errorMessage ? (
             <>
+               <div className="intake-list-heading">
+                  <span>
+                     Showing {rangeStart}–{rangeEnd} of {intake.count}
+                  </span>
+                  <span>Review the claim context before assigning work to your organization.</span>
+               </div>
+
                <ul className="intake-list">
                   {intake.results.map((assignment) => {
                      const claim = assignment?.claim ?? {};
                      const claimText = claim.context_text || "Claim text unavailable";
                      const hasLongClaimText = claimText.length > 360;
-
                      const verdictMeta = getVerdictMeta(claim.ai_verdict);
-
+                     const confidence = formatConfidence(claim.consensus_score);
                      const isConfirming = confirmingId === assignment.id;
-
                      const isClaiming = claimingId === assignment.id;
+                     const claimHeadingId = `intake-claim-${assignment.id}`;
+                     const confirmationId = `intake-confirm-${assignment.id}`;
 
                      return (
                         <li key={assignment.id} className="intake-list-item">
-                           <article className="intake-item">
-                              <div className="intake-item-top">
-                                 <div className="intake-item-labels">
+                           <article className="intake-item" aria-labelledby={claimHeadingId}>
+                              <div className="intake-item-main">
+                                 <div className="intake-item-kicker">
                                     <span className="intake-status-badge">Available</span>
-
                                     <span className="intake-type-badge">{formatLabel(claim.claim_type)}</span>
                                  </div>
 
-                                 <span className="intake-updated">Updated {formatDateTime(claim.last_updated)}</span>
+                                 <h3 id={claimHeadingId} className={`intake-claim-text ${hasLongClaimText ? "is-truncated" : ""}`}>
+                                    {claimText}
+                                 </h3>
+
+                                 {hasLongClaimText ? (
+                                    <details className="intake-claim-details">
+                                       <summary>Show full claim text</summary>
+                                       <p>{claimText}</p>
+                                    </details>
+                                 ) : null}
+
+                                 {claim.ai_summary ? <p className="intake-ai-summary">{claim.ai_summary}</p> : null}
+
+                                 <dl className="intake-signals">
+                                    <div>
+                                       <dt>AI assessment</dt>
+                                       <dd>
+                                          {verdictMeta ? (
+                                             <span
+                                                className="intake-verdict"
+                                                style={{
+                                                   color: verdictMeta.color,
+                                                   background: verdictMeta.bg,
+                                                   borderColor: verdictMeta.border,
+                                                }}
+                                             >
+                                                {verdictMeta.label}
+                                             </span>
+                                          ) : claim.ai_verdict ? (
+                                             formatLabel(claim.ai_verdict)
+                                          ) : (
+                                             "No AI assessment"
+                                          )}
+                                       </dd>
+                                    </div>
+
+                                    {confidence ? (
+                                       <div>
+                                          <dt>AI confidence</dt>
+                                          <dd>{confidence}</dd>
+                                       </div>
+                                    ) : null}
+
+                                    <div>
+                                       <dt>Source</dt>
+                                       <dd>{claim.source_type ? formatLabel(claim.source_type) : "Not recorded"}</dd>
+                                    </div>
+                                 </dl>
+
+                                 <InvestigationContextLinks claim={claim} />
                               </div>
 
-                              <h3 className={`intake-claim-text ${hasLongClaimText ? "is-truncated" : ""}`}>
-                                 {claimText}
-                              </h3>
+                              <div className="intake-item-actions">
+                                 {claim.last_updated ? (
+                                    <time className="intake-updated" dateTime={claim.last_updated}>
+                                       Updated {formatDateTime(claim.last_updated)}
+                                    </time>
+                                 ) : (
+                                    <span className="intake-updated">Updated date unavailable</span>
+                                 )}
 
-                              {hasLongClaimText && (
-                                 <details className="intake-claim-details">
-                                    <summary>Show full claim text</summary>
-                                    <p>{claimText}</p>
-                                 </details>
-                              )}
+                                 {!isConfirming ? (
+                                    <Button
+                                       ref={(node) => {
+                                          if (node) claimTriggerRefs.current.set(assignment.id, node);
+                                          else claimTriggerRefs.current.delete(assignment.id);
+                                       }}
+                                       type="button"
+                                       variant="primary"
+                                       density="standard"
+                                       className="intake-claim-action"
+                                       trailingIcon={<Icons name="arrow-right" size={15} />}
+                                       aria-expanded="false"
+                                       aria-controls={confirmationId}
+                                       disabled={Boolean(claimingId)}
+                                       onClick={() => setConfirmingId(assignment.id)}
+                                    >
+                                       Claim investigation
+                                    </Button>
+                                 ) : null}
+                              </div>
 
-                              {claim.ai_summary && <p className="intake-ai-summary">{claim.ai_summary}</p>}
+                              {isConfirming ? (
+                                 <div
+                                    id={confirmationId}
+                                    className="intake-confirm"
+                                    role="group"
+                                    aria-label="Confirm investigation claim"
+                                 >
+                                    <div className="intake-confirm-copy">
+                                       <Icons name="inbox" size={17} />
+                                       <div>
+                                          <strong>Claim this investigation?</strong>
+                                          <span>
+                                             It will move from shared intake to {organizationName || "your organization"}’s
+                                             active Investigations queue.
+                                          </span>
+                                       </div>
+                                    </div>
 
-                              <dl className="intake-signals">
-                                 <div>
-                                    <dt className="intake-signal-label">AI assessment</dt>
-
-                                    <dd>
-                                       <span
-                                          className="intake-verdict"
-                                          style={{
-                                             color: verdictMeta.color,
-                                             background: verdictMeta.bg,
-                                             borderColor: verdictMeta.border,
-                                          }}
-                                       >
-                                          {verdictMeta.label}
-                                       </span>
-                                    </dd>
-                                 </div>
-
-                                 <div>
-                                    <dt className="intake-signal-label">AI confidence</dt>
-
-                                    <dd>
-                                       <strong>{formatConfidence(claim.consensus_score)}</strong>
-                                    </dd>
-                                 </div>
-
-                                 <div>
-                                    <dt className="intake-signal-label">Source type</dt>
-
-                                    <dd>
-                                       <strong>{formatLabel(claim.source_type)}</strong>
-                                    </dd>
-                                 </div>
-                              </dl>
-
-                              <div className="intake-item-footer">
-                                 <InvestigationContextLinks claim={claim} />
-
-                                 {isConfirming ? (
-                                    <div className="intake-confirm">
-                                       <span>
-                                          Claim for <strong>{organizationName}</strong>?
-                                       </span>
-
+                                    <div className="intake-confirm-actions">
                                        <Button
+                                          ref={confirmCancelRef}
                                           type="button"
                                           variant="secondary"
-                                          density="standard"
+                                          density="compact"
                                           disabled={isClaiming}
-                                          onClick={() => setConfirmingId(null)}
+                                          onClick={() => closeClaimConfirmation(assignment.id)}
                                        >
                                           Cancel
                                        </Button>
@@ -426,29 +519,17 @@ function VerificationIntakePanel({ organizationId, organizationName, onInvestiga
                                        <Button
                                           type="button"
                                           variant="primary"
-                                          density="comfortable"
+                                          density="compact"
                                           loading={isClaiming}
-                                          loadingLabel="Claiming..."
+                                          loadingLabel="Claiming…"
                                           disabled={isClaiming}
                                           onClick={() => handleClaim(assignment.id)}
                                        >
                                           Confirm claim
                                        </Button>
                                     </div>
-                                 ) : (
-                                    <Button
-                                       type="button"
-                                       variant="primary"
-                                       density="comfortable"
-                                       className="intake-claim-action"
-                                       leadingIcon={<Icons name="inbox" size={15} />}
-                                       disabled={Boolean(claimingId)}
-                                       onClick={() => setConfirmingId(assignment.id)}
-                                    >
-                                       Claim investigation
-                                    </Button>
-                                 )}
-                              </div>
+                                 </div>
+                              ) : null}
                            </article>
                         </li>
                      );
@@ -457,7 +538,7 @@ function VerificationIntakePanel({ organizationId, organizationName, onInvestiga
 
                <div className="intake-pagination">
                   <span>
-                     Showing {rangeStart}–{rangeEnd} of {intake.count}
+                     Page {currentPage} of {totalPages}
                   </span>
 
                   <div className="intake-pagination-controls">
