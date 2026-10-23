@@ -276,11 +276,12 @@ function EvidenceRecord({ evidence }) {
          </div>
 
          <div className="adjudication-source-row">
-            <span className="adjudication-url-text">{evidence?.evidence_url || "Source URL unavailable"}</span>
-            {safeEvidenceUrl && (
-               <SafeExternalLink value={safeEvidenceUrl} className="adjudication-external-link">
-                  Open evidence source
+            {safeEvidenceUrl ? (
+               <SafeExternalLink value={safeEvidenceUrl} className="adjudication-evidence-source-link">
+                  {evidence?.evidence_url}
                </SafeExternalLink>
+            ) : (
+               <span className="adjudication-url-text">{evidence?.evidence_url || "Source URL unavailable"}</span>
             )}
          </div>
          {!safeEvidenceUrl && evidence?.evidence_url && (
@@ -1451,7 +1452,17 @@ function AdjudicationReviewContent({
       detailIdentity.requestId === detailRequestIdRef.current;
    const readyForFirstDecision = firstDecisionContract.ready && Boolean(detailIdentityIsCurrent);
    const actionBlockers = Array.isArray(actionState.blockers) ? actionState.blockers : [];
+   const primaryBlocker = actionBlockers[0] || null;
+   const additionalBlockers = actionBlockers.slice(1);
    const isResolvedCase = detail?.status === "RESOLVED";
+   const currentDecision = detail?.current_decision || null;
+   const evidenceTotal = normalizeNonnegativeNumber(evidenceReview.total);
+   const evidenceVerified = normalizeNonnegativeNumber(evidenceReview.verified);
+   const evidenceRejected = normalizeNonnegativeNumber(evidenceReview.rejected);
+   const evidenceUnreviewed = normalizeNonnegativeNumber(evidenceReview.unreviewed);
+   const reviewedEvidenceCount = evidenceVerified + evidenceRejected;
+   const isUrlClaim = String(detailClaim.claim_type || "").toUpperCase() === "URL";
+   const originalClaimUrl = isUrlClaim ? getSafeHttpUrl(detailClaim.url_link) : null;
    const viewingOutsideCurrentQueue = Boolean(
       selectedCaseId && detail && !queueLoading && !queueError && !selectedCase,
    );
@@ -1862,6 +1873,112 @@ function AdjudicationReviewContent({
                               )}
                            </header>
 
+                           {detail && (
+                              <section className="adjudication-decision-summary-bar" aria-label="Adjudication decision summary">
+                                 <div className="adjudication-summary-item">
+                                    <span className="adjudication-summary-label">
+                                       {currentDecision ? "Current verdict" : "Decision state"}
+                                    </span>
+                                    {currentDecision ? (
+                                       <span
+                                          className={`adjudication-decision-verdict adjudication-decision-verdict--${getVerdictTone(currentDecision.verdict)}`}
+                                       >
+                                          {currentDecision.verdict_label || formatLabel(currentDecision.verdict, "Verdict unavailable")}
+                                       </span>
+                                    ) : (
+                                       <span
+                                          className={`adjudication-summary-state adjudication-summary-state--${
+                                             isResolvedCase ? "recorded" : readyForFirstDecision ? "ready" : "blocked"
+                                          }`}
+                                       >
+                                          <Icons
+                                             name={isResolvedCase || readyForFirstDecision ? "check-circle" : "alert-circle"}
+                                             size={14}
+                                             aria-hidden="true"
+                                          />
+                                          {isResolvedCase ? "Completed" : readyForFirstDecision ? "Ready" : "Blocked"}
+                                       </span>
+                                    )}
+                                    <span className="adjudication-summary-meta">
+                                       {currentDecision
+                                          ? "Authoritative human adjudication recorded"
+                                          : isResolvedCase
+                                            ? "This case is resolved in the authorized view."
+                                            : readyForFirstDecision
+                                              ? "Backend decision preconditions are currently satisfied."
+                                              : "A first decision is not currently available."}
+                                    </span>
+                                 </div>
+
+                                 <div className="adjudication-summary-item">
+                                    <span className="adjudication-summary-label">Evidence reviewed</span>
+                                    <strong className="adjudication-summary-value">
+                                       {reviewedEvidenceCount}/{evidenceTotal}
+                                    </strong>
+                                    <span className="adjudication-summary-meta">
+                                       {evidenceReview.all_reviewed
+                                          ? "All submitted evidence has a review disposition."
+                                          : `${evidenceUnreviewed} evidence ${evidenceUnreviewed === 1 ? "item remains" : "items remain"} unreviewed.`}
+                                    </span>
+                                 </div>
+
+                                 <div className="adjudication-summary-item">
+                                    <span className="adjudication-summary-label">
+                                       {currentDecision ? "Recorded by" : "Primary requirement"}
+                                    </span>
+                                    <strong className="adjudication-summary-value">
+                                       {currentDecision ? (
+                                          <MinimalUser user={currentDecision.decided_by} fallback="Actor not recorded" />
+                                       ) : isResolvedCase ? (
+                                          "No active decision action"
+                                       ) : readyForFirstDecision ? (
+                                          "No blocking requirement"
+                                       ) : primaryBlocker ? (
+                                          formatLabel(primaryBlocker.code, "Decision blocker")
+                                       ) : (
+                                          "Refresh required"
+                                       )}
+                                    </strong>
+                                    <span className="adjudication-summary-meta">
+                                       {currentDecision
+                                          ? currentDecision.organization?.name || "Organization not recorded"
+                                          : isResolvedCase
+                                            ? "Review the recorded decision and history if needed."
+                                            : readyForFirstDecision
+                                              ? "You can prepare the first adjudication decision."
+                                              : primaryBlocker?.message || "Refresh this case to revalidate its decision preconditions."}
+                                    </span>
+                                 </div>
+
+                                 {readyForFirstDecision && !decisionFormOpen && !confirmation && !confirmationChecking ? (
+                                    <div className="adjudication-summary-action">
+                                       <Button
+                                          type="button"
+                                          variant="primary"
+                                          density="comfortable"
+                                          ref={decisionTriggerRef}
+                                          disabled={Boolean(mutation) || Boolean(reconciliationPending) || detailLoading || Boolean(detailError)}
+                                          onClick={handleBeginDecision}
+                                       >
+                                          Begin decision
+                                       </Button>
+                                    </div>
+                                 ) : guidedMode && isResolvedCase && onReturnToInvestigation && !selectedActionNotice ? (
+                                    <div className="adjudication-summary-action">
+                                       <Button
+                                          type="button"
+                                          variant="secondary"
+                                          density="compact"
+                                          trailingIcon={<Icons name="arrow-right" size={13} aria-hidden="true" />}
+                                          onClick={onReturnToInvestigation}
+                                       >
+                                          Continue investigation
+                                       </Button>
+                                    </div>
+                                 ) : null}
+                              </section>
+                           )}
+
                            {!guidedMode && viewingOutsideCurrentQueue && (
                               <p className="adjudication-outside-queue-note">
                                  <Icons name="info" size={15} aria-hidden="true" />
@@ -2025,7 +2142,7 @@ function AdjudicationReviewContent({
                                        aria-controls="adjudication-case-support adjudication-decision-support adjudication-history-support adjudication-context-support"
                                        onClick={() => setGuidedSupportOpen((open) => !open)}
                                     >
-                                       {guidedSupportOpen ? "Hide supporting details" : "Supporting details"}
+                                       {guidedSupportOpen ? "Hide details" : "More details"}
                                     </Button>
                                  </div>
 
@@ -2050,16 +2167,14 @@ function AdjudicationReviewContent({
                                              <p>{detailClaim.context_text || "Claim text unavailable."}</p>
                                           </div>
 
-                                          <div className="adjudication-context-links">
-                                             <SafeExternalLink value={detailClaim.url_link}>Open original claim</SafeExternalLink>
-                                             <SafeExternalLink value={detailClaim.source_link}>Open claim source</SafeExternalLink>
-                                             <SafeExternalLink value={detailClaim.media_url}>Open claim media</SafeExternalLink>
-                                          </div>
-                                          {[detailClaim.url_link, detailClaim.source_link, detailClaim.media_url].some(
-                                             (value) => value && !getSafeHttpUrl(value),
-                                          ) && (
+                                          {originalClaimUrl && (
+                                             <div className="adjudication-context-links">
+                                                <SafeExternalLink value={originalClaimUrl}>Open original claim URL</SafeExternalLink>
+                                             </div>
+                                          )}
+                                          {isUrlClaim && detailClaim.url_link && !originalClaimUrl && (
                                              <p className="adjudication-inline-warning">
-                                                One or more recorded claim links cannot be opened because they are not supported HTTP(S) addresses.
+                                                The submitted claim URL cannot be opened because it is not a supported HTTP(S) address.
                                              </p>
                                           )}
 
@@ -2194,44 +2309,45 @@ function AdjudicationReviewContent({
                                        </div>
                                     )}
 
-                                    {actionBlockers.length > 0 && (
+                                    {primaryBlocker && !isResolvedCase && (
                                        <div className="adjudication-blocker-group">
-                                          <h6>Decision blockers</h6>
+                                          <h6>Primary blocker</h6>
                                           <ul className="adjudication-blocker-list">
-                                             {actionBlockers.map((blocker, index) => (
-                                                <li key={`${blocker.code || "BLOCKER"}-${index}`}>
-                                                   <strong>{formatLabel(blocker.code, "Decision blocker")}</strong>
-                                                   <span>{blocker.message || "This case is not currently eligible for a first decision."}</span>
-                                                </li>
-                                             ))}
+                                             <li>
+                                                <strong>{formatLabel(primaryBlocker.code, "Decision blocker")}</strong>
+                                                <span>{primaryBlocker.message || "This case is not currently eligible for a first decision."}</span>
+                                             </li>
                                           </ul>
+                                          {additionalBlockers.length > 0 && (
+                                             <details className="adjudication-other-blockers">
+                                                <summary>
+                                                   Other requirements ({additionalBlockers.length})
+                                                </summary>
+                                                <ul className="adjudication-blocker-list">
+                                                   {additionalBlockers.map((blocker, index) => (
+                                                      <li key={`${blocker.code || "BLOCKER"}-${index + 1}`}>
+                                                         <strong>{formatLabel(blocker.code, "Decision blocker")}</strong>
+                                                         <span>{blocker.message || "This case has another unmet decision requirement."}</span>
+                                                      </li>
+                                                   ))}
+                                                </ul>
+                                             </details>
+                                          )}
                                        </div>
                                     )}
 
                                     <dl className="adjudication-detail-facts compact adjudication-readiness-meta">
                                        <div><dt>Assignment status</dt><dd>{detail.assignment?.status ? formatLabel(detail.assignment.status) : "No active assignment"}</dd></div>
                                        <div><dt>Claimed by</dt><dd><MinimalUser user={detail.assignment?.claimed_by} fallback="Not assigned" /></dd></div>
-                                       <div><dt>Expected revision</dt><dd>{actionState.expected_revision ?? "Unavailable"}</dd></div>
-                                       <div><dt>Selected case precondition</dt><dd>{actionPreconditionsAreValid ? "Confirmed" : "Unavailable"}</dd></div>
                                     </dl>
 
-                                    {readyForFirstDecision && !decisionFormOpen && !confirmation && !confirmationChecking && (
-                                       <div className="adjudication-decision-entry">
-                                          <Button
-                                             type="button"
-                                             variant="primary"
-                                             density="comfortable"
-                                             ref={decisionTriggerRef}
-                                             disabled={Boolean(mutation) || Boolean(reconciliationPending) || detailLoading || Boolean(detailError)}
-                                             onClick={handleBeginDecision}
-                                          >
-                                             Begin decision
-                                          </Button>
-                                          <p>
-                                             This begins a deliberate first-decision review. It does not draft or publish a fact-check.
-                                          </p>
-                                       </div>
-                                    )}
+                                    <details className="adjudication-record-disclosure adjudication-technical-preconditions">
+                                       <summary>Technical decision preconditions</summary>
+                                       <dl className="adjudication-detail-facts compact adjudication-record-disclosure-body">
+                                          <div><dt>Expected revision</dt><dd>{actionState.expected_revision ?? "Unavailable"}</dd></div>
+                                          <div><dt>Selected case precondition</dt><dd>{actionPreconditionsAreValid ? "Confirmed" : "Unavailable"}</dd></div>
+                                       </dl>
+                                    </details>
 
                                     {confirmationChecking && (
                                        <div className="adjudication-decision-checking" role="status">
