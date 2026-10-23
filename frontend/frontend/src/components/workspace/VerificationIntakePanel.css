@@ -318,6 +318,11 @@
    white-space: nowrap;
 }
 
+.intake-signals .intake-evidence-signal dd {
+   color: var(--text-main);
+   font-weight: 750;
+}
+
 .intake-verdict {
    display: inline-flex;
    align-items: center;

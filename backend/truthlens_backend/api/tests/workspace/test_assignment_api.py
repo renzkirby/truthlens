@@ -479,6 +479,37 @@ class VerificationAssignmentApiTests(APITestCase):
                 str(fixture["claim"].id),
             )
 
+    def test_intake_exposes_submitted_evidence_count(self):
+        fixture = self._create_available_assignment(
+            suffix="evidence-count",
+        )
+
+        EvidenceSubmission.objects.create(
+            thread=fixture["thread"],
+            contributor=self.community_user,
+            evidence_caption="First supporting source",
+            evidence_url="https://example.com/intake-evidence-one",
+            evidence_type=EvidenceSubmission.EvidenceType.SUPPORTS,
+        )
+        EvidenceSubmission.objects.create(
+            thread=fixture["thread"],
+            contributor=self.community_user,
+            evidence_caption="Second contextual source",
+            evidence_url="https://example.com/intake-evidence-two",
+            evidence_type=EvidenceSubmission.EvidenceType.PROVIDES_CONTEXT,
+        )
+
+        response = self.lead_a_client.get(
+            reverse("verification_intake"),
+            {
+                "organization_id": str(self.organization_a.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["evidence_count"], 2)
+
     # =====================================
     # Claim
     # =====================================

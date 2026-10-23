@@ -1243,6 +1243,21 @@ class VerificationWorkloadAssignmentSerializer(
         read_only_fields = fields
 
 
+class VerificationIntakeAssignmentSerializer(
+    VerificationAssignmentSerializer
+):
+    evidence_count = serializers.IntegerField(
+        read_only=True,
+    )
+
+    class Meta(VerificationAssignmentSerializer.Meta):
+        fields = VerificationAssignmentSerializer.Meta.fields + [
+            "evidence_count",
+        ]
+
+        read_only_fields = fields
+
+
 class VerificationAssignmentClaimSerializer(serializers.Serializer):
     organization_id = serializers.UUIDField()
 

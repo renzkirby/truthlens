@@ -376,6 +376,7 @@ from .serializers import (
     FactualCorrectionProposalSaveSerializer,
     FactualCorrectionRequestMutationSerializer,
     VerificationAssignmentClaimSerializer,
+    VerificationIntakeAssignmentSerializer,
     VerificationAssignmentSerializer,
     VerificationWorkloadAssignmentSerializer,
     OrganizationMembershipAdminSerializer,
@@ -2857,7 +2858,7 @@ def verification_intake(request):
     total_count = len(eligible)
     assignments = eligible[offset : offset + limit]
 
-    serializer = VerificationAssignmentSerializer(
+    serializer = VerificationIntakeAssignmentSerializer(
         assignments,
         many=True,
         context={

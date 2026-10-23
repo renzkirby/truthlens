@@ -395,6 +395,7 @@ function VerificationIntakePanel({ organizationId, organizationName, onInvestiga
                      const hasLongClaimText = claimText.length > 360;
                      const verdictMeta = getVerdictMeta(claim.ai_verdict);
                      const confidence = formatConfidence(claim.consensus_score);
+                     const evidenceCount = Number(assignment.evidence_count || 0);
                      const isConfirming = confirmingId === assignment.id;
                      const isClaiming = claimingId === assignment.id;
                      const claimHeadingId = `intake-claim-${assignment.id}`;
@@ -423,6 +424,13 @@ function VerificationIntakePanel({ organizationId, organizationName, onInvestiga
                                  {claim.ai_summary ? <p className="intake-ai-summary">{claim.ai_summary}</p> : null}
 
                                  <dl className="intake-signals">
+                                    <div className="intake-evidence-signal">
+                                       <dt>Submitted evidence</dt>
+                                       <dd>
+                                          {evidenceCount} {evidenceCount === 1 ? "item" : "items"}
+                                       </dd>
+                                    </div>
+
                                     <div>
                                        <dt>AI assessment</dt>
                                        <dd>

@@ -179,6 +179,12 @@ def get_available_verification_assignments():
         .prefetch_related(
             "claim__threads",
         )
+        .annotate(
+            evidence_count=Count(
+                "claim__threads__evidence_submissions",
+                distinct=True,
+            )
+        )
         .order_by("-created_at")
     )
 
