@@ -833,9 +833,10 @@ function EvidenceReviewContent({
    const queueDispositionLabel =
       DISPOSITION_OPTIONS.find((option) => option.value === disposition)?.label.toLowerCase() || "available";
    const evidenceUrl = safeExternalUrl(evidence?.evidence_url);
-   const claimUrl = safeExternalUrl(claim?.url_link);
-   const sourceUrl = safeExternalUrl(claim?.source_link);
-   const mediaUrl = safeExternalUrl(claim?.media_url);
+   const originalClaimUrl =
+      String(claim?.claim_type || "").toUpperCase() === "URL"
+         ? safeExternalUrl(claim?.url_link)
+         : null;
    const selectedDecisionCopy = decision ? DECISION_COPY[decision] : null;
    const isMutatingSelectedCase = mutation?.caseId === detail?.id;
    const readOnlyDecisionState = detail ? getReadOnlyDecisionState(detail, evidence) : null;
@@ -1134,19 +1135,28 @@ function EvidenceReviewContent({
                               <h5 id="submitted-evidence-heading">Submitted evidence</h5>
                               <p>Review the submitted source directly and assess its suitability.</p>
                            </div>
-                           {evidenceUrl && (
-                              <a href={evidenceUrl} target="_blank" rel="noopener noreferrer" className="evidence-external-link">
-                                 Open submitted source
-                                 <Icons name="external-link" size={13} aria-hidden="true" />
-                              </a>
-                           )}
+
                         </div>
 
                         <p className="evidence-reading-text">{evidence?.evidence_caption || "No evidence caption was provided."}</p>
                         <dl className="evidence-source-record">
                            <div>
                               <dt>Source</dt>
-                              <dd className="evidence-url-text">{evidence?.evidence_url || "Source URL unavailable"}</dd>
+                              <dd className="evidence-url-text">
+                                 {evidenceUrl ? (
+                                    <a
+                                       href={evidenceUrl}
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       className="evidence-external-link"
+                                    >
+                                       {evidence?.evidence_url}
+                                       <Icons name="external-link" size={12} aria-hidden="true" />
+                                    </a>
+                                 ) : (
+                                    evidence?.evidence_url || "Source URL unavailable"
+                                 )}
+                              </dd>
                            </div>
                         </dl>
                         {!evidenceUrl && evidence?.evidence_url && (
@@ -1358,7 +1368,7 @@ function EvidenceReviewContent({
                            aria-controls="evidence-claim-support evidence-review-support evidence-audit-support"
                            onClick={() => setGuidedSupportOpen((open) => !open)}
                         >
-                           {guidedSupportOpen ? "Hide supporting details" : "Supporting details"}
+                           {guidedSupportOpen ? "Hide details" : "More details"}
                         </Button>
                         <span>Claim context, review metadata, and audit history</span>
                      </div>
@@ -1381,11 +1391,14 @@ function EvidenceReviewContent({
                            )}
                         </div>
                         <p className="evidence-reading-text">{claim?.context_text || detail.thread?.caption || "Claim context unavailable"}</p>
-                        <div className="evidence-context-links">
-                           {claimUrl && <a href={claimUrl} target="_blank" rel="noopener noreferrer">Open original claim URL <Icons name="external-link" size={12} aria-hidden="true" /></a>}
-                           {sourceUrl && <a href={sourceUrl} target="_blank" rel="noopener noreferrer">Open claim source <Icons name="external-link" size={12} aria-hidden="true" /></a>}
-                           {mediaUrl && <a href={mediaUrl} target="_blank" rel="noopener noreferrer">Open claim media <Icons name="external-link" size={12} aria-hidden="true" /></a>}
-                        </div>
+                        {originalClaimUrl && (
+                           <div className="evidence-context-links">
+                              <a href={originalClaimUrl} target="_blank" rel="noopener noreferrer">
+                                 Open original claim URL
+                                 <Icons name="external-link" size={12} aria-hidden="true" />
+                              </a>
+                           </div>
+                        )}
                         <dl className="evidence-record-details evidence-claim-meta">
                            <div>
                               <dt>Claim type</dt>
