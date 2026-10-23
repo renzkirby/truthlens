@@ -151,7 +151,7 @@
 .intake-list {
    margin: 0;
    padding: 0;
-   overflow: hidden;
+   overflow: visible;
    border: 1px solid var(--border-default);
    border-radius: 10px;
    background: var(--bg-surface);
@@ -167,6 +167,16 @@
    border-bottom: 0;
 }
 
+.intake-list-item:first-child .intake-item {
+   border-top-left-radius: 9px;
+   border-top-right-radius: 9px;
+}
+
+.intake-list-item:last-child .intake-item {
+   border-bottom-right-radius: 9px;
+   border-bottom-left-radius: 9px;
+}
+
 .intake-item {
    min-width: 0;
    display: grid;
@@ -177,7 +187,8 @@
    transition: background-color var(--tl-duration-fast) ease;
 }
 
-.intake-list-item:hover .intake-item {
+.intake-list-item:hover .intake-item,
+.intake-list-item:focus-within .intake-item {
    background: var(--bg-subtle);
 }
 

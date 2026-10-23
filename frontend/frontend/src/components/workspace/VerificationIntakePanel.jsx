@@ -65,6 +65,12 @@ function getVerdictMeta(verdict) {
    return VERDICT_CONFIG[normalizedVerdict] ?? null;
 }
 
+function formatAvailableInvestigations(count) {
+   const normalizedCount = Number(count ?? 0);
+
+   return `${normalizedCount} available ${normalizedCount === 1 ? "investigation" : "investigations"}`;
+}
+
 function VerificationIntakePanel({ organizationId, organizationName, onInvestigationClaimed }) {
    const { authFetch } = useAuth();
 
@@ -268,9 +274,8 @@ function VerificationIntakePanel({ organizationId, organizationName, onInvestiga
          );
          onInvestigationClaimed?.(claimedAssignment);
       } catch (error) {
-         setConfirmingId(null);
-
          if (error?.status === 409) {
+            setConfirmingId(null);
             setNotice(
                "This investigation was claimed by another organization before your request completed. The intake has been refreshed.",
             );
@@ -311,7 +316,7 @@ function VerificationIntakePanel({ organizationId, organizationName, onInvestiga
       <div className="verification-intake" aria-busy={loading ? "true" : undefined}>
          <div className="intake-overview">
             <div>
-               <strong>{intake.count} available investigations</strong>
+               <strong>{formatAvailableInvestigations(intake.count)}</strong>
                <p>Choose new community investigations for {organizationName || "your organization"} to verify.</p>
             </div>
 
