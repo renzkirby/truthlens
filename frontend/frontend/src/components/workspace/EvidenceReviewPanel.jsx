@@ -830,6 +830,8 @@ function EvidenceReviewContent({
    const hasPreviousPage = offset > 0;
    const hasNextPage = offset + PAGE_SIZE < queue.count;
    const emptyCopy = getQueueEmptyCopy(disposition);
+   const queueDispositionLabel =
+      DISPOSITION_OPTIONS.find((option) => option.value === disposition)?.label.toLowerCase() || "available";
    const evidenceUrl = safeExternalUrl(evidence?.evidence_url);
    const claimUrl = safeExternalUrl(claim?.url_link);
    const sourceUrl = safeExternalUrl(claim?.source_link);
@@ -840,16 +842,15 @@ function EvidenceReviewContent({
 
    return (
       <div className={`evidence-review-panel ${guidedMode ? "is-guided" : ""}`}>
-         <div className={`evidence-panel-intro ${guidedMode ? "is-guided-redundant" : ""}`}>
+         <div className={`evidence-overview ${guidedMode ? "is-guided-redundant" : ""}`}>
             <div>
-               <h3>{guidedMode ? "Review this investigation’s evidence" : "Evidence review"}</h3>
-               <p>
-                  {guidedMode
-                     ? "Work on the evidence item that is currently blocking this investigation."
-                     : "Assess submitted sources before they become part of a professionally reviewed evidence set."}
-               </p>
+               <strong aria-live="polite">
+                  {queueLoading && queue.results.length === 0
+                     ? "Loading evidence cases…"
+                     : `${queue.count} ${queueDispositionLabel} evidence ${queue.count === 1 ? "case" : "cases"}`}
+               </strong>
+               <p>Assess submitted sources before they become part of a professionally reviewed evidence set.</p>
             </div>
-            <span className="evidence-organization-context">Organization: {organizationName || "Unavailable"}</span>
          </div>
 
          <div className={`evidence-boundary-note ${guidedMode ? "is-guided-redundant" : ""}`}>
@@ -865,8 +866,8 @@ function EvidenceReviewContent({
                <div>
                   <strong>Organization-wide queue</strong>
                   <span>
-                     To keep claim identity, stage guidance, and a Continue investigation path, open the case from
-                     Investigations instead.
+                     Open work from Investigations when you want claim context, stage guidance, and a direct return to
+                     the investigation.
                   </span>
                </div>
                <Link
@@ -895,42 +896,37 @@ function EvidenceReviewContent({
          ) : (
             <>
                {!guidedMode && (
-                  <>
-                                    <div className="evidence-toolbar">
-                                 <label htmlFor="evidence-disposition-filter">
-                                    Review history
-                                    <Select
-                                       density="standard"
-                                       id="evidence-disposition-filter"
-                                       value={disposition}
-                                       disabled={Boolean(mutation)}
-                                       onChange={handleDispositionChange}
-                                    >
-                                       {DISPOSITION_OPTIONS.map((option) => (
-                                          <option key={option.value} value={option.value}>
-                                             {option.label}
-                                          </option>
-                                       ))}
-                                    </Select>
-                                 </label>
-                     
-                                 <div className="evidence-toolbar-actions">
-                                    <span aria-live="polite">
-                                       {queue.count} {queue.count === 1 ? "case" : "cases"}
-                                    </span>
-                                    <Button
-                                       type="button"
-                                       variant="secondary"
-                                       density="compact"
-                                       leadingIcon={<Icons name="refresh-cw" size={15} aria-hidden="true" />}
-                                       disabled={queueLoading || Boolean(mutation)}
-                                       onClick={() => requestQueueRefresh()}
-                                    >
-                                       {queueLoading && queue.results.length > 0 ? "Refreshing…" : "Refresh"}
-                                    </Button>
-                                 </div>
-                              </div>
-                  </>
+                  <div className="evidence-toolbar">
+                     <label htmlFor="evidence-disposition-filter">
+                        Review history
+                        <Select
+                           density="standard"
+                           id="evidence-disposition-filter"
+                           value={disposition}
+                           disabled={Boolean(mutation)}
+                           onChange={handleDispositionChange}
+                        >
+                           {DISPOSITION_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                 {option.label}
+                              </option>
+                           ))}
+                        </Select>
+                     </label>
+
+                     <div className="evidence-toolbar-actions">
+                        <Button
+                           type="button"
+                           variant="secondary"
+                           density="compact"
+                           leadingIcon={<Icons name="refresh-cw" size={15} aria-hidden="true" />}
+                           disabled={queueLoading || Boolean(mutation)}
+                           onClick={() => requestQueueRefresh()}
+                        >
+                           {queueLoading && queue.results.length > 0 ? "Refreshing…" : "Refresh"}
+                        </Button>
+                     </div>
+                  </div>
                )}
 
          {!guidedMode && notice && (!selectedCaseId || String(noticeCaseId) !== String(selectedCaseId)) && (
@@ -1177,119 +1173,6 @@ function EvidenceReviewContent({
                         </details>
                      </section>
 
-                     <div className="evidence-guided-disclosure-control">
-                        <Button
-                           type="button"
-                           variant="secondary"
-                           density="compact"
-                           trailingIcon={
-                              <Icons name={guidedSupportOpen ? "chevron-up" : "chevron-down"} size={13} aria-hidden="true" />
-                           }
-                           aria-expanded={guidedSupportOpen}
-                           aria-controls="evidence-claim-support evidence-review-support evidence-audit-support"
-                           onClick={() => setGuidedSupportOpen((open) => !open)}
-                        >
-                           {guidedSupportOpen ? "Hide supporting details" : "Supporting details"}
-                        </Button>
-                        <span>
-                           {guidedMode
-                              ? "Claim context, review metadata, and audit history"
-                              : "Review metadata and audit history"}
-                        </span>
-                     </div>
-
-                     <section
-                        id="evidence-claim-support"
-                        className={`evidence-detail-section ${guidedMode ? "evidence-secondary-section" : ""} ${guidedSupportOpen ? "is-visible" : ""}`}
-                        aria-labelledby="claim-context-heading"
-                     >
-                        <div className="evidence-subheading-row evidence-major-section-heading">
-                           <div>
-                              <h5 id="claim-context-heading">Claim context</h5>
-                              <p>Evidence suitability is reviewed in the context of this investigation.</p>
-                           </div>
-                           {detail.thread?.id && (
-                              <Link to={`/thread/detail/${detail.thread.id}`} className="evidence-thread-link">
-                                 View full thread
-                                 <Icons name="arrow-right" size={13} aria-hidden="true" />
-                              </Link>
-                           )}
-                        </div>
-                        <p className="evidence-reading-text">{claim?.context_text || detail.thread?.caption || "Claim context unavailable"}</p>
-                        <div className="evidence-context-links">
-                           {claimUrl && <a href={claimUrl} target="_blank" rel="noopener noreferrer">Open original claim URL <Icons name="external-link" size={12} aria-hidden="true" /></a>}
-                           {sourceUrl && <a href={sourceUrl} target="_blank" rel="noopener noreferrer">Open claim source <Icons name="external-link" size={12} aria-hidden="true" /></a>}
-                           {mediaUrl && <a href={mediaUrl} target="_blank" rel="noopener noreferrer">Open claim media <Icons name="external-link" size={12} aria-hidden="true" /></a>}
-                        </div>
-                        <details className="evidence-record-disclosure">
-                           <summary>Claim details</summary>
-                           <dl className="evidence-record-details">
-                              <div>
-                                 <dt>Claim type</dt>
-                                 <dd>{formatLabel(claim?.claim_type)}</dd>
-                              </div>
-                              <div>
-                                 <dt>Thread caption</dt>
-                                 <dd>{detail.thread?.caption || "Unavailable"}</dd>
-                              </div>
-                           </dl>
-                        </details>
-                     </section>
-
-                     <section
-                        id="evidence-review-support"
-                        className={`evidence-detail-section evidence-secondary-section ${guidedSupportOpen ? "is-visible" : ""}`}
-                        aria-labelledby="review-state-heading"
-                     >
-                        <div className="evidence-subheading-row evidence-major-section-heading">
-                           <div>
-                              <h5 id="review-state-heading">Review state</h5>
-                              <p>Evidence disposition and case lifecycle are separate records.</p>
-                           </div>
-                        </div>
-                        <dl className="evidence-review-status">
-                           <div>
-                              <dt>Evidence disposition</dt>
-                              <dd>
-                                 <span className={`evidence-disposition disposition-${evidence?.evidence_status?.toLowerCase() || "unknown"}`}>
-                                    {getDispositionLabel(evidence)}
-                                 </span>
-                              </dd>
-                           </div>
-                           <div>
-                              <dt>Case lifecycle</dt>
-                              <dd><span className="evidence-case-status">{formatLabel(detail.status)}</span></dd>
-                           </div>
-                        </dl>
-                        <dl className="evidence-review-provenance">
-                           <div>
-                              <dt>Reviewer</dt>
-                              <dd>{detail.verified_by?.username ? `@${detail.verified_by.username}` : "Reviewer not recorded"}</dd>
-                           </div>
-                           <div>
-                              <dt>Review date</dt>
-                              <dd>
-                                 <FormattedDateTime
-                                    value={detail.verified_at}
-                                    fallback="Review date not recorded"
-                                 />
-                              </dd>
-                           </div>
-                        </dl>
-                        {evidence?.evidence_status === "REJECTED" && (
-                           <dl className="evidence-review-outcome">
-                              <div>
-                                 <dt>Rejection reason</dt>
-                                 <dd>{detail.rejection_reason_label || "Historical rejection reason unavailable"}</dd>
-                              </div>
-                           </dl>
-                        )}
-                        <div className="evidence-review-notes">
-                           <strong>Moderator notes</strong>
-                           <p>{detail.moderator_notes || "No review notes were recorded."}</p>
-                        </div>
-                     </section>
-
                      <section className="evidence-decision-section" aria-labelledby="evidence-decision-heading">
                         <div className="evidence-subheading-row evidence-major-section-heading">
                            <div>
@@ -1332,11 +1215,7 @@ function EvidenceReviewContent({
 
                         {!isActiveCase || evidence?.evidence_status !== "UNVERIFIED" ? (
                            <div className="evidence-readonly-state" role="status">
-                              <Icons
-                                 name="info"
-                                 size={18}
-                                 aria-hidden="true"
-                              />
+                              <Icons name="info" size={18} aria-hidden="true" />
                               <div>
                                  <strong>{readOnlyDecisionState.heading}</strong>
                                  <span>{readOnlyDecisionState.body}</span>
@@ -1434,11 +1313,7 @@ function EvidenceReviewContent({
                               <span id="evidence-notes-count" className="evidence-notes-count">{moderatorNotes.length}/2000</span>
 
                               {validationError && (
-                                 <p
-                                    id="evidence-rejection-reason-error"
-                                    className="evidence-form-error"
-                                    role="alert"
-                                 >
+                                 <p id="evidence-rejection-reason-error" className="evidence-form-error" role="alert">
                                     {validationError}
                                  </p>
                               )}
@@ -1466,6 +1341,115 @@ function EvidenceReviewContent({
                               </div>
                            </form>
                         )}
+                     </section>
+
+                     <div className="evidence-guided-disclosure-control">
+                        <Button
+                           type="button"
+                           variant="secondary"
+                           density="compact"
+                           trailingIcon={
+                              <Icons name={guidedSupportOpen ? "chevron-up" : "chevron-down"} size={13} aria-hidden="true" />
+                           }
+                           aria-expanded={guidedSupportOpen}
+                           aria-controls="evidence-claim-support evidence-review-support evidence-audit-support"
+                           onClick={() => setGuidedSupportOpen((open) => !open)}
+                        >
+                           {guidedSupportOpen ? "Hide supporting details" : "Supporting details"}
+                        </Button>
+                        <span>Claim context, review metadata, and audit history</span>
+                     </div>
+
+                     <section
+                        id="evidence-claim-support"
+                        className={`evidence-detail-section evidence-secondary-section ${guidedSupportOpen ? "is-visible" : ""}`}
+                        aria-labelledby="claim-context-heading"
+                     >
+                        <div className="evidence-subheading-row evidence-major-section-heading">
+                           <div>
+                              <h5 id="claim-context-heading">Claim context</h5>
+                              <p>Evidence suitability is reviewed in the context of this investigation.</p>
+                           </div>
+                           {detail.thread?.id && (
+                              <Link to={`/thread/detail/${detail.thread.id}`} className="evidence-thread-link">
+                                 View full thread
+                                 <Icons name="arrow-right" size={13} aria-hidden="true" />
+                              </Link>
+                           )}
+                        </div>
+                        <p className="evidence-reading-text">{claim?.context_text || detail.thread?.caption || "Claim context unavailable"}</p>
+                        <div className="evidence-context-links">
+                           {claimUrl && <a href={claimUrl} target="_blank" rel="noopener noreferrer">Open original claim URL <Icons name="external-link" size={12} aria-hidden="true" /></a>}
+                           {sourceUrl && <a href={sourceUrl} target="_blank" rel="noopener noreferrer">Open claim source <Icons name="external-link" size={12} aria-hidden="true" /></a>}
+                           {mediaUrl && <a href={mediaUrl} target="_blank" rel="noopener noreferrer">Open claim media <Icons name="external-link" size={12} aria-hidden="true" /></a>}
+                        </div>
+                        <details className="evidence-record-disclosure">
+                           <summary>Claim details</summary>
+                           <dl className="evidence-record-details">
+                              <div>
+                                 <dt>Claim type</dt>
+                                 <dd>{formatLabel(claim?.claim_type)}</dd>
+                              </div>
+                              <div>
+                                 <dt>Thread caption</dt>
+                                 <dd>{detail.thread?.caption || "Unavailable"}</dd>
+                              </div>
+                           </dl>
+                        </details>
+                     </section>
+
+                     <section
+                        id="evidence-review-support"
+                        className={`evidence-detail-section evidence-secondary-section ${guidedSupportOpen ? "is-visible" : ""}`}
+                        aria-labelledby="review-state-heading"
+                     >
+                        <div className="evidence-subheading-row evidence-major-section-heading">
+                           <div>
+                              <h5 id="review-state-heading">Review state</h5>
+                              <p>Evidence disposition and case lifecycle are separate records.</p>
+                           </div>
+                        </div>
+                        <dl className="evidence-review-status">
+                           <div>
+                              <dt>Evidence disposition</dt>
+                              <dd>
+                                 <span className={`evidence-disposition disposition-${evidence?.evidence_status?.toLowerCase() || "unknown"}`}>
+                                    {getDispositionLabel(evidence)}
+                                 </span>
+                              </dd>
+                           </div>
+                           <div>
+                              <dt>Case lifecycle</dt>
+                              <dd><span className="evidence-case-status">{formatLabel(detail.status)}</span></dd>
+                           </div>
+                        </dl>
+                        <dl className="evidence-review-provenance">
+                           <div>
+                              <dt>Reviewer</dt>
+                              <dd>{detail.verified_by?.username ? `@${detail.verified_by.username}` : "Reviewer not recorded"}</dd>
+                           </div>
+                           <div>
+                              <dt>Review date</dt>
+                              <dd>
+                                 <FormattedDateTime
+                                    value={detail.verified_at}
+                                    fallback="Review date not recorded"
+                                 />
+                              </dd>
+                           </div>
+                        </dl>
+                        {evidence?.evidence_status === "REJECTED" && (
+                           <dl className="evidence-review-outcome">
+                              <div>
+                                 <dt>Rejection reason</dt>
+                                 <dd>{detail.rejection_reason_label || "Historical rejection reason unavailable"}</dd>
+                              </div>
+                           </dl>
+                        )}
+                        <div className="evidence-review-notes">
+                           <strong>Moderator notes</strong>
+                           <p>{detail.moderator_notes || "No review notes were recorded."}</p>
+                        </div>
                      </section>
 
                      <section
