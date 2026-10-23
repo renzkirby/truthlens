@@ -2002,35 +2002,36 @@ function AdjudicationReviewContent({
                                     </div>
                                  )}
 
-                                 {guidedMode && (
-                                    <div className="adjudication-guided-controls">
-                                       <div>
-                                          <strong>Focused adjudication view</strong>
-                                          <span>Readiness and decision controls stay visible. Context and history are available on demand.</span>
-                                       </div>
-                                       <Button
-                                          type="button"
-                                          variant="secondary"
-                                          density="compact"
-                                          trailingIcon={
-                                             <Icons
-                                                name={guidedSupportOpen ? "chevron-up" : "chevron-down"}
-                                                size={13}
-                                                aria-hidden="true"
-                                             />
-                                          }
-                                          aria-expanded={guidedSupportOpen}
-                                          onClick={() => setGuidedSupportOpen((open) => !open)}
-                                       >
-                                          {guidedSupportOpen ? "Hide supporting details" : "Supporting details"}
-                                       </Button>
+                                 <div className="adjudication-guided-controls">
+                                    <div>
+                                       <strong>{guidedMode ? "Focused adjudication view" : "Decision-first view"}</strong>
+                                       <span>
+                                          Evidence readiness and decision controls stay visible. Context, technical metadata,
+                                          and history are available on demand.
+                                       </span>
                                     </div>
-                                 )}
+                                    <Button
+                                       type="button"
+                                       variant="secondary"
+                                       density="compact"
+                                       trailingIcon={
+                                          <Icons
+                                             name={guidedSupportOpen ? "chevron-up" : "chevron-down"}
+                                             size={13}
+                                             aria-hidden="true"
+                                          />
+                                       }
+                                       aria-expanded={guidedSupportOpen}
+                                       onClick={() => setGuidedSupportOpen((open) => !open)}
+                                    >
+                                       {guidedSupportOpen ? "Hide supporting details" : "Supporting details"}
+                                    </Button>
+                                 </div>
 
                                  <div className="adjudication-detail-layout">
                                     <div className="adjudication-primary-surface">
                                        <section
-                                          className={`adjudication-detail-section ${guidedMode ? "adjudication-guided-secondary" : ""} ${guidedSupportOpen ? "is-visible" : ""}`}
+                                          className={`adjudication-detail-section adjudication-secondary-section ${guidedSupportOpen ? "is-visible" : ""}`}
                                           aria-labelledby="adjudication-case-context-heading"
                                        >
                                           <div className="adjudication-subheading-row">
@@ -2140,7 +2141,7 @@ function AdjudicationReviewContent({
 
                                     {evidenceItems.length > 0 ? (
                                        <ol
-                                          className={`adjudication-evidence-list ${guidedMode && !guidedEvidenceOpen ? "is-guided-collapsed" : ""}`}
+                                          className={`adjudication-evidence-list ${!guidedEvidenceOpen ? "is-guided-collapsed" : ""}`}
                                        >
                                           {evidenceItems.map((evidence) => <EvidenceRecord key={evidence.id} evidence={evidence} />)}
                                        </ol>
@@ -2501,7 +2502,7 @@ function AdjudicationReviewContent({
                                     </div>
 
                                     <aside
-                                       className={`adjudication-context-rail ${guidedMode ? "adjudication-guided-secondary" : ""} ${guidedSupportOpen ? "is-visible" : ""}`}
+                                       className={`adjudication-context-rail adjudication-secondary-section ${guidedSupportOpen ? "is-visible" : ""}`}
                                        aria-label="Selected case context"
                                     >
                                        {detailClaim.id && organizationId && (
