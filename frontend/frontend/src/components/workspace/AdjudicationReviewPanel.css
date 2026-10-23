@@ -909,15 +909,6 @@
    overflow-wrap: anywhere;
 }
 
-.adjudication-record-actions {
-   flex: 0 0 auto;
-   display: flex;
-   align-items: center;
-   justify-content: flex-end;
-   gap: 8px;
-   flex-wrap: wrap;
-}
-
 .adjudication-evidence-status {
    align-self: flex-start;
    max-width: 100%;
@@ -1035,6 +1026,22 @@
 .adjudication-review-outcome p {
    margin: 3px 0 0;
    white-space: pre-wrap;
+}
+
+.adjudication-review-notes-row {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 16px;
+}
+
+.adjudication-review-notes-row > p {
+   min-width: 0;
+   flex: 1 1 auto;
+}
+
+.adjudication-review-notes-row .adjudication-review-evidence-link {
+   flex: 0 0 auto;
 }
 
 .adjudication-evidence-provenance {
@@ -2230,5 +2237,14 @@
    .adjudication-case-details-launcher .tl-button {
       width: 100%;
       min-height: 44px;
+   }
+}
+
+
+@container adjudication-panel (max-width: 620px) {
+   .adjudication-review-notes-row {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 10px;
    }
 }

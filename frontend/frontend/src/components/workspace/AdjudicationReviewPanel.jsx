@@ -272,17 +272,9 @@ function EvidenceRecord({
       <li className="adjudication-evidence-record">
          <div className="adjudication-record-heading">
             <h6>{evidence?.evidence_caption || "Untitled evidence submission"}</h6>
-            <div className="adjudication-record-actions">
-               <span className={`adjudication-evidence-status adjudication-evidence-status--${evidenceStatusTone}`}>
-                  {evidence?.evidence_status_label || formatLabel(evidence?.evidence_status)}
-               </span>
-               {reviewEvidencePath && (
-                  <Link to={reviewEvidencePath} className="adjudication-review-evidence-link">
-                     Review evidence
-                     <Icons name="arrow-right" size={12} aria-hidden="true" />
-                  </Link>
-               )}
-            </div>
+            <span className={`adjudication-evidence-status adjudication-evidence-status--${evidenceStatusTone}`}>
+               {evidence?.evidence_status_label || formatLabel(evidence?.evidence_status)}
+            </span>
          </div>
 
          <div className="adjudication-source-row">
@@ -327,7 +319,15 @@ function EvidenceRecord({
                   {evidence?.rejection_reason && ` (${evidence.rejection_reason})`}
                </p>
             )}
-            <p><strong>Review notes:</strong> {evidence?.review_notes || "No review notes were recorded."}</p>
+            <div className="adjudication-review-notes-row">
+               <p><strong>Review notes:</strong> {evidence?.review_notes || "No review notes were recorded."}</p>
+               {reviewEvidencePath && (
+                  <Link to={reviewEvidencePath} className="adjudication-review-evidence-link">
+                     Review evidence
+                     <Icons name="arrow-right" size={12} aria-hidden="true" />
+                  </Link>
+               )}
+            </div>
          </div>
 
          <details className="adjudication-record-disclosure">
