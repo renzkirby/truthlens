@@ -9,6 +9,7 @@ from django.db.models import (
     IntegerField,
     OuterRef,
     Q,
+    Subquery,
     When,
 )
 from django.utils import timezone
@@ -299,9 +300,22 @@ def get_adjudication_case_detail(
         )
         .order_by("created_at", "id")
     )
+    active_evidence_case_id = (
+        ModerationCase.objects.filter(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission_id=OuterRef("pk"),
+            organization=organization,
+            status__in=ACTIVE_CASE_STATUSES,
+        )
+        .order_by("created_at", "id")
+        .values("id")[:1]
+    )
     evidence = list(
         EvidenceSubmission.objects.filter(thread__claim=claim)
         .select_related("contributor", "verified_by")
+        .annotate(
+            adjudication_evidence_case_id=Subquery(active_evidence_case_id),
+        )
         .only(
             "id",
             "thread_id",

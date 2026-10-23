@@ -175,6 +175,7 @@ function EvidenceReviewContent({
    canReviewEvidence,
    initialCaseId,
    returnToInvestigationPath,
+   returnToAdjudicationPath,
    guidedMode = false,
    onWorkflowChanged,
    onReturnToInvestigation,
@@ -1219,6 +1220,11 @@ function EvidenceReviewContent({
                                  ) : returnToInvestigationPath ? (
                                     <Link to={returnToInvestigationPath} className="evidence-return-investigation">
                                        Return to investigation
+                                       <Icons name="arrow-right" size={13} aria-hidden="true" />
+                                    </Link>
+                                 ) : returnToAdjudicationPath ? (
+                                    <Link to={returnToAdjudicationPath} className="evidence-return-investigation">
+                                       Return to adjudication
                                        <Icons name="arrow-right" size={13} aria-hidden="true" />
                                     </Link>
                                  ) : null}

@@ -451,6 +451,7 @@ class AdjudicationCaseDetailApiTests(APITestCase):
         self.assertTrue(review["all_reviewed"])
         self.assertTrue(response.data["action_state"]["can_issue_first_decision"])
         evidence_item = review["items"][0]
+        self.assertIsNone(evidence_item["evidence_case_id"])
         self.assertEqual(evidence_item["reviewed_by"]["id"], self.reviewer.id)
         self.assertEqual(evidence_item["rejection_reason"], "IRRELEVANT")
         self.assertFalse(evidence_item["is_current_user_contributor"])
@@ -499,7 +500,7 @@ class AdjudicationCaseDetailApiTests(APITestCase):
         unreviewed = self._create_context(
             evidence_statuses=(EvidenceSubmission.EvidenceStatus.UNVERIFIED,)
         )
-        ModerationCase.objects.create(
+        evidence_case = ModerationCase.objects.create(
             case_type=ModerationCase.CaseType.EVIDENCE,
             evidence_submission=unreviewed["evidence"][0],
             organization=self.organization,
@@ -514,6 +515,25 @@ class AdjudicationCaseDetailApiTests(APITestCase):
         )
         direct_conflict = self._create_context(contributor=self.lead)
         direct_author_conflict = self._create_context(author=self.lead)
+
+        unreviewed_response = self.client.get(self._detail_url(unreviewed))
+        self.assertEqual(
+            unreviewed_response.data["evidence_review"]["items"][0]["evidence_case_id"],
+            str(evidence_case.id),
+        )
+
+        cross_org_handoff = self._create_context(
+            evidence_statuses=(EvidenceSubmission.EvidenceStatus.UNVERIFIED,)
+        )
+        ModerationCase.objects.create(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=cross_org_handoff["evidence"][0],
+            organization=self.other_organization,
+        )
+        cross_org_response = self.client.get(self._detail_url(cross_org_handoff))
+        self.assertIsNone(
+            cross_org_response.data["evidence_review"]["items"][0]["evidence_case_id"]
+        )
 
         expected_codes = (
             (no_evidence, {"NO_EVIDENCE"}),

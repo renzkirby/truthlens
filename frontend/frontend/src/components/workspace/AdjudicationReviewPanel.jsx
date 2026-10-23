@@ -241,9 +241,24 @@ function SafeExternalLink({ value, children, className = "" }) {
    );
 }
 
-function EvidenceRecord({ evidence }) {
+function EvidenceRecord({
+   evidence,
+   organizationId,
+   adjudicationCaseId,
+   canReviewEvidence,
+}) {
    const safeEvidenceUrl = getSafeHttpUrl(evidence?.evidence_url);
    const rejected = evidence?.evidence_status === "REJECTED";
+   const canOpenEvidenceReview =
+      canReviewEvidence &&
+      evidence?.evidence_status === "UNVERIFIED" &&
+      evidence?.evidence_case_id &&
+      organizationId &&
+      adjudicationCaseId &&
+      !evidence?.is_current_user_contributor;
+   const reviewEvidencePath = canOpenEvidenceReview
+      ? `/workspace?section=evidence&organization_id=${encodeURIComponent(organizationId)}&case_id=${encodeURIComponent(evidence.evidence_case_id)}&from_adjudication_case=${encodeURIComponent(adjudicationCaseId)}`
+      : null;
    const evidenceStatusTone =
       evidence?.evidence_status === "VERIFIED"
          ? "verified"
@@ -257,9 +272,17 @@ function EvidenceRecord({ evidence }) {
       <li className="adjudication-evidence-record">
          <div className="adjudication-record-heading">
             <h6>{evidence?.evidence_caption || "Untitled evidence submission"}</h6>
-            <span className={`adjudication-evidence-status adjudication-evidence-status--${evidenceStatusTone}`}>
-               {evidence?.evidence_status_label || formatLabel(evidence?.evidence_status)}
-            </span>
+            <div className="adjudication-record-actions">
+               <span className={`adjudication-evidence-status adjudication-evidence-status--${evidenceStatusTone}`}>
+                  {evidence?.evidence_status_label || formatLabel(evidence?.evidence_status)}
+               </span>
+               {reviewEvidencePath && (
+                  <Link to={reviewEvidencePath} className="adjudication-review-evidence-link">
+                     Review evidence
+                     <Icons name="arrow-right" size={12} aria-hidden="true" />
+                  </Link>
+               )}
+            </div>
          </div>
 
          <div className="adjudication-source-row">
@@ -565,6 +588,7 @@ function AdjudicationReviewContent({
    organizationId,
    organizationName,
    canAdjudicate,
+   canReviewEvidence = false,
    initialCaseId,
    returnToInvestigationPath,
    guidedMode = false,
@@ -2292,7 +2316,15 @@ function AdjudicationReviewContent({
                                              id="adjudication-evidence-records"
                                              className="adjudication-evidence-list"
                                           >
-                                             {evidenceItems.map((evidence) => <EvidenceRecord key={evidence.id} evidence={evidence} />)}
+                                             {evidenceItems.map((evidence) => (
+                                                <EvidenceRecord
+                                                   key={evidence.id}
+                                                   evidence={evidence}
+                                                   organizationId={organizationId}
+                                                   adjudicationCaseId={detail.id}
+                                                   canReviewEvidence={canReviewEvidence}
+                                                />
+                                             ))}
                                           </ol>
                                        ) : null
                                     ) : (

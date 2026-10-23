@@ -201,6 +201,7 @@ function WorkspacePage() {
    const routeFactCheckId = routeQuery.get("fact_check_id");
    const routePublicationId = routeQuery.get("publication_id");
    const routeFromAssignment = routeQuery.get("from_assignment");
+   const routeFromAdjudicationCase = routeQuery.get("from_adjudication_case");
    const routeStatus = ["ACTIVE", "COMPLETED", "CANCELLED", "ALL"].includes(routeQuery.get("status"))
       ? routeQuery.get("status")
       : "ACTIVE";
@@ -743,9 +744,15 @@ function WorkspacePage() {
 
          const nextQuery = new URLSearchParams(location.search);
          nextQuery.set("organization_id", nextOrganizationId);
-         ["case_id", "resource_type", "resource_id", "fact_check_id", "publication_id", "from_assignment"].forEach(
-            (key) => nextQuery.delete(key),
-         );
+         [
+            "case_id",
+            "resource_type",
+            "resource_id",
+            "fact_check_id",
+            "publication_id",
+            "from_assignment",
+            "from_adjudication_case",
+         ].forEach((key) => nextQuery.delete(key));
          navigateWithOneShotAllowance(`${location.pathname}?${nextQuery.toString()}`, { replace: true });
       });
    };
@@ -907,6 +914,11 @@ function WorkspacePage() {
                                  ? `/workspace/investigations/${encodeURIComponent(routeFromAssignment)}?organization_id=${encodeURIComponent(selectedOrganizationId)}`
                                  : null
                            }
+                           returnToAdjudicationPath={
+                              routeFromAdjudicationCase && selectedOrganizationId
+                                 ? `/workspace?section=adjudication&organization_id=${encodeURIComponent(selectedOrganizationId)}&case_id=${encodeURIComponent(routeFromAdjudicationCase)}`
+                                 : null
+                           }
                         />
                      ) : activeSection.id === "adjudication" &&
                        organizationCapabilities.includes(WorkspaceCapability.ADJUDICATE) ? (
@@ -915,6 +927,9 @@ function WorkspacePage() {
                            organizationId={selectedOrganizationId}
                            organizationName={selectedOrganization?.name}
                            canAdjudicate
+                           canReviewEvidence={organizationCapabilities.includes(
+                              WorkspaceCapability.REVIEW_EVIDENCE,
+                           )}
                            initialCaseId={routeCaseId}
                            returnToInvestigationPath={
                               routeFromAssignment && selectedOrganizationId

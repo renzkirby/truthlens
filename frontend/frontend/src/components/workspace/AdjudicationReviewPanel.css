@@ -846,21 +846,21 @@
 }
 
 .adjudication-evidence-totals > .adjudication-evidence-metric--success,
-.adjudication-record-heading > .adjudication-evidence-status--verified {
+.adjudication-evidence-status--verified {
    border-color: var(--tl-color-status-success-border);
    background: var(--tl-color-status-success-bg);
    color: var(--tl-color-status-success-text);
 }
 
 .adjudication-evidence-totals > .adjudication-evidence-metric--critical,
-.adjudication-record-heading > .adjudication-evidence-status--rejected {
+.adjudication-evidence-status--rejected {
    border-color: var(--tl-color-status-critical-border);
    background: var(--tl-color-status-critical-bg);
    color: var(--tl-color-status-critical-text);
 }
 
 .adjudication-evidence-totals > .adjudication-evidence-metric--info,
-.adjudication-record-heading > .adjudication-evidence-status--unreviewed {
+.adjudication-evidence-status--unreviewed {
    border-color: var(--tl-color-status-info-border);
    background: var(--tl-color-status-info-bg);
    color: var(--tl-color-status-info-text);
@@ -909,8 +909,18 @@
    overflow-wrap: anywhere;
 }
 
-.adjudication-record-heading > span {
+.adjudication-record-actions {
    flex: 0 0 auto;
+   display: flex;
+   align-items: center;
+   justify-content: flex-end;
+   gap: 8px;
+   flex-wrap: wrap;
+}
+
+.adjudication-evidence-status {
+   align-self: flex-start;
+   max-width: 100%;
    padding: 3px 7px;
    border: 1px solid var(--border-default);
    border-radius: 999px;
@@ -918,12 +928,34 @@
    color: var(--text-body);
    font-size: 0.67rem;
    font-weight: 700;
+   overflow-wrap: anywhere;
 }
 
-.adjudication-evidence-status {
-   align-self: flex-start;
-   max-width: 100%;
-   overflow-wrap: anywhere;
+.adjudication-review-evidence-link {
+   min-height: 28px;
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   gap: 5px;
+   padding: 4px 8px;
+   border: 1px solid var(--border-default);
+   border-radius: 7px;
+   background: var(--bg-surface);
+   color: var(--brand-primary);
+   font-size: 0.7rem;
+   font-weight: 750;
+   line-height: 1.2;
+   text-decoration: none;
+}
+
+.adjudication-review-evidence-link:hover {
+   border-color: var(--brand-primary);
+   background: var(--bg-subtle);
+}
+
+.adjudication-review-evidence-link:focus-visible {
+   outline: 2px solid var(--brand-primary);
+   outline-offset: 2px;
 }
 
 .adjudication-decision-verdict {

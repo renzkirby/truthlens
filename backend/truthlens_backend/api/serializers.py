@@ -2892,6 +2892,11 @@ class AdjudicationCaseDetailEvidenceSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     is_current_user_contributor = serializers.SerializerMethodField()
+    evidence_case_id = serializers.UUIDField(
+        source="adjudication_evidence_case_id",
+        read_only=True,
+        allow_null=True,
+    )
 
     def get_is_current_user_contributor(self, obj):
         request = self.context.get("request")
@@ -2906,6 +2911,7 @@ class AdjudicationCaseDetailEvidenceSerializer(serializers.ModelSerializer):
         model = EvidenceSubmission
         fields = [
             "id",
+            "evidence_case_id",
             "thread_id",
             "evidence_caption",
             "evidence_type",
