@@ -2022,6 +2022,7 @@ function AdjudicationReviewContent({
                                           />
                                        }
                                        aria-expanded={guidedSupportOpen}
+                                       aria-controls="adjudication-case-support adjudication-decision-support adjudication-history-support adjudication-context-support"
                                        onClick={() => setGuidedSupportOpen((open) => !open)}
                                     >
                                        {guidedSupportOpen ? "Hide supporting details" : "Supporting details"}
@@ -2033,6 +2034,7 @@ function AdjudicationReviewContent({
                                  >
                                     <div className="adjudication-primary-surface">
                                        <section
+                                          id="adjudication-case-support"
                                           className={`adjudication-detail-section adjudication-secondary-section ${guidedSupportOpen ? "is-visible" : ""}`}
                                           aria-labelledby="adjudication-case-context-heading"
                                        >
@@ -2131,6 +2133,7 @@ function AdjudicationReviewContent({
                                                 />
                                              }
                                              aria-expanded={guidedEvidenceOpen}
+                                             aria-controls="adjudication-evidence-records"
                                              onClick={() => setGuidedEvidenceOpen((open) => !open)}
                                           >
                                              {guidedEvidenceOpen
@@ -2143,6 +2146,7 @@ function AdjudicationReviewContent({
 
                                     {evidenceItems.length > 0 ? (
                                        <ol
+                                          id="adjudication-evidence-records"
                                           className={`adjudication-evidence-list ${!guidedEvidenceOpen ? "is-guided-collapsed" : ""}`}
                                        >
                                           {evidenceItems.map((evidence) => <EvidenceRecord key={evidence.id} evidence={evidence} />)}
@@ -2416,6 +2420,7 @@ function AdjudicationReviewContent({
                                  </section>
 
                                  <section
+                                    id="adjudication-decision-support"
                                     className={`adjudication-detail-section adjudication-secondary-section ${guidedSupportOpen ? "is-visible" : ""}`}
                                     aria-labelledby="adjudication-decisions-heading"
                                  >
@@ -2454,6 +2459,7 @@ function AdjudicationReviewContent({
                                  </section>
 
                                        <section
+                                          id="adjudication-history-support"
                                           className={`adjudication-detail-section adjudication-secondary-section ${guidedSupportOpen ? "is-visible" : ""}`}
                                           aria-labelledby="adjudication-resolution-heading"
                                        >
@@ -2504,6 +2510,7 @@ function AdjudicationReviewContent({
                                     </div>
 
                                     <aside
+                                       id="adjudication-context-support"
                                        className={`adjudication-context-rail adjudication-secondary-section ${guidedSupportOpen ? "is-visible" : ""}`}
                                        aria-label="Selected case context"
                                     >
