@@ -1430,7 +1430,7 @@ function AdjudicationReviewContent({
    }
 
    return (
-      <div className="adjudication-review-panel" ref={panelRef}>
+      <div className={`adjudication-review-panel ${guidedMode ? "is-guided" : ""}`} ref={panelRef}>
          <div className="adjudication-panel-intro">
             <div>
                <h3>{guidedMode ? "Adjudicate this investigation" : "Adjudication review"}</h3>
@@ -1830,14 +1830,25 @@ function AdjudicationReviewContent({
                                     <Button type="button" variant="secondary" density="compact" onClick={requestDetailRefresh}>
                                        Retry detail
                                     </Button>
-                                    <Button
-                                       type="button"
-                                       variant="secondary"
-                                       density="compact"
-                                       onClick={() => clearSelection({ restoreQueueFocus: true })}
-                                    >
-                                       Return to queue
-                                    </Button>
+                                    {guidedMode && onReturnToInvestigation ? (
+                                       <Button
+                                          type="button"
+                                          variant="secondary"
+                                          density="compact"
+                                          onClick={onReturnToInvestigation}
+                                       >
+                                          Back to investigation
+                                       </Button>
+                                    ) : (
+                                       <Button
+                                          type="button"
+                                          variant="secondary"
+                                          density="compact"
+                                          onClick={() => clearSelection({ restoreQueueFocus: true })}
+                                       >
+                                          Return to queue
+                                       </Button>
+                                    )}
                                  </div>
                               </div>
                            ) : detail ? (
@@ -1860,6 +1871,42 @@ function AdjudicationReviewContent({
                                        <Button type="button" variant="secondary" density="compact" onClick={requestDetailRefresh}>
                                           Retry detail
                                        </Button>
+                                    </div>
+                                 )}
+
+                                 {guidedMode && mutation && (
+                                    <div className="adjudication-action-message pending adjudication-guided-message" role="status">
+                                       <Icons name="loader" size={18} className="adjudication-spinner" aria-hidden="true" />
+                                       <div>
+                                          <strong>Recording adjudication</strong>
+                                          <span>The authoritative decision is being recorded and reconciled with the canonical case.</span>
+                                       </div>
+                                    </div>
+                                 )}
+
+                                 {guidedMode && actionError && (
+                                    <div
+                                       className="adjudication-action-message error adjudication-guided-message"
+                                       ref={actionMessageRef}
+                                       tabIndex="-1"
+                                       role="alert"
+                                    >
+                                       <Icons name="alert-circle" size={18} aria-hidden="true" />
+                                       <div>
+                                          <strong>Decision workflow needs attention</strong>
+                                          <span>{actionError}</span>
+                                          {reconciliationPending && (
+                                             <Button
+                                                type="button"
+                                                variant="secondary"
+                                                density="compact"
+                                                disabled={Boolean(mutation)}
+                                                onClick={handleRetryReconciliation}
+                                             >
+                                                {mutation ? "Reconciling…" : "Retry canonical reconciliation"}
+                                             </Button>
+                                          )}
+                                       </div>
                                     </div>
                                  )}
 
