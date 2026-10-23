@@ -2276,7 +2276,7 @@ function AdjudicationReviewContent({
                                                 />
                                              }
                                              aria-expanded={guidedEvidenceOpen}
-                                             aria-controls="adjudication-evidence-records"
+                                             aria-controls={guidedEvidenceOpen ? "adjudication-evidence-records" : undefined}
                                              onClick={() => setGuidedEvidenceOpen((open) => !open)}
                                           >
                                              {guidedEvidenceOpen
@@ -2287,13 +2287,14 @@ function AdjudicationReviewContent({
                                     )}
 
                                     {evidenceItems.length > 0 ? (
-                                       <ol
-                                          id="adjudication-evidence-records"
-                                          className="adjudication-evidence-list"
-                                          hidden={!guidedEvidenceOpen}
-                                       >
-                                          {evidenceItems.map((evidence) => <EvidenceRecord key={evidence.id} evidence={evidence} />)}
-                                       </ol>
+                                       guidedEvidenceOpen ? (
+                                          <ol
+                                             id="adjudication-evidence-records"
+                                             className="adjudication-evidence-list"
+                                          >
+                                             {evidenceItems.map((evidence) => <EvidenceRecord key={evidence.id} evidence={evidence} />)}
+                                          </ol>
+                                       ) : null
                                     ) : (
                                        <p className="adjudication-inline-empty">No evidence submissions are attached to this claim.</p>
                                     )}
