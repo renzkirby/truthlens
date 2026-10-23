@@ -202,6 +202,7 @@ function EvidenceReviewContent({
    const [mutation, setMutation] = useState(null);
    const [notice, setNotice] = useState("");
    const [noticeCaseId, setNoticeCaseId] = useState(null);
+   const [guidedSupportOpen, setGuidedSupportOpen] = useState(false);
    const [actionError, setActionError] = useState("");
    const [authorityError, setAuthorityError] = useState("");
 
@@ -839,7 +840,7 @@ function EvidenceReviewContent({
 
    return (
       <div className={`evidence-review-panel ${guidedMode ? "is-guided" : ""}`}>
-         <div className="evidence-panel-intro">
+         <div className={`evidence-panel-intro ${guidedMode ? "is-guided-redundant" : ""}`}>
             <div>
                <h3>{guidedMode ? "Review this investigation’s evidence" : "Evidence review"}</h3>
                <p>
@@ -851,7 +852,7 @@ function EvidenceReviewContent({
             <span className="evidence-organization-context">Organization: {organizationName || "Unavailable"}</span>
          </div>
 
-         <div className="evidence-boundary-note">
+         <div className={`evidence-boundary-note ${guidedMode ? "is-guided-redundant" : ""}`}>
             <Icons name="info" size={17} aria-hidden="true" />
             <p>
                Evidence review evaluates source suitability. Claim-level factual decisions are made separately during
@@ -1112,7 +1113,9 @@ function EvidenceReviewContent({
                            <h4 id="evidence-detail-heading" ref={detailHeadingRef} tabIndex="-1">
                               {getEvidenceTitle(detail)}
                            </h4>
-                           <span className="evidence-full-case-id">Case ID: {detail.id}</span>
+                           <span className={`evidence-full-case-id ${guidedMode ? "is-guided-secondary-id" : ""}`}>
+                              Case ID: {detail.id}
+                           </span>
                         </div>
                         <div className="evidence-detail-badges">
                            <span className={`evidence-disposition disposition-${evidence?.evidence_status?.toLowerCase() || "unknown"}`}>
@@ -1174,7 +1177,28 @@ function EvidenceReviewContent({
                         </details>
                      </section>
 
-                     <section className="evidence-detail-section" aria-labelledby="claim-context-heading">
+                     {guidedMode && (
+                        <div className="evidence-guided-disclosure-control">
+                           <Button
+                              type="button"
+                              variant="secondary"
+                              density="compact"
+                              trailingIcon={
+                                 <Icons name={guidedSupportOpen ? "chevron-up" : "chevron-down"} size={13} aria-hidden="true" />
+                              }
+                              aria-expanded={guidedSupportOpen}
+                              onClick={() => setGuidedSupportOpen((open) => !open)}
+                           >
+                              {guidedSupportOpen ? "Hide supporting details" : "Show supporting details"}
+                           </Button>
+                           <span>Claim context, review metadata, and audit history</span>
+                        </div>
+                     )}
+
+                     <section
+                        className={`evidence-detail-section ${guidedMode ? "evidence-guided-secondary" : ""} ${guidedSupportOpen ? "is-visible" : ""}`}
+                        aria-labelledby="claim-context-heading"
+                     >
                         <div className="evidence-subheading-row evidence-major-section-heading">
                            <div>
                               <h5 id="claim-context-heading">Claim context</h5>
@@ -1208,7 +1232,10 @@ function EvidenceReviewContent({
                         </details>
                      </section>
 
-                     <section className="evidence-detail-section" aria-labelledby="review-state-heading">
+                     <section
+                        className={`evidence-detail-section ${guidedMode ? "evidence-guided-secondary" : ""} ${guidedSupportOpen ? "is-visible" : ""}`}
+                        aria-labelledby="review-state-heading"
+                     >
                         <div className="evidence-subheading-row evidence-major-section-heading">
                            <div>
                               <h5 id="review-state-heading">Review state</h5>
@@ -1436,7 +1463,10 @@ function EvidenceReviewContent({
                         )}
                      </section>
 
-                     <section className="evidence-detail-section" aria-labelledby="evidence-history-heading">
+                     <section
+                        className={`evidence-detail-section ${guidedMode ? "evidence-guided-secondary" : ""} ${guidedSupportOpen ? "is-visible" : ""}`}
+                        aria-labelledby="evidence-history-heading"
+                     >
                         <div className="evidence-subheading-row evidence-major-section-heading">
                            <div>
                               <h5 id="evidence-history-heading">Audit history</h5>
