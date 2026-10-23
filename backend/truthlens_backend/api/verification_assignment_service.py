@@ -1,5 +1,5 @@
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from .adjudication_provenance import (
@@ -216,6 +216,12 @@ def get_organization_verification_workload(
         )
         .prefetch_related(
             "claim__threads",
+        )
+        .annotate(
+            evidence_count=Count(
+                "claim__threads__evidence_submissions",
+                distinct=True,
+            )
         )
     )
 
