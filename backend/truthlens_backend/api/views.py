@@ -377,6 +377,7 @@ from .serializers import (
     FactualCorrectionRequestMutationSerializer,
     VerificationAssignmentClaimSerializer,
     VerificationAssignmentSerializer,
+    VerificationWorkloadAssignmentSerializer,
     OrganizationMembershipAdminSerializer,
     OrganizationInvitationAdminSerializer,
     OrganizationInvitationCreateSerializer,
@@ -3075,7 +3076,7 @@ def verification_workload(request):
 
     assignments = queryset[offset : offset + limit]
 
-    serializer = VerificationAssignmentSerializer(
+    serializer = VerificationWorkloadAssignmentSerializer(
         assignments,
         many=True,
         context={
