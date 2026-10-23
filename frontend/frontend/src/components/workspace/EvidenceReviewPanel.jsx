@@ -1177,26 +1177,28 @@ function EvidenceReviewContent({
                         </details>
                      </section>
 
-                     {guidedMode && (
-                        <div className="evidence-guided-disclosure-control">
-                           <Button
-                              type="button"
-                              variant="secondary"
-                              density="compact"
-                              trailingIcon={
-                                 <Icons name={guidedSupportOpen ? "chevron-up" : "chevron-down"} size={13} aria-hidden="true" />
-                              }
-                              aria-expanded={guidedSupportOpen}
-                              onClick={() => setGuidedSupportOpen((open) => !open)}
-                           >
-                              {guidedSupportOpen ? "Hide supporting details" : "Show supporting details"}
-                           </Button>
-                           <span>Claim context, review metadata, and audit history</span>
-                        </div>
-                     )}
+                     <div className="evidence-guided-disclosure-control">
+                        <Button
+                           type="button"
+                           variant="secondary"
+                           density="compact"
+                           trailingIcon={
+                              <Icons name={guidedSupportOpen ? "chevron-up" : "chevron-down"} size={13} aria-hidden="true" />
+                           }
+                           aria-expanded={guidedSupportOpen}
+                           onClick={() => setGuidedSupportOpen((open) => !open)}
+                        >
+                           {guidedSupportOpen ? "Hide supporting details" : "Supporting details"}
+                        </Button>
+                        <span>
+                           {guidedMode
+                              ? "Claim context, review metadata, and audit history"
+                              : "Review metadata and audit history"}
+                        </span>
+                     </div>
 
                      <section
-                        className={`evidence-detail-section ${guidedMode ? "evidence-guided-secondary" : ""} ${guidedSupportOpen ? "is-visible" : ""}`}
+                        className={`evidence-detail-section ${guidedMode ? "evidence-secondary-section" : ""} ${guidedSupportOpen ? "is-visible" : ""}`}
                         aria-labelledby="claim-context-heading"
                      >
                         <div className="evidence-subheading-row evidence-major-section-heading">
@@ -1233,7 +1235,7 @@ function EvidenceReviewContent({
                      </section>
 
                      <section
-                        className={`evidence-detail-section ${guidedMode ? "evidence-guided-secondary" : ""} ${guidedSupportOpen ? "is-visible" : ""}`}
+                        className={`evidence-detail-section evidence-secondary-section ${guidedSupportOpen ? "is-visible" : ""}`}
                         aria-labelledby="review-state-heading"
                      >
                         <div className="evidence-subheading-row evidence-major-section-heading">
@@ -1464,7 +1466,7 @@ function EvidenceReviewContent({
                      </section>
 
                      <section
-                        className={`evidence-detail-section ${guidedMode ? "evidence-guided-secondary" : ""} ${guidedSupportOpen ? "is-visible" : ""}`}
+                        className={`evidence-detail-section evidence-secondary-section ${guidedSupportOpen ? "is-visible" : ""}`}
                         aria-labelledby="evidence-history-heading"
                      >
                         <div className="evidence-subheading-row evidence-major-section-heading">
