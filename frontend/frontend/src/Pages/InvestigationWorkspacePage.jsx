@@ -364,6 +364,9 @@ function InvestigationWorkspacePage() {
       Array.isArray(data.actor_blockers) && data.actor_blockers.length > 0
          ? data.actor_blockers[0]
          : pending[0] || null;
+   const remainingRequirements = primaryBlocker?.code
+      ? pending.filter((item) => item?.code !== primaryBlocker.code)
+      : pending;
    const evidenceTotal = Number(evidence.total || 0);
    const evidenceReviewed = Number(evidence.verified || 0) + Number(evidence.rejected || 0);
    const ownerLabel = data.assignment.claimed_by?.username
@@ -449,8 +452,8 @@ function InvestigationWorkspacePage() {
             <aside className="investigation-stage-rail" aria-label="Investigation stages">
                <div className="investigation-stage-rail-heading">
                   <span className="investigation-section-label">Workflow</span>
-                  <strong>{state.label || "Investigation"}</strong>
-                  <span>Keep your place while the case moves through review and publication.</span>
+                  <strong>Investigation stages</strong>
+                  <span>Track where this case is in the verification lifecycle.</span>
                </div>
 
                <ol className="investigation-stage-list">
@@ -467,20 +470,6 @@ function InvestigationWorkspacePage() {
                   ))}
                </ol>
 
-               <div className="investigation-stage-attention">
-                  <span className="investigation-section-label">Needs attention</span>
-                  {primaryBlocker ? (
-                     <>
-                        <strong>{formatLabel(primaryBlocker.code || "Current requirement")}</strong>
-                        <p>{primaryBlocker.detail || primaryBlocker.message || "Review the current stage before continuing."}</p>
-                     </>
-                  ) : (
-                     <>
-                        <strong>No active blocker</strong>
-                        <p>The investigation is ready for the next authorized action.</p>
-                     </>
-                  )}
-               </div>
             </aside>
 
             <main className="investigation-workspace-main">
@@ -593,28 +582,6 @@ function InvestigationWorkspacePage() {
                         </div>
                      </div>
 
-                     {pending.length > 0 ? (
-                        <details className="investigation-pending">
-                           <summary>
-                              <span>Workflow requirements</span>
-                              <strong>
-                                 {pending.length} {pending.length === 1 ? "item" : "items"}
-                              </strong>
-                           </summary>
-                           <ul>
-                              {pending.map((item) => (
-                                 <li key={item.code}>
-                                    <Icons name="clock" size={15} aria-hidden="true" />
-                                    <span>
-                                       {item.detail}
-                                       {Number.isInteger(item.count) && item.count > 0 ? " (" + item.count + ")" : ""}
-                                    </span>
-                                 </li>
-                              ))}
-                           </ul>
-                        </details>
-                     ) : null}
-
                      <div className="investigation-next-action">
                         <div>
                            <span className="investigation-section-label">Next action</span>
@@ -642,6 +609,28 @@ function InvestigationWorkspacePage() {
                            </Button>
                         ) : null}
                      </div>
+
+                     {remainingRequirements.length > 0 ? (
+                        <details className="investigation-pending">
+                           <summary>
+                              <span>Other workflow requirements</span>
+                              <strong>
+                                 {remainingRequirements.length} {remainingRequirements.length === 1 ? "item" : "items"}
+                              </strong>
+                           </summary>
+                           <ul>
+                              {remainingRequirements.map((item) => (
+                                 <li key={item.code}>
+                                    <Icons name="clock" size={15} aria-hidden="true" />
+                                    <span>
+                                       {item.detail}
+                                       {Number.isInteger(item.count) && item.count > 0 ? " (" + item.count + ")" : ""}
+                                    </span>
+                                 </li>
+                              ))}
+                           </ul>
+                        </details>
+                     ) : null}
                   </section>
                )}
 

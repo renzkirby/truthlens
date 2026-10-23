@@ -5,9 +5,21 @@
 }
 
 .investigation-workspace-header {
+   position: relative;
    min-width: 0;
-   padding: 2px 0 20px;
-   border-bottom: 1px solid var(--border-default);
+   overflow: hidden;
+   padding: 20px 22px 22px;
+   border: 1px solid var(--border-default);
+   border-radius: 16px;
+   background: var(--bg-surface);
+}
+
+.investigation-workspace-header::before {
+   content: "";
+   position: absolute;
+   inset: 0 0 auto;
+   height: 3px;
+   background: var(--brand-primary);
 }
 
 .investigation-workspace-toolbar {
@@ -16,7 +28,7 @@
    align-items: center;
    justify-content: space-between;
    gap: 18px;
-   margin-bottom: 18px;
+   margin-bottom: 14px;
 }
 
 .investigation-workspace-back {
@@ -171,12 +183,14 @@
    position: sticky;
    top: 18px;
    min-width: 0;
-   padding-right: 20px;
-   border-right: 1px solid var(--border-default);
+   overflow: hidden;
+   border: 1px solid var(--border-default);
+   border-radius: 14px;
+   background: var(--bg-surface);
 }
 
 .investigation-stage-rail-heading {
-   padding: 2px 0 14px;
+   padding: 16px 16px 13px;
    border-bottom: 1px solid var(--border-light);
 }
 
@@ -207,14 +221,14 @@
    grid-template-columns: 20px minmax(0, 1fr);
    gap: 9px;
    align-items: start;
-   padding: 10px 8px 10px 0;
+   padding: 10px 14px;
    color: var(--text-muted);
 }
 
 .investigation-stage-list li + li::before {
    content: "";
    position: absolute;
-   left: 8px;
+   left: 24px;
    top: -8px;
    width: 1px;
    height: 16px;
@@ -240,27 +254,13 @@
 }
 
 .investigation-stage-list li.is-current {
+   background: var(--bg-subtle);
    color: var(--text-main);
 }
 
 .investigation-stage-list li.is-current .investigation-stage-marker {
    border-color: var(--brand-primary);
    box-shadow: inset 0 0 0 4px var(--bg-surface);
-   background: var(--brand-primary);
-}
-
-.investigation-stage-list li.is-current > div {
-   position: relative;
-}
-
-.investigation-stage-list li.is-current > div::before {
-   content: "";
-   position: absolute;
-   left: -29px;
-   top: -4px;
-   bottom: -4px;
-   width: 2px;
-   border-radius: 999px;
    background: var(--brand-primary);
 }
 
@@ -439,8 +439,9 @@
 }
 
 .investigation-pending {
-   margin-top: 2px;
-   border-bottom: 1px solid var(--border-light);
+   margin-top: 16px;
+   padding-top: 2px;
+   border-top: 1px solid var(--border-light);
 }
 
 .investigation-pending > summary {
@@ -526,9 +527,9 @@
 
 .investigation-case-summary {
    min-width: 0;
-   border-top: 1px solid var(--border-default);
-   border-bottom: 1px solid var(--border-default);
-   background: transparent;
+   border: 1px solid var(--border-default);
+   border-radius: 12px;
+   background: var(--bg-surface);
 }
 
 .investigation-case-summary > summary {
@@ -536,7 +537,7 @@
    align-items: center;
    justify-content: space-between;
    gap: 16px;
-   padding: 13px 2px;
+   padding: 14px 16px;
    cursor: pointer;
    list-style: none;
 }
@@ -570,7 +571,7 @@
 .investigation-progress-grid {
    display: grid;
    grid-template-columns: repeat(3, minmax(0, 1fr));
-   padding: 0 2px 14px;
+   padding: 0 16px 16px;
 }
 
 .investigation-progress-grid article {
@@ -601,8 +602,8 @@
 }
 
 .investigation-case-summary-blockers {
-   margin: 0 2px 14px;
-   padding-top: 12px;
+   margin: 0 16px 16px;
+   padding-top: 14px;
    border-top: 1px solid var(--border-light);
 }
 
@@ -634,8 +635,10 @@
    position: sticky;
    top: 18px;
    min-width: 0;
-   padding-left: 18px;
-   border-left: 1px solid var(--border-default);
+   padding: 18px;
+   border: 1px solid var(--border-default);
+   border-radius: 14px;
+   background: var(--bg-surface);
 }
 
 .investigation-context-summary {
@@ -704,9 +707,6 @@
    .investigation-workspace-context {
       position: static;
       grid-column: 2;
-      padding: 18px 0 0;
-      border-top: 1px solid var(--border-default);
-      border-left: 0;
    }
 }
 
@@ -734,9 +734,6 @@
 
    .investigation-stage-rail {
       position: static;
-      padding: 0 0 16px;
-      border-right: 0;
-      border-bottom: 1px solid var(--border-default);
    }
 
    .investigation-stage-list {
@@ -834,7 +831,7 @@
 
 @media (max-width: 520px) {
    .investigation-workspace-header {
-      padding-bottom: 16px;
+      padding: 18px 16px;
    }
 
    .investigation-workspace-meta {
