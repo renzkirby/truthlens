@@ -43,11 +43,11 @@
    background: transparent;
 }
 
-.evidence-review-panel.is-guided .evidence-guided-secondary {
+.evidence-secondary-section {
    display: none;
 }
 
-.evidence-review-panel.is-guided .evidence-guided-secondary.is-visible {
+.evidence-secondary-section.is-visible {
    display: block;
 }
 
@@ -1143,4 +1143,15 @@
 
 .evidence-guided-cue-link:hover {
    text-decoration: underline;
+}
+
+@media (max-width: 700px) {
+   .evidence-guided-disclosure-control {
+      align-items: flex-start;
+      flex-direction: column;
+   }
+
+   .evidence-guided-disclosure-control > span {
+      text-align: left;
+   }
 }
