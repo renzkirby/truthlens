@@ -2114,8 +2114,34 @@ function AdjudicationReviewContent({
                                        Evidence verification assesses source suitability. It does not establish whether the claim is true or false.
                                     </p>
 
+                                    {guidedMode && evidenceItems.length > 0 && (
+                                       <div className="adjudication-evidence-disclosure-control">
+                                          <Button
+                                             type="button"
+                                             variant="secondary"
+                                             density="compact"
+                                             trailingIcon={
+                                                <Icons
+                                                   name={guidedEvidenceOpen ? "chevron-up" : "chevron-down"}
+                                                   size={13}
+                                                   aria-hidden="true"
+                                                />
+                                             }
+                                             aria-expanded={guidedEvidenceOpen}
+                                             onClick={() => setGuidedEvidenceOpen((open) => !open)}
+                                          >
+                                             {guidedEvidenceOpen
+                                                ? "Hide evidence details"
+                                                : `Review ${evidenceItems.length} evidence ${evidenceItems.length === 1 ? "item" : "items"}`}
+                                          </Button>
+                                          <span>Open individual source records only when needed for the decision.</span>
+                                       </div>
+                                    )}
+
                                     {evidenceItems.length > 0 ? (
-                                       <ol className="adjudication-evidence-list">
+                                       <ol
+                                          className={`adjudication-evidence-list ${guidedMode && !guidedEvidenceOpen ? "is-guided-collapsed" : ""}`}
+                                       >
                                           {evidenceItems.map((evidence) => <EvidenceRecord key={evidence.id} evidence={evidence} />)}
                                        </ol>
                                     ) : (
