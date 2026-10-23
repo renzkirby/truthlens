@@ -646,7 +646,9 @@ function EvidenceReviewContent({
       setModeratorNotes("");
       setRejectionReason("");
       setValidationError("");
-      requestQueueRefresh();
+      if (!guidedMode) {
+         requestQueueRefresh();
+      }
 
       if (selectedCaseIdRef.current === caseId) {
          focusActionErrorRef.current = true;
@@ -755,7 +757,9 @@ function EvidenceReviewContent({
             setDetailUnavailable(true);
             setDetailError("This Evidence case is no longer available.");
             focusDetailErrorRef.current = true;
-            requestQueueRefresh();
+            if (!guidedMode) {
+               requestQueueRefresh();
+            }
          } else {
             focusActionErrorRef.current = true;
             setActionError(error?.message || `Unable to ${DECISION_COPY[operation.decision].label.toLowerCase()}.`);
