@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../../hooks/useAuth";
 import { resolveApiEndpoint } from "../../utils/api";
@@ -43,6 +43,8 @@ function formatLabel(value) {
 }
 
 function formatConfidence(value) {
+   if (value === null || value === undefined || value === "") return null;
+
    const numeric = Number(value);
    if (!Number.isFinite(numeric)) return null;
    return `${Math.round(numeric)}%`;
@@ -76,6 +78,18 @@ function OrganizationWorkloadPanel({
    const [actionError, setActionError] = useState("");
    const [confirmingReleaseId, setConfirmingReleaseId] = useState(null);
    const [releasingId, setReleasingId] = useState(null);
+   const releaseCancelRef = useRef(null);
+   const releaseTriggerRefs = useRef(new Map());
+
+   useEffect(() => {
+      if (!confirmingReleaseId) return undefined;
+
+      const frame = window.requestAnimationFrame(() => {
+         releaseCancelRef.current?.focus();
+      });
+
+      return () => window.cancelAnimationFrame(frame);
+   }, [confirmingReleaseId]);
 
    useEffect(() => {
       const timer = window.setTimeout(() => {
@@ -200,6 +214,8 @@ function OrganizationWorkloadPanel({
    const hasNext = offset + workload.results.length < workload.count;
    const rangeStart = workload.count === 0 ? 0 : offset + 1;
    const rangeEnd = Math.min(offset + workload.results.length, workload.count);
+   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
+   const totalPages = Math.max(1, Math.ceil(workload.count / PAGE_SIZE));
    const hasFilters = Boolean(search || claimType || ownership !== "all" || sortOrder !== "newest");
 
    const removeReleasedAssignmentFromWorkload = (assignmentId) => {
@@ -248,12 +264,20 @@ function OrganizationWorkloadPanel({
       }
    };
 
+   const closeReleaseConfirmation = (assignmentId) => {
+      setConfirmingReleaseId(null);
+      window.requestAnimationFrame(() => {
+         releaseTriggerRefs.current.get(assignmentId)?.focus();
+      });
+   };
+
    return (
       <div className="organization-workload" aria-busy={loading ? "true" : undefined}>
          <div className="workload-overview">
             <div>
-               <span className="workload-overview-label">Active work</span>
-               <strong>{hasCurrentWorkload ? workload.count : "—"} investigations</strong>
+               <strong>
+                  {hasCurrentWorkload ? workload.count : "—"} active investigations
+               </strong>
                <p>Resume fact-checking work currently owned by {organizationName || "this organization"}.</p>
             </div>
 
@@ -272,73 +296,75 @@ function OrganizationWorkloadPanel({
             </Button>
          </div>
 
-         <div className="workload-view-tabs" aria-label="Investigation ownership">
-            <button
-               type="button"
-               className={ownership === "all" ? "active" : ""}
-               aria-pressed={ownership === "all"}
-               onClick={() => updateOwnership("all")}
-            >
-               All active
-            </button>
-            <button
-               type="button"
-               className={ownership === "mine" ? "active" : ""}
-               aria-pressed={ownership === "mine"}
-               onClick={() => updateOwnership("mine")}
-            >
-               My work
-            </button>
-         </div>
-
-         <div className="workload-filter-bar">
-            <div className="workload-search">
-               <label htmlFor="investigation-search">Search investigations</label>
-               <Input
-                  id="investigation-search"
-                  value={searchInput}
-                  onChange={(event) => setSearchInput(event.target.value)}
-                  placeholder="Search claim or owner…"
-                  leadingIcon={<Icons name="search" size={15} />}
-                  density="standard"
-               />
-            </div>
-
-            <div className="workload-filter-field">
-               <label htmlFor="investigation-type-filter">Claim type</label>
-               <Select
-                  id="investigation-type-filter"
-                  value={claimType}
-                  onChange={(event) => updateClaimType(event.target.value)}
-                  density="standard"
+         <section className="workload-toolbar" aria-label="Investigation filters">
+            <div className="workload-view-tabs" aria-label="Investigation ownership">
+               <button
+                  type="button"
+                  className={ownership === "all" ? "active" : ""}
+                  aria-pressed={ownership === "all"}
+                  onClick={() => updateOwnership("all")}
                >
-                  {CLAIM_TYPE_OPTIONS.map((option) => (
-                     <option key={option.value || "all"} value={option.value}>
-                        {option.label}
-                     </option>
-                  ))}
-               </Select>
-            </div>
-
-            <div className="workload-filter-field">
-               <label htmlFor="investigation-sort">Sort</label>
-               <Select
-                  id="investigation-sort"
-                  value={sortOrder}
-                  onChange={(event) => updateSortOrder(event.target.value)}
-                  density="standard"
+                  All active
+               </button>
+               <button
+                  type="button"
+                  className={ownership === "mine" ? "active" : ""}
+                  aria-pressed={ownership === "mine"}
+                  onClick={() => updateOwnership("mine")}
                >
-                  <option value="newest">Newest claimed</option>
-                  <option value="oldest">Oldest claimed</option>
-               </Select>
+                  My work
+               </button>
             </div>
 
-            {hasFilters ? (
-               <Button type="button" variant="secondary" density="compact" onClick={clearFilters}>
-                  Clear
-               </Button>
-            ) : null}
-         </div>
+            <div className="workload-filter-bar">
+               <div className="workload-search">
+                  <label htmlFor="investigation-search">Search investigations</label>
+                  <Input
+                     id="investigation-search"
+                     value={searchInput}
+                     onChange={(event) => setSearchInput(event.target.value)}
+                     placeholder="Search claim or owner…"
+                     leadingIcon={<Icons name="search" size={15} />}
+                     density="standard"
+                  />
+               </div>
+
+               <div className="workload-filter-field">
+                  <label htmlFor="investigation-type-filter">Claim type</label>
+                  <Select
+                     id="investigation-type-filter"
+                     value={claimType}
+                     onChange={(event) => updateClaimType(event.target.value)}
+                     density="standard"
+                  >
+                     {CLAIM_TYPE_OPTIONS.map((option) => (
+                        <option key={option.value || "all"} value={option.value}>
+                           {option.label}
+                        </option>
+                     ))}
+                  </Select>
+               </div>
+
+               <div className="workload-filter-field">
+                  <label htmlFor="investigation-sort">Sort</label>
+                  <Select
+                     id="investigation-sort"
+                     value={sortOrder}
+                     onChange={(event) => updateSortOrder(event.target.value)}
+                     density="standard"
+                  >
+                     <option value="newest">Newest claimed</option>
+                     <option value="oldest">Oldest claimed</option>
+                  </Select>
+               </div>
+
+               {hasFilters ? (
+                  <Button type="button" variant="ghost" density="compact" onClick={clearFilters}>
+                     Clear filters
+                  </Button>
+               ) : null}
+            </div>
+         </section>
 
          {notice && (
             <div className="workload-notice" role="status" aria-live="polite">
@@ -416,103 +442,106 @@ function OrganizationWorkloadPanel({
                      const isConfirmingRelease = confirmingReleaseId === assignment.id;
                      const isReleasing = releasingId === assignment.id;
                      const confidence = formatConfidence(claim.consensus_score);
+                     const claimHeadingId = `investigation-claim-${assignment.id}`;
+                     const releaseConfirmationId = `investigation-release-${assignment.id}`;
 
                      return (
                         <li key={assignment.id} className="workload-list-item">
-                           <article className="workload-item">
-                              <div className="workload-item-icon" aria-hidden="true">
-                                 <Icons
-                                    name={
-                                       claim.claim_type === "IMAGE"
-                                          ? "image"
-                                          : claim.claim_type === "VIDEO"
-                                            ? "play"
-                                            : claim.claim_type === "URL"
-                                              ? "link"
-                                              : claim.claim_type === "FILE"
-                                                ? "file-text"
-                                                : "message-square"
-                                    }
-                                    size={18}
-                                 />
-                              </div>
-
+                           <article className="workload-item" aria-labelledby={claimHeadingId}>
                               <div className="workload-item-main">
                                  <div className="workload-item-kicker">
                                     <span className="workload-status">Active</span>
                                     <span className="workload-type">{formatLabel(claim.claim_type)}</span>
                                  </div>
 
-                                 <h3 className="workload-claim-text">
+                                 <h3 id={claimHeadingId} className="workload-claim-text">
                                     {claim.context_text || "Claim text unavailable"}
                                  </h3>
 
-                                 <div className="workload-row-meta">
-                                    <span>
-                                       <small>Claimed by</small>
-                                       <strong>
+                                 <dl className="workload-row-meta">
+                                    <div>
+                                       <dt>Claimed by</dt>
+                                       <dd>
                                           {assignment?.claimed_by?.username
                                              ? `@${assignment.claimed_by.username}`
                                              : "Unknown"}
-                                       </strong>
-                                    </span>
-                                    <span>
-                                       <small>AI assessment</small>
-                                       <strong>{formatLabel(claim.ai_verdict || "UNVERIFIED")}</strong>
-                                    </span>
-                                    {confidence ? (
-                                       <span>
-                                          <small>AI confidence</small>
-                                          <strong>{confidence}</strong>
-                                       </span>
-                                    ) : null}
-                                    <span>
-                                       <small>Source</small>
-                                       <strong>{claim.source_type || "Not recorded"}</strong>
-                                    </span>
-                                    <span>
-                                       <small>Evidence</small>
-                                       <strong>
+                                       </dd>
+                                    </div>
+                                    <div className="workload-evidence-meta">
+                                       <dt>Evidence</dt>
+                                       <dd>
                                           {Number(assignment.evidence_count || 0)}{" "}
                                           {Number(assignment.evidence_count || 0) === 1 ? "item" : "items"}
-                                       </strong>
-                                    </span>
-                                 </div>
+                                       </dd>
+                                    </div>
+                                    <div>
+                                       <dt>AI assessment</dt>
+                                       <dd>{claim.ai_verdict ? formatLabel(claim.ai_verdict) : "No AI assessment"}</dd>
+                                    </div>
+                                    {confidence ? (
+                                       <div>
+                                          <dt>AI confidence</dt>
+                                          <dd>{confidence}</dd>
+                                       </div>
+                                    ) : null}
+                                    <div>
+                                       <dt>Source</dt>
+                                       <dd>{claim.source_type || "Not recorded"}</dd>
+                                    </div>
+                                 </dl>
                               </div>
 
                               <div className="workload-item-actions">
-                                 <span className="workload-updated-at">
-                                    Updated {formatDateTime(claim.last_updated || assignment.updated_at)}
-                                 </span>
+                                 {claim.last_updated || assignment.updated_at ? (
+                                    <time
+                                       className="workload-updated-at"
+                                       dateTime={claim.last_updated || assignment.updated_at}
+                                    >
+                                       Updated {formatDateTime(claim.last_updated || assignment.updated_at)}
+                                    </time>
+                                 ) : (
+                                    <span className="workload-updated-at">Updated date unavailable</span>
+                                 )}
 
                                  <div className="workload-action-buttons">
-                                 <Button
-                                    type="button"
-                                    variant="primary"
-                                    density="standard"
-                                    trailingIcon={<Icons name="arrow-right" size={15} />}
-                                    onClick={() => onOpenInvestigation?.(assignment)}
-                                 >
-                                    Open investigation
-                                 </Button>
-
-                                 {canReleaseInvestigation && !isConfirmingRelease ? (
                                     <Button
                                        type="button"
-                                       variant="secondary"
-                                       density="compact"
-                                       className="workload-release-action"
-                                       disabled={Boolean(releasingId)}
-                                       onClick={() => setConfirmingReleaseId(assignment.id)}
+                                       variant="primary"
+                                       density="standard"
+                                       trailingIcon={<Icons name="arrow-right" size={15} />}
+                                       onClick={() => onOpenInvestigation?.(assignment)}
                                     >
-                                       Release
+                                       Open investigation
                                     </Button>
-                                 ) : null}
+
+                                    {canReleaseInvestigation && !isConfirmingRelease ? (
+                                       <Button
+                                          ref={(node) => {
+                                             if (node) releaseTriggerRefs.current.set(assignment.id, node);
+                                             else releaseTriggerRefs.current.delete(assignment.id);
+                                          }}
+                                          type="button"
+                                          variant="ghost"
+                                          density="compact"
+                                          className="workload-release-action"
+                                          aria-expanded="false"
+                                          aria-controls={releaseConfirmationId}
+                                          disabled={Boolean(releasingId)}
+                                          onClick={() => setConfirmingReleaseId(assignment.id)}
+                                       >
+                                          Release
+                                       </Button>
+                                    ) : null}
                                  </div>
                               </div>
 
                               {canReleaseInvestigation && isConfirmingRelease ? (
-                                 <div className="workload-release-confirm">
+                                 <div
+                                    id={releaseConfirmationId}
+                                    className="workload-release-confirm"
+                                    role="group"
+                                    aria-label="Confirm investigation release"
+                                 >
                                     <div className="workload-release-warning">
                                        <Icons name="alert-triangle" size={17} />
                                        <span>
@@ -522,11 +551,12 @@ function OrganizationWorkloadPanel({
 
                                     <div className="workload-release-controls">
                                        <Button
+                                          ref={releaseCancelRef}
                                           type="button"
                                           variant="secondary"
                                           density="compact"
                                           disabled={isReleasing}
-                                          onClick={() => setConfirmingReleaseId(null)}
+                                          onClick={() => closeReleaseConfirmation(assignment.id)}
                                        >
                                           Cancel
                                        </Button>
@@ -553,7 +583,7 @@ function OrganizationWorkloadPanel({
 
                <div className="workload-pagination">
                   <span>
-                     Page {Math.floor(offset / PAGE_SIZE) + 1}
+                     Page {currentPage} of {totalPages}
                   </span>
 
                   <div className="workload-pagination-controls">
