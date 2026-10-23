@@ -3039,7 +3039,37 @@ def verification_workload(request):
 
     limit, offset = _parse_verification_pagination(request)
 
-    queryset = get_organization_verification_workload(organization)
+    search = (request.query_params.get("search") or "").strip()[:120]
+    claim_type = request.query_params.get("claim_type")
+    if claim_type and claim_type not in Claim.ClaimType.values:
+        raise ValidationError(
+            {
+                "claim_type": (
+                    "Select a valid claim type: "
+                    f"{', '.join(Claim.ClaimType.values)}."
+                )
+            }
+        )
+
+    ownership = request.query_params.get("ownership", "all")
+    if ownership not in {"all", "mine"}:
+        raise ValidationError(
+            {"ownership": "Select a valid ownership: all or mine."}
+        )
+
+    sort_order = request.query_params.get("sort", "newest")
+    if sort_order not in {"newest", "oldest"}:
+        raise ValidationError(
+            {"sort": "Select a valid sort: newest or oldest."}
+        )
+
+    queryset = get_organization_verification_workload(
+        organization,
+        search=search,
+        claim_type=claim_type or None,
+        claimed_by=request.user if ownership == "mine" else None,
+        sort=sort_order,
+    )
 
     total_count = queryset.count()
 
