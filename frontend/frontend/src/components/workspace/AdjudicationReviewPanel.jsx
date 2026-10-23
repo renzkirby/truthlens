@@ -1038,6 +1038,12 @@ function AdjudicationReviewContent({
                   message: "The request outcome was initially unclear, but the fresh canonical case now contains a recorded decision.",
                   inspectable: !selectedCaseIsSubmittedCase,
                });
+               onWorkflowChanged?.({
+                  stage: "ADJUDICATION",
+                  caseId: operation.caseId,
+                  detail: canonicalDetail,
+                  reconciled: true,
+               });
             } else {
                setActionNotice(null);
                setActionError(
