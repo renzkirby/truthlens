@@ -5,6 +5,22 @@
    container-name: adjudication-panel;
 }
 
+.adjudication-review-panel.is-guided {
+   margin-top: 0;
+}
+
+.adjudication-workspace-grid.is-guided {
+   grid-template-columns: minmax(0, 1fr);
+}
+
+.adjudication-workspace-grid.is-guided .adjudication-selection {
+   width: 100%;
+}
+
+.adjudication-guided-message {
+   margin: 0 0 14px;
+}
+
 .adjudication-panel-intro,
 .adjudication-toolbar,
 .adjudication-section-heading {
