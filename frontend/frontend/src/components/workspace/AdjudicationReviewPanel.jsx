@@ -2117,7 +2117,7 @@ function AdjudicationReviewContent({
                                        Evidence verification assesses source suitability. It does not establish whether the claim is true or false.
                                     </p>
 
-                                    {guidedMode && evidenceItems.length > 0 && (
+                                    {evidenceItems.length > 0 && (
                                        <div className="adjudication-evidence-disclosure-control">
                                           <Button
                                              type="button"
@@ -2416,7 +2416,7 @@ function AdjudicationReviewContent({
                                  </section>
 
                                  <section
-                                    className={`adjudication-detail-section ${guidedMode ? "adjudication-guided-secondary" : ""} ${guidedSupportOpen ? "is-visible" : ""}`}
+                                    className={`adjudication-detail-section adjudication-secondary-section ${guidedSupportOpen ? "is-visible" : ""}`}
                                     aria-labelledby="adjudication-decisions-heading"
                                  >
                                     <div className="adjudication-subheading-row">
@@ -2454,7 +2454,7 @@ function AdjudicationReviewContent({
                                  </section>
 
                                        <section
-                                          className={`adjudication-detail-section ${guidedMode ? "adjudication-guided-secondary" : ""} ${guidedSupportOpen ? "is-visible" : ""}`}
+                                          className={`adjudication-detail-section adjudication-secondary-section ${guidedSupportOpen ? "is-visible" : ""}`}
                                           aria-labelledby="adjudication-resolution-heading"
                                        >
                                     <div className="adjudication-subheading-row">
