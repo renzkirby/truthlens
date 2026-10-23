@@ -1152,7 +1152,19 @@ function EvidenceReviewContent({
                         {!evidenceUrl && evidence?.evidence_url && (
                            <p className="evidence-inline-warning">The submitted URL cannot be opened because it is not a supported HTTP(S) address.</p>
                         )}
-                        <dl className="evidence-provenance">
+                        <dl className="evidence-provenance evidence-submission-meta">
+                           <div>
+                              <dt>Evidence type</dt>
+                              <dd>{evidence?.evidence_type_label || "Unavailable"}</dd>
+                           </div>
+                           <div>
+                              <dt>User verdict assessment</dt>
+                              <dd>
+                                 <span className="evidence-user-verdict">
+                                    {formatLabel(evidence?.evidence_verdict, "Not provided")}
+                                 </span>
+                              </dd>
+                           </div>
                            <div>
                               <dt>Submitted by</dt>
                               <dd>{evidence?.contributor?.username ? `@${evidence.contributor.username}` : "Not recorded"}</dd>
@@ -1162,15 +1174,6 @@ function EvidenceReviewContent({
                               <dd><FormattedDateTime value={evidence?.submitted_at} /></dd>
                            </div>
                         </dl>
-                        <details className="evidence-record-disclosure">
-                           <summary>Evidence details</summary>
-                           <dl className="evidence-record-details">
-                              <div>
-                                 <dt>Evidence type</dt>
-                                 <dd>{evidence?.evidence_type_label || "Unavailable"}</dd>
-                              </div>
-                           </dl>
-                        </details>
                      </section>
 
                      <section className="evidence-decision-section" aria-labelledby="evidence-decision-heading">
@@ -1383,19 +1386,16 @@ function EvidenceReviewContent({
                            {sourceUrl && <a href={sourceUrl} target="_blank" rel="noopener noreferrer">Open claim source <Icons name="external-link" size={12} aria-hidden="true" /></a>}
                            {mediaUrl && <a href={mediaUrl} target="_blank" rel="noopener noreferrer">Open claim media <Icons name="external-link" size={12} aria-hidden="true" /></a>}
                         </div>
-                        <details className="evidence-record-disclosure">
-                           <summary>Claim details</summary>
-                           <dl className="evidence-record-details">
-                              <div>
-                                 <dt>Claim type</dt>
-                                 <dd>{formatLabel(claim?.claim_type)}</dd>
-                              </div>
-                              <div>
-                                 <dt>Thread caption</dt>
-                                 <dd>{detail.thread?.caption || "Unavailable"}</dd>
-                              </div>
-                           </dl>
-                        </details>
+                        <dl className="evidence-record-details evidence-claim-meta">
+                           <div>
+                              <dt>Claim type</dt>
+                              <dd>{formatLabel(claim?.claim_type)}</dd>
+                           </div>
+                           <div>
+                              <dt>Thread caption</dt>
+                              <dd>{detail.thread?.caption || "Unavailable"}</dd>
+                           </div>
+                        </dl>
                      </section>
 
                      <section
