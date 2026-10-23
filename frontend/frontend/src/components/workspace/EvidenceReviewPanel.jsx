@@ -774,6 +774,29 @@ function EvidenceReviewContent({
    const handleAuthorityRetry = () => {
       authorityGenerationRef.current += 1;
       authorityRevokedRef.current = false;
+
+      if (guidedMode && initialCaseKey) {
+         queueRequestIdRef.current += 1;
+         detailRequestIdRef.current += 1;
+         selectedCaseIdRef.current = initialCaseKey;
+         focusQueueAfterAuthorityRetryRef.current = false;
+         focusDetailAfterRetryRef.current = true;
+         setAuthorityError("");
+         setQueueLoading(false);
+         setQueueError("");
+         setSelectedCaseId(initialCaseKey);
+         setDetail(null);
+         setDetailLoading(true);
+         setDetailError("");
+         setDetailUnavailable(false);
+         setDecision(null);
+         setMutation(null);
+         setNotice("");
+         setNoticeCaseId(null);
+         setActionError("");
+         setDetailRequestVersion((current) => current + 1);
+         return;
+      }
       focusQueueAfterAuthorityRetryRef.current = true;
       queueRequestIdRef.current += 1;
       detailRequestIdRef.current += 1;
