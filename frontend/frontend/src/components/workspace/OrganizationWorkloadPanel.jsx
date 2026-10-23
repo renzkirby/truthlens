@@ -425,7 +425,7 @@ function OrganizationWorkloadPanel({
                                        claim.claim_type === "IMAGE"
                                           ? "image"
                                           : claim.claim_type === "VIDEO"
-                                            ? "play-circle"
+                                            ? "play"
                                             : claim.claim_type === "URL"
                                               ? "link"
                                               : claim.claim_type === "FILE"
