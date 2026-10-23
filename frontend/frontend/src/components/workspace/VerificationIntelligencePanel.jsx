@@ -275,6 +275,59 @@ function SystemCollectedEvidenceSummary({ automated }) {
    );
 }
 
+function CompactSystemCollectedEvidenceSummary({ automated }) {
+   const stances = automated.stance_counts || {};
+   const sourceIdentity = automated.source_identity || {};
+   const total = Number.isInteger(automated.total) && automated.total >= 0 ? automated.total : null;
+   const sharedGroups =
+      Number.isInteger(sourceIdentity.shared_group_count) && sourceIdentity.shared_group_count > 0
+         ? sourceIdentity.shared_group_count
+         : 0;
+
+   return (
+      <section className="verification-intelligence-block" aria-labelledby="verification-intelligence-system-compact-heading">
+         <div className="verification-intelligence-block-heading">
+            <h6 id="verification-intelligence-system-compact-heading">Automated evidence context</h6>
+            <Badge tone="neutral">Context only</Badge>
+         </div>
+
+         <p className="verification-intelligence-summary-line">
+            {total === 0
+               ? "No persisted system-collected evidence is available from the latest verification run."
+               : total === null
+                 ? "System-collected evidence count is unavailable."
+                 : `${total} persisted ${total === 1 ? "item" : "items"} from the latest verification run.`}
+         </p>
+
+         <div className="verification-intelligence-count-badges" aria-label="Automated relationship signals">
+            {[
+               ["Supports", stances.SUPPORTS],
+               ["Refutes", stances.REFUTES],
+               ["Context", stances.CONTEXT],
+               ["Unknown", stances.UNKNOWN],
+            ]
+               .filter(([, value]) => Number.isInteger(value) && value > 0)
+               .map(([label, value]) => (
+                  <Badge key={label} tone="neutral">
+                     {label} {value}
+                  </Badge>
+               ))}
+         </div>
+
+         {sharedGroups > 0 && (
+            <p className="verification-intelligence-warning verification-intelligence-compact-warning">
+               {sharedGroups} shared source {sharedGroups === 1 ? "group may make" : "groups may make"} multiple items
+               look more independent than they are.
+            </p>
+         )}
+
+         <p className="verification-intelligence-note">
+            These machine-assessed relationships are review prompts only and do not determine the human verdict.
+         </p>
+      </section>
+   );
+}
+
 function ReviewQuestions({ questions }) {
    return (
       <section
@@ -398,7 +451,7 @@ function InterpretationLimitations({ evidenceLimitations, knowledgeLimitations }
    );
 }
 
-function IntelligenceContent({ data }) {
+function IntelligenceContent({ data, compact = false }) {
    const evidence = data.evidence_intelligence || {};
    const human = evidence.human || {};
    const automated = evidence.automated || {};
@@ -407,6 +460,20 @@ function IntelligenceContent({ data }) {
    const knowledgeLimitations = Array.isArray(knowledge?.intelligence?.limitations)
       ? knowledge.intelligence.limitations
       : [];
+
+   if (compact) {
+      return (
+         <div className="verification-intelligence-content verification-intelligence-content--compact">
+            <ReviewQuestions questions={evidence.unresolved_questions} />
+            <CompactSystemCollectedEvidenceSummary automated={automated} />
+            <PriorKnowledge knowledge={knowledge} />
+            <InterpretationLimitations
+               evidenceLimitations={evidenceLimitations}
+               knowledgeLimitations={knowledgeLimitations}
+            />
+         </div>
+      );
+   }
 
    return (
       <div className="verification-intelligence-content">
@@ -427,7 +494,7 @@ function IntelligenceContent({ data }) {
    );
 }
 
-export default function VerificationIntelligencePanel({ claimId, organizationId }) {
+export default function VerificationIntelligencePanel({ claimId, organizationId, compact = false }) {
    const { authFetch, user, token } = useAuth();
    const headingId = useId();
    const requestIdRef = useRef(0);
@@ -502,16 +569,23 @@ export default function VerificationIntelligencePanel({ claimId, organizationId 
    const loading = currentResult === null;
 
    return (
-      <section className="verification-intelligence-panel" aria-labelledby={headingId}>
+      <section
+         className={`verification-intelligence-panel ${compact ? "is-compact" : ""}`}
+         aria-labelledby={headingId}
+      >
          <header className="verification-intelligence-heading">
             <div className="verification-intelligence-heading-row">
                <div>
                   <span className="verification-intelligence-eyebrow">Review support</span>
-                  <h5 id={headingId}>Verification intelligence</h5>
+                  <h5 id={headingId}>{compact ? "Supplementary signals" : "Verification intelligence"}</h5>
                </div>
                <Badge tone="neutral">Non-authoritative</Badge>
             </div>
-            <p>Persisted evidence and institutional context only. This panel does not recommend or set a verdict.</p>
+            <p>
+               {compact
+                  ? "Use these persisted automated and institutional signals as questions to investigate, not as a verdict recommendation."
+                  : "Persisted evidence and institutional context only. This panel does not recommend or set a verdict."}
+            </p>
          </header>
 
          {loading ? (
@@ -534,7 +608,7 @@ export default function VerificationIntelligencePanel({ claimId, organizationId 
                </Button>
             </div>
          ) : (
-            <IntelligenceContent data={currentResult.data} />
+            <IntelligenceContent data={currentResult.data} compact={compact} />
          )}
       </section>
    );
