@@ -441,7 +441,6 @@ function OrganizationWorkloadPanel({
                                  <div className="workload-item-kicker">
                                     <span className="workload-status">Active</span>
                                     <span className="workload-type">{formatLabel(claim.claim_type)}</span>
-                                    <span>Updated {formatDateTime(claim.last_updated || assignment.updated_at)}</span>
                                  </div>
 
                                  <h3 className="workload-claim-text">
@@ -471,10 +470,22 @@ function OrganizationWorkloadPanel({
                                        <small>Source</small>
                                        <strong>{claim.source_type || "Not recorded"}</strong>
                                     </span>
+                                    <span>
+                                       <small>Evidence</small>
+                                       <strong>
+                                          {Number(assignment.evidence_count || 0)}{" "}
+                                          {Number(assignment.evidence_count || 0) === 1 ? "item" : "items"}
+                                       </strong>
+                                    </span>
                                  </div>
                               </div>
 
                               <div className="workload-item-actions">
+                                 <span className="workload-updated-at">
+                                    Updated {formatDateTime(claim.last_updated || assignment.updated_at)}
+                                 </span>
+
+                                 <div className="workload-action-buttons">
                                  <Button
                                     type="button"
                                     variant="primary"
@@ -497,6 +508,7 @@ function OrganizationWorkloadPanel({
                                        Release
                                     </Button>
                                  ) : null}
+                                 </div>
                               </div>
 
                               {canReleaseInvestigation && isConfirmingRelease ? (
