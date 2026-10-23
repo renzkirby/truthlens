@@ -1186,6 +1186,7 @@ function EvidenceReviewContent({
                               <Icons name={guidedSupportOpen ? "chevron-up" : "chevron-down"} size={13} aria-hidden="true" />
                            }
                            aria-expanded={guidedSupportOpen}
+                           aria-controls="evidence-claim-support evidence-review-support evidence-audit-support"
                            onClick={() => setGuidedSupportOpen((open) => !open)}
                         >
                            {guidedSupportOpen ? "Hide supporting details" : "Supporting details"}
@@ -1198,6 +1199,7 @@ function EvidenceReviewContent({
                      </div>
 
                      <section
+                        id="evidence-claim-support"
                         className={`evidence-detail-section ${guidedMode ? "evidence-secondary-section" : ""} ${guidedSupportOpen ? "is-visible" : ""}`}
                         aria-labelledby="claim-context-heading"
                      >
@@ -1235,6 +1237,7 @@ function EvidenceReviewContent({
                      </section>
 
                      <section
+                        id="evidence-review-support"
                         className={`evidence-detail-section evidence-secondary-section ${guidedSupportOpen ? "is-visible" : ""}`}
                         aria-labelledby="review-state-heading"
                      >
@@ -1466,6 +1469,7 @@ function EvidenceReviewContent({
                      </section>
 
                      <section
+                        id="evidence-audit-support"
                         className={`evidence-detail-section evidence-secondary-section ${guidedSupportOpen ? "is-visible" : ""}`}
                         aria-labelledby="evidence-history-heading"
                      >
