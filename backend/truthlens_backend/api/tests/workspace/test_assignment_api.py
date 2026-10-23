@@ -830,6 +830,34 @@ class VerificationAssignmentApiTests(APITestCase):
         )
 
 
+    def test_workload_exposes_investigation_evidence_count(self):
+        fixture = self._claim_for_a(suffix="evidence-count")
+        EvidenceSubmission.objects.create(
+            thread=fixture["thread"],
+            contributor=self.community_user,
+            evidence_caption="First supporting source",
+            evidence_url="https://example.com/evidence-one",
+            evidence_type=EvidenceSubmission.EvidenceType.SUPPORTS,
+        )
+        EvidenceSubmission.objects.create(
+            thread=fixture["thread"],
+            contributor=self.community_user,
+            evidence_caption="Second contextual source",
+            evidence_url="https://example.com/evidence-two",
+            evidence_type=EvidenceSubmission.EvidenceType.PROVIDES_CONTEXT,
+        )
+
+        response = self.lead_a_client.get(
+            reverse("verification_workload"),
+            {
+                "organization_id": str(self.organization_a.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["evidence_count"], 2)
+
     def test_workload_search_filters_claim_text(self):
         matching = self._claim_for_a(suffix="search-target")
         self._claim_for_a(suffix="other-work")
