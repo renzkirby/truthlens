@@ -175,13 +175,16 @@ function EvidenceReviewContent({
    canReviewEvidence,
    initialCaseId,
    returnToInvestigationPath,
+   guidedMode = false,
+   onWorkflowChanged,
+   onReturnToInvestigation,
 }) {
    const initialCaseKey = initialCaseId ? String(initialCaseId) : null;
 
    const [disposition, setDisposition] = useState("UNVERIFIED");
    const [offset, setOffset] = useState(0);
    const [queue, setQueue] = useState({ count: 0, limit: PAGE_SIZE, offset: 0, results: [] });
-   const [queueLoading, setQueueLoading] = useState(true);
+   const [queueLoading, setQueueLoading] = useState(!guidedMode);
    const [queueError, setQueueError] = useState("");
    const [queueRequestVersion, setQueueRequestVersion] = useState(0);
 
@@ -294,6 +297,10 @@ function EvidenceReviewContent({
    }, [disposition, offset, organizationId]);
 
    useEffect(() => {
+      if (guidedMode) {
+         return undefined;
+      }
+
       let cancelled = false;
       const requestId = queueRequestIdRef.current + 1;
       const authorityGeneration = authorityGenerationRef.current;
@@ -352,7 +359,7 @@ function EvidenceReviewContent({
       return () => {
          cancelled = true;
       };
-   }, [authFetch, isAuthorityGenerationCurrent, offset, queueRequestVersion, queueUrl, revokeAuthority]);
+   }, [authFetch, guidedMode, isAuthorityGenerationCurrent, offset, queueRequestVersion, queueUrl, revokeAuthority]);
 
    useEffect(() => {
       if (!selectedCaseId) {
@@ -717,7 +724,15 @@ function EvidenceReviewContent({
             }. Claim-level adjudication remains a separate decision.`,
          );
          setNoticeCaseId(operation.caseId);
-         requestQueueRefresh();
+         onWorkflowChanged?.({
+            stage: "EVIDENCE_REVIEW",
+            caseId: operation.caseId,
+            decision: operation.decision,
+            updatedCase,
+         });
+         if (!guidedMode) {
+            requestQueueRefresh();
+         }
       } catch (error) {
          if (
             !mountedRef.current ||
@@ -796,11 +811,15 @@ function EvidenceReviewContent({
    const readOnlyDecisionState = detail ? getReadOnlyDecisionState(detail, evidence) : null;
 
    return (
-      <div className="evidence-review-panel">
+      <div className={`evidence-review-panel ${guidedMode ? "is-guided" : ""}`}>
          <div className="evidence-panel-intro">
             <div>
-               <h3>Evidence review</h3>
-               <p>Assess submitted sources before they become part of a professionally reviewed evidence set.</p>
+               <h3>{guidedMode ? "Review this investigation’s evidence" : "Evidence review"}</h3>
+               <p>
+                  {guidedMode
+                     ? "Work on the evidence item that is currently blocking this investigation."
+                     : "Assess submitted sources before they become part of a professionally reviewed evidence set."}
+               </p>
             </div>
             <span className="evidence-organization-context">Organization: {organizationName || "Unavailable"}</span>
          </div>
@@ -828,158 +847,164 @@ function EvidenceReviewContent({
             </div>
          ) : (
             <>
-               <div className="evidence-toolbar">
-            <label htmlFor="evidence-disposition-filter">
-               Review history
-               <Select
-                  density="standard"
-                  id="evidence-disposition-filter"
-                  value={disposition}
-                  disabled={Boolean(mutation)}
-                  onChange={handleDispositionChange}
-               >
-                  {DISPOSITION_OPTIONS.map((option) => (
-                     <option key={option.value} value={option.value}>
-                        {option.label}
-                     </option>
-                  ))}
-               </Select>
-            </label>
+               {!guidedMode && (
+                  <>
+                                    <div className="evidence-toolbar">
+                                 <label htmlFor="evidence-disposition-filter">
+                                    Review history
+                                    <Select
+                                       density="standard"
+                                       id="evidence-disposition-filter"
+                                       value={disposition}
+                                       disabled={Boolean(mutation)}
+                                       onChange={handleDispositionChange}
+                                    >
+                                       {DISPOSITION_OPTIONS.map((option) => (
+                                          <option key={option.value} value={option.value}>
+                                             {option.label}
+                                          </option>
+                                       ))}
+                                    </Select>
+                                 </label>
+                     
+                                 <div className="evidence-toolbar-actions">
+                                    <span aria-live="polite">
+                                       {queue.count} {queue.count === 1 ? "case" : "cases"}
+                                    </span>
+                                    <Button
+                                       type="button"
+                                       variant="secondary"
+                                       density="compact"
+                                       leadingIcon={<Icons name="refresh-cw" size={15} aria-hidden="true" />}
+                                       disabled={queueLoading || Boolean(mutation)}
+                                       onClick={() => requestQueueRefresh()}
+                                    >
+                                       {queueLoading && queue.results.length > 0 ? "Refreshing…" : "Refresh"}
+                                    </Button>
+                                 </div>
+                              </div>
+                  </>
+               )}
 
-            <div className="evidence-toolbar-actions">
-               <span aria-live="polite">
-                  {queue.count} {queue.count === 1 ? "case" : "cases"}
-               </span>
-               <Button
-                  type="button"
-                  variant="secondary"
-                  density="compact"
-                  leadingIcon={<Icons name="refresh-cw" size={15} aria-hidden="true" />}
-                  disabled={queueLoading || Boolean(mutation)}
-                  onClick={() => requestQueueRefresh()}
-               >
-                  {queueLoading && queue.results.length > 0 ? "Refreshing…" : "Refresh"}
-               </Button>
-            </div>
-         </div>
-
-         {notice && (!selectedCaseId || String(noticeCaseId) !== String(selectedCaseId)) && (
+         {!guidedMode && notice && (!selectedCaseId || String(noticeCaseId) !== String(selectedCaseId)) && (
             <div className="evidence-notice" role="status" aria-live="polite">
                <Icons name="info" size={17} aria-hidden="true" />
                <span>{notice}</span>
             </div>
          )}
 
-               <div className={`evidence-workspace-grid ${selectedCaseId ? "has-selection" : ""}`}>
-            <section className="evidence-queue" aria-labelledby="evidence-queue-heading" aria-busy={queueLoading}>
-               <div className="evidence-section-heading">
-                  <div>
-                     <h4 id="evidence-queue-heading" ref={queueHeadingRef} tabIndex="-1">
-                        {DISPOSITION_OPTIONS.find((option) => option.value === disposition)?.label} evidence
-                     </h4>
-                     <p>Cases are scoped to {organizationName || "the selected organization"}.</p>
-                  </div>
-               </div>
-
-               {queueError && (
-                  <div className="evidence-contained-error" role="alert">
-                     <strong>Evidence queue unavailable</strong>
-                     <span>{queueError}</span>
-                     <Button
-                        type="button"
-                        variant="secondary"
-                        density="compact"
-                        onClick={() => {
-                           queueHeadingRef.current?.focus();
-                           requestQueueRefresh({ preserveRows: false });
-                        }}
-                     >
-                        Retry
-                     </Button>
-                  </div>
-               )}
-
-               {queueLoading && queue.results.length === 0 ? (
-                  <div className="evidence-state" role="status">
-                     <Icons name="loader" size={21} className="evidence-spinner" aria-hidden="true" />
-                     <p>Loading Evidence cases…</p>
-                  </div>
-               ) : !queueError && queue.results.length === 0 ? (
-                  <div className="evidence-state">
-                     <Icons name="paperclip" size={24} aria-hidden="true" />
-                     <h5>{emptyCopy.heading}</h5>
-                     <p>{emptyCopy.body}</p>
-                  </div>
-               ) : (
-                  <ul className="evidence-case-list">
-                     {queue.results.map((caseItem) => {
-                        const selected = selectedCaseId === caseItem.id;
-                        return (
-                           <li key={caseItem.id} className="evidence-case-item">
-                              <button
-                                 type="button"
-                                 className={`evidence-case-row ${selected ? "selected" : ""}`}
-                                 aria-pressed={selected}
-                                 disabled={Boolean(mutation)}
-                                 onClick={() => handleSelectCase(caseItem.id)}
-                              >
-                                 <span className="evidence-case-row-top">
-                                    <span className={`evidence-disposition disposition-${caseItem.evidence?.evidence_status?.toLowerCase() || "unknown"}`}>
-                                       {getDispositionLabel(caseItem.evidence)}
-                                    </span>
-                                    <span className="evidence-case-status">Case: {formatLabel(caseItem.status)}</span>
-                                    {selected && <span className="evidence-selected-label">Selected</span>}
+               <div className={`evidence-workspace-grid ${selectedCaseId ? "has-selection" : ""} ${guidedMode ? "is-guided" : ""}`}>
+            {!guidedMode && (
+                           <section className="evidence-queue" aria-labelledby="evidence-queue-heading" aria-busy={queueLoading}>
+                              <div className="evidence-section-heading">
+                                 <div>
+                                    <h4 id="evidence-queue-heading" ref={queueHeadingRef} tabIndex="-1">
+                                       {DISPOSITION_OPTIONS.find((option) => option.value === disposition)?.label} evidence
+                                    </h4>
+                                    <p>Cases are scoped to {organizationName || "the selected organization"}.</p>
+                                 </div>
+                              </div>
+               
+                              {queueError && (
+                                 <div className="evidence-contained-error" role="alert">
+                                    <strong>Evidence queue unavailable</strong>
+                                    <span>{queueError}</span>
+                                    <Button
+                                       type="button"
+                                       variant="secondary"
+                                       density="compact"
+                                       onClick={() => {
+                                          queueHeadingRef.current?.focus();
+                                          requestQueueRefresh({ preserveRows: false });
+                                       }}
+                                    >
+                                       Retry
+                                    </Button>
+                                 </div>
+                              )}
+               
+                              {queueLoading && queue.results.length === 0 ? (
+                                 <div className="evidence-state" role="status">
+                                    <Icons name="loader" size={21} className="evidence-spinner" aria-hidden="true" />
+                                    <p>Loading Evidence cases…</p>
+                                 </div>
+                              ) : !queueError && queue.results.length === 0 ? (
+                                 <div className="evidence-state">
+                                    <Icons name="paperclip" size={24} aria-hidden="true" />
+                                    <h5>{emptyCopy.heading}</h5>
+                                    <p>{emptyCopy.body}</p>
+                                 </div>
+                              ) : (
+                                 <ul className="evidence-case-list">
+                                    {queue.results.map((caseItem) => {
+                                       const selected = selectedCaseId === caseItem.id;
+                                       return (
+                                          <li key={caseItem.id} className="evidence-case-item">
+                                             <button
+                                                type="button"
+                                                className={`evidence-case-row ${selected ? "selected" : ""}`}
+                                                aria-pressed={selected}
+                                                disabled={Boolean(mutation)}
+                                                onClick={() => handleSelectCase(caseItem.id)}
+                                             >
+                                                <span className="evidence-case-row-top">
+                                                   <span className={`evidence-disposition disposition-${caseItem.evidence?.evidence_status?.toLowerCase() || "unknown"}`}>
+                                                      {getDispositionLabel(caseItem.evidence)}
+                                                   </span>
+                                                   <span className="evidence-case-status">Case: {formatLabel(caseItem.status)}</span>
+                                                   {selected && <span className="evidence-selected-label">Selected</span>}
+                                                </span>
+                                                <strong>{getEvidenceTitle(caseItem)}</strong>
+                                                <span className="evidence-type">{caseItem.evidence?.evidence_type_label || "Evidence type unavailable"}</span>
+                                                <span className="evidence-claim-preview">{getClaimContext(caseItem)}</span>
+                                                <span className="evidence-case-row-meta">
+                                                   <span>
+                                                      Submitted <FormattedDateTime value={caseItem.evidence?.submitted_at} />
+                                                   </span>
+                                                   <span>
+                                                      {caseItem.evidence?.contributor?.username
+                                                         ? `Contributor @${caseItem.evidence.contributor.username}`
+                                                         : "Contributor not recorded"}
+                                                   </span>
+                                                   <span>Case {formatCaseReference(caseItem.id)}</span>
+                                                </span>
+                                             </button>
+                                          </li>
+                                       );
+                                    })}
+                                 </ul>
+                              )}
+               
+                              <nav className="evidence-pagination" aria-label="Evidence queue pagination">
+                                 <Button
+                                    type="button"
+                                    variant="secondary"
+                                    density="compact"
+                                    leadingIcon={<Icons name="chevron-left" size={15} aria-hidden="true" />}
+                                    disabled={!hasPreviousPage || queueLoading || Boolean(mutation)}
+                                    onClick={() => handlePageChange(Math.max(0, offset - PAGE_SIZE))}
+                                 >
+                                    Previous
+                                 </Button>
+                                 <span>
+                                    Page {currentPage} of {totalPages}
                                  </span>
-                                 <strong>{getEvidenceTitle(caseItem)}</strong>
-                                 <span className="evidence-type">{caseItem.evidence?.evidence_type_label || "Evidence type unavailable"}</span>
-                                 <span className="evidence-claim-preview">{getClaimContext(caseItem)}</span>
-                                 <span className="evidence-case-row-meta">
-                                    <span>
-                                       Submitted <FormattedDateTime value={caseItem.evidence?.submitted_at} />
-                                    </span>
-                                    <span>
-                                       {caseItem.evidence?.contributor?.username
-                                          ? `Contributor @${caseItem.evidence.contributor.username}`
-                                          : "Contributor not recorded"}
-                                    </span>
-                                    <span>Case {formatCaseReference(caseItem.id)}</span>
-                                 </span>
-                              </button>
-                           </li>
-                        );
-                     })}
-                  </ul>
-               )}
-
-               <nav className="evidence-pagination" aria-label="Evidence queue pagination">
-                  <Button
-                     type="button"
-                     variant="secondary"
-                     density="compact"
-                     leadingIcon={<Icons name="chevron-left" size={15} aria-hidden="true" />}
-                     disabled={!hasPreviousPage || queueLoading || Boolean(mutation)}
-                     onClick={() => handlePageChange(Math.max(0, offset - PAGE_SIZE))}
-                  >
-                     Previous
-                  </Button>
-                  <span>
-                     Page {currentPage} of {totalPages}
-                  </span>
-                  <Button
-                     type="button"
-                     variant="secondary"
-                     density="compact"
-                     trailingIcon={<Icons name="chevron-right" size={15} aria-hidden="true" />}
-                     disabled={!hasNextPage || queueLoading || Boolean(mutation)}
-                     onClick={() => handlePageChange(offset + PAGE_SIZE)}
-                  >
-                     Next
-                  </Button>
-               </nav>
-            </section>
+                                 <Button
+                                    type="button"
+                                    variant="secondary"
+                                    density="compact"
+                                    trailingIcon={<Icons name="chevron-right" size={15} aria-hidden="true" />}
+                                    disabled={!hasNextPage || queueLoading || Boolean(mutation)}
+                                    onClick={() => handlePageChange(offset + PAGE_SIZE)}
+                                 >
+                                    Next
+                                 </Button>
+                              </nav>
+                           </section>
+            )}
 
             <section className="evidence-detail" aria-labelledby="evidence-detail-heading" aria-busy={detailLoading}>
-               {selectedCaseId && (
+               {selectedCaseId && !guidedMode && (
                   <Button
                      type="button"
                      variant="secondary"
@@ -1207,12 +1232,22 @@ function EvidenceReviewContent({
                               <div>
                                  <strong>Evidence review recorded</strong>
                                  <span>{notice}</span>
-                                 {returnToInvestigationPath && (
+                                 {onReturnToInvestigation ? (
+                                    <Button
+                                       type="button"
+                                       variant="secondary"
+                                       density="compact"
+                                       trailingIcon={<Icons name="arrow-right" size={13} aria-hidden="true" />}
+                                       onClick={onReturnToInvestigation}
+                                    >
+                                       Continue investigation
+                                    </Button>
+                                 ) : returnToInvestigationPath ? (
                                     <Link to={returnToInvestigationPath} className="evidence-return-investigation">
                                        Return to investigation
                                        <Icons name="arrow-right" size={13} aria-hidden="true" />
                                     </Link>
-                                 )}
+                                 ) : null}
                               </div>
                            </div>
                         )}
