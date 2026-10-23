@@ -141,6 +141,35 @@
    gap: 18px;
 }
 
+.investigation-refresh-status,
+.investigation-refresh-error {
+   min-width: 0;
+   display: flex;
+   align-items: center;
+   gap: 9px;
+   padding: 10px 12px;
+   border-radius: 9px;
+   font-size: 0.78rem;
+   line-height: 1.45;
+}
+
+.investigation-refresh-status {
+   border: 1px solid var(--tl-color-status-info-border);
+   background: var(--tl-color-status-info-bg);
+   color: var(--tl-color-status-info-text);
+}
+
+.investigation-refresh-error {
+   border: 1px solid var(--tl-color-status-critical-border);
+   background: var(--tl-color-status-critical-bg);
+   color: var(--tl-color-status-critical-text);
+}
+
+.investigation-refresh-error span {
+   min-width: 0;
+   flex: 1 1 auto;
+}
+
 .investigation-guided-work {
    min-width: 0;
    scroll-margin-top: 18px;
