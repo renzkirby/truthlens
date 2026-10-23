@@ -455,13 +455,19 @@ class VerificationRunURLRuntimeTests(TestCase):
             "Official Fact Check",
             self.cleaned["cleaned_claim"],
             [],
+            related_proposition=self.cleaned["cleaned_claim"],
+            related_candidate=self.vault.return_value,
         )
         self.bridge.assert_called_once()
         self.evaluate_persisted.assert_called_once()
         self.evaluate_gfc.assert_not_called()
         self.retrieve_tavily.assert_not_called()
+        # This incomplete synthetic Vault candidate cannot be validated as a
+        # real publication. It must not gain authority or a visible reference.
+        self.claim.refresh_from_db()
+        self.assertIsNone(self.claim.relatedness_decision_id)
+        self.assertFalse(self.claim.fact_check_references.exists())
         stages = [call.args[1] for call in self.log_stage.call_args_list]
-        self.assertIn("url_vault_related_relevance_check", stages)
         self.assertNotIn("url_vault_search_success", stages)
 
     def test_gfc_receives_active_running_run_and_completes(self):
@@ -499,6 +505,8 @@ class VerificationRunURLRuntimeTests(TestCase):
             "Official Fact Check",
             self.cleaned["cleaned_claim"],
             [],
+            related_proposition=self.cleaned["cleaned_claim"],
+            related_candidate=None,
         )
         self.retrieve_tavily.assert_not_called()
         self.assertEqual(VerificationEvidence.objects.count(), 0)
