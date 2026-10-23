@@ -1494,6 +1494,25 @@ function AdjudicationReviewContent({
             </div>
          </div>
 
+         {!guidedMode && (
+            <div className="adjudication-guided-cue">
+               <div>
+                  <strong>Organization-wide queue</strong>
+                  <span>
+                     For a guided case flow with persistent investigation identity and continuation, open the case from
+                     Investigations.
+                  </span>
+               </div>
+               <Link
+                  to={`/workspace/investigations?organization_id=${encodeURIComponent(organizationId)}`}
+                  className="adjudication-guided-cue-link"
+               >
+                  Open investigations
+                  <Icons name="arrow-right" size={13} aria-hidden="true" />
+               </Link>
+            </div>
+         )}
+
          {authorityError ? (
             <div
                className="adjudication-contained-error adjudication-authority-error"
