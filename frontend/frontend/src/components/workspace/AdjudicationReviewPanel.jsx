@@ -1004,7 +1004,9 @@ function AdjudicationReviewContent({
             focusDetailAfterMutationRef.current = true;
          }
 
-         requestQueueRefresh();
+         if (!guidedMode) {
+            requestQueueRefresh();
+         }
 
          if (outcome === "success") {
             setActionError("");
@@ -1080,7 +1082,9 @@ function AdjudicationReviewContent({
          setActionNotice(null);
          setActionError(`${pendingMessage} Case ${formatCaseReference(operation.caseId)}.`);
          focusActionMessageRef.current = true;
-         requestQueueRefresh();
+         if (!guidedMode) {
+            requestQueueRefresh();
+         }
       }
    };
 
@@ -1256,7 +1260,9 @@ function AdjudicationReviewContent({
                focusActionMessageRef.current = true;
             }
             setActionError(`Case ${formatCaseReference(operation.caseId)} is no longer available.`);
-            requestQueueRefresh();
+            if (!guidedMode) {
+               requestQueueRefresh();
+            }
          } else if (error?.status === 409) {
             await reconcileDecisionOperation(operation, "conflict", error?.message);
          } else {
