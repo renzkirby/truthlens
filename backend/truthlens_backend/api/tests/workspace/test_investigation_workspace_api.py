@@ -216,6 +216,34 @@ class InvestigationWorkspaceApiTests(APITestCase):
             ["RELEASE_INVESTIGATION"],
         )
 
+    def test_claim_payload_includes_community_discussions(self):
+        first = Thread.objects.create(
+            claim=self.claim,
+            author=self.actor,
+            caption="First community discussion",
+            status=Thread.Status.OPEN,
+        )
+        second = Thread.objects.create(
+            claim=self.claim,
+            author=self.actor,
+            caption="Second community discussion",
+            status=Thread.Status.OPEN,
+        )
+
+        payload = self.get().json()
+        threads = payload["claim"]["community_threads"]
+
+        self.assertEqual(
+            {thread["id"] for thread in threads},
+            {str(first.pk), str(second.pk)},
+        )
+        for thread in threads:
+            self.assertEqual(thread["claim_id"], str(self.claim.pk))
+            self.assertEqual(
+                set(thread),
+                {"id", "claim_id", "caption", "status", "created_at"},
+            )
+
     def test_unreviewed_evidence_state_and_review_action(self):
         evidence = self.evidence()
         case = ModerationCase.objects.create(

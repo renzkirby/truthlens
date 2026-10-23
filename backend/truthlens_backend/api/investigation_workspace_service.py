@@ -7,6 +7,7 @@ from .models import (
     EvidenceSubmission,
     ModerationCase,
     OfficialFactCheck,
+    Thread,
     VerificationAssignment,
 )
 from .moderation_service import ACTIVE_CASE_STATUSES
@@ -66,6 +67,19 @@ def _organization_payload(organization):
 
 
 def _claim_payload(claim):
+    community_threads = [
+        {
+            "id": str(thread.pk),
+            "claim_id": str(thread.claim_id),
+            "caption": thread.caption,
+            "status": thread.status,
+            "created_at": _timestamp(thread.created_at),
+        }
+        for thread in Thread.objects.filter(claim=claim)
+        .only("id", "claim_id", "caption", "status", "created_at")
+        .order_by("-created_at", "id")
+    ]
+
     return {
         "id": str(claim.pk),
         "claim_type": claim.claim_type,
@@ -74,6 +88,7 @@ def _claim_payload(claim):
         "source_link": claim.source_link,
         "media_url": claim.media_url,
         "last_updated": _timestamp(claim.last_updated),
+        "community_threads": community_threads,
     }
 
 
