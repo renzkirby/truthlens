@@ -2601,9 +2601,6 @@ function AdjudicationReviewContent({
                                        )}
                                     </details>
                                        </section>
-                                    </div>
-
-                                    
                                           </>
                                        )}
                                     </div>
