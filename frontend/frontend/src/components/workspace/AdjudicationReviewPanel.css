@@ -19,15 +19,17 @@
 }
 
 .adjudication-review-panel.is-guided .adjudication-context-rail {
-   padding-left: 0;
+   margin-top: 18px;
+   padding: 18px 0 0;
+   border-top: 1px solid var(--border-light);
    border-left: 0;
 }
 
-.adjudication-review-panel.is-guided .adjudication-guided-secondary {
+.adjudication-secondary-section {
    display: none;
 }
 
-.adjudication-review-panel.is-guided .adjudication-guided-secondary.is-visible {
+.adjudication-secondary-section.is-visible {
    display: block;
 }
 
@@ -606,9 +608,17 @@
 .adjudication-detail-layout {
    min-width: 0;
    display: grid;
-   grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+   grid-template-columns: minmax(0, 1fr);
    gap: var(--tl-space-6);
    align-items: start;
+}
+
+.adjudication-detail-layout.has-support:not(.is-guided) {
+   grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+}
+
+.adjudication-detail-layout.is-guided {
+   grid-template-columns: minmax(0, 1fr);
 }
 
 .adjudication-primary-surface,
@@ -617,6 +627,7 @@
 }
 
 .adjudication-context-rail {
+   min-width: 0;
    padding-left: var(--tl-space-5);
    border-left: 1px solid var(--border-default);
 }
