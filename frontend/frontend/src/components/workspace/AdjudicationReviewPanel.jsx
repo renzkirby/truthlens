@@ -2280,17 +2280,17 @@ function AdjudicationReviewContent({
                                              onClick={() => setGuidedEvidenceOpen((open) => !open)}
                                           >
                                              {guidedEvidenceOpen
-                                                ? "Hide evidence details"
+                                                ? "Hide evidence items"
                                                 : `Review ${evidenceItems.length} evidence ${evidenceItems.length === 1 ? "item" : "items"}`}
                                           </Button>
-                                          <span>Open individual source records only when needed for the decision.</span>
                                        </div>
                                     )}
 
                                     {evidenceItems.length > 0 ? (
                                        <ol
                                           id="adjudication-evidence-records"
-                                          className={`adjudication-evidence-list ${!guidedEvidenceOpen ? "is-guided-collapsed" : ""}`}
+                                          className="adjudication-evidence-list"
+                                          hidden={!guidedEvidenceOpen}
                                        >
                                           {evidenceItems.map((evidence) => <EvidenceRecord key={evidence.id} evidence={evidence} />)}
                                        </ol>
