@@ -272,28 +272,6 @@
    font-size: var(--tl-text-xs);
 }
 
-/* The intelligence card lives in the case-context rail. Give that rail enough
-   width for readable review support without making it visually dominant. */
-.adjudication-detail-layout:has(.verification-intelligence-panel) {
-   grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
-}
-
-.adjudication-context-rail > .verification-intelligence-panel + h5 {
-   margin-top: var(--tl-space-6);
-   padding-top: var(--tl-space-5);
-   border-top: 1px solid var(--border-default);
-}
-
-@container adjudication-panel (max-width: 920px) {
-   .adjudication-detail-layout:has(.verification-intelligence-panel) {
-      grid-template-columns: 1fr;
-   }
-
-   .verification-intelligence-panel {
-      max-width: none;
-   }
-}
-
 @container adjudication-panel (max-width: 520px) {
    .verification-intelligence-panel {
       padding: var(--tl-space-3);
@@ -308,4 +286,31 @@
       align-items: flex-start;
       flex-direction: column;
    }
+}
+
+
+.verification-intelligence-panel.is-compact {
+   padding: 0;
+   border: 0;
+   border-radius: 0;
+   background: transparent;
+   box-shadow: none;
+}
+
+.verification-intelligence-panel.is-compact .verification-intelligence-content {
+   gap: var(--tl-space-5);
+   margin-top: var(--tl-space-5);
+}
+
+.verification-intelligence-panel.is-compact .verification-intelligence-block {
+   padding-top: var(--tl-space-5);
+}
+
+.verification-intelligence-panel.is-compact .verification-intelligence-block:first-child {
+   padding-top: 0;
+   border-top: 0;
+}
+
+.verification-intelligence-compact-warning {
+   margin-top: var(--tl-space-3);
 }
