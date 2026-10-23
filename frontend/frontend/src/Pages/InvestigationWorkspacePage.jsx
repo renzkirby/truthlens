@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
@@ -7,6 +7,8 @@ import { resolveApiEndpoint } from "../utils/api";
 import { getWorkspaceMembership } from "../utils/workspace";
 import Button from "../components/ui/Button.jsx";
 import Icons from "../components/Icons.jsx";
+import AdjudicationReviewPanel from "../components/workspace/AdjudicationReviewPanel.jsx";
+import EvidenceReviewPanel from "../components/workspace/EvidenceReviewPanel.jsx";
 import InvestigationContextLinks from "../components/workspace/InvestigationContextLinks.jsx";
 import VerificationIntelligencePanel from "../components/workspace/VerificationIntelligencePanel.jsx";
 
@@ -91,6 +93,9 @@ function InvestigationWorkspacePage() {
 
    const [requestVersion, setRequestVersion] = useState(0);
    const [contextOpen, setContextOpen] = useState(false);
+   const [guidedAction, setGuidedAction] = useState(null);
+   const stageRef = useRef(null);
+   const guidedWorkRef = useRef(null);
    const requestKey =
       assignmentId && organizationId && membership
          ? `${assignmentId}:${organizationId}:${requestVersion}`
@@ -168,6 +173,46 @@ function InvestigationWorkspacePage() {
          ? "?" + new URLSearchParams({ organization_id: organizationId }).toString()
          : "";
       navigate("/workspace/investigations" + query);
+   };
+
+   const scrollToRef = (ref) => {
+      requestAnimationFrame(() => {
+         const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+         ref.current?.scrollIntoView({
+            behavior: reduceMotion ? "auto" : "smooth",
+            block: "start",
+         });
+      });
+   };
+
+   const isInlineGuidedAction = (action) =>
+      action?.code === "REVIEW_EVIDENCE" || action?.code === "ADJUDICATE";
+
+   const handleProgressAction = (action) => {
+      if (!action) {
+         return;
+      }
+
+      if (isInlineGuidedAction(action)) {
+         setContextOpen(false);
+         setGuidedAction(action);
+         scrollToRef(guidedWorkRef);
+         return;
+      }
+
+      const destination = buildActionDestination(action, organizationId, assignmentId);
+      if (destination) {
+         navigate(destination);
+      }
+   };
+
+   const handleGuidedWorkflowChanged = () => {
+      setRequestVersion((value) => value + 1);
+   };
+
+   const handleContinueInvestigation = () => {
+      setGuidedAction(null);
+      scrollToRef(stageRef);
    };
 
    if (!organizationId) {
@@ -289,7 +334,7 @@ function InvestigationWorkspacePage() {
 
          <div className={`investigation-workspace-layout ${contextOpen ? "has-context" : ""}`}>
             <main className="investigation-workspace-main">
-               <section className="investigation-stage" aria-labelledby="investigation-stage-heading">
+               <section ref={stageRef} className="investigation-stage" aria-labelledby="investigation-stage-heading">
                   <div className="investigation-stage-heading">
                      <span className="investigation-stage-icon" aria-hidden="true">
                         <Icons name={STATE_ICON[state.code] || "activity"} size={20} />
@@ -334,18 +379,72 @@ function InvestigationWorkspacePage() {
                               : "TruthLens will keep this investigation active. Another authorized role or a new evidence submission may be required before it can progress."}
                         </p>
                      </div>
-                     {progressAction && progressDestination ? (
+                     {progressAction && (isInlineGuidedAction(progressAction) || progressDestination) ? (
                         <Button
                            variant="primary"
                            density="comfortable"
                            trailingIcon={<Icons name="arrow-right" size={15} />}
-                           onClick={() => navigate(progressDestination)}
+                           onClick={() => handleProgressAction(progressAction)}
                         >
                            {progressAction.label}
                         </Button>
                      ) : null}
                   </div>
                </section>
+
+               {guidedAction ? (
+                  <section
+                     ref={guidedWorkRef}
+                     className="investigation-guided-work"
+                     aria-labelledby="investigation-guided-work-heading"
+                  >
+                     <div className="investigation-guided-work-heading">
+                        <div>
+                           <span className="investigation-section-label">Working in this investigation</span>
+                           <h2 id="investigation-guided-work-heading">
+                              {guidedAction.code === "REVIEW_EVIDENCE" ? "Evidence review" : "Adjudication"}
+                           </h2>
+                           <p>
+                              The work item below belongs to this investigation. Completing it refreshes the persisted
+                              investigation state without sending you to a separate queue.
+                           </p>
+                        </div>
+                        <Button
+                           type="button"
+                           variant="secondary"
+                           density="compact"
+                           leadingIcon={<Icons name="x" size={14} />}
+                           onClick={handleContinueInvestigation}
+                        >
+                           Close work surface
+                        </Button>
+                     </div>
+
+                     {guidedAction.code === "REVIEW_EVIDENCE" ? (
+                        <EvidenceReviewPanel
+                           key={`guided-evidence-${guidedAction.target?.id}`}
+                           organizationId={organizationId}
+                           organizationName={data.organization.name}
+                           canReviewEvidence
+                           initialCaseId={guidedAction.target?.id}
+                           guidedMode
+                           onWorkflowChanged={handleGuidedWorkflowChanged}
+                           onReturnToInvestigation={handleContinueInvestigation}
+                        />
+                     ) : (
+                        <AdjudicationReviewPanel
+                           key={`guided-adjudication-${guidedAction.target?.id}`}
+                           organizationId={organizationId}
+                           organizationName={data.organization.name}
+                           canAdjudicate
+                           initialCaseId={guidedAction.target?.id}
+                           guidedMode
+                           onWorkflowChanged={handleGuidedWorkflowChanged}
+                           onReturnToInvestigation={handleContinueInvestigation}
+                        />
+                     )}
+                  </section>
+               ) : null}
 
                <section className="investigation-progress" aria-labelledby="investigation-progress-heading">
                   <div className="investigation-section-heading">
