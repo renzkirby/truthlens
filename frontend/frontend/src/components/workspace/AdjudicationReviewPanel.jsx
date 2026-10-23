@@ -1005,11 +1005,25 @@ function AdjudicationReviewContent({
    }, [confirmation, confirmationChecking, decisionFormOpen]);
 
    useEffect(() => {
-      if ((actionError || actionNotice) && focusActionMessageRef.current) {
+      const decisionDialogActive =
+         decisionFormOpen ||
+         confirmationChecking ||
+         Boolean(confirmation) ||
+         Boolean(mutation && identifiersMatch(mutation.caseId, selectedCaseId));
+
+      if ((actionError || actionNotice) && focusActionMessageRef.current && !decisionDialogActive) {
          focusActionMessageRef.current = false;
          actionMessageRef.current?.focus();
       }
-   }, [actionError, actionNotice]);
+   }, [
+      actionError,
+      actionNotice,
+      confirmation,
+      confirmationChecking,
+      decisionFormOpen,
+      mutation,
+      selectedCaseId,
+   ]);
 
    useEffect(() => {
       if (detail && focusDetailAfterMutationRef.current) {
@@ -1049,6 +1063,7 @@ function AdjudicationReviewContent({
       setDetailError("");
       setDetailUnavailable(false);
       setDetailIdentity(null);
+      setCaseDetailsView(null);
       resetDecisionWorkflow({ clearMessages: false });
    };
 
