@@ -859,6 +859,25 @@ function EvidenceReviewContent({
             </p>
          </div>
 
+         {!guidedMode && (
+            <div className="evidence-guided-cue">
+               <div>
+                  <strong>Organization-wide queue</strong>
+                  <span>
+                     To keep claim identity, stage guidance, and a Continue investigation path, open the case from
+                     Investigations instead.
+                  </span>
+               </div>
+               <Link
+                  to={`/workspace/investigations?organization_id=${encodeURIComponent(organizationId)}`}
+                  className="evidence-guided-cue-link"
+               >
+                  Open investigations
+                  <Icons name="arrow-right" size={13} aria-hidden="true" />
+               </Link>
+            </div>
+         )}
+
          {authorityError ? (
             <div
                className="evidence-contained-error evidence-authority-error"
