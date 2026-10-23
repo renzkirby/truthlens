@@ -2036,7 +2036,7 @@ function AdjudicationReviewContent({
                                           : isResolvedCase
                                             ? "This case is resolved in the authorized view."
                                             : readyForFirstDecision
-                                              ? "Backend decision preconditions are currently satisfied."
+                                              ? "All requirements for adjudication are currently satisfied."
                                               : "A first decision is not currently available."}
                                     </span>
                                  </div>
@@ -2315,15 +2315,15 @@ function AdjudicationReviewContent({
                                           <strong>{readyForFirstDecision ? "Ready for a first decision" : "First decision unavailable"}</strong>
                                           <span>
                                              {readyForFirstDecision
-                                                ? "The backend reports valid selected-case, organization, and revision preconditions. Refreshing the case will revalidate them."
-                                                : "Review the authoritative blockers below. Refresh before relying on this advisory state."}
+                                                ? "This case is ready for adjudication. Review the evidence and record your decision when ready."
+                                                : "Review the requirements below before recording a decision."}
                                           </span>
                                        </div>
                                     </div>
 
                                     {!actionPreconditionsAreValid && actionState.can_issue_first_decision === true && (
                                        <p className="adjudication-inline-warning">
-                                          The server marked this case ready, but its returned action preconditions are incomplete or do not match the selected case.
+                                          This case appears ready, but some decision checks could not be confirmed. Refresh the case before proceeding.
                                        </p>
                                     )}
 
@@ -2372,10 +2372,10 @@ function AdjudicationReviewContent({
                                     </dl>
 
                                     <details className="adjudication-record-disclosure adjudication-technical-preconditions">
-                                       <summary>Technical decision preconditions</summary>
+                                       <summary>Decision checks</summary>
                                        <dl className="adjudication-detail-facts compact adjudication-record-disclosure-body">
                                           <div><dt>Expected revision</dt><dd>{actionState.expected_revision ?? "Unavailable"}</dd></div>
-                                          <div><dt>Selected case precondition</dt><dd>{actionPreconditionsAreValid ? "Confirmed" : "Unavailable"}</dd></div>
+                                          <div><dt>Case identity check</dt><dd>{actionPreconditionsAreValid ? "Confirmed" : "Unavailable"}</dd></div>
                                        </dl>
                                     </details>
 
