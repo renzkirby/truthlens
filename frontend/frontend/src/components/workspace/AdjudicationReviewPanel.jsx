@@ -439,6 +439,9 @@ function AdjudicationReviewContent({
    canAdjudicate,
    initialCaseId,
    returnToInvestigationPath,
+   guidedMode = false,
+   onWorkflowChanged,
+   onReturnToInvestigation,
 }) {
    const initialCaseKey = initialCaseId ? String(initialCaseId) : null;
    const [statusFilter, setStatusFilter] = useState("");
@@ -450,7 +453,7 @@ function AdjudicationReviewContent({
       offset: 0,
       results: [],
    });
-   const [queueLoading, setQueueLoading] = useState(true);
+   const [queueLoading, setQueueLoading] = useState(!guidedMode);
    const [queueError, setQueueError] = useState("");
    const [queueRequestVersion, setQueueRequestVersion] = useState(0);
    const [selectedCaseId, setSelectedCaseId] = useState(initialCaseKey);
@@ -588,7 +591,7 @@ function AdjudicationReviewContent({
    }, [offset, organizationId, priorityFilter, statusFilter]);
 
    useEffect(() => {
-      if (!canAdjudicate || !organizationId) {
+      if (!canAdjudicate || !organizationId || guidedMode) {
          return undefined;
       }
 
@@ -653,6 +656,7 @@ function AdjudicationReviewContent({
    }, [
       authFetch,
       canAdjudicate,
+      guidedMode,
       isAuthorityGenerationCurrent,
       offset,
       organizationId,
@@ -1011,6 +1015,11 @@ function AdjudicationReviewContent({
                   ? "The authoritative decision was recorded and the canonical case detail is current."
                   : "The authoritative decision was recorded for the submitted case. Your current selection was not changed.",
                inspectable: !selectedCaseIsSubmittedCase,
+            });
+            onWorkflowChanged?.({
+               stage: "ADJUDICATION",
+               caseId: operation.caseId,
+               detail: canonicalDetail,
             });
          } else if (outcome === "conflict") {
             setActionNotice(null);
@@ -1411,7 +1420,7 @@ function AdjudicationReviewContent({
 
    if (!canAdjudicate || !organizationId) {
       return (
-         <div className="adjudication-review-panel" ref={panelRef}>
+         <div className={`adjudication-review-panel ${guidedMode ? "is-guided" : ""}`} ref={panelRef}>
             <div className="adjudication-contained-error" role="alert">
                <strong>Adjudication unavailable</strong>
                <span>The selected organization does not grant Adjudication access.</span>
@@ -1424,8 +1433,12 @@ function AdjudicationReviewContent({
       <div className="adjudication-review-panel" ref={panelRef}>
          <div className="adjudication-panel-intro">
             <div>
-               <h3>Adjudication review</h3>
-               <p>Select a case from the filtered queue, examine its evidence and provenance, then record an authorized human conclusion when the backend permits it.</p>
+               <h3>{guidedMode ? "Adjudicate this investigation" : "Adjudication review"}</h3>
+               <p>
+                  {guidedMode
+                     ? "Review the evidence and record the authorized human conclusion for this investigation."
+                     : "Select a case from the filtered queue, examine its evidence and provenance, then record an authorized human conclusion when the backend permits it."}
+               </p>
             </div>
             <span className="adjudication-organization-context">
                Organization: {organizationName || "Unavailable"}
@@ -1460,65 +1473,71 @@ function AdjudicationReviewContent({
             </div>
          ) : (
             <>
-               <div className="adjudication-toolbar">
-                  <div className="adjudication-filter-grid">
-                     <label htmlFor="adjudication-status-filter">
-                        <span>Case status</span>
-                        <Select
-                           density="standard"
-                           id="adjudication-status-filter"
-                           value={statusFilter}
-                           onChange={(event) =>
-                              replaceQueueScope({ status: event.target.value, nextOffset: 0 })
-                           }
-                        >
-                           {STATUS_OPTIONS.map((option) => (
-                              <option key={option.value || "ACTIVE"} value={option.value}>
-                                 {option.label}
-                              </option>
-                           ))}
-                        </Select>
-                     </label>
+               {!guidedMode && (
+                  <>
+                                    <div className="adjudication-toolbar">
+                                       <div className="adjudication-filter-grid">
+                                          <label htmlFor="adjudication-status-filter">
+                                             <span>Case status</span>
+                                             <Select
+                                                density="standard"
+                                                id="adjudication-status-filter"
+                                                value={statusFilter}
+                                                onChange={(event) =>
+                                                   replaceQueueScope({ status: event.target.value, nextOffset: 0 })
+                                                }
+                                             >
+                                                {STATUS_OPTIONS.map((option) => (
+                                                   <option key={option.value || "ACTIVE"} value={option.value}>
+                                                      {option.label}
+                                                   </option>
+                                                ))}
+                                             </Select>
+                                          </label>
+                     
+                                          <label htmlFor="adjudication-priority-filter">
+                                             <span>Priority</span>
+                                             <Select
+                                                density="standard"
+                                                id="adjudication-priority-filter"
+                                                value={priorityFilter}
+                                                onChange={(event) =>
+                                                   replaceQueueScope({ priority: event.target.value, nextOffset: 0 })
+                                                }
+                                             >
+                                                {PRIORITY_OPTIONS.map((option) => (
+                                                   <option key={option.value || "ALL"} value={option.value}>
+                                                      {option.label}
+                                                   </option>
+                                                ))}
+                                             </Select>
+                                          </label>
+                                       </div>
+                     
+                                       <div className="adjudication-toolbar-actions">
+                                          <span aria-live="polite">
+                                             {queueLoading && queue.results.length === 0
+                                                ? "Loading cases…"
+                                                : `${queue.count} ${queue.count === 1 ? "case" : "cases"}`}
+                                          </span>
+                                          <Button
+                                             type="button"
+                                             variant="secondary"
+                                             density="compact"
+                                             leadingIcon={<Icons name="refresh-cw" size={15} aria-hidden="true" />}
+                                             disabled={queueLoading}
+                                             onClick={() => requestQueueRefresh()}
+                                          >
+                                             {queueLoading && queue.results.length > 0 ? "Refreshing…" : "Refresh"}
+                                          </Button>
+                                       </div>
+                                    </div>
+                     
+                     
+                  </>
+               )}
 
-                     <label htmlFor="adjudication-priority-filter">
-                        <span>Priority</span>
-                        <Select
-                           density="standard"
-                           id="adjudication-priority-filter"
-                           value={priorityFilter}
-                           onChange={(event) =>
-                              replaceQueueScope({ priority: event.target.value, nextOffset: 0 })
-                           }
-                        >
-                           {PRIORITY_OPTIONS.map((option) => (
-                              <option key={option.value || "ALL"} value={option.value}>
-                                 {option.label}
-                              </option>
-                           ))}
-                        </Select>
-                     </label>
-                  </div>
-
-                  <div className="adjudication-toolbar-actions">
-                     <span aria-live="polite">
-                        {queueLoading && queue.results.length === 0
-                           ? "Loading cases…"
-                           : `${queue.count} ${queue.count === 1 ? "case" : "cases"}`}
-                     </span>
-                     <Button
-                        type="button"
-                        variant="secondary"
-                        density="compact"
-                        leadingIcon={<Icons name="refresh-cw" size={15} aria-hidden="true" />}
-                        disabled={queueLoading}
-                        onClick={() => requestQueueRefresh()}
-                     >
-                        {queueLoading && queue.results.length > 0 ? "Refreshing…" : "Refresh"}
-                     </Button>
-                  </div>
-               </div>
-
-               {actionNotice && !selectedActionNotice && (
+               {!guidedMode && actionNotice && !selectedActionNotice && (
                   <div
                       className="adjudication-action-message success"
                       ref={actionMessageRef}
@@ -1543,7 +1562,7 @@ function AdjudicationReviewContent({
                   </div>
                )}
 
-               {actionError && (
+               {!guidedMode && actionError && (
                   <div
                       className="adjudication-action-message error"
                       ref={actionMessageRef}
@@ -1569,7 +1588,7 @@ function AdjudicationReviewContent({
                   </div>
                )}
 
-               {mutation && (
+               {!guidedMode && mutation && (
                   <div className="adjudication-action-message pending" role="status">
                      <Icons name="loader" size={18} className="adjudication-spinner" aria-hidden="true" />
                      <div>
@@ -1581,153 +1600,157 @@ function AdjudicationReviewContent({
                   </div>
                )}
 
-               <div className={`adjudication-workspace-grid ${selectedCaseId ? "has-selection" : ""}`}>
-                  <section
-                     className="adjudication-queue"
-                     aria-labelledby="adjudication-queue-heading"
-                     aria-busy={queueLoading}
-                  >
-                     <div className="adjudication-section-heading">
-                        <div>
-                           <h4 id="adjudication-queue-heading" ref={queueHeadingRef} tabIndex="-1">
-                              Filtered case queue
-                           </h4>
-                           <p>{activeStatusLabel} · Scoped to {organizationName || "the selected organization"}.</p>
-                        </div>
-                     </div>
-
-                     {queueError && (
-                        <div className="adjudication-contained-error" role="alert">
-                           <strong>Adjudication queue unavailable</strong>
-                           <span>{queueError}</span>
-                           {queue.results.length > 0 && <span>Previously loaded results remain visible below.</span>}
-                           <Button
-                              type="button"
-                              variant="secondary"
-                              density="compact"
-                              onClick={() => requestQueueRefresh({ preserveRows: false })}
-                           >
-                              Retry
-                           </Button>
-                        </div>
-                     )}
-
-                     {queueLoading && queue.results.length === 0 ? (
-                        <div className="adjudication-state">
-                           <Icons name="loader" size={21} className="adjudication-spinner" aria-hidden="true" />
-                           <p>Loading Adjudication cases…</p>
-                        </div>
-                     ) : queueError && queue.results.length === 0 ? null : queue.results.length === 0 ? (
-                        <div className="adjudication-state">
-                           <Icons name="list-checks" size={24} aria-hidden="true" />
-                           <h5>{emptyCopy.heading}</h5>
-                           <p>{emptyCopy.body}</p>
-                        </div>
-                     ) : (
-                        <div className="adjudication-case-list">
-                           {queue.results.map((caseItem) => {
-                              const selected = String(selectedCaseId) === String(caseItem.id);
-                              const evidence = caseItem.evidence_review || {};
-
-                              return (
-                                 <button
-                                    key={caseItem.id}
-                                    ref={(node) => {
-                                       const caseKey = String(caseItem.id);
-                                       if (node) {
-                                          queueRowRefs.current.set(caseKey, node);
-                                       } else {
-                                          queueRowRefs.current.delete(caseKey);
-                                       }
-                                    }}
-                                    type="button"
-                                    className={`adjudication-case-row ${selected ? "selected" : ""}`}
-                                    aria-pressed={selected}
-                                    onClick={() => handleSelectCase(caseItem.id)}
-                                 >
-                                    <span className="adjudication-case-row-top">
-                                       <span className="adjudication-case-status">
-                                          {caseItem.status_label || formatLabel(caseItem.status)}
-                                       </span>
-                                       <span className="adjudication-priority">
-                                          Priority: {caseItem.priority_label || formatLabel(caseItem.priority)}
-                                       </span>
-                                       {selected && <span className="adjudication-selected-label">Selected</span>}
-                                    </span>
-
-                                    <strong>{getClaimContext(caseItem)}</strong>
-                                    <span className="adjudication-claim-type">
-                                       Claim type: {formatLabel(caseItem.claim?.claim_type)}
-                                    </span>
-
-                                    <span className="adjudication-evidence-summary">
-                                       <span>Total evidence: {normalizeNonnegativeNumber(evidence.total)}</span>
-                                       <span>Verified: {normalizeNonnegativeNumber(evidence.verified)}</span>
-                                       <span>Rejected: {normalizeNonnegativeNumber(evidence.rejected)}</span>
-                                       <span>Unreviewed: {normalizeNonnegativeNumber(evidence.unreviewed)}</span>
-                                       <span>
-                                          Active Evidence cases: {normalizeNonnegativeNumber(evidence.active_evidence_cases)}
-                                       </span>
-                                    </span>
-
-                                    <span className="adjudication-case-row-meta">
-                                       <span>Source: {formatLabel(caseItem.source)}</span>
-                                       <span>
-                                          Created <FormattedDateTime value={caseItem.created_at} />
-                                       </span>
-                                       <span>
-                                          Updated <FormattedDateTime value={caseItem.updated_at} />
-                                       </span>
-                                       {caseItem.resolved_at && (
-                                          <span>
-                                             Resolved <FormattedDateTime value={caseItem.resolved_at} />
-                                          </span>
-                                       )}
-                                       <span>Case {formatCaseReference(caseItem.id)}</span>
-                                    </span>
-
-                                    {caseItem.adjudication_blocked && (
-                                       <span className="adjudication-history-indicator">
-                                          <Icons name="clock" size={13} aria-hidden="true" />
-                                          Decision history exists
-                                       </span>
-                                    )}
-                                 </button>
-                              );
-                           })}
-                        </div>
-                     )}
-
-                     <nav className="adjudication-pagination" aria-label="Adjudication queue pagination">
-                        <Button
-                           type="button"
-                           variant="secondary"
-                           density="compact"
-                           leadingIcon={<Icons name="chevron-left" size={15} aria-hidden="true" />}
-                           disabled={!hasPreviousPage || queueLoading}
-                           onClick={() =>
-                              replaceQueueScope({ nextOffset: Math.max(0, offset - (queue.limit || PAGE_SIZE)) })
-                           }
-                        >
-                           Previous
-                        </Button>
-                        <span>
-                           Page {currentPage} of {totalPages}
-                        </span>
-                        <Button
-                           type="button"
-                           variant="secondary"
-                           density="compact"
-                           trailingIcon={<Icons name="chevron-right" size={15} aria-hidden="true" />}
-                           disabled={!hasNextPage || queueLoading}
-                           onClick={() =>
-                              replaceQueueScope({ nextOffset: offset + (queue.limit || PAGE_SIZE) })
-                           }
-                        >
-                           Next
-                        </Button>
-                     </nav>
-                  </section>
+               <div className={`adjudication-workspace-grid ${selectedCaseId ? "has-selection" : ""} ${guidedMode ? "is-guided" : ""}`}>
+                  {!guidedMode && (
+                                       <section
+                                          className="adjudication-queue"
+                                          aria-labelledby="adjudication-queue-heading"
+                                          aria-busy={queueLoading}
+                                       >
+                                          <div className="adjudication-section-heading">
+                                             <div>
+                                                <h4 id="adjudication-queue-heading" ref={queueHeadingRef} tabIndex="-1">
+                                                   Filtered case queue
+                                                </h4>
+                                                <p>{activeStatusLabel} · Scoped to {organizationName || "the selected organization"}.</p>
+                                             </div>
+                                          </div>
+                     
+                                          {queueError && (
+                                             <div className="adjudication-contained-error" role="alert">
+                                                <strong>Adjudication queue unavailable</strong>
+                                                <span>{queueError}</span>
+                                                {queue.results.length > 0 && <span>Previously loaded results remain visible below.</span>}
+                                                <Button
+                                                   type="button"
+                                                   variant="secondary"
+                                                   density="compact"
+                                                   onClick={() => requestQueueRefresh({ preserveRows: false })}
+                                                >
+                                                   Retry
+                                                </Button>
+                                             </div>
+                                          )}
+                     
+                                          {queueLoading && queue.results.length === 0 ? (
+                                             <div className="adjudication-state">
+                                                <Icons name="loader" size={21} className="adjudication-spinner" aria-hidden="true" />
+                                                <p>Loading Adjudication cases…</p>
+                                             </div>
+                                          ) : queueError && queue.results.length === 0 ? null : queue.results.length === 0 ? (
+                                             <div className="adjudication-state">
+                                                <Icons name="list-checks" size={24} aria-hidden="true" />
+                                                <h5>{emptyCopy.heading}</h5>
+                                                <p>{emptyCopy.body}</p>
+                                             </div>
+                                          ) : (
+                                             <div className="adjudication-case-list">
+                                                {queue.results.map((caseItem) => {
+                                                   const selected = String(selectedCaseId) === String(caseItem.id);
+                                                   const evidence = caseItem.evidence_review || {};
+                     
+                                                   return (
+                                                      <button
+                                                         key={caseItem.id}
+                                                         ref={(node) => {
+                                                            const caseKey = String(caseItem.id);
+                                                            if (node) {
+                                                               queueRowRefs.current.set(caseKey, node);
+                                                            } else {
+                                                               queueRowRefs.current.delete(caseKey);
+                                                            }
+                                                         }}
+                                                         type="button"
+                                                         className={`adjudication-case-row ${selected ? "selected" : ""}`}
+                                                         aria-pressed={selected}
+                                                         onClick={() => handleSelectCase(caseItem.id)}
+                                                      >
+                                                         <span className="adjudication-case-row-top">
+                                                            <span className="adjudication-case-status">
+                                                               {caseItem.status_label || formatLabel(caseItem.status)}
+                                                            </span>
+                                                            <span className="adjudication-priority">
+                                                               Priority: {caseItem.priority_label || formatLabel(caseItem.priority)}
+                                                            </span>
+                                                            {selected && <span className="adjudication-selected-label">Selected</span>}
+                                                         </span>
+                     
+                                                         <strong>{getClaimContext(caseItem)}</strong>
+                                                         <span className="adjudication-claim-type">
+                                                            Claim type: {formatLabel(caseItem.claim?.claim_type)}
+                                                         </span>
+                     
+                                                         <span className="adjudication-evidence-summary">
+                                                            <span>Total evidence: {normalizeNonnegativeNumber(evidence.total)}</span>
+                                                            <span>Verified: {normalizeNonnegativeNumber(evidence.verified)}</span>
+                                                            <span>Rejected: {normalizeNonnegativeNumber(evidence.rejected)}</span>
+                                                            <span>Unreviewed: {normalizeNonnegativeNumber(evidence.unreviewed)}</span>
+                                                            <span>
+                                                               Active Evidence cases: {normalizeNonnegativeNumber(evidence.active_evidence_cases)}
+                                                            </span>
+                                                         </span>
+                     
+                                                         <span className="adjudication-case-row-meta">
+                                                            <span>Source: {formatLabel(caseItem.source)}</span>
+                                                            <span>
+                                                               Created <FormattedDateTime value={caseItem.created_at} />
+                                                            </span>
+                                                            <span>
+                                                               Updated <FormattedDateTime value={caseItem.updated_at} />
+                                                            </span>
+                                                            {caseItem.resolved_at && (
+                                                               <span>
+                                                                  Resolved <FormattedDateTime value={caseItem.resolved_at} />
+                                                               </span>
+                                                            )}
+                                                            <span>Case {formatCaseReference(caseItem.id)}</span>
+                                                         </span>
+                     
+                                                         {caseItem.adjudication_blocked && (
+                                                            <span className="adjudication-history-indicator">
+                                                               <Icons name="clock" size={13} aria-hidden="true" />
+                                                               Decision history exists
+                                                            </span>
+                                                         )}
+                                                      </button>
+                                                   );
+                                                })}
+                                             </div>
+                                          )}
+                     
+                                          <nav className="adjudication-pagination" aria-label="Adjudication queue pagination">
+                                             <Button
+                                                type="button"
+                                                variant="secondary"
+                                                density="compact"
+                                                leadingIcon={<Icons name="chevron-left" size={15} aria-hidden="true" />}
+                                                disabled={!hasPreviousPage || queueLoading}
+                                                onClick={() =>
+                                                   replaceQueueScope({ nextOffset: Math.max(0, offset - (queue.limit || PAGE_SIZE)) })
+                                                }
+                                             >
+                                                Previous
+                                             </Button>
+                                             <span>
+                                                Page {currentPage} of {totalPages}
+                                             </span>
+                                             <Button
+                                                type="button"
+                                                variant="secondary"
+                                                density="compact"
+                                                trailingIcon={<Icons name="chevron-right" size={15} aria-hidden="true" />}
+                                                disabled={!hasNextPage || queueLoading}
+                                                onClick={() =>
+                                                   replaceQueueScope({ nextOffset: offset + (queue.limit || PAGE_SIZE) })
+                                                }
+                                             >
+                                                Next
+                                             </Button>
+                                          </nav>
+                                       </section>
+                     
+                     
+                  )}
 
                   <section
                      className="adjudication-selection"
@@ -1737,6 +1760,7 @@ function AdjudicationReviewContent({
                      {selectedCaseId ? (
                         <div className="adjudication-selection-content">
                            <div className="adjudication-detail-actions">
+                              {!guidedMode && (
                               <Button
                                  type="button"
                                  variant="secondary"
@@ -1747,6 +1771,7 @@ function AdjudicationReviewContent({
                               >
                                  Return to queue
                               </Button>
+                              )}
                               <Button
                                  type="button"
                                  variant="secondary"
@@ -1780,7 +1805,7 @@ function AdjudicationReviewContent({
                               )}
                            </header>
 
-                           {viewingOutsideCurrentQueue && (
+                           {!guidedMode && viewingOutsideCurrentQueue && (
                               <p className="adjudication-outside-queue-note">
                                  <Icons name="info" size={15} aria-hidden="true" />
                                  Viewing a selected case outside the current queue results. Use the case-status filters to find active or resolved history when applicable.
@@ -1850,7 +1875,17 @@ function AdjudicationReviewContent({
                                        <div>
                                           <strong>Adjudication recorded</strong>
                                           <span>{selectedActionNotice.message}</span>
-                                          {returnToInvestigationPath && (
+                                          {onReturnToInvestigation ? (
+                                             <Button
+                                                type="button"
+                                                variant="secondary"
+                                                density="compact"
+                                                trailingIcon={<Icons name="arrow-right" size={13} aria-hidden="true" />}
+                                                onClick={onReturnToInvestigation}
+                                             >
+                                                Continue investigation
+                                             </Button>
+                                          ) : returnToInvestigationPath ? (
                                              <Link
                                                 to={returnToInvestigationPath}
                                                 className="adjudication-return-investigation"
@@ -1858,7 +1893,7 @@ function AdjudicationReviewContent({
                                                 Return to investigation
                                                 <Icons name="arrow-right" size={13} aria-hidden="true" />
                                              </Link>
-                                          )}
+                                          ) : null}
                                        </div>
                                     </div>
                                  )}
