@@ -369,7 +369,9 @@ function InvestigationWorkspacePage() {
    const ownerLabel = data.assignment.claimed_by?.username
       ? `@${data.assignment.claimed_by.username}`
       : "Organization";
-   const humanDecisionLabel = adjudication.current_decision?.verdict\n      ? formatLabel(adjudication.current_decision.verdict)\n      : "Not recorded";
+   const humanDecisionLabel = adjudication.current_decision?.verdict
+      ? formatLabel(adjudication.current_decision.verdict)
+      : "Not recorded";
    const publicationLabel = publication ? formatLabel(publication.publication_status) : "Not started";
 
    return (
