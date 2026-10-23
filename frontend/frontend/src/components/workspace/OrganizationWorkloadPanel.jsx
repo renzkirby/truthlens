@@ -79,13 +79,16 @@ function OrganizationWorkloadPanel({
 
    useEffect(() => {
       const timer = window.setTimeout(() => {
-         setSearch(searchInput.trim());
+         const nextSearch = searchInput.trim();
+         if (nextSearch === search) return;
+
+         setSearch(nextSearch);
          setOffset(0);
          setLoading(true);
       }, 300);
 
       return () => window.clearTimeout(timer);
-   }, [searchInput]);
+   }, [search, searchInput]);
 
    const workloadUrl = useMemo(() => {
       if (!organizationId) return null;
@@ -269,12 +272,11 @@ function OrganizationWorkloadPanel({
             </Button>
          </div>
 
-         <div className="workload-view-tabs" role="tablist" aria-label="Investigation ownership">
+         <div className="workload-view-tabs" aria-label="Investigation ownership">
             <button
                type="button"
                className={ownership === "all" ? "active" : ""}
-               role="tab"
-               aria-selected={ownership === "all"}
+               aria-pressed={ownership === "all"}
                onClick={() => updateOwnership("all")}
             >
                All active
@@ -282,8 +284,7 @@ function OrganizationWorkloadPanel({
             <button
                type="button"
                className={ownership === "mine" ? "active" : ""}
-               role="tab"
-               aria-selected={ownership === "mine"}
+               aria-pressed={ownership === "mine"}
                onClick={() => updateOwnership("mine")}
             >
                My work
