@@ -3,6 +3,18 @@
    margin-top: 24px;
 }
 
+.evidence-review-panel.is-guided {
+   margin-top: 0;
+}
+
+.evidence-workspace-grid.is-guided {
+   grid-template-columns: minmax(0, 1fr);
+}
+
+.evidence-workspace-grid.is-guided .evidence-detail {
+   width: 100%;
+}
+
 .evidence-panel-intro,
 .evidence-toolbar,
 .evidence-section-heading,
