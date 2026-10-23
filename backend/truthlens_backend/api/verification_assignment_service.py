@@ -190,10 +190,18 @@ def get_available_verification_assignments():
 
 def get_organization_verification_workload(
     organization,
+    *,
+    search="",
+    claim_type=None,
+    claimed_by=None,
+    sort="newest",
 ):
     """
     Return active factual-verification work currently
     owned by one partner organization.
+
+    Optional filters are intentionally limited to the
+    scannable Investigations list surface.
     """
 
     queryset = (
@@ -209,11 +217,31 @@ def get_organization_verification_workload(
         .prefetch_related(
             "claim__threads",
         )
-        .order_by(
+    )
+
+    normalized_search = (search or "").strip()
+    if normalized_search:
+        queryset = queryset.filter(
+            Q(claim__context_text__icontains=normalized_search)
+            | Q(claimed_by__username__icontains=normalized_search)
+        )
+
+    if claim_type:
+        queryset = queryset.filter(claim__claim_type=claim_type)
+
+    if claimed_by is not None:
+        queryset = queryset.filter(claimed_by=claimed_by)
+
+    if sort == "oldest":
+        queryset = queryset.order_by(
+            "claimed_at",
+            "created_at",
+        )
+    else:
+        queryset = queryset.order_by(
             "-claimed_at",
             "-created_at",
         )
-    )
 
     return prefetch_claim_adjudication_provenance(
         queryset,
