@@ -9,6 +9,111 @@
    margin-top: 0;
 }
 
+.adjudication-review-panel.is-guided .is-guided-redundant {
+   display: none;
+}
+
+.adjudication-review-panel.is-guided .adjudication-detail-layout {
+   grid-template-columns: minmax(0, 1fr);
+   gap: 0;
+}
+
+.adjudication-review-panel.is-guided .adjudication-context-rail {
+   padding-left: 0;
+   border-left: 0;
+}
+
+.adjudication-review-panel.is-guided .adjudication-guided-secondary {
+   display: none;
+}
+
+.adjudication-review-panel.is-guided .adjudication-guided-secondary.is-visible {
+   display: block;
+}
+
+.adjudication-review-panel.is-guided .adjudication-subheading-row {
+   margin-bottom: 12px;
+}
+
+.adjudication-review-panel.is-guided .adjudication-detail-section > .adjudication-subheading-row {
+   padding: 0;
+   border-left: 0;
+   background: transparent;
+}
+
+.adjudication-review-panel.is-guided .adjudication-detail-section + .adjudication-detail-section {
+   margin-top: 18px;
+   padding-top: 18px;
+   border-top: 1px solid var(--border-light);
+}
+
+.adjudication-guided-controls {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 16px;
+   margin-bottom: 16px;
+   padding: 12px 14px;
+   border: 1px solid var(--border-light);
+   border-radius: 10px;
+   background: var(--bg-subtle);
+}
+
+.adjudication-guided-controls > div {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   gap: 3px;
+}
+
+.adjudication-guided-controls strong {
+   color: var(--text-main);
+   font-size: 0.78rem;
+}
+
+.adjudication-guided-controls span {
+   color: var(--text-muted);
+   font-size: 0.7rem;
+   line-height: 1.45;
+}
+
+.adjudication-evidence-disclosure-control {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 12px;
+   margin-top: 12px;
+}
+
+.adjudication-evidence-disclosure-control > span {
+   color: var(--text-muted);
+   font-size: 0.7rem;
+   line-height: 1.45;
+   text-align: right;
+}
+
+.adjudication-evidence-list.is-guided-collapsed {
+   display: none;
+}
+
+.adjudication-review-panel.is-guided .adjudication-readiness-state {
+   margin-top: 4px;
+}
+
+.adjudication-review-panel.is-guided .adjudication-blocker-group {
+   margin-top: 12px;
+}
+
+.adjudication-review-panel.is-guided .adjudication-readiness-meta {
+   margin-top: 12px;
+}
+
+.adjudication-review-panel.is-guided .adjudication-decision-entry,
+.adjudication-review-panel.is-guided .adjudication-decision-form,
+.adjudication-review-panel.is-guided .adjudication-decision-confirmation {
+   max-width: 780px;
+}
+
 .adjudication-workspace-grid.is-guided {
    grid-template-columns: minmax(0, 1fr);
 }
@@ -1821,4 +1926,16 @@
 
 .adjudication-guided-cue-link:hover {
    text-decoration: underline;
+}
+
+@media (max-width: 700px) {
+   .adjudication-guided-controls,
+   .adjudication-evidence-disclosure-control {
+      align-items: flex-start;
+      flex-direction: column;
+   }
+
+   .adjudication-evidence-disclosure-control > span {
+      text-align: left;
+   }
 }
