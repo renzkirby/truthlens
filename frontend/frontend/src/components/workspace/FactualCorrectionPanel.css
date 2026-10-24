@@ -513,17 +513,27 @@
 }
 
 .correction-evidence-title strong,
-.correction-evidence-title span,
+.correction-evidence-title > div > span,
 .correction-external-link,
 .correction-invalid-url,
 .correction-review-provenance p {
    overflow-wrap: anywhere;
 }
 
-.correction-evidence-title span,
+.correction-evidence-title > div > span,
 .correction-invalid-url {
    color: var(--tl-color-text-muted);
    font-size: var(--tl-text-xs);
+}
+
+.correction-evidence-title > .tl-badge {
+   flex: 0 0 auto;
+   white-space: nowrap;
+}
+
+.correction-evidence-title > .tl-badge .tl-badge__label {
+   overflow-wrap: normal;
+   white-space: nowrap;
 }
 
 .correction-external-link {
