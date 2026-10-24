@@ -963,6 +963,7 @@ function FactualCorrectionContent({
       eligibleVerificationRuns,
       selectedVerificationRunId,
    );
+   const correctionSourceModel = useMemo(() => correctionEvidenceSourceModel(detail), [detail]);
    const hasUnresolvedLinkedVerificationRun = Boolean(selectedVerificationRunId && !selectedVerificationRun);
    const showVerificationRunSelect = Boolean(
       eligibleVerificationRuns && (eligibleVerificationRuns.length > 0 || selectedVerificationRunId),
@@ -1432,11 +1433,15 @@ function FactualCorrectionContent({
       if (editor.headline.trim().length > 300) {
          errors.headline = "Headline must be 300 characters or fewer.";
       }
-      const sources = editor.source_urls.map((value) => value.trim()).filter(Boolean);
+      const sourceRows = editor.source_urls.map((value) => String(value || ""));
+      const sources = sourceRows.map((value) => value.trim()).filter(Boolean);
+      const sourceIssues = sourceRows
+         .map((value, index) => sourceRowIssue(value, sourceRows, index, correctionSourceModel.rejectedKeys))
+         .filter(Boolean);
       if (sources.length === 0) {
-         errors.source_urls = "Add at least one HTTP or HTTPS source URL.";
-      } else if (sources.some((value) => !safeExternalUrl(value))) {
-         errors.source_urls = "Each source must be a valid HTTP or HTTPS URL.";
+         errors.source_urls = "Add at least one source for this correction.";
+      } else if (sourceIssues.length > 0) {
+         errors.source_urls = sourceIssues[0];
       }
       setFieldErrors(errors);
       const firstInvalid = Object.keys(errors)[0];
@@ -1926,67 +1931,17 @@ function FactualCorrectionContent({
                   </span>
                ) : null}
             </div>
-            <fieldset className="correction-source-editor correction-field--wide">
-               <legend>Source URLs</legend>
-               <p>Only HTTP and HTTPS URLs can be submitted. Validation rules are checked when you save.</p>
-               {editor.source_urls.map((url, index) => (
-                  <div key={index} className="correction-source-row">
-                     <label className="sr-only" htmlFor={`correction-source-${index}`}>
-                        Source URL {index + 1}
-                     </label>
-                     <Input
-                        ref={index === 0 ? proposalRefs.source_urls : undefined}
-                        id={`correction-source-${index}`}
-                        type="url"
-                        maxLength={2000}
-                        value={url}
-                        disabled={!canEditProposal || Boolean(mutation)}
-                        invalid={Boolean(fieldError(fieldErrors, "source_urls"))}
-                        aria-describedby={
-                           fieldError(fieldErrors, "source_urls") ? "correction-source-error" : undefined
-                        }
-                        onChange={(event) => {
-                           setEditor((current) => ({
-                              ...current,
-                              source_urls: current.source_urls.map((item, itemIndex) =>
-                                 itemIndex === index ? event.target.value : item,
-                              ),
-                           }));
-                           setFieldErrors((current) => ({ ...current, source_urls: undefined }));
-                        }}
-                     />
-                     <Button
-                        type="button"
-                        variant="ghost"
-                        density="compact"
-                        aria-label={`Remove source URL ${index + 1}`}
-                        disabled={!canEditProposal || Boolean(mutation) || editor.source_urls.length === 1}
-                        onClick={() =>
-                           setEditor((current) => ({
-                              ...current,
-                              source_urls: current.source_urls.filter((_, itemIndex) => itemIndex !== index),
-                           }))
-                        }
-                     >
-                        Remove
-                     </Button>
-                  </div>
-               ))}
-               {fieldError(fieldErrors, "source_urls") ? (
-                  <span id="correction-source-error" className="correction-field-error">
-                     {fieldError(fieldErrors, "source_urls")}
-                  </span>
-               ) : null}
-               <Button
-                  type="button"
-                  variant="secondary"
-                  density="compact"
+            <div className="correction-field correction-field--wide">
+               <CorrectionSourceEditor
+                  value={editor.source_urls}
                   disabled={!canEditProposal || Boolean(mutation)}
-                  onClick={() => setEditor((current) => ({ ...current, source_urls: [...current.source_urls, ""] }))}
-               >
-                  Add source
-               </Button>
-            </fieldset>
+                  verifiedOptions={correctionSourceModel.verifiedOptions}
+                  rejectedKeys={correctionSourceModel.rejectedKeys}
+                  error={fieldError(fieldErrors, "source_urls")}
+                  inputRef={proposalRefs.source_urls}
+                  onChange={(nextSources) => updateEditor("source_urls", nextSources)}
+               />
+            </div>
             <div className="correction-field correction-field--wide">
                <label htmlFor={showVerificationRunSelect ? "correction-verification-run" : undefined}>
                   Supporting verification run <span>(optional)</span>
