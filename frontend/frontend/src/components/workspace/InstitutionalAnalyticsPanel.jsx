@@ -1173,10 +1173,10 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
    return (
       <section className="institutional-analytics" aria-labelledby={headingId}>
          <header className="institutional-analytics__header">
-            <h3 id={headingId}>Organization overview</h3>
+            <h3 id={headingId}>Institutional overview</h3>
             <p>
-               Current work{organizationName ? ` at ${organizationName}` : ""} and eligible recorded activity, presented
-               separately so the measurements remain clear.
+               Current work{organizationName ? ` at ${organizationName}` : ""}, selected-period activity, and recorded
+               institutional outcomes presented with their measurement scope kept explicit.
             </p>
          </header>
 
@@ -1204,9 +1204,9 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
                <section className="institutional-analytics__section institutional-analytics__section--current">
                   <header className="institutional-analytics__section-header">
                      <span className="institutional-analytics__coverage-label institutional-analytics__coverage-label--current">
-                        Current operational records
+                        Current snapshot
                      </span>
-                     <h4>Your organization at a glance</h4>
+                     <h4>Current organization snapshot</h4>
                      <p>Publication and verification work in your organization right now.</p>
                   </header>
 
@@ -1255,73 +1255,6 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
                   <p className="institutional-analytics__overlap-note">
                      These categories describe different types of work and may overlap.
                   </p>
-               </section>
-
-               <section className="institutional-analytics__section">
-                  <header className="institutional-analytics__section-header">
-                     <span className="institutional-analytics__coverage-label">Recorded activity since tracking began</span>
-                     <h4>Institutional activity since tracking began</h4>
-                     <p>
-                        These are eligible actions recorded since institutional tracking began. Earlier work has not
-                        been reconstructed.
-                     </p>
-                  </header>
-
-                  <div className="institutional-analytics__activity-grid">
-                     <section className="institutional-analytics__activity-group">
-                        <h5>Evidence review</h5>
-                        <dl className="institutional-analytics__principal-metric">
-                           <dt>Evidence review decisions</dt>
-                           <dd>{formatCount(activity?.evidence_review?.decisions)}</dd>
-                        </dl>
-                        <MetricList
-                           compact
-                           items={[
-                              ["Evidence verified", formatCount(activity?.evidence_review?.verified)],
-                              ["Evidence rejected", formatCount(activity?.evidence_review?.rejected)],
-                           ]}
-                        />
-                        <p className="institutional-analytics__supporting-copy">
-                           Evidence verified means submissions verified by reviewers, not claims proven FACT.
-                        </p>
-                     </section>
-
-                     <section className="institutional-analytics__activity-group">
-                        <h5>Adjudication and publication</h5>
-                        <dl className="institutional-analytics__principal-metric">
-                           <dt>Verdicts issued</dt>
-                           <dd>{formatCount(activity?.adjudication?.verdicts_issued)}</dd>
-                        </dl>
-                        <MetricList
-                           compact
-                           items={[
-                              ["Adjudications started", formatCount(activity?.adjudication?.started)],
-                              ["Initial publications recorded", formatCount(activity?.publication?.initial_published)],
-                           ]}
-                        />
-                        <p className="institutional-analytics__supporting-copy">
-                           These are recorded events, not totals of all current decisions or published fact-checks.
-                        </p>
-                     </section>
-
-                     <section className="institutional-analytics__activity-group">
-                        <h5>Reviewer participation</h5>
-                        <dl className="institutional-analytics__principal-metric">
-                           <dt>Unique observed reviewers</dt>
-                           <dd>{formatCount(reviewers?.unique_reviewers)}</dd>
-                        </dl>
-                        <MetricList
-                           compact
-                           items={[
-                              ["Evidence-review reviewers", formatCount(reviewers?.by_stage?.evidence_review)],
-                              ["Adjudication reviewers", formatCount(reviewers?.by_stage?.adjudication)],
-                           ]}
-                        />
-                        <p className="institutional-analytics__supporting-copy">
-                           Distinct recorded identities, not current staff headcount. One reviewer may appear in both stages.
-                        </p>
-                     </section>
-                  </div>
                </section>
 
                <ActivityTrendsSection
@@ -1460,6 +1393,80 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
                   </section>
 
                </div>
+
+               <details className="institutional-analytics__history">
+                  <summary>
+                     <span>
+                        <strong>Recorded history since tracking began</strong>
+                        <small>
+                           Cumulative evidence-review, adjudication, publication, and reviewer activity outside the selected
+                           reporting-period view.
+                        </small>
+                     </span>
+                     <span className="institutional-analytics__history-scope">Cumulative history</span>
+                  </summary>
+                  <div className="institutional-analytics__history-content">
+                     <p className="institutional-analytics__history-note">
+                        These are eligible actions recorded since institutional tracking began. Earlier work has not been
+                        reconstructed, and these counts should not be read as current-state totals.
+                     </p>
+                     <div className="institutional-analytics__activity-grid">
+                        <section className="institutional-analytics__activity-group">
+                           <h5>Evidence review</h5>
+                           <dl className="institutional-analytics__principal-metric">
+                              <dt>Evidence review decisions</dt>
+                              <dd>{formatCount(activity?.evidence_review?.decisions)}</dd>
+                           </dl>
+                           <MetricList
+                              compact
+                              items={[
+                                 ["Evidence verified", formatCount(activity?.evidence_review?.verified)],
+                                 ["Evidence rejected", formatCount(activity?.evidence_review?.rejected)],
+                              ]}
+                           />
+                           <p className="institutional-analytics__supporting-copy">
+                              Evidence verified means submissions verified by reviewers, not claims proven FACT.
+                           </p>
+                        </section>
+
+                        <section className="institutional-analytics__activity-group">
+                           <h5>Adjudication and publication</h5>
+                           <dl className="institutional-analytics__principal-metric">
+                              <dt>Verdicts issued</dt>
+                              <dd>{formatCount(activity?.adjudication?.verdicts_issued)}</dd>
+                           </dl>
+                           <MetricList
+                              compact
+                              items={[
+                                 ["Adjudications started", formatCount(activity?.adjudication?.started)],
+                                 ["Initial publications recorded", formatCount(activity?.publication?.initial_published)],
+                              ]}
+                           />
+                           <p className="institutional-analytics__supporting-copy">
+                              These are recorded events, not totals of all current decisions or published fact-checks.
+                           </p>
+                        </section>
+
+                        <section className="institutional-analytics__activity-group">
+                           <h5>Reviewer participation</h5>
+                           <dl className="institutional-analytics__principal-metric">
+                              <dt>Unique observed reviewers</dt>
+                              <dd>{formatCount(reviewers?.unique_reviewers)}</dd>
+                           </dl>
+                           <MetricList
+                              compact
+                              items={[
+                                 ["Evidence-review reviewers", formatCount(reviewers?.by_stage?.evidence_review)],
+                                 ["Adjudication reviewers", formatCount(reviewers?.by_stage?.adjudication)],
+                              ]}
+                           />
+                           <p className="institutional-analytics__supporting-copy">
+                              Distinct recorded identities, not current staff headcount. One reviewer may appear in both stages.
+                           </p>
+                        </section>
+                     </div>
+                  </div>
+               </details>
 
                <section className="institutional-analytics__section institutional-analytics__observations">
                   <header className="institutional-analytics__section-header">
