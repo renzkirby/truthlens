@@ -1621,7 +1621,7 @@ function PublishingContent({
                   <p>{actionError}</p>
                </div>
             ) : null}
-            <div className="publishing-confirmation">
+            <div className="publishing-confirmation publishing-confirmation--publish">
                <div className="publishing-confirmation-heading">
                   <Icons name="landmark" size={20} />
                   <div>
@@ -1709,7 +1709,7 @@ function PublishingContent({
                   <p>{actionError}</p>
                </div>
             ) : null}
-            <form className="publishing-confirmation" onSubmit={handleReturnForRework}>
+            <form className="publishing-confirmation publishing-confirmation--rework" onSubmit={handleReturnForRework}>
                <div className="publishing-confirmation-heading">
                   <Icons name="arrow-left" size={20} />
                   <div>
