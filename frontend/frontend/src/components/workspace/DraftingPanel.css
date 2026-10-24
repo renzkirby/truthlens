@@ -163,6 +163,51 @@
    flex: 0 0 auto;
 }
 
+.drafting-view-switcher {
+   display: inline-flex;
+   align-items: center;
+   gap: var(--tl-space-1);
+   margin-bottom: var(--tl-space-4);
+   padding: var(--tl-space-1);
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: var(--tl-radius-md);
+   background: var(--tl-color-bg-subtle);
+}
+
+.drafting-view-switcher button {
+   min-height: 2.25rem;
+   padding: var(--tl-space-2) var(--tl-space-3);
+   border: 0;
+   border-radius: var(--tl-radius-sm);
+   background: transparent;
+   color: var(--tl-color-text-muted);
+   font: inherit;
+   font-size: var(--tl-text-sm);
+   font-weight: 700;
+   cursor: pointer;
+}
+
+.drafting-view-switcher button:hover {
+   background: var(--tl-color-bg-surface);
+   color: var(--tl-color-text-main);
+}
+
+.drafting-view-switcher button.is-active {
+   background: var(--tl-color-bg-surface);
+   color: var(--tl-color-text-main);
+   box-shadow: var(--tl-shadow-xs);
+}
+
+.drafting-view-switcher button:focus-visible {
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
+}
+
+.drafting-view-switcher button:disabled {
+   opacity: 0.58;
+   cursor: not-allowed;
+}
+
 .drafting-state {
    min-height: 13rem;
    display: flex;
@@ -497,10 +542,22 @@
    margin-bottom: var(--tl-space-1);
 }
 
+.drafting-archive-summary {
+   padding: var(--tl-space-4);
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: var(--tl-radius-md);
+   background: var(--tl-color-bg-subtle);
+}
+
+.drafting-archive-summary + .drafting-readonly-article {
+   margin-top: var(--tl-space-5);
+}
+
 .drafting-provenance-section,
 .drafting-article-context,
 .drafting-editor,
 .drafting-readonly-article,
+.drafting-archive-summary,
 .drafting-blockers,
 .drafting-danger-zone {
    margin-top: var(--tl-space-6);
@@ -950,6 +1007,17 @@
 }
 
 @container drafting-panel (max-width: 650px) {
+   .drafting-view-switcher {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      width: 100%;
+      box-sizing: border-box;
+   }
+
+   .drafting-view-switcher button {
+      width: 100%;
+   }
+
    .drafting-detail-header,
    .drafting-section-heading,
    .drafting-source-list > li,
