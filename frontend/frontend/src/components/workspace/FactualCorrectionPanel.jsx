@@ -159,10 +159,9 @@ function correctionEvidenceSourceModel(detail) {
       const reviewedStatus = item?.correction_review?.new_evidence_status || item?.evidence_status;
       if (reviewedStatus === "REJECTED") {
          rejectedKeys.add(key);
-         verified.delete(key);
          return;
       }
-      if (reviewedStatus !== "VERIFIED" || rejectedKeys.has(key)) {
+      if (reviewedStatus !== "VERIFIED") {
          return;
       }
 
@@ -190,7 +189,7 @@ function correctionEvidenceSourceModel(detail) {
       verifiedOptions: Array.from(verified.values()).sort((left, right) =>
          (left.caption || left.url).localeCompare(right.caption || right.url),
       ),
-      rejectedKeys,
+      rejectedKeys: new Set(Array.from(rejectedKeys).filter((key) => !verified.has(key))),
    };
 }
 
