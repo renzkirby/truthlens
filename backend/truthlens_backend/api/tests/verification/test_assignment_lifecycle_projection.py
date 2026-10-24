@@ -184,9 +184,13 @@ class AssignmentLifecycleProjectionTests(TestCase):
         for action in (actions.VERIFICATION_ASSIGNMENT_RELEASED,
                        actions.VERIFICATION_ASSIGNMENT_COMPLETED):
             with self.subTest(action=action):
-                with transaction.atomic():
-                    self.record(action, at=self.terminal_at)
-                    self.assertEqual(self.project(), [])
+                assignment_id = str(uuid.uuid4())
+                self.record(
+                    action,
+                    assignment_id=assignment_id,
+                    at=self.terminal_at,
+                )
+                self.assertEqual(self.project(), [])
 
     def test_duplicate_claimed_or_terminal_events_fail_closed(self):
         actions = AccountabilityEvent.ActionType
