@@ -1835,7 +1835,7 @@ function DraftingContent({
             title: operation.workflowKind === "EDITORIAL_REVISION" ? "Editorial revision abandoned" : "Draft abandoned",
             message:
                operation.workflowKind === "EDITORIAL_REVISION"
-                  ? "The revision was archived and was not added to publication history."
+                  ? "The revision was archived and was not added to publication history. You can review it later under Archived drafts."
                   : "The draft was archived. You can review it later under Archived drafts; the claim remains available for future publication work.",
             duration: WORKSPACE_LONG_TOAST_DURATION,
          });
@@ -2019,7 +2019,10 @@ function DraftingContent({
                            Drafting
                         </h3>
                         <p>
-                           {queue.count} {isArchivedView ? "archived drafts" : "active publication work items"}
+                           {queue.count}{" "}
+                           {isArchivedView
+                              ? `archived draft${queue.count === 1 ? "" : "s"}`
+                              : `active publication work item${queue.count === 1 ? "" : "s"}`}
                         </p>
                      </div>
                      <Button
@@ -2140,7 +2143,9 @@ function DraftingContent({
                                              </span>
                                           </>
                                        ) : null}
-                                       {Array.isArray(item?.blockers) && item.blockers.length > 0 ? (
+                                       {item?.article?.publication_status !== "ARCHIVED" &&
+                                       Array.isArray(item?.blockers) &&
+                                       item.blockers.length > 0 ? (
                                           <span className="drafting-row-blockers">
                                              {item.blockers.length} readiness blocker
                                              {item.blockers.length === 1 ? "" : "s"}
