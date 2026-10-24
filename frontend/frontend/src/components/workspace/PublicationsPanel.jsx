@@ -528,10 +528,10 @@ function PublicationsContent({
    }, [correctionOpen, correctionReason]);
 
    useEffect(() => {
-      if (notice || actionError || authorityError) {
+      if (actionError || authorityError) {
          requestAnimationFrame(() => messageRef.current?.focus());
       }
-   }, [actionError, authorityError, notice]);
+   }, [actionError, authorityError]);
 
    useEffect(() => {
       let cancelled = false;
