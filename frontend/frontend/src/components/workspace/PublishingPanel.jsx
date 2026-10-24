@@ -328,7 +328,7 @@ function Readiness({ detail }) {
          <div className="publishing-section-heading">
             <div>
                <h4 id="publishing-readiness-heading">Decision readiness</h4>
-               <p>Server-defined workflow conditions determine which publication actions are available.</p>
+               <p>Current workflow conditions determine which publication actions are available.</p>
             </div>
          </div>
 
@@ -1357,7 +1357,7 @@ function PublishingContent({
                         {detailLoading && !detail ? (
                            <div className="publishing-state" role="status">
                               <Icons name="loader" size={22} className="publishing-spinner" />
-                              <strong>Loading canonical review…</strong>
+                              <strong>Loading latest review…</strong>
                            </div>
                         ) : detailError && !detail ? (
                            <div className="publishing-state publishing-state--error" role="alert">
@@ -1426,9 +1426,9 @@ function PublishingContent({
                                        <p>{conflict.detail}</p>
                                        <p>
                                           {conflict.remainsInReview === null
-                                             ? "Loading the latest server state…"
+                                             ? "Loading the latest review state…"
                                              : conflict.remainsInReview
-                                               ? "This review item changed. The latest server state has been loaded."
+                                               ? "This review item changed. The latest review state has been loaded."
                                                : "This item is no longer available in the publication Review queue."}
                                        </p>
                                        {conflict.remainsInReview ? (
