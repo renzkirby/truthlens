@@ -649,9 +649,11 @@ function PublishingContent({
    useEffect(() => {
       if (focusActionMessageRef.current && (actionError || authorityError)) {
          focusActionMessageRef.current = false;
-         actionMessageRef.current?.focus();
+         if (!confirmation) {
+            actionMessageRef.current?.focus();
+         }
       }
-   }, [actionError, authorityError]);
+   }, [actionError, authorityError, confirmation]);
 
    useEffect(() => {
       if (conflict) {
@@ -1613,6 +1615,12 @@ function PublishingContent({
                }
             }}
          >
+            {actionError ? (
+               <div className="publishing-dialog-error" role="alert">
+                  <Icons name="alert-circle" size={18} />
+                  <p>{actionError}</p>
+               </div>
+            ) : null}
             <div className="publishing-confirmation">
                <div className="publishing-confirmation-heading">
                   <Icons name="landmark" size={20} />
@@ -1695,6 +1703,12 @@ function PublishingContent({
                }
             }}
          >
+            {actionError ? (
+               <div className="publishing-dialog-error" role="alert">
+                  <Icons name="alert-circle" size={18} />
+                  <p>{actionError}</p>
+               </div>
+            ) : null}
             <form className="publishing-confirmation" onSubmit={handleReturnForRework}>
                <div className="publishing-confirmation-heading">
                   <Icons name="arrow-left" size={20} />
