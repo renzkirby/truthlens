@@ -1455,9 +1455,10 @@ function PublicationsContent({
 
                               <PublicationReferenceMaterial detail={detail} />
 
-                              {(correctionWorkflow ||
-                              canCreateRevision ||
-                              (Array.isArray(detail.blockers) && detail.blockers.length > 0)) ? (
+                              {detail.history_state === "CURRENT" &&
+                              (correctionWorkflow ||
+                                 canCreateRevision ||
+                                 (Array.isArray(detail.blockers) && detail.blockers.length > 0)) ? (
                                  <section
                                     className="publications-maintenance"
                                     aria-labelledby="publications-maintenance-heading"
