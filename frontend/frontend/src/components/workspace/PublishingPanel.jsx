@@ -316,13 +316,6 @@ function SealedEvidence({ sealedEvidence }) {
             </ol>
          )}
 
-         {sealedEvidence ? (
-            <p className="publishing-snapshot-note">
-               Record {String(sealedEvidence.decision_snapshot_id || "unavailable").slice(0, 8)} · Schema version{" "}
-               {sealedEvidence.schema_version ?? "unavailable"} · Preserved{" "}
-               <FormattedDateTime value={sealedEvidence.captured_at} />
-            </p>
-         ) : null}
       </section>
    );
 }
