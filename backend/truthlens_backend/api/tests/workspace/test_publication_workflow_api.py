@@ -421,7 +421,8 @@ class PublicationWorkflowApiTests(PublicationWorkflowFixtures, APITestCase):
             self.queue_url(queue="REVIEW", view="ARCHIVED")
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("view", response.data)
+        self.assertEqual(response.data["code"], "INVALID_INPUT")
+        self.assertIn("view", response.data["errors"])
 
     def test_initial_drafting_handoff_uses_publication_workflow_eligibility(self):
         eligible = self.decided_context(suffix="handoff-eligible")
