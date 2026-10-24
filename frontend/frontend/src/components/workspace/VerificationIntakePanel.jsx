@@ -6,7 +6,7 @@ import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
 
 import { resolveApiEndpoint } from "../../utils/api";
-import { showWorkspaceSuccess, WORKSPACE_LONG_TOAST_DURATION } from "../../utils/workspaceToast";
+import { showWorkspaceSuccess } from "../../utils/workspaceToast";
 
 import { VERDICT_CONFIG } from "../../utils/constants";
 

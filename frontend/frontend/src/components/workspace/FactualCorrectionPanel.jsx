@@ -505,7 +505,6 @@ function FactualCorrectionContent({
    const [detailError, setDetailError] = useState("");
    const [detailRequestVersion, setDetailRequestVersion] = useState(0);
    const [authorityError, setAuthorityError] = useState("");
-   const [notice, setNotice] = useState(() => initialDirtySnapshotRef.current?.notice || "");
    const [actionError, setActionError] = useState(() => initialDirtySnapshotRef.current?.actionError || "");
    const [fieldErrors, setFieldErrors] = useState(() => initialDirtySnapshotRef.current?.fieldErrors || {});
    const [conflict, setConflict] = useState(() => initialDirtySnapshotRef.current?.conflict || null);
@@ -621,7 +620,6 @@ function FactualCorrectionContent({
       setDetailLoading(false);
       setMutation(null);
       setDialog(null);
-      setNotice("");
       setActionError("");
       setConflict(null);
       setEditor(proposalToEditor(null));
@@ -667,7 +665,6 @@ function FactualCorrectionContent({
             conflict,
             fieldErrors,
             actionError,
-            notice,
          });
          return;
       }
@@ -677,7 +674,7 @@ function FactualCorrectionContent({
       if (dirtyOwnerKeyRef.current === dirtySnapshotKey) {
          dirtyOwnerKeyRef.current = null;
       }
-   }, [actionError, conflict, dirtySnapshotKey, editor, editorBase, fieldErrors, isDirty, notice, requestId]);
+   }, [actionError, conflict, dirtySnapshotKey, editor, editorBase, fieldErrors, isDirty, requestId]);
 
    useEffect(() => {
       onDirtyChange?.(isDirty, isDirty ? discardDirtyDraft : null);
@@ -697,10 +694,10 @@ function FactualCorrectionContent({
    }, [isDirty]);
 
    useEffect(() => {
-      if (notice || actionError || authorityError || conflict) {
+      if (actionError || authorityError || conflict) {
          requestAnimationFrame(() => messageRef.current?.focus());
       }
-   }, [actionError, authorityError, conflict, notice]);
+   }, [actionError, authorityError, conflict]);
 
    useEffect(() => {
       let cancelled = false;
@@ -799,14 +796,12 @@ function FactualCorrectionContent({
             setFieldErrors(restoredSnapshot.fieldErrors || {});
             setConflict(restoredSnapshot.conflict || null);
             setActionError(restoredSnapshot.actionError || "");
-            setNotice(restoredSnapshot.notice || "");
          } else {
             setEditor(proposalToEditor(null));
             setEditorBase(proposalToEditor(null));
             setFieldErrors({});
             setConflict(null);
             setActionError("");
-            setNotice("");
          }
          setEvidenceDrafts({});
          setDialog(null);
@@ -819,7 +814,6 @@ function FactualCorrectionContent({
          setFieldErrors(restoredSnapshot.fieldErrors || {});
          setConflict(restoredSnapshot.conflict || null);
          setActionError(restoredSnapshot.actionError || "");
-         setNotice(restoredSnapshot.notice || "");
       }
 
       let cancelled = false;
@@ -943,7 +937,6 @@ function FactualCorrectionContent({
       mutationRequestIdRef.current = operation.sequence;
       setMutation(kind);
       setActionError("");
-      setNotice("");
       setFieldErrors({});
       setConflict(null);
 
@@ -1839,15 +1832,6 @@ function FactualCorrectionContent({
                      >
                         Retry access
                      </Button>
-                  </div>
-               </div>
-            ) : null}
-            {notice ? (
-               <div className="correction-message correction-message--success" role="status">
-                  <Icons name="check-circle" size={18} />
-                  <div>
-                     <strong>Correction workspace updated</strong>
-                     <p>{notice}</p>
                   </div>
                </div>
             ) : null}
