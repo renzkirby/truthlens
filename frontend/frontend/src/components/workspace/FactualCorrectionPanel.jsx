@@ -497,10 +497,6 @@ function blockersForActions(blockers, actions) {
    );
 }
 
-function hasBlockersForActions(blockers, actions) {
-   return Object.keys(blockersForActions(blockers, actions)).length > 0;
-}
-
 function CorrectionWorkDisclosure({ title, description, meta, children }) {
    return (
       <details className="correction-work-disclosure">
@@ -1747,6 +1743,12 @@ function FactualCorrectionContent({
             <>
                {renderEvidence()}
                {Object.keys(reviewBlockers).length > 0 ? <Blockers blockers={reviewBlockers} /> : null}
+               {!allowedActions.includes("REVIEW_CORRECTION_EVIDENCE") &&
+               Object.keys(reviewBlockers).length === 0 ? (
+                  <p className="correction-permission-note">
+                     Correction evidence is read-only with your current permissions.
+                  </p>
+               ) : null}
                {detail.proposal || canEditProposal ? (
                   <CorrectionWorkDisclosure
                      title="Correction proposal"
@@ -1910,6 +1912,10 @@ function FactualCorrectionContent({
                         Prepare correction proposal
                      </Button>
                   </div>
+               ) : Object.keys(prepareBlockers).length === 0 ? (
+                  <p className="correction-permission-note">
+                     Preparing the proposal is not available with your current permissions.
+                  </p>
                ) : null}
                {allowedActions.includes("PREPARE_CORRECTION_PROPOSAL") && isDirty ? (
                   <p className="correction-action-note">Save the current proposal changes before preparing.</p>
@@ -1940,6 +1946,10 @@ function FactualCorrectionContent({
                         Publish factual correction
                      </Button>
                   </div>
+               ) : Object.keys(publishBlockers).length === 0 ? (
+                  <p className="correction-permission-note">
+                     Publishing this correction is not available with your current permissions.
+                  </p>
                ) : null}
             </section>
          );
