@@ -11,6 +11,7 @@ import OrganizationPublicProfilePanel from "./OrganizationPublicProfilePanel.jsx
 import OrganizationVerificationScopePanel from "./OrganizationVerificationScopePanel.jsx";
 
 import { resolveApiEndpoint } from "../../utils/api";
+import { showWorkspaceSuccess } from "../../utils/workspaceToast";
 
 import "./OrganizationAdminPanel.css";
 
@@ -878,8 +879,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
          });
          setShowInviteForm(false);
 
-         addToast({
-            type: "success",
+         showWorkspaceSuccess(addToast, {
             title: "Invitation sent",
             message: `An invitation was sent to ${email}.`,
          });
@@ -928,8 +928,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
             setInvitations((current) => current.map((item) => (item.id === invitation.id ? updatedInvitation : item)));
          }
 
-         addToast({
-            type: "success",
+         showWorkspaceSuccess(addToast, {
             title: "Invitation resent",
             message: `A new invitation link was sent to ${invitation.email}.`,
          });
@@ -982,8 +981,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
             setInvitations((current) => current.map((item) => (item.id === invitation.id ? updatedInvitation : item)));
          }
 
-         addToast({
-            type: "success",
+         showWorkspaceSuccess(addToast, {
             title: "Invitation cancelled",
             message: `The invitation for ${invitation.email} is no longer active.`,
          });
@@ -1042,8 +1040,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
 
          replaceRosterMembership(updatedMembership);
 
-         addToast({
-            type: "success",
+         showWorkspaceSuccess(addToast, {
             title: "Role updated",
             message: `@${getUsername(membership)} is now ${formatLabel(updatedMembership.role)}.`,
          });
@@ -1092,8 +1089,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
 
          replaceRosterMembership(updatedMembership);
 
-         addToast({
-            type: "success",
+         showWorkspaceSuccess(addToast, {
             title: "Membership suspended",
             message: `@${getUsername(membership)} no longer has active organization authority.`,
          });
@@ -1142,8 +1138,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
 
          replaceRosterMembership(updatedMembership);
 
-         addToast({
-            type: "success",
+         showWorkspaceSuccess(addToast, {
             title: "Membership restored",
             message: `@${getUsername(membership)} has active organization access again.`,
          });
@@ -1184,8 +1179,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
             method: "POST",
          });
 
-         addToast({
-            type: "success",
+         showWorkspaceSuccess(addToast, {
             title: "Member removed",
             message: `@${getUsername(membership)} was removed from the organization.`,
          });

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
+import { showWorkspaceSuccess } from "../../utils/workspaceToast";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
 import Input from "../ui/Input.jsx";
@@ -401,8 +402,7 @@ function OrganizationPublicProfilePanel({ organizationId }) {
          setSaveError("");
          setFieldErrors({});
 
-         addToast({
-            type: "success",
+         showWorkspaceSuccess(addToast, {
             title: "Public profile updated",
             message: "The organization's public presence settings were saved.",
          });
@@ -497,8 +497,7 @@ function OrganizationPublicProfilePanel({ organizationId }) {
          clearSelectedLogo();
          setConfirmLogoRemoval(false);
 
-         addToast({
-            type: "success",
+         showWorkspaceSuccess(addToast, {
             title: savedProfile.logo_url ? "Organization logo replaced" : "Organization logo uploaded",
             message: "The managed organization logo was saved.",
          });
@@ -553,8 +552,7 @@ function OrganizationPublicProfilePanel({ organizationId }) {
          clearSelectedLogo();
          setConfirmLogoRemoval(false);
 
-         addToast({
-            type: "success",
+         showWorkspaceSuccess(addToast, {
             title: "Organization logo removed",
             message: "The stored organization logo was removed. Logo display consent was not changed.",
          });
