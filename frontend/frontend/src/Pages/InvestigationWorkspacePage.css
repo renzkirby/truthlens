@@ -32,28 +32,7 @@
 }
 
 .investigation-workspace-back {
-   display: inline-flex;
-   align-items: center;
-   gap: 7px;
    margin: 0;
-   padding: 7px 0;
-   border: 0;
-   background: transparent;
-   color: var(--brand-primary);
-   font: inherit;
-   font-size: 0.8rem;
-   font-weight: 750;
-   cursor: pointer;
-}
-
-.investigation-workspace-back:hover {
-   text-decoration: underline;
-}
-
-.investigation-workspace-back:focus-visible {
-   outline: 3px solid var(--tl-color-focus-ring, var(--brand-primary));
-   outline-offset: 3px;
-   border-radius: 4px;
 }
 
 .investigation-workspace-heading-actions {

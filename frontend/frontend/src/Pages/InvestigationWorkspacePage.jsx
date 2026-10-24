@@ -381,10 +381,16 @@ function InvestigationWorkspacePage() {
       <div className="investigation-workspace-page">
          <header className="investigation-workspace-header">
             <div className="investigation-workspace-toolbar">
-               <button type="button" className="investigation-workspace-back" onClick={backToInvestigations}>
-                  <Icons name="arrow-left" size={16} />
-                  <span>Investigations</span>
-               </button>
+               <Button
+                  type="button"
+                  variant="ghost"
+                  density="compact"
+                  className="investigation-workspace-back"
+                  leadingIcon={<Icons name="arrow-left" size={15} />}
+                  onClick={backToInvestigations}
+               >
+                  Investigations
+               </Button>
 
                <div className="investigation-workspace-heading-actions">
                   <span className="investigation-workspace-active-status">

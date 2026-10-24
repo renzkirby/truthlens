@@ -393,7 +393,7 @@
 }
 
 .correction-back {
-   display: none;
+   display: inline-flex;
    margin-bottom: var(--tl-space-3);
 }
 
@@ -864,9 +864,6 @@
       border-right: 0;
    }
 
-   .correction-back {
-      display: inline-flex;
-   }
 }
 
 @container correction-panel (max-width: 720px) {

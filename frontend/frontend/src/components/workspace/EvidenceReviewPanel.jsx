@@ -1052,7 +1052,7 @@ function EvidenceReviewContent({
                {selectedCaseId && !guidedMode && (
                   <Button
                      type="button"
-                     variant="secondary"
+                     variant="ghost"
                      density="compact"
                      leadingIcon={<Icons name="arrow-left" size={15} aria-hidden="true" />}
                      className="evidence-return-to-queue"
@@ -1095,8 +1095,9 @@ function EvidenceReviewContent({
                         )}
                         <Button
                            type="button"
-                           variant="secondary"
+                           variant="ghost"
                            density="compact"
+                           leadingIcon={<Icons name="arrow-left" size={15} aria-hidden="true" />}
                            onClick={() => clearSelection({ restoreQueueFocus: true })}
                         >
                            Back to Evidence Review

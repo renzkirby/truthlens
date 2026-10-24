@@ -1995,7 +1995,7 @@ function AdjudicationReviewContent({
                               {!guidedMode && (
                               <Button
                                  type="button"
-                                 variant="secondary"
+                                 variant="ghost"
                                  density="compact"
                                  leadingIcon={<Icons name="arrow-left" size={15} aria-hidden="true" />}
                                  className="adjudication-return-to-queue"

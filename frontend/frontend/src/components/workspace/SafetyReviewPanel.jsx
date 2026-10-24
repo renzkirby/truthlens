@@ -954,8 +954,9 @@ function SafetyReviewPanel() {
                      {detailUnavailable ? (
                         <Button
                            type="button"
-                           variant="secondary"
+                           variant="ghost"
                            density="compact"
+                           leadingIcon={<Icons name="arrow-left" size={15} />}
                            onClick={handleReturnToQueue}
                         >
                            Back to Safety Review

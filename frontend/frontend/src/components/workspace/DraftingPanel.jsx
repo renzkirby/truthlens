@@ -2050,7 +2050,7 @@ function DraftingContent({
                                              setEditor((current) => ({ ...current, articleBody: event.target.value }))
                                           }
                                        />
-                                       <span>Optional while creating the draft.</span>
+                                       <span>You can leave this blank when creating the draft. It is required before submitting for publication review.</span>
                                     </div>
                                     <div className="drafting-field">
                                        <EditorialSourceEditor
