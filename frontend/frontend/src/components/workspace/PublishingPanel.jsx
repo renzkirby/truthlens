@@ -1501,20 +1501,18 @@ function PublishingContent({
                                  </dl>
                               </section>
 
-                              {isEditorialReview ? <EditorialRevisionContext revision={detail.revision} /> : null}
-
                               <HumanJudgment detail={detail} />
 
                               <section
-                                 className="publishing-review-section"
+                                 className="publishing-review-section publishing-article-review"
                                  aria-labelledby="publishing-article-heading"
                               >
                                  <div className="publishing-section-heading">
                                     <div>
                                        <h4 id="publishing-article-heading">Article under review</h4>
                                        <p>
-                                          Submitted editorial content. This review does not alter the factual
-                                          adjudication.
+                                          Review the submitted editorial content against the recorded factual judgment.
+                                          Publication does not alter that judgment.
                                        </p>
                                     </div>
                                  </div>
@@ -1529,9 +1527,12 @@ function PublishingContent({
                                  </div>
                               </section>
 
-                              <PublicationSources sourceItems={detail.source_items} />
-                              <SealedEvidence sealedEvidence={detail.sealed_evidence} />
                               <Readiness detail={detail} />
+
+                              <PublishingReferenceMaterial
+                                 detail={detail}
+                                 isEditorialReview={isEditorialReview}
+                              />
 
                               {!detailUnavailable &&
                               (isInitialReview || isEditorialReview) &&
@@ -1543,180 +1544,46 @@ function PublishingContent({
                                  >
                                     <div className="publishing-section-heading">
                                        <div>
-                                          <h4 id="publishing-action-gate-heading">Review decision</h4>
-                                          <p>Choose only an action currently allowed by the server.</p>
+                                          <h4 id="publishing-action-gate-heading">Publication decision</h4>
+                                          <p>
+                                             Approve the submitted article for institutional publication, or return it
+                                             to Drafting with a specific rework reason.
+                                          </p>
                                        </div>
                                     </div>
-
-                                    {!confirmation ? (
-                                       <div className="publishing-primary-actions">
-                                          {allowedActions.includes("RETURN_FOR_REWORK") ? (
-                                             <Button
-                                                type="button"
-                                                variant="secondary"
-                                                density="standard"
-                                                disabled={Boolean(mutation) || authorityBlocked}
-                                                onClick={() => {
-                                                   setConfirmation("return");
-                                                   setActionError("");
-                                                }}
-                                                leadingIcon={<Icons name="arrow-left" size={16} />}
-                                             >
-                                                Return for rework
-                                             </Button>
-                                          ) : null}
-                                          {allowedActions.includes(publishAction) ? (
-                                             <Button
-                                                type="button"
-                                                variant="primary"
-                                                density="standard"
-                                                disabled={Boolean(mutation) || authorityBlocked}
-                                                onClick={() => {
-                                                   setConfirmation("publish");
-                                                   setActionError("");
-                                                }}
-                                                leadingIcon={<Icons name="check-circle" size={16} />}
-                                             >
-                                                {isEditorialReview ? "Review replacement publication" : "Review publication"}
-                                             </Button>
-                                          ) : null}
-                                       </div>
-                                    ) : confirmation === "publish" ? (
-                                       <section
-                                          className="publishing-confirmation"
-                                          aria-labelledby="publishing-confirm-title"
-                                       >
-                                          <div className="publishing-confirmation-heading">
-                                             <Icons name="landmark" size={20} />
-                                             <div>
-                                                <h5 id="publishing-confirm-title">
-                                                   {isEditorialReview ? "Publish this replacement article for " : "Publish this article for "}
-                                                   {organizationName || detail.organization?.name}?
-                                                </h5>
-                                                <p>
-                                                   {isEditorialReview
-                                                      ? "Confirm the replacement version and preserved factual authority below."
-                                                      : "Confirm the exact institutional publication record below."}
-                                                </p>
-                                             </div>
-                                          </div>
-                                          <dl className="publishing-confirmation-facts">
-                                             <div>
-                                                <dt>Headline</dt>
-                                                <dd>{detail.headline || "Untitled fact check"}</dd>
-                                             </div>
-                                             <div>
-                                                <dt>Factual verdict</dt>
-                                                <dd>{formatLabel(detail.verdict || detail.decision?.verdict)}</dd>
-                                             </div>
-                                             <div>
-                                                <dt>Article version</dt>
-                                                <dd>{detail.version ?? "Not recorded"}</dd>
-                                             </div>
-                                          </dl>
-                                          {isEditorialReview ? (
-                                             <ul>
-                                                <li>This publishes a replacement editorial version.</li>
-                                                <li>The previous publication remains preserved in version history.</li>
-                                                <li>The human factual verdict and adjudication decision do not change.</li>
-                                                <li>This action is an editorial revision, not a factual correction.</li>
-                                             </ul>
-                                          ) : (
-                                             <ul>
-                                                <li>Publication seals this article version.</li>
-                                                <li>
-                                                   {organizationName || detail.organization?.name} becomes the
-                                                   institutional publisher.
-                                                </li>
-                                                <li>
-                                                   The verification assignment completes only after successful publication.
-                                                </li>
-                                                <li>
-                                                   The published article cannot be edited directly; later replacement
-                                                   requires a separate revision or correction workflow.
-                                                </li>
-                                             </ul>
-                                          )}
-                                          <div className="publishing-confirmation-actions">
-                                             <Button
-                                                type="button"
-                                                variant="secondary"
-                                                density="standard"
-                                                disabled={Boolean(mutation)}
-                                                onClick={() => setConfirmation(null)}
-                                             >
-                                                Cancel
-                                             </Button>
-                                             <Button
-                                                type="button"
-                                                variant="primary"
-                                                density="standard"
-                                                loading={mutation === "publish"}
-                                                loadingLabel="Publishing…"
-                                                disabled={Boolean(mutation)}
-                                                onClick={handlePublish}
-                                             >
-                                                {isEditorialReview ? "Publish replacement" : "Publish article"}
-                                             </Button>
-                                          </div>
-                                       </section>
-                                    ) : (
-                                       <form
-                                          className="publishing-confirmation"
-                                          aria-labelledby="publishing-rework-title"
-                                          onSubmit={handleReturnForRework}
-                                       >
-                                          <div className="publishing-confirmation-heading">
-                                             <Icons name="arrow-left" size={20} />
-                                             <div>
-                                                <h5 id="publishing-rework-title">
-                                                   Return this {isEditorialReview ? "editorial revision" : "article"} to Drafting?
-                                                </h5>
-                                                <p>
-                                                   The factual adjudication remains unchanged and article content is not
-                                                   deleted.
-                                                </p>
-                                             </div>
-                                          </div>
-                                          <div className="publishing-field">
-                                             <label htmlFor="publishing-rework-reason">Reason for rework</label>
-                                             <Textarea
-                                                id="publishing-rework-reason"
-                                                rows={5}
-                                                value={reworkReason}
-                                                maxLength={2000}
-                                                required
-                                                disabled={Boolean(mutation)}
-                                                onChange={(event) => setReworkReason(event.target.value)}
-                                             />
-                                             <span>{reworkReason.length}/2000</span>
-                                          </div>
-                                          <div className="publishing-confirmation-actions">
-                                             <Button
-                                                type="button"
-                                                variant="secondary"
-                                                density="standard"
-                                                disabled={Boolean(mutation)}
-                                                onClick={() => {
-                                                   setConfirmation(null);
-                                                   setReworkReason("");
-                                                }}
-                                             >
-                                                Keep in review
-                                             </Button>
-                                             <Button
-                                                type="submit"
-                                                variant="destructive"
-                                                density="standard"
-                                                loading={mutation === "return"}
-                                                loadingLabel="Returning…"
-                                                disabled={!reworkReason.trim() || Boolean(mutation)}
-                                             >
-                                                Return for rework
-                                             </Button>
-                                          </div>
-                                       </form>
-                                    )}
+                                    <div className="publishing-primary-actions">
+                                       {allowedActions.includes("RETURN_FOR_REWORK") ? (
+                                          <Button
+                                             type="button"
+                                             variant="secondary"
+                                             density="standard"
+                                             disabled={Boolean(mutation) || authorityBlocked}
+                                             onClick={() => {
+                                                setConfirmation("return");
+                                                setActionError("");
+                                                setReworkReason("");
+                                             }}
+                                             leadingIcon={<Icons name="arrow-left" size={16} />}
+                                          >
+                                             Return for rework
+                                          </Button>
+                                       ) : null}
+                                       {allowedActions.includes(publishAction) ? (
+                                          <Button
+                                             type="button"
+                                             variant="primary"
+                                             density="standard"
+                                             disabled={Boolean(mutation) || authorityBlocked}
+                                             onClick={() => {
+                                                setConfirmation("publish");
+                                                setActionError("");
+                                             }}
+                                             leadingIcon={<Icons name="check-circle" size={16} />}
+                                          >
+                                             {isEditorialReview ? "Publish replacement" : "Publish article"}
+                                          </Button>
+                                       ) : null}
+                                    </div>
                                  </section>
                               ) : null}
                            </div>
@@ -1726,6 +1593,155 @@ function PublishingContent({
                </section>
             </div>
          )}
+
+         <PublishingDecisionDialog
+            open={confirmation === "publish" && Boolean(detail)}
+            processing={mutation === "publish"}
+            title={
+               isEditorialReview
+                  ? `Publish this replacement article for ${organizationName || detail?.organization?.name || "this organization"}?`
+                  : `Publish this article for ${organizationName || detail?.organization?.name || "this organization"}?`
+            }
+            description={
+               isEditorialReview
+                  ? "Confirm the replacement version and preserved factual authority before publishing."
+                  : "Confirm the exact institutional publication record before publishing."
+            }
+            onClose={() => {
+               if (!mutation) {
+                  setConfirmation(null);
+               }
+            }}
+         >
+            <div className="publishing-confirmation">
+               <div className="publishing-confirmation-heading">
+                  <Icons name="landmark" size={20} />
+                  <div>
+                     <h5>{isEditorialReview ? "Replacement publication" : "Institutional publication"}</h5>
+                     <p>
+                        This is a consequential publication action. Review the record below before confirming.
+                     </p>
+                  </div>
+               </div>
+               <dl className="publishing-confirmation-facts">
+                  <div>
+                     <dt>Headline</dt>
+                     <dd>{detail?.headline || "Untitled fact check"}</dd>
+                  </div>
+                  <div>
+                     <dt>Factual verdict</dt>
+                     <dd>{formatLabel(detail?.verdict || detail?.decision?.verdict)}</dd>
+                  </div>
+                  <div>
+                     <dt>Article version</dt>
+                     <dd>{detail?.version ?? "Not recorded"}</dd>
+                  </div>
+               </dl>
+               {isEditorialReview ? (
+                  <ul>
+                     <li>This publishes a replacement editorial version.</li>
+                     <li>The previous publication remains preserved in version history.</li>
+                     <li>The human factual verdict and adjudication decision do not change.</li>
+                     <li>This action is an editorial revision, not a factual correction.</li>
+                  </ul>
+               ) : (
+                  <ul>
+                     <li>Publication seals this article version.</li>
+                     <li>
+                        {organizationName || detail?.organization?.name || "The selected organization"} becomes the
+                        institutional publisher.
+                     </li>
+                     <li>The verification assignment completes only after successful publication.</li>
+                     <li>
+                        The published article cannot be edited directly; later replacement requires a separate
+                        revision or correction workflow.
+                     </li>
+                  </ul>
+               )}
+               <div className="publishing-confirmation-actions">
+                  <Button
+                     type="button"
+                     variant="secondary"
+                     density="standard"
+                     disabled={Boolean(mutation)}
+                     onClick={() => setConfirmation(null)}
+                  >
+                     Cancel
+                  </Button>
+                  <Button
+                     type="button"
+                     variant="primary"
+                     density="standard"
+                     loading={mutation === "publish"}
+                     loadingLabel="Publishing…"
+                     disabled={Boolean(mutation)}
+                     onClick={handlePublish}
+                  >
+                     {isEditorialReview ? "Publish replacement" : "Publish article"}
+                  </Button>
+               </div>
+            </div>
+         </PublishingDecisionDialog>
+
+         <PublishingDecisionDialog
+            open={confirmation === "return" && Boolean(detail)}
+            processing={mutation === "return"}
+            title={`Return this ${isEditorialReview ? "editorial revision" : "article"} to Drafting?`}
+            description="The factual adjudication remains unchanged. The submitted article returns to Drafting with your recorded reason."
+            onClose={() => {
+               if (!mutation) {
+                  setConfirmation(null);
+                  setReworkReason("");
+               }
+            }}
+         >
+            <form className="publishing-confirmation" onSubmit={handleReturnForRework}>
+               <div className="publishing-confirmation-heading">
+                  <Icons name="arrow-left" size={20} />
+                  <div>
+                     <h5>Return for rework</h5>
+                     <p>Give the drafter a clear reason for why this article should not be published yet.</p>
+                  </div>
+               </div>
+               <div className="publishing-field">
+                  <label htmlFor="publishing-rework-reason">Reason for rework</label>
+                  <Textarea
+                     id="publishing-rework-reason"
+                     rows={5}
+                     value={reworkReason}
+                     maxLength={2000}
+                     required
+                     disabled={Boolean(mutation)}
+                     onChange={(event) => setReworkReason(event.target.value)}
+                  />
+                  <span>{reworkReason.length}/2000</span>
+               </div>
+               <div className="publishing-confirmation-actions">
+                  <Button
+                     type="button"
+                     variant="secondary"
+                     density="standard"
+                     disabled={Boolean(mutation)}
+                     onClick={() => {
+                        setConfirmation(null);
+                        setReworkReason("");
+                     }}
+                  >
+                     Keep in review
+                  </Button>
+                  <Button
+                     type="submit"
+                     variant="destructive"
+                     density="standard"
+                     loading={mutation === "return"}
+                     loadingLabel="Returning…"
+                     disabled={!reworkReason.trim() || Boolean(mutation)}
+                  >
+                     Return for rework
+                  </Button>
+               </div>
+            </form>
+         </PublishingDecisionDialog>
       </div>
    );
 }
