@@ -396,8 +396,6 @@ function ContextHelp({ label = "More information", children }) {
          return undefined;
       }
 
-      updateAlignment();
-
       const closeIfOutside = (event) => {
          if (!rootRef.current?.contains(event.target)) {
             setPinned(false);
