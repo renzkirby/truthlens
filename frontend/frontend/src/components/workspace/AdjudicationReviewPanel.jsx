@@ -933,7 +933,7 @@ function AdjudicationReviewContent({
             if (confirmationAttempt && !unavailable) {
                setDecisionFormOpen(true);
                setDecisionErrors({
-                  general: "Canonical detail could not be refreshed. Retry the case refresh before reviewing this decision again.",
+                  general: "The latest case details could not be refreshed. Retry the case refresh before reviewing this decision again.",
                });
             } else if (unavailable) {
                setDecisionFormOpen(false);
@@ -1151,7 +1151,7 @@ function AdjudicationReviewContent({
             !identifiersMatch(canonicalDetail?.id, operation.caseId) ||
             !identifiersMatch(canonicalDetail?.organization?.id, operation.organizationId)
          ) {
-            throw new Error("The canonical case response did not match the submitted decision identity.");
+            throw new Error("The refreshed case details did not match the submitted decision.");
          }
 
          const selectedCaseIsSubmittedCase =
@@ -1214,7 +1214,7 @@ function AdjudicationReviewContent({
                setActionNotice({
                   kind: "reconciled",
                   caseId: operation.caseId,
-                  message: "The request outcome was initially unclear, but the fresh canonical case now contains a recorded decision.",
+                  message: "The request outcome was initially unclear, but the latest case details now contain a recorded decision.",
                   inspectable: !selectedCaseIsSubmittedCase,
                });
                focusActionMessageRef.current = true;
@@ -1227,7 +1227,7 @@ function AdjudicationReviewContent({
             } else {
                setActionNotice(null);
                setActionError(
-                  `The outcome for case ${formatCaseReference(operation.caseId)} was unclear. Fresh canonical detail shows no recorded decision; review it fully before beginning a new attempt.`,
+                  `The outcome for case ${formatCaseReference(operation.caseId)} was unclear. The latest case details show no recorded decision; review them fully before beginning a new attempt.`,
                );
                focusActionMessageRef.current = true;
             }
@@ -1250,8 +1250,8 @@ function AdjudicationReviewContent({
             detailRequestIdRef.current === selectedDetailRequestId;
          const pendingMessage =
             outcome === "success"
-               ? "The action endpoint recorded the decision, but canonical reconciliation is pending. Do not resubmit the decision."
-               : "The request outcome is not confirmed because canonical reconciliation failed. Do not resubmit until the case is reconciled.";
+               ? "The decision was recorded, but confirmation against the latest case state is still pending. Do not resubmit the decision."
+               : "The request outcome is not confirmed because the latest case state could not be verified. Do not resubmit until the case is confirmed.";
 
          if (selectedCaseIsSubmittedCase) {
             setDetailIdentity(null);
@@ -1260,7 +1260,7 @@ function AdjudicationReviewContent({
             setDetailError(
                error?.status === 404
                   ? "The submitted Adjudication case is no longer available in this organization."
-                  : (error?.message || "Unable to reconcile the submitted case with canonical detail."),
+                  : (error?.message || "Unable to confirm the submitted decision against the latest case details."),
             );
          }
 
@@ -1830,7 +1830,7 @@ function AdjudicationReviewContent({
                               disabled={Boolean(mutation)}
                               onClick={handleRetryReconciliation}
                            >
-                              {mutation ? "Reconciling…" : "Retry canonical reconciliation"}
+                              {mutation ? "Reconciling…" : "Retry confirmation"}
                            </Button>
                         )}
                      </div>
@@ -2204,7 +2204,7 @@ function AdjudicationReviewContent({
                                        <Icons name="loader" size={18} className="adjudication-spinner" aria-hidden="true" />
                                        <div>
                                           <strong>Recording adjudication</strong>
-                                          <span>The authoritative decision is being recorded and reconciled with the canonical case.</span>
+                                          <span>The authoritative decision is being recorded and confirmed against the latest case state.</span>
                                        </div>
                                     </div>
                                  )}
@@ -2228,7 +2228,7 @@ function AdjudicationReviewContent({
                                                 disabled={Boolean(mutation)}
                                                 onClick={handleRetryReconciliation}
                                              >
-                                                {mutation ? "Reconciling…" : "Retry canonical reconciliation"}
+                                                {mutation ? "Reconciling…" : "Retry confirmation"}
                                              </Button>
                                           )}
                                        </div>
@@ -2314,7 +2314,7 @@ function AdjudicationReviewContent({
                                     <div className="adjudication-subheading-row">
                                        <div>
                                           <h5 id="adjudication-evidence-heading">Evidence review</h5>
-                                          <p>These are current evidence records, not an immutable decision-time snapshot.</p>
+                                          <p>These are current evidence records and may include evidence added after the human decision.</p>
                                        </div>
                                        <span className="adjudication-basis-label">
                                           Basis: {formatLabel(evidenceReview.basis, "Unavailable")}
@@ -2730,7 +2730,7 @@ function AdjudicationReviewContent({
                                     {confirmationChecking && (
                                        <div className="adjudication-decision-checking" role="status">
                                           <Icons name="loader" size={17} className="adjudication-spinner" aria-hidden="true" />
-                                          <span>Refreshing canonical detail before confirmation…</span>
+                                          <span>Refreshing latest case details before confirmation…</span>
                                        </div>
                                     )}
 
@@ -2739,7 +2739,7 @@ function AdjudicationReviewContent({
                                           <Icons name="loader" size={20} className="adjudication-spinner" aria-hidden="true" />
                                           <div>
                                              <strong>Recording authoritative adjudication</strong>
-                                             <span>The decision is being reconciled with the canonical case. Do not resubmit it.</span>
+                                             <span>The recorded decision is being confirmed against the latest case state. Do not resubmit it.</span>
                                           </div>
                                        </div>
                                     ) : decisionFormOpen ? (
