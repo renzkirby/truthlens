@@ -129,7 +129,7 @@ function Blockers({ blockers }) {
          <div className="publications-section-heading">
             <div>
                <h4 id="publications-blockers-heading">Revision availability</h4>
-               <p>The server has reported conditions that prevent new editorial revision work.</p>
+               <p>This publication is not currently eligible for new editorial revision work.</p>
             </div>
          </div>
          <ul className="publications-blockers">
@@ -342,7 +342,7 @@ function VersionHistory({ lineage, selectedPublicationId, disabled, onSelect }) 
          <div className="publications-section-heading">
             <div>
                <h4 id="publications-history-heading">Version history</h4>
-               <p>Published versions remain inspectable in their server-defined historical order.</p>
+               <p>Published versions remain inspectable in their recorded historical order.</p>
             </div>
             <span className="publications-count-label">{items.length} versions</span>
          </div>
@@ -1001,7 +1001,7 @@ function PublicationsContent({
                current: error?.current,
             });
             setActionError(
-               `${error?.code || "CONFLICT"}: ${error?.message || "The publication changed before the correction request was created."} The correction reason is preserved; review the refreshed server state before submitting again.`,
+               `${error?.code || "CONFLICT"}: ${error?.message || "The publication changed before the correction request was created."} The correction reason is preserved; review the refreshed publication state before submitting again.`,
             );
             refreshLibrary();
             setDetailRequestVersion((current) => current + 1);
@@ -1093,7 +1093,7 @@ function PublicationsContent({
             setActionError(
                `${error?.code || "CONFLICT"}: ${
                   error?.message || "The publication changed before the revision could be created."
-               } Your revision reason is preserved; review the refreshed server state before trying again.`,
+               } Your revision reason is preserved; review the refreshed publication state before trying again.`,
             );
             refreshLibrary();
             setDetailRequestVersion((current) => current + 1);
@@ -1641,7 +1641,7 @@ function PublicationsContent({
                <div className="publications-correction-conflict" role="alert">
                   <strong>{correctionConflict.code}</strong>
                   <p>
-                     {correctionConflict.detail} No mutation was repeated. The server record was refreshed for explicit
+                     {correctionConflict.detail} No action was repeated. The latest record was refreshed for explicit
                      reconciliation.
                   </p>
                   {Array.isArray(correctionConflict.blockers) && correctionConflict.blockers.length > 0 ? (
@@ -1649,7 +1649,7 @@ function PublicationsContent({
                         {correctionConflict.blockers.map((blocker, index) => (
                            <li key={`${blocker?.code || "blocker"}-${index}`}>
                               <strong>{formatLabel(blocker?.code, "Conflict blocker")}</strong>
-                              {blocker?.detail || "The server rejected the stale request."}
+                              {blocker?.detail || "This request is no longer current."}
                            </li>
                         ))}
                      </ul>
