@@ -834,6 +834,78 @@
    max-width: 78ch;
 }
 
+.institutional-analytics__history {
+   min-width: 0;
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: var(--tl-radius-lg);
+   background: var(--tl-color-bg-surface);
+   overflow: hidden;
+}
+
+.institutional-analytics__history > summary {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: var(--tl-space-4);
+   padding: var(--tl-space-4) var(--tl-space-5);
+   color: var(--tl-color-text-main);
+   cursor: pointer;
+   list-style: none;
+}
+
+.institutional-analytics__history > summary::-webkit-details-marker {
+   display: none;
+}
+
+.institutional-analytics__history > summary > span:first-child {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   gap: var(--tl-space-1);
+}
+
+.institutional-analytics__history > summary strong {
+   font-size: var(--tl-text-base);
+}
+
+.institutional-analytics__history > summary small {
+   max-width: 76ch;
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-sm);
+   font-weight: 400;
+   line-height: 1.45;
+}
+
+.institutional-analytics__history > summary:focus-visible {
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: calc(var(--tl-focus-offset) * -1);
+}
+
+.institutional-analytics__history-scope {
+   flex: 0 0 auto;
+   padding: var(--tl-space-1) var(--tl-space-2);
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: var(--tl-radius-pill);
+   background: var(--tl-color-bg-subtle);
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-xs);
+   font-weight: 700;
+   white-space: nowrap;
+}
+
+.institutional-analytics__history-content {
+   padding: var(--tl-space-5);
+   border-top: 1px solid var(--tl-color-border-default);
+}
+
+.institutional-analytics__history-note {
+   max-width: 78ch;
+   margin-bottom: var(--tl-space-4) !important;
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-sm);
+   line-height: 1.55;
+}
+
 /* Supporting history and outcomes use adjacent cards only when there is room. */
 .institutional-analytics__support-grid {
    display: grid;
@@ -1384,6 +1456,11 @@
 }
 
 @container institutional-analytics (max-width: 660px) {
+   .institutional-analytics__history > summary {
+      align-items: flex-start;
+      flex-direction: column;
+   }
+
    .institutional-analytics__activity-grid,
    .institutional-analytics__custom-period,
    .institutional-analytics__workflow-details,
@@ -1463,5 +1540,11 @@
    .institutional-analytics__basis dl > div {
       grid-template-columns: minmax(0, 1fr);
       gap: var(--tl-space-1);
+   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+   .institutional-analytics * {
+      scroll-behavior: auto;
    }
 }
