@@ -412,10 +412,10 @@ function ContextHelp({ label = "More information", children }) {
 
 function HeadingWithHelp({ as: Heading = "h5", children, help, helpLabel }) {
    return (
-      <span className="institutional-analytics__heading-with-help">
+      <div className="institutional-analytics__heading-with-help">
          <Heading>{children}</Heading>
          {help ? <ContextHelp label={helpLabel || `About ${children}`}>{help}</ContextHelp> : null}
-      </span>
+      </div>
    );
 }
 
@@ -1410,24 +1410,27 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
 
                      <div className="institutional-analytics__workflow-details">
                         <section className="institutional-analytics__workflow-group">
-                           <h5>Completion and return proportions</h5>
+                           <HeadingWithHelp
+                              help="These proportions use only observed investigations that ended in either completion or release. Active investigations are not part of this denominator."
+                           >
+                              Completion and return proportions
+                           </HeadingWithHelp>
                            {attempts?.terminal === 0 ? (
                               <EmptyMessage>
                                  Completion and release percentages will appear after an observed investigation is completed
                                  or returned.
                               </EmptyMessage>
                            ) : hasTerminalAttempts ? (
-                              <div className="institutional-analytics__rate-grid">
-                                 <p>
-                                    Of observed investigations that ended in completion or release, {" "}
-                                    <strong>{formatPercent(reliability?.terminal_completion_rate)}</strong> were completed.
-                                 </p>
-                                 <p>
-                                    Of observed investigations that ended in completion or release, {" "}
-                                    <strong>{formatPercent(reliability?.terminal_release_rate)}</strong> were returned to
-                                    shared intake.
-                                 </p>
-                              </div>
+                              <dl className="institutional-analytics__rate-grid">
+                                 <div>
+                                    <dt>Completed</dt>
+                                    <dd>{formatPercent(reliability?.terminal_completion_rate)}</dd>
+                                 </div>
+                                 <div>
+                                    <dt>Returned to shared intake</dt>
+                                    <dd>{formatPercent(reliability?.terminal_release_rate)}</dd>
+                                 </div>
+                              </dl>
                            ) : (
                               <EmptyMessage>Completion and release measurements are unavailable.</EmptyMessage>
                            )}
