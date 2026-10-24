@@ -189,7 +189,7 @@ function HumanDecision({ detail }) {
          </div>
          <dl className="publications-metadata-grid">
             <div className="publications-metadata-wide">
-               <dt>Canonical claim</dt>
+               <dt>Claim reviewed</dt>
                <dd>{decision.canonical_claim || detail?.claim?.canonical_claim || "Not recorded"}</dd>
             </div>
             <div className="publications-metadata-wide">
@@ -372,7 +372,7 @@ function VersionHistory({ lineage, selectedPublicationId, disabled, onSelect }) 
                               {item.revision_reason ? <span>Reason: {item.revision_reason}</span> : null}
                            </span>
                            <span className={`publications-history-state publications-history-state--${item.history_state.toLowerCase()}`}>
-                              {item.history_state}
+                              {formatLabel(item.history_state)}
                            </span>
                         </button>
                      </li>
@@ -381,6 +381,158 @@ function VersionHistory({ lineage, selectedPublicationId, disabled, onSelect }) 
             </ol>
          )}
       </section>
+   );
+}
+
+function PublicationReferenceMaterial({ detail }) {
+   const article = detail?.article || {};
+
+   return (
+      <details className="publications-reference-material">
+         <summary>
+            <span>
+               <strong>Reference material</strong>
+               <small>Publication sources, sealed decision evidence, and technical record details</small>
+            </span>
+            <Icons name="chevron-down" size={16} aria-hidden="true" />
+         </summary>
+
+         <div className="publications-reference-content">
+            <PublicationSources sourceItems={detail?.source_items} />
+            <SealedEvidence sealedEvidence={detail?.sealed_evidence} />
+
+            <details className="publications-technical-details">
+               <summary>Technical details</summary>
+               <dl className="publications-metadata-grid">
+                  <div>
+                     <dt>Publication status</dt>
+                     <dd>{formatLabel(article.publication_status)}</dd>
+                  </div>
+                  <div>
+                     <dt>Revision kind</dt>
+                     <dd>{formatLabel(article.revision_kind)}</dd>
+                  </div>
+                  <div>
+                     <dt>Record integrity</dt>
+                     <dd>{RECORD_STATE_LABELS[detail?.record_state] || "Record state unavailable"}</dd>
+                  </div>
+                  <div>
+                     <dt>Decision revision</dt>
+                     <dd>{detail?.decision?.revision_number ?? "Not recorded"}</dd>
+                  </div>
+                  <div>
+                     <dt>Selected version</dt>
+                     <dd>Article v{article.version ?? "–"}</dd>
+                  </div>
+               </dl>
+            </details>
+         </div>
+      </details>
+   );
+}
+
+function PublicationActionDialog({
+   open,
+   processing,
+   title,
+   description,
+   onClose,
+   children,
+}) {
+   const dialogRef = useRef(null);
+   const triggerRef = useRef(null);
+   const processingRef = useRef(processing);
+   const closeRef = useRef(onClose);
+
+   useEffect(() => {
+      processingRef.current = processing;
+   }, [processing]);
+
+   useEffect(() => {
+      closeRef.current = onClose;
+   }, [onClose]);
+
+   useEffect(() => {
+      if (!open) {
+         return undefined;
+      }
+
+      triggerRef.current = document.activeElement;
+      const previousOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+
+      requestAnimationFrame(() => {
+         dialogRef.current
+            ?.querySelector('textarea:not([disabled]), input:not([disabled]), button:not([disabled])')
+            ?.focus();
+      });
+
+      const handleKeyDown = (event) => {
+         if (event.key === "Escape" && !processingRef.current) {
+            event.preventDefault();
+            closeRef.current?.();
+            return;
+         }
+
+         if (event.key !== "Tab") {
+            return;
+         }
+
+         const focusable = dialogRef.current?.querySelectorAll(
+            'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href]:not([aria-disabled="true"]), [tabindex]:not([tabindex="-1"])',
+         );
+         if (!focusable?.length) {
+            return;
+         }
+
+         const first = focusable[0];
+         const last = focusable[focusable.length - 1];
+         if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+         } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+         }
+      };
+
+      document.addEventListener("keydown", handleKeyDown);
+      return () => {
+         document.removeEventListener("keydown", handleKeyDown);
+         document.body.style.overflow = previousOverflow;
+         requestAnimationFrame(() => triggerRef.current?.focus?.());
+      };
+   }, [open]);
+
+   if (!open) {
+      return null;
+   }
+
+   return (
+      <div
+         className="publications-dialog-backdrop"
+         onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !processing) {
+               onClose();
+            }
+         }}
+      >
+         <section
+            ref={dialogRef}
+            className="publications-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="publications-dialog-title"
+            aria-describedby="publications-dialog-description"
+            aria-busy={processing || undefined}
+         >
+            <div className="publications-dialog-copy">
+               <h3 id="publications-dialog-title">{title}</h3>
+               <p id="publications-dialog-description">{description}</p>
+            </div>
+            {children}
+         </section>
+      </div>
    );
 }
 
