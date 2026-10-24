@@ -2071,8 +2071,8 @@ function FactualCorrectionContent({
                {detail.proposal || canEditProposal ? (
                   <CorrectionWorkDisclosure
                      title="Correction proposal"
-                     description="Optional while evidence review is still in progress. Saving a draft does not make it factual authority."
-                     meta={isDirty ? "Unsaved changes" : detail.proposal ? `Proposal v${detail.proposal.version}` : "Optional"}
+                     description="You can start drafting while evidence review is still in progress. A completed proposal is required before the correction can be prepared for publication."
+                     meta={isDirty ? "Unsaved changes" : detail.proposal ? `Proposal v${detail.proposal.version}` : null}
                   >
                      {renderProposalSection()}
                   </CorrectionWorkDisclosure>
