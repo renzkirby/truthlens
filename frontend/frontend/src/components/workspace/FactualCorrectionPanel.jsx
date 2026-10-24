@@ -2297,7 +2297,7 @@ function FactualCorrectionContent({
                                  <div>
                                     <h4 id="correction-provenance-heading">Correction and publication provenance</h4>
                                     <p>
-                                       Request, case, proposal, and sealed predecessor evidence remain distinct
+                                       Request, case, proposal, and evidence preserved for the previous decision remain distinct
                                        historical records.
                                     </p>
                                  </div>
@@ -2337,18 +2337,18 @@ function FactualCorrectionContent({
                                  </div>
                               </dl>
                               <div className="correction-sealed-evidence">
-                                 <strong>Sealed predecessor evidence</strong>
+                                 <strong>Evidence used for the previous decision</strong>
                                  <p>
-                                    This immutable snapshot is historical factual provenance for the predecessor human
-                                    decision.
+                                    This evidence was preserved when the previous human decision was made. Evidence added later does
+                                    not change that historical record.
                                  </p>
                                  <dl className="correction-metadata-grid">
                                     <div>
-                                       <dt>Basis</dt>
-                                       <dd>{formatLabel(detail.sealed_predecessor_evidence?.basis)}</dd>
+                                       <dt>Record type</dt>
+                                       <dd>Evidence used for the previous decision</dd>
                                     </div>
                                     <div>
-                                       <dt>Captured</dt>
+                                       <dt>Preserved</dt>
                                        <dd>{formatDateTime(detail.sealed_predecessor_evidence?.captured_at)}</dd>
                                     </div>
                                     <div>
@@ -2370,7 +2370,7 @@ function FactualCorrectionContent({
                                                 <div className="correction-evidence-title">
                                                    <div>
                                                       <strong>
-                                                         {entry?.evidence_caption || `Sealed evidence ${index + 1}`}
+                                                         {entry?.evidence_caption || `Evidence record ${index + 1}`}
                                                       </strong>
                                                       <span>{formatLabel(entry?.evidence_type)}</span>
                                                    </div>
