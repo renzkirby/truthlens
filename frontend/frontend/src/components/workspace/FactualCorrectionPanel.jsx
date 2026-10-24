@@ -136,6 +136,371 @@ function safeExternalUrl(value) {
    }
 }
 
+function comparableSourceUrl(value) {
+   return safeExternalUrl(value) || "";
+}
+
+function correctionEvidenceSourceModel(detail) {
+   const items = Array.isArray(detail?.evidence_review?.items) ? detail.evidence_review.items : [];
+   const verified = new Map();
+   const rejectedKeys = new Set();
+
+   items.forEach((item) => {
+      if (!item?.has_qualifying_correction_review) {
+         return;
+      }
+
+      const url = safeExternalUrl(item?.evidence_url);
+      const key = comparableSourceUrl(url);
+      if (!url || !key) {
+         return;
+      }
+
+      const reviewedStatus = item?.correction_review?.new_evidence_status || item?.evidence_status;
+      if (reviewedStatus === "REJECTED") {
+         rejectedKeys.add(key);
+         verified.delete(key);
+         return;
+      }
+      if (reviewedStatus !== "VERIFIED" || rejectedKeys.has(key)) {
+         return;
+      }
+
+      const existing = verified.get(key);
+      if (existing) {
+         existing.recordCount += 1;
+         if (!existing.caption && item?.evidence_caption) {
+            existing.caption = item.evidence_caption;
+         }
+         return;
+      }
+
+      verified.set(key, {
+         key,
+         url,
+         caption: item?.evidence_caption || "",
+         evidenceType: item?.evidence_type || "",
+         reviewedBy: item?.correction_review?.reviewed_by || null,
+         reviewedAt: item?.correction_review?.reviewed_at || null,
+         recordCount: 1,
+      });
+   });
+
+   return {
+      verifiedOptions: Array.from(verified.values()).sort((left, right) =>
+         (left.caption || left.url).localeCompare(right.caption || right.url),
+      ),
+      rejectedKeys,
+   };
+}
+
+function sourceRowIssue(value, rows, index, rejectedKeys = new Set()) {
+   const trimmed = String(value || "").trim();
+   if (!trimmed) {
+      return "";
+   }
+
+   const key = comparableSourceUrl(trimmed);
+   if (!key) {
+      return "Enter a complete http:// or https:// URL.";
+   }
+   if (rejectedKeys.has(key)) {
+      return "This source was rejected during correction evidence review and cannot be used.";
+   }
+
+   const firstMatch = rows.findIndex((row) => comparableSourceUrl(row) === key);
+   if (firstMatch !== index) {
+      return "This source has already been added.";
+   }
+
+   return "";
+}
+
+function CorrectionSourceEditor({
+   value,
+   disabled,
+   verifiedOptions,
+   rejectedKeys,
+   error,
+   inputRef,
+   onChange,
+}) {
+   const rows = Array.isArray(value) && value.length > 0 ? value : [""];
+   const [pickerOpen, setPickerOpen] = useState(false);
+   const [pendingVerifiedKeys, setPendingVerifiedKeys] = useState(() => new Set());
+   const optionByKey = useMemo(
+      () => new Map(verifiedOptions.map((option) => [option.key, option])),
+      [verifiedOptions],
+   );
+   const selectedVerifiedKeys = useMemo(
+      () =>
+         new Set(
+            rows
+               .map((row) => comparableSourceUrl(row))
+               .filter((key) => key && optionByKey.has(key)),
+         ),
+      [optionByKey, rows],
+   );
+
+   const updateRow = (index, nextValue) => {
+      onChange(rows.map((row, rowIndex) => (rowIndex === index ? nextValue : row)));
+   };
+
+   const addRow = () => {
+      const next = [...rows, ""];
+      onChange(next);
+      requestAnimationFrame(() => document.getElementById(`correction-source-${next.length - 1}`)?.focus());
+   };
+
+   const removeRow = (index) => {
+      const next = rows.filter((_, rowIndex) => rowIndex !== index);
+      onChange(next.length > 0 ? next : [""]);
+   };
+
+   const openPicker = () => {
+      setPendingVerifiedKeys(new Set(selectedVerifiedKeys));
+      setPickerOpen(true);
+   };
+
+   const toggleVerified = (key) => {
+      setPendingVerifiedKeys((current) => {
+         const next = new Set(current);
+         if (next.has(key)) next.delete(key);
+         else next.add(key);
+         return next;
+      });
+   };
+
+   const applySelection = () => {
+      const manualRows = rows.filter((row) => {
+         const key = comparableSourceUrl(row);
+         return !key || !optionByKey.has(key);
+      }).filter((row) => String(row).trim());
+
+      const selectedEvidenceUrls = verifiedOptions
+         .filter((option) => pendingVerifiedKeys.has(option.key))
+         .map((option) => option.url);
+
+      const combined = [...selectedEvidenceUrls, ...manualRows];
+      const seen = new Set();
+      const deduplicated = combined.filter((row) => {
+         const key = comparableSourceUrl(row) || `raw:${String(row).trim()}`;
+         if (seen.has(key)) return false;
+         seen.add(key);
+         return true;
+      });
+
+      onChange(deduplicated.length > 0 ? deduplicated : [""]);
+      setPickerOpen(false);
+   };
+
+   const canAddAnother =
+      !disabled &&
+      rows.every((row, index) => String(row).trim() && !sourceRowIssue(row, rows, index, rejectedKeys));
+
+   return (
+      <div className="correction-source-picker" role="group" aria-labelledby="correction-sources-heading">
+         <div className="correction-source-picker-header">
+            <div>
+               <strong id="correction-sources-heading">Sources for this correction</strong>
+               <p>
+                  Select sources already verified during this correction review, or add another source your organization
+                  used. Selected evidence keeps its correction-review provenance.
+               </p>
+            </div>
+         </div>
+
+         <div className="correction-source-picker-actions">
+            <Button
+               type="button"
+               variant="secondary"
+               density="compact"
+               leadingIcon={<Icons name="shield-check" size={15} />}
+               disabled={disabled || verifiedOptions.length === 0}
+               onClick={openPicker}
+            >
+               Add from reviewed evidence
+            </Button>
+            <Button
+               type="button"
+               variant="ghost"
+               density="compact"
+               leadingIcon={<Icons name="circle-plus" size={15} />}
+               disabled={!canAddAnother}
+               onClick={addRow}
+            >
+               Add another source
+            </Button>
+         </div>
+
+         {pickerOpen ? (
+            <section className="correction-source-evidence-picker" aria-labelledby="correction-source-evidence-heading">
+               <div className="correction-source-evidence-picker-heading">
+                  <div>
+                     <strong id="correction-source-evidence-heading">Choose reviewed evidence</strong>
+                     <p>
+                        These sources completed dedicated correction review with a Verified outcome. Select the ones
+                        you want to cite in the correction article.
+                     </p>
+                  </div>
+                  <span>{verifiedOptions.length} available</span>
+               </div>
+
+               <div className="correction-source-evidence-options">
+                  {verifiedOptions.map((option) => {
+                     const checked = pendingVerifiedKeys.has(option.key);
+                     return (
+                        <label
+                           key={option.key}
+                           className={`correction-source-evidence-option ${checked ? "is-selected" : ""}`}
+                        >
+                           <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={disabled}
+                              onChange={() => toggleVerified(option.key)}
+                           />
+                           <span className="correction-source-evidence-check" aria-hidden="true">
+                              {checked ? <Icons name="check" size={13} /> : null}
+                           </span>
+                           <span className="correction-source-evidence-copy">
+                              <span className="correction-source-evidence-title-row">
+                                 <strong>{option.caption || "Reviewed evidence source"}</strong>
+                                 <span>Verified</span>
+                              </span>
+                              <small>
+                                 {formatLabel(option.evidenceType, "Evidence")}
+                                 {option.recordCount > 1
+                                    ? ` · ${option.recordCount} reviewed records share this source`
+                                    : ""}
+                              </small>
+                              <a
+                                 href={option.url}
+                                 target="_blank"
+                                 rel="noopener noreferrer"
+                                 onClick={(event) => event.stopPropagation()}
+                              >
+                                 {option.url}
+                                 <Icons name="external-link" size={12} aria-hidden="true" />
+                              </a>
+                           </span>
+                        </label>
+                     );
+                  })}
+               </div>
+
+               <div className="correction-source-evidence-picker-actions">
+                  <Button type="button" variant="ghost" density="compact" disabled={disabled} onClick={() => setPickerOpen(false)}>
+                     Cancel
+                  </Button>
+                  <Button type="button" variant="primary" density="compact" disabled={disabled} onClick={applySelection}>
+                     Apply selection
+                  </Button>
+               </div>
+            </section>
+         ) : null}
+
+         {verifiedOptions.length === 0 ? (
+            <p className="correction-source-availability-note">
+               No Verified correction evidence with a usable source URL is available yet.
+            </p>
+         ) : null}
+
+         <div className="correction-source-input-list">
+            {rows.map((row, index) => {
+               const key = comparableSourceUrl(row);
+               const verifiedOption = optionByKey.get(key);
+               const issue = sourceRowIssue(row, rows, index, rejectedKeys);
+               const inputId = `correction-source-${index}`;
+
+               if (verifiedOption && String(row).trim()) {
+                  return (
+                     <div key={inputId} className="correction-selected-source correction-selected-source--evidence">
+                        <div>
+                           <span className="correction-selected-source-origin">Reviewed evidence</span>
+                           <strong>{verifiedOption.caption || "Reviewed evidence source"}</strong>
+                           <a href={verifiedOption.url} target="_blank" rel="noopener noreferrer">
+                              {verifiedOption.url}
+                              <Icons name="external-link" size={12} aria-hidden="true" />
+                           </a>
+                           <small>
+                              Verified during this factual correction review. Its provenance will remain linked when the
+                              correction is prepared.
+                           </small>
+                        </div>
+                        <Button
+                           type="button"
+                           variant="ghost"
+                           density="compact"
+                           disabled={disabled}
+                           onClick={() => removeRow(index)}
+                           aria-label={`Remove reviewed evidence source ${index + 1}`}
+                        >
+                           Remove
+                        </Button>
+                     </div>
+                  );
+               }
+
+               return (
+                  <div className="correction-source-input-item" key={inputId}>
+                     <div className="correction-source-input-label-row">
+                        <label htmlFor={inputId}>Editorial source {index + 1}</label>
+                        <span>Organization-added source</span>
+                     </div>
+                     <div className="correction-source-input-row">
+                        <Input
+                           ref={index === 0 ? inputRef : undefined}
+                           id={inputId}
+                           type="url"
+                           inputMode="url"
+                           value={row}
+                           placeholder="https://example.com/source"
+                           autoCapitalize="none"
+                           autoCorrect="off"
+                           spellCheck={false}
+                           disabled={disabled}
+                           invalid={Boolean(issue || error)}
+                           aria-describedby={issue ? `${inputId}-error` : error ? "correction-source-error" : undefined}
+                           onChange={(event) => updateRow(index, event.target.value)}
+                        />
+                        <Button
+                           type="button"
+                           variant="ghost"
+                           density="compact"
+                           disabled={disabled}
+                           onClick={() => removeRow(index)}
+                           aria-label={`Remove editorial source ${index + 1}`}
+                        >
+                           Remove
+                        </Button>
+                     </div>
+                     {issue ? (
+                        <span id={`${inputId}-error`} className="correction-source-input-error">
+                           {issue}
+                        </span>
+                     ) : null}
+                  </div>
+               );
+            })}
+         </div>
+
+         {error ? (
+            <span id="correction-source-error" className="correction-field-error">
+               {error}
+            </span>
+         ) : null}
+
+         <div className="correction-source-picker-footer">
+            <span>
+               At least one source is required to save the correction proposal. A source rejected during correction
+               review cannot be selected.
+            </span>
+         </div>
+      </div>
+   );
+}
+
 function proposalToEditor(proposal) {
    if (!proposal) {
       return { ...EMPTY_EDITOR, source_urls: [""] };
