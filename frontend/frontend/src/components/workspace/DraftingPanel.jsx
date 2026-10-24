@@ -214,43 +214,27 @@ function BlockerList({ blockers }) {
    );
 }
 
-function HumanAdjudication({ detail }) {
+function DecisionContext({ detail }) {
    const decision = detail?.decision || {};
 
    return (
-      <section className="drafting-provenance-section" aria-labelledby="drafting-adjudication-heading">
-         <div className="drafting-section-heading">
+      <section className="drafting-decision-context" aria-labelledby="drafting-decision-context-heading">
+         <div className="drafting-decision-context-heading">
             <div>
-               <h4 id="drafting-adjudication-heading">Human adjudication</h4>
-               <p>Authoritative, read-only factual judgment. These are not editable article fields.</p>
+               <span>Decision context</span>
+               <h4 id="drafting-decision-context-heading">Claim statement</h4>
             </div>
             <VerdictBadge verdict={decision.verdict || detail?.verdict} />
          </div>
 
-         <dl className="drafting-metadata-grid">
-            <div className="drafting-metadata-wide">
-               <dt>Canonical claim</dt>
-               <dd>{decision.canonical_claim || detail?.canonical_claim || "Not recorded"}</dd>
-            </div>
-            <div className="drafting-metadata-wide">
-               <dt>Rationale</dt>
-               <dd>{decision.rationale || "No rationale was recorded."}</dd>
-            </div>
-            <div>
-               <dt>Decision revision</dt>
-               <dd>{decision.revision_number ?? detail?.concurrency?.decision_revision ?? "Not recorded"}</dd>
-            </div>
-            <div>
-               <dt>Adjudicator</dt>
-               <dd>{actorName(decision.decided_by)}</dd>
-            </div>
-            <div>
-               <dt>Decision time</dt>
-               <dd>
-                  <FormattedDateTime value={decision.decided_at} />
-               </dd>
-            </div>
-         </dl>
+         <p className="drafting-decision-claim">
+            {decision.canonical_claim || detail?.canonical_claim || "Claim statement not recorded."}
+         </p>
+
+         <div className="drafting-decision-rationale">
+            <strong>Decision rationale</strong>
+            <p>{decision.rationale || "No rationale was recorded."}</p>
+         </div>
       </section>
    );
 }
@@ -369,13 +353,6 @@ function SealedEvidence({ sealedEvidence }) {
             </ol>
          )}
 
-         {sealedEvidence ? (
-            <p className="drafting-snapshot-note">
-               Snapshot {String(sealedEvidence.decision_snapshot_id || "unavailable").slice(0, 8)} · Schema version{" "}
-               {sealedEvidence.schema_version ?? "unavailable"} · Captured{" "}
-               <FormattedDateTime value={sealedEvidence.captured_at} />
-            </p>
-         ) : null}
       </section>
    );
 }
@@ -434,6 +411,100 @@ function PublicationSources({ sourceItems }) {
             </ul>
          )}
       </section>
+   );
+}
+
+function DraftingReferenceMaterial({ detail, isEditorialRevision }) {
+   const decision = detail?.decision || {};
+   const sealedEvidence = detail?.sealed_evidence || null;
+
+   return (
+      <details className="drafting-reference-material">
+         <summary>
+            <span>
+               <strong>Reference material</strong>
+               <small>Article details, publication sources, decision evidence, and audit information</small>
+            </span>
+            <Icons name="chevron-down" size={16} aria-hidden="true" />
+         </summary>
+
+         <div className="drafting-reference-content">
+            {detail?.resource_type === "FACT_CHECK" ? (
+               <section className="drafting-reference-section" aria-labelledby="drafting-article-details-heading">
+                  <div className="drafting-section-heading">
+                     <div>
+                        <h4 id="drafting-article-details-heading">Article details</h4>
+                        <p>Lifecycle information for the current article version.</p>
+                     </div>
+                  </div>
+                  <dl className="drafting-compact-metadata drafting-compact-metadata--article">
+                     <div>
+                        <dt>Status</dt>
+                        <dd>{formatLabel(detail.publication_status)}</dd>
+                     </div>
+                     <div>
+                        <dt>Drafter</dt>
+                        <dd>{actorName(detail.drafted_by)}</dd>
+                     </div>
+                     <div>
+                        <dt>Submitted</dt>
+                        <dd>
+                           <FormattedDateTime value={detail.submitted_for_review_at} fallback="Not submitted" />
+                        </dd>
+                     </div>
+                     <div>
+                        <dt>Article version</dt>
+                        <dd>{detail.version ?? "Not recorded"}</dd>
+                     </div>
+                  </dl>
+               </section>
+            ) : null}
+
+            {isEditorialRevision ? <EditorialRevisionContext revision={detail?.revision} /> : null}
+            <PublicationSources sourceItems={detail?.source_items} />
+            <SealedEvidence sealedEvidence={sealedEvidence} />
+
+            <details className="drafting-technical-details">
+               <summary>Technical details</summary>
+               <dl className="drafting-compact-metadata">
+                  <div>
+                     <dt>Decision revision</dt>
+                     <dd>{decision.revision_number ?? detail?.concurrency?.decision_revision ?? "Not recorded"}</dd>
+                  </div>
+                  {detail?.resource_type === "FACT_CHECK" ? (
+                     <div>
+                        <dt>Edit generation</dt>
+                        <dd>{detail?.concurrency?.edit_generation ?? detail?.edit_generation ?? "Not recorded"}</dd>
+                     </div>
+                  ) : null}
+                  <div>
+                     <dt>Adjudicator</dt>
+                     <dd>{actorName(decision.decided_by)}</dd>
+                  </div>
+                  <div>
+                     <dt>Decision time</dt>
+                     <dd><FormattedDateTime value={decision.decided_at} /></dd>
+                  </div>
+                  {sealedEvidence ? (
+                     <>
+                        <div>
+                           <dt>Evidence snapshot</dt>
+                           <dd>{String(sealedEvidence.decision_snapshot_id || "Not recorded")}</dd>
+                        </div>
+                        <div>
+                           <dt>Snapshot schema</dt>
+                           <dd>{sealedEvidence.schema_version ?? "Not recorded"}</dd>
+                        </div>
+                        <div>
+                           <dt>Snapshot captured</dt>
+                           <dd><FormattedDateTime value={sealedEvidence.captured_at} /></dd>
+                        </div>
+                     </>
+                  ) : null}
+               </dl>
+            </details>
+         </div>
+      </details>
    );
 }
 
@@ -591,8 +662,8 @@ function ServerConflict({ conflict, editor, focusRef, onUseLatest, onContinue })
             <div>
                <h4 id="drafting-conflict-heading">
                   {conflict?.code === "STALE_EDIT_GENERATION"
-                     ? "The server draft changed after this editor was opened."
-                     : "This publication work changed on the server."}
+                     ? "The saved draft changed after this editor was opened."
+                     : "This publication work changed after it was opened."}
                </h4>
                <p>
                   <strong>{conflict?.code || "CONFLICT"}</strong> · {conflict?.detail || "The update was not applied."}
@@ -626,7 +697,7 @@ function ServerConflict({ conflict, editor, focusRef, onUseLatest, onContinue })
                   </dl>
                </section>
                <section>
-                  <h5>Latest server version</h5>
+                  <h5>Latest saved version</h5>
                   <dl>
                      <div>
                         <dt>Edit generation</dt>
@@ -652,13 +723,13 @@ function ServerConflict({ conflict, editor, focusRef, onUseLatest, onContinue })
                </section>
             </div>
          ) : (
-            <p>Your local text remains visible for recovery, but the latest server item could not be loaded.</p>
+            <p>Your local text remains visible for recovery, but the latest saved version could not be loaded.</p>
          )}
 
          {server ? (
             <div className="drafting-conflict-actions">
                <Button type="button" variant="secondary" density="compact" onClick={onUseLatest}>
-                  Use latest server version
+                  Use latest saved version
                </Button>
                {conflict?.code === "STALE_EDIT_GENERATION" && canContinue ? (
                   <Button type="button" variant="primary" density="compact" onClick={onContinue}>
@@ -670,7 +741,7 @@ function ServerConflict({ conflict, editor, focusRef, onUseLatest, onContinue })
 
          {server && !canContinue ? (
             <p className="drafting-conflict-readonly">
-               The latest server state no longer allows draft updates. Your local text remains available to copy.
+               The latest saved state no longer allows draft updates. Your local text remains available to copy.
             </p>
          ) : null}
       </section>
@@ -1872,7 +1943,7 @@ function DraftingContent({
                                     disabled={Boolean(mutation)}
                                     onClick={handleReturnToQueue}
                                  >
-                                    Return to queue
+                                    Back to Drafting
                                  </Button>
                               </div>
                            </div>
@@ -1911,8 +1982,8 @@ function DraftingContent({
                                  <div className="drafting-review-notice">
                                     <Icons name="clock" size={18} />
                                     <div>
-                                       <strong>Awaiting publication review</strong>
-                                       <p>Publication actions are available only in the Publishing workspace.</p>
+                                       <strong>Submitted for publication review</strong>
+                                       <p>This article is read-only here while it awaits review in Publishing.</p>
                                     </div>
                                  </div>
                               ) : null}
@@ -1927,50 +1998,8 @@ function DraftingContent({
                                  />
                               ) : null}
 
-                              {detail.resource_type === "FACT_CHECK" ? (
-                                 <section
-                                    className="drafting-article-context"
-                                    aria-labelledby="drafting-article-context-heading"
-                                 >
-                                    <div className="drafting-section-heading">
-                                       <div>
-                                          <h4 id="drafting-article-context-heading">Article context</h4>
-                                          <p>Current lifecycle and concurrency metadata for this article.</p>
-                                       </div>
-                                    </div>
-                                    <dl className="drafting-compact-metadata drafting-compact-metadata--article">
-                                       <div>
-                                          <dt>Status</dt>
-                                          <dd>{formatLabel(detail.publication_status)}</dd>
-                                       </div>
-                                       <div>
-                                          <dt>Drafter</dt>
-                                          <dd>{actorName(detail.drafted_by)}</dd>
-                                       </div>
-                                       <div>
-                                          <dt>Submitted</dt>
-                                          <dd>
-                                             <FormattedDateTime
-                                                value={detail.submitted_for_review_at}
-                                                fallback="Not submitted"
-                                             />
-                                          </dd>
-                                       </div>
-                                       <div>
-                                          <dt>Edit generation</dt>
-                                          <dd>
-                                             {detail.concurrency?.edit_generation ??
-                                                detail.edit_generation ??
-                                                "Not recorded"}
-                                          </dd>
-                                       </div>
-                                    </dl>
-                                 </section>
-                              ) : null}
-
-                              {isEditorialRevision ? <EditorialRevisionContext revision={detail.revision} /> : null}
-
-                              <HumanAdjudication detail={detail} />
+                              <BlockerList blockers={detail.blockers} />
+                              <DecisionContext detail={detail} />
 
                               {detail.resource_type === "ELIGIBLE_CLAIM" &&
                               allowedActions.includes("CREATE_DRAFT") &&
@@ -1978,8 +2007,8 @@ function DraftingContent({
                                  <form className="drafting-editor" onSubmit={handleCreateDraft}>
                                     <div className="drafting-section-heading">
                                        <div>
-                                          <h4>Create article draft</h4>
-                                          <p>Start editorial content without changing the adjudication record.</p>
+                                          <h4>Create fact-check draft</h4>
+                                          <p>Write the publication content for this adjudicated claim. The factual decision remains unchanged.</p>
                                        </div>
                                        {isDirty ? <span className="drafting-unsaved-label">Unsaved</span> : null}
                                     </div>
@@ -2056,8 +2085,8 @@ function DraftingContent({
                                  <form className="drafting-editor" onSubmit={handleSaveDraft}>
                                     <div className="drafting-section-heading">
                                        <div>
-                                          <h4>{isEditorialRevision ? "Editorial revision draft" : "Article draft"}</h4>
-                                          <p>Manual save only. Sealed evidence remains read-only.</p>
+                                          <h4>{isEditorialRevision ? "Editorial revision draft" : "Fact-check draft"}</h4>
+                                          <p>Continue writing and save intentionally before submitting for publication review.</p>
                                        </div>
                                        {isDirty ? (
                                           <span className="drafting-unsaved-label">Unsaved</span>
@@ -2185,8 +2214,8 @@ function DraftingContent({
                                  >
                                     <div className="drafting-section-heading">
                                        <div>
-                                          <h4 id="drafting-submitted-article-heading">Submitted article</h4>
-                                          <p>Read-only content currently awaiting institutional publication review.</p>
+                                          <h4 id="drafting-submitted-article-heading">Submitted fact-check</h4>
+                                          <p>Review the submitted article as it currently appears in the publication workflow.</p>
                                        </div>
                                     </div>
                                     <h5>{detail.headline || "Untitled fact check"}</h5>
@@ -2199,9 +2228,10 @@ function DraftingContent({
                                  </section>
                               ) : null}
 
-                              <BlockerList blockers={detail.blockers} />
-                              <PublicationSources sourceItems={detail.source_items} />
-                              <SealedEvidence sealedEvidence={detail.sealed_evidence} />
+                              <DraftingReferenceMaterial
+                                 detail={detail}
+                                 isEditorialRevision={isEditorialRevision}
+                              />
 
                               {isDraft && isSupportedWork && allowedActions.includes("ABANDON") && !conflict ? (
                                  <section className="drafting-danger-zone" aria-labelledby="drafting-abandon-heading">
