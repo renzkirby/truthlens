@@ -339,6 +339,7 @@ function ActionFilterMenu({ id, value, options, onChange }) {
             id={id}
             type="button"
             className="accountability-action-filter-trigger"
+            aria-label="Action filter"
             aria-haspopup="menu"
             aria-expanded={open}
             onClick={() => setOpen((current) => !current)}
@@ -588,7 +589,7 @@ function AccountabilityPanel({ scope, organizationId, organizationName }) {
                      ))}
                   </Select>
                </label>
-               <label htmlFor="accountability-action">
+               <div className="accountability-filter-field">
                   <span>Action</span>
                   <ActionFilterMenu
                      id="accountability-action"
@@ -596,7 +597,7 @@ function AccountabilityPanel({ scope, organizationId, organizationName }) {
                      options={visibleActions}
                      onChange={(value) => updateDraftFilter("action_type", value)}
                   />
-               </label>
+               </div>
                <label htmlFor="accountability-resource">
                   <span>Record type</span>
                   <Select
