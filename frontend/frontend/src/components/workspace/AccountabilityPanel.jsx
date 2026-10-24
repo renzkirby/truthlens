@@ -182,6 +182,7 @@ function AccountabilityEvent({ event }) {
    const resourceId = event.resource?.id || "";
    const hasReasonOrNotes = Boolean(event.reason_code || event.notes);
    const hasContext = !isEmptyRecord(event.context);
+   const authorityLabel = event.authority?.organization?.name || event.authority?.scope || "Not applicable";
 
    return (
       <li>
@@ -189,10 +190,9 @@ function AccountabilityEvent({ event }) {
             <header className="accountability-event-header">
                <div className="accountability-event-title">
                   <div className="accountability-badges">
-                     <span>{event.domain_label || event.domain}</span>
-                     <span>{event.authority?.scope || "Unknown scope"}</span>
+                     <span>{event.domain_label || displayKey(event.domain)}</span>
                   </div>
-                  <h3>{event.action_label || event.action_type}</h3>
+                  <h3>{event.action_label || displayKey(event.action_type)}</h3>
                </div>
                {validTimestamp ? (
                   <time dateTime={timestamp.toISOString()}>{formatDateTime(event.created_at)}</time>
@@ -201,28 +201,24 @@ function AccountabilityEvent({ event }) {
                )}
             </header>
 
-            <dl className="accountability-event-meta accountability-event-meta--compact">
+            <dl className="accountability-event-meta">
                <div>
-                  <dt>Actor</dt>
+                  <dt>Performed by</dt>
                   <dd>
                      <span>{actorLabel}</span>
-                     {event.actor?.historical ? <span className="accountability-historical">Historical</span> : null}
+                     {event.actor?.historical ? <span className="accountability-historical">Historical identity</span> : null}
                   </dd>
                </div>
                <div>
-                  <dt>Capability</dt>
-                  <dd>{event.authority?.capability || "Not applicable"}</dd>
-               </div>
-               <div>
-                  <dt>Authority</dt>
-                  <dd>{event.authority?.organization?.name || event.authority?.scope || "Not applicable"}</dd>
-               </div>
-               <div>
-                  <dt>Resource</dt>
+                  <dt>Affected record</dt>
                   <dd>
-                     <strong>{event.resource?.label || event.resource?.type}</strong>
-                     <code title={resourceId || undefined}>{compactIdentifier(resourceId)}</code>
+                     <strong>{event.resource?.label || displayKey(event.resource?.type || "Record")}</strong>
+                     {resourceId ? <code title={resourceId}>{compactIdentifier(resourceId)}</code> : null}
                   </dd>
+               </div>
+               <div>
+                  <dt>Recorded authority</dt>
+                  <dd>{authorityLabel}</dd>
                </div>
             </dl>
 
@@ -235,7 +231,7 @@ function AccountabilityEvent({ event }) {
                   aria-controls={detailId}
                   trailingIcon={<Icons name={expanded ? "chevron-up" : "chevron-down"} size={16} aria-hidden="true" />}
                >
-                  {expanded ? "Hide details" : "View details"}
+                  {expanded ? "Hide record details" : "View record details"}
                </Button>
             </div>
 
@@ -243,14 +239,14 @@ function AccountabilityEvent({ event }) {
                <div className="accountability-expanded" id={detailId}>
                   <StateChanges previousState={event.previous_state} newState={event.new_state} />
 
-                  <section className="accountability-expanded-section">
-                     <h4>Reason / notes</h4>
-                     {hasReasonOrNotes ? (
+                  {hasReasonOrNotes ? (
+                     <section className="accountability-expanded-section">
+                        <h4>Reason and notes</h4>
                         <dl className="accountability-reason-list">
                            {event.reason_code ? (
                               <div>
-                                 <dt>Reason code</dt>
-                                 <dd>{event.reason_code}</dd>
+                                 <dt>Reason</dt>
+                                 <dd>{displayKey(event.reason_code)}</dd>
                               </div>
                            ) : null}
                            {event.notes ? (
@@ -260,22 +256,41 @@ function AccountabilityEvent({ event }) {
                               </div>
                            ) : null}
                         </dl>
-                     ) : (
-                        <p className="accountability-detail-note">No reason or notes were recorded.</p>
-                     )}
-                  </section>
-
-                  {hasContext ? (
-                     <details className="accountability-context-disclosure">
-                        <summary>
-                           <span>Additional context</span>
-                           <span className="accountability-context-hint">Technical metadata</span>
-                        </summary>
-                        <div className="accountability-context-content">
-                           <StructuredValue value={event.context} />
-                        </div>
-                     </details>
+                     </section>
                   ) : null}
+
+                  <details className="accountability-context-disclosure">
+                     <summary>
+                        <span>Authority and technical record</span>
+                        <span className="accountability-context-hint">Details on demand</span>
+                     </summary>
+                     <div className="accountability-context-content">
+                        <dl className="accountability-record-details">
+                           <div>
+                              <dt>Authority scope</dt>
+                              <dd>{event.authority?.scope || "Not recorded"}</dd>
+                           </div>
+                           <div>
+                              <dt>Capability used</dt>
+                              <dd>{event.authority?.capability || "Not applicable"}</dd>
+                           </div>
+                           <div>
+                              <dt>Resource type</dt>
+                              <dd>{displayKey(event.resource?.type || "Not recorded")}</dd>
+                           </div>
+                           <div>
+                              <dt>Resource ID</dt>
+                              <dd>{resourceId || "Not recorded"}</dd>
+                           </div>
+                        </dl>
+                        {hasContext ? (
+                           <div className="accountability-technical-context">
+                              <h5>Additional context</h5>
+                              <StructuredValue value={event.context} />
+                           </div>
+                        ) : null}
+                     </div>
+                  </details>
                </div>
             ) : null}
          </article>
@@ -287,6 +302,7 @@ function AccountabilityPanel({ scope, organizationId, organizationName }) {
    const { authFetch, token, user } = useAuth();
    const [draftFilters, setDraftFilters] = useState({ ...EMPTY_FILTERS });
    const [appliedFilters, setAppliedFilters] = useState({ ...EMPTY_FILTERS });
+   const [filtersOpen, setFiltersOpen] = useState(false);
    const [offset, setOffset] = useState(0);
    const [requestVersion, setRequestVersion] = useState(0);
    const [page, setPage] = useState({
@@ -432,21 +448,44 @@ function AccountabilityPanel({ scope, organizationId, organizationName }) {
    const rangeStart = page.results.length === 0 ? 0 : offset + 1;
    const rangeEnd = Math.min(offset + page.results.length, page.count);
    const scopeLabel = scope === "platform" ? "Platform Safety" : organizationName || "this organization";
+   const appliedFilterCount = Object.values(appliedFilters).filter(Boolean).length;
 
    return (
       <div className="accountability-panel">
-         <p className="accountability-boundary-note">
-            <Icons name="activity" size={17} />
-            <span>
-               Read-only accountability history for <strong>{scopeLabel}</strong>. Entries reflect attributable actions
-               recorded when each operation occurred.
-            </span>
-         </p>
+         <section className="accountability-boundary-note" aria-label="Accountability record scope">
+            <Icons name="activity" size={18} />
+            <div>
+               <strong>Read-only accountability record</strong>
+               <p>
+                  Review attributable actions recorded for <strong>{scopeLabel}</strong>. This history supports
+                  organizational accountability; it is not a general user-surveillance view.
+               </p>
+            </div>
+         </section>
 
-         <form className="accountability-filters" onSubmit={applyFilters}>
-            <div className="accountability-filter-grid">
+         <section className="accountability-history-controls">
+            <div className="accountability-history-heading">
+               <div>
+                  <h3>Recorded actions</h3>
+                  <p>See what changed, who performed the action, when it happened, and which record was affected.</p>
+               </div>
+               <Button
+                  type="button"
+                  variant="secondary"
+                  leadingIcon={<Icons name="filter" size={16} aria-hidden="true" />}
+                  onClick={() => setFiltersOpen((current) => !current)}
+                  aria-expanded={filtersOpen}
+                  aria-controls="accountability-filter-panel"
+               >
+                  {appliedFilterCount > 0 ? `Filters (${appliedFilterCount})` : "Filters"}
+               </Button>
+            </div>
+
+            {filtersOpen ? (
+               <form id="accountability-filter-panel" className="accountability-filters" onSubmit={applyFilters}>
+                  <div className="accountability-filter-grid">
                <label htmlFor="accountability-domain">
-                  <span>Domain</span>
+                  <span>Activity area</span>
                   <Select
                      id="accountability-domain"
                      value={draftFilters.domain}
@@ -476,7 +515,7 @@ function AccountabilityPanel({ scope, organizationId, organizationName }) {
                   </Select>
                </label>
                <label htmlFor="accountability-resource">
-                  <span>Resource</span>
+                  <span>Record type</span>
                   <Select
                      id="accountability-resource"
                      value={draftFilters.resource_type}
@@ -496,11 +535,11 @@ function AccountabilityPanel({ scope, organizationId, organizationName }) {
                      id="accountability-actor"
                      value={draftFilters.actor}
                      onChange={(event) => updateDraftFilter("actor", event.target.value)}
-                     placeholder="Username contains…"
+                     placeholder="Search username…"
                   />
                </label>
                <label htmlFor="accountability-created-after">
-                  <span>Created after</span>
+                  <span>From</span>
                   <Input
                      id="accountability-created-after"
                      type="datetime-local"
@@ -509,7 +548,7 @@ function AccountabilityPanel({ scope, organizationId, organizationName }) {
                   />
                </label>
                <label htmlFor="accountability-created-before">
-                  <span>Created before</span>
+                  <span>To</span>
                   <Input
                      id="accountability-created-before"
                      type="datetime-local"
@@ -518,27 +557,19 @@ function AccountabilityPanel({ scope, organizationId, organizationName }) {
                   />
                </label>
             </div>
-            <div className="accountability-filter-actions">
-               <Button type="submit" disabled={loading}>
-                  Apply filters
-               </Button>
-               <Button type="button" variant="secondary" onClick={clearFilters} disabled={loading}>
-                  Clear filters
-               </Button>
-               <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={refresh}
-                  loading={isRefreshing}
-                  loadingLabel="Refreshing…"
-                  disabled={isBlockingLoad}
-               >
-                  Refresh
-               </Button>
-            </div>
-         </form>
+                  <div className="accountability-filter-actions">
+                     <Button type="submit" disabled={loading}>
+                        Apply filters
+                     </Button>
+                     <Button type="button" variant="secondary" onClick={clearFilters} disabled={loading}>
+                        Clear filters
+                     </Button>
+                  </div>
+               </form>
+            ) : null}
 
-         <div className="accountability-status" aria-live="polite" aria-atomic="true">
+            <div className="accountability-results-toolbar">
+               <div className="accountability-status" aria-live="polite" aria-atomic="true">
             {isBlockingLoad
                ? "Loading accountability history."
                : isRefreshing
@@ -547,8 +578,21 @@ function AccountabilityPanel({ scope, organizationId, organizationName }) {
                    ? errorMessage
                    : effectiveAccessDenied
                      ? "Accountability access is no longer available."
-                     : `Showing ${rangeStart} to ${rangeEnd} of ${page.count} events.`}
-         </div>
+                     : `Showing ${rangeStart} to ${rangeEnd} of ${page.count} recorded actions.`}
+               </div>
+               <Button
+                  type="button"
+                  variant="ghost"
+                  leadingIcon={<Icons name="refresh-cw" size={15} aria-hidden="true" />}
+                  onClick={refresh}
+                  loading={isRefreshing}
+                  loadingLabel="Refreshing…"
+                  disabled={isBlockingLoad}
+               >
+                  Refresh
+               </Button>
+            </div>
+         </section>
 
          {effectiveAccessDenied ? (
             <section className="accountability-state accountability-state--denied" role="status">
@@ -580,8 +624,8 @@ function AccountabilityPanel({ scope, organizationId, organizationName }) {
          ) : page.results.length === 0 ? (
             <section className="accountability-state" role="status">
                <Icons name="activity" size={23} />
-               <h3>No accountability events found</h3>
-               <p>No authorized events match the current filters.</p>
+               <h3>No recorded actions found</h3>
+               <p>No recorded actions match the current filters.</p>
             </section>
          ) : (
             <ul className="accountability-feed">
@@ -591,27 +635,23 @@ function AccountabilityPanel({ scope, organizationId, organizationName }) {
             </ul>
          )}
 
-         {!effectiveAccessDenied && !errorMessage && !isBlockingLoad ? (
+         {!effectiveAccessDenied && !errorMessage && !isBlockingLoad && page.results.length > 0 ? (
             <nav className="accountability-pagination" aria-label="Accountability history pages">
-               <span>
-                  {rangeStart}–{rangeEnd} of {page.count}
-               </span>
-               <div>
-                  <Button
-                     variant="secondary"
-                     onClick={() => setOffset((current) => Math.max(0, current - PAGE_SIZE))}
-                     disabled={!hasPrevious || loading}
-                  >
-                     Previous
-                  </Button>
-                  <Button
-                     variant="secondary"
-                     onClick={() => setOffset((current) => current + PAGE_SIZE)}
-                     disabled={!hasNext || loading}
-                  >
-                     Next
-                  </Button>
-               </div>
+               <Button
+                  variant="secondary"
+                  onClick={() => setOffset((current) => Math.max(0, current - PAGE_SIZE))}
+                  disabled={!hasPrevious || loading}
+               >
+                  Previous
+               </Button>
+               <span>{rangeStart}–{rangeEnd} of {page.count}</span>
+               <Button
+                  variant="secondary"
+                  onClick={() => setOffset((current) => current + PAGE_SIZE)}
+                  disabled={!hasNext || loading}
+               >
+                  Next
+               </Button>
             </nav>
          ) : null}
       </div>
