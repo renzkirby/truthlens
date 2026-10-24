@@ -488,6 +488,37 @@ function ProposalSummary({ proposal, eligibleVerificationRuns }) {
    );
 }
 
+function blockersForActions(blockers, actions) {
+   const allowed = new Set(actions);
+   return Object.fromEntries(
+      Object.entries(blockers || {}).filter(
+         ([action, values]) => allowed.has(action) && Array.isArray(values) && values.length > 0,
+      ),
+   );
+}
+
+function hasBlockersForActions(blockers, actions) {
+   return Object.keys(blockersForActions(blockers, actions)).length > 0;
+}
+
+function CorrectionWorkDisclosure({ title, description, meta, children }) {
+   return (
+      <details className="correction-work-disclosure">
+         <summary>
+            <span>
+               <strong>{title}</strong>
+               <small>{description}</small>
+            </span>
+            <span className="correction-work-disclosure-meta">
+               {meta ? <small>{meta}</small> : null}
+               <Icons name="chevron-down" size={16} aria-hidden="true" />
+            </span>
+         </summary>
+         <div className="correction-work-disclosure-content">{children}</div>
+      </details>
+   );
+}
+
 function FactualCorrectionContent({
    authFetch,
    authIdentity,
@@ -1536,7 +1567,7 @@ function FactualCorrectionContent({
             </div>
             <fieldset className="correction-source-editor correction-field--wide">
                <legend>Source URLs</legend>
-               <p>Only HTTP and HTTPS URLs can be submitted. Server validation remains authoritative.</p>
+               <p>Only HTTP and HTTPS URLs can be submitted. Validation rules are checked when you save.</p>
                {editor.source_urls.map((url, index) => (
                   <div key={index} className="correction-source-row">
                      <label className="sr-only" htmlFor={`correction-source-${index}`}>
@@ -1648,7 +1679,7 @@ function FactualCorrectionContent({
                className={isDirty ? "correction-dirty-indicator is-dirty" : "correction-dirty-indicator"}
                role="status"
             >
-               {isDirty ? "Unsaved proposal changes" : "Proposal matches the saved server version"}
+               {isDirty ? "Unsaved proposal changes" : "Proposal matches the latest saved version"}
             </span>
             <div className="correction-action-row">
                {allowedActions.includes("SAVE_CORRECTION_PROPOSAL") ? (
@@ -1711,21 +1742,39 @@ function FactualCorrectionContent({
 
    const renderStageWork = () => {
       if (detail.stage === "EVIDENCE_REVIEW") {
+         const reviewBlockers = blockersForActions(detail.blockers, ["REVIEW_CORRECTION_EVIDENCE"]);
          return (
             <>
                {renderEvidence()}
-               {detail.proposal || canEditProposal ? renderProposalSection() : null}
+               {Object.keys(reviewBlockers).length > 0 ? <Blockers blockers={reviewBlockers} /> : null}
+               {detail.proposal || canEditProposal ? (
+                  <CorrectionWorkDisclosure
+                     title="Correction proposal"
+                     description="Optional while evidence review is still in progress. Saving a draft does not make it factual authority."
+                     meta={isDirty ? "Unsaved changes" : detail.proposal ? `Proposal v${detail.proposal.version}` : "Optional"}
+                  >
+                     {renderProposalSection()}
+                  </CorrectionWorkDisclosure>
+               ) : null}
             </>
          );
       }
+
       if (detail.stage === "PROPOSAL_DRAFT") {
          return (
             <>
                {renderProposalSection()}
-               {renderEvidence()}
+               <CorrectionWorkDisclosure
+                  title="Reviewed correction evidence"
+                  description="Evidence review is complete. Reopen it here for reference while drafting the correction proposal."
+                  meta={`${detail.evidence_review?.reviewed_count ?? 0} reviewed`}
+               >
+                  {renderEvidence()}
+               </CorrectionWorkDisclosure>
             </>
          );
       }
+
       if (detail.stage === "PREPARED") {
          return (
             <>
@@ -1740,74 +1789,163 @@ function FactualCorrectionContent({
                            Prepared for publication — not yet published or authoritative.
                         </h4>
                         <p>
-                           The proposal is now locked for final review. Only successful final publication creates the new current decision
-                           and article authority.
+                           The proposal is locked for final review. Only successful final publication creates the new
+                           current decision and article authority.
                         </p>
                      </div>
                   </div>
                </section>
                {renderProposalSection()}
+               <CorrectionWorkDisclosure
+                  title="Reviewed correction evidence"
+                  description="Evidence review is complete and retained for reference before publication."
+                  meta={`${detail.evidence_review?.reviewed_count ?? 0} reviewed`}
+               >
+                  {renderEvidence()}
+               </CorrectionWorkDisclosure>
             </>
          );
       }
+
       if (detail.stage === "COMPLETED") {
          const publication = publishedPublication || detail.completed_publication;
          const publicationArticle = publication?.article || publication;
          const publicationTime = publication?.published_at || publicationArticle?.published_at;
          return (
+            <>
+               <section
+                  className="correction-section correction-terminal correction-terminal--completed"
+                  aria-labelledby="correction-completed-heading"
+               >
+                  <div className="correction-terminal-heading">
+                     <Icons name="check-circle" size={22} />
+                     <div>
+                        <h4 id="correction-completed-heading">Factual correction completed</h4>
+                        <p>
+                           {completedHasReplacementDecision
+                              ? "Final publication succeeded. The replacement human decision and institutional article are now current authority."
+                              : "Final publication succeeded, but this response does not distinguish a replacement human decision. The authority comparison remains neutral."}
+                        </p>
+                     </div>
+                  </div>
+                  {publication ? (
+                     <div className="correction-completed-publication">
+                        <div>
+                           <strong>{publicationArticle?.headline || "Completed factual correction"}</strong>
+                           <span>
+                              Article v{publicationArticle?.version ?? "–"} · {formatDateTime(publicationTime)}
+                           </span>
+                        </div>
+                        <Button type="button" variant="secondary" onClick={() => onOpenPublication?.(publication)}>
+                           Open completed publication
+                        </Button>
+                     </div>
+                  ) : (
+                     <p className="correction-inline-empty">
+                        The completed publication record is not available in this response.
+                     </p>
+                  )}
+               </section>
+               <CorrectionWorkDisclosure
+                  title="Historical correction work"
+                  description="Review the evidence and proposal that led to this completed correction."
+                  meta="Read-only"
+               >
+                  {renderEvidence()}
+                  {renderProposalSection({ preserved: true })}
+               </CorrectionWorkDisclosure>
+            </>
+         );
+      }
+
+      return (
+         <>
             <section
-               className="correction-section correction-terminal correction-terminal--completed"
-               aria-labelledby="correction-completed-heading"
+               className="correction-section correction-terminal correction-terminal--cancelled"
+               aria-labelledby="correction-cancelled-heading"
             >
                <div className="correction-terminal-heading">
-                  <Icons name="check-circle" size={22} />
+                  <Icons name="alert-circle" size={22} />
                   <div>
-                     <h4 id="correction-completed-heading">Factual correction completed</h4>
+                     <h4 id="correction-cancelled-heading">Factual correction cancelled</h4>
                      <p>
-                        {completedHasReplacementDecision
-                           ? "Final publication succeeded. The returned replacement human decision and institutional article are now current authority."
-                           : "Final publication succeeded, but this response does not distinguish a replacement human decision. The authority comparison below remains neutral."}
+                        This request is terminal and read-only. Cancellation created no replacement factual authority;
+                        the existing human decision remains current.
                      </p>
                   </div>
                </div>
-               {publication ? (
-                  <div className="correction-completed-publication">
-                     <div>
-                        <strong>{publicationArticle?.headline || "Completed factual correction"}</strong>
-                        <span>
-                           Article v{publicationArticle?.version ?? "–"} · {formatDateTime(publicationTime)}
-                        </span>
-                     </div>
-                     <Button type="button" variant="secondary" onClick={() => onOpenPublication?.(publication)}>
-                        Open completed publication
+            </section>
+            <CorrectionWorkDisclosure
+               title="Historical correction work"
+               description="Review the evidence and proposal preserved from this cancelled correction request."
+               meta="Read-only"
+            >
+               {renderEvidence()}
+               {renderProposalSection({ preserved: true })}
+            </CorrectionWorkDisclosure>
+         </>
+      );
+   };
+
+   const renderPrimaryTransition = () => {
+      if (detail.stage === "PROPOSAL_DRAFT") {
+         const prepareBlockers = blockersForActions(detail.blockers, ["PREPARE_CORRECTION_PROPOSAL"]);
+         return (
+            <section className="correction-section correction-next-step" aria-labelledby="correction-next-step-heading">
+               <div className="correction-section-heading">
+                  <div>
+                     <h4 id="correction-next-step-heading">Prepare for publication</h4>
+                     <p>Lock the saved proposal for final publication review once the correction is ready.</p>
+                  </div>
+               </div>
+               {Object.keys(prepareBlockers).length > 0 ? <Blockers blockers={prepareBlockers} /> : null}
+               {allowedActions.includes("PREPARE_CORRECTION_PROPOSAL") ? (
+                  <div className="correction-action-row">
+                     <Button
+                        type="button"
+                        variant="primary"
+                        disabled={isDirty || Boolean(mutation)}
+                        onClick={prepareProposal}
+                     >
+                        Prepare correction proposal
                      </Button>
                   </div>
-               ) : (
-                  <p className="correction-inline-empty">
-                     The completed publication record is not available in this response.
-                  </p>
-               )}
+               ) : null}
+               {allowedActions.includes("PREPARE_CORRECTION_PROPOSAL") && isDirty ? (
+                  <p className="correction-action-note">Save the current proposal changes before preparing.</p>
+               ) : null}
             </section>
          );
       }
-      return (
-         <section
-            className="correction-section correction-terminal correction-terminal--cancelled"
-            aria-labelledby="correction-cancelled-heading"
-         >
-            <div className="correction-terminal-heading">
-               <Icons name="alert-circle" size={22} />
-               <div>
-                  <h4 id="correction-cancelled-heading">Factual correction cancelled</h4>
-                  <p>
-                     This request is terminal and read-only. Cancellation created no replacement factual authority; the
-                     existing human decision remains current. Historical evidence and proposal material remain
-                     inspectable below.
-                  </p>
+
+      if (detail.stage === "PREPARED") {
+         const publishBlockers = blockersForActions(detail.blockers, ["PUBLISH_FACTUAL_CORRECTION"]);
+         return (
+            <section className="correction-section correction-next-step" aria-labelledby="correction-publication-heading">
+               <div className="correction-section-heading">
+                  <div>
+                     <h4 id="correction-publication-heading">Publication decision</h4>
+                     <p>Publish the prepared factual correction to create the new current human decision and article.</p>
+                  </div>
                </div>
-            </div>
-         </section>
-      );
+               {Object.keys(publishBlockers).length > 0 ? <Blockers blockers={publishBlockers} /> : null}
+               {allowedActions.includes("PUBLISH_FACTUAL_CORRECTION") ? (
+                  <div className="correction-action-row">
+                     <Button
+                        type="button"
+                        variant="primary"
+                        disabled={Boolean(mutation)}
+                        onClick={() => setDialog({ type: "publish" })}
+                     >
+                        Publish factual correction
+                     </Button>
+                  </div>
+               ) : null}
+            </section>
+         );
+      }
+
+      return null;
    };
 
    return (
