@@ -1640,7 +1640,7 @@ function FactualCorrectionContent({
             </Badge>
          </div>
          {evidenceItems.length === 0 ? (
-            <p className="correction-inline-empty">No correction evidence is currently returned by the server.</p>
+            <p className="correction-inline-empty">No correction evidence is currently available.</p>
          ) : (
             <ol className="correction-evidence-list">
                {evidenceItems.map((item, index) => {
@@ -2336,7 +2336,7 @@ function FactualCorrectionContent({
                            {conflict.blockers.map((blocker, index) => (
                               <li key={`${blocker?.code || "blocker"}-${index}`}>
                                  <strong>{formatLabel(blocker?.code, "Conflict blocker")}</strong>
-                                 {blocker?.detail || "The server rejected this state transition."}
+                                 {blocker?.detail || "This action is not available in the current state."}
                               </li>
                            ))}
                         </ul>
@@ -2435,7 +2435,7 @@ function FactualCorrectionContent({
                         No {normalizedStatus === "ALL" ? "" : formatLabel(normalizedStatus).toLowerCase()} correction
                         requests
                      </strong>
-                     <p>Requests matching this server status will appear here.</p>
+                     <p>Requests with this status will appear here.</p>
                   </div>
                ) : (
                   <>
