@@ -7,7 +7,8 @@ import unittest
 from api.verification.semantic_benchmark import BenchmarkInputError
 from api.verification.semantic_eval_gemini import (
     CONFIRMATION, EXECUTION_VERSION, INTER_REQUEST_DELAY_SEC, MODEL_ID,
-    TEMPERATURE, THINKING_BUDGET, execute_gemini_pilot, validate_live_plan,
+    TEMPERATURE, THINKING_BUDGET, _failure_details, execute_gemini_pilot,
+    validate_live_plan,
 )
 from api.verification.semantic_eval_runner import write_plan
 
@@ -203,7 +204,92 @@ class GeminiPilotTests(unittest.TestCase):
         attempts = [json.loads(line) for line in self.attempts.read_text().splitlines()]
         self.assertEqual(attempts[0]["outcome"], "FAILED")
         self.assertEqual(attempts[0]["error_code"], "PROVIDER_ERROR")
+        self.assertEqual(attempts[0]["error_category"], "UNCLASSIFIED_ERROR")
+        self.assertNotIn("http_status", attempts[0])
         self.assertNotIn("quota body", self.attempts.read_text())
+        self.assertEqual(len(self.responses.read_text().splitlines()), 7)
+
+
+    def test_http_error_categories_do_not_use_message_text(self):
+        class ProviderException(Exception):
+            def __init__(self, status, message="provider secret=do-not-log"):
+                super().__init__(message)
+                self.code = status
+
+        examples = {
+            400: "INVALID_REQUEST",
+            401: "AUTHENTICATION_ERROR",
+            402: "PAYMENT_REQUIRED",
+            403: "ACCESS_DENIED",
+            404: "HTTP_CLIENT_ERROR",
+            408: "REQUEST_TIMEOUT",
+            413: "INVALID_REQUEST",
+            422: "INVALID_REQUEST",
+            429: "RATE_LIMIT_OR_QUOTA",
+            500: "SERVER_ERROR",
+            503: "SERVER_ERROR",
+            504: "REQUEST_TIMEOUT",
+        }
+        for status, category in examples.items():
+            with self.subTest(http_status=status):
+                result = _failure_details(ProviderException(status))
+                self.assertEqual(result["error_code"], "PROVIDER_ERROR")
+                self.assertEqual(result["http_status"], status)
+                self.assertEqual(result["error_category"], category)
+                self.assertNotIn("secret", json.dumps(result))
+                self.assertNotIn("do-not-log", json.dumps(result))
+
+    def test_secondary_numeric_status_and_invalid_status_fail_closed(self):
+        class AlternateProviderException(Exception):
+            status_code = 429
+
+        result = _failure_details(AlternateProviderException("private body"))
+        self.assertEqual(result["http_status"], 429)
+        self.assertEqual(result["error_category"], "RATE_LIMIT_OR_QUOTA")
+
+        for invalid in (None, "429", True, 99, 600, -1):
+            with self.subTest(invalid=invalid):
+                exc = RuntimeError("private body")
+                exc.code = invalid
+                result = _failure_details(exc)
+                self.assertNotIn("http_status", result)
+                self.assertEqual(result["error_category"], "UNCLASSIFIED_ERROR")
+                self.assertEqual(result["error_code"], "PROVIDER_ERROR")
+
+    def test_unreadable_status_and_forged_internal_prefix_are_safe(self):
+        class BrokenStatus(Exception):
+            @property
+            def code(self):
+                raise ValueError("secret from property")
+
+        self.assertEqual(
+            _failure_details(BrokenStatus("hidden text"))["error_category"],
+            "UNCLASSIFIED_ERROR",
+        )
+        result = _failure_details(RuntimeError("GEMINI_FINISH_SECRET_API_KEY"))
+        self.assertEqual(result["error_code"], "PROVIDER_ERROR")
+        self.assertNotIn("SECRET_API_KEY", json.dumps(result))
+        self.assertEqual(
+            _failure_details(RuntimeError("GEMINI_FINISH_MAX_TOKENS"))["error_category"],
+            "RESPONSE_VALIDATION",
+        )
+
+    def test_saved_provider_http_failure_is_sanitized(self):
+        class ProviderException(Exception):
+            def __init__(self):
+                super().__init__("Bearer very-secret-token; provider message")
+                self.code = 429
+
+        outcomes = [ProviderException()] + [_response() for _ in range(7)]
+        result, client, _ = self._execute(outcomes)
+        self.assertEqual(result["failed_requests"], 1)
+        self.assertEqual(len(client.models.calls), 8)
+        first = json.loads(self.attempts.read_text(encoding="utf-8").splitlines()[0])
+        self.assertEqual(first["http_status"], 429)
+        self.assertEqual(first["error_code"], "PROVIDER_ERROR")
+        self.assertEqual(first["error_category"], "RATE_LIMIT_OR_QUOTA")
+        self.assertNotIn("very-secret-token", self.attempts.read_text(encoding="utf-8"))
+        self.assertNotIn("provider message", self.attempts.read_text(encoding="utf-8"))
         self.assertEqual(len(self.responses.read_text().splitlines()), 7)
 
     def test_non_stop_finish_is_not_saved_as_prediction(self):

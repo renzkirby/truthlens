@@ -95,6 +95,83 @@ def _generated_tokens(usage):
     return (candidate or 0) + (thoughts or 0)
 
 
+# Only internally-generated, fixed diagnostic codes may be persisted.
+# Arbitrary exception strings (including those that resemble an internal code)
+# can contain credentials, provider response bodies, or other sensitive data.
+_INTERNAL_FAILURE_CODES = frozenset({
+    "INVALID_GEMINI_RESPONSE_TEXT",
+    "GEMINI_OUTPUT_USAGE_EXCEEDS_PLAN",
+    "GEMINI_FINISH_MISSING",
+    "GEMINI_FINISH_MAX_TOKENS",
+    "GEMINI_FINISH_SAFETY",
+    "GEMINI_FINISH_RECITATION",
+    "GEMINI_FINISH_LANGUAGE",
+    "GEMINI_FINISH_OTHER",
+    "GEMINI_FINISH_BLOCKLIST",
+    "GEMINI_FINISH_PROHIBITED_CONTENT",
+    "GEMINI_FINISH_SPII",
+    "GEMINI_FINISH_MALFORMED_FUNCTION_CALL",
+    "GEMINI_FINISH_IMAGE_SAFETY",
+    "GEMINI_FINISH_UNEXPECTED_TOOL_CALL",
+    "GEMINI_FINISH_TOO_MANY_TOOL_CALLS",
+    "GEMINI_FINISH_FINISH_REASON_UNSPECIFIED",
+})
+
+
+def _http_status_from_error(exc):
+    """Extract an HTTP status only from numeric SDK exception attributes.
+
+    Never parse exception messages or provider response bodies for a status.
+    A bogus/non-numeric status is treated as unavailable.
+    """
+    for attribute in ("code", "status_code"):
+        try:
+            status = getattr(exc, attribute, None)
+        except Exception:
+            continue
+        if type(status) is int and 400 <= status <= 599:
+            return status
+    return None
+
+
+def _failure_details(exc):
+    """Return safe, bounded failure metadata; never persist str(exc)."""
+    details = {
+        "error_type": type(exc).__name__,
+        "error_code": "PROVIDER_ERROR",
+        "error_category": "UNCLASSIFIED_ERROR",
+    }
+    if type(exc) is RuntimeError and len(exc.args) == 1:
+        internal_code = exc.args[0]
+        if type(internal_code) is str and internal_code in _INTERNAL_FAILURE_CODES:
+            details["error_code"] = internal_code
+            details["error_category"] = "RESPONSE_VALIDATION"
+            return details
+
+    status = _http_status_from_error(exc)
+    if status is None:
+        return details
+    details["http_status"] = status
+    if status in (400, 413, 422):
+        category = "INVALID_REQUEST"
+    elif status == 401:
+        category = "AUTHENTICATION_ERROR"
+    elif status == 402:
+        category = "PAYMENT_REQUIRED"
+    elif status == 403:
+        category = "ACCESS_DENIED"
+    elif status in (408, 504):
+        category = "REQUEST_TIMEOUT"
+    elif status == 429:
+        category = "RATE_LIMIT_OR_QUOTA"
+    elif status >= 500:
+        category = "SERVER_ERROR"
+    else:
+        category = "HTTP_CLIENT_ERROR"
+    details["error_category"] = category
+    return details
+
+
 def validate_live_plan(*, jobs_path, manifest_path):
     """Validate an immutable offline plan without reading gold/reference labels."""
     manifest = _strict_json(Path(manifest_path).read_text(encoding="utf-8"))
@@ -292,9 +369,7 @@ def execute_gemini_pilot(
                 attempts.write(_json_line({
                     "job_id": job["job_id"],
                     "outcome": "FAILED",
-                    "error_type": type(exc).__name__,
-                    "error_code": str(exc) if str(exc).startswith("GEMINI_")
-                                  or str(exc).startswith("INVALID_GEMINI_") else "PROVIDER_ERROR",
+                    **_failure_details(exc),
                     "latency_ms": round(latency_ms, 3),
                 }))
                 attempts.flush()
