@@ -160,7 +160,7 @@ function StateChanges({ previousState, newState }) {
                      <StructuredValue value={change.before} />
                   </div>
                   <span className="accountability-change-arrow" aria-hidden="true">
-                     →
+                     <Icons name="arrow-right" size={18} />
                   </span>
                   <div className="accountability-change-value">
                      <span className="accountability-change-label">After</span>
@@ -295,6 +295,95 @@ function AccountabilityEvent({ event }) {
             ) : null}
          </article>
       </li>
+   );
+}
+
+function ActionFilterMenu({ id, value, options, onChange }) {
+   const rootRef = useRef(null);
+   const [open, setOpen] = useState(false);
+   const selected = options.find((option) => option.value === value);
+
+   useEffect(() => {
+      if (!open) {
+         return undefined;
+      }
+
+      const closeIfOutside = (event) => {
+         if (!rootRef.current?.contains(event.target)) {
+            setOpen(false);
+         }
+      };
+      const closeOnEscape = (event) => {
+         if (event.key === "Escape") {
+            setOpen(false);
+            rootRef.current?.querySelector("button")?.focus();
+         }
+      };
+
+      document.addEventListener("pointerdown", closeIfOutside);
+      document.addEventListener("keydown", closeOnEscape);
+      return () => {
+         document.removeEventListener("pointerdown", closeIfOutside);
+         document.removeEventListener("keydown", closeOnEscape);
+      };
+   }, [open]);
+
+   const choose = (nextValue) => {
+      onChange(nextValue);
+      setOpen(false);
+   };
+
+   return (
+      <div ref={rootRef} className="accountability-action-filter">
+         <button
+            id={id}
+            type="button"
+            className="accountability-action-filter-trigger"
+            aria-haspopup="menu"
+            aria-expanded={open}
+            onClick={() => setOpen((current) => !current)}
+            onKeyDown={(event) => {
+               if (event.key === "ArrowDown" && !open) {
+                  event.preventDefault();
+                  setOpen(true);
+               }
+            }}
+         >
+            <span>{selected?.label || "All visible actions"}</span>
+            <Icons name="chevron-down" size={16} aria-hidden="true" />
+         </button>
+
+         {open ? (
+            <div className="accountability-action-filter-menu" role="menu" aria-label="Filter by action">
+               <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={!value}
+                  className={!value ? "is-selected" : ""}
+                  onClick={() => choose("")}
+               >
+                  <span>All visible actions</span>
+                  {!value ? <Icons name="check" size={15} aria-hidden="true" /> : null}
+               </button>
+               {options.map((option) => {
+                  const active = option.value === value;
+                  return (
+                     <button
+                        key={option.value}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={active}
+                        className={active ? "is-selected" : ""}
+                        onClick={() => choose(option.value)}
+                     >
+                        <span>{option.label}</span>
+                        {active ? <Icons name="check" size={15} aria-hidden="true" /> : null}
+                     </button>
+                  );
+               })}
+            </div>
+         ) : null}
+      </div>
    );
 }
 
@@ -501,18 +590,12 @@ function AccountabilityPanel({ scope, organizationId, organizationName }) {
                </label>
                <label htmlFor="accountability-action">
                   <span>Action</span>
-                  <Select
+                  <ActionFilterMenu
                      id="accountability-action"
                      value={draftFilters.action_type}
-                     onChange={(event) => updateDraftFilter("action_type", event.target.value)}
-                  >
-                     <option value="">All visible actions</option>
-                     {visibleActions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                           {option.label}
-                        </option>
-                     ))}
-                  </Select>
+                     options={visibleActions}
+                     onChange={(value) => updateDraftFilter("action_type", value)}
+                  />
                </label>
                <label htmlFor="accountability-resource">
                   <span>Record type</span>
@@ -583,7 +666,7 @@ function AccountabilityPanel({ scope, organizationId, organizationName }) {
                <Button
                   type="button"
                   variant="ghost"
-                  leadingIcon={<Icons name="refresh-cw" size={15} aria-hidden="true" />}
+                  leadingIcon={<Icons name="refresh" size={15} aria-hidden="true" />}
                   onClick={refresh}
                   loading={isRefreshing}
                   loadingLabel="Refreshing…"
