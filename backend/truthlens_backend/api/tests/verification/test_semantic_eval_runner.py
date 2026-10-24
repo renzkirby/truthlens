@@ -1,5 +1,6 @@
 """Batch 7 paired evaluation planning and saved-response import: OFFLINE ONLY."""
 
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -7,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from api.verification.semantic_benchmark import BenchmarkInputError, compare, read_predictions, read_reference
+from api.verification.semantic_review import build_blind_semantic_review_prompt
 from api.verification.semantic_eval_runner import (
     _balanced_ids, _decode_baseline, _source_baseline_prompt,
     collect, plan, write_collected, write_plan,
@@ -99,6 +101,28 @@ class OfflinePairedRunnerTests(unittest.TestCase):
             self.assertIn("Official records confirm", job["user_prompt"])
         self.assertEqual(manifest["selected_cases"], 4)
         self.assertEqual(len(read_reference(self.subset_gold)), 4)
+
+
+    def test_candidate_jobs_include_context_guidance_and_keep_baseline_fixed(self):
+        manifest = self._plan()
+        jobs = [json.loads(line) for line in self.jobs.read_text(encoding="utf-8").splitlines()]
+        baseline_job = next(j for j in jobs if j["job_id"] == "baseline.c1")
+        candidate_job = next(j for j in jobs if j["job_id"] == "candidate.c1")
+        expected_system, expected_user = build_blind_semantic_review_prompt(
+            assertion_id="c1",
+            assertion_text=self.rows["c1"]["assertion"],
+            evidence_link_id="bench.c1",
+            evidence_content=self.rows["c1"]["evidence"],
+        )
+        self.assertEqual(baseline_job["system_prompt"], BASELINE)
+        self.assertEqual(candidate_job["system_prompt"], expected_system)
+        self.assertEqual(candidate_job["user_prompt"], expected_user)
+        self.assertIn("Lack of proof alone does not require UNKNOWN", expected_system)
+        self.assertNotIn("Lack of proof alone", baseline_job["system_prompt"])
+        self.assertNotIn("reference_stance", candidate_job["user_prompt"])
+        self.assertNotIn("review_status", candidate_job["user_prompt"])
+        self.assertEqual(manifest["jobs_sha256"], hashlib.sha256(
+            self.jobs.read_bytes()).hexdigest())
 
     def test_reference_subset_does_not_leave_missing_nonpilot_cases(self):
         for i in range(12):
