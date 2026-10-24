@@ -3421,12 +3421,23 @@ class FactCheckRecoverySerializer(serializers.Serializer):
 class PublicationWorkflowQueueQuerySerializer(serializers.Serializer):
     organization_id = serializers.UUIDField()
     queue = serializers.ChoiceField(choices=["DRAFTING", "REVIEW"])
+    view = serializers.ChoiceField(
+        choices=["ACTIVE", "ARCHIVED"],
+        default="ACTIVE",
+    )
     workflow_kind = serializers.ChoiceField(
         choices=["INITIAL", "EDITORIAL_REVISION", "ALL"],
         default="INITIAL",
     )
     limit = serializers.IntegerField(default=20, min_value=1, max_value=100)
     offset = serializers.IntegerField(default=0, min_value=0)
+
+    def validate(self, attrs):
+        if attrs["view"] == "ARCHIVED" and attrs["queue"] != "DRAFTING":
+            raise serializers.ValidationError(
+                {"view": "Archived publication work is only available in Drafting."}
+            )
+        return attrs
 
 
 class PublicationWorkflowDetailQuerySerializer(serializers.Serializer):
@@ -3440,6 +3451,12 @@ class PublicationWorkflowDetailQuerySerializer(serializers.Serializer):
 class PublicationWorkflowActorSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     username = serializers.CharField()
+
+
+class PublicationWorkflowAbandonmentSerializer(serializers.Serializer):
+    abandoned_at = serializers.DateTimeField()
+    abandoned_by = PublicationWorkflowActorSerializer(allow_null=True)
+    reason = serializers.CharField(allow_blank=True)
 
 
 class PublicationWorkflowOrganizationSerializer(serializers.Serializer):
@@ -3585,6 +3602,7 @@ class PublicationWorkflowListItemSerializer(serializers.Serializer):
     article = PublicationWorkflowListArticleSerializer(allow_null=True)
     lifecycle = PublicationWorkflowLifecycleSerializer()
     concurrency = PublicationWorkflowConcurrencySerializer()
+    abandonment = PublicationWorkflowAbandonmentSerializer(allow_null=True)
     allowed_actions = serializers.ListField(child=serializers.CharField())
     blockers = PublicationWorkflowBlockerSerializer(many=True)
 
