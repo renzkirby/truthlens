@@ -897,7 +897,7 @@ function EvidenceReviewContent({
             </div>
          ) : (
             <>
-               {!guidedMode && (
+               {!guidedMode && !selectedCaseId && (
                   <div className="evidence-toolbar">
                      <label htmlFor="evidence-disposition-filter">
                         Review history
@@ -1059,7 +1059,7 @@ function EvidenceReviewContent({
                      disabled={Boolean(mutation)}
                      onClick={() => clearSelection({ restoreQueueFocus: true })}
                   >
-                     Return to queue
+                     Back to Evidence Review
                   </Button>
                )}
 
@@ -1099,7 +1099,7 @@ function EvidenceReviewContent({
                            density="compact"
                            onClick={() => clearSelection({ restoreQueueFocus: true })}
                         >
-                           Return to queue
+                           Back to Evidence Review
                         </Button>
                      </div>
                   </div>
