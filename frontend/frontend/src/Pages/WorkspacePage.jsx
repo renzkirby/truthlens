@@ -930,6 +930,9 @@ function WorkspacePage() {
                            canReviewEvidence={organizationCapabilities.includes(
                               WorkspaceCapability.REVIEW_EVIDENCE,
                            )}
+                           canDraftFactCheck={organizationCapabilities.includes(
+                              WorkspaceCapability.CREATE_FACT_CHECK_DRAFT,
+                           )}
                            initialCaseId={routeCaseId}
                            returnToInvestigationPath={
                               routeFromAssignment && selectedOrganizationId

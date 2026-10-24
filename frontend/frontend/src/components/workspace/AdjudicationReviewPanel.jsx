@@ -589,6 +589,7 @@ function AdjudicationReviewContent({
    organizationName,
    canAdjudicate,
    canReviewEvidence = false,
+   canDraftFactCheck = false,
    initialCaseId,
    returnToInvestigationPath,
    guidedMode = false,
@@ -1641,6 +1642,10 @@ function AdjudicationReviewContent({
    const reviewedEvidenceCount = evidenceVerified + evidenceRejected;
    const isUrlClaim = String(detailClaim.claim_type || "").toUpperCase() === "URL";
    const originalClaimUrl = isUrlClaim ? getSafeHttpUrl(detailClaim.url_link) : null;
+   const draftingPath =
+      canDraftFactCheck && detailClaim.id && organizationId
+         ? `/workspace?section=drafting&organization_id=${encodeURIComponent(organizationId)}&resource_type=ELIGIBLE_CLAIM&resource_id=${encodeURIComponent(detailClaim.id)}`
+         : null;
    const viewingOutsideCurrentQueue = Boolean(
       selectedCaseId && detail && !queueLoading && !queueError && !selectedCase,
    );
@@ -1664,7 +1669,7 @@ function AdjudicationReviewContent({
                <p>
                   {guidedMode
                      ? "Review the evidence and record the authorized human conclusion for this investigation."
-                     : "Select a case from the filtered queue, examine its evidence and provenance, then record an authorized human conclusion when the backend permits it."}
+                     : "Select a case from the queue, examine its evidence and provenance, then record an authorized human conclusion when all requirements are satisfied."}
                </p>
             </div>
             <span className="adjudication-organization-context">
@@ -2111,7 +2116,7 @@ function AdjudicationReviewContent({
                            {!guidedMode && viewingOutsideCurrentQueue && (
                               <p className="adjudication-outside-queue-note">
                                  <Icons name="info" size={15} aria-hidden="true" />
-                                 Viewing a selected case outside the current queue results. Use the case-status filters to find active or resolved history when applicable.
+                                 Viewing a selected case outside the current queue results. Use Current work or Resolved history to switch queue views.
                               </p>
                            )}
 
@@ -2213,7 +2218,7 @@ function AdjudicationReviewContent({
                                     </div>
                                  )}
 
-                                 {selectedActionNotice && (
+                                 {selectedActionNotice && !isResolvedCase && (
                                     <div
                                        className="adjudication-local-outcome"
                                        ref={actionMessageRef}
@@ -2225,27 +2230,74 @@ function AdjudicationReviewContent({
                                        <div>
                                           <strong>Adjudication recorded</strong>
                                           <span>{selectedActionNotice.message}</span>
-                                          {onReturnToInvestigation ? (
-                                             <Button
-                                                type="button"
-                                                variant="secondary"
-                                                density="compact"
-                                                trailingIcon={<Icons name="arrow-right" size={13} aria-hidden="true" />}
-                                                onClick={onReturnToInvestigation}
-                                             >
-                                                Continue investigation
-                                             </Button>
-                                          ) : returnToInvestigationPath ? (
-                                             <Link
-                                                to={returnToInvestigationPath}
-                                                className="adjudication-return-investigation"
-                                             >
-                                                Return to investigation
-                                                <Icons name="arrow-right" size={13} aria-hidden="true" />
-                                             </Link>
-                                          ) : null}
                                        </div>
                                     </div>
+                                 )}
+
+                                 {isResolvedCase && (
+                                    <section
+                                       className="adjudication-completion-state"
+                                       ref={selectedActionNotice ? actionMessageRef : undefined}
+                                       tabIndex={selectedActionNotice ? "-1" : undefined}
+                                       role={selectedActionNotice ? "status" : undefined}
+                                       aria-live={selectedActionNotice ? "polite" : undefined}
+                                       aria-labelledby="adjudication-completion-heading"
+                                    >
+                                       <Icons name="check-circle" size={20} aria-hidden="true" />
+                                       <div className="adjudication-completion-copy">
+                                          <span className="adjudication-completion-eyebrow">Decision recorded</span>
+                                          <strong id="adjudication-completion-heading">Adjudication complete</strong>
+                                          <p>
+                                             The authoritative decision has been recorded. Fact-check drafting is the next publication workflow for this claim.
+                                          </p>
+                                          <div className="adjudication-completion-actions">
+                                             {guidedMode && onReturnToInvestigation ? (
+                                                <Button
+                                                   type="button"
+                                                   variant="primary"
+                                                   density="compact"
+                                                   trailingIcon={<Icons name="arrow-right" size={13} aria-hidden="true" />}
+                                                   onClick={onReturnToInvestigation}
+                                                >
+                                                   Continue investigation
+                                                </Button>
+                                             ) : returnToInvestigationPath ? (
+                                                <Link
+                                                   to={returnToInvestigationPath}
+                                                   className="adjudication-completion-link adjudication-completion-link--primary"
+                                                >
+                                                   Return to investigation
+                                                   <Icons name="arrow-right" size={13} aria-hidden="true" />
+                                                </Link>
+                                             ) : (
+                                                <>
+                                                   {draftingPath && (
+                                                      <Link
+                                                         to={draftingPath}
+                                                         className="adjudication-completion-link adjudication-completion-link--primary"
+                                                      >
+                                                         Continue to Drafting
+                                                         <Icons name="arrow-right" size={13} aria-hidden="true" />
+                                                      </Link>
+                                                   )}
+                                                   <Button
+                                                      type="button"
+                                                      variant="secondary"
+                                                      density="compact"
+                                                      onClick={() => clearSelection({ restoreQueueFocus: true })}
+                                                   >
+                                                      Return to Adjudication queue
+                                                   </Button>
+                                                </>
+                                             )}
+                                          </div>
+                                          {!guidedMode && !returnToInvestigationPath && !draftingPath && (
+                                             <span className="adjudication-completion-permission-note">
+                                                Drafting is available to organization members with the appropriate permission.
+                                             </span>
+                                          )}
+                                       </div>
+                                    </section>
                                  )}
 
                                  <div className="adjudication-primary-surface">
@@ -2333,6 +2385,7 @@ function AdjudicationReviewContent({
                                  </section>
 
                                  
+{!isResolvedCase && (
 <section className="adjudication-detail-section" aria-labelledby="adjudication-readiness-heading">
                                     <div className="adjudication-subheading-row">
                                        <div>
@@ -2357,18 +2410,6 @@ function AdjudicationReviewContent({
                                        <p className="adjudication-inline-warning">
                                           This case appears ready, but some decision checks could not be confirmed. Refresh the case before proceeding.
                                        </p>
-                                    )}
-
-                                    {isResolvedCase && (
-                                       <div className="adjudication-read-only-state">
-                                          <Icons name="check-circle" size={18} aria-hidden="true" />
-                                          <div>
-                                             <strong>Review completed · Read-only</strong>
-                                             <span>
-                                                What happens next: the decision remains recorded for this case. Fact-check drafting and publication are separate processes; this workbench does not correct, revise, or reopen it.
-                                             </span>
-                                          </div>
-                                       </div>
                                     )}
 
                                     {primaryBlocker && !isResolvedCase && (
@@ -2428,8 +2469,7 @@ function AdjudicationReviewContent({
                                     )}
 
                                  </section>
-
-                                 
+                                 )}
 
                                  <section className="adjudication-case-details-launcher" aria-labelledby="adjudication-case-details-heading">
                                     <div>

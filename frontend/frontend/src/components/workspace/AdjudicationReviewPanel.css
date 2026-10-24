@@ -2248,3 +2248,108 @@
       gap: 10px;
    }
 }
+
+
+.adjudication-completion-state {
+   display: flex;
+   align-items: flex-start;
+   gap: 12px;
+   margin: 0 0 var(--tl-space-6);
+   padding: 16px;
+   border: 1px solid var(--tl-color-status-success-border);
+   border-radius: 10px;
+   background: var(--tl-color-status-success-bg);
+   color: var(--tl-color-status-success-text);
+}
+
+.adjudication-completion-state > svg {
+   flex: 0 0 auto;
+   margin-top: 2px;
+}
+
+.adjudication-completion-copy {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   align-items: flex-start;
+   gap: 4px;
+}
+
+.adjudication-completion-eyebrow {
+   font-size: 0.65rem;
+   font-weight: 800;
+   letter-spacing: 0.04em;
+   text-transform: uppercase;
+}
+
+.adjudication-completion-copy > strong {
+   color: currentColor;
+   font-size: 0.86rem;
+}
+
+.adjudication-completion-copy > p {
+   max-width: 72ch;
+   margin: 0;
+   color: currentColor;
+   font-size: 0.74rem;
+   line-height: 1.5;
+}
+
+.adjudication-completion-actions {
+   display: flex;
+   align-items: center;
+   gap: 8px;
+   flex-wrap: wrap;
+   margin-top: 8px;
+}
+
+.adjudication-completion-link {
+   min-height: 34px;
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   gap: 6px;
+   padding: 7px 11px;
+   border: 1px solid transparent;
+   border-radius: 8px;
+   font-size: 0.73rem;
+   font-weight: 750;
+   line-height: 1.2;
+   text-decoration: none;
+}
+
+.adjudication-completion-link--primary {
+   border-color: var(--brand-primary);
+   background: var(--brand-primary);
+   color: #fff;
+}
+
+.adjudication-completion-link--primary:hover {
+   filter: brightness(0.96);
+}
+
+.adjudication-completion-link:focus-visible {
+   outline: 2px solid var(--brand-primary);
+   outline-offset: 2px;
+}
+
+.adjudication-completion-permission-note {
+   margin-top: 4px;
+   color: currentColor;
+   font-size: 0.7rem;
+   line-height: 1.45;
+}
+
+@container adjudication-panel (max-width: 520px) {
+   .adjudication-completion-actions {
+      width: 100%;
+      align-items: stretch;
+      flex-direction: column;
+   }
+
+   .adjudication-completion-actions .tl-button,
+   .adjudication-completion-link {
+      width: 100%;
+      min-height: 44px;
+   }
+}
