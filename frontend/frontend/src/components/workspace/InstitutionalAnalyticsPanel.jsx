@@ -989,28 +989,29 @@ function PublicationReachPanel({ reach }) {
             <EmptyMessage>Publication reach measurements are unavailable.</EmptyMessage>
          ) : (
             <>
-               <ObservationMetricCards
-                  items={[
-                     {
-                        label: "Publication page views",
-                        value: interactions.by_type.PUBLICATION_VIEW,
-                        description: "Recorded visits to your organization's public fact-check pages.",
-                     },
-                     {
-                        label: "Partner profile views",
-                        value: interactions.by_type.PARTNER_PROFILE_VIEW,
-                        description: "Recorded visits to your organization's public profile.",
-                     },
-                  ]}
-               />
+               <div className="institutional-analytics__observation-primary">
+                  <ObservationMetricCards
+                     items={[
+                        {
+                           label: "Publication page views",
+                           value: interactions.by_type.PUBLICATION_VIEW,
+                           description: "Recorded visits to your organization's public fact-check pages.",
+                        },
+                        {
+                           label: "Partner profile views",
+                           value: interactions.by_type.PARTNER_PROFILE_VIEW,
+                           description: "Recorded visits to your organization's public profile.",
+                        },
+                     ]}
+                  />
+                  <p className="institutional-analytics__observation-limitation">
+                     Recorded events, not unique visitors or readers.
+                  </p>
+               </div>
                {interactions.events === 0 ? (
                   <EmptyMessage>No eligible public interactions have been recorded for this organization yet.</EmptyMessage>
                ) : (
                   <>
-                     <p className="institutional-analytics__observation-limitation">
-                        These values count recorded events, not unique visitors or readers.
-                     </p>
-
                      <section className="institutional-analytics__measurement-support">
                         <HeadingWithHelp
                            as="h6"
@@ -1027,8 +1028,9 @@ function PublicationReachPanel({ reach }) {
                         />
                      </section>
 
-                     <details className="institutional-analytics__measurement-details">
-                        <summary>Official and related publication results</summary>
+                     <div className="institutional-analytics__observation-details">
+                        <details className="institutional-analytics__measurement-details">
+                           <summary>Official and related publication results</summary>
                         <MetricList
                            compact
                            items={[
@@ -1042,10 +1044,10 @@ function PublicationReachPanel({ reach }) {
                            Related publications provide context and do not automatically transfer their verdicts to
                            another claim.
                         </p>
-                     </details>
+                        </details>
 
-                     <details className="institutional-analytics__measurement-details">
-                        <summary>Additional reach measurements</summary>
+                        <details className="institutional-analytics__measurement-details">
+                           <summary>Additional reach measurements</summary>
                         <MetricList
                            compact
                            items={[
@@ -1061,7 +1063,8 @@ function PublicationReachPanel({ reach }) {
                            a count of all current or historical publications, publicly accessible publications, or
                            people.
                         </p>
-                     </details>
+                        </details>
+                     </div>
                   </>
                )}
             </>
@@ -1088,33 +1091,33 @@ function KnowledgeReusePanel({ reuse }) {
             <EmptyMessage>Knowledge reuse measurements are unavailable.</EmptyMessage>
          ) : (
             <>
-               <ObservationMetricCards
-                  items={[
-                     {
-                        label: "User-facing reuse events",
-                        value: material.by_type.USER_RESPONSE,
-                        description:
-                           "Recorded occasions when previously published knowledge was reused in a user-facing response.",
-                     },
-                     {
-                        label: "Verification-context reuse events",
-                        value: material.by_type.VERIFICATION_CONTEXT,
-                        description:
-                           "Recorded occasions when published knowledge was reused as context for another verification workflow.",
-                     },
-                  ]}
-               />
+               <div className="institutional-analytics__observation-primary">
+                  <ObservationMetricCards
+                     items={[
+                        {
+                           label: "User-facing reuse events",
+                           value: material.by_type.USER_RESPONSE,
+                           description:
+                              "Recorded occasions when previously published knowledge was reused in a user-facing response.",
+                        },
+                        {
+                           label: "Verification-context reuse events",
+                           value: material.by_type.VERIFICATION_CONTEXT,
+                           description:
+                              "Recorded occasions when published knowledge was reused as context for another verification workflow.",
+                        },
+                     ]}
+                  />
+                  <p className="institutional-analytics__observation-limitation">
+                     Recorded events, not unique users or target claims.
+                  </p>
+               </div>
                {material.events === 0 ? (
                   <EmptyMessage>
                      No attributed knowledge reuse events have been recorded for this organization yet.
                   </EmptyMessage>
                ) : (
                   <>
-                     <p className="institutional-analytics__observation-limitation">
-                        These event counts are not unique users or target claims. Verification-context reuse does not
-                        automatically transfer an earlier publication&apos;s verdict to another claim.
-                     </p>
-
                      <section className="institutional-analytics__measurement-support">
                         <HeadingWithHelp
                            as="h6"
@@ -1130,8 +1133,9 @@ function KnowledgeReusePanel({ reuse }) {
                         </dl>
                      </section>
 
-                     <details className="institutional-analytics__measurement-details">
-                        <summary>Additional reuse measurements and match methods</summary>
+                     <div className="institutional-analytics__observation-details">
+                        <details className="institutional-analytics__measurement-details">
+                           <summary>Additional reuse measurements and match methods</summary>
                         <MetricList
                            compact
                            items={[
@@ -1174,7 +1178,8 @@ function KnowledgeReusePanel({ reuse }) {
                            </dl>
                            <p>Match methods provide context and do not measure verification quality.</p>
                         </section>
-                     </details>
+                        </details>
+                     </div>
                   </>
                )}
             </>
