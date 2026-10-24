@@ -1009,7 +1009,6 @@ function PublishingContent({
             return;
          }
 
-         const headline = published?.article?.headline || published?.headline || detail?.headline || "Fact check";
          const version = published?.article?.version ?? published?.version ?? detail?.version;
          selectedIdRef.current = null;
          setSelectedId(null);
@@ -1017,7 +1016,14 @@ function PublishingContent({
          setConfirmation(null);
          showWorkspaceSuccess(addToast, {
             title: operation.workflowKind === "EDITORIAL_REVISION" ? "Replacement published" : "Fact-check published",
-            message: `${headline}${version ? ` · article v${version}` : ""} is now published.`,
+            message:
+               operation.workflowKind === "EDITORIAL_REVISION"
+                  ? version
+                     ? `Article v${version} is now the current published version.`
+                     : "The replacement article is now the current published version."
+                  : version
+                    ? `Article v${version} is now published.`
+                    : "The fact-check article is now published.",
             duration: WORKSPACE_LONG_TOAST_DURATION,
          });
          focusQueueAfterMutationRef.current = true;
