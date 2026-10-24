@@ -224,7 +224,10 @@ function CorrectionSourceEditor({
    inputRef,
    onChange,
 }) {
-   const rows = Array.isArray(value) && value.length > 0 ? value : [""];
+   const rows = useMemo(
+      () => (Array.isArray(value) && value.length > 0 ? value : [""]),
+      [value],
+   );
    const [pickerOpen, setPickerOpen] = useState(false);
    const [pendingVerifiedKeys, setPendingVerifiedKeys] = useState(() => new Set());
    const optionByKey = useMemo(
